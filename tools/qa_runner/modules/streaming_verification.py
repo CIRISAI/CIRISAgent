@@ -1095,6 +1095,28 @@ class StreamingVerificationModule:
                                         f"{event_type} has unexpected fields: {', '.join(sorted(extra_fields))}"
                                     )
 
+                                # CIRISAgent#717 regression guard: every emitted LLM_CALL must
+                                # carry a real parent_event_type. The "UNKNOWN_PARENT" sentinel
+                                # signals an LLM-issuing handler that wasn't covered by
+                                # @streaming_step / set_parent_event_context() — the fix in #715
+                                # closed all known sites and the static guard in
+                                # tests/ciris_engine/logic/buses/test_llm_call_parent_coverage.py
+                                # prevents regression at the StepPoint mapping + emission-site
+                                # layer; this runtime check catches any unwiring that slipped
+                                # past both (e.g., a handler that bypasses the decorator entirely).
+                                if event_type == "llm_call":
+                                    parent_event_type = event.get("parent_event_type")
+                                    if parent_event_type == "UNKNOWN_PARENT":
+                                        msg = (
+                                            f"LLM_CALL emitted with parent_event_type='UNKNOWN_PARENT' "
+                                            f"sentinel — handler '{event.get('handler_name', '?')}' / "
+                                            f"service '{event.get('service_name', '?')}' on thought "
+                                            f"{event.get('thought_id', '?')} bypassed the @streaming_step "
+                                            f"parent-context wiring. See CIRISAgent#717."
+                                        )
+                                        event_detail["issues"].append(msg)
+                                        errors.append(msg)
+
                                 event_details.append(event_detail)
 
                         except json.JSONDecodeError as e:

@@ -1347,7 +1347,7 @@ private fun CapacityScoreExplainerCard(
                     Text(
                         text = "Right now your local score is ${fmt(local)}.",
                         fontSize = 13.sp,
-                        color = theme.bodySubtle,
+                        color = theme.textMuted,
                     )
                 }
             }

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Complete Indonesian translation for localization/id.json
+Complete Indonesian translation for ciris_engine/data/localized/id.json
 This script translates ALL keys from en.json to Indonesian using the glossary.
 
 Due to the large size (1816 keys), this is done programmatically with

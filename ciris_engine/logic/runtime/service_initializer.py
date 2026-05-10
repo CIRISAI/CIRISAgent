@@ -4,6 +4,7 @@ Service initialization for CIRIS Agent runtime.
 Handles the initialization of all core services.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -261,26 +262,16 @@ class ServiceInitializer:
         keys_dir = Path(self.essential_config.security.secrets_key_path)
         keys_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load or generate master key
+        # Load or generate master key. Atomic write (.tmp + fsync + os.replace)
+        # protects against asyncio cancellation mid-write — see RCA-secrets-
+        # master-key-zero-byte for the incident this guards against.
+        # TODO(phase-split): pull master-key bootstrap into an earlier phase
+        # (INFRASTRUCTURE) so it doesn't share a timeout boundary with DB
+        # connect at all. Atomic write makes the file safe even under
+        # cancellation; phase split would prevent the cancellation entirely.
         # Note: Hardware-backed key protection is handled by CIRISVerify's unified signer
         master_key_path = keys_dir / "secrets_master.key"
-        master_key = None
-
-        if master_key_path.exists():
-            # Load existing master key
-            async with aiofiles.open(master_key_path, "rb") as f:
-                master_key = await f.read()
-            logger.info("Loaded existing secrets master key")
-        else:
-            # Generate new master key and save it
-            import secrets
-
-            master_key = secrets.token_bytes(32)
-            async with aiofiles.open(master_key_path, "wb") as f:
-                await f.write(master_key)
-            # Set restrictive permissions (owner read/write only)
-            os.chmod(master_key_path, 0o600)
-            logger.info("Generated and saved new secrets master key")
+        master_key = await self._load_or_create_master_key(master_key_path)
 
         # Create README if it doesn't exist
         readme_path = keys_dir / "README.md"
@@ -399,6 +390,87 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Migrate essential config to graph
         await self._migrate_config_to_graph()
+
+    @staticmethod
+    async def _load_or_create_master_key(master_key_path: Any) -> bytes:
+        """Load secrets master key from disk, validating length, or generate
+        a fresh one with an atomic write.
+
+        Two failure modes this guards against:
+
+        1. **Cancellation mid-write.** ``aiofiles.open(path, "wb")`` truncates
+           the file the instant the descriptor opens; the bytes only land
+           when the write+close drain. If asyncio cancels the parent task
+           before close, the canonical name is left at 0 bytes — every
+           subsequent boot then fails ``len(master_key) != 32`` validation
+           in ``SecretsEncryption.__init__`` with no self-healing path.
+           Fix: write to ``<path>.tmp``, fsync, then ``os.replace`` to the
+           canonical name. POSIX rename is atomic — cancellation orphans
+           ``.tmp`` and the canonical name either holds the previous file
+           (or doesn't exist for a first write).
+
+        2. **Corrupted file from any prior cause** — partial write from an
+           older code path, manual operator intervention, FS corruption,
+           etc. We treat any wrong-length file as missing, log an ERROR
+           with a stable string monitoring can alert on, and rotate.
+        """
+        import secrets as secrets_module
+
+        path = Path(master_key_path)
+
+        if path.exists():
+            async with aiofiles.open(path, "rb") as f:
+                candidate = await f.read()
+            if len(candidate) == 32:
+                logger.info("Loaded existing secrets master key")
+                return candidate
+            # Wrong length → treat as corrupted. Stable error string for
+            # monitoring: "secrets_bootstrap_corruption".
+            logger.error(
+                "secrets_bootstrap_corruption: existing %s is %d bytes, "
+                "expected 32. Treating as corrupted and rotating master key. "
+                "Any pre-existing encrypted secrets will be unrecoverable.",
+                path,
+                len(candidate),
+            )
+            # Fall through to generate-and-rotate path.
+
+        # Generate a fresh 32-byte key and persist atomically. asyncio.shield
+        # is belt-and-suspenders — even if the parent task is cancelled, the
+        # write+rename completes; a torn .tmp can never become the canonical
+        # name. The shield is bounded (small FS-only work) so it does not
+        # extend any meaningful timeout window.
+        async def _atomic_write() -> bytes:
+            new_key = secrets_module.token_bytes(32)
+            tmp_path = path.with_suffix(path.suffix + ".tmp")
+            try:
+                async with aiofiles.open(tmp_path, "wb") as f:
+                    await f.write(new_key)
+                    await f.flush()
+                    # fsync the underlying fd so the bytes are durable on disk
+                    # before we promote the .tmp to the canonical name.
+                    fd = f.fileno()
+                    await asyncio.get_running_loop().run_in_executor(
+                        None, os.fsync, fd
+                    )
+                os.chmod(tmp_path, 0o600)
+                # POSIX atomic rename. Either the canonical name holds the
+                # previous file (or doesn't exist), or it holds the fully-
+                # written new file. There is no torn intermediate state.
+                os.replace(tmp_path, path)
+            except BaseException:
+                # Best-effort cleanup of any orphaned .tmp; never raise from
+                # the cleanup path (the original exception is what matters).
+                try:
+                    if tmp_path.exists():
+                        os.unlink(tmp_path)
+                except Exception:
+                    pass
+                raise
+            logger.info("Generated and saved new secrets master key (atomic)")
+            return new_key
+
+        return await asyncio.shield(_atomic_write())
 
     async def verify_memory_service(self) -> bool:
         """Verify memory service is operational."""

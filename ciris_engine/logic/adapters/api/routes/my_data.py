@@ -865,9 +865,19 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str]:
         return 0.30, "high_fragility"
 
 
-def _count_recent_task_completes_sqlite(hours: int = 1) -> int:
+# σ (sustainability) maturity window — see _sigma_from_positive_moments docstring.
+# The 30-interactions-over-30-days story is what the client's capacity-score
+# card explains to operators ("you need ~30 interactions over 30 days for
+# your local score to fully compute"). Keep these constants here so the
+# user-facing copy and the formula are pinned to the same values.
+SIGMA_WINDOW_DAYS = 30
+SIGMA_TARGET_COMPLETIONS = 30
+SIGMA_FLOOR = 0.30
+
+
+def _count_recent_task_completes_sqlite(days: int = SIGMA_WINDOW_DAYS) -> int:
     """Count ``task_complete`` events in the audit SQLite DB over the last
-    ``hours`` hours. Synchronous; called via run_in_executor.
+    ``days`` days. Synchronous; called via run_in_executor.
 
     The graph-memory audit store (``audit_service.query_audit_trail``) does
     not receive handler-action events — those land in the signed audit log
@@ -879,7 +889,7 @@ def _count_recent_task_completes_sqlite(hours: int = 1) -> int:
         from ciris_engine.logic.utils.path_resolution import get_data_dir
 
         db_path = str(get_data_dir() / "ciris_audit.db")
-        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         with get_safe_sqlite_connection(db_path, read_only=True, timeout=2.0) as conn:
             cur = conn.execute(
                 "SELECT COUNT(*) FROM audit_log WHERE event_type = ? AND event_timestamp >= ?",
@@ -900,25 +910,38 @@ async def _sigma_from_positive_moments(request: Request) -> float:
     and the closest cheap proxy we have for the CCA σ term (maintenance
     capacity / sustainable operation).
 
-    Mapping over the last hour:
-      * 0 completions   → σ = 0.30 (floor — idle is not fragile)
-      * 1 completion    → σ ≈ 0.53
-      * ≥ 3 completions → σ = 1.00 (target rate)
+    Window: last 30 days. Target: 30 completions. Mapping:
+
+      * 0 completions   → σ = 0.30 (floor — fresh install / idle agent)
+      * 15 completions  → σ ≈ 0.65
+      * ≥ 30 completions → σ = 1.00 (target — fully-matured operation)
 
     Linear ramp. One bounded COUNT on the audit SQLite DB, ~ms, run in
     the default executor so we never block the event loop. Degrades to
     the floor on any error.
+
+    The 30-over-30 shape is intentional: it matches the user-facing
+    capacity-score explainer card on the cell-viz badge ("you need ~30
+    interactions over 30 days before your local score can fully compute")
+    and prevents a fresh install from showing 1.00 immediately just
+    because all services happen to be healthy at boot.
     """
     try:
         loop = asyncio.get_event_loop()
-        successes = await loop.run_in_executor(None, _count_recent_task_completes_sqlite, 1)
-        logger.debug(f"[capacity.sigma] {successes} task_complete(s) in last 1h")
-        floor = 0.30
-        target = 3
-        return max(floor, min(1.0, floor + (1.0 - floor) * (successes / target)))
+        successes = await loop.run_in_executor(
+            None, _count_recent_task_completes_sqlite, SIGMA_WINDOW_DAYS
+        )
+        logger.debug(
+            f"[capacity.sigma] {successes} task_complete(s) in last {SIGMA_WINDOW_DAYS}d "
+            f"(target={SIGMA_TARGET_COMPLETIONS})"
+        )
+        return max(
+            SIGMA_FLOOR,
+            min(1.0, SIGMA_FLOOR + (1.0 - SIGMA_FLOOR) * (successes / SIGMA_TARGET_COMPLETIONS)),
+        )
     except Exception as e:
         logger.debug(f"[capacity.sigma] probe failed, returning floor: {type(e).__name__}: {e}")
-        return 0.30
+        return SIGMA_FLOOR
 
 
 async def _fetch_capacity_from_lens(template: str) -> Dict[str, Any]:

@@ -2591,8 +2591,11 @@ private fun QuickSetupStep(
     var locationExpanded by remember { mutableStateOf(true) }
     var servicesExpanded by remember { mutableStateOf(true) }
     var tracesExpanded by remember { mutableStateOf(true) }
-    // LLM config always expanded - show all options in both CIRIS and BYOK modes
-    var llmConfigExpanded by remember { mutableStateOf(true) }
+    // LLM config defaults to collapsed in CIRIS_PROXY mode — operators using
+    // the hosted proxy don't need to touch provider/key/base-URL fields and
+    // surfacing them open by default makes the wizard look more complex than
+    // it is. BYOK keeps the section expanded since the user MUST fill it in.
+    var llmConfigExpanded by remember { mutableStateOf(state.setupMode != SetupMode.CIRIS_PROXY) }
     var adaptersExpanded by remember { mutableStateOf(false) }
 
     // Local LLM discovery

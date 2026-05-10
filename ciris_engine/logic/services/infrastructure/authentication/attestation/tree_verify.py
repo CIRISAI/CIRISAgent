@@ -185,22 +185,39 @@ def run_tree_verify(
         return None
 
     # AttestationResult.python_failed_modules is typed Dict[str, str] (path → reason).
-    # CIRISVerify v1.13.2's TreeVerifyResult.failed_files is List[FailedFile{path, kind}],
+    # CIRISVerify v1.13.2+ TreeVerifyResult.failed_files is List[FailedFile{path, kind}],
     # so collapse to a dict mapping each failed path to its kind label. Empty dict ≠ list:
     # passing a list here breaks pydantic validation in build_attestation_result and the
     # cache never populates, which makes every downstream thought error out at
     # `await_attestation_ready()` (see CIRISAgent#741 root cause).
+    #
+    # v1.14.0 split: `failed_files` now contains ONLY hard failures (hash_mismatch,
+    # extra). Files in the manifest but not on disk move to `missing_files`, which
+    # we track separately as `missing_modules` — soft/informational rather than
+    # an L4-gating failure. CIRISVerify#15 → CIRISAgent#742. Build-time-only
+    # artifacts like `_build_secrets.py` (mobile bundles ship it for the wallet
+    # provider's runtime secrets read; desktop wheel intentionally excludes it
+    # for distribution security) appear here on desktop installs and shouldn't
+    # block L4.
+    def _kind_str(kind: Any) -> str:
+        if kind is None:
+            return "failed"
+        if hasattr(kind, "value"):
+            return str(kind.value)
+        return str(kind)
+
     failed_modules: Dict[str, str] = {}
     for f in result.failed_files or []:
         path = getattr(f, "path", None) or str(f)
-        kind = getattr(f, "kind", None)
-        if kind is None:
-            kind_str = "failed"
-        elif hasattr(kind, "value"):
-            kind_str = str(kind.value)
-        else:
-            kind_str = str(kind)
-        failed_modules[path] = kind_str
+        failed_modules[path] = _kind_str(getattr(f, "kind", None))
+
+    missing_modules: Dict[str, str] = {}
+    # `missing_files` exists only on v1.14.0+; getattr-with-default keeps the
+    # wrapper backward-compatible against older ciris-verify versions during
+    # the transition window.
+    for f in getattr(result, "missing_files", None) or []:
+        path = getattr(f, "path", None) or str(f)
+        missing_modules[path] = _kind_str(getattr(f, "kind", "missing"))
     # Field names mirror what result_builder._build_python_integrity_fields()
     # reads (those keys date back to Algorithm B). Specifically:
     #   - "actual_total_hash" (NOT "total_hash") — the field result_builder
@@ -214,8 +231,10 @@ def run_tree_verify(
         "valid": bool(result.valid),
         "modules_checked": int(result.files_checked),
         "modules_passed": int(result.files_passed),
-        "modules_failed": int(result.files_checked) - int(result.files_passed),
+        "modules_failed": len(failed_modules),  # only hard failures, not missing
         "failed_modules": failed_modules,
+        "modules_missing": len(missing_modules),
+        "missing_modules": missing_modules,
         "actual_total_hash": result.total_hash,
         "total_hash_valid": (
             bool(result.expected_total_hash)
@@ -232,6 +251,8 @@ def run_tree_verify(
         f"[tree_verify] valid={python_integrity['valid']} "
         f"checked={python_integrity['modules_checked']} "
         f"passed={python_integrity['modules_passed']} "
+        f"failed={python_integrity['modules_failed']} "
+        f"missing={python_integrity['modules_missing']} "
         f"registry_match={python_integrity['registry_match']}"
     )
     return python_integrity

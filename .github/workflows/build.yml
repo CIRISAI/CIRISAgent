@@ -872,9 +872,20 @@ jobs:
           # exactly what the runtime walks. Target name preserved as
           # python-source-tree for v1.12.x verify-client compatibility (the
           # name is historical; the content is now the staged runtime).
+          # Explicit --tree-include / --tree-exempt-dir / --tree-exempt-ext flags
+          # match tools/dev/stage_runtime.py::ExemptRules byte-for-byte. Without
+          # them, ciris-build-sign falls back to its internal defaults which
+          # exclude .json (and other non-py extensions) — that drops 30+ real
+          # runtime data files (ciris_engine/data/localized/*.json) from the
+          # registered manifest, even though they're already in the staged tree
+          # AND in the wheel install. Caught at L4 validation post-2.8.6 merge.
+          # CIRISAgent#742, drift-protection in tests/dev/test_canonical_rules_parity.py.
           ciris-build-sign sign \
             --primitive agent \
             --tree /tmp/ciris-staged \
+            --tree-include ciris_engine ciris_adapters ciris_sdk \
+            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git tests examples gui_static desktop_app \
+            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 md pyi deleted \
             --tree-extra-hashes-file build-secrets.json \
             --binary-version "$VERSION" \
             --build-id "$GIT_SHA" \

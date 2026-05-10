@@ -69,6 +69,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalUriHandler
 import ai.ciris.mobile.shared.platform.openUrlInBrowser
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -2902,6 +2903,26 @@ private fun QuickSetupStep(
                     DataPointRow("Decision patterns (no message content)", SetupColors.InfoText)
                     DataPointRow("LLM provider and API base URL", SetupColors.InfoText)
                     DataPointRow("Performance metrics", SetupColors.InfoText)
+                }
+
+                // Public dataset link — the traces feed the CIRISAI Hugging
+                // Face org's public datasets. Surfacing the destination here
+                // makes the consent material rather than abstract: the user
+                // can see *exactly* what their data joins before they tick
+                // the box. URL validated 2026-05-10.
+                val tracesUriHandler = LocalUriHandler.current
+                TextButton(
+                    onClick = { tracesUriHandler.openUri("https://huggingface.co/CIRISAI") },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .padding(bottom = 8.dp)
+                        .testable("btn_traces_view_dataset_quick"),
+                ) {
+                    Text(
+                        text = "View public dataset on Hugging Face: CIRISAI",
+                        fontSize = 12.sp,
+                        color = SetupColors.Primary,
+                    )
                 }
 
                 // Accord metrics consent checkbox

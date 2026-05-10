@@ -125,25 +125,37 @@ genuine "multiple providers" story; everything else uses direct calls.
 
 ### 2.3 Bus-level prohibition gate
 
-`WiseBus` is where the apophatic bounds become an enforced contract.
-The gate fires at **guidance-request time**, not registration time:
-`request_guidance()` (`wise_bus.py:606`) calls
-`_validate_capability()` (line 461), which calls
-`get_capability_category()` from `prohibitions.py` and matches against
-the 22 prohibited-category regexes. `NEVER_ALLOWED` matches raise
-`ValueError` and route the request to a `LICENSED_DOMAIN_REQUIRED`
-deferral; `REQUIRES_SEPARATE_MODULE` matches go through the same
-deferral path with a domain hint. There is no override flag.
+`WiseBus` and `ServiceRegistry` together enforce the apophatic bounds
+on wisdom sources. The contract fires in two places:
 
-Honest gap: `ServiceRegistry.register_service()` accepts a
-`capabilities: Optional[List[str]]` parameter without checking those
-capabilities against the prohibited list at registration time
-(`registries/base.py:107`). A `_is_capability_allowed()` helper exists
-in `wise_bus.py:762` but is currently unwired — likely a future
-registration-time hook. The query-time gate is the load-bearing
-defense today; if a wisdom source registers a `NEVER_ALLOWED`
-capability, it will only be blocked the first time someone actually
-asks for it. The agent's conscience layer is the second defense.
+**At registration time** — `ServiceRegistry.register_service()` calls
+`_validate_wa_capabilities_at_registration()` for any
+`WISE_AUTHORITY` provider (`registries/base.py:165`). Each declared
+capability is matched against the 22-category prohibition table via
+`get_capability_category()` + `get_prohibition_severity()` from
+`prohibitions.py`. Any `NEVER_ALLOWED` match raises `ValueError` and
+the registration is rejected — a misconfigured peer cannot enter the
+registry at all.
+
+**At guidance-request time** — `WiseBus.request_guidance()` calls
+`_validate_capability()` (`wise_bus.py:461`). This path also blocks
+`NEVER_ALLOWED` (defense in depth), and it is the *only* gate for
+`REQUIRES_SEPARATE_MODULE` capabilities — those route to a
+`LICENSED_DOMAIN_REQUIRED` domain-deferral, which fans out to a
+qualified licensed agent via CIRISNode.
+
+Why isn't `REQUIRES_SEPARATE_MODULE` also gated at registration time?
+Because those capabilities are *legal* when the registrant is a
+properly licensed sister module (e.g. CIRISMedical). Distinguishing a
+licensed registrant from an unauthorized one needs a registry-signed
+module manifest — that flow exists in roadmap form but not yet on the
+registration path. Until then, REQUIRES_SEPARATE_MODULE is gated only
+at query-time, where the deferral is the correct outcome anyway. A
+TODO in `_validate_wa_capabilities_at_registration()` points at the
+follow-up work in `FSD/PROOF_OF_BENEFIT_FEDERATION.md`.
+
+There is no override flag. The agent's conscience layer is the
+second defense.
 
 ### 2.4 Wise Authority Deferral
 

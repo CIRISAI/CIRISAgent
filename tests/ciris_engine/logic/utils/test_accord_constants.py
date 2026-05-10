@@ -342,7 +342,7 @@ class TestAccordIntegrityHashes:
         from ciris_engine.logic.utils.constants import ACCORD_EXPECTED_HASHES
 
         repo_root = Path(__file__).resolve().parents[4]
-        manifest = json.loads((repo_root / "localization" / "manifest.json").read_text())
+        manifest = json.loads((repo_root / "ciris_engine" / "data" / "localized" / "manifest.json").read_text())
         # The manifest may store languages as a list or dict — normalize.
         if isinstance(manifest.get("languages"), list):
             locales = set(manifest["languages"])

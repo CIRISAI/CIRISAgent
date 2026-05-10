@@ -82,7 +82,7 @@ class TestKotlinLocalizations:
     @pytest.fixture
     def localization_keys(self, project_root: Path) -> set[str]:
         """Load all localization keys from en.json."""
-        en_json = project_root / "localization" / "en.json"
+        en_json = project_root / "ciris_engine" / "data" / "localized" / "en.json"
         if not en_json.exists():
             pytest.skip("localization/en.json not found")
         return load_localization_keys(en_json)
@@ -133,7 +133,7 @@ class TestKotlinLocalizations:
         4. client/desktopApp/src/main/resources/localization/ (Desktop resources)
         5. client/shared/src/desktopMain/resources/localization/ (Desktop KMP)
         """
-        source_dir = project_root / "localization"
+        source_dir = project_root / "ciris_engine" / "data" / "localized"
         if not source_dir.exists():
             pytest.skip("localization/ directory not found")
 
@@ -186,7 +186,7 @@ class TestKotlinLocalizations:
 
     def test_no_duplicate_keys(self, project_root: Path) -> None:
         """Check for duplicate keys in localization files."""
-        en_json = project_root / "localization" / "en.json"
+        en_json = project_root / "ciris_engine" / "data" / "localized" / "en.json"
         if not en_json.exists():
             pytest.skip("localization/en.json not found")
 
@@ -203,7 +203,7 @@ class TestKotlinLocalizations:
 
     def test_all_languages_have_mobile_section(self, project_root: Path) -> None:
         """Verify all language files have a 'mobile' section."""
-        localization_dir = project_root / "localization"
+        localization_dir = project_root / "ciris_engine" / "data" / "localized"
         if not localization_dir.exists():
             pytest.skip("localization directory not found")
 

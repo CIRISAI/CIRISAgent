@@ -36,7 +36,7 @@ KOTLIN_DIRS = [
 ]
 
 LOCALIZATION_FILES = [
-    "localization/en.json",
+    "ciris_engine/data/localized/en.json",
     "client/androidApp/src/main/assets/localization/en.json",
     "client/shared/src/desktopMain/resources/localization/en.json",
 ]

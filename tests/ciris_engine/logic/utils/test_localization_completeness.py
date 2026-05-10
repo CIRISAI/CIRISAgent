@@ -22,7 +22,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 
 def get_supported_languages() -> List[str]:
     """Get list of supported languages from manifest.json (excluding 'en')."""
-    manifest_path = PROJECT_ROOT / "localization" / "manifest.json"
+    manifest_path = PROJECT_ROOT / "ciris_engine" / "data" / "localized" / "manifest.json"
     with open(manifest_path, "r", encoding="utf-8") as f:
         manifest = json.load(f)
     return sorted([code for code in manifest.get("languages", {}).keys() if code != "en"])
@@ -30,7 +30,7 @@ def get_supported_languages() -> List[str]:
 
 def get_all_languages() -> List[str]:
     """Get list of all languages from manifest.json (including 'en')."""
-    manifest_path = PROJECT_ROOT / "localization" / "manifest.json"
+    manifest_path = PROJECT_ROOT / "ciris_engine" / "data" / "localized" / "manifest.json"
     with open(manifest_path, "r", encoding="utf-8") as f:
         manifest = json.load(f)
     return sorted(manifest.get("languages", {}).keys())
@@ -77,8 +77,16 @@ class TestLocalizationKeyCompleteness:
 
     @pytest.fixture(scope="class")
     def localization_dir(self) -> Path:
-        """Get the localization directory."""
-        return PROJECT_ROOT / "localization"
+        """Get the localization directory.
+
+        Source-of-truth was moved into the package in 2.8.8 — the JSON files
+        live at ``ciris_engine/data/localized/*.json`` (git-tracked, packaged
+        via ``setup.py::package_data``). Previously they were authored at
+        ``localization/*.json`` (gitignored copy at the package path) and a
+        custom ``build_py`` step copied them in at wheel-build time, which
+        produced the sign-vs-install drift CIRISAgent#744 closed.
+        """
+        return PROJECT_ROOT / "ciris_engine" / "data" / "localized"
 
     @pytest.fixture(scope="class")
     def english_keys(self, localization_dir: Path) -> Set[str]:

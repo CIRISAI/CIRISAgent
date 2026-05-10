@@ -76,14 +76,14 @@ TRANSLATIONS = {
 
 def load_en_json():
     """Load the English source file."""
-    en_path = Path(__file__).parent.parent / "localization" / "en.json"
+    en_path = Path(__file__).parent.parent / "ciris_engine" / "data" / "localized" / "en.json"
     with open(en_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_id_json(data):
     """Save the Indonesian translation file."""
-    id_path = Path(__file__).parent.parent / "localization" / "id.json"
+    id_path = Path(__file__).parent.parent / "ciris_engine" / "data" / "localized" / "id.json"
     with open(id_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
     print(f"✓ Saved to {id_path}")

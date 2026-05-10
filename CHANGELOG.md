@@ -5,6 +5,40 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.8] - 2026-05-10
+
+Closes the L4 sign-vs-install drift at its root: the localization JSON files now live in the package, not in a sibling directory that gets copied at wheel-build time.
+
+### Background
+
+CIRISAgent#744 + CIRISVerify#16 (retracted): the 30 `ciris_engine/data/localized/*.json` files were the **source of truth** at `localization/*.json` (git-tracked) plus a **gitignored copy** at the package path that `setup.py::_BuildPyWithLocalization` materialized at wheel-build time. In CI:
+
+1. `actions/checkout` → 0 `.json` at the package path (gitignored)
+2. `stage_runtime` walks include_roots → 0 `.json` in `/tmp/ciris-staged`
+3. `ciris-build-sign sign` walks `/tmp/ciris-staged` → manifest correctly omits 30 files (they aren't on disk yet)
+4. Wheel build's `build_py` step then copies them in → wheel ships 30 `.json` files
+5. End-user `pip install` → `verify_tree()` reports 30 `extra` files vs the registered manifest
+
+The walker on both sides was correct — the agent's pipeline produced different file sets at sign vs install time.
+
+### Fixed
+
+- **Source-of-truth moved into the package.** `git mv localization/*.json ciris_engine/data/localized/`. 30 files now git-tracked at the canonical path (preserving git history).
+- **Removed `setup.py::_BuildPyWithLocalization`** — no longer needed. `package_data` ships the in-tree files directly via the standard setuptools path.
+- **Dropped `.gitignore` line** for `ciris_engine/data/localized/*.json`.
+- **Updated tests + tooling paths** — 9 tests + 6 dev-tool scripts that read from `repo_root/localization/{lang}.json` now read from `ciris_engine/data/localized/{lang}.json`. Runtime loader's `CIRIS_HOME/localization` fallback chain is preserved (operators can still override).
+
+### Verified
+
+- `stage_runtime --check` walks 30 `.json` files from the canonical path → in `/tmp/ciris-staged`
+- Wheel build (no `_BuildPyWithLocalization`) → 30 `.json` files in `dist/*.whl`
+- 954/955 attestation + parity + localization suite green; mypy clean
+
+### Cross-link
+
+- CIRISAgent#744 closed by this PR
+- CIRISAgent#743 (split sign target — desktop drops `_build_secrets.py`) — separate work, deferred to next patch since the runtime-side target-resolution mechanism needs CIRISVerify input first
+
 ## [2.8.7] - 2026-05-09
 
 CI sign step + canonical-rules drift fix + ciris-verify v1.14.0 floor (platform-asymmetric `missing` semantic). 2.8.6 wired `verify_tree()` end-to-end but L4 validation against the prod-installed wheel (post-`Register Build with CIRISRegistry`) showed `python_modules_passed=1499/1530` with 30 `extra` files — `ciris_engine/data/localized/*.json` data files were in the staged tree, in the wheel, but missing from the registered manifest. Plus 1 `missing` for `_build_secrets.py` (legitimately platform-asymmetric: mobile bundles ship it, desktop wheel intentionally doesn't).

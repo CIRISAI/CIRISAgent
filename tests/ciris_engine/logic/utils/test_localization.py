@@ -510,7 +510,7 @@ class TestGetLanguageGuidance:
         import json
         from pathlib import Path
 
-        manifest_path = Path(__file__).resolve().parents[4] / "localization" / "manifest.json"
+        manifest_path = Path(__file__).resolve().parents[4] / "ciris_engine" / "data" / "localized" / "manifest.json"
         manifest = json.loads(manifest_path.read_text())
         if isinstance(manifest.get("languages"), list):
             manifest_langs = set(manifest["languages"])

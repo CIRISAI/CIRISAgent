@@ -50,7 +50,7 @@ def translate_recursive(obj, mappings: dict[str, str]):
 def generate_localization(lang_code: str, lang_name: str):
     """Generate a complete localization JSON file."""
     # Load English source
-    en_path = BASE_DIR / "localization/en.json"
+    en_path = BASE_DIR / "ciris_engine/data/localized/en.json"
     with open(en_path, "r", encoding="utf-8") as f:
         en = json.load(f)
 

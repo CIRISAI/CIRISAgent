@@ -29,7 +29,7 @@ class TestLocaleCoverage:
     """The locale registry must stay in sync with localization/manifest.json."""
 
     def test_every_manifest_locale_has_a_user(self):
-        manifest = json.loads((REPO_ROOT / "localization" / "manifest.json").read_text())
+        manifest = json.loads((REPO_ROOT / "ciris_engine" / "data" / "localized" / "manifest.json").read_text())
         if isinstance(manifest.get("languages"), list):
             manifest_locales = set(manifest["languages"])
         elif isinstance(manifest.get("languages"), dict):

@@ -32,7 +32,7 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MANIFEST = REPO_ROOT / "localization" / "manifest.json"
+MANIFEST = REPO_ROOT / "ciris_engine" / "data" / "localized" / "manifest.json"
 EN_BASE = REPO_ROOT / "ciris_engine" / "logic" / "conscience" / "prompts"
 LOCALIZED_ROOT = EN_BASE / "localized"
 

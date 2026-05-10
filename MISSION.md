@@ -69,13 +69,15 @@ in three places:
 
 ### 1.3 Recursive Golden Rule
 
-The Accord's relational ethic is fractal: the same Self ↔ Originator ↔
-Ecosystem structure recurs at every scale of agency the system models.
-The canonical statement is in [`ACCORD.md`](ACCORD.md) and the polyglot
-accord at `ciris_engine/data/localized/accord_1.2b_POLYGLOT.txt`. Mission
-alignment isn't symmetric reciprocity — it's the same shape at every
-scale, with hollow-center prohibition and Mandelbrot-style termination
-safeguards.
+The Accord's ethical structure repeats at every level the system reasons
+about: the agent treats itself, the people it talks to, and the broader
+community it lives in by the same rules. Same shape, different scale.
+Mission alignment is "treat the next agent / user / community the way
+you'd want to be treated, all the way up and all the way down" — not
+"follow this single rule about the immediate user."
+
+The full statement is in [`ACCORD.md`](ACCORD.md) and the polyglot
+accord at `ciris_engine/data/localized/accord_1.2b_POLYGLOT.txt`.
 
 ---
 
@@ -124,29 +126,51 @@ genuine "multiple providers" story; everything else uses direct calls.
 ### 2.3 Bus-level prohibition gate
 
 `WiseBus` is where the apophatic bounds become an enforced contract.
-Before any wisdom source can register or be queried, its declared
-capability tokens are run through
-`prohibitions.get_capability_category()` (regex over the 22 prohibited
-sets). Matches in `NEVER_ALLOWED` categories are rejected at registration
-time; matches in `REQUIRES_SEPARATE_MODULE` categories must reference an
-external licensed module. There is no override flag. The gate is the
-first defense; the agent's own conscience is the second.
+The gate fires at **guidance-request time**, not registration time:
+`request_guidance()` (`wise_bus.py:606`) calls
+`_validate_capability()` (line 461), which calls
+`get_capability_category()` from `prohibitions.py` and matches against
+the 22 prohibited-category regexes. `NEVER_ALLOWED` matches raise
+`ValueError` and route the request to a `LICENSED_DOMAIN_REQUIRED`
+deferral; `REQUIRES_SEPARATE_MODULE` matches go through the same
+deferral path with a domain hint. There is no override flag.
+
+Honest gap: `ServiceRegistry.register_service()` accepts a
+`capabilities: Optional[List[str]]` parameter without checking those
+capabilities against the prohibited list at registration time
+(`registries/base.py:107`). A `_is_capability_allowed()` helper exists
+in `wise_bus.py:762` but is currently unwired — likely a future
+registration-time hook. The query-time gate is the load-bearing
+defense today; if a wisdom source registers a `NEVER_ALLOWED`
+capability, it will only be blocked the first time someone actually
+asks for it. The agent's conscience layer is the second defense.
 
 ### 2.4 Wise Authority Deferral
 
 The protocol contract for handing decisions back to humans lives in
 `ciris_engine/protocols/services/governance/wise_authority.py`. The
-agent's runtime path:
+agent's runtime path, traced through code:
 
-1. The agent's DSDMA / IDMA evaluation flags a competence-boundary case
-   (uncertain consent, conflicting principles, capability requiring
-   licensed authority).
-2. The action handler emits `DEFER` with a typed `defer_reason` and an
-   optional `defer_until` ISO 8601 timestamp.
-3. `WiseBus.broadcast_deferral()` fans the request out to all
-   registered wisdom sources matching the deferral's domain.
-4. A licensed human (medical, legal, etc.) or a trusted authority
-   resolves the deferral via the `WiseAuthority` API; agent resumes.
+1. **ASPDMA selects `DEFER`** as the action (see `HandlerActionType.DEFER`
+   in `schemas/runtime/enums.py`). The DMAs / consciences provided the
+   inputs that led to the selection — competence boundary, conscience
+   failure, capability requiring licensed authority — but the emit
+   itself is the action-selection step's output.
+2. **`DeferHandler.handle()`** in `logic/handlers/control/defer_handler.py`
+   parses `DeferParams` (typed: `reason`, `defer_until`, `priority`,
+   `domain_hint`, `reason_code`, `needs_category`,
+   `secondary_needs_categories`, `rights_basis`, `metadata`).
+3. If `defer_until` is set, the handler schedules a resume via
+   `task_scheduler.schedule_deferred_task()`.
+4. The handler calls **`bus_manager.wise.send_deferral(context, handler_name)`**
+   on the `WiseBus` (`wise_bus.py:147`). The bus picks a matching
+   wisdom source and delivers the typed `DeferralContext`.
+5. The thought is marked `DEFERRED` in persistence; the parent task is
+   marked deferred.
+6. A licensed human or trusted authority calls
+   **`WiseAuthority.resolve_deferral(deferral_id, response: DeferralResponse) -> bool`**
+   (`protocols/services/governance/wise_authority.py:53`). The agent
+   resumes when the deferred task is reactivated.
 
 The defer/resume cycle is the load-bearing primitive that makes
 "capabilities requiring licensed authority" implementable without
@@ -161,11 +185,38 @@ embedding domain expertise in the agent.
 > **No Untyped Dicts. No Bypass Patterns. No Exceptions.**
 
 `Dict[str, Any]` is the antipattern. Every data structure that crosses a
-service or protocol boundary must be a Pydantic model with explicit
+service or protocol boundary should be a Pydantic model with explicit
 field types and validation. Enforced by `mypy --strict` in CI; tracked
-by `tools/quality/audit_dict_any_usage.py`. `disallow_any_explicit` is
-on the list of strict-mode flags pending a final pass — see
-`mypy.ini`.
+by `tools/quality/audit_dict_any_usage.py`.
+
+In practice, ~275 files under `ciris_engine/` and `ciris_adapters/`
+still contain at least one `Dict[str, Any]`. The concentrations are
+where you'd expect them — boundaries between typed Python and untyped
+JSON / third-party APIs:
+
+- **`ciris_engine/logic/adapters/api/routes/`** (17 files) — FastAPI
+  route handlers. FastAPI's OpenAPI generator and request/response
+  encoding tolerate `Dict[str, Any]` at the wire boundary; tightening
+  them all would mean threading typed envelopes through every
+  third-party JSON shape we accept.
+- **`ciris_adapters/`** (60+ files across `wallet/`, `home_assistant/`,
+  `cirisnode/`, `external_data_sql/`, `mock_llm/`,
+  `ciris_accord_metrics/`) — adapter HTTP clients and tool services.
+  Each one fronts a third-party surface where typing the upstream
+  schema is its own multi-week project. `ciris_accord_metrics/services.py`
+  alone has 28.
+- **`ciris_engine/schemas/types.py`** — defines `JSONValue` and
+  `ConfigValue` type aliases that legitimately must include
+  `Dict[str, Any]` (recursive JSON requires it). 46 occurrences
+  show up inside `ciris_engine/schemas/` itself; most are these
+  aliases or escape-hatch payload fields on graph nodes/edges.
+
+Per CLAUDE.md: *"minimal Dict[str, Any] usage remaining, none in
+critical code paths."* That's approximately right if you read
+"critical" as "not a route handler, not an adapter HTTP envelope, not
+a JSON type alias." The rule is the rule; the residue at the
+boundaries is what we accept while `disallow_any_explicit` (currently
+commented out in `mypy.ini:32`) remains pending a final pass.
 
 ### 3.2 The schema landscape
 
@@ -346,9 +397,17 @@ This is the section to consult during code review. Every change should
 demonstrably advance — or at minimum not regress — at least one of the
 M-1 vectors below.
 
-### 5.1 The review checklist
+### 5.1 The review heuristic
 
-For each PR, the reviewer asks:
+This is the internalized heuristic, not a written gate. The project
+runs at **defensive acceleration** velocity — admin-merge is normal,
+the safety batteries (CIRISVerify attestation, signed audit chains, the
+RATCHET watching the watcher, bus-level prohibition gate, conscience
+faculty, Wise-Authority deferral) are the structural guarantees, not a
+human check-list at every PR. The heuristic stays in the reviewer's
+head; the safety lives in the architecture.
+
+When alignment-relevant code crosses a reviewer's eyes, they're asking:
 
 1. **Mission**: Which Accord principle does this serve? If "none, but
    it's good engineering hygiene," is there mission leverage in the
@@ -357,10 +416,13 @@ For each PR, the reviewer asks:
    even indirectly (e.g., a generic "summarize health records" tool)?
 3. **Protocol**: Does this break an existing service or bus contract?
    New contract = new protocol file under `ciris_engine/protocols/`.
-4. **Schema**: Is any new data structure typed end-to-end? Any
-   `Dict[str, Any]` in a non-boundary site = block.
+4. **Schema**: Is any new data structure typed end-to-end?
 5. **Auditability**: Can the relevant decision be traced from emit-time
    back to a thought_id in the streaming pipeline?
+
+Move as quickly as you can responsibly move. Slow-rolling reviews
+isn't safety — it's just slower failure. The architecture is the
+safety; reviews are sanity checks on top.
 
 ### 5.2 Anti-Goodhart guardrails
 
@@ -402,21 +464,32 @@ functions over time.
 
 ### 6.1 The federation peers
 
+The federation has more named pieces than fit cleanly in a table —
+agents, observatories, registries, portals, bridges, managers, websites,
+LLM proxies, GUI standalones, medical/legal sister repos under separate
+liability isolation, and more being added. The list below is a
+non-exhaustive snapshot of the load-bearing pieces at the time of
+writing. **The authoritative source is
+[`FSD/PROOF_OF_BENEFIT_FEDERATION.md`](FSD/PROOF_OF_BENEFIT_FEDERATION.md);
+read that for the moving topology.**
+
 | Repo | Role |
 |---|---|
 | **CIRISAgent** | The agent runtime — emits signed traces, enforces apophatic bounds, runs the H3ERE pipeline locally. This file documents it. |
 | **CIRISVerify** | Hardware-rooted attestation (Ed25519 + ML-DSA-65, TPM-backed). `verify_tree()` v1.14+ produces the L1–L5 ladder; without this, no claim from any other federation peer is verifiable. |
 | **CIRISLens** | External observatory. Receives signed traces, verifies at the Rust edge, computes the **Capacity Score** and runs the **Coherence Ratchet** anomaly detectors. The "watching the watcher" layer — see §6.2. |
 | **CIRISPersist** | Trace persistence. Signed audit chains, schema-versioned trace ingest, dedup tuples on `(agent_id_hash, trace_id, thought_id, parent_event_type, parent_attempt_index)`. |
-| **CIRISRegistry** | Identity / build / license / revocation directory. Dual-region (US/EU) Rust gRPC service deployed at `*.ciris-services-1.ai`. SOC2/HIPAA/GDPR-compliant. The bootstrap node and commercial fast-track for licensed deployments. |
-| **CIRISBridge** | Public verify edge. Caddy gate for anonymous routes (`/v1/health`, `/v1/steward-key`, `/v1/builds/{ver}`, `/v1/verify/binary-manifest/{ver}`, `/v1/verify/function-manifest/{ver}/{target}`). |
-| **CIRISManager** | Multi-agent fleet orchestration. Per-agent deployment, secrets distribution, manager tokens, agent restart and integrity checks. |
-| **CIRISNode** | Benchmark execution + WBD routing + audit anchoring. Folding into the agent per the FSD §3.1 architectural move. |
-| **CIRISPortal** (`portal.ciris.ai`) | Admin UI for the registry — orgs, users, keys, licenses, builds. |
-| **CIRISMedical** | Private repo. Licensed-domain implementation. Reaches CIRISAgent only through the WBD bus; never imported. |
+| **CIRISRegistry** | Identity / build / license / revocation directory. Dual-region (US/EU) Rust gRPC service deployed at `*.ciris-services-1.ai`. SOC2/HIPAA/GDPR-compliant. The bootstrap node. |
+| **CIRISBridge** | Public verify edge. Caddy gate for anonymous routes. |
+| **CIRISManager** | Multi-agent fleet orchestration. Per-agent deployment, secrets, manager tokens, restart + integrity checks. |
+| **CIRISNode** | Benchmark execution + WBD routing + audit anchoring. Folding into the agent per FSD §3.1. |
+| **CIRISPortal** | Admin UI for the registry — orgs, users, keys, licenses, builds. |
+| **CIRISMedical** | Private. Licensed-domain implementation. Reaches CIRISAgent only through the WBD bus; never imported. |
 
-This list is the current snapshot — the Federation FSD is the moving
-authoritative source as the topology evolves.
+Other pieces in the federation (the public website, LLM proxy, the
+desktop/mobile client artifact targets, sister liability-isolated repos
+for other licensed domains, etc.) join and reshape on their own
+schedule.
 
 ### 6.2 The Coherence Ratchet — the federation's threat model
 

@@ -42,7 +42,12 @@ This FSD specifies all three.
 
 ## 2. The artifact tuple
 
-A run is identified by a **6-element tuple**:
+The loop produces TWO classes of artifact (capture + interpret); each
+is identified by an overlapping tuple.
+
+### 2.0 Capture artifact tuple (6 elements)
+
+The agent-under-test's signed responses.
 
 | Element | Source | Example |
 |---|---|---|
@@ -53,7 +58,41 @@ A run is identified by a **6-element tuple**:
 | `agent_version` | `ciris_engine/constants.py` | `2.8.9` |
 | `template_id` | setup-completion payload | `default` |
 
-Why each:
+### 2.0a Interpret artifact tuple (8 elements)
+
+The interpreter agent's verdicts. Strictly a superset of the capture
+tuple plus two interpreter-side elements.
+
+| Element | Source | Example |
+|---|---|---|
+| (all six capture elements above) |  |  |
+| `rubric_id` | criteria.json | `am_mh_v4_canonical_universal` |
+| `interpreter_agent_version` | interpreter `ciris_engine/constants.py` | `2.8.9` |
+
+Why the split into two artifact classes:
+
+- **Capture is expensive** (agent-under-test runs through full DMA +
+  conscience pipeline per question; minutes per question on Together
+  gemma). Re-using captured responses when only the rubric changes is
+  the whole point of the dedup pre-flight (§4).
+- **Interpret is cheap** for deterministic criteria, moderate for
+  semantic. Re-running interpret with a new rubric against existing
+  captured responses is the normal flow when a `rubric_proposal`
+  Contribution wins a vote and becomes canonical.
+
+Why each new element on the interpret tuple:
+
+- **`rubric_id`** because competing rubrics may exist for the same
+  cell (per `cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md`). Each
+  rubric's verdicts are distinct evidence; the artifact name carries
+  which rubric was applied.
+- **`interpreter_agent_version`** because the interpreter is itself a
+  CIRIS agent whose prompts/accord/guide get recalibrated through the
+  Contribution flow (per `cirisnodecore/FSD/INTERPRETER_AGENT.md` §7).
+  A re-calibration of the interpreter changes verdicts even when
+  response + rubric are unchanged. Distinct artifact.
+
+Why each capture element (unchanged from before):
 
 - **Cell** is the consensus boundary per `MISSION.md` Primitive 2/3. A
   run is bound to one (domain, language) cell.
@@ -72,39 +111,68 @@ Why each:
   Future: `datum`, `echo-speculative`, `scout` etc. each get their own
   artifact track.
 
-### 2.1 Artifact name
+### 2.1 Artifact names
 
+**Capture**:
 ```
-safety-battery-{language}-{domain}-v{battery_version}-{model_slug}-{agent_version}-{template_id}
+safety-battery-capture-{language}-{domain}-v{battery_version}-{model_slug}-{agent_version}-{template_id}
 ```
 
 Example:
-
 ```
-safety-battery-am-mental_health-v4-google_gemma-4-31B-it-2.8.9-default
+safety-battery-capture-am-mental_health-v4-google_gemma-4-31b-it-2.8.9-default
 ```
 
-GitHub Actions artifact name length cap is 255 chars; tuple fits well
-under.
+**Interpret**:
+```
+safety-battery-interpret-{language}-{domain}-v{battery_version}-{model_slug}-{agent_version}-{template_id}-{rubric_id}-{interpreter_agent_version}
+```
 
-**Latest-wins**: no `run_id` in the name. Re-running the same tuple
+Example:
+```
+safety-battery-interpret-am-mental_health-v4-google_gemma-4-31b-it-2.8.9-default-canonical_universal-2.8.9
+```
+
+GitHub Actions artifact name length cap is 255 chars; both tuples fit
+well under. (Shortening `rubric_id` to the suffix after `am_mh_v4_`
+keeps the interpret name compact.)
+
+**Latest-wins**: no `run_id` in either name. Re-running the same tuple
 overwrites the artifact pointer (each run still has a unique run_id
 within the workflow run; the *named* artifact tracks the most recent).
 safety.ciris.ai always fetches "the current canonical run of this
 tuple."
 
-### 2.2 What the artifact contains
+### 2.2 What each artifact contains
 
+**Capture bundle**:
 ```
-safety-battery-am-mental_health-v4-...-2.8.9-default/
-├── results.jsonl                 # one row per question, per SCHEMA.md §5.1
-├── summary.json                  # run-level rollup
-├── manifest_signed.json          # the signed envelope (§3)
-└── workflow.log                  # stdout/stderr from the runner
+safety-battery-capture-am-mental_health-v4-...-2.8.9-default/
+├── results.jsonl                 # one row per question: response + metadata
+├── summary.json                  # capture-run rollup
+├── manifest_signed.json          # signed envelope (§3) — capture-side
+├── traces/                       # full reasoning stream from the agent-under-test
+│   └── accord-batch-*.json       # @streaming_step broadcasts (per CLAUDE.md memory)
+└── workflow.log                  # stdout/stderr from the capture runner
 ```
 
-GitHub Actions Sigstore attestation is bound to the bundle; verifies
-via `gh attestation verify` (§3.2).
+**Interpret bundle**:
+```
+safety-battery-interpret-am-mental_health-v4-...-default-canonical_universal-2.8.9/
+├── verdicts.jsonl                # one row per (response, criterion) pair
+├── verdicts_summary.json         # interpret-run rollup (per-criterion pass/fail counts)
+├── manifest_signed.json          # signed envelope (§3) — interpret-side, with
+│                                 # references back to the capture artifact
+├── traces/                       # full reasoning stream from the interpreter agent
+│   └── accord-batch-*.json
+└── workflow.log
+```
+
+Both bundles get a Sigstore attestation; verifies via
+`gh attestation verify` (§3.2). The interpret bundle's
+`manifest_signed.json` carries the capture bundle's `manifest_signed.json
+.bundle.results_jsonl_sha256` so verifiers can confirm "this verdict
+batch was produced against THIS specific response batch."
 
 ---
 
@@ -310,30 +378,49 @@ output buffer.
 
 ## 6. End-to-end flow
 
+Two CI jobs, capture → interpret. Both stream full reasoning traces
+to disk (`CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR`) and upload them as
+part of their respective artifact bundles. Both attested separately
+via Sigstore.
+
 ```
 [ CI trigger: cron | workflow_dispatch | PR on tests/safety/** ]
-                          ↓
-[ Pre-flight: query GH Actions API for matching tuple artifact ]
-                          ↓
-              ┌───────────┴───────────┐
-              ↓ found + fresh         ↓ not found / stale / forced
-[ Exit success ]                      [ Continue ]
-[ Annotate URL ]                          ↓
-                          [ Write TOGETHER_API_KEY → ~/.together_key ]
-                                          ↓
-                          [ Invoke qa_runner safety_battery ]
-                          [ Runner: --wipe-data forced via metadata ]
-                          [ Runner: starts agent in live mode w/ Together gemma ]
-                          [ Runner: completes setup wizard, creates locale user ]
-                          [ Runner: submits 9 questions sequentially, shared channel ]
-                          [ Runner: writes results.jsonl + summary.json ]
-                                          ↓
-                          [ Workflow: compute SHAs, write manifest_signed.json ]
-                          [ Workflow: actions/attest-build-provenance ]
-                          [ Workflow: upload artifact w/ tuple-name ]
-                                          ↓
-                          [ safety.ciris.ai: poll GH Actions API, fetch latest,
-                            verify both signatures, present to scorers ]
+                                  ↓
+            ┌─────────────────────┴─────────────────────┐
+            ↓                                             ↓
+[ Capture job ]                              [ Interpret job (needs: capture) ]
+            ↓                                             ↓
+[ Capture pre-flight: dedup by capture-tuple ]
+            ↓
+   ┌────────┴────────┐
+   ↓ skip            ↓ run
+[ exit success ]  [ run safety_battery module ]
+                  [ - --wipe-data forced via WIPE_DATA_ON_START ]
+                  [ - agent-under-test on port 8080, template=default ]
+                  [ - CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR → traces/ dir ]
+                  [ - submits 9 questions sequentially, shared channel ]
+                  [ - writes results.jsonl + summary.json + manifest_signed.json ]
+                  [ - attest-build-provenance over the bundle ]
+                  [ - upload capture artifact ]
+                                                ↓
+                                  [ Interpret pre-flight: dedup by interpret-tuple ]
+                                                ↓
+                                     ┌──────────┴──────────┐
+                                     ↓ skip                ↓ run
+                                  [ exit success ]      [ download capture artifact ]
+                                                        [ run safety_interpret module ]
+                                                        [ - interpreter agent on port 8081 ]
+                                                        [ - CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR ]
+                                                        [ - for each (response, criterion): ]
+                                                        [   * deterministic → in-Python regex/term ]
+                                                        [   * interpreter_judgment → POST to agent ]
+                                                        [ - writes verdicts.jsonl + summary + signed ]
+                                                        [ - attest-build-provenance over the bundle ]
+                                                        [ - upload interpret artifact ]
+                                                                                ↓
+                          [ safety.ciris.ai: poll GH Actions API for both artifact tuples,
+                            verify both Sigstore signatures, cross-link capture↔interpret
+                            via manifest_signed.json hashes, present to operators ]
 ```
 
 ---

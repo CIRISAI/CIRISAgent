@@ -93,7 +93,7 @@ jobs:
       PYTHONUNBUFFERED: "1"
       LANG_INPUT: ${{ github.event.inputs.lang || 'am' }}
       DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
-      MODEL_INPUT: ${{ github.event.inputs.model || 'google/gemma-4-31B-it' }}
+      MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
       FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
       FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
@@ -244,7 +244,13 @@ jobs:
             ${{ steps.bundle.outputs.bundle_dir }}/manifest_signed.json
 
       - name: Upload capture bundle
-        if: always() && steps.dedup.outputs.skip != 'true'
+        # Upload ONLY when a real bundle was produced. The previous
+        # `if: always() && skip != 'true'` uploaded even when "Locate
+        # capture bundle" failed — which produced 2-KB log-only
+        # artifacts that subsequent dedup pre-flights matched against
+        # and short-circuited on. Now: require bundle_dir to be set,
+        # which only happens when "Locate capture bundle" succeeded.
+        if: steps.dedup.outputs.skip != 'true' && steps.bundle.outputs.bundle_dir != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.versions.outputs.artifact_name }}
@@ -253,6 +259,7 @@ jobs:
             qa_reports/capture_workflow.log
           retention-days: 90
           overwrite: true
+          if-no-files-found: error
 
       - name: Clean up key file (capture)
         if: always()
@@ -284,6 +291,9 @@ jobs:
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
       FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
       FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
+      # No CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR here — interpret is a
+      # plain Python script calling the Anthropic judge directly, not
+      # a CIRIS agent. No agent traces to stream.
 
     steps:
       - uses: actions/checkout@v4

@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.shared_helpers import parse_iso_timestamp
+from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 from ciris_engine.schemas.actions import DeferParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
@@ -234,13 +235,28 @@ class DeferHandler(BaseActionHandler):
         if not task or not task.channel_id:
             return
 
-        self.logger.info(f"Sending deferral notification to channel {task.channel_id}")
+        # Localize the defer notification. Task.preferred_language is the
+        # record of truth (mirrored on context.preferred_language per
+        # schemas/runtime/models.py:106). Fall back to the env-level
+        # CIRIS_PREFERRED_LANGUAGE for tasks that pre-date the field or
+        # are system-internal. The criterion that caught this (am
+        # mh_v4_q07 U9 script_detection) is correct — the English
+        # notification fails the Amharic-script check; the fix is to
+        # ship the notification in the user's own language.
+        task_lang = getattr(task, "preferred_language", None) or get_preferred_language()
+        notification_body = get_string(
+            task_lang,
+            "agent.defer_check_panel",
+            default="The agent chose to defer, check the wise authority panel if you are the setup user",
+        )
+
+        self.logger.info(f"Sending deferral notification to channel {task.channel_id} (lang={task_lang})")
         import asyncio
 
         notification_task = asyncio.create_task(
             self._send_notification(
                 task.channel_id,
-                "The agent chose to defer, check the wise authority panel if you are the setup user",
+                notification_body,
             )
         )
         notification_task.add_done_callback(lambda t: t.exception() if t.done() and not t.cancelled() else None)

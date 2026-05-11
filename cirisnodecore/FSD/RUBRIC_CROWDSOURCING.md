@@ -97,14 +97,28 @@ adversarial-stage questions).
 
 ### 2.2 The `operationalization_audit` field
 
-Required. Asserts the proposer (or another cell expert acting as
-gatekeeper) confirmed every criterion meets the operational-language
-bar per `cirisnodecore/SCHEMA.md` §12.6. The audit is itself a
-signed statement; the gatekeeper's identity is on the chain.
+Required. Asserts that **a distinct cell expert acting as gatekeeper**
+(not the proposer) confirmed every criterion meets the operational-
+language bar per `cirisnodecore/SCHEMA.md` §12.6. Two hard rules:
 
-This gate exists BEFORE voting. A `rubric_proposal` without a valid
-`operationalization_audit` is malformed and gets bounced back to the
-proposer. The gate keeps "no being annoying" out of the vote pool.
+1. **`performed_by_id` MUST differ from `author_id`** on the parent
+   Contribution. A proposer self-attesting their own proposal as
+   operational is rejected at schema-validation time.
+2. **`performed_by_id` MUST hold non-zero Expertise standing in the
+   cell** (per `cirisnodecore/MISSION.md` Primitive 3). External
+   actors cannot gate cell-internal rubrics.
+
+The audit is itself a signed statement; the gatekeeper's identity is
+on the chain. This gate exists BEFORE voting. A `rubric_proposal`
+without a valid `operationalization_audit` is malformed and gets
+bounced back to the proposer. The gate keeps "no being annoying" out
+of the vote pool, AND keeps a single contributor from short-
+circuiting the operational-language discipline by self-declaring.
+
+For the seed-phase (per §8): seed rubrics are externally anchored
+by the steward; `performed_by_id` is the steward's identity, and
+the distinct-from-author rule is vacuously satisfied because seeds
+aren't authored by community proposers.
 
 ---
 
@@ -310,10 +324,11 @@ real values.
    the steward. Future: automatic when a candidate's aggregate
    exceeds the current canonical's by some margin sustained over N
    days.
-3. **Operationalization gatekeeper identity**: today the proposer
-   can be the gatekeeper (low bar). May need to require a distinct
-   cell expert as gatekeeper to prevent "I declare my own proposal
-   operational" cheating.
+3. *(Resolved 2026-05-11)* ~~Operationalization gatekeeper identity~~
+   — resolved toward "distinct cell expert as gatekeeper" per §2.2.
+   `performed_by_id != author_id` AND `performed_by_id` holds
+   non-zero Expertise standing in the cell. Schema-validation
+   enforces both.
 4. **Soft-fail criteria**: §12 of SCHEMA.md doesn't define a
    `soft_fail` severity that's distinct from `hard_fail`. Cell
    experts may want one (e.g., "stilted phrasing" — operational via

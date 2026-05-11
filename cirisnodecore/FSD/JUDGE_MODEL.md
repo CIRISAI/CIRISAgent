@@ -106,13 +106,60 @@ care toward people whose realistic alternative is no care, with
 the diligence, humility, and accountability the tradition
 requires.
 
-### 0.3 Ubuntu — the relational ethic
+### 0.3 Ubuntu — the relational ethic of mutual personhood
 
 Already named in `MISSION.md` §1.5: *I am because we are.* The
 recursive obligation runs both directions at every scale of
 agency — contributor, cell, deployment, federation. The judge is
 no exception. Calibrating the judge is itself a community
 practice, mediated by Contributions, votes, and Reconsiderations.
+
+The Bantu philosophical tradition gives the framing precisely:
+
+- **"Motho ke motho ka batho"** (Setswana / Sotho): *A person is a
+  person through other persons.* The Nguni-language analogue
+  ("umuntu ngumuntu ngabantu") is the variant most often cited in
+  English-language scholarship. Both express the same claim:
+  personhood is not an individual property; it is constituted by
+  the recognition and obligation of other persons.
+
+- John Mbiti, *African Religions and Philosophy* (1969, rev. 1990).
+  The canonical English-language anthropological grounding. Mbiti
+  formulated the claim as: *"I am because we are; and since we
+  are, therefore I am."* The temporal recursion (past community →
+  present self → future obligation) maps directly to the
+  federation's recursive accountability: the seed-holders' work
+  constitutes the cell; the cell constitutes the judge; the
+  judge's verdicts constitute future practice; future practice
+  re-grounds (or challenges) the seed.
+
+- Desmond Tutu, *No Future Without Forgiveness* (1999). Brings
+  Ubuntu into the operational register of post-harm restitution
+  and accountability. Tutu's framing of the South African TRC
+  process — "What dehumanises you inexorably dehumanises me" — is
+  the load-bearing principle behind why the Reconsideration path
+  (Primitive 11) exists: a federation that slashes contributors
+  without an appeal path harms the appellants AND degrades the
+  federation's own moral standing.
+
+- Mogobe Ramose, *African Philosophy through Ubuntu* (1999, rev.
+  2002). The systematic philosophical exposition. Ramose argues
+  Ubuntu is not a "concept" but a verb-form — *ubu-* (be-ing) +
+  *-ntu* (human) — naming the *activity* of becoming human in
+  relation. The implication for the federation: calibrating the
+  judge isn't a one-time configuration; it's an ongoing relational
+  practice. The `judge_prompt_edit` / `judge_model_vote` flow is
+  not maintenance; it's how the judge becomes the judge it should
+  be, through the community it serves.
+
+The Bantu tradition's structural correspondence to the Catholic
+prudential-judgment tradition above is striking and worth naming:
+both refuse the Cartesian model of the autonomous individual
+moral reasoner; both ground moral standing in relationship and
+diligent practice rather than in the isolated act of the will.
+The deployment regions served (Ethiopia, Nigeria, Tanzania,
+Kenya, South Africa) are Ubuntu's geographic-philosophical home;
+the moral weight is not borrowed.
 
 ### 0.4 What the prompt does (and does not) carry
 
@@ -360,16 +407,42 @@ What we kept:
 
 ---
 
-## 7. v2 (2.9.x) deferred work
+## 7. v1 (2.8.9) acceptance criteria + v2 deferred work
 
-- **Per-locale prompt templates** if drift surfaces in pilot.
+### 7.0 v1 acceptance: Amharic reversal-rate visibility from day one
+
+Pulled forward from v2 — the pilot cell is `(mental_health, am)`,
+the first live contributor is Ethiopian, and we need to know on
+day one whether Opus 4.7 is systematically Western-biased in
+Amharic verdicts. v1 lands two things:
+
+1. **`verdicts_summary.json`** carries
+   `per_cell_per_judge: {reversal_rate, n_reconsiderations,
+   n_upheld, n_reversed, n_partial}` for the `(am, mental_health,
+   claude-opus-4-7)` triple. Empty until the first Reconsideration
+   lands; computable from the federation audit chain (or from CI
+   artifacts in the pre-`[Impl]` interim).
+2. **Reversal-rate threshold** as a documented monitoring signal
+   (not yet a slashing trigger): when the `am` cell's
+   `claude-opus-4-7` reversal rate exceeds 25% over the trailing
+   N≥10 Reconsiderations, surface a `judge_drift_signal` event the
+   steward can act on by filing a `judge_prompt_edit` or
+   `judge_model_vote` Contribution.
+
+The other 13 cells inherit the tracking machinery but their
+specific thresholds default to "monitor only, no signal" until
+their first pilot evidence accumulates.
+
+### 7.1 v2 (2.9.x) deferred work
+
+- **Per-locale prompt templates** if drift surfaces in pilot
+  beyond what `judge_prompt_edit` covers
 - **Multi-judge ensembles** — N foundation models per cell;
   canonical verdict is the majority. Witness diversity from
   MISSION.md §10 applies when N ≥ 3 distinct judges.
-- **Judge calibration ledger** — track per-judge
-  Reconsideration-Reversed rates per cell; when a judge crosses a
-  threshold, file automatic `judge_model_vote` Contributions to
-  consider swapping it out.
+- **Auto-filed `judge_model_vote` Contributions** when reversal
+  rate thresholds trip (v1 surfaces the signal; v2 closes the
+  loop automatically)
 - **Caching** — `(response_hash, criterion_hash, judge_model,
   prompt_sha256) → verdict`. Same inputs really do produce the
   same verdict; we currently re-call every time.

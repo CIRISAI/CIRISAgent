@@ -141,6 +141,17 @@ GitHub Actions artifact name length cap is 255 chars; both tuples fit
 well under. (Shortening `rubric_id` to the suffix after `am_mh_v4_`
 keeps the interpret name compact.)
 
+**`judge_prompt_sha256` prefix-escalation policy.** The 8-char prefix
+has ~1-in-4-billion collision probability per cell — vanishingly
+unlikely in pilot phase. If an intra-cell collision is observed (two
+distinct prompt templates SHA-collide on their first 8 hex chars
+within the same `(rubric_id, judge_model_slug)`), extend the prefix
+to 12 hex chars cell-wide and re-name future artifacts accordingly.
+The 12-char fallback is documented as a comment in
+`tools/qa_runner/modules/safety_interpret.py` and lives here as
+the policy of record; it is not pre-applied (longer names without
+benefit add tuple noise).
+
 **Latest-wins**: no `run_id` in either name. Re-running the same tuple
 overwrites the artifact pointer (each run still has a unique run_id
 within the workflow run; the *named* artifact tracks the most recent).
@@ -433,6 +444,44 @@ inputs). Both bundles attested separately via Sigstore.
                             verify both Sigstore signatures, cross-link capture↔interpret
                             via manifest_signed.json hashes, present to operators ]
 ```
+
+### 6.1 Federation-chain ingestion policy
+
+The CI loop produces evidence; the federation chain stores
+consensus state. The policy that governs which CI bundles flow
+into the chain:
+
+**Only canonical artifacts ingest into the federation audit chain**
+— that is, bundles produced by runs whose battery is `canonical`
+(per `cirisnodecore/SCHEMA.md` §13.1) AND whose rubric is
+`canonical` per `cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md` §3.1.
+
+CI bundles for `candidate` rubrics, exploratory model swaps, or
+debug-driven workflow_dispatch runs stay GH-only evidence:
+accessible to safety.ciris.ai via the GH Actions Artifacts API +
+Sigstore attestation, durable for the 90-day artifact-retention
+window, but not mirrored into the federation chain.
+
+Why this asymmetry. The federation chain is the consensus record
+of what counts as a verdict in the loop. Mirroring every CI run
+into it (including candidates, debug runs, freshness re-runs)
+would drown signal in noise and conflate "this is what voted-in
+canonical produces" with "we tested a hypothesis." The chain
+should hold the former; the artifacts cache holds both. When a
+candidate rubric wins votes and promotes to canonical at the
+next `battery_version` cut, *the next CI run for that newly-
+canonical rubric* is the one that ingests — not retroactive
+backfills of the candidate's history.
+
+Operational shape (when CIRISNodeCore is `[Impl]`): the workflow
+emits a `federation_chain_ingest` event with the artifact's
+Sigstore attestation reference + `manifest_signed.json` SHA only
+when the BatteryManifest + criteria.json both have `status:
+canonical`. Until the crate is `[Impl]`, the policy is recorded
+here and surfaced as a label on the CI artifact (`canonical=true`
+on the GH artifact); safety.ciris.ai filters by that label when
+deciding what to display as "the canonical evidence" vs. "all
+runs."
 
 ---
 

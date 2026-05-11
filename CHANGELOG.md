@@ -13,13 +13,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This closes the L4 sign-vs-install drift at its root: in CI, `stage_runtime` ran before the wheel-build copy step, so the registered manifest correctly omitted 30 files that the wheel install then carried — `verify_tree()` reported them as `extra`. With the source-of-truth in the package, sign-time and install-time see the same tree. CIRISVerify#16/#17 retracted (walker was innocent). Remaining 1-file `_build_secrets.py` `missing` (platform-asymmetric) is tracked in #743 for the next patch.
 
+### Secrets master-key bootstrap hardened (RCA-secrets-master-key-zero-byte)
+
+Closes the deterministic deadlock from the 2026-05-10 scout1/scout2 incident: CIRISCore set cirispostgres `trusted_ips=[]` then `docker compose down/up`'d the agent containers. Fresh boots blocked on the unreachable Postgres for 30 s; asyncio cancelled the parent coroutine mid-write inside `initialize_memory_service`, leaving `secrets_master.key` at 0 bytes. Every subsequent boot then failed `len(master_key) != 32` validation in `SecretsEncryption.__init__` with no self-healing path — manual intervention required to recover.
+
+Two structural fixes in `service_initializer.py::_load_or_create_master_key()`:
+
+- **Atomic write.** Replace `aiofiles.open(path, "wb")` + write with write-to-`.tmp` + `fsync` + `os.replace`. POSIX rename is atomic — cancellation orphans `.tmp` only, never corrupts the canonical name. The block is wrapped in `asyncio.shield()` as belt-and-suspenders so the write+rename always completes once started.
+- **Load-time validation.** Any wrong-length file (0 bytes, partial write, FS damage) is treated as corrupted: logs ERROR with stable string `secrets_bootstrap_corruption` (so monitoring can alert), then falls through to rotate. Operators get a clear single-string signal instead of a misleading "Loaded existing secrets master key" INFO followed by a stack trace three frames away.
+
+7 regression tests including the literal cancellation-race reproduction (`test_atomic_write_survives_outer_cancellation`) and an `os.replace`-failure cleanup test. TODO marker points at the deeper follow-up (option #3 from the RCA): pull master-key bootstrap into an earlier phase (INFRASTRUCTURE) so it doesn't share a timeout boundary with DB connect at all.
+
+### WiseBus prohibition gate moves to registration time (closes MISSION.md §2.3 gap)
+
+`ServiceRegistry.register_service()` now calls `_validate_wa_capabilities_at_registration()` for any `WISE_AUTHORITY` provider. Capabilities matching a `NEVER_ALLOWED` category (SPIRITUAL_DIRECTION, WEAPONS_HARMFUL, MANIPULATION_COERCION, etc.) raise `ValueError` and the registration is rejected. A misconfigured peer can no longer enter the registry only to be caught hours later on first guidance request.
+
+`REQUIRES_SEPARATE_MODULE` is intentionally NOT blocked at registration: those capabilities are legal *only* when the registrant is a properly licensed sister module (e.g. CIRISMedical), and proving that needs a registry-signed module manifest we don't yet have on the registration path. Query-time `_validate_capability` still handles them, routing to domain-deferral via CIRISNode. TODO marker points at `FSD/PROOF_OF_BENEFIT_FEDERATION.md` for the follow-up.
+
+6 regression tests covering NEVER_ALLOWED rejection, REQUIRES_SEPARATE_MODULE pass-through, non-WA service-type exemption, and empty/None capability handling.
+
+### Mission Driven Development charter (`MISSION.md`)
+
+New repo-root `MISSION.md` reverse-engineers how CIRISAgent meets the four MDD pillars (Mission / Protocols / Schemas / Logic) per `FSD/MISSION_DRIVEN_DEVELOPMENT.md`. Every code-pointer resolves to a real `file:line`; every claim about a defense matches what the code does at runtime. Includes the federation threat model (Coherence Ratchet anomaly detectors) and an explicit "defensive acceleration" framing for the §5 review heuristic: architecture is the safety battery (CIRISVerify attestation, signed audit chains, RATCHET, prohibition gate, conscience, WBD), reviews are sanity checks on top.
+
+### Capacity Score: tap-to-explain badge + 30-over-30 σ maturity window
+
+Capacity badge on the cell-viz now opens an explainer card on tap linking to https://ciris.ai/ciris-scoring/. The card surfaces the **maturity window** to the user explicitly: "you need ~30 interactions over 30 days before your local score can fully compute" — closes the prior failure mode where fresh installs erroneously showed σ = 1.0 just because all services happened to be healthy at boot.
+
+σ implementation: linear ramp on `task_complete` count over the last 30 days, floor 0.30, target/clamp 1.00 at 30+ completions. One bounded SQLite COUNT against `ciris_audit.db`, run via executor so it never blocks the event loop, degrades to the floor on any error. 7 unit tests pin the floor / midpoint / target / clamp / fallback behavior.
+
 ### Setup wizard
 
 - LLM config section in `QuickSetupStep` defaults collapsed in `CIRIS_PROXY` mode (proxy users don't touch provider/key/base-URL); stays expanded in BYOK.
+- Traces opt-in card now links to the Hugging Face **CIRISAI** org (https://huggingface.co/CIRISAI) so users can see who their training data flows to.
 
 ### Verified
 
-954/955 tests green; mypy clean; `stage_runtime --check` walks 30 `.json` files into `/tmp/ciris-staged`; wheel ships 30 `.json` files without the `build_py` hook.
+CI green across all 26 substantive checks at `c364e1942` (8 test shards, type-check, builds, CodeQL, Socket Security, Memory Benchmark, Staged QA). SonarCloud quality gate flipped green after coverage tests for the secrets cleanup branch and the σ helper.
 
 ## [2.8.7] - 2026-05-09
 

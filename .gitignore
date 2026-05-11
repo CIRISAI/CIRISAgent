@@ -146,9 +146,6 @@ ciris_engine/desktop_app/jre/
 ciris_engine/desktop_app/JRE_RELEASE.txt
 ciris_engine/desktop_app/THIRD_PARTY_LICENSES.txt
 
-# Backend localization JSON files (copied from /localization/ at build time)
-ciris_engine/data/localized/*.json
-
 # Test artifacts
 test_data/
 ~/

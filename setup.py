@@ -11,31 +11,20 @@ Platform-specific wheels:
   for headless server deployments.
 
 Localization:
-  The authoritative localization files are in /localization/*.json.
-  During build, these are copied to ciris_engine/data/localized/ for bundling.
+  Localization JSON files (29 languages + manifest) live at
+  ``ciris_engine/data/localized/*.json`` — git-tracked, packaged via
+  ``package_data`` below. They were previously authored at
+  ``localization/*.json`` (gitignored copy at the package path) and a
+  custom ``build_py`` step copied them in at wheel-build time. That
+  produced sign-vs-install drift in CI (``stage_runtime`` ran before the
+  copy step, so the registered manifest dropped 30 .json files; CIRISAgent#744).
+  In 2.8.8 the source-of-truth moved into the package directory; the
+  ``build_py`` override is no longer needed.
 """
 
-import shutil
 from pathlib import Path
 
 from setuptools import find_packages, setup
-from setuptools.command.build_py import build_py as _build_py
-
-
-class _BuildPyWithLocalization(_build_py):
-    """Copy localization files to package data before building."""
-
-    def run(self):
-        # Copy localization files to package data directory
-        src_dir = Path(__file__).parent / "localization"
-        dst_dir = Path(__file__).parent / "ciris_engine" / "data" / "localized"
-        dst_dir.mkdir(parents=True, exist_ok=True)
-
-        if src_dir.exists():
-            for json_file in src_dir.glob("*.json"):
-                shutil.copy2(json_file, dst_dir / json_file.name)
-
-        super().run()
 
 
 try:
@@ -105,9 +94,9 @@ if _bdist_wheel is not None:
                 return "py3", "none", self._detected_platform
             return super().get_tag()
 
-    _cmdclass = {"bdist_wheel": _PlatformBdistWheel, "build_py": _BuildPyWithLocalization}
+    _cmdclass = {"bdist_wheel": _PlatformBdistWheel}
 else:
-    _cmdclass = {"build_py": _BuildPyWithLocalization}
+    _cmdclass = {}
 
 # Read the README for long description
 this_directory = Path(__file__).parent

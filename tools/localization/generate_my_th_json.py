@@ -50,7 +50,7 @@ def translate_recursive(obj, mappings: dict[str, str]):
 def generate_localization(lang_code: str, lang_name: str):
     """Generate a complete localization JSON file."""
     # Load English source
-    en_path = BASE_DIR / "localization/en.json"
+    en_path = BASE_DIR / "ciris_engine/data/localized/en.json"
     with open(en_path, "r", encoding="utf-8") as f:
         en = json.load(f)
 
@@ -64,8 +64,11 @@ def generate_localization(lang_code: str, lang_name: str):
     # Set metadata
     translated["_meta"] = {"language": lang_code, "language_name": lang_name, "direction": "ltr"}
 
-    # Write output
-    out_path = BASE_DIR / f"localization/{lang_code}.json"
+    # Write output to the canonical package_data path. Source-of-truth
+    # moved here in 2.8.8 (CIRISAgent#744) — writing back to the repo-root
+    # localization/ would silently drift from what the wheel ships and
+    # what stage_runtime / verify_tree walk.
+    out_path = BASE_DIR / "ciris_engine" / "data" / "localized" / f"{lang_code}.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(translated, f, ensure_ascii=False, indent=2)
 
@@ -80,5 +83,5 @@ if __name__ == "__main__":
     generate_localization("th", "ไทย")
 
     print("\nDone! Files created:")
-    print("  - localization/my.json")
-    print("  - localization/th.json")
+    print("  - ciris_engine/data/localized/my.json")
+    print("  - ciris_engine/data/localized/th.json")

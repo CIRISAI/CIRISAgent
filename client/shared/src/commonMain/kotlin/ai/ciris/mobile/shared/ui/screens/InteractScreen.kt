@@ -68,6 +68,7 @@ import ai.ciris.mobile.shared.platform.platformImePadding
 import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -1215,11 +1216,18 @@ private fun CapacityBadge(
         else -> fmt(state.compositeScore)
     }
 
-    // Compact capacity badge - matches trust badge style
+    // Tap-to-explain dialog state. The card explains the σ-maturity rule
+    // (~30 interactions over 30 days for a fully-computed local score) so
+    // a fresh-install operator knows why their score isn't 1.00 yet —
+    // without that context the number reads as broken.
+    var showExplainer by remember { mutableStateOf(false) }
+
+    // Compact capacity badge - matches trust badge style. Now clickable.
     Surface(
         shape = RoundedCornerShape(4.dp),
         color = badgeColor.copy(alpha = 0.15f),
-        modifier = modifier.testable("capacity_badge"),
+        modifier = modifier
+            .testableClickable("capacity_badge") { showExplainer = true },
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -1250,6 +1258,120 @@ private fun CapacityBadge(
             )
         }
     }
+
+    if (showExplainer) {
+        CapacityScoreExplainerCard(
+            state = state,
+            theme = theme,
+            onDismiss = { showExplainer = false },
+        )
+    }
+}
+
+/**
+ * Tap-on-badge explainer for the CIRIS capacity score.
+ *
+ * Two things this card has to do:
+ *
+ *   1. Explain the **σ-maturity rule** — the local score blends service
+ *      health + LLM health + a sustainability term that ramps over the
+ *      last 30 days. Backend ``_sigma_from_positive_moments`` (in
+ *      ``ciris_engine/logic/adapters/api/routes/my_data.py``) returns σ
+ *      = 0.30 floor with 0 task_completes and σ = 1.00 at 30 task_completes
+ *      over the rolling 30-day window. Without this context, a fresh
+ *      install reads as "broken" — every other input is 1.00 the moment
+ *      services boot.
+ *
+ *   2. Link out to the long-form spec at https://ciris.ai/ciris-scoring/
+ *      so operators who want the full CCA derivation can read it.
+ *
+ * Pure Material3 AlertDialog; no platform-specific code. testTag
+ * ``capacity_explainer`` for E2E automation.
+ */
+@Composable
+private fun CapacityScoreExplainerCard(
+    state: ai.ciris.mobile.shared.ui.screens.graph.CellVizState,
+    theme: InteractTheme,
+    onDismiss: () -> Unit,
+) {
+    val uriHandler = LocalUriHandler.current
+    // Same integer-math formatter the badge uses; String.format is JVM-only
+    // in commonMain (see comment on the parent fun's fmt()).
+    fun fmt(v: Float): String {
+        val hundredths = (v.coerceIn(0f, 1f) * 100f + 0.5f).toInt()
+        val whole = hundredths / 100
+        val frac = hundredths % 100
+        val fracStr = if (frac < 10) "0$frac" else "$frac"
+        return "$whole.$fracStr"
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testable("capacity_explainer"),
+        title = {
+            Text(
+                text = "CIRIS Capacity Score",
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "The pair beside the trust shield is your local · fleet score, " +
+                        "each a real number in [0, 1]. Higher = more coherent.",
+                    fontSize = 13.sp,
+                )
+                Text(
+                    text = "Local reflects this device's CCA approximation: service health, " +
+                        "LLM health, and sustainability. Fleet is the template-aggregate " +
+                        "score across every install of the same agent template — that's " +
+                        "your context.",
+                    fontSize = 13.sp,
+                )
+                Text(
+                    text = "Why a fresh install isn't 1.00",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                )
+                Text(
+                    text = "The sustainability term needs operational evidence: roughly " +
+                        "30 successful interactions over a 30-day rolling window for a " +
+                        "fully computed local score. Until then it floors at 0.30 — that's " +
+                        "by design, so a brand-new agent doesn't claim coherence it " +
+                        "hasn't earned. Keep using the agent and the number climbs " +
+                        "honestly.",
+                    fontSize = 13.sp,
+                )
+                state.localScore?.let { local ->
+                    Text(
+                        text = "Right now your local score is ${fmt(local)}.",
+                        fontSize = 13.sp,
+                        color = theme.textMuted,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    uriHandler.openUri("https://ciris.ai/ciris-scoring/")
+                    onDismiss()
+                },
+                modifier = Modifier.testable("btn_capacity_explainer_learn_more"),
+            ) {
+                Text("Read the full spec")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testable("btn_capacity_explainer_close"),
+            ) {
+                Text("Close")
+            }
+        },
+    )
 }
 
 /**

@@ -364,7 +364,7 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
 
     DMA_DIR = REPO_ROOT / "ciris_engine" / "logic" / "dma" / "prompts" / "localized" / locale
     CONS_DIR = REPO_ROOT / "ciris_engine" / "logic" / "conscience" / "prompts" / "localized" / locale
-    LOC_JSON = REPO_ROOT / "localization" / f"{locale}.json"
+    LOC_JSON = REPO_ROOT / "ciris_engine" / "data" / "localized" / f"{locale}.json"
 
     DMA_FILES = sorted(DMA_DIR.glob("*.yml")) if DMA_DIR.is_dir() else []
     CONS_FILES = sorted(CONS_DIR.glob("*.yml")) if CONS_DIR.is_dir() else []

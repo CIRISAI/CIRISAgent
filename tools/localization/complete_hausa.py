@@ -10,8 +10,8 @@ from pathlib import Path
 
 # Define paths
 BASE_DIR = Path(__file__).parent.parent.parent
-EN_JSON = BASE_DIR / "localization" / "en.json"
-HA_JSON = BASE_DIR / "localization" / "ha.json"
+EN_JSON = BASE_DIR / "ciris_engine" / "data" / "localized" / "en.json"
+HA_JSON = BASE_DIR / "ciris_engine" / "data" / "localized" / "ha.json"
 HA_GLOSSARY = BASE_DIR / "docs" / "localization" / "glossaries" / "ha_glossary.md"
 
 

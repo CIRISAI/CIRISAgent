@@ -19,7 +19,7 @@ from tools.qa_runner.modules.model_eval_tests import LANGUAGE_SPECS
 
 
 REPO = Path(__file__).resolve().parents[3]
-MANIFEST = REPO / "localization" / "manifest.json"
+MANIFEST = REPO / "ciris_engine" / "data" / "localized" / "manifest.json"
 
 
 def _load_manifest_languages() -> set[str]:

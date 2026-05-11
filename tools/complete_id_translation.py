@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Complete Indonesian translation for localization/id.json
+Complete Indonesian translation for ciris_engine/data/localized/id.json
 This script translates ALL keys from en.json to Indonesian using the glossary.
 
 Due to the large size (1816 keys), this is done programmatically with
@@ -104,7 +104,7 @@ class IndonesianTranslator:
     def run(self):
         """Main translation process."""
         print("Loading English source...")
-        en_path = self.root / "localization" / "en.json"
+        en_path = self.root / "ciris_engine" / "data" / "localized" / "en.json"
         with open(en_path, "r", encoding="utf-8") as f:
             en_data = json.load(f)
 
@@ -124,7 +124,7 @@ class IndonesianTranslator:
                 id_data[key] = value
 
         # Save result
-        id_path = self.root / "localization" / "id.json"
+        id_path = self.root / "ciris_engine" / "data" / "localized" / "id.json"
         with open(id_path, "w", encoding="utf-8") as f:
             json.dump(id_data, f, ensure_ascii=False, indent=4)
 

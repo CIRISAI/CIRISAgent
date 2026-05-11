@@ -12,10 +12,10 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent.parent.parent
 
 # Load files
-with open(BASE_DIR / "localization/en.json", "r", encoding="utf-8") as f:
+with open(BASE_DIR / "ciris_engine/data/localized/en.json", "r", encoding="utf-8") as f:
     en_data = json.load(f)
 
-with open(BASE_DIR / "localization/ta.json", "r", encoding="utf-8") as f:
+with open(BASE_DIR / "ciris_engine/data/localized/ta.json", "r", encoding="utf-8") as f:
     ta_existing = json.load(f)
 
 # Comprehensive Tamil translation dictionary
@@ -920,7 +920,7 @@ ta_complete["_meta"] = {"language": "ta", "language_name": "தமிழ்", "d
 print(f"Total keys in completed Tamil: {sum(1 for _ in json.dumps(ta_complete).split('\"') if _.strip())}")
 
 # Write the completed file
-output_path = BASE_DIR / "localization/ta.json"
+output_path = BASE_DIR / "ciris_engine/data/localized/ta.json"
 with open(output_path, "w", encoding="utf-8") as f:
     json.dump(ta_complete, f, ensure_ascii=False, indent=4)
 

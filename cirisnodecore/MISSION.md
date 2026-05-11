@@ -69,6 +69,19 @@ The crate operates under proportionate reflective ethical responsibility: we owe
 
 The eleven primitives (§2) generalize across deferral routing, safety evaluation, WA promotion, governance votes. The differentiator across applications is the **subject** of the Contribution and the **truth-grounding signal** configured for that subject. Truth-grounding fidelity varies substantially across subjects (production hedge captures for safety are tight; long-term federation health metrics for governance are loose); the mechanism is uniform, the grounding is not.
 
+The application → primitive → grounding mapping made explicit:
+
+| Application | Primary Contribution kind(s) | Load-bearing primitive(s) | Truth-grounding signal | Fidelity |
+|---|---|---|---|---|
+| Deferral routing | `deferral_request` / `deferral_response` (§4.2) | P3 Expertise ledger, P7 Weighted aggregate, P10 Witness diversity | Sustained substantive contribution by routed responders | medium |
+| Safety evaluation (the pilot) | `arc_question`, `rubric_proposal`, `prompt_edit`, `failure_pattern` | P4 Vote, P5 Contribution, P7 Weighted aggregate, P11 Reconsideration | Production hedge captures + **independent foundation-model judge verdicts** (`FSD/JUDGE_MODEL.md`); see §5.4 | tight (weekly cadence) |
+| WA promotion | `wa_candidacy` | P2 Credits ledger, P3 Expertise ledger, threshold gates | Sustained participation breadth (180-day window) | medium |
+| Expertise attestation | `expertise_attestation` | P3 Expertise ledger, P10 Witness diversity (above jump-threshold) | Validated track record on hard cases (§3.7) | medium |
+| Moderation | `moderation_event` | P8 Moderation, P9 Slashing, P10 Witness diversity, RATCHET flags | WA quorum adjudication + post-hoc Reconsideration reversal rate | loose-to-medium |
+| Governance / policy | `proposal` (free-form, new battery, policy) | P4 Vote, P7 Weighted aggregate | Long-term federation health metrics; reversal/affirmation by subsequent votes | loose (quarterly+) |
+
+The split between *tight* and *loose* grounding maps directly onto the §6.2 empirical bets — Bet B is unpacked into B-safety and B-governance precisely because the cadence and observability differ by an order of magnitude. The mechanism stays uniform; the operational confidence does not.
+
 ---
 
 ## 2. Primitives (the eleven)
@@ -159,7 +172,7 @@ Filing requires the requester to stake Commons Credits proportional to the alleg
 - **PARTIAL**. Original slashing reduced but not nullified; standing restored proportional to the proven error.
 - **UPHELD**. Original slashing stands. Requester's stake disposition is discretionary to the fresh quorum (same rule as NOT_PROVEN in Primitive 9).
 
-**Recursion bound**: a target may file at most one Reconsideration per SlashingAttestation per ground (NEW_EVIDENCE, PROCEDURAL_ERROR, QUORUM_COMPROMISE separately). Three Reconsiderations filed without success on a single SlashingAttestation triggers harassment-pattern review via RATCHET integration. The bound prevents indefinite re-litigation while preserving the appeal path.
+**Recursion bound**: a target may file at most one Reconsideration per SlashingAttestation **per hash-pinned evidence package per ground** (NEW_EVIDENCE, PROCEDURAL_ERROR, QUORUM_COMPROMISE separately). An "evidence package" is a deterministically-hashable bundle (signed Contributions, attestations, external documents pinned by SHA-256) that the requester submits as the load-bearing material for the appeal; two filings with *the same* evidence package hash under the same ground collapse to one. This expands the legitimate appeal surface (a target with three distinct pieces of NEW_EVIDENCE can pursue three appeals) without weakening the harassment trip-wire: three Reconsiderations filed without success on a single SlashingAttestation — regardless of how many distinct evidence packages they cite — triggers harassment-pattern review via RATCHET integration. The bound prevents indefinite re-litigation while preserving the appeal path.
 
 **Time bound**: Reconsideration may be filed within a policy-tunable window from the SlashingAttestation date (default proposed: 180 days). Beyond the window, only QUORUM_COMPROMISE grounds remain available (because compromise evidence may emerge years later).
 
@@ -181,6 +194,10 @@ CIRISNodeCore is not the anti-Sybil evaluator. RATCHET is, per `RATCHET/README.m
 - WA quorums consult flags when adjudicating ModerationEvents or when filing automatic ModerationEvent drafts on flagged patterns.
 
 RATCHET's L-01 through L-08 limitations (`RATCHET/KNOWN_LIMITATIONS.md`) bind here as they bind at the substrate level. The federation accepts these as operational rather than theoretical guarantees.
+
+**Who watches RATCHET.** The recursion ("if RATCHET monitors the federation, what monitors RATCHET?") terminates structurally, not by adding another monitor. RATCHET is the *operational* detector for coherence collapse in the federation's behavior. The *formal framework* defining what coherence collapse IS — and giving the mathematical conditions under which it is measurable — is fixed in the published preprint *Coherence Collapse Analysis* (Moore 2026; DOI [10.5281/zenodo.18217688](https://doi.org/10.5281/zenodo.18217688); CC-BY 4.0). The framework is hash-pinned, citable, immutable per its version; it cannot be captured by the federation it analyzes because it predates and is independent of any running deployment. RATCHET's correctness is checkable against the preprint, not against another running monitor. The CCA finding that *correlated constraints collapse effective diversity toward unity* (k_eff = k/(1+ρ(k-1)) → 1 as ρ → 1) is the structural reason a federation needs RATCHET in the first place; making the framework citable closes the regress.
+
+**Seed-holder voting-alignment monitoring signal.** Externally-anchored seed Expertise per §7.2 (F-AV-BOOT) introduces a known asymmetry — seed-holders carry weight the cell has not yet attested. To make seed-bloc capture observable rather than implicit, the audit chain emits a `seed_holder_voting_alignment` event per cell per voting window: pairwise cosine of seed-holder vote vectors across all Contributions in the window. RATCHET (and eventual lens-core dashboards) read the event and surface alignment that exceeds a steward-set threshold for review. Not a slashing trigger; a transparency signal. Pre-`[Impl]` interim: emit the alignment statistic alongside the CI safety-battery artifacts so safety.ciris.ai can render it next to the canonical evidence.
 
 ### 2.13 Boundary defense
 
@@ -264,7 +281,7 @@ WA candidacy is a Contribution subtype. Promotion requires both:
 1. **Significant Expertise** in the (domain, language). The candidate's Expertise standing must exceed a threshold derived from existing WAs and high-Expertise contributors in the cell.
 2. **Substantive participation history**. The candidate's aggregated Credits across all subjects within the (domain, language) over a rolling 180-day window must exceed a participation threshold. Aggregation across subjects (rather than per-subject) reflects that WA standing is at the (domain, language) granularity matching Expertise; a candidate's participation breadth across multiple subjects in the cell is what's measured, not depth in any one subject.
 
-Both thresholds are policy parameters. Promotion is algorithmic; no human gatekeeper intervenes. Demotion follows the same algorithm in reverse, with decay on inactivity. [Spec]
+Both thresholds are policy parameters. **Policy is the gate, not adjudication.** Humans set the thresholds (rule-setting layer) and cast the votes that constitute Credits and Expertise (consensus layer); the promotion algorithm applies those policy-set rules deterministically. Symmetric with the safety-loop framing in `cirisnodecore/SCHEMA.md` §12.1: rules are crowdsourced; verdicts are machined. WA promotion is the same shape applied to standing rather than to responses — there is no per-candidate adjudication panel deciding "is this person worthy"; there is policy applied to ledger state. Demotion follows the same algorithm in reverse, with decay on inactivity. [Spec]
 
 ### 3.7 Expertise attestation flow
 
@@ -539,7 +556,9 @@ struct ReconsiderationAttestation {
 
 ### 5.4 Truth-grounding loop
 
-1. Safety subjects: production hedge captures from CIRIS agents feed back via the loop. Each capture references the Contribution scenario.
+1. Safety subjects: two independent grounding sources feed the loop:
+   (a) production hedge captures from CIRIS agents-under-test (each capture references the Contribution scenario);
+   (b) **independent foundation-model judge verdicts** — a non-CIRIS-lineage model (default Claude Opus 4.7) applies the cell's `criteria.json` to captured responses and emits signed PASS / FAIL / UNDETERMINED verdicts with cited spans per `cirisnodecore/FSD/JUDGE_MODEL.md`. The judge is outside the system under test by construction, which closes the agent-grading-itself trap that a same-lineage interpreter would re-open. The two signals are reconciled at aggregation time: (a) tells you what the agent actually did in production, (b) tells you whether what the agent did matches what the rubric asked for.
 2. Crate updates Contribution aggregate and voters' Credits based on alignment between vote and outcome.
 3. Voters aligned with outcomes accrue Credits; misaligned voters do not lose Credits (miscalibration is not slashable).
 4. WA subjects: sustained substantive contribution serves as grounding.
@@ -596,11 +615,17 @@ Per `FEDERATION_THREAT_MODEL.md` §2.6, anti-Sybil resistance is not an emergent
 - Reconsideration time bound and recursion bound (§3.9, Primitive 11).
 - Fresh-quorum selection rules for narrow-cell reconsideration (§3.9).
 
-Three empirical bets:
+Four empirical bets:
 
 - **Bet A**: some cost floor exists somewhere in the consensus stack. Witness recruitment cost, sustained-contribution cost, expertise-attestation-attester recruitment cost provides a non-trivial floor relative to attacker budget.
-- **Bet B**: the truth-grounding loop closes faster than adversary adaptation. Production captures, sustained-contribution metrics, hard-case validation surface miscalibration and rogue patterns at actionable cadence.
+
+- **Bet B-safety**: for safety subjects, the truth-grounding loop closes at weekly cadence. Production hedge captures + independent foundation-model judge verdicts (§5.4 (b)) surface miscalibration and rogue patterns within one CI cycle of the responses being produced. Tight grounding; high-confidence empirical claim.
+
+- **Bet B-governance**: for governance subjects, the truth-grounding loop closes at quarterly-or-slower cadence. Federation health metrics, reversal/affirmation by subsequent votes, external benchmark outcomes anchor post-hoc. Loose grounding; lower-confidence empirical claim — the bet here is "slower than safety but still faster than adversary adaptation in the policy layer."
+
 - **Bet C**: policy adjustment outpaces adversarial adaptation. The steward (post-G2: the council) detects and responds at a cadence faster than attack patterns evolve.
+
+- **Bet D**: foundation-model judge reproducibility is operational, not cryptographic. Same `(judge_model, judge_prompt_sha256, criterion, response)` → same verdict at acceptable variance, without per-verdict cryptographic signing. Bundle-level Sigstore attestation (per `FSD/SAFETY_BATTERY_CI_LOOP.md` §3.2) binds the verdicts to a workflow run + commit; per-verdict reproducibility is checkable by anyone with the same inputs. The bet: at T=0 (or each model's effective-deterministic equivalent) on Anthropic's Messages API, verdict drift across runs falls below the threshold at which it would be confused with genuine cell-behavior change. Tracked in `FSD/JUDGE_MODEL.md` §7.
 
 The bets are operational hypotheses, monitored continuously, tracked in §9.
 
@@ -690,6 +715,10 @@ While CIRISNodeCore is in the extraction phase, this document and the crate's AP
 
 14. **Reconsideration recursion and stake-disposition calibration** (Primitive 11). Stake magnitude proportional to alleged severity; counter-moderation thresholds for QUORUM_COMPROMISE-proven reversals.
 
+15. **First-ModerationEvent stake floor for new contributors** (Primitive 8, §2.8). Without a stake *floor* (minimum), a new contributor with a low Credits balance can file ModerationEvents at near-zero cost — degenerates into an F-AV-ONBOARD-adjacent Sybil-fast-track via moderation gaming. The floor is a policy parameter: minimum stake for a contributor's first N ModerationEvents (default proposed: N=3) regardless of the contributor's actual Credits balance. Calibration pending pilot evidence on whether the floor's friction suppresses legitimate first-moderation appeals.
+
+16. **Pilot-to-fold criterion** (§7.3). Marked TBD per steward direction. Too many criteria to define ahead of pilot evidence; the criterion is "ready when the pilot demonstrates the primitives carry production load," with operator + steward judgment on which thresholds matter. Not a planning oversight — a lifecycle-stage gap correctly left open.
+
 ---
 
-*This document is iterative. v1.0 is the publishable version. Future versions report operational evidence from the safety.ciris.ai pilot, parameter calibrations, adversarial-review findings, and the eventual fold into CIRISAgent. Readers can challenge any claim by tracing it to its primitive in §2, pushing back on the empirical bets in §6.2, or filing a finding against the schemas in §4 or the logic flows in §5.*
+*This document is iterative. v1.0 is the publishable version; v1.1 patches absorbed (2026-05-11) refine §1.6 mapping, §3.6 policy-not-adjudication framing, §5.4 independent grounding signal, §6.2 four-bet split, Primitive 11 evidence-package recursion, §2.12 CCA + seed-holder monitoring. Future versions report operational evidence from the safety.ciris.ai pilot, parameter calibrations, adversarial-review findings, and the eventual fold into CIRISAgent. Readers can challenge any claim by tracing it to its primitive in §2, pushing back on the empirical bets in §6.2, or filing a finding against the schemas in §4 or the logic flows in §5.*

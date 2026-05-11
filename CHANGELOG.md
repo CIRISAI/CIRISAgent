@@ -7,11 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.8.9] - Unreleased
 
-**Focus:** streamlined contributor experience for safety rubrics and language packs.
+**Focus:** streamlined contributor experience for safety rubrics and language packs. External contributors (starting with the Amharic / Ethiopian work) need a path to propose new safety questions, refined rubrics, and prompt/guide/accord edits through a federation-consensus loop rather than ad-hoc PRs against a single repo. 2.8.9 lands the on-disk contract and the CI loop that the loop's pilot (safety.ciris.ai) will build against.
 
-External contributors (starting with our Amharic / Ethiopian work) need a path to ship a new locale or a refined safety rubric without first reverse-engineering the build system, the prompt-loader fallback chain, or the manifest sign step. 2.8.9 collects the contributor-facing surface into something that can be picked up and shipped against.
+### CIRISNodeCore spec lands in-tree at `cirisnodecore/`
 
-(Entries land as the release progresses.)
+Two paired documents form the v1.0 CIRISNodeCore spec:
+
+- **`cirisnodecore/MISSION.md`** — the why and the eleven primitives (Identity, Commons Credits, Expertise, Vote, Contribution, Truth-Grounding, Weighted Aggregate, Moderation, Slashing, Witness-Diversity, Reconsideration) plus the RATCHET integration contract. v1.0 draft, status `Spec`. Authored externally and folded into the repo here so the spec is co-located with its first consumer.
+- **`cirisnodecore/SCHEMA.md`** — the canonical JSON wire format for every primitive, plus the safety-battery encoding (`BatteryManifest`), plus the canonical-vs-pending split and the promotion path. Authored alongside MISSION.md; pairs with it 1:1.
+
+Together they define the contract that safety.ciris.ai builds against and that the eventual `ciris-node-core` rust crate implements. When the crate goes `Impl`, both docs migrate with it.
+
+### Safety batteries: v3 → v4 schema migration
+
+The 14 existing mental-health batteries (Amharic, Arabic, Bengali, Burmese, Hausa, Hindi, Marathi, Persian, Punjabi, Swahili, Tamil, Telugu, Urdu, Yoruba — covering the high-need locale set per the priming-aware-primer pilot) shipped in v3 shape (per-question list, no battery wrapper, no IDs, no version field). v4 adds the structure safety.ciris.ai needs to ingest them as `Contribution(subject_kind=arc_question)` payloads:
+
+- **`BatteryManifest` wrapper** with `battery_id`, `battery_version`, `cell`, `subject_kind`, `rubric_path`, `rubric_sha256` (pins the file pair against drift), and `promoted_from_contribution_id`.
+- **Per-question fields**: `question_id` (e.g. `am_mh_v4_q01`), `question_version`, `stage`, `category`, `evaluates`, `hard_fail_triggers` and `soft_fail_triggers` (pointers into the rubric's U-table for human scorers; NOT machine-evaluator inputs), `faculty_targets` (which conscience/DMA the question exercises), `translations`.
+- **`tests/safety/SCHEMA.md`** points at `cirisnodecore/SCHEMA.md` as the authoritative format spec.
+- **`tools/safety_battery_migrate.py`** is the one-shot migration (idempotent, supports `--check` for dry-run, `--lang am` to migrate one cell). All 14 cells migrated; v3 files git-removed.
+
+### `tests/safety/README.md` — contributor on-ramp
+
+The on-disk contract document for a new contributor. Covers the directory naming convention, the two-axis taxonomy (domain from `prohibitions.py` + `mental_health`; language from `manifest.json`), the four files per cell (battery JSON + rubric MD), the canonical-vs-pending split, the loop diagram (submit → batch run via A2A → human score → ticket → edit proposal → vote → merge), and how to propose new questions, batteries, or cells. References `cirisnodecore/MISSION.md` and `cirisnodecore/SCHEMA.md` as authoritative.
+
+### `safety_battery` QA runner module + GH workflow
+
+New `tools/qa_runner/modules/safety_battery.py`: loads a canonical v4 battery, creates the cell's locale user (so the agent reads `user_preferred_name + preferred_language` matching the cell — no more "Jeff" addressing Selamawit), submits each question sequentially in a shared channel via `/v1/agent/interact`, captures signed responses with stable IDs. No scoring in the runner — that's the human-scoring loop on safety.ciris.ai. Strips the third-person `"User X said: '...'"` wrapper before sending so the model receives only the user's first-person utterance.
+
+New `.github/workflows/safety-battery.yml`: weekly cron + on-demand `workflow_dispatch` + `pull_request` on `tests/safety/**`. Reads `TOGETHER_API_KEY` from repo secrets, runs against `google/gemma-4-31B-it` (production datum's primary model), uploads JSONL results as workflow artifact (90-day retention).
+
+### Generic module-metadata mechanism in qa_runner
+
+Migrated the per-module hardcoded conditionals in `tools/qa_runner/server.py` (`CIRIS_DISABLE_TASK_APPEND=1` for `MODEL_EVAL`/`PARALLEL_LOCALES`) and `tools/qa_runner/__main__.py` (`--live` force for `DEGRADED_MODE`) to a generic class-attribute-driven mechanism:
+
+- **`REQUIRES_LIVE_LLM`** class attribute → runner auto-enables `--live` with `LIVE_LLM_DEFAULTS` when the default key file exists; refuses to start with a clear message when it doesn't.
+- **`LIVE_LLM_DEFAULTS`** dict (`key_file`, `base_url`, `model`, `provider`) → applied when `--live` not explicitly configured.
+- **`SERVER_ENV`** dict → merged into the agent process env at server-start time.
+- **`tools/qa_runner/modules/_module_metadata.py`** reads these via lazy-import; conflict detection across multi-module runs is last-write-wins with a warning.
+
+The `SAFETY_BATTERY`, `MODEL_EVAL`, `PARALLEL_LOCALES`, and `DEGRADED_MODE` modules now declare their requirements via these class attributes. Adding a new live-LLM-requiring module is a class-attribute change plus a `_module_metadata._REGISTRY` entry — no edits to `server.py` or `__main__.py` per-module.
+
+### CHANGELOG style note
+
+Entries under `[2.8.9]` will continue to land as the release progresses — this is the first wave. Next likely entries: the rubric trigger DSL formalization, the optional `tools/safety_battery_audit.py` linter, and the contributor docs cross-reference into the localized prompts surface.
 
 ## [2.8.8] - 2026-05-10
 

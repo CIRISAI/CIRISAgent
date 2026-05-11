@@ -477,7 +477,14 @@ jobs:
             ${{ steps.interpret_bundle.outputs.bundle_dir }}/manifest_signed.json
 
       - name: Upload interpret bundle
-        if: always() && steps.interpret_dedup.outputs.skip != 'true'
+        # Only upload when a real bundle was produced. Mirrors the
+        # capture-side fix: previously `if: always() && skip != 'true'`
+        # uploaded log-only 1.7-KB artifacts when "Locate interpret
+        # bundle" failed, which subsequent dedup pre-flights then
+        # matched against and short-circuited on. Now: require
+        # interpret_bundle.outputs.bundle_dir to be set, and fail the
+        # upload itself if no real files were found.
+        if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_bundle.outputs.bundle_dir != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.interpret_versions.outputs.artifact_name }}
@@ -486,6 +493,7 @@ jobs:
             qa_reports/interpret_workflow.log
           retention-days: 90
           overwrite: true
+          if-no-files-found: error
 
       - name: Clean up key file (interpret)
         if: always()

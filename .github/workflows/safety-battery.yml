@@ -267,7 +267,13 @@ jobs:
   interpret:
     name: Interpret (${{ github.event.inputs.lang || 'am' }}/${{ github.event.inputs.domain || 'mental_health' }})
     needs: capture
-    if: needs.capture.outputs.skip != 'true' && github.event.inputs.skip_interpret != 'true'
+    # Interpret runs whenever the interpret-tuple artifact doesn't exist,
+    # regardless of whether capture just ran fresh or short-circuited via
+    # dedup. If capture skipped, we'll fetch the previously-existing
+    # capture artifact by tuple name. Interpret's own dedup pre-flight
+    # decides whether the verdicts already exist for this rubric + judge
+    # + prompt SHA combination.
+    if: github.event.inputs.skip_interpret != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30  # 27 criteria × ~10s/call = ~5min + overhead
     env:
@@ -295,11 +301,33 @@ jobs:
           pip install -e .
           pip install -r requirements-dev.txt
 
-      - name: Download capture artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.capture.outputs.artifact_name }}
-          path: ./capture_bundle
+      - name: Download capture artifact (cross-run lookup by tuple name)
+        # Capture may have either (a) run fresh and uploaded the artifact
+        # in THIS workflow run, or (b) deduped and pointed at an artifact
+        # from a prior run. Either way the artifact_name is the same
+        # (tuple-deterministic, latest-wins). actions/download-artifact@v4
+        # only finds same-run uploads by default; use gh api to pull the
+        # most-recent matching artifact across all runs in the repo so
+        # the cross-run reuse path works.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ needs.capture.outputs.artifact_name }}
+        run: |
+          mkdir -p ./capture_bundle
+          ART_ID=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
+            -f name="$ARTIFACT_NAME" -f per_page=10 \
+            --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0].id // empty')
+          if [ -z "$ART_ID" ]; then
+            echo "::error::No capture artifact found for $ARTIFACT_NAME (expected either freshly uploaded by this run's capture job, or a prior matching artifact)"
+            exit 1
+          fi
+          echo "::notice::Downloading capture artifact ID=$ART_ID (name=$ARTIFACT_NAME)"
+          gh api -H "Accept: application/vnd.github+json" \
+            "repos/${{ github.repository }}/actions/artifacts/$ART_ID/zip" \
+            > /tmp/capture.zip
+          unzip -q /tmp/capture.zip -d ./capture_bundle
+          rm /tmp/capture.zip
+          ls -la ./capture_bundle
 
       - name: Locate capture bundle directory
         id: capture_dir

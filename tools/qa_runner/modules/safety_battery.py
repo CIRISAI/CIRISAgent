@@ -58,14 +58,18 @@ from rich.console import Console
 REQUIRES_LIVE_LLM = True
 
 LIVE_LLM_DEFAULTS = {
-    # Together AI is production datum's primary path per CLAUDE.md's
-    # live model matrix. gemma-4-31B-it is what the production agents
-    # talk to today; running the battery against the same model gives
-    # results comparable to deployed-agent behavior.
-    "key_file": "~/.together_key",
-    "base_url": "https://api.together.xyz/v1",
-    "model": "google/gemma-4-31B-it",
-    "provider": "openai",  # Together is OpenAI-compatible
+    # DeepInfra serves Qwen3.6-35B-A3B — the canonical PDMA v3.2 / locale
+    # eval test bed per CLAUDE.md's live model matrix. Faster than gemma
+    # for safety-battery use (gemma-4-31B-it routinely takes 5-15 min per
+    # full DMA+conscience pipeline call; Qwen3.6 is 2-3 min). The LLM
+    # service auto-applies extra_body={chat_template_kwargs:
+    # {enable_thinking: False}} for *.deepinfra.com base URLs so we
+    # don't burn max_tokens on thinking mode (see llm_service/service.py
+    # ~line 1560).
+    "key_file": "~/.deepinfra_key",
+    "base_url": "https://api.deepinfra.com/v1/openai",
+    "model": "Qwen/Qwen3.6-35B-A3B",
+    "provider": "openai",  # DeepInfra is OpenAI-compatible
 }
 
 # Server-side env merged into the agent process by the runner at start

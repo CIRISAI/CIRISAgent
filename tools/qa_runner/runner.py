@@ -153,6 +153,8 @@ class QARunner:
                 safety_battery_template=self.config.safety_battery_template,
                 safety_interpret_capture_dir=self.config.safety_interpret_capture_dir,
                 safety_interpret_criteria_file=self.config.safety_interpret_criteria_file,
+                safety_interpret_anthropic_key_file=self.config.safety_interpret_anthropic_key_file,
+                safety_interpret_judge_model=self.config.safety_interpret_judge_model,
                 setup_template_id=self.config.setup_template_id,
             )
             self.server_managers[backend] = APIServerManager(
@@ -1120,11 +1122,15 @@ class QARunner:
                     from pathlib import Path as _Path
                     _cap = getattr(self.config, "safety_interpret_capture_dir", None)
                     _crit = getattr(self.config, "safety_interpret_criteria_file", None)
+                    _key = getattr(self.config, "safety_interpret_anthropic_key_file", None)
+                    _model = getattr(self.config, "safety_interpret_judge_model", None)
                     test_instance = test_class(
                         client,
                         self.console,
                         capture_dir=_Path(_cap) if _cap else None,
                         criteria_file=_Path(_crit) if _crit else None,
+                        anthropic_key_file=_Path(_key) if _key else None,
+                        judge_model=_model,
                         api_port=self.config.api_port,
                     )
                 else:

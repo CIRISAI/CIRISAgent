@@ -327,6 +327,24 @@ Available modules:
             "(criteria_path field)."
         ),
     )
+    parser.add_argument(
+        "--safety-interpret-anthropic-key-file",
+        default=None,
+        help=(
+            "Path to Anthropic API key file for the judge model "
+            "(default: ~/.anthropic_key). Falls back to the "
+            "ANTHROPIC_API_KEY env var if neither is set."
+        ),
+    )
+    parser.add_argument(
+        "--safety-interpret-judge-model",
+        default=None,
+        help=(
+            "Foundation-model judge identifier "
+            "(default: claude-opus-4-7). See "
+            "cirisnodecore/FSD/JUDGE_MODEL.md."
+        ),
+    )
 
     # Output configuration
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -623,6 +641,8 @@ def main():
         safety_battery_template=args.safety_battery_template,
         safety_interpret_capture_dir=args.safety_interpret_capture_dir,
         safety_interpret_criteria_file=args.safety_interpret_criteria_file,
+        safety_interpret_anthropic_key_file=args.safety_interpret_anthropic_key_file,
+        safety_interpret_judge_model=args.safety_interpret_judge_model,
         setup_template_id=(
             args.safety_battery_template
             if any(m.value == "safety_battery" for m in modules)

@@ -72,6 +72,51 @@ The corrected architecture: **humans crowdsource the rules; a CIRIS interpreter 
 
 The 2.8.9 release will not ship until this corrected spec/structure is fully in. The PR (`#746`) stays open through this iteration. Future waves in 2.8.9 (now: rubric trigger DSL formalization is in scope; the `safety_battery_audit` linter and prompt-surface cross-references are still on the menu) layer atop this corrected base.
 
+### Pragmatic correction #2: judge is a foundation model, not a CIRIS agent
+
+The "interpreter agent" framing from the prior pivot would have routed every `interpreter_judgment` criterion through a second CIRIS agent's full DMA + conscience + ASPDMA pipeline — 12-15 LLM hops per criterion. Local smoke against Together gemma showed ~8-15 min per criterion × 27 criteria per battery = ~7 hours per cell. Unshippable.
+
+The architecture pivots: **the judge is a foundation model (default Claude Opus 4.7) called directly via Anthropic's `/v1/messages` API.** No CIRIS agent in the interpret loop. One LLM call per criterion. Local smoke: 27 criteria + 54 deterministic checks = 81 verdicts in **53 seconds** (down from 7+ hours).
+
+What's preserved:
+- **Rules-crowdsourced / verdicts-machined** semantic (the architectural correction stands)
+- Reproducibility: same inputs (judge_model + judge_prompt_sha256 + criterion + response) → same verdict
+- Appeal via Reconsideration per MISSION.md Primitive 11
+- Operationalization gate before voting
+- Time-symmetric audit (rules + prompt templates + model identifiers all dated + hashed)
+- The judge has no special exemption from criticism — calibrated via four new Contribution kinds: `judge_prompt_edit`, `judge_model_vote`, `judge_examples_edit`, `judge_max_tokens_edit`
+
+What's given up:
+- No per-verdict TPM-signed audit-chain entry (verdicts are signed only at the bundle level via Sigstore — sufficient given the verdict is reproducible from inputs)
+- No interpreter-side accord / guide / language_guidance (the prompt template IS the calibratable surface, narrower but explicit)
+- No locale-aware judge prompts in v1 (deferred to v2 if pilot evidence warrants)
+
+What changes in code:
+- `cirisnodecore/FSD/INTERPRETER_AGENT.md` → `cirisnodecore/FSD/JUDGE_MODEL.md` (git mv preserves history; v1.0 rewritten for the corrected architecture)
+- `cirisnodecore/SCHEMA.md` §12 + verdict shape: `interpreter_kind` enum now `deterministic | foundation_model`; verdict carries `judge_model` + `judge_prompt_sha256`; drops `interpreter_task_id` for foundation_model verdicts
+- `cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md` §2: interpret tuple expands to 9 elements (capture's 6 + `rubric_id` + `judge_model_slug` + `judge_prompt_sha256[:8]`); `interpreter_agent_version` removed
+- `tools/qa_runner/modules/safety_interpret.py`: dropped CIRIS-agent dependency (REQUIRES_LIVE_LLM=False, WIPE_DATA_ON_START=False, SERVER_ENV={}). Direct httpx POST to Anthropic. Two new CLI flags: `--safety-interpret-anthropic-key-file` (default `~/.anthropic_key`) + `--safety-interpret-judge-model` (default `claude-opus-4-7`).
+- `.github/workflows/safety-battery.yml`: interpret job timeout 90→30 min; no CIRIS agent spin-up; reads `ANTHROPIC_API_KEY` secret; writes `~/.anthropic_key`; no libtss2 apt-install (capture job still needs it)
+- `tools/qa_runner/modules/safety_battery.py` `LIVE_LLM_DEFAULTS`: switched from Together gemma to **DeepInfra Qwen3.6-35B-A3B** (CLAUDE.md's canonical PDMA v3.2 test bed; faster than gemma; `enable_thinking=False` auto-applied by the LLM service for deepinfra URLs)
+
+### CIRISVerify bump: 1.14.0 → 2.0.2
+
+The 1.14.0 pin blocked the 2.x line where the software-only fallback got robust. The CI failure on `safety-battery.yml` was `CommunicationError: Failed to load library:` from CIRISVerify FFI trying to initialize on a GH Actions runner without TPM. 2.0.2's software fallback should handle this; belt-and-suspenders, the capture job now also `apt-get install`s `libtss2-tctildr0 libtss2-esys-3.0.2-0 libtss2-mu-4.0.1-0` for the runtime probe path.
+
+- `requirements.txt`: pin moved to `>=2.0.2,<3.0.0`
+- Android mobile bundles updated to v2.0.2 via `tools/update_ciris_verify.py 2.0.2 --android-only` (3 ABIs)
+- iOS bundles will follow when the CI loop is greenlit
+- Workflow capture job: new "Install CIRISVerify system deps" step before `pip install -e .`
+
+### Capture and interpret artifacts are signed and queryable
+
+Per the user's explicit ask: both bundles get:
+- A **Sigstore-signed attestation** (`actions/attest-build-provenance@v1` over `results.jsonl`/`verdicts.jsonl` + `summary.json` + `manifest_signed.json`)
+- A **tuple-named GH Actions artifact** (latest-wins by name, queryable via `gh api repos/CIRISAI/CIRISAgent/actions/artifacts?name=<tuple>`)
+- 90-day retention
+
+safety.ciris.ai's discovery path: query by tuple name, fetch the most recent, verify Sigstore attestation via `gh attestation verify`, cross-link capture↔interpret via `manifest_signed.json.bundle.results_jsonl_sha256`. CI secrets `ANTHROPIC_API_KEY` + `TOGETHER_API_KEY` both set on the repo.
+
 ## [2.8.8] - 2026-05-10
 
 ### Localization source-of-truth moved into the package (closes #744)

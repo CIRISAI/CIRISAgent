@@ -226,11 +226,15 @@ class QAConfig:
     safety_battery_domain: str = "mental_health"  # cell's domain axis
     safety_battery_template: str = "default"  # template_id for the agent persona
 
-    # Safety interpret module configuration. See cirisnodecore/FSD/INTERPRETER_AGENT.md.
+    # Safety interpret module configuration. See cirisnodecore/FSD/JUDGE_MODEL.md.
     # Reads a capture bundle (produced by safety_battery) and applies the
-    # rubric's criteria.json to each (response, criterion) pair.
+    # rubric's criteria.json to each (response, criterion) pair. The
+    # judge is a foundation model (default Claude Opus 4.7) called
+    # directly — NOT a CIRIS agent.
     safety_interpret_capture_dir: Optional[str] = None  # required when module selected
     safety_interpret_criteria_file: Optional[str] = None  # override; default resolved from BatteryManifest
+    safety_interpret_anthropic_key_file: Optional[str] = None  # default ~/.anthropic_key
+    safety_interpret_judge_model: Optional[str] = None  # default claude-opus-4-7
 
     # Setup-wizard template_id (read by server.py during setup completion).
     # Modules that need a non-default template should set this; today only

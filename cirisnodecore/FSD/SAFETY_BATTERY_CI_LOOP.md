@@ -58,16 +58,17 @@ The agent-under-test's signed responses.
 | `agent_version` | `ciris_engine/constants.py` | `2.8.9` |
 | `template_id` | setup-completion payload | `default` |
 
-### 2.0a Interpret artifact tuple (8 elements)
+### 2.0a Interpret artifact tuple (9 elements)
 
-The interpreter agent's verdicts. Strictly a superset of the capture
-tuple plus two interpreter-side elements.
+The judge's verdicts. Strictly a superset of the capture tuple plus
+three judge-side elements.
 
 | Element | Source | Example |
 |---|---|---|
 | (all six capture elements above) |  |  |
 | `rubric_id` | criteria.json | `am_mh_v4_canonical_universal` |
-| `interpreter_agent_version` | interpreter `ciris_engine/constants.py` | `2.8.9` |
+| `judge_model_slug` | judge model identifier, slug-safe | `claude-opus-4-7` |
+| `judge_prompt_sha256[:8]` | first 8 hex chars of the prompt template SHA | `88360a06` |
 
 Why the split into two artifact classes:
 
@@ -86,11 +87,14 @@ Why each new element on the interpret tuple:
   cell (per `cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md`). Each
   rubric's verdicts are distinct evidence; the artifact name carries
   which rubric was applied.
-- **`interpreter_agent_version`** because the interpreter is itself a
-  CIRIS agent whose prompts/accord/guide get recalibrated through the
-  Contribution flow (per `cirisnodecore/FSD/INTERPRETER_AGENT.md` §7).
-  A re-calibration of the interpreter changes verdicts even when
-  response + rubric are unchanged. Distinct artifact.
+- **`judge_model_slug`** because the judge is a foundation model
+  (default Claude Opus 4.7) called directly. Different judge models
+  produce different verdicts; each is its own evidence track. See
+  `cirisnodecore/FSD/JUDGE_MODEL.md`.
+- **`judge_prompt_sha256[:8]`** because the prompt template is the
+  judge's calibratable surface. A `judge_prompt_edit` Contribution
+  that wins votes changes the SHA → distinct artifact. Old vs new
+  template's verdicts comparable side-by-side.
 
 Why each capture element (unchanged from before):
 
@@ -120,17 +124,17 @@ safety-battery-capture-{language}-{domain}-v{battery_version}-{model_slug}-{agen
 
 Example:
 ```
-safety-battery-capture-am-mental_health-v4-google_gemma-4-31b-it-2.8.9-default
+safety-battery-capture-am-mental_health-v4-qwen_qwen3.6-35b-a3b-2.8.9-default
 ```
 
 **Interpret**:
 ```
-safety-battery-interpret-{language}-{domain}-v{battery_version}-{model_slug}-{agent_version}-{template_id}-{rubric_id}-{interpreter_agent_version}
+safety-battery-interpret-{language}-{domain}-v{battery_version}-{model_slug}-{agent_version}-{template_id}-{rubric_short}-{judge_model_slug}-{judge_prompt_sha256[:8]}
 ```
 
 Example:
 ```
-safety-battery-interpret-am-mental_health-v4-google_gemma-4-31b-it-2.8.9-default-canonical_universal-2.8.9
+safety-battery-interpret-am-mental_health-v4-qwen_qwen3.6-35b-a3b-2.8.9-default-canonical_universal-claude-opus-4-7-88360a06
 ```
 
 GitHub Actions artifact name length cap is 255 chars; both tuples fit
@@ -158,15 +162,19 @@ safety-battery-capture-am-mental_health-v4-...-2.8.9-default/
 
 **Interpret bundle**:
 ```
-safety-battery-interpret-am-mental_health-v4-...-default-canonical_universal-2.8.9/
+safety-battery-interpret-am-mental_health-v4-qwen_...-default-canonical_universal-claude-opus-4-7-88360a06/
 ├── verdicts.jsonl                # one row per (response, criterion) pair
-├── verdicts_summary.json         # interpret-run rollup (per-criterion pass/fail counts)
+├── verdicts_summary.json         # rollup (per-criterion pass/fail/undetermined)
 ├── manifest_signed.json          # signed envelope (§3) — interpret-side, with
 │                                 # references back to the capture artifact
-├── traces/                       # full reasoning stream from the interpreter agent
-│   └── accord-batch-*.json
 └── workflow.log
 ```
+
+The interpret bundle does NOT carry agent reasoning traces because the
+judge is a foundation model called directly, not a CIRIS agent. The
+judge's call shape is fully reproducible from inputs (judge_model,
+judge_prompt_sha256, criterion, response) — see
+`cirisnodecore/FSD/JUDGE_MODEL.md`.
 
 Both bundles get a Sigstore attestation; verifies via
 `gh attestation verify` (§3.2). The interpret bundle's
@@ -378,10 +386,12 @@ output buffer.
 
 ## 6. End-to-end flow
 
-Two CI jobs, capture → interpret. Both stream full reasoning traces
-to disk (`CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR`) and upload them as
-part of their respective artifact bundles. Both attested separately
-via Sigstore.
+Two CI jobs, capture → interpret. The capture job runs a CIRIS agent
+and streams its full reasoning trace
+(`CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR`) into its bundle. The interpret
+job is a plain Python script calling a foundation model — no CIRIS
+runtime, no traces of its own (the judge's call is reproducible from
+inputs). Both bundles attested separately via Sigstore.
 
 ```
 [ CI trigger: cron | workflow_dispatch | PR on tests/safety/** ]
@@ -408,12 +418,13 @@ via Sigstore.
                                      ┌──────────┴──────────┐
                                      ↓ skip                ↓ run
                                   [ exit success ]      [ download capture artifact ]
+                                                        [ write ANTHROPIC_API_KEY → ~/.anthropic_key ]
                                                         [ run safety_interpret module ]
-                                                        [ - interpreter agent on port 8081 ]
-                                                        [ - CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR ]
+                                                        [ - plain Python; no CIRIS agent ]
                                                         [ - for each (response, criterion): ]
                                                         [   * deterministic → in-Python regex/term ]
-                                                        [   * interpreter_judgment → POST to agent ]
+                                                        [   * interpreter_judgment → direct call to ]
+                                                        [     Anthropic /v1/messages (Opus 4.7) ]
                                                         [ - writes verdicts.jsonl + summary + signed ]
                                                         [ - attest-build-provenance over the bundle ]
                                                         [ - upload interpret artifact ]

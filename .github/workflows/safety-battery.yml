@@ -110,6 +110,17 @@ jobs:
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+      - name: Install CIRISVerify system deps (libtss2)
+        # The ciris-verify wheel's Linux x86_64 build runtime-depends on
+        # libtss2-tctildr.so.0 (and friends) per requirements.txt note.
+        # Even with 2.x's software-only fallback, the FFI initializer
+        # probes for hardware first and the .so resolution failure
+        # surfaces as "Failed to load library" before fallback can fire.
+        # apt-install the runtime subset; ~5s on first cache miss.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libtss2-tctildr0 libtss2-esys-3.0.2-0 libtss2-mu-4.0.1-0
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -243,33 +254,30 @@ jobs:
           retention-days: 90
           overwrite: true
 
-      - name: Clean up key file
+      - name: Clean up key file (capture)
         if: always()
         run: shred -u "$HOME/.together_key" 2>/dev/null || rm -f "$HOME/.together_key" || true
 
   # ───────────────────────────────────────────────────────────────────
-  # JOB 2: INTERPRET — CIRIS interpreter agent applies criteria to responses
+  # JOB 2: INTERPRET — foundation-model judge applies criteria to responses
+  #
+  # No CIRIS agent in this job. The judge is Claude Opus 4.7 called
+  # directly via Anthropic /v1/messages. Plain Python script.
   # ───────────────────────────────────────────────────────────────────
   interpret:
     name: Interpret (${{ github.event.inputs.lang || 'am' }}/${{ github.event.inputs.domain || 'mental_health' }})
     needs: capture
-    # Skip if capture was deduped (no new responses to interpret) OR
-    # operator passed skip_interpret=true. The dedup-skip case downstream
-    # consumers find the existing interpret artifact via gh api just as
-    # they would the capture.
     if: needs.capture.outputs.skip != 'true' && github.event.inputs.skip_interpret != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30  # 27 criteria × ~10s/call = ~5min + overhead
     env:
-      CIRIS_FORCE_FIRST_RUN: "1"
       PYTHONUNBUFFERED: "1"
       LANG_INPUT: ${{ github.event.inputs.lang || 'am' }}
       DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
-      MODEL_INPUT: ${{ github.event.inputs.model || 'google/gemma-4-31B-it' }}
+      MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
       FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
       FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
-      CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR: ${{ github.workspace }}/qa_reports/interpret_traces
 
     steps:
       - uses: actions/checkout@v4
@@ -281,6 +289,7 @@ jobs:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
       - name: Install dependencies
+        # No libtss2 needed — the judge is a direct Anthropic API call.
         run: |
           python -m pip install --upgrade pip
           pip install -e .
@@ -376,23 +385,21 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Write Together API key (interpreter)
+      - name: Write Anthropic API key
         if: steps.interpret_dedup.outputs.skip != 'true'
         env:
-          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          [ -z "$TOGETHER_API_KEY" ] && { echo "::error::TOGETHER_API_KEY secret missing"; exit 1; }
+          [ -z "$ANTHROPIC_API_KEY" ] && { echo "::error::ANTHROPIC_API_KEY secret missing"; exit 1; }
           umask 077
-          printf '%s' "$TOGETHER_API_KEY" > "$HOME/.together_key"
+          printf '%s' "$ANTHROPIC_API_KEY" > "$HOME/.anthropic_key"
 
       - name: Run safety interpret
         if: steps.interpret_dedup.outputs.skip != 'true'
         run: |
-          mkdir -p qa_reports "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"
+          mkdir -p qa_reports
           python3 -m tools.qa_runner safety_interpret \
             --safety-interpret-capture-dir "${{ steps.capture_dir.outputs.capture_bundle_dir }}" \
-            --live-model "$MODEL_INPUT" \
-            --wipe-data \
             --verbose 2>&1 | tee qa_reports/interpret_workflow.log
 
       - name: Locate interpret bundle
@@ -404,19 +411,14 @@ jobs:
             echo "::error::No interpret bundle produced"
             exit 1
           fi
-          if [ -d "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" ]; then
-            mkdir -p "$BUNDLE_DIR/traces"
-            cp -r "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"/* "$BUNDLE_DIR/traces/" 2>/dev/null || true
-          fi
           echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
           ls -la "$BUNDLE_DIR"
-          # Surface verdicts summary in the job summary
           if [ -f "$BUNDLE_DIR/verdicts_summary.json" ]; then
             {
               echo ""
               echo "## Verdict summary"
               echo '```json'
-              python3 -c "import json; d=json.load(open('$BUNDLE_DIR/verdicts_summary.json')); print(json.dumps({k:v for k,v in d.items() if k in ('verdict_counts','per_criterion_counts','rubric_id','n_verdicts')}, indent=2, ensure_ascii=False))"
+              python3 -c "import json; d=json.load(open('$BUNDLE_DIR/verdicts_summary.json')); print(json.dumps({k:v for k,v in d.items() if k in ('verdict_counts','per_criterion_counts','rubric_id','judge_model','judge_prompt_sha256','n_verdicts')}, indent=2, ensure_ascii=False))"
               echo '```'
             } >> $GITHUB_STEP_SUMMARY
           fi
@@ -441,6 +443,6 @@ jobs:
           retention-days: 90
           overwrite: true
 
-      - name: Clean up key file
+      - name: Clean up key file (interpret)
         if: always()
-        run: shred -u "$HOME/.together_key" 2>/dev/null || rm -f "$HOME/.together_key" || true
+        run: shred -u "$HOME/.anthropic_key" 2>/dev/null || rm -f "$HOME/.anthropic_key" || true

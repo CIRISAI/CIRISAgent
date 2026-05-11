@@ -53,14 +53,16 @@ voting.
    each question. Signed bundle uploaded; per-response audit anchors
    resolve to the agent's TPM-signed audit-chain entries.
             ↓
-   JOB 2 (interpret): a CIRIS *interpreter agent* applies each
-   criterion to each response:
+   JOB 2 (interpret): a foundation-model judge (default Claude
+   Opus 4.7, called directly via Anthropic's API — NOT a CIRIS
+   agent) applies each criterion to each response:
      - deterministic (term_present, regex_present, script_detection)
        → applied in-process, no LLM call
-     - interpreter_judgment → CIRIS interpreter agent decides with
-       cited span, signed in audit chain
-   Verdicts bundle uploaded; per-verdict audit anchors resolve to
-   the interpreter's signed entries.
+     - interpreter_judgment → direct call to the judge model with
+       a pinned prompt template; PASS/FAIL/UNDETERMINED + cited span
+   Verdicts bundle uploaded; Sigstore-attested via GitHub Actions.
+   See cirisnodecore/FSD/JUDGE_MODEL.md for why the judge is outside
+   CIRIS by design.
             ↓
    safety.ciris.ai reads both bundles, shows operators per-criterion
    verdicts with cited spans; competing rubrics' verdicts shown
@@ -85,7 +87,7 @@ model applied to safety calibration. Spec lives in three documents:
 - [`../cirisnodecore/SCHEMA.md`](../cirisnodecore/SCHEMA.md) — wire
   formats; §12 specifies the rubric+criteria format
 - [`../cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md`](../cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md) — how rubrics become canonical
-- [`../cirisnodecore/FSD/INTERPRETER_AGENT.md`](../cirisnodecore/FSD/INTERPRETER_AGENT.md) — what the interpreter is
+- [`../cirisnodecore/FSD/JUDGE_MODEL.md`](../cirisnodecore/FSD/JUDGE_MODEL.md) — what the judge model is (and why it's not a CIRIS agent)
 - [`../cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md`](../cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md) — the CI flow
 
 Pilot deployment: [safety.ciris.ai](https://safety.ciris.ai) per

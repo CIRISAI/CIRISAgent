@@ -151,6 +151,8 @@ class QARunner:
                 safety_battery_lang=self.config.safety_battery_lang,
                 safety_battery_domain=self.config.safety_battery_domain,
                 safety_battery_template=self.config.safety_battery_template,
+                safety_interpret_capture_dir=self.config.safety_interpret_capture_dir,
+                safety_interpret_criteria_file=self.config.safety_interpret_criteria_file,
                 setup_template_id=self.config.setup_template_id,
             )
             self.server_managers[backend] = APIServerManager(
@@ -308,6 +310,7 @@ class QARunner:
             QAModule.MODEL_EVAL,
             QAModule.PARALLEL_LOCALES,
             QAModule.SAFETY_BATTERY,
+            QAModule.SAFETY_INTERPRET,
             QAModule.SECRETS_ENCRYPTION,
             QAModule.MEMORY_BENCHMARK,
         ]
@@ -951,6 +954,7 @@ class QARunner:
         from .modules.model_eval_tests import ModelEvalTests
         from .modules.parallel_locales_tests import ParallelLocalesTests
         from .modules.safety_battery import SafetyBatteryTests
+        from .modules.safety_interpret import SafetyInterpretTests
         from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
         from .modules.secrets_encryption_tests import SecretsEncryptionTests
@@ -1006,6 +1010,7 @@ class QARunner:
             QAModule.MODEL_EVAL: ModelEvalTests,
             QAModule.PARALLEL_LOCALES: ParallelLocalesTests,
             QAModule.SAFETY_BATTERY: SafetyBatteryTests,
+            QAModule.SAFETY_INTERPRET: SafetyInterpretTests,
             QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
             QAModule.MEMORY_BENCHMARK: MemoryBenchmarkTests,
         }
@@ -1109,6 +1114,17 @@ class QARunner:
                         model=self.config.live_model,
                         live_base_url=self.config.live_base_url,
                         live_provider=self.config.live_provider,
+                        api_port=self.config.api_port,
+                    )
+                elif module == QAModule.SAFETY_INTERPRET:
+                    from pathlib import Path as _Path
+                    _cap = getattr(self.config, "safety_interpret_capture_dir", None)
+                    _crit = getattr(self.config, "safety_interpret_criteria_file", None)
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        capture_dir=_Path(_cap) if _cap else None,
+                        criteria_file=_Path(_crit) if _crit else None,
                         api_port=self.config.api_port,
                     )
                 else:

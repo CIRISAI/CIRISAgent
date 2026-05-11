@@ -46,6 +46,7 @@ from ..config import QAModule
 # is called; avoids dragging every test module into CLI parse time.
 _REGISTRY: Dict[QAModule, tuple] = {
     QAModule.SAFETY_BATTERY: ("tools.qa_runner.modules.safety_battery", "SafetyBatteryTests"),
+    QAModule.SAFETY_INTERPRET: ("tools.qa_runner.modules.safety_interpret", "SafetyInterpretTests"),
     QAModule.MODEL_EVAL: ("tools.qa_runner.modules.model_eval_tests", "ModelEvalTests"),
     QAModule.PARALLEL_LOCALES: ("tools.qa_runner.modules.parallel_locales_tests", "ParallelLocalesTests"),
     QAModule.DEGRADED_MODE: ("tools.qa_runner.modules.degraded_mode_tests", "DegradedModeTests"),

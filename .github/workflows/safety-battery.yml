@@ -1,17 +1,23 @@
 name: Safety Battery
 
-# Runs a canonical safety battery (cirisnodecore/SCHEMA.md §11) against
-# the live agent via the A2A path on Together gemma (production datum's
-# primary model). Emits signed artifacts queryable by tuple per
-# cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md.
+# Two-runner pipeline per cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md:
 #
-# Three stages: pre-flight dedup → battery run → attestation + upload.
-# safety.ciris.ai polls the tuple-named artifact, verifies the Sigstore
-# attestation, and presents the responses to human scorers.
+#   1. Capture: agent-under-test responds to a canonical battery's
+#      questions on Together gemma. Signed artifact uploaded.
+#   2. Interpret: a CIRIS interpreter agent applies the cell's
+#      rubric criteria to each captured response and emits signed
+#      verdicts. Cross-linked to the capture bundle's SHAs.
+#
+# Both runners stream full reasoning traces
+# (CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR) into their respective bundle.
+# Both bundles attested via actions/attest-build-provenance.
+#
+# safety.ciris.ai consumes the interpret bundle's verdicts.jsonl; the
+# capture bundle is the upstream evidence reference.
 
 on:
   schedule:
-    - cron: '0 7 * * 1'  # Monday 7am UTC (cadence-match memory-benchmark)
+    - cron: '0 7 * * 1'  # Monday 7am UTC
   workflow_dispatch:
     inputs:
       lang:
@@ -46,34 +52,43 @@ on:
         required: false
         default: '7'
         type: string
+      skip_interpret:
+        description: 'Run only capture; skip interpret (useful for debugging)'
+        required: false
+        default: false
+        type: boolean
   pull_request:
     paths:
       - 'tests/safety/**'
       - 'cirisnodecore/**'
       - 'tools/qa_runner/modules/safety_battery.py'
+      - 'tools/qa_runner/modules/safety_interpret.py'
       - 'tools/qa_runner/modules/_module_metadata.py'
       - 'tools/safety_battery_migrate.py'
       - 'ciris_engine/data/localized/**'
 
 permissions:
-  # Sigstore attestation issuance per
-  # https://docs.github.com/en/actions/security-guides/using-artifact-attestations
-  id-token: write
+  id-token: write       # Sigstore attestation issuance
   attestations: write
   contents: read
-  actions: read  # required for dedup pre-flight (gh api artifacts)
+  actions: read         # gh api artifacts (dedup pre-flight + interpret-side fetch)
 
 jobs:
-  safety-battery:
-    name: Safety Battery (${{ github.event.inputs.lang || 'am' }} / ${{ github.event.inputs.domain || 'mental_health' }} / ${{ github.event.inputs.template_id || 'default' }})
+  # ───────────────────────────────────────────────────────────────────
+  # JOB 1: CAPTURE — agent-under-test produces signed responses
+  # ───────────────────────────────────────────────────────────────────
+  capture:
+    name: Capture (${{ github.event.inputs.lang || 'am' }}/${{ github.event.inputs.domain || 'mental_health' }}/${{ github.event.inputs.template_id || 'default' }})
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    outputs:
+      artifact_name: ${{ steps.versions.outputs.artifact_name }}
+      bundle_dir: ${{ steps.bundle.outputs.bundle_dir }}
+      agent_version: ${{ steps.versions.outputs.agent_version }}
+      battery_version: ${{ steps.versions.outputs.battery_version }}
+      model_slug: ${{ steps.versions.outputs.model_slug }}
+      skip: ${{ steps.dedup.outputs.skip }}
     env:
-      # Belt-and-suspenders for the CI clean-slate boot path per
-      # cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §5.2. Even though the
-      # qa_runner forces --wipe-data via the WIPE_DATA_ON_START metadata
-      # contract, setting CIRIS_FORCE_FIRST_RUN here survives any subshell
-      # env scrubbing and makes the intent legible.
       CIRIS_FORCE_FIRST_RUN: "1"
       PYTHONUNBUFFERED: "1"
       LANG_INPUT: ${{ github.event.inputs.lang || 'am' }}
@@ -82,36 +97,29 @@ jobs:
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
       FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
       FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
+      # Trace streaming per FSD §6 — every @streaming_step broadcast
+      # the agent ships gets teed to disk for forensic review.
+      CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR: ${{ github.workspace }}/qa_reports/capture_traces
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Cache pip dependencies
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e .
           pip install -r requirements-dev.txt
 
-      - name: Read agent_version + battery_version
+      - name: Read agent_version + battery_version + assemble tuple
         id: versions
-        # The tuple needs agent_version and battery_version BEFORE we know
-        # whether to skip — pre-flight dedup queries by tuple. Read them
-        # from the canonical sources (constants.py for agent, the v4
-        # BatteryManifest on disk for battery).
         run: |
           AGENT_VERSION=$(python3 -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
-          # The migration script encodes lang → directory name; mirror that here.
           declare -A ISO_TO_DIR=(
             [am]=amharic [ar]=arabic [bn]=bengali [my]=burmese [ha]=hausa
             [hi]=hindi [mr]=marathi [fa]=persian [pa]=punjabi [sw]=swahili
@@ -121,43 +129,41 @@ jobs:
           BATTERY_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/v4_${LANG_DIR}_${DOMAIN_INPUT}_arc.json"
           BATTERY_VERSION=$(python3 -c "import json; print(json.load(open('$BATTERY_PATH'))['battery_version'])")
           MODEL_SLUG=$(python3 -c "from tools.qa_runner.modules.safety_battery import slugify_model; print(slugify_model('$MODEL_INPUT'))")
-          ARTIFACT_NAME="safety-battery-${LANG_INPUT}-${DOMAIN_INPUT}-v${BATTERY_VERSION}-${MODEL_SLUG}-${AGENT_VERSION}-${TEMPLATE_INPUT}"
+          ARTIFACT_NAME="safety-battery-capture-${LANG_INPUT}-${DOMAIN_INPUT}-v${BATTERY_VERSION}-${MODEL_SLUG}-${AGENT_VERSION}-${TEMPLATE_INPUT}"
           echo "agent_version=$AGENT_VERSION" >> $GITHUB_OUTPUT
           echo "battery_version=$BATTERY_VERSION" >> $GITHUB_OUTPUT
           echo "model_slug=$MODEL_SLUG" >> $GITHUB_OUTPUT
           echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-          echo "## Result tuple" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Cell | \`${LANG_INPUT}/${DOMAIN_INPUT}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Battery version | \`v${BATTERY_VERSION}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Model | \`${MODEL_INPUT}\` (slug: \`${MODEL_SLUG}\`) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Agent version | \`${AGENT_VERSION}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Template | \`${TEMPLATE_INPUT}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Artifact name | \`${ARTIFACT_NAME}\` |" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Capture tuple"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Cell | \`${LANG_INPUT}/${DOMAIN_INPUT}\` |"
+            echo "| Battery | \`v${BATTERY_VERSION}\` |"
+            echo "| Model | \`${MODEL_INPUT}\` (\`${MODEL_SLUG}\`) |"
+            echo "| Agent | \`${AGENT_VERSION}\` |"
+            echo "| Template | \`${TEMPLATE_INPUT}\` |"
+            echo "| Artifact | \`${ARTIFACT_NAME}\` |"
+          } >> $GITHUB_STEP_SUMMARY
 
-      - name: Dedup pre-flight
+      - name: Capture dedup pre-flight
         id: dedup
-        # cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §4. Look up existing
-        # artifacts by tuple-name. If a match exists within the freshness
-        # window AND the user did not pass force=true, skip the run.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACT_NAME: ${{ steps.versions.outputs.artifact_name }}
         run: |
           if [ "$FORCE_INPUT" = "true" ]; then
             echo "skip=false" >> $GITHUB_OUTPUT
-            echo "::notice::force=true — bypassing dedup pre-flight"
+            echo "::notice::force=true — bypassing capture dedup"
             exit 0
           fi
-          # gh api returns artifacts sorted by created_at desc by default
           MATCH=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
             -f name="$ARTIFACT_NAME" -f per_page=10 \
             --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0] // empty')
           if [ -z "$MATCH" ]; then
             echo "skip=false" >> $GITHUB_OUTPUT
-            echo "::notice::no matching artifact for $ARTIFACT_NAME — proceeding with fresh run"
+            echo "::notice::no matching capture for $ARTIFACT_NAME — proceeding"
             exit 0
           fi
           CREATED=$(echo "$MATCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["created_at"])')
@@ -165,81 +171,60 @@ jobs:
           AGE_DAYS=$(python3 -c "
           from datetime import datetime, timezone
           created = datetime.fromisoformat('$CREATED'.replace('Z', '+00:00'))
-          age = (datetime.now(timezone.utc) - created).total_seconds() / 86400
-          print(f'{age:.2f}')
+          print(f'{(datetime.now(timezone.utc) - created).total_seconds() / 86400:.2f}')
           ")
           if python3 -c "import sys; sys.exit(0 if float('$AGE_DAYS') < float('$FRESHNESS_DAYS') else 1)"; then
             echo "skip=true" >> $GITHUB_OUTPUT
             echo "existing_url=$URL" >> $GITHUB_OUTPUT
-            echo "## Dedup skip" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Found fresh artifact for tuple — skipping run." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "- **Existing artifact**: $URL" >> $GITHUB_STEP_SUMMARY
-            echo "- **Age**: ${AGE_DAYS} days (freshness window: ${FRESHNESS_DAYS} days)" >> $GITHUB_STEP_SUMMARY
-            echo "- **Override**: re-run with \`force=true\` to bypass" >> $GITHUB_STEP_SUMMARY
-            echo "::notice::Dedup skip — fresh artifact exists (age=${AGE_DAYS}d, window=${FRESHNESS_DAYS}d): $URL"
+            echo "## Capture dedup skip" >> $GITHUB_STEP_SUMMARY
+            echo "Fresh capture artifact exists (age=${AGE_DAYS}d, window=${FRESHNESS_DAYS}d) — skipping." >> $GITHUB_STEP_SUMMARY
+            echo "Existing: $URL" >> $GITHUB_STEP_SUMMARY
+            echo "::notice::Capture dedup skip — fresh artifact exists: $URL"
           else
             echo "skip=false" >> $GITHUB_OUTPUT
-            echo "::notice::Existing artifact is stale (age=${AGE_DAYS}d > ${FRESHNESS_DAYS}d) — proceeding with fresh run"
           fi
 
       - name: Write Together API key
         if: steps.dedup.outputs.skip != 'true'
-        # The qa_runner reads ~/.together_key (LIVE_LLM_DEFAULTS["key_file"]).
-        # Writing it here means the metadata auto-enable path lights up
-        # without needing explicit --live-key-file on the CLI.
         env:
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
         run: |
-          if [ -z "$TOGETHER_API_KEY" ]; then
-            echo "::error::TOGETHER_API_KEY secret is not set on this repository"
-            exit 1
-          fi
+          [ -z "$TOGETHER_API_KEY" ] && { echo "::error::TOGETHER_API_KEY secret missing"; exit 1; }
           umask 077
           printf '%s' "$TOGETHER_API_KEY" > "$HOME/.together_key"
 
-      - name: Run safety battery
+      - name: Run safety battery (capture)
         if: steps.dedup.outputs.skip != 'true'
-        # --wipe-data is forced by the WIPE_DATA_ON_START metadata, but
-        # pass it explicitly here too for log-readability.
         run: |
-          mkdir -p qa_reports
+          mkdir -p qa_reports "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"
           python3 -m tools.qa_runner safety_battery \
             --safety-battery-lang "$LANG_INPUT" \
             --safety-battery-domain "$DOMAIN_INPUT" \
             --safety-battery-template "$TEMPLATE_INPUT" \
             --live-model "$MODEL_INPUT" \
             --wipe-data \
-            --verbose 2>&1 | tee qa_reports/safety_battery_workflow.log
+            --verbose 2>&1 | tee qa_reports/capture_workflow.log
 
-      - name: Locate result bundle
+      - name: Locate capture bundle
         if: steps.dedup.outputs.skip != 'true'
         id: bundle
-        # Surface the per-run results dir path. There's exactly one
-        # per run because the runner namespaces by run_id; the workflow
-        # then attests + uploads it under the tuple-name.
         run: |
           BUNDLE_DIR=$(ls -td qa_reports/safety_battery/${LANG_INPUT}_${DOMAIN_INPUT}_* 2>/dev/null | head -1)
           if [ -z "$BUNDLE_DIR" ]; then
-            echo "::error::No result bundle produced by the runner"
+            echo "::error::No capture bundle produced"
             exit 1
+          fi
+          # Copy streamed traces into the bundle for upload
+          if [ -d "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" ]; then
+            mkdir -p "$BUNDLE_DIR/traces"
+            cp -r "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"/* "$BUNDLE_DIR/traces/" 2>/dev/null || true
+            echo "$(ls "$BUNDLE_DIR/traces" 2>/dev/null | wc -l) trace files copied into bundle"
           fi
           echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
           ls -la "$BUNDLE_DIR"
-          # Surface the manifest_signed.json content in the job summary
-          if [ -f "$BUNDLE_DIR/manifest_signed.json" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "## Signed manifest" >> $GITHUB_STEP_SUMMARY
-            echo '```json' >> $GITHUB_STEP_SUMMARY
-            head -40 "$BUNDLE_DIR/manifest_signed.json" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
 
-      - name: Attest build provenance
+      - name: Attest capture bundle
         if: steps.dedup.outputs.skip != 'true'
-        # Sigstore signature binding the bundle to this workflow + commit.
-        # Verification: gh attestation verify <artifact> --owner CIRISAI
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: |
@@ -247,21 +232,215 @@ jobs:
             ${{ steps.bundle.outputs.bundle_dir }}/summary.json
             ${{ steps.bundle.outputs.bundle_dir }}/manifest_signed.json
 
-      - name: Upload battery results
-        # Always upload on a fresh run; nothing to upload on dedup-skip.
+      - name: Upload capture bundle
         if: always() && steps.dedup.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.versions.outputs.artifact_name }}
           path: |
             ${{ steps.bundle.outputs.bundle_dir }}
-            qa_reports/safety_battery_workflow.log
+            qa_reports/capture_workflow.log
           retention-days: 90
-          # Allow re-running this workflow to overwrite the named artifact —
-          # latest-wins discoverability per FSD §2.1.
           overwrite: true
 
       - name: Clean up key file
         if: always()
+        run: shred -u "$HOME/.together_key" 2>/dev/null || rm -f "$HOME/.together_key" || true
+
+  # ───────────────────────────────────────────────────────────────────
+  # JOB 2: INTERPRET — CIRIS interpreter agent applies criteria to responses
+  # ───────────────────────────────────────────────────────────────────
+  interpret:
+    name: Interpret (${{ github.event.inputs.lang || 'am' }}/${{ github.event.inputs.domain || 'mental_health' }})
+    needs: capture
+    # Skip if capture was deduped (no new responses to interpret) OR
+    # operator passed skip_interpret=true. The dedup-skip case downstream
+    # consumers find the existing interpret artifact via gh api just as
+    # they would the capture.
+    if: needs.capture.outputs.skip != 'true' && github.event.inputs.skip_interpret != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CIRIS_FORCE_FIRST_RUN: "1"
+      PYTHONUNBUFFERED: "1"
+      LANG_INPUT: ${{ github.event.inputs.lang || 'am' }}
+      DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
+      MODEL_INPUT: ${{ github.event.inputs.model || 'google/gemma-4-31B-it' }}
+      TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
+      FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
+      FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
+      CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR: ${{ github.workspace }}/qa_reports/interpret_traces
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+      - name: Install dependencies
         run: |
-          shred -u "$HOME/.together_key" 2>/dev/null || rm -f "$HOME/.together_key" || true
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install -r requirements-dev.txt
+
+      - name: Download capture artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.capture.outputs.artifact_name }}
+          path: ./capture_bundle
+
+      - name: Locate capture bundle directory
+        id: capture_dir
+        run: |
+          # download-artifact extracts under the named-path, preserving subdir structure
+          BUNDLE_DIR=$(find ./capture_bundle -type d -name "${LANG_INPUT}_${DOMAIN_INPUT}_*" | head -1)
+          if [ -z "$BUNDLE_DIR" ]; then
+            # Fallback — bundle may be at the top level if upload was flat
+            BUNDLE_DIR=$(find ./capture_bundle -type f -name "results.jsonl" | head -1 | xargs dirname 2>/dev/null)
+          fi
+          if [ -z "$BUNDLE_DIR" ] || [ ! -f "$BUNDLE_DIR/manifest_signed.json" ]; then
+            echo "::error::Could not locate capture bundle (looking for results.jsonl + manifest_signed.json)"
+            find ./capture_bundle -type f | head -20
+            exit 1
+          fi
+          echo "capture_bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
+
+      - name: Resolve interpret tuple
+        id: interpret_versions
+        run: |
+          # Read rubric_id from the capture's BatteryManifest's criteria file
+          declare -A ISO_TO_DIR=(
+            [am]=amharic [ar]=arabic [bn]=bengali [my]=burmese [ha]=hausa
+            [hi]=hindi [mr]=marathi [fa]=persian [pa]=punjabi [sw]=swahili
+            [ta]=tamil [te]=telugu [ur]=urdu [yo]=yoruba
+          )
+          LANG_DIR="${ISO_TO_DIR[$LANG_INPUT]:-$LANG_INPUT}"
+          BATTERY_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/v4_${LANG_DIR}_${DOMAIN_INPUT}_arc.json"
+          CRITERIA_REL=$(python3 -c "import json; print(json.load(open('$BATTERY_PATH'))['criteria_path'])")
+          CRITERIA_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/${CRITERIA_REL}"
+          # Extract rubric_id from criteria.json — short suffix only for artifact name
+          RUBRIC_ID=$(python3 -c "import json; print(json.load(open('$CRITERIA_PATH'))['rubric_id'])")
+          # short = after last underscore-cluster (e.g. am_mh_v4_canonical_universal → canonical_universal)
+          RUBRIC_SHORT=$(echo "$RUBRIC_ID" | sed -E 's/^[a-z]+_[a-z]+_v[0-9]+_//')
+          INTERPRETER_VERSION="${{ needs.capture.outputs.agent_version }}"  # v1: same release as agent-under-test
+          ARTIFACT_NAME="safety-battery-interpret-${LANG_INPUT}-${DOMAIN_INPUT}-v${{ needs.capture.outputs.battery_version }}-${{ needs.capture.outputs.model_slug }}-${{ needs.capture.outputs.agent_version }}-${TEMPLATE_INPUT}-${RUBRIC_SHORT}-${INTERPRETER_VERSION}"
+          echo "rubric_id=$RUBRIC_ID" >> $GITHUB_OUTPUT
+          echo "rubric_short=$RUBRIC_SHORT" >> $GITHUB_OUTPUT
+          echo "interpreter_version=$INTERPRETER_VERSION" >> $GITHUB_OUTPUT
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          {
+            echo "## Interpret tuple"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Rubric | \`${RUBRIC_ID}\` |"
+            echo "| Interpreter agent version | \`${INTERPRETER_VERSION}\` |"
+            echo "| Artifact | \`${ARTIFACT_NAME}\` |"
+            echo "| Capture artifact | \`${{ needs.capture.outputs.artifact_name }}\` |"
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Interpret dedup pre-flight
+        id: interpret_dedup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ steps.interpret_versions.outputs.artifact_name }}
+        run: |
+          if [ "$FORCE_INPUT" = "true" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          MATCH=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
+            -f name="$ARTIFACT_NAME" -f per_page=10 \
+            --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0] // empty')
+          if [ -z "$MATCH" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          CREATED=$(echo "$MATCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["created_at"])')
+          AGE_DAYS=$(python3 -c "
+          from datetime import datetime, timezone
+          c=datetime.fromisoformat('$CREATED'.replace('Z','+00:00'))
+          print(f'{(datetime.now(timezone.utc) - c).total_seconds()/86400:.2f}')
+          ")
+          if python3 -c "import sys; sys.exit(0 if float('$AGE_DAYS') < float('$FRESHNESS_DAYS') else 1)"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            URL=$(echo "$MATCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])')
+            echo "## Interpret dedup skip" >> $GITHUB_STEP_SUMMARY
+            echo "Fresh interpret artifact exists (age=${AGE_DAYS}d) — skipping." >> $GITHUB_STEP_SUMMARY
+            echo "Existing: $URL" >> $GITHUB_STEP_SUMMARY
+            echo "::notice::Interpret dedup skip — fresh artifact exists: $URL"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Write Together API key (interpreter)
+        if: steps.interpret_dedup.outputs.skip != 'true'
+        env:
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+        run: |
+          [ -z "$TOGETHER_API_KEY" ] && { echo "::error::TOGETHER_API_KEY secret missing"; exit 1; }
+          umask 077
+          printf '%s' "$TOGETHER_API_KEY" > "$HOME/.together_key"
+
+      - name: Run safety interpret
+        if: steps.interpret_dedup.outputs.skip != 'true'
+        run: |
+          mkdir -p qa_reports "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"
+          python3 -m tools.qa_runner safety_interpret \
+            --safety-interpret-capture-dir "${{ steps.capture_dir.outputs.capture_bundle_dir }}" \
+            --live-model "$MODEL_INPUT" \
+            --wipe-data \
+            --verbose 2>&1 | tee qa_reports/interpret_workflow.log
+
+      - name: Locate interpret bundle
+        if: steps.interpret_dedup.outputs.skip != 'true'
+        id: interpret_bundle
+        run: |
+          BUNDLE_DIR=$(ls -td qa_reports/safety_interpret/* 2>/dev/null | head -1)
+          if [ -z "$BUNDLE_DIR" ]; then
+            echo "::error::No interpret bundle produced"
+            exit 1
+          fi
+          if [ -d "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" ]; then
+            mkdir -p "$BUNDLE_DIR/traces"
+            cp -r "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"/* "$BUNDLE_DIR/traces/" 2>/dev/null || true
+          fi
+          echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
+          ls -la "$BUNDLE_DIR"
+          # Surface verdicts summary in the job summary
+          if [ -f "$BUNDLE_DIR/verdicts_summary.json" ]; then
+            {
+              echo ""
+              echo "## Verdict summary"
+              echo '```json'
+              python3 -c "import json; d=json.load(open('$BUNDLE_DIR/verdicts_summary.json')); print(json.dumps({k:v for k,v in d.items() if k in ('verdict_counts','per_criterion_counts','rubric_id','n_verdicts')}, indent=2, ensure_ascii=False))"
+              echo '```'
+            } >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Attest interpret bundle
+        if: steps.interpret_dedup.outputs.skip != 'true'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            ${{ steps.interpret_bundle.outputs.bundle_dir }}/verdicts.jsonl
+            ${{ steps.interpret_bundle.outputs.bundle_dir }}/verdicts_summary.json
+            ${{ steps.interpret_bundle.outputs.bundle_dir }}/manifest_signed.json
+
+      - name: Upload interpret bundle
+        if: always() && steps.interpret_dedup.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.interpret_versions.outputs.artifact_name }}
+          path: |
+            ${{ steps.interpret_bundle.outputs.bundle_dir }}
+            qa_reports/interpret_workflow.log
+          retention-days: 90
+          overwrite: true
+
+      - name: Clean up key file
+        if: always()
+        run: shred -u "$HOME/.together_key" 2>/dev/null || rm -f "$HOME/.together_key" || true

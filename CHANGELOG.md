@@ -48,9 +48,29 @@ Migrated the per-module hardcoded conditionals in `tools/qa_runner/server.py` (`
 
 The `SAFETY_BATTERY`, `MODEL_EVAL`, `PARALLEL_LOCALES`, and `DEGRADED_MODE` modules now declare their requirements via these class attributes. Adding a new live-LLM-requiring module is a class-attribute change plus a `_module_metadata._REGISTRY` entry — no edits to `server.py` or `__main__.py` per-module.
 
-### CHANGELOG style note
+### Architectural correction: rules crowdsourced, verdicts machined
 
-Entries under `[2.8.9]` will continue to land as the release progresses — this is the first wave. Next likely entries: the rubric trigger DSL formalization, the optional `tools/safety_battery_audit.py` linter, and the contributor docs cross-reference into the localized prompts surface.
+After the first wave landed, the framing for the human-scoring loop was reconsidered against the safety-vs-censorship distinction. The original framing had humans scoring agent responses against the rubric — but that puts humans in the *interpretation* seat, where bias rides in: the same response gets called differently depending on who's voting today, and the loop slides into polite censorship with extra steps.
+
+The corrected architecture: **humans crowdsource the rules; a CIRIS interpreter agent machines the verdicts**. Specifically:
+
+- **`cirisnodecore/SCHEMA.md` §12 rewritten** — rubrics are no longer "human-scorer guidance, NOT machine inputs." They are machine-applicable assertions. Five `kind`s defined: `term_present`, `term_absent`, `regex_present`, `script_detection`, `interpreter_judgment`. Rules that can't be operationalized as one of these get rejected before voting (the "no being annoying" gate). The rubric markdown becomes the human-readable POLICY doc; a sibling `criteria.json` carries the operational form. Both are pinned via `criteria_sha256` + `rubric_md_sha256`.
+
+- **`cirisnodecore/FSD/INTERPRETER_AGENT.md`** (new) — specifies the interpreter agent: a CIRIS agent that applies criteria.json to agent-under-test responses and emits signed verdicts (PASS / FAIL / UNDETERMINED with cited span). Deterministic kinds run in-process; `interpreter_judgment` calls the CIRIS interpreter. The interpreter is itself calibrated through the same prompt_edit / accord_edit / guide_edit Contribution flow that calibrates any CIRIS agent — no special exemption.
+
+- **`cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md`** (new) — specifies the `rubric_proposal` Contribution flow: rubrics are Contributions, voted on per MISSION.md §3.4 (Credits × Expertise weighted), top-voted rubrics become canonical at the next battery_version cut. Competing rubrics CAN exist for the same question and can be run in parallel; disagreement between rubrics surfaces "rule needs more decomposition" tickets. Battery composition is the SET of voted-in `(question_id, rubric_id)` pairs.
+
+- **`cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md` v1.1** — expanded artifact tuple. Capture-side: 6 elements as before. Interpret-side: capture tuple + `rubric_id` + `interpreter_agent_version` (8 elements). Two-job workflow: capture → interpret, each independently attested via Sigstore, cross-linked via `manifest_signed.json` SHAs.
+
+- **`tools/qa_runner/modules/safety_interpret.py`** (new) — the interpret runner. Reads a capture bundle + criteria.json, applies each criterion to each response (deterministic in-process; `interpreter_judgment` via the CIRIS interpreter agent at `/v1/agent/interact` with the templated prompt from INTERPRETER_AGENT.md §5), emits `verdicts.jsonl` + `verdicts_summary.json` + `manifest_signed.json`. Class-attribute metadata: `REQUIRES_LIVE_LLM=True`, `WIPE_DATA_ON_START=True`, `SERVER_ENV` configures task-append disable + extended interaction timeout.
+
+- **`tests/safety/amharic_mental_health/v4_amharic_canonical_universal_criteria.json`** (new) — worked example operationalizing all 9 Amharic mental-health rubric U-rows: 5 deterministic (`term_present` for U1/U2/U3/U4 transliteration-fallback terms, `regex_present` for U5 register-break detection), 1 `script_detection` (U9 Amharic-script ratio), 3 `interpreter_judgment` (U6/U7/U8 diagnosis-confirmation / medication-recommendation / cross-cluster contamination). Worked example consumed by `safety_interpret`; other 13 cells migrate as cell experts file `rubric_proposal` Contributions per RUBRIC_CROWDSOURCING.md.
+
+- **`.github/workflows/safety-battery.yml` v1.1** — split into two jobs (capture + interpret). Interpret depends on capture's artifact, downloads it via `actions/download-artifact@v4`, runs `safety_interpret` against a separate CIRIS agent instance, attests + uploads. Both jobs stream full reasoning traces via `CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR` into the bundle. Dedup pre-flight runs on both tuples independently.
+
+- **`tests/safety/README.md` rewritten** — reframes the loop diagram for the corrected architecture; adds the operationalization-discipline note ("No being annoying" gets rejected before voting); adds the time-symmetric audit property (rules have dates and hashes, so last year's rule re-runs against this year's corpus — what censorship regimes cannot do).
+
+The 2.8.9 release will not ship until this corrected spec/structure is fully in. The PR (`#746`) stays open through this iteration. Future waves in 2.8.9 (now: rubric trigger DSL formalization is in scope; the `safety_battery_audit` linter and prompt-surface cross-references are still on the menu) layer atop this corrected base.
 
 ## [2.8.8] - 2026-05-10
 

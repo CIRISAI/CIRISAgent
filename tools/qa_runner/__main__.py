@@ -308,6 +308,25 @@ Available modules:
             "echo-core, sage, test."
         ),
     )
+    parser.add_argument(
+        "--safety-interpret-capture-dir",
+        default=None,
+        help=(
+            "Path to a safety_battery bundle directory (the capture artifact). "
+            "Required when running the safety_interpret module. The interpret "
+            "module reads results.jsonl + manifest_signed.json from this dir "
+            "and applies the rubric criteria to each response."
+        ),
+    )
+    parser.add_argument(
+        "--safety-interpret-criteria-file",
+        default=None,
+        help=(
+            "Optional path to criteria.json for the safety_interpret module. "
+            "If omitted, resolved from the capture bundle's BatteryManifest "
+            "(criteria_path field)."
+        ),
+    )
 
     # Output configuration
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -602,6 +621,8 @@ def main():
         safety_battery_lang=args.safety_battery_lang,
         safety_battery_domain=args.safety_battery_domain,
         safety_battery_template=args.safety_battery_template,
+        safety_interpret_capture_dir=args.safety_interpret_capture_dir,
+        safety_interpret_criteria_file=args.safety_interpret_criteria_file,
         setup_template_id=(
             args.safety_battery_template
             if any(m.value == "safety_battery" for m in modules)

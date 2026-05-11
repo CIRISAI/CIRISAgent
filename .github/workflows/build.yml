@@ -668,12 +668,19 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install ciris-build-sign (CIRISVerify v1.8.1+)
-        # Provides the `ciris-build-sign` binary on PATH. Required for the
-        # --tree manifest shape that replaces register_agent_build.py's
-        # in-Python file-tree hashing + signing as of 2.7.8.4 (issue #707).
+      - name: Install ciris-build-sign (CIRISVerify v1.8.6+)
+        # Provides the `ciris-build-sign` + `ciris-build-verify` binaries on
+        # PATH. Required for the --tree manifest shape that replaces
+        # register_agent_build.py's in-Python file-tree hashing + signing as
+        # of 2.7.8.4 (issue #707).
+        #
+        # v1.8.6 is the floor: ciris-verify wheels 1.8.0-1.8.5 did not ship
+        # the CLI binaries as console_scripts entry points (the register-build
+        # job on the 2.7.8 merge failed on `which ciris-build-sign` exit 1).
+        # v1.8.6 adds them across all 5 platforms (linux x86_64/aarch64,
+        # macos x86_64/arm64, windows x86_64).
         run: |
-          pip install --upgrade "ciris-verify>=1.8.1"
+          pip install --upgrade "ciris-verify>=1.8.6"
           which ciris-build-sign && ciris-build-sign --version
 
       - name: Emit build-secrets hash file

@@ -80,6 +80,9 @@ REQUIRES_LIVE_LLM = False
 LIVE_LLM_DEFAULTS: Dict[str, str] = {}
 SERVER_ENV: Dict[str, str] = {}
 WIPE_DATA_ON_START = False
+# Judge is a plain Anthropic API call; no CIRIS agent needed in the
+# interpret runner. Tell the qa_runner to skip server start + auth.
+REQUIRES_CIRIS_SERVER = False
 
 
 # Default judge model + endpoint. The judge is OUTSIDE the system
@@ -456,6 +459,7 @@ class SafetyInterpretTests:
     LIVE_LLM_DEFAULTS = LIVE_LLM_DEFAULTS
     SERVER_ENV = SERVER_ENV
     WIPE_DATA_ON_START = WIPE_DATA_ON_START
+    REQUIRES_CIRIS_SERVER = REQUIRES_CIRIS_SERVER
 
     def __init__(
         self,

@@ -54,6 +54,26 @@ class QARunner:
                     f"declares WIPE_DATA_ON_START (reproducibility requirement)[/dim]"
                 )
 
+        # If every selected module declares REQUIRES_CIRIS_SERVER=False,
+        # skip server start + auth entirely. Such modules (e.g.
+        # safety_interpret) talk to external APIs directly — booting a
+        # CIRIS agent just to throw it away is wasteful and surfaces
+        # unrelated failure modes (e.g. CIRISVerify FFI on TPM-less
+        # runners) that have nothing to do with the test in question.
+        if self.modules and all(
+            not getattr(_get_module_md(_m), "requires_ciris_server", True)
+            for _m in self.modules
+        ):
+            self._skip_ciris_server = True
+            if self.config.auto_start_server:
+                self.config.auto_start_server = False
+                self.console.print(
+                    "[dim]Auto-disabled server start: all selected modules "
+                    "declare REQUIRES_CIRIS_SERVER=False[/dim]"
+                )
+        else:
+            self._skip_ciris_server = False
+
         # Auto-configure adapter based on modules being tested
         # This allows modular services to be loaded automatically
         if modules and QAModule.REDDIT in modules:
@@ -256,8 +276,13 @@ class QARunner:
                 self.console.print("[red]❌ Failed to start API server[/red]")
                 return False
 
-        # Get authentication token (skip for SETUP module - first-run has no users)
-        if QAModule.SETUP not in modules:
+        # Get authentication token (skip for SETUP module - first-run has no users,
+        # and skip when no module needs a CIRIS server at all)
+        if getattr(self, "_skip_ciris_server", False):
+            self.console.print(
+                "[dim]Skipping authentication: no selected module requires a CIRIS server[/dim]"
+            )
+        elif QAModule.SETUP not in modules:
             if not self._authenticate():
                 self.console.print("[red]❌ Authentication failed[/red]")
                 if self.config.auto_start_server:
@@ -1045,9 +1070,25 @@ class QARunner:
             except (TypeError, ValueError):
                 _model_eval_sdk_timeout = 1800.0
             sdk_timeout = _model_eval_sdk_timeout if module == QAModule.MODEL_EVAL else 120.0
-            async with CIRISClient(base_url=self.config.base_url, timeout=sdk_timeout) as client:
-                # Manually set the token (skip login since we already have it)
-                client._transport.set_api_key(token_to_use, persist=False)
+
+            # No-server modules (e.g. safety_interpret) talk to an
+            # external API directly — don't try to open a CIRISClient
+            # to a server that isn't running.
+            from .modules._module_metadata import get_metadata as _md_lookup
+            _module_needs_server = getattr(_md_lookup(module), "requires_ciris_server", True)
+
+            from contextlib import asynccontextmanager
+
+            @asynccontextmanager
+            async def _client_ctx():
+                if not _module_needs_server:
+                    yield None
+                    return
+                async with CIRISClient(base_url=self.config.base_url, timeout=sdk_timeout) as _c:
+                    _c._transport.set_api_key(token_to_use, persist=False)
+                    yield _c
+
+            async with _client_ctx() as client:
 
                 # Instantiate and run test module
                 # Special handling for AccordMetricsTests - pass live_lens config +

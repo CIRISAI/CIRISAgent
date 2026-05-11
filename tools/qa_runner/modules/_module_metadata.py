@@ -23,6 +23,13 @@ Recognized class attributes on test modules:
                                       for signed-artifact reproducibility
                                       (see cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md
                                       §5.1).
+  REQUIRES_CIRIS_SERVER : bool      — defaults True. Set False for modules
+                                      that don't talk to a CIRIS API server
+                                      at all (e.g. safety_interpret, which
+                                      calls the Anthropic API directly with
+                                      no agent in the loop). When all
+                                      selected modules declare this False,
+                                      the runner skips server start + auth.
 
 The runner reads these via :func:`get_metadata` which lazy-imports the
 module to avoid CLI startup cost.
@@ -61,6 +68,7 @@ class ModuleMetadata:
     live_llm_defaults: Dict[str, str] = field(default_factory=dict)
     server_env: Dict[str, str] = field(default_factory=dict)
     wipe_data_on_start: bool = False
+    requires_ciris_server: bool = True
 
 
 def get_metadata(module: QAModule) -> ModuleMetadata:
@@ -82,6 +90,7 @@ def get_metadata(module: QAModule) -> ModuleMetadata:
         live_llm_defaults=dict(getattr(cls, "LIVE_LLM_DEFAULTS", {})),
         server_env=dict(getattr(cls, "SERVER_ENV", {})),
         wipe_data_on_start=bool(getattr(cls, "WIPE_DATA_ON_START", False)),
+        requires_ciris_server=bool(getattr(cls, "REQUIRES_CIRIS_SERVER", True)),
     )
 
 

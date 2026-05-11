@@ -195,14 +195,20 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Write Together API key
+      - name: Write DeepInfra API key
+        # Capture default model is Qwen/Qwen3.6-35B-A3B served by
+        # DeepInfra (per CLAUDE.md live model matrix + safety_battery.py
+        # LIVE_LLM_DEFAULTS). The qa_runner's metadata-driven --live
+        # auto-enable looks for ~/.deepinfra_key — write the secret to
+        # that path so the lookup succeeds. (Earlier iteration used
+        # ~/.together_key + gemma; switched 2026-05-11.)
         if: steps.dedup.outputs.skip != 'true'
         env:
-          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
         run: |
-          [ -z "$TOGETHER_API_KEY" ] && { echo "::error::TOGETHER_API_KEY secret missing"; exit 1; }
+          [ -z "$DEEPINFRA_API_KEY" ] && { echo "::error::DEEPINFRA_API_KEY secret missing"; exit 1; }
           umask 077
-          printf '%s' "$TOGETHER_API_KEY" > "$HOME/.together_key"
+          printf '%s' "$DEEPINFRA_API_KEY" > "$HOME/.deepinfra_key"
 
       - name: Run safety battery (capture)
         if: steps.dedup.outputs.skip != 'true'
@@ -263,7 +269,7 @@ jobs:
 
       - name: Clean up key file (capture)
         if: always()
-        run: shred -u "$HOME/.together_key" 2>/dev/null || rm -f "$HOME/.together_key" || true
+        run: shred -u "$HOME/.deepinfra_key" 2>/dev/null || rm -f "$HOME/.deepinfra_key" || true
 
   # ───────────────────────────────────────────────────────────────────
   # JOB 2: INTERPRET — foundation-model judge applies criteria to responses

@@ -5,6 +5,14 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.9] - Unreleased
+
+**Focus:** streamlined contributor experience for safety rubrics and language packs.
+
+External contributors (starting with our Amharic / Ethiopian work) need a path to ship a new locale or a refined safety rubric without first reverse-engineering the build system, the prompt-loader fallback chain, or the manifest sign step. 2.8.9 collects the contributor-facing surface into something that can be picked up and shipped against.
+
+(Entries land as the release progresses.)
+
 ## [2.8.8] - 2026-05-10
 
 ### Localization source-of-truth moved into the package (closes #744)

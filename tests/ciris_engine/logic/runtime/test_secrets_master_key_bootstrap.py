@@ -23,6 +23,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -133,6 +134,36 @@ async def test_atomic_write_survives_outer_cancellation(tmp_path: Path) -> None:
     # No orphan tmp
     tmp_artifact = key_path.with_suffix(key_path.suffix + ".tmp")
     assert not tmp_artifact.exists()
+
+
+@pytest.mark.asyncio
+async def test_atomic_write_cleanup_on_replace_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If os.replace fails after the .tmp is written, the .tmp must be
+    cleaned up and the failure must propagate (caller decides what to do).
+
+    Mirrors a real failure mode: cross-filesystem rename, ENOSPC, or
+    SELinux denial. We must not leave .tmp orphans behind, and we must
+    not leave a half-promoted canonical name.
+    """
+    key_path = tmp_path / "secrets_master.key"
+
+    boom = OSError("simulated replace failure (e.g. EXDEV)")
+
+    def failing_replace(src: Any, dst: Any) -> None:
+        raise boom
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+
+    with pytest.raises(OSError, match="simulated replace failure"):
+        await ServiceInitializer._load_or_create_master_key(key_path)
+
+    # Canonical name MUST NOT exist (replace failed before promoting)
+    assert not key_path.exists(), "canonical file must not be promoted on replace failure"
+    # .tmp orphan MUST have been cleaned up
+    tmp_artifact = key_path.with_suffix(key_path.suffix + ".tmp")
+    assert not tmp_artifact.exists(), "orphan .tmp must be cleaned up on replace failure"
 
 
 @pytest.mark.asyncio

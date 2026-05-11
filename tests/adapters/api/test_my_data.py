@@ -1248,3 +1248,131 @@ class TestCapacityEndpoint:
 
         monkeypatch.delenv("CIRIS_ACCORD_METRICS_ENDPOINT", raising=False)
         assert _capacity_base_url() == "https://lens.ciris-services-1.ai/lens-api/api/v1"
+
+
+# ============================================================================
+# σ (sustainability) maturity window — 30 task_completes over 30 days
+# ============================================================================
+# These guard the 30-over-30 capacity-score story: a fresh agent reports
+# σ=0.30 (floor), σ climbs linearly with task_complete count over the last
+# 30 days, and clamps to 1.00 at or above 30 completions. The mapping is
+# user-facing copy on the capacity-score explainer card; if these numbers
+# drift, the card lies.
+
+
+class TestSigmaFromPositiveMoments:
+    """Unit tests for the σ maturity helper in `my_data.py`."""
+
+    @pytest.mark.asyncio
+    async def test_sigma_floor_at_zero_completions(self, monkeypatch):
+        """Fresh install / idle agent → σ = 0.30 (floor)."""
+        from ciris_engine.logic.adapters.api.routes import my_data as my_data_mod
+
+        monkeypatch.setattr(
+            my_data_mod, "_count_recent_task_completes_sqlite", lambda days=30: 0
+        )
+        sigma = await my_data_mod._sigma_from_positive_moments(request=Mock())
+        assert sigma == pytest.approx(my_data_mod.SIGMA_FLOOR)
+        assert sigma == pytest.approx(0.30)
+
+    @pytest.mark.asyncio
+    async def test_sigma_midpoint_at_half_target(self, monkeypatch):
+        """15 completions (half of target) → σ ≈ 0.65 (linear ramp midpoint)."""
+        from ciris_engine.logic.adapters.api.routes import my_data as my_data_mod
+
+        monkeypatch.setattr(
+            my_data_mod, "_count_recent_task_completes_sqlite", lambda days=30: 15
+        )
+        sigma = await my_data_mod._sigma_from_positive_moments(request=Mock())
+        # floor + (1 - floor) * (15/30) = 0.30 + 0.70 * 0.5 = 0.65
+        assert sigma == pytest.approx(0.65)
+
+    @pytest.mark.asyncio
+    async def test_sigma_reaches_one_at_target(self, monkeypatch):
+        """30 completions (full target) → σ = 1.00 (fully matured operation)."""
+        from ciris_engine.logic.adapters.api.routes import my_data as my_data_mod
+
+        monkeypatch.setattr(
+            my_data_mod, "_count_recent_task_completes_sqlite", lambda days=30: 30
+        )
+        sigma = await my_data_mod._sigma_from_positive_moments(request=Mock())
+        assert sigma == pytest.approx(1.0)
+
+    @pytest.mark.asyncio
+    async def test_sigma_clamps_to_one_above_target(self, monkeypatch):
+        """60 completions → still σ = 1.00. The mapping is min-clamped at the
+        target, not unbounded — important so a chatty agent doesn't push the
+        score into nonsense territory."""
+        from ciris_engine.logic.adapters.api.routes import my_data as my_data_mod
+
+        monkeypatch.setattr(
+            my_data_mod, "_count_recent_task_completes_sqlite", lambda days=30: 60
+        )
+        sigma = await my_data_mod._sigma_from_positive_moments(request=Mock())
+        assert sigma == pytest.approx(1.0)
+
+    @pytest.mark.asyncio
+    async def test_sigma_degrades_to_floor_on_count_failure(self, monkeypatch):
+        """If the SQLite probe raises, σ degrades to the floor — never
+        propagates an exception up to the unified-telemetry caller."""
+        from ciris_engine.logic.adapters.api.routes import my_data as my_data_mod
+
+        def boom(days=30):
+            raise RuntimeError("audit db unavailable")
+
+        monkeypatch.setattr(
+            my_data_mod, "_count_recent_task_completes_sqlite", boom
+        )
+        sigma = await my_data_mod._sigma_from_positive_moments(request=Mock())
+        assert sigma == pytest.approx(my_data_mod.SIGMA_FLOOR)
+
+    def test_count_recent_task_completes_returns_zero_on_missing_db(self, tmp_path, monkeypatch):
+        """If the audit DB does not exist, the count helper returns 0 (not
+        an exception) — keeps σ at the floor for fresh installs."""
+        from ciris_engine.logic.adapters.api.routes import my_data as my_data_mod
+
+        # Point get_data_dir at an empty temp dir — no ciris_audit.db present
+        monkeypatch.setattr(
+            "ciris_engine.logic.utils.path_resolution.get_data_dir",
+            lambda: tmp_path,
+        )
+
+        result = my_data_mod._count_recent_task_completes_sqlite(days=30)
+        assert result == 0
+
+    def test_count_recent_task_completes_reads_audit_db(self, tmp_path, monkeypatch):
+        """End-to-end count against a real SQLite file: insert N task_complete
+        rows within the window, verify the COUNT matches."""
+        import sqlite3
+        from ciris_engine.logic.adapters.api.routes import my_data as my_data_mod
+
+        monkeypatch.setattr(
+            "ciris_engine.logic.utils.path_resolution.get_data_dir",
+            lambda: tmp_path,
+        )
+
+        db_path = tmp_path / "ciris_audit.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE audit_log (event_type TEXT, event_timestamp TEXT)"
+        )
+        # Three task_completes inside the 30-day window; one outside; one
+        # different event_type that must not match the filter.
+        now = datetime.now(timezone.utc)
+        inside = (now - timedelta(days=1)).isoformat()
+        outside = (now - timedelta(days=60)).isoformat()
+        conn.executemany(
+            "INSERT INTO audit_log VALUES (?, ?)",
+            [
+                ("task_complete", inside),
+                ("task_complete", inside),
+                ("task_complete", inside),
+                ("task_complete", outside),  # outside the window
+                ("speak", inside),  # wrong event_type
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+        result = my_data_mod._count_recent_task_completes_sqlite(days=30)
+        assert result == 3

@@ -296,6 +296,18 @@ Available modules:
             "ciris_engine/logic/buses/prohibitions.py."
         ),
     )
+    parser.add_argument(
+        "--safety-battery-template",
+        default="default",
+        help=(
+            "Template ID for the agent persona (default: 'default' renders "
+            "the Ally persona). Joins the result-key tuple per "
+            "cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §2 — same cell + "
+            "version + model against different templates is distinct evidence. "
+            "Available: default, datum, scout, echo-speculative, echo, "
+            "echo-core, sage, test."
+        ),
+    )
 
     # Output configuration
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -589,6 +601,12 @@ def main():
         model_eval_questions_file=(args.model_eval_questions_file or None),
         safety_battery_lang=args.safety_battery_lang,
         safety_battery_domain=args.safety_battery_domain,
+        safety_battery_template=args.safety_battery_template,
+        setup_template_id=(
+            args.safety_battery_template
+            if any(m.value == "safety_battery" for m in modules)
+            else None
+        ),
     )
 
     # Create and run runner

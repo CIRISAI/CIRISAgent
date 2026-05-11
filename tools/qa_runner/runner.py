@@ -38,6 +38,22 @@ class QARunner:
         self.token: Optional[str] = None
         self.modules = modules or []  # Store modules for server manager
 
+        # Module-metadata driven: if any selected module declares
+        # WIPE_DATA_ON_START=True (per cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md
+        # §5.1), force --wipe-data regardless of CLI flags. Required for
+        # signed-artifact reproducibility — every run starts from a
+        # deterministic baseline so the bundle hash is meaningful.
+        from .modules._module_metadata import get_metadata as _get_module_md
+
+        for _mod in self.modules:
+            _md = _get_module_md(_mod)
+            if getattr(_md, "wipe_data_on_start", False) and not self.config.wipe_data:
+                self.config.wipe_data = True
+                self.console.print(
+                    f"[dim]Auto-enabled --wipe-data: {_mod.value} module "
+                    f"declares WIPE_DATA_ON_START (reproducibility requirement)[/dim]"
+                )
+
         # Auto-configure adapter based on modules being tested
         # This allows modular services to be loaded automatically
         if modules and QAModule.REDDIT in modules:
@@ -134,6 +150,8 @@ class QARunner:
                 # rationale as the model_eval block above.
                 safety_battery_lang=self.config.safety_battery_lang,
                 safety_battery_domain=self.config.safety_battery_domain,
+                safety_battery_template=self.config.safety_battery_template,
+                setup_template_id=self.config.setup_template_id,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -1087,6 +1105,10 @@ class QARunner:
                         self.console,
                         lang=getattr(self.config, "safety_battery_lang", "am"),
                         domain=getattr(self.config, "safety_battery_domain", "mental_health"),
+                        template_id=getattr(self.config, "safety_battery_template", "default"),
+                        model=self.config.live_model,
+                        live_base_url=self.config.live_base_url,
+                        live_provider=self.config.live_provider,
                         api_port=self.config.api_port,
                     )
                 else:

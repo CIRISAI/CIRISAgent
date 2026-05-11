@@ -18,6 +18,11 @@ Recognized class attributes on test modules:
                                       module-specific knobs like
                                       CIRIS_DISABLE_TASK_APPEND=1 or
                                       CIRIS_API_INTERACTION_TIMEOUT.
+  WIPE_DATA_ON_START : bool         — runner forces --wipe-data
+                                      regardless of CLI flags. Required
+                                      for signed-artifact reproducibility
+                                      (see cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md
+                                      §5.1).
 
 The runner reads these via :func:`get_metadata` which lazy-imports the
 module to avoid CLI startup cost.
@@ -54,6 +59,7 @@ class ModuleMetadata:
     requires_live_llm: bool = False
     live_llm_defaults: Dict[str, str] = field(default_factory=dict)
     server_env: Dict[str, str] = field(default_factory=dict)
+    wipe_data_on_start: bool = False
 
 
 def get_metadata(module: QAModule) -> ModuleMetadata:
@@ -74,6 +80,7 @@ def get_metadata(module: QAModule) -> ModuleMetadata:
         requires_live_llm=bool(getattr(cls, "REQUIRES_LIVE_LLM", False)),
         live_llm_defaults=dict(getattr(cls, "LIVE_LLM_DEFAULTS", {})),
         server_env=dict(getattr(cls, "SERVER_ENV", {})),
+        wipe_data_on_start=bool(getattr(cls, "WIPE_DATA_ON_START", False)),
     )
 
 

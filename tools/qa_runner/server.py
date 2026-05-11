@@ -1233,11 +1233,16 @@ class APIServerManager:
         llm_model = self.config.live_model or "gpt-4"
         llm_base_url = self.config.live_base_url
 
+        # template_id is configurable per-module. Default "default" preserves
+        # historical behavior (Ally persona). safety_battery sets it via
+        # --safety-battery-template so the result-key tuple per
+        # cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §2 carries the template.
+        template_id = getattr(self.config, "setup_template_id", None) or "default"
         setup_payload = {
             "llm_provider": llm_provider,
             "llm_api_key": llm_api_key,
             "llm_model": llm_model,
-            "template_id": "default",
+            "template_id": template_id,
             "enabled_adapters": ["api"],
             "adapter_config": {},
             "admin_username": self.config.admin_username,

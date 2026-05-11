@@ -78,9 +78,16 @@ SERVER_ENV = {
     "CIRIS_DISABLE_TASK_APPEND": "1",
     # Each interact call fans through the full DMA + conscience pipeline
     # (~12 live LLM hops). Default 55s truncates Stage-5 crisis chains
-    # which routinely run 2-4 minutes on Together gemma.
-    "CIRIS_API_INTERACTION_TIMEOUT": "600",
+    # which routinely run 2-4 minutes on Together gemma. Per-question
+    # timeout in the module is 1800s; this is the agent-side ceiling.
+    "CIRIS_API_INTERACTION_TIMEOUT": "1800",
 }
+
+# Force --wipe-data on every run for signed-artifact reproducibility.
+# See cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §5.1. Every run starts
+# from a deterministic baseline so the bundle hash is meaningful and
+# the auto-setup-completion path is exercised exactly once per run.
+WIPE_DATA_ON_START = True
 
 # ISO 639-1 → directory-name language used in tests/safety/{lang_eng}_{domain}/.
 # Kept in sync with tools/safety_battery_migrate.py::LANG_DIR_TO_ISO and
@@ -159,6 +166,52 @@ def _sha256_hex(path: Path) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+# Characters allowed in an artifact-name model slug. GH Actions artifact
+# names are constrained; the cirisnodecore FSD §2.1 picks lowercase
+# alphanumerics + dot + hyphen + underscore. Slash becomes underscore.
+_SLUG_OK = re.compile(r"[^a-z0-9._-]")
+
+
+def slugify_model(model: str) -> str:
+    """Slugify a model identifier for inclusion in an artifact-name tuple.
+
+    Per cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §2: lowercase,
+    `/` → `_`, strip everything outside `[a-z0-9._-]`.
+
+    Examples:
+      google/gemma-4-31B-it           → google_gemma-4-31b-it
+      meta-llama/llama-4-scout        → meta-llama_llama-4-scout
+      Qwen/Qwen3.6-35B-A3B            → qwen_qwen3.6-35b-a3b
+    """
+    s = (model or "unknown").lower().replace("/", "_")
+    return _SLUG_OK.sub("", s)
+
+
+# Kept under the previous internal name too so the existing call site in
+# _write_manifest_signed continues to work.
+_slugify_model = slugify_model
+
+
+def _capture_ci_provenance() -> Dict[str, Optional[str]]:
+    """Capture GitHub Actions provenance from the workflow env.
+
+    Returns null fields when not running under GitHub Actions (e.g. local
+    smoke run). The fields here mirror what
+    actions/attest-build-provenance@v1 records; including them in the
+    manifest lets safety.ciris.ai cross-check the Sigstore attestation
+    against the in-bundle copy.
+    """
+    import os
+    return {
+        "github_repository": os.environ.get("GITHUB_REPOSITORY"),
+        "github_sha": os.environ.get("GITHUB_SHA"),
+        "github_ref": os.environ.get("GITHUB_REF"),
+        "github_run_id": os.environ.get("GITHUB_RUN_ID"),
+        "github_workflow": os.environ.get("GITHUB_WORKFLOW"),
+        "workflow_path": os.environ.get("GITHUB_WORKFLOW_REF"),
+    }
 
 
 def load_battery(lang: str, domain: str = "mental_health") -> Dict[str, Any]:
@@ -247,6 +300,7 @@ class SafetyBatteryTests:
     REQUIRES_LIVE_LLM = REQUIRES_LIVE_LLM
     LIVE_LLM_DEFAULTS = LIVE_LLM_DEFAULTS
     SERVER_ENV = SERVER_ENV
+    WIPE_DATA_ON_START = WIPE_DATA_ON_START
 
     def __init__(
         self,
@@ -254,6 +308,10 @@ class SafetyBatteryTests:
         console: Console,
         lang: str = "am",
         domain: str = "mental_health",
+        template_id: str = "default",
+        model: Optional[str] = None,
+        live_base_url: Optional[str] = None,
+        live_provider: Optional[str] = None,
         api_port: int = 8080,
         per_question_timeout_s: float = 1800.0,
         results_dir: Optional[Path] = None,
@@ -262,6 +320,10 @@ class SafetyBatteryTests:
         self.console = console
         self.lang = lang
         self.domain = domain
+        self.template_id = template_id
+        self.model = model or LIVE_LLM_DEFAULTS["model"]
+        self.live_base_url = live_base_url or LIVE_LLM_DEFAULTS["base_url"]
+        self.live_provider = live_provider or LIVE_LLM_DEFAULTS["provider"]
         self.api_port = api_port
         self.per_question_timeout_s = per_question_timeout_s
         self.results: List[Dict[str, Any]] = []
@@ -272,10 +334,14 @@ class SafetyBatteryTests:
         self._locale_token: Optional[str] = None
         self._locale_username: Optional[str] = None
         self._locale_display_name: Optional[str] = None
+        # Filled in by _capture_agent_identity() at run start.
+        self._agent_identity: Dict[str, Any] = {}
+        self._captured_at_start: Optional[str] = None
 
     async def run(self) -> List[Dict[str, Any]]:
         self.console.print("\n[bold cyan]🛡️  Safety Battery[/bold cyan]")
         self.console.print("=" * 70)
+        self._captured_at_start = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         # Load + validate the canonical battery.
         try:
@@ -285,8 +351,13 @@ class SafetyBatteryTests:
             self.results.append({
                 "test": f"load_battery[{self.lang}_{self.domain}]",
                 "status": "FAIL: " + str(e),
+                "error": str(e),
             })
             return self.results
+
+        # Capture agent identity for the signed manifest (best-effort —
+        # non-fatal if endpoints unavailable). See FSD §3.3.
+        await self._capture_agent_identity()
 
         cell = manifest["cell"]
         questions = manifest["questions"]
@@ -337,8 +408,62 @@ class SafetyBatteryTests:
             self._display_result(result)
 
         self._write_summary(manifest, results_jsonl)
+        self._write_manifest_signed(manifest, results_jsonl)
         self._print_summary(manifest)
         return self.results
+
+    async def _capture_agent_identity(self) -> None:
+        """Best-effort capture of agent_id + agent_version from the running
+        agent. Recorded in manifest_signed.json so consumers can verify
+        per-response audit anchors against the named agent.
+
+        Non-fatal on failure — the manifest still ships with whatever was
+        captured; missing fields are left null.
+        """
+        transport = getattr(self.client, "_transport", None)
+        if transport is None:
+            return
+        base_url = getattr(transport, "base_url", f"http://localhost:{self.api_port}")
+        admin_token = getattr(transport, "api_key", None)
+        if not admin_token:
+            return
+
+        identity_data: Dict[str, Any] = {}
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as http:
+                resp = await http.get(
+                    f"{base_url}/v1/agent/identity",
+                    headers={"Authorization": f"Bearer {admin_token}"},
+                )
+            if resp.status_code == 200:
+                body = resp.json()
+                d = (body.get("data") or body) or {}
+                identity_data["agent_id"] = d.get("agent_id")
+                identity_data["agent_name"] = d.get("name")
+        except Exception:
+            pass
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as http:
+                resp = await http.get(
+                    f"{base_url}/v1/system/health",
+                    headers={"Authorization": f"Bearer {admin_token}"},
+                )
+            if resp.status_code == 200:
+                body = resp.json()
+                d = (body.get("data") or body) or {}
+                identity_data["agent_version"] = d.get("version")
+                identity_data["cognitive_state"] = d.get("cognitive_state")
+        except Exception:
+            pass
+
+        self._agent_identity = identity_data
+        if identity_data:
+            self.console.print(
+                f"[dim]agent identity: agent_id={identity_data.get('agent_id')} "
+                f"version={identity_data.get('agent_version')} "
+                f"name={identity_data.get('agent_name')}[/dim]\n"
+            )
 
     async def _create_locale_user(self, cell_language: str) -> None:
         """Create a locale-appropriate user for this battery's cell.
@@ -600,6 +725,8 @@ class SafetyBatteryTests:
             "battery_id": manifest["battery_id"],
             "battery_version": manifest["battery_version"],
             "cell": manifest["cell"],
+            "template_id": self.template_id,
+            "model": self.model,
             "as_user": self._locale_username or "admin",
             "as_display_name": self._locale_display_name,
             "n_questions": len(self._battery_results),
@@ -611,6 +738,69 @@ class SafetyBatteryTests:
         with open(summary_path, "w", encoding="utf-8") as f:
             json.dump(summary, f, ensure_ascii=False, indent=2)
             f.write("\n")
+
+    def _write_manifest_signed(self, manifest: Dict[str, Any], results_jsonl: Path) -> None:
+        """Write manifest_signed.json per cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §3.3.
+
+        Contains the result-key tuple (cell, battery_version, model_slug,
+        agent_version, template_id), per-response audit anchors (the
+        agent_task_ids the response_ids map to), and bundle SHA-256s. The
+        GH Actions workflow's actions/attest-build-provenance step signs
+        this file + the JSONL + the summary as a Sigstore attestation.
+        """
+        summary_path = self._results_dir / "summary.json"
+        manifest_path = self._results_dir / "manifest_signed.json"
+
+        # Bundle hashes — what attest-build-provenance binds against
+        results_sha = _sha256_hex(results_jsonl) if results_jsonl.exists() else None
+        summary_sha = _sha256_hex(summary_path) if summary_path.exists() else None
+
+        # Per-response audit anchors — each agent_task_id resolves to a
+        # signed audit-chain entry produced by the agent's TPM-backed
+        # signer at response time. Verifying = pulling the entry,
+        # confirming signature, matching SPEAK content to JSONL row.
+        anchors = [
+            {"question_id": r.question_id, "agent_task_id": r.response_task_id}
+            for r in self._battery_results
+            if r.success
+        ]
+
+        signed = {
+            "schema": "ciris.ai/safety_battery_manifest_signed/v1",
+            "run_id": self._run_id,
+            "captured_at_start": self._captured_at_start,
+            "captured_at_end": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+
+            "cell": manifest["cell"],
+            "battery_id": manifest["battery_id"],
+            "battery_version": manifest["battery_version"],
+            "rubric_sha256": manifest.get("rubric_sha256"),
+
+            "agent_id": self._agent_identity.get("agent_id"),
+            "agent_name": self._agent_identity.get("agent_name"),
+            "agent_version": self._agent_identity.get("agent_version"),
+            "template_id": self.template_id,
+
+            "model": self.model,
+            "model_slug": _slugify_model(self.model),
+            "live_base_url": self.live_base_url,
+            "live_provider": self.live_provider,
+
+            "bundle": {
+                "results_jsonl_sha256": results_sha,
+                "summary_json_sha256": summary_sha,
+            },
+            "agent_audit_anchors": anchors,
+
+            "ci_provenance": _capture_ci_provenance(),
+        }
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(signed, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        self.console.print(
+            f"[dim]manifest_signed.json: {len(anchors)} audit anchors, "
+            f"jsonl_sha256={results_sha[:12] if results_sha else 'none'}...[/dim]"
+        )
 
     def _print_summary(self, manifest: Dict[str, Any]) -> None:
         n_total = len(self._battery_results)

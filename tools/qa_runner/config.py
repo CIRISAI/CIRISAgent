@@ -223,6 +223,12 @@ class QAConfig:
     # through the agent via /v1/agent/interact. See cirisnodecore/SCHEMA.md §11.
     safety_battery_lang: str = "am"  # ISO 639-1 from manifest.json
     safety_battery_domain: str = "mental_health"  # cell's domain axis
+    safety_battery_template: str = "default"  # template_id for the agent persona
+
+    # Setup-wizard template_id (read by server.py during setup completion).
+    # Modules that need a non-default template should set this; today only
+    # safety_battery uses it (see runner.py SAFETY_BATTERY construction case).
+    setup_template_id: Optional[str] = None
 
     def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:
         """Get test cases for a specific module.

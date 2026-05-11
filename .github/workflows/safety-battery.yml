@@ -1,44 +1,51 @@
 name: Safety Battery
 
 # Runs a canonical safety battery (cirisnodecore/SCHEMA.md §11) against
-# the live agent via the A2A path, against the same Together AI model
-# production datum uses (google/gemma-4-31B-it). Results land as workflow
-# artifacts ready for human scoring on safety.ciris.ai.
+# the live agent via the A2A path on Together gemma (production datum's
+# primary model). Emits signed artifacts queryable by tuple per
+# cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md.
 #
-# This is the CI surface that closes the contributor loop from
-# tests/safety/README.md §1 (submit → batch run → score → ticket →
-# propose edit → vote → merge → next release).
+# Three stages: pre-flight dedup → battery run → attestation + upload.
+# safety.ciris.ai polls the tuple-named artifact, verifies the Sigstore
+# attestation, and presents the responses to human scorers.
 
 on:
-  # Weekly baseline: did the agent regress on the canonical Amharic
-  # mental-health battery since last release? Monday morning UTC matches
-  # the memory-benchmark workflow's schedule so weekly capacity reports
-  # come out at one cadence.
   schedule:
-    - cron: '0 7 * * 1'  # Monday 7am UTC
-
-  # On-demand: any maintainer can trigger from the Actions tab.
+    - cron: '0 7 * * 1'  # Monday 7am UTC (cadence-match memory-benchmark)
   workflow_dispatch:
     inputs:
       lang:
-        description: 'ISO 639-1 language code (cell language)'
+        description: 'ISO 639-1 cell language'
         required: false
         default: 'am'
         type: choice
         options: [am, ar, bn, my, ha, hi, mr, fa, pa, sw, ta, te, ur, yo]
       domain:
-        description: 'Cell domain (today only mental_health is canonical)'
+        description: 'Cell domain'
         required: false
         default: 'mental_health'
         type: string
       model:
-        description: 'Live LLM model identifier (Together catalog)'
+        description: 'Live LLM model identifier'
         required: false
         default: 'google/gemma-4-31B-it'
         type: string
-
-  # Run on PRs that touch the battery surface so a contributor's
-  # safety-PR gets a real-LLM verdict before merge.
+      template_id:
+        description: "Agent template (default → Ally persona)"
+        required: false
+        default: 'default'
+        type: choice
+        options: [default, datum, scout, echo-speculative, echo, echo-core, sage, test]
+      force:
+        description: 'Bypass dedup pre-flight and force a fresh run'
+        required: false
+        default: false
+        type: boolean
+      freshness_days:
+        description: 'Dedup freshness window in days (default 7)'
+        required: false
+        default: '7'
+        type: string
   pull_request:
     paths:
       - 'tests/safety/**'
@@ -48,17 +55,33 @@ on:
       - 'tools/safety_battery_migrate.py'
       - 'ciris_engine/data/localized/**'
 
+permissions:
+  # Sigstore attestation issuance per
+  # https://docs.github.com/en/actions/security-guides/using-artifact-attestations
+  id-token: write
+  attestations: write
+  contents: read
+  actions: read  # required for dedup pre-flight (gh api artifacts)
+
 jobs:
   safety-battery:
-    name: Safety Battery (${{ github.event.inputs.lang || 'am' }} / ${{ github.event.inputs.domain || 'mental_health' }})
+    name: Safety Battery (${{ github.event.inputs.lang || 'am' }} / ${{ github.event.inputs.domain || 'mental_health' }} / ${{ github.event.inputs.template_id || 'default' }})
     runs-on: ubuntu-latest
-    # 9 questions × ~12 LLM hops × ~30s each on Together gemma ≈ 50 min
-    # worst case; cold start + server boot ≈ 2 min. 90-minute ceiling
-    # gives generous headroom without risking the runner's free-tier
-    # cancellation envelope.
     timeout-minutes: 90
-    permissions:
-      contents: read
+    env:
+      # Belt-and-suspenders for the CI clean-slate boot path per
+      # cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §5.2. Even though the
+      # qa_runner forces --wipe-data via the WIPE_DATA_ON_START metadata
+      # contract, setting CIRIS_FORCE_FIRST_RUN here survives any subshell
+      # env scrubbing and makes the intent legible.
+      CIRIS_FORCE_FIRST_RUN: "1"
+      PYTHONUNBUFFERED: "1"
+      LANG_INPUT: ${{ github.event.inputs.lang || 'am' }}
+      DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
+      MODEL_INPUT: ${{ github.event.inputs.model || 'google/gemma-4-31B-it' }}
+      TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
+      FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
+      FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -80,10 +103,92 @@ jobs:
           pip install -e .
           pip install -r requirements-dev.txt
 
-      - name: Write Together API key to file
-        # The qa_runner reads ~/.together_key (LIVE_LLM_DEFAULTS["key_file"]
-        # on SafetyBatteryTests). Write the secret to that path and the
-        # runner picks it up automatically — no CLI flags needed.
+      - name: Read agent_version + battery_version
+        id: versions
+        # The tuple needs agent_version and battery_version BEFORE we know
+        # whether to skip — pre-flight dedup queries by tuple. Read them
+        # from the canonical sources (constants.py for agent, the v4
+        # BatteryManifest on disk for battery).
+        run: |
+          AGENT_VERSION=$(python3 -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
+          # The migration script encodes lang → directory name; mirror that here.
+          declare -A ISO_TO_DIR=(
+            [am]=amharic [ar]=arabic [bn]=bengali [my]=burmese [ha]=hausa
+            [hi]=hindi [mr]=marathi [fa]=persian [pa]=punjabi [sw]=swahili
+            [ta]=tamil [te]=telugu [ur]=urdu [yo]=yoruba
+          )
+          LANG_DIR="${ISO_TO_DIR[$LANG_INPUT]:-$LANG_INPUT}"
+          BATTERY_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/v4_${LANG_DIR}_${DOMAIN_INPUT}_arc.json"
+          BATTERY_VERSION=$(python3 -c "import json; print(json.load(open('$BATTERY_PATH'))['battery_version'])")
+          MODEL_SLUG=$(python3 -c "from tools.qa_runner.modules.safety_battery import slugify_model; print(slugify_model('$MODEL_INPUT'))")
+          ARTIFACT_NAME="safety-battery-${LANG_INPUT}-${DOMAIN_INPUT}-v${BATTERY_VERSION}-${MODEL_SLUG}-${AGENT_VERSION}-${TEMPLATE_INPUT}"
+          echo "agent_version=$AGENT_VERSION" >> $GITHUB_OUTPUT
+          echo "battery_version=$BATTERY_VERSION" >> $GITHUB_OUTPUT
+          echo "model_slug=$MODEL_SLUG" >> $GITHUB_OUTPUT
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo "## Result tuple" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Cell | \`${LANG_INPUT}/${DOMAIN_INPUT}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Battery version | \`v${BATTERY_VERSION}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Model | \`${MODEL_INPUT}\` (slug: \`${MODEL_SLUG}\`) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Agent version | \`${AGENT_VERSION}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Template | \`${TEMPLATE_INPUT}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifact name | \`${ARTIFACT_NAME}\` |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Dedup pre-flight
+        id: dedup
+        # cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §4. Look up existing
+        # artifacts by tuple-name. If a match exists within the freshness
+        # window AND the user did not pass force=true, skip the run.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ steps.versions.outputs.artifact_name }}
+        run: |
+          if [ "$FORCE_INPUT" = "true" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "::notice::force=true — bypassing dedup pre-flight"
+            exit 0
+          fi
+          # gh api returns artifacts sorted by created_at desc by default
+          MATCH=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
+            -f name="$ARTIFACT_NAME" -f per_page=10 \
+            --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0] // empty')
+          if [ -z "$MATCH" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "::notice::no matching artifact for $ARTIFACT_NAME — proceeding with fresh run"
+            exit 0
+          fi
+          CREATED=$(echo "$MATCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["created_at"])')
+          URL=$(echo "$MATCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])')
+          AGE_DAYS=$(python3 -c "
+          from datetime import datetime, timezone
+          created = datetime.fromisoformat('$CREATED'.replace('Z', '+00:00'))
+          age = (datetime.now(timezone.utc) - created).total_seconds() / 86400
+          print(f'{age:.2f}')
+          ")
+          if python3 -c "import sys; sys.exit(0 if float('$AGE_DAYS') < float('$FRESHNESS_DAYS') else 1)"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "existing_url=$URL" >> $GITHUB_OUTPUT
+            echo "## Dedup skip" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Found fresh artifact for tuple — skipping run." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **Existing artifact**: $URL" >> $GITHUB_STEP_SUMMARY
+            echo "- **Age**: ${AGE_DAYS} days (freshness window: ${FRESHNESS_DAYS} days)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Override**: re-run with \`force=true\` to bypass" >> $GITHUB_STEP_SUMMARY
+            echo "::notice::Dedup skip — fresh artifact exists (age=${AGE_DAYS}d, window=${FRESHNESS_DAYS}d): $URL"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "::notice::Existing artifact is stale (age=${AGE_DAYS}d > ${FRESHNESS_DAYS}d) — proceeding with fresh run"
+          fi
+
+      - name: Write Together API key
+        if: steps.dedup.outputs.skip != 'true'
+        # The qa_runner reads ~/.together_key (LIVE_LLM_DEFAULTS["key_file"]).
+        # Writing it here means the metadata auto-enable path lights up
+        # without needing explicit --live-key-file on the CLI.
         env:
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
         run: |
@@ -93,39 +198,70 @@ jobs:
           fi
           umask 077
           printf '%s' "$TOGETHER_API_KEY" > "$HOME/.together_key"
-          ls -la "$HOME/.together_key"
 
       - name: Run safety battery
-        env:
-          # Keep logs unbuffered so cancellations don't lose the in-flight
-          # output buffer (memory-benchmark workflow has the same setting
-          # for the same reason).
-          PYTHONUNBUFFERED: "1"
+        if: steps.dedup.outputs.skip != 'true'
+        # --wipe-data is forced by the WIPE_DATA_ON_START metadata, but
+        # pass it explicitly here too for log-readability.
         run: |
+          mkdir -p qa_reports
           python3 -m tools.qa_runner safety_battery \
-            --safety-battery-lang "${{ github.event.inputs.lang || 'am' }}" \
-            --safety-battery-domain "${{ github.event.inputs.domain || 'mental_health' }}" \
-            --live-model "${{ github.event.inputs.model || 'google/gemma-4-31B-it' }}" \
+            --safety-battery-lang "$LANG_INPUT" \
+            --safety-battery-domain "$DOMAIN_INPUT" \
+            --safety-battery-template "$TEMPLATE_INPUT" \
+            --live-model "$MODEL_INPUT" \
+            --wipe-data \
             --verbose 2>&1 | tee qa_reports/safety_battery_workflow.log
 
+      - name: Locate result bundle
+        if: steps.dedup.outputs.skip != 'true'
+        id: bundle
+        # Surface the per-run results dir path. There's exactly one
+        # per run because the runner namespaces by run_id; the workflow
+        # then attests + uploads it under the tuple-name.
+        run: |
+          BUNDLE_DIR=$(ls -td qa_reports/safety_battery/${LANG_INPUT}_${DOMAIN_INPUT}_* 2>/dev/null | head -1)
+          if [ -z "$BUNDLE_DIR" ]; then
+            echo "::error::No result bundle produced by the runner"
+            exit 1
+          fi
+          echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
+          ls -la "$BUNDLE_DIR"
+          # Surface the manifest_signed.json content in the job summary
+          if [ -f "$BUNDLE_DIR/manifest_signed.json" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## Signed manifest" >> $GITHUB_STEP_SUMMARY
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            head -40 "$BUNDLE_DIR/manifest_signed.json" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Attest build provenance
+        if: steps.dedup.outputs.skip != 'true'
+        # Sigstore signature binding the bundle to this workflow + commit.
+        # Verification: gh attestation verify <artifact> --owner CIRISAI
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            ${{ steps.bundle.outputs.bundle_dir }}/results.jsonl
+            ${{ steps.bundle.outputs.bundle_dir }}/summary.json
+            ${{ steps.bundle.outputs.bundle_dir }}/manifest_signed.json
+
       - name: Upload battery results
-        # Always upload, even if the run partially failed — the JSONL
-        # of captured responses is the artifact safety.ciris.ai consumes.
-        if: always()
+        # Always upload on a fresh run; nothing to upload on dedup-skip.
+        if: always() && steps.dedup.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: safety-battery-${{ github.event.inputs.lang || 'am' }}-${{ github.event.inputs.domain || 'mental_health' }}-${{ github.run_id }}
+          name: ${{ steps.versions.outputs.artifact_name }}
           path: |
-            qa_reports/safety_battery/
+            ${{ steps.bundle.outputs.bundle_dir }}
             qa_reports/safety_battery_workflow.log
-          # 90 days matches the memory-benchmark retention; long enough
-          # for week-over-week comparison before federation persistence
-          # takes over.
           retention-days: 90
+          # Allow re-running this workflow to overwrite the named artifact —
+          # latest-wins discoverability per FSD §2.1.
+          overwrite: true
 
       - name: Clean up key file
-        # Belt-and-suspenders: the runner is ephemeral, but explicit
-        # cleanup makes the intent legible to anyone reading the workflow.
         if: always()
         run: |
-          shred -u "$HOME/.together_key" 2>/dev/null || rm -f "$HOME/.together_key"
+          shred -u "$HOME/.together_key" 2>/dev/null || rm -f "$HOME/.together_key" || true

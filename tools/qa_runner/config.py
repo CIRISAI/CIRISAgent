@@ -58,6 +58,7 @@ class QAModule(Enum):
     DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
     MODEL_EVAL = "model_eval"  # Model quality evaluation with tough questions (requires --live)
     PARALLEL_LOCALES = "parallel_locales"  # 29-locale parallel multi-turn convo (per-user channels)
+    SAFETY_BATTERY = "safety_battery"  # Run a canonical safety battery (cirisnodecore/SCHEMA.md §11) against the agent via A2A
     SECRETS_ENCRYPTION = "secrets_encryption"  # Secrets encryption testing (CIRISVerify v1.6.0+)
     MEMORY_BENCHMARK = "memory_benchmark"  # Memory usage benchmark under message load
 
@@ -216,6 +217,12 @@ class QAConfig:
     # question sets live out-of-tree; point this at e.g.
     # `~/bounce-test/model_eval_questions/v1_sensitive.json`.
     model_eval_questions_file: Optional[str] = None
+
+    # Safety battery configuration. Loads a canonical battery from
+    # tests/safety/{lang_eng}_{domain}/v{N}_*_arc.json and runs each question
+    # through the agent via /v1/agent/interact. See cirisnodecore/SCHEMA.md §11.
+    safety_battery_lang: str = "am"  # ISO 639-1 from manifest.json
+    safety_battery_domain: str = "mental_health"  # cell's domain axis
 
     def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:
         """Get test cases for a specific module.

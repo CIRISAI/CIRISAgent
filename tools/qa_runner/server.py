@@ -878,46 +878,32 @@ class APIServerManager:
             env["CIRIS_FORCE_FIRST_RUN"] = "1"
             self.console.print("[dim]Setting CIRIS_FORCE_FIRST_RUN=1 for wiped data[/dim]")
 
-        # model_eval and parallel_locales BOTH fire concurrent submissions against
-        # unique per-channel routes. Disable task-append coalescing so any stray
-        # cross-channel collision doesn't silently merge submissions into a
-        # single task. Raise the per-IP rate limit because all 29 (or N×N)
-        # concurrent requests come from 127.0.0.1 in the test runner, but in
-        # production those would be N different phones with N different IPs.
-        # Raise the interact response timeout because each request fans out
-        # through the full DMA + conscience pipeline (~12 LLM calls).
-        if any(m in (QAModule.MODEL_EVAL, QAModule.PARALLEL_LOCALES) for m in self.modules):
-            env["CIRIS_DISABLE_TASK_APPEND"] = "1"
-            # Default 60 req/min rate-limit 429s most of the parallel burst.
-            # 600/min (10/s) accommodates 29-way and (questions × languages)
-            # bursts while the LLM bus's FIFO gate still backpressures
-            # downstream — this is a localhost-IP artifact, not a deployment
-            # config change. Production deployments serve different users from
-            # different IPs and don't hit this rate limit.
-            env.setdefault("CIRIS_API_RATE_LIMIT_PER_MINUTE", "600")
-            # Default 55s interact timeout truncates DMA+conscience chains
-            # (routinely 2-5 min on live LLM). Raise to 600s.
-            env.setdefault("CIRIS_API_INTERACTION_TIMEOUT", "600")
-            # The LLM bus defaults to 4 in-flight calls per service to avoid
-            # provider rate limits for a single user. Each channel in this
-            # test fans out ~12 LLM calls through the DMA+conscience pipeline,
-            # so 29 parallel channels = ~348 calls queued behind a 4-deep
-            # bottleneck (per-channel latency unbounded as queue grows).
-            # Raise to 32 — enough to sustain 29-way fan-out without losing
-            # the per-provider safety the gate provides. This is a deployment
-            # config knob, not a pipeline-depth override; pipeline behavior
-            # per channel is identical to a phone deployment.
-            env.setdefault("CIRIS_LLM_MAX_CONCURRENT", "32")
-            module_label = (
-                "MODEL_EVAL"
-                if any(m == QAModule.MODEL_EVAL for m in self.modules)
-                else "PARALLEL_LOCALES"
-            )
+        # Module-level SERVER_ENV contributions. Each selected module can
+        # declare a SERVER_ENV class attribute that gets merged into the
+        # agent process env. See tools/qa_runner/modules/_module_metadata.py
+        # for the contract. Modules currently declaring SERVER_ENV:
+        # MODEL_EVAL, PARALLEL_LOCALES, SAFETY_BATTERY (CIRIS_DISABLE_TASK_APPEND
+        # + concurrent-burst tuning for the first two; task-append disable
+        # only for the safety-battery sequential-in-shared-channel pattern).
+        from .modules._module_metadata import merge_server_env
+
+        merged = merge_server_env(self.modules)
+        conflicts = merged.pop("__conflicts__", "")
+        for k, v in merged.items():
+            # setdefault so an operator can still override any of these via
+            # an explicit env var (e.g. for debugging or one-off CI runs).
+            env.setdefault(k, v)
+        if merged:
+            modules_label = ",".join(m.value for m in self.modules
+                                     if any(merge_server_env([m]).keys() - {"__conflicts__"}))
             self.console.print(
-                f"[dim]Setting CIRIS_DISABLE_TASK_APPEND=1, "
-                f"CIRIS_API_RATE_LIMIT_PER_MINUTE=600, "
-                f"CIRIS_API_INTERACTION_TIMEOUT=600, "
-                f"CIRIS_LLM_MAX_CONCURRENT=32 for {module_label} module[/dim]"
+                f"[dim]Merged module SERVER_ENV from {modules_label or 'selected modules'}: "
+                f"{merged}[/dim]"
+            )
+        if conflicts:
+            self.console.print(
+                f"[yellow]SERVER_ENV conflicts across modules (last-write-wins): "
+                f"{conflicts}[/yellow]"
             )
 
         # Set backend-specific log directory to avoid symlink collisions

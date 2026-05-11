@@ -21,7 +21,20 @@ from ciris_sdk.client import CIRISClient
 
 
 class DegradedModeTests:
-    """Test degraded mode behavior."""
+    """Test degraded mode behavior.
+
+    Live-LLM contract read by tools/qa_runner/modules/_module_metadata.py.
+    Exercises adding/removing real LLM providers at runtime; mock LLM
+    has no real provider state to mutate. Migrated from the hardcoded
+    __main__.py check at line ~348."""
+
+    REQUIRES_LIVE_LLM = True
+    LIVE_LLM_DEFAULTS = {
+        "key_file": "~/.groq_key",
+        "base_url": "https://api.groq.com/openai/v1",
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "provider": "openai",
+    }
 
     def __init__(
         self,

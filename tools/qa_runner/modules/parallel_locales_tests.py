@@ -132,7 +132,20 @@ class ParallelLocalesTests:
     user_preferred_name and preferred_language. Validates all 29 reply.
     Each reply costs ~12 LLM calls (full DMA + conscience pipeline), so
     a run is ~29 × 12 ≈ 350 LLM calls — all in parallel.
-    """
+
+    Server-env contract read by tools/qa_runner/modules/_module_metadata.py.
+    Migrated from the hardcoded conditional in server.py:889 — concurrent
+    submissions across per-locale channels demand raised rate limit +
+    interact timeout + LLM concurrency. Live LLM is the production
+    calibration path but not enforced (mock LLM also exercises the
+    fan-out path)."""
+
+    SERVER_ENV = {
+        "CIRIS_DISABLE_TASK_APPEND": "1",
+        "CIRIS_API_RATE_LIMIT_PER_MINUTE": "600",
+        "CIRIS_API_INTERACTION_TIMEOUT": "600",
+        "CIRIS_LLM_MAX_CONCURRENT": "32",
+    }
 
     def __init__(
         self,

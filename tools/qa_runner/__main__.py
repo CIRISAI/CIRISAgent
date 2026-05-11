@@ -277,6 +277,25 @@ Available modules:
             "deliberately generic (theodicy / AI ethics / epistemology only)."
         ),
     )
+    # Safety battery — loads a canonical battery from tests/safety/{lang_eng}_{domain}/
+    # and submits each question via /v1/agent/interact. See cirisnodecore/SCHEMA.md §11.
+    parser.add_argument(
+        "--safety-battery-lang",
+        default="am",
+        help=(
+            "ISO 639-1 language code for the safety battery cell "
+            "(default: am). Source of truth: ciris_engine/data/localized/manifest.json."
+        ),
+    )
+    parser.add_argument(
+        "--safety-battery-domain",
+        default="mental_health",
+        help=(
+            "Domain axis for the safety battery cell (default: mental_health). "
+            "Future cells extend the domain axis to entries from "
+            "ciris_engine/logic/buses/prohibitions.py."
+        ),
+    )
 
     # Output configuration
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -344,12 +363,49 @@ def main():
             print(f"Available modules: {', '.join(m.value for m in QAModule)}")
             sys.exit(1)
 
-    # Degraded mode tests require --live (no mock LLM)
-    if QAModule.DEGRADED_MODE in modules and not args.live:
-        print("❌ degraded_mode module requires --live flag")
-        print("   This module tests adding/removing real LLM providers at runtime")
-        print("   Example: python3 -m tools.qa_runner degraded_mode --live")
-        sys.exit(1)
+    # Generic live-LLM enforcement driven by module-class metadata.
+    # See tools/qa_runner/modules/_module_metadata.py — a module sets
+    # REQUIRES_LIVE_LLM = True (and optional LIVE_LLM_DEFAULTS = {...})
+    # and the runner here either auto-applies defaults (when the default
+    # key file exists) or fails fast with a clear message.
+    from .modules._module_metadata import get_metadata
+
+    _live_default_key_file = args.live_key_file  # so we can detect if user passed --live-key-file
+    _user_set_live_key_file = "--live-key-file" in sys.argv
+    _user_set_live_model = "--live-model" in sys.argv
+    _user_set_live_base_url = "--live-base-url" in sys.argv
+    _user_set_live_provider = "--live-provider" in sys.argv
+    for _mod in modules:
+        _md = get_metadata(_mod)
+        if not _md.requires_live_llm:
+            continue
+        if not args.live:
+            # Try auto-enable from module defaults.
+            _defaults = _md.live_llm_defaults
+            _default_key = Path(_defaults.get("key_file", args.live_key_file)).expanduser()
+            if _default_key.exists():
+                args.live = True
+                if not _user_set_live_key_file:
+                    args.live_key_file = str(_default_key)
+                if not _user_set_live_base_url and _defaults.get("base_url"):
+                    args.live_base_url = _defaults["base_url"]
+                if not _user_set_live_model and _defaults.get("model"):
+                    args.live_model = _defaults["model"]
+                if not _user_set_live_provider and _defaults.get("provider"):
+                    args.live_provider = _defaults["provider"]
+                print(
+                    f"   ✅ {_mod.value} requires live LLM — auto-enabled "
+                    f"(key={_default_key}, model={args.live_model})"
+                )
+            else:
+                print(f"❌ {_mod.value} module requires --live (live LLM required)")
+                if _defaults.get("key_file"):
+                    print(f"   Expected key file at {_default_key} (from module defaults).")
+                print(
+                    f"   Create the key file or pass --live --live-key-file <path> "
+                    f"--live-base-url ... --live-model ... explicitly."
+                )
+                sys.exit(1)
 
     # HE-300 benchmark module-specific defaults
     is_he300 = QAModule.HE300_BENCHMARK in modules
@@ -531,6 +587,8 @@ def main():
             cat.strip() for cat in args.model_eval_questions.split(",") if cat.strip()
         ],
         model_eval_questions_file=(args.model_eval_questions_file or None),
+        safety_battery_lang=args.safety_battery_lang,
+        safety_battery_domain=args.safety_battery_domain,
     )
 
     # Create and run runner

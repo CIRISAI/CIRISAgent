@@ -1,0 +1,131 @@
+name: Safety Battery
+
+# Runs a canonical safety battery (cirisnodecore/SCHEMA.md §11) against
+# the live agent via the A2A path, against the same Together AI model
+# production datum uses (google/gemma-4-31B-it). Results land as workflow
+# artifacts ready for human scoring on safety.ciris.ai.
+#
+# This is the CI surface that closes the contributor loop from
+# tests/safety/README.md §1 (submit → batch run → score → ticket →
+# propose edit → vote → merge → next release).
+
+on:
+  # Weekly baseline: did the agent regress on the canonical Amharic
+  # mental-health battery since last release? Monday morning UTC matches
+  # the memory-benchmark workflow's schedule so weekly capacity reports
+  # come out at one cadence.
+  schedule:
+    - cron: '0 7 * * 1'  # Monday 7am UTC
+
+  # On-demand: any maintainer can trigger from the Actions tab.
+  workflow_dispatch:
+    inputs:
+      lang:
+        description: 'ISO 639-1 language code (cell language)'
+        required: false
+        default: 'am'
+        type: choice
+        options: [am, ar, bn, my, ha, hi, mr, fa, pa, sw, ta, te, ur, yo]
+      domain:
+        description: 'Cell domain (today only mental_health is canonical)'
+        required: false
+        default: 'mental_health'
+        type: string
+      model:
+        description: 'Live LLM model identifier (Together catalog)'
+        required: false
+        default: 'google/gemma-4-31B-it'
+        type: string
+
+  # Run on PRs that touch the battery surface so a contributor's
+  # safety-PR gets a real-LLM verdict before merge.
+  pull_request:
+    paths:
+      - 'tests/safety/**'
+      - 'cirisnodecore/**'
+      - 'tools/qa_runner/modules/safety_battery.py'
+      - 'tools/qa_runner/modules/_module_metadata.py'
+      - 'tools/safety_battery_migrate.py'
+      - 'ciris_engine/data/localized/**'
+
+jobs:
+  safety-battery:
+    name: Safety Battery (${{ github.event.inputs.lang || 'am' }} / ${{ github.event.inputs.domain || 'mental_health' }})
+    runs-on: ubuntu-latest
+    # 9 questions × ~12 LLM hops × ~30s each on Together gemma ≈ 50 min
+    # worst case; cold start + server boot ≈ 2 min. 90-minute ceiling
+    # gives generous headroom without risking the runner's free-tier
+    # cancellation envelope.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install -r requirements-dev.txt
+
+      - name: Write Together API key to file
+        # The qa_runner reads ~/.together_key (LIVE_LLM_DEFAULTS["key_file"]
+        # on SafetyBatteryTests). Write the secret to that path and the
+        # runner picks it up automatically — no CLI flags needed.
+        env:
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+        run: |
+          if [ -z "$TOGETHER_API_KEY" ]; then
+            echo "::error::TOGETHER_API_KEY secret is not set on this repository"
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$TOGETHER_API_KEY" > "$HOME/.together_key"
+          ls -la "$HOME/.together_key"
+
+      - name: Run safety battery
+        env:
+          # Keep logs unbuffered so cancellations don't lose the in-flight
+          # output buffer (memory-benchmark workflow has the same setting
+          # for the same reason).
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python3 -m tools.qa_runner safety_battery \
+            --safety-battery-lang "${{ github.event.inputs.lang || 'am' }}" \
+            --safety-battery-domain "${{ github.event.inputs.domain || 'mental_health' }}" \
+            --live-model "${{ github.event.inputs.model || 'google/gemma-4-31B-it' }}" \
+            --verbose 2>&1 | tee qa_reports/safety_battery_workflow.log
+
+      - name: Upload battery results
+        # Always upload, even if the run partially failed — the JSONL
+        # of captured responses is the artifact safety.ciris.ai consumes.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-battery-${{ github.event.inputs.lang || 'am' }}-${{ github.event.inputs.domain || 'mental_health' }}-${{ github.run_id }}
+          path: |
+            qa_reports/safety_battery/
+            qa_reports/safety_battery_workflow.log
+          # 90 days matches the memory-benchmark retention; long enough
+          # for week-over-week comparison before federation persistence
+          # takes over.
+          retention-days: 90
+
+      - name: Clean up key file
+        # Belt-and-suspenders: the runner is ephemeral, but explicit
+        # cleanup makes the intent legible to anyone reading the workflow.
+        if: always()
+        run: |
+          shred -u "$HOME/.together_key" 2>/dev/null || rm -f "$HOME/.together_key"

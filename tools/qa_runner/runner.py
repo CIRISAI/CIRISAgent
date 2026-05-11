@@ -130,6 +130,10 @@ class QARunner:
                 model_eval_profile_memory=self.config.model_eval_profile_memory,
                 model_eval_question_categories=self.config.model_eval_question_categories,
                 model_eval_questions_file=self.config.model_eval_questions_file,
+                # Safety battery configuration — same backend-config preservation
+                # rationale as the model_eval block above.
+                safety_battery_lang=self.config.safety_battery_lang,
+                safety_battery_domain=self.config.safety_battery_domain,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -285,6 +289,7 @@ class QARunner:
             QAModule.DEGRADED_MODE,
             QAModule.MODEL_EVAL,
             QAModule.PARALLEL_LOCALES,
+            QAModule.SAFETY_BATTERY,
             QAModule.SECRETS_ENCRYPTION,
             QAModule.MEMORY_BENCHMARK,
         ]
@@ -927,6 +932,7 @@ class QARunner:
         from .modules.memory_benchmark_tests import MemoryBenchmarkTests
         from .modules.model_eval_tests import ModelEvalTests
         from .modules.parallel_locales_tests import ParallelLocalesTests
+        from .modules.safety_battery import SafetyBatteryTests
         from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
         from .modules.secrets_encryption_tests import SecretsEncryptionTests
@@ -981,6 +987,7 @@ class QARunner:
             QAModule.DEGRADED_MODE: DegradedModeTests,
             QAModule.MODEL_EVAL: ModelEvalTests,
             QAModule.PARALLEL_LOCALES: ParallelLocalesTests,
+            QAModule.SAFETY_BATTERY: SafetyBatteryTests,
             QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
             QAModule.MEMORY_BENCHMARK: MemoryBenchmarkTests,
         }
@@ -1073,6 +1080,14 @@ class QARunner:
                         self.console,
                         fail_fast=self.config.fail_fast,
                         test_timeout=self.config.test_timeout,
+                    )
+                elif module == QAModule.SAFETY_BATTERY:
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        lang=getattr(self.config, "safety_battery_lang", "am"),
+                        domain=getattr(self.config, "safety_battery_domain", "mental_health"),
+                        api_port=self.config.api_port,
                     )
                 else:
                     test_instance = test_class(client, self.console)

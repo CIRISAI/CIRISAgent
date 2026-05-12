@@ -419,7 +419,6 @@ def main():
     # key file exists) or fails fast with a clear message.
     from .modules._module_metadata import get_metadata
 
-    _live_default_key_file = args.live_key_file  # so we can detect if user passed --live-key-file
     _user_set_live_key_file = "--live-key-file" in sys.argv
     _user_set_live_model = "--live-model" in sys.argv
     _user_set_live_base_url = "--live-base-url" in sys.argv

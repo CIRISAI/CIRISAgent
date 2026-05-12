@@ -199,6 +199,30 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check secrets availability (capture)
+        # GitHub does not pass repository secrets to workflows triggered by
+        # pull_request events from forks. Without DEEPINFRA_API_KEY the
+        # capture job has nothing to call — hard-failing would just spam
+        # external contributors with red Xs they cannot fix. Soft-skip
+        # the live steps with a clear notice instead. Internal PRs +
+        # workflow_dispatch + schedule events always have the secret.
+        id: secrets_check
+        env:
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+        run: |
+          if [ -z "$DEEPINFRA_API_KEY" ]; then
+            echo "have_secret=false" >> $GITHUB_OUTPUT
+            echo "::notice::DEEPINFRA_API_KEY unavailable (likely fork PR). Skipping live capture; a maintainer can re-run on a trusted branch."
+            {
+              echo "## Capture skipped — secret unavailable"
+              echo ""
+              echo "This run does not have \`DEEPINFRA_API_KEY\` in scope (commonly happens on fork PRs)."
+              echo "A maintainer can re-run this workflow on a trusted branch to produce a fresh capture."
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            echo "have_secret=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Write DeepInfra API key
         # Capture default model is Qwen/Qwen3.6-35B-A3B served by
         # DeepInfra (per CLAUDE.md live model matrix + safety_battery.py
@@ -206,16 +230,15 @@ jobs:
         # auto-enable looks for ~/.deepinfra_key — write the secret to
         # that path so the lookup succeeds. (Earlier iteration used
         # ~/.together_key + gemma; switched 2026-05-11.)
-        if: steps.dedup.outputs.skip != 'true'
+        if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
         env:
           DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
         run: |
-          [ -z "$DEEPINFRA_API_KEY" ] && { echo "::error::DEEPINFRA_API_KEY secret missing"; exit 1; }
           umask 077
           printf '%s' "$DEEPINFRA_API_KEY" > "$HOME/.deepinfra_key"
 
       - name: Run safety battery (capture)
-        if: steps.dedup.outputs.skip != 'true'
+        if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
         run: |
           mkdir -p qa_reports "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"
           python3 -m tools.qa_runner safety_battery \
@@ -227,7 +250,7 @@ jobs:
             --verbose 2>&1 | tee qa_reports/capture_workflow.log
 
       - name: Locate capture bundle
-        if: steps.dedup.outputs.skip != 'true'
+        if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
         id: bundle
         run: |
           BUNDLE_DIR=$(ls -td qa_reports/safety_battery/${LANG_INPUT}_${DOMAIN_INPUT}_* 2>/dev/null | head -1)
@@ -245,7 +268,7 @@ jobs:
           ls -la "$BUNDLE_DIR"
 
       - name: Attest capture bundle
-        if: steps.dedup.outputs.skip != 'true'
+        if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: |
@@ -382,10 +405,21 @@ jobs:
           RUBRIC_ID=$(python3 -c "import json; print(json.load(open('$CRITERIA_PATH'))['rubric_id'])")
           # short = after last underscore-cluster (e.g. am_mh_v4_canonical_universal → canonical_universal)
           RUBRIC_SHORT=$(echo "$RUBRIC_ID" | sed -E 's/^[a-z]+_[a-z]+_v[0-9]+_//')
+          # Judge identity bound INTO the artifact name so dedup invalidates
+          # when JUDGE_PROMPT_TEMPLATE or JUDGE_DEFAULTS["model"] changes.
+          # Without these, editing the judge prompt and pushing would let
+          # interpret_dedup reuse stale verdicts (P1 finding, codex review).
+          JUDGE_MODEL=$(python3 -c "from tools.qa_runner.modules.safety_interpret import JUDGE_DEFAULTS; print(JUDGE_DEFAULTS['model'])")
+          JUDGE_MODEL_SLUG=$(python3 -c "from tools.qa_runner.modules.safety_battery import slugify_model; from tools.qa_runner.modules.safety_interpret import JUDGE_DEFAULTS; print(slugify_model(JUDGE_DEFAULTS['model']))")
+          JUDGE_PROMPT_SHA256=$(python3 -c "import hashlib; from tools.qa_runner.modules.safety_interpret import JUDGE_PROMPT_TEMPLATE; print(hashlib.sha256(JUDGE_PROMPT_TEMPLATE.encode('utf-8')).hexdigest())")
+          JUDGE_PROMPT_SHORT="${JUDGE_PROMPT_SHA256:0:8}"
           INTERPRETER_VERSION="${{ needs.capture.outputs.agent_version }}"  # v1: same release as agent-under-test
-          ARTIFACT_NAME="safety-battery-interpret-${LANG_INPUT}-${DOMAIN_INPUT}-v${{ needs.capture.outputs.battery_version }}-${{ needs.capture.outputs.model_slug }}-${{ needs.capture.outputs.agent_version }}-${TEMPLATE_INPUT}-${RUBRIC_SHORT}-${INTERPRETER_VERSION}"
+          ARTIFACT_NAME="safety-battery-interpret-${LANG_INPUT}-${DOMAIN_INPUT}-v${{ needs.capture.outputs.battery_version }}-${{ needs.capture.outputs.model_slug }}-${{ needs.capture.outputs.agent_version }}-${TEMPLATE_INPUT}-${RUBRIC_SHORT}-${JUDGE_MODEL_SLUG}-${JUDGE_PROMPT_SHORT}-${INTERPRETER_VERSION}"
           echo "rubric_id=$RUBRIC_ID" >> $GITHUB_OUTPUT
           echo "rubric_short=$RUBRIC_SHORT" >> $GITHUB_OUTPUT
+          echo "judge_model=$JUDGE_MODEL" >> $GITHUB_OUTPUT
+          echo "judge_model_slug=$JUDGE_MODEL_SLUG" >> $GITHUB_OUTPUT
+          echo "judge_prompt_sha256=$JUDGE_PROMPT_SHA256" >> $GITHUB_OUTPUT
           echo "interpreter_version=$INTERPRETER_VERSION" >> $GITHUB_OUTPUT
           echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
           {
@@ -394,6 +428,8 @@ jobs:
             echo "| Field | Value |"
             echo "|---|---|"
             echo "| Rubric | \`${RUBRIC_ID}\` |"
+            echo "| Judge model | \`${JUDGE_MODEL}\` (\`${JUDGE_MODEL_SLUG}\`) |"
+            echo "| Judge prompt sha | \`${JUDGE_PROMPT_SHORT}\` (full: \`${JUDGE_PROMPT_SHA256}\`) |"
             echo "| Interpreter agent version | \`${INTERPRETER_VERSION}\` |"
             echo "| Artifact | \`${ARTIFACT_NAME}\` |"
             echo "| Capture artifact | \`${{ needs.capture.outputs.artifact_name }}\` |"
@@ -433,17 +469,38 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Write Anthropic API key
-        if: steps.interpret_dedup.outputs.skip != 'true'
+      - name: Check secrets availability (interpret)
+        # Same pattern as the capture-side gate: fork PRs do not get
+        # ANTHROPIC_API_KEY, so hard-failing would spam external
+        # contributors. Soft-skip the live judge steps with a clear
+        # notice. Internal PRs + workflow_dispatch + schedule have it.
+        id: interpret_secrets_check
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          [ -z "$ANTHROPIC_API_KEY" ] && { echo "::error::ANTHROPIC_API_KEY secret missing"; exit 1; }
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "have_secret=false" >> $GITHUB_OUTPUT
+            echo "::notice::ANTHROPIC_API_KEY unavailable (likely fork PR). Skipping judge run; a maintainer can re-run on a trusted branch."
+            {
+              echo "## Interpret skipped — secret unavailable"
+              echo ""
+              echo "This run does not have \`ANTHROPIC_API_KEY\` in scope (commonly happens on fork PRs)."
+              echo "A maintainer can re-run this workflow on a trusted branch to produce fresh verdicts."
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            echo "have_secret=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Write Anthropic API key
+        if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
           umask 077
           printf '%s' "$ANTHROPIC_API_KEY" > "$HOME/.anthropic_key"
 
       - name: Run safety interpret
-        if: steps.interpret_dedup.outputs.skip != 'true'
+        if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
         run: |
           mkdir -p qa_reports
           python3 -m tools.qa_runner safety_interpret \
@@ -451,7 +508,7 @@ jobs:
             --verbose 2>&1 | tee qa_reports/interpret_workflow.log
 
       - name: Locate interpret bundle
-        if: steps.interpret_dedup.outputs.skip != 'true'
+        if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
         id: interpret_bundle
         run: |
           BUNDLE_DIR=$(ls -td qa_reports/safety_interpret/* 2>/dev/null | head -1)
@@ -472,7 +529,7 @@ jobs:
           fi
 
       - name: Attest interpret bundle
-        if: steps.interpret_dedup.outputs.skip != 'true'
+        if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: |

@@ -36,7 +36,6 @@ CLI invocation:
 """
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import re
@@ -433,6 +432,11 @@ class SafetyBatteryTests:
             return
 
         identity_data: Dict[str, Any] = {}
+        # Best-effort identity + health probes for the manifest. Either
+        # endpoint can be unreachable (port shifted, server still starting,
+        # transient timeout); manifest generation must not block on them.
+        # Soft-fail with a debug print so failures are intentional and
+        # diagnosable, not silently swallowed.
         try:
             async with httpx.AsyncClient(timeout=15.0) as http:
                 resp = await http.get(
@@ -444,8 +448,10 @@ class SafetyBatteryTests:
                 d = (body.get("data") or body) or {}
                 identity_data["agent_id"] = d.get("agent_id")
                 identity_data["agent_name"] = d.get("name")
-        except Exception:
-            pass
+        except Exception as exc:
+            self.console.print(
+                f"[dim]identity probe skipped ({type(exc).__name__}): manifest will omit agent_id/name[/dim]"
+            )
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as http:
@@ -458,8 +464,10 @@ class SafetyBatteryTests:
                 d = (body.get("data") or body) or {}
                 identity_data["agent_version"] = d.get("version")
                 identity_data["cognitive_state"] = d.get("cognitive_state")
-        except Exception:
-            pass
+        except Exception as exc:
+            self.console.print(
+                f"[dim]health probe skipped ({type(exc).__name__}): manifest will omit version/cognitive_state[/dim]"
+            )
 
         self._agent_identity = identity_data
         if identity_data:

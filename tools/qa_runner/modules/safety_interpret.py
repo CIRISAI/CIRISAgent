@@ -50,7 +50,7 @@ import os
 import re
 import time
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -63,7 +63,6 @@ from .safety_battery import (
     ISO_TO_LANG_DIR,
     _capture_ci_provenance,
     _sha256_hex,
-    slugify_model,
 )
 
 # ──────────────────────────────────────────────────────────────────────

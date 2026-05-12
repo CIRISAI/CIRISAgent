@@ -100,8 +100,8 @@ class DeferHandler(BaseActionHandler):
                 f"Deferred thought {thought.thought_id} until {defer_params.defer_until} "
                 f"({hours}h {minutes}m from now). Reason: {defer_params.reason}"
             )
-        except Exception as e:
-            logger.error(f"Failed to schedule deferred task: {e}")
+        except Exception:
+            logger.exception("Failed to schedule deferred task")
             return follow_up_info
 
     async def _send_deferral_to_wa(

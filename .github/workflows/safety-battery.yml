@@ -33,9 +33,9 @@ on:
         default: 'mental_health'
         type: string
       model:
-        description: 'Live LLM model identifier'
+        description: 'Live LLM model identifier (CLAUDE.md live model matrix)'
         required: false
-        default: 'google/gemma-4-31B-it'
+        default: 'Qwen/Qwen3.6-35B-A3B'
         type: string
       template_id:
         description: "Agent template (default → Ally persona)"

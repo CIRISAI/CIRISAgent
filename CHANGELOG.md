@@ -96,7 +96,7 @@ What changes in code:
 - `cirisnodecore/SCHEMA.md` §12 + verdict shape: `interpreter_kind` enum now `deterministic | foundation_model`; verdict carries `judge_model` + `judge_prompt_sha256`; drops `interpreter_task_id` for foundation_model verdicts
 - `cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md` §2: interpret tuple expands to 9 elements (capture's 6 + `rubric_id` + `judge_model_slug` + `judge_prompt_sha256[:8]`); `interpreter_agent_version` removed
 - `tools/qa_runner/modules/safety_interpret.py`: dropped CIRIS-agent dependency (REQUIRES_LIVE_LLM=False, WIPE_DATA_ON_START=False, SERVER_ENV={}). Direct httpx POST to Anthropic. Two new CLI flags: `--safety-interpret-anthropic-key-file` (default `~/.anthropic_key`) + `--safety-interpret-judge-model` (default `claude-opus-4-7`).
-- `.github/workflows/safety-battery.yml`: interpret job timeout 90→30 min; no CIRIS agent spin-up; reads `ANTHROPIC_API_KEY` secret; writes `~/.anthropic_key`; no libtss2 apt-install (capture job still needs it)
+- `.github/workflows/safety-battery.yml`: interpret job timeout 90→30 min; no CIRIS agent spin-up; reads `ANTHROPIC_API_KEY` secret; writes `~/.anthropic_key`; no libtss2 apt-install (capture job still needs it). Capture job writes `DEEPINFRA_API_KEY → ~/.deepinfra_key` to match the runner's metadata-driven `--live` auto-enable.
 - `tools/qa_runner/modules/safety_battery.py` `LIVE_LLM_DEFAULTS`: switched from Together gemma to **DeepInfra Qwen3.6-35B-A3B** (CLAUDE.md's canonical PDMA v3.2 test bed; faster than gemma; `enable_thinking=False` auto-applied by the LLM service for deepinfra URLs)
 
 ### CIRISVerify bump: 1.14.0 → 2.0.2
@@ -115,7 +115,19 @@ Per the user's explicit ask: both bundles get:
 - A **tuple-named GH Actions artifact** (latest-wins by name, queryable via `gh api repos/CIRISAI/CIRISAgent/actions/artifacts?name=<tuple>`)
 - 90-day retention
 
-safety.ciris.ai's discovery path: query by tuple name, fetch the most recent, verify Sigstore attestation via `gh attestation verify`, cross-link capture↔interpret via `manifest_signed.json.bundle.results_jsonl_sha256`. CI secrets `ANTHROPIC_API_KEY` + `TOGETHER_API_KEY` both set on the repo.
+safety.ciris.ai's discovery path: query by tuple name, fetch the most recent, verify Sigstore attestation via `gh attestation verify`, cross-link capture↔interpret via `manifest_signed.json.bundle.results_jsonl_sha256`. CI secrets `ANTHROPIC_API_KEY` (judge) + `DEEPINFRA_API_KEY` (agent-under-test) both set on the repo.
+
+### CI loop went green end-to-end on the `am` cell
+
+The final iteration cleared three small bugs blocking the loop:
+
+- **`REQUIRES_CIRIS_SERVER` module-metadata flag** — `tools/qa_runner/modules/_module_metadata.py` now also recognizes an opt-out: modules that talk to an external API directly (e.g. `safety_interpret` calling Anthropic) declare `REQUIRES_CIRIS_SERVER=False` and the runner skips server start + auth + SDK-client wrapping. Previously the interpret job booted a CIRIS API server just to throw it away, and that boot hit a `Failed to load library` CIRISVerify FFI failure on TPM-less GH Actions runners — surfacing as a 503 from `/v1/setup`.
+
+- **Workflow upload guards** — both capture and interpret upload steps now require `bundle_dir != ''` and pass `if-no-files-found: error`. The old `if: always() && skip != 'true'` shape uploaded log-only 1.7-KB artifacts whenever bundle production failed, which subsequent dedup pre-flights then matched against and short-circuited on.
+
+- **DEFER channel notification is now localized** — `ciris_engine/logic/handlers/control/defer_handler.py` reads `task.preferred_language` (with the env default as fallback) and calls `get_string(lang, "agent.defer_check_panel")`. Previously every deferral shipped the same hardcoded English notification, which on the `am` battery scored as a `script_detection` fail (q07/U9) — a register-attack jailbreak that the agent correctly deferred, but the English defer-notification body failed the Amharic-script check. The localized string already existed for all 29 locales; the handler just wasn't reading it. 28 defer_handler unit tests pass.
+
+End-to-end timing on the green run (PR run 25703189494): capture 73s (deduped against a prior tuple match — no LLM tokens), interpret 104s (81 verdicts: 80 PASS / 1 FAIL / 0 UNDETERMINED, the 1 FAIL being the q07/U9 case fixed above). Both bundles Sigstore-attested.
 
 ## [2.8.8] - 2026-05-10
 

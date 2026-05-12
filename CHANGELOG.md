@@ -5,7 +5,33 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.8.9] - Unreleased
+## [2.8.10] - Unreleased
+
+**Focus:** post-2.8.9 findings from external testing. Two issues surfaced in lens-side trace consumption against a live 2.8.9 deployment; neither blocks adoption, both have fixes scoped upstream.
+
+### Findings from 2.8.9 lens-side testing (filed upstream, not blocking)
+
+**Finding 1 — `agent_id_hash` scrubbed to `[IDENTIFIER]` for ~5% of agents** ([CIRISAI/CIRISLens#11](https://github.com/CIRISAI/CIRISLens/issues/11))
+
+The CIRISLens `pii_scrubber.py` IDENTIFIER regex (line 212) over-fires on `agent_id_hash` values whose 16-hex-char string happens to contain a year-shape substring (`17xx`–`19xx`, `20[0-1]x`, `202[0-3]`). Birthday-paradox math: ~5% of random hex hashes hit this by chance. When the scrubber replaces the hash with the literal `[IDENTIFIER]`, downstream consumers passing the value as a URL path/query param hit `HTTP 0` (bracket chars invalid without percent-encoding) — that's how the issue surfaced.
+
+**This is purely a lens-side bug.** CIRISAgent's emitter is correct: `_compute_agent_id_hash_from_signer()` computes `sha256(signing_key.public_key_bytes).hexdigest()[:16]` and ships it unmodified. The fix belongs in CIRISLens (column-level field allowlist in the scrubber walker) and CIRISLensCore (the Rust port inherits the same invariant).
+
+`agent_id_hash` is the AV-9 federation identity gate by construction — it is never PII and must never be scrubbed. Cross-filed at [CIRISAI/CIRISLensCore#4](https://github.com/CIRISAI/CIRISLensCore/issues/4) so the Rust port lands the field-allowlist before v0.1.0 implementation.
+
+**Finding 2 — `by_deployment_region` cohort breakdown empty** (operator docs)
+
+The `deployment_profile.deployment_region` field is operator-declared via the accord-metrics config (`deployment_region` key). When operators don't set it explicitly, the field stays empty and downstream `corpus_shape.by_deployment_region` aggregates over zero declarations → `{}`.
+
+This is **not a code bug** — the FSD §3.2 closed-enum is correctly emitted when the value is set. It's an operator-onboarding gap: production deployments should be reminded to declare `deployment_region` in their config so federation-level cohort analytics work. Documenting; setup-wizard surfacing deferred to a follow-up (the right place is the existing `CIRIS_SHARE_LOCATION_IN_TRACES` flow, not a new step).
+
+### Version bump
+
+`CIRIS_VERSION = "2.8.10-stable"`. Android `versionCode 133 → 134`, `versionName 2.8.10`.
+
+---
+
+## [2.8.9] - 2026-05-12
 
 **Focus:** streamlined contributor experience for safety rubrics and language packs. External contributors (starting with the Amharic / Ethiopian work) need a path to propose new safety questions, refined rubrics, and prompt/guide/accord edits through a federation-consensus loop rather than ad-hoc PRs against a single repo. 2.8.9 lands the on-disk contract and the CI loop that the loop's pilot (safety.ciris.ai) will build against.
 

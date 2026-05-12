@@ -123,7 +123,7 @@ class ReasoningEvent(str, Enum):
     - THOUGHT_START: Thought begins processing
     - SNAPSHOT_AND_CONTEXT: System snapshot + gathered context
     - DMA_RESULTS: 3 DMA results (CSDMA, DSDMA, PDMA)
-    - IDMA_RESULT: Identity DMA fragility check
+    - IDMA_RESULT: Intuition DMA fragility check
     - ASPDMA_RESULT: Selected action + rationale
     - CONSCIENCE_RESULT: Conscience evaluation + final action
     - ACTION_RESULT: Action execution outcome + audit trail
@@ -143,7 +143,7 @@ class ReasoningEvent(str, Enum):
     THOUGHT_START = "thought_start"  # 0) Thought begins processing - metadata and content
     SNAPSHOT_AND_CONTEXT = "snapshot_and_context"  # 1) System snapshot + gathered context
     DMA_RESULTS = "dma_results"  # 2) 3 DMA results (CSDMA, DSDMA, PDMA)
-    IDMA_RESULT = "idma_result"  # 3) Identity DMA fragility check (always emitted)
+    IDMA_RESULT = "idma_result"  # 3) Intuition DMA fragility check (always emitted)
     ASPDMA_RESULT = "aspdma_result"  # 4) Selected action + rationale
     TSASPDMA_RESULT = "tsaspdma_result"  # 4.5a) DEPRECATED: Tool-Specific ASPDMA legacy event
                                          # Kept emitting alongside VERB_SECOND_PASS_RESULT during the
@@ -1155,7 +1155,7 @@ class DMAResultsEvent(BaseModel):
 
 
 class IDMAResultEvent(BaseModel):
-    """Event 3: Identity DMA fragility check (always emitted after DMA_RESULTS).
+    """Event 3: Intuition DMA fragility check (always emitted after DMA_RESULTS).
 
     IDMA evaluates epistemic diversity using CCA (Coherent Collective Action) principles.
     Emitted separately from DMA_RESULTS to allow fine-grained tracing of identity/fragility checks.

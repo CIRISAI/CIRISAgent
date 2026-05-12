@@ -25,7 +25,7 @@ Event Types (8 total - 7 core + 1 optional):
 - THOUGHT_START: Thought begins processing
 - SNAPSHOT_AND_CONTEXT: System snapshot + gathered context
 - DMA_RESULTS: 3 DMA results (CSDMA, DSDMA, PDMA)
-- IDMA_RESULT: Identity DMA fragility check (always emitted)
+- IDMA_RESULT: Intuition DMA fragility check (always emitted)
 - ASPDMA_RESULT: Selected action + rationale
 - TSASPDMA_RESULT: Tool-Specific ASPDMA (optional, when TOOL selected)
 - CONSCIENCE_RESULT: Conscience evaluation + final action
@@ -482,7 +482,7 @@ class AccordMetricsService:
         "THOUGHT_START": "observation",
         "SNAPSHOT_AND_CONTEXT": "context",
         "DMA_RESULTS": "rationale",
-        "IDMA_RESULT": "rationale",  # Identity DMA fragility check
+        "IDMA_RESULT": "rationale",  # Intuition DMA fragility check
         "ASPDMA_RESULT": "rationale",
         "TSASPDMA_RESULT": "rationale",  # DEPRECATED legacy; replaced by VERB_SECOND_PASS_RESULT
         "VERB_SECOND_PASS_RESULT": "verb_second_pass",  # Generic verb-specific second pass
@@ -1918,7 +1918,7 @@ class AccordMetricsService:
             return data
 
         elif event_type == "IDMA_RESULT":
-            # RATIONALE (Part 1.5): Identity DMA fragility check
+            # RATIONALE (Part 1.5): Intuition DMA fragility check
             # GENERIC: Numeric scores only - k_eff is the key metric
             data = {
                 "k_eff": event.get("k_eff"),

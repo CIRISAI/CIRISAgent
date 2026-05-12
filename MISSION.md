@@ -348,7 +348,7 @@ in the `PERFORM_DMAS` step:
   checking. Red-flag enumeration.
 - **`DSDMA`** (Domain-Specific DMA, `dma/dsdma_base.py`) — domain
   alignment per the agent template (Discord moderator, scout, etc.).
-- **`IDMA`** (Identity DMA, `dma/idma.py`) — Coherence Collapse Analysis:
+- **`IDMA`** (Intuition DMA, `dma/idma.py`) — Coherence Collapse Analysis:
   evaluates the *other DMAs' reasoning* for fragility (`k_eff`,
   fragility flag). The check on the checkers.
 

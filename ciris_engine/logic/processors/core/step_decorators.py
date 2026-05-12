@@ -1575,7 +1575,7 @@ def _create_idma_result_event(
 ) -> Any:
     """Create IDMA_RESULT reasoning event from InitialDMAResults.
 
-    IDMA (Identity DMA) evaluates epistemic diversity using CCA principles.
+    IDMA (Intuition DMA) evaluates epistemic diversity using CCA principles.
     This event is always emitted after DMA_RESULTS (v1.9.3).
     """
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent

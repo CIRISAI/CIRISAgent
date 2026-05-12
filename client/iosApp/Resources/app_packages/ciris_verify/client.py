@@ -37,6 +37,10 @@ from .types import (
     StorageDescriptor,
     StorageKind,
     KeyringScope,
+    TreeVerifyRequest,
+    TreeVerifyResult,
+    FailedFile,
+    FailedFileKind,
 )
 from .exceptions import (
     BinaryNotFoundError,
@@ -49,6 +53,12 @@ from .exceptions import (
 
 # FFI error codes
 CIRIS_ERROR_ATTESTATION_IN_PROGRESS = -100
+
+# Repeated error messages — single-source so we don't drift across raise sites.
+# Surfaces when the loaded libciris_verify_ffi.so is older than the feature
+# this client expects.
+_NO_ED25519_MSG = "Ed25519 key functions not available in this library version."
+_NO_NAMED_KEY_MSG = "Named key functions not available (library version < 1.5.0)"
 
 
 # Default paths for the CIRISVerify binary by platform
@@ -275,6 +285,21 @@ class CIRISVerify:
 
         return None
 
+    @staticmethod
+    def _get_platform_binary_suffixes(system: str) -> list:
+        """Return loader suffix preference order for the host platform.
+
+        Mixed-bundle dev hosts (macOS with both .dylib and a Linux .so
+        present in a single search dir) hit the wrong-platform binary
+        first when the iteration order is fixed. Platform-aware ordering
+        returns the correct one first. See CIRISVerify#13.
+        """
+        if system == "Darwin":
+            return [".dylib", ".so"]
+        if system == "Windows":
+            return [".dll"]
+        return [".so", ".dylib"]
+
     def _find_binary(self, explicit_path: Optional[str]) -> Path:
         """Find CIRISVerify binary."""
         if explicit_path:
@@ -312,12 +337,39 @@ class CIRISVerify:
             if path.exists():
                 return path
 
+        # Platform-preferred suffix order (CIRISVerify#13). On Darwin this
+        # returns [".dylib", ".so"], so a stray Linux .so in the same dir
+        # doesn't get loaded ahead of the macOS .dylib.
+        suffixes = self._get_platform_binary_suffixes(system)
+
         # Also check relative to this module
         module_dir = Path(__file__).parent
-        for suffix in [".so", ".dylib", ".dll"]:
+        for suffix in suffixes:
             candidate = module_dir / f"libciris_verify_ffi{suffix}"
             if candidate.exists():
                 return candidate
+
+        # Site-packages fallback (CIRISVerify#13). Useful for downstream
+        # consumers that load CIRISVerify from a directory other than the
+        # wheel's own (embedded bindings, agent wrappers, test harnesses
+        # with custom sys.path manipulation). When the wheel IS the loader,
+        # pkg_dir == module_dir and the loop above already hit, so the
+        # `pkg_dir != module_dir` guard makes this branch a no-op for
+        # wheel-internal use.
+        try:
+            import ciris_verify as _ciris_verify_pkg
+
+            pkg_file = getattr(_ciris_verify_pkg, "__file__", None)
+            if pkg_file:
+                pkg_dir = Path(pkg_file).parent
+                if pkg_dir != module_dir:
+                    for suffix in suffixes:
+                        candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
+                        if candidate.exists():
+                            return candidate
+        except ImportError:
+            # ciris_verify not on sys.path — fall through to the raise.
+            pass
 
         raise BinaryNotFoundError(f"Searched: {paths}")
 
@@ -2276,8 +2328,7 @@ class CIRISVerify:
         """
         if not self._has_ed25519_support:
             raise NotImplementedError(
-                "Ed25519 key functions not available in this library version. "
-                "Update to ciris-verify >= 0.4.0 for Portal key support."
+                f"{_NO_ED25519_MSG} Update to ciris-verify >= 0.4.0 for Portal key support."
             )
         if len(key_bytes) != 32:
             raise ValueError(f"Ed25519 key must be 32 bytes, got {len(key_bytes)}")
@@ -2323,9 +2374,7 @@ class CIRISVerify:
                 attestation = verifier.attestation_with_challenge(challenge)
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError(_NO_ED25519_MSG)
 
         # Check if the FFI function exists
         if not hasattr(self._lib, "ciris_verify_await_key_registration"):
@@ -2378,9 +2427,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError(_NO_ED25519_MSG)
         ret = self._lib.ciris_verify_has_key(self._handle)
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("has_key")
@@ -2397,9 +2444,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError(_NO_ED25519_MSG)
         ret = self._lib.ciris_verify_delete_key(self._handle)
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("delete_key")
@@ -2435,9 +2480,7 @@ class CIRISVerify:
             # attestation["key_attestation"]["key_type"] == "ephemeral"
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError(_NO_ED25519_MSG)
 
         # Check if the FFI function exists
         if not hasattr(self._lib, "ciris_verify_generate_key"):
@@ -2469,9 +2512,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError(_NO_ED25519_MSG)
         sig_data = ctypes.c_void_p()
         sig_len = ctypes.c_size_t()
 
@@ -2506,9 +2547,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError(_NO_ED25519_MSG)
         key_data = ctypes.c_void_p()
         key_len = ctypes.c_size_t()
 
@@ -2942,9 +2981,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError(_NO_NAMED_KEY_MSG)
         if len(seed) != 32:
             raise ValueError(f"seed must be 32 bytes, got {len(seed)}")
 
@@ -2973,9 +3010,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError(_NO_NAMED_KEY_MSG)
 
         sig_data = ctypes.c_void_p()
         sig_len = ctypes.c_size_t()
@@ -3017,9 +3052,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError(_NO_NAMED_KEY_MSG)
 
         key_id_bytes = key_id.encode("utf-8")
         ret = self._lib.ciris_verify_has_named_key(self._handle, key_id_bytes)
@@ -3042,9 +3075,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError(_NO_NAMED_KEY_MSG)
 
         key_id_bytes = key_id.encode("utf-8")
         ret = self._lib.ciris_verify_delete_named_key(self._handle, key_id_bytes)
@@ -3068,9 +3099,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError(_NO_NAMED_KEY_MSG)
 
         pk_data = ctypes.c_void_p()
         pk_len = ctypes.c_size_t()
@@ -3108,9 +3137,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError(_NO_NAMED_KEY_MSG)
 
         json_out = ctypes.c_char_p()
         ret = self._lib.ciris_verify_list_named_keys(
@@ -3128,6 +3155,130 @@ class CIRISVerify:
         finally:
             if json_out.value:
                 self._lib.ciris_verify_free_string(json_out)
+
+
+# =============================================================================
+# Runtime tree-walking verifier (CIRISVerify#9, v1.13.0+)
+# =============================================================================
+
+# Default registry URL — matches the production deployment used by all
+# downstream consumers. Override via the `registry_url=` parameter when
+# pointing at a regional fallback or a staging registry.
+DEFAULT_REGISTRY_URL = "https://api.registry.ciris-services-1.ai"
+
+# Cached CDLL handle for `verify_tree`. Loaded lazily on first call so
+# callers don't pay for `ctypes.CDLL` unless they need it. Keyed on the
+# resolved binary path so an explicit override after the default load
+# would re-load — but in practice the path is stable per-process.
+_VERIFY_TREE_LIB: Optional[ctypes.CDLL] = None
+_VERIFY_TREE_LIB_PATH: Optional[Path] = None
+
+
+def _load_verify_tree_lib(binary_path: Optional[str] = None) -> ctypes.CDLL:
+    """Lazy-load the FFI binary and bind the `ciris_verify_tree` symbol.
+
+    Reuses `CIRISVerify._find_binary` for binary discovery (the same
+    platform-aware suffix order + site-packages fallback wired up for
+    CIRISVerify#13). The function is callable without instantiating
+    `CIRISVerify`, which is what the agent's startup-attestation path
+    needs (it doesn't need keys / keyring init just to walk a tree).
+    """
+    global _VERIFY_TREE_LIB, _VERIFY_TREE_LIB_PATH
+
+    # Use the existing binary discovery without running CIRISVerify.__init__
+    # (which loads keys + sets up keyring). Same trick the test suite uses.
+    finder = CIRISVerify.__new__(CIRISVerify)
+    path = finder._find_binary(binary_path)
+
+    if _VERIFY_TREE_LIB is not None and _VERIFY_TREE_LIB_PATH == path:
+        return _VERIFY_TREE_LIB
+
+    lib = ctypes.CDLL(str(path))
+
+    if not hasattr(lib, "ciris_verify_tree"):
+        raise RuntimeError(
+            f"verify_tree not available in this library version "
+            f"(requires ciris-verify >= 1.13.0). Loaded: {path}"
+        )
+
+    # ciris_verify_tree(request_json, registry_url, result_out) -> i32
+    lib.ciris_verify_tree.argtypes = [
+        ctypes.c_char_p,                  # request_json (NUL-terminated)
+        ctypes.c_char_p,                  # registry_url (NUL-terminated)
+        ctypes.POINTER(ctypes.c_char_p),  # result_out
+    ]
+    lib.ciris_verify_tree.restype = ctypes.c_int
+
+    # ciris_verify_free_string(ptr) — caller frees the result_out
+    lib.ciris_verify_free_string.argtypes = [ctypes.c_char_p]
+    lib.ciris_verify_free_string.restype = None
+
+    _VERIFY_TREE_LIB = lib
+    _VERIFY_TREE_LIB_PATH = path
+    return lib
+
+
+def verify_tree(
+    request: TreeVerifyRequest,
+    registry_url: str = DEFAULT_REGISTRY_URL,
+    binary_path: Optional[str] = None,
+) -> TreeVerifyResult:
+    """Walk a source tree on disk and compare against the registered manifest.
+
+    This is the runtime tree-walking verifier (CIRISVerify#9, v1.13.0+).
+    It uses the same canonical algorithm `ciris-build-sign sign --tree`
+    used at registration time, so what gets walked here is byte-comparable
+    to what's stored in the registry's `file_manifest_json`.
+
+    Args:
+        request: Filesystem root + exempt rules + project/binary_version.
+            The exempt rules MUST match the rules used at sign time
+            (the `--tree-include`/`--tree-exempt-dir`/`--tree-exempt-ext`
+            flags passed to `ciris-build-sign sign --tree`).
+        registry_url: Registry base URL. Defaults to the production
+            registry; pass a regional fallback or staging URL when needed.
+        binary_path: Override path to `libciris_verify_ffi.so`. Defaults
+            to the wheel-bundled binary.
+
+    Returns:
+        TreeVerifyResult. `valid=True` means the on-disk tree matches the
+        registered manifest byte-for-byte AND the registry was reachable.
+        Inspect `failed_files` for per-file divergences and `registry_error`
+        to distinguish a tampered tree from a network failure.
+
+    Raises:
+        BinaryNotFoundError: If `libciris_verify_ffi.so` cannot be located.
+        RuntimeError: If the loaded library predates v1.13.0 (no
+            `ciris_verify_tree` symbol).
+        VerificationFailedError: If the underlying walk fails (root
+            missing, unreadable file, JSON parse failure).
+    """
+    lib = _load_verify_tree_lib(binary_path)
+
+    request_json = request.model_dump_json().encode("utf-8")
+    registry_url_bytes = registry_url.encode("utf-8")
+
+    result_ptr = ctypes.c_char_p()
+    rc = lib.ciris_verify_tree(
+        request_json,
+        registry_url_bytes,
+        ctypes.byref(result_ptr),
+    )
+
+    if rc != 0:
+        raise VerificationFailedError(
+            rc, f"ciris_verify_tree failed with code {rc}"
+        )
+
+    try:
+        if not result_ptr.value:
+            raise VerificationFailedError(0, "ciris_verify_tree returned empty result")
+        result_json = result_ptr.value.decode("utf-8")
+    finally:
+        if result_ptr.value:
+            lib.ciris_verify_free_string(result_ptr)
+
+    return TreeVerifyResult.model_validate_json(result_json)
 
 
 class MockCIRISVerify(CIRISVerify):
@@ -3160,6 +3311,10 @@ class MockCIRISVerify(CIRISVerify):
         self._timeout = 10.0
         # Don't call parent __init__ - no binary needed
 
+    # The four overrides below are intentional no-ops: MockCIRISVerify
+    # has no native binary, no key material, no library handle, so the
+    # CIRISVerify lifecycle hooks (find / verify / load / destruct) all
+    # short-circuit. The real behavior lives on the CIRISVerify base.
     def _find_binary(self, path):
         return None
 

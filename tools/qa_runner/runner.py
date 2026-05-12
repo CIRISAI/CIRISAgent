@@ -38,6 +38,42 @@ class QARunner:
         self.token: Optional[str] = None
         self.modules = modules or []  # Store modules for server manager
 
+        # Module-metadata driven: if any selected module declares
+        # WIPE_DATA_ON_START=True (per CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md
+        # §5.1), force --wipe-data regardless of CLI flags. Required for
+        # signed-artifact reproducibility — every run starts from a
+        # deterministic baseline so the bundle hash is meaningful.
+        from .modules._module_metadata import get_metadata as _get_module_md
+
+        for _mod in self.modules:
+            _md = _get_module_md(_mod)
+            if getattr(_md, "wipe_data_on_start", False) and not self.config.wipe_data:
+                self.config.wipe_data = True
+                self.console.print(
+                    f"[dim]Auto-enabled --wipe-data: {_mod.value} module "
+                    f"declares WIPE_DATA_ON_START (reproducibility requirement)[/dim]"
+                )
+
+        # If every selected module declares REQUIRES_CIRIS_SERVER=False,
+        # skip server start + auth entirely. Such modules (e.g.
+        # safety_interpret) talk to external APIs directly — booting a
+        # CIRIS agent just to throw it away is wasteful and surfaces
+        # unrelated failure modes (e.g. CIRISVerify FFI on TPM-less
+        # runners) that have nothing to do with the test in question.
+        if self.modules and all(
+            not getattr(_get_module_md(_m), "requires_ciris_server", True)
+            for _m in self.modules
+        ):
+            self._skip_ciris_server = True
+            if self.config.auto_start_server:
+                self.config.auto_start_server = False
+                self.console.print(
+                    "[dim]Auto-disabled server start: all selected modules "
+                    "declare REQUIRES_CIRIS_SERVER=False[/dim]"
+                )
+        else:
+            self._skip_ciris_server = False
+
         # Auto-configure adapter based on modules being tested
         # This allows modular services to be loaded automatically
         if modules and QAModule.REDDIT in modules:
@@ -130,6 +166,16 @@ class QARunner:
                 model_eval_profile_memory=self.config.model_eval_profile_memory,
                 model_eval_question_categories=self.config.model_eval_question_categories,
                 model_eval_questions_file=self.config.model_eval_questions_file,
+                # Safety battery configuration — same backend-config preservation
+                # rationale as the model_eval block above.
+                safety_battery_lang=self.config.safety_battery_lang,
+                safety_battery_domain=self.config.safety_battery_domain,
+                safety_battery_template=self.config.safety_battery_template,
+                safety_interpret_capture_dir=self.config.safety_interpret_capture_dir,
+                safety_interpret_criteria_file=self.config.safety_interpret_criteria_file,
+                safety_interpret_anthropic_key_file=self.config.safety_interpret_anthropic_key_file,
+                safety_interpret_judge_model=self.config.safety_interpret_judge_model,
+                setup_template_id=self.config.setup_template_id,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -230,8 +276,13 @@ class QARunner:
                 self.console.print("[red]❌ Failed to start API server[/red]")
                 return False
 
-        # Get authentication token (skip for SETUP module - first-run has no users)
-        if QAModule.SETUP not in modules:
+        # Get authentication token (skip for SETUP module - first-run has no users,
+        # and skip when no module needs a CIRIS server at all)
+        if getattr(self, "_skip_ciris_server", False):
+            self.console.print(
+                "[dim]Skipping authentication: no selected module requires a CIRIS server[/dim]"
+            )
+        elif QAModule.SETUP not in modules:
             if not self._authenticate():
                 self.console.print("[red]❌ Authentication failed[/red]")
                 if self.config.auto_start_server:
@@ -285,6 +336,8 @@ class QARunner:
             QAModule.DEGRADED_MODE,
             QAModule.MODEL_EVAL,
             QAModule.PARALLEL_LOCALES,
+            QAModule.SAFETY_BATTERY,
+            QAModule.SAFETY_INTERPRET,
             QAModule.SECRETS_ENCRYPTION,
             QAModule.MEMORY_BENCHMARK,
         ]
@@ -927,6 +980,8 @@ class QARunner:
         from .modules.memory_benchmark_tests import MemoryBenchmarkTests
         from .modules.model_eval_tests import ModelEvalTests
         from .modules.parallel_locales_tests import ParallelLocalesTests
+        from .modules.safety_battery import SafetyBatteryTests
+        from .modules.safety_interpret import SafetyInterpretTests
         from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
         from .modules.secrets_encryption_tests import SecretsEncryptionTests
@@ -981,6 +1036,8 @@ class QARunner:
             QAModule.DEGRADED_MODE: DegradedModeTests,
             QAModule.MODEL_EVAL: ModelEvalTests,
             QAModule.PARALLEL_LOCALES: ParallelLocalesTests,
+            QAModule.SAFETY_BATTERY: SafetyBatteryTests,
+            QAModule.SAFETY_INTERPRET: SafetyInterpretTests,
             QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
             QAModule.MEMORY_BENCHMARK: MemoryBenchmarkTests,
         }
@@ -1013,9 +1070,25 @@ class QARunner:
             except (TypeError, ValueError):
                 _model_eval_sdk_timeout = 1800.0
             sdk_timeout = _model_eval_sdk_timeout if module == QAModule.MODEL_EVAL else 120.0
-            async with CIRISClient(base_url=self.config.base_url, timeout=sdk_timeout) as client:
-                # Manually set the token (skip login since we already have it)
-                client._transport.set_api_key(token_to_use, persist=False)
+
+            # No-server modules (e.g. safety_interpret) talk to an
+            # external API directly — don't try to open a CIRISClient
+            # to a server that isn't running.
+            from .modules._module_metadata import get_metadata as _md_lookup
+            _module_needs_server = getattr(_md_lookup(module), "requires_ciris_server", True)
+
+            from contextlib import asynccontextmanager
+
+            @asynccontextmanager
+            async def _client_ctx():
+                if not _module_needs_server:
+                    yield None
+                    return
+                async with CIRISClient(base_url=self.config.base_url, timeout=sdk_timeout) as _c:
+                    _c._transport.set_api_key(token_to_use, persist=False)
+                    yield _c
+
+            async with _client_ctx() as client:
 
                 # Instantiate and run test module
                 # Special handling for AccordMetricsTests - pass live_lens config +
@@ -1073,6 +1146,33 @@ class QARunner:
                         self.console,
                         fail_fast=self.config.fail_fast,
                         test_timeout=self.config.test_timeout,
+                    )
+                elif module == QAModule.SAFETY_BATTERY:
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        lang=getattr(self.config, "safety_battery_lang", "am"),
+                        domain=getattr(self.config, "safety_battery_domain", "mental_health"),
+                        template_id=getattr(self.config, "safety_battery_template", "default"),
+                        model=self.config.live_model,
+                        live_base_url=self.config.live_base_url,
+                        live_provider=self.config.live_provider,
+                        api_port=self.config.api_port,
+                    )
+                elif module == QAModule.SAFETY_INTERPRET:
+                    from pathlib import Path as _Path
+                    _cap = getattr(self.config, "safety_interpret_capture_dir", None)
+                    _crit = getattr(self.config, "safety_interpret_criteria_file", None)
+                    _key = getattr(self.config, "safety_interpret_anthropic_key_file", None)
+                    _model = getattr(self.config, "safety_interpret_judge_model", None)
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        capture_dir=_Path(_cap) if _cap else None,
+                        criteria_file=_Path(_crit) if _crit else None,
+                        anthropic_key_file=_Path(_key) if _key else None,
+                        judge_model=_model,
+                        api_port=self.config.api_port,
                     )
                 else:
                     test_instance = test_class(client, self.console)

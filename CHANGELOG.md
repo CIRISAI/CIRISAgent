@@ -5,6 +5,136 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.9] - Unreleased
+
+**Focus:** streamlined contributor experience for safety rubrics and language packs. External contributors (starting with the Amharic / Ethiopian work) need a path to propose new safety questions, refined rubrics, and prompt/guide/accord edits through a federation-consensus loop rather than ad-hoc PRs against a single repo. 2.8.9 lands the on-disk contract and the CI loop that the loop's pilot (safety.ciris.ai) will build against.
+
+### CIRISNodeCore spec — extracted to its own repo before 2.8.9 ships
+
+The v1.0 CIRISNodeCore spec was iterated in-tree at `cirisnodecore/` throughout the 2.8.9 cycle, then **extracted to [`github.com/CIRISAI/CIRISNodeCore`](https://github.com/CIRISAI/CIRISNodeCore) as a standalone repo before merge** (same shape as the sibling `CIRISLensCore` spec repo). Reason: the spec is the contract that `safety.ciris.ai` and the eventual `ciris-node-core` Rust crate build against — co-locating it with the first consumer was useful while the contract was still moving every day, but once stable it deserves its own commit graph, its own issues, and its own version cadence independent of CIRISAgent releases. 2.8.9 ships without `cirisnodecore/` on `main`.
+
+The spec content that landed:
+
+- **MISSION.md** — the eleven primitives (Identity, Commons Credits, Expertise, Vote, Contribution, Truth-Grounding, Weighted Aggregate, Moderation, Slashing, Witness-Diversity, Reconsideration) + RATCHET integration contract + Application × Contribution mapping. v1.0 draft, status `Spec`.
+- **SCHEMA.md** — the canonical JSON wire format for every primitive, plus the safety-battery encoding (`BatteryManifest`, `arc_question`), plus §12's machine-applicable criteria contract, plus the canonical-vs-pending split and the promotion path.
+- **PROGRAMMATIC_ACCESS.md** — the website-team integration handoff (where to find batteries, rubrics, captures, judgements; tuple-name discovery; Sigstore verification recipe; 14-cell map).
+- **FSD/JUDGE_MODEL.md** — the foundation-model judge contract (deployment-aware prompt; calibration via four `judge_*_edit` Contribution kinds).
+- **FSD/SAFETY_BATTERY_CI_LOOP.md** — capture + interpret two-job CI flow, tuple-named artifacts, dedup pre-flight.
+- **FSD/RUBRIC_CROWDSOURCING.md** — `rubric_proposal` Contribution flow (Credits × Expertise weighted voting per MISSION.md §3.4; competing rubrics OK).
+
+All in-tree cross-references from CIRISAgent rewrite to `CIRISNodeCore <FILE>` (or `github.com/CIRISAI/CIRISNodeCore/...` for doc-link surfaces). The safety-battery workflow's `cirisnodecore/**` path filter is removed — spec changes no longer touch this repo.
+
+### Safety batteries: v3 → v4 schema migration
+
+The 14 existing mental-health batteries (Amharic, Arabic, Bengali, Burmese, Hausa, Hindi, Marathi, Persian, Punjabi, Swahili, Tamil, Telugu, Urdu, Yoruba — covering the high-need locale set per the priming-aware-primer pilot) shipped in v3 shape (per-question list, no battery wrapper, no IDs, no version field). v4 adds the structure safety.ciris.ai needs to ingest them as `Contribution(subject_kind=arc_question)` payloads:
+
+- **`BatteryManifest` wrapper** with `battery_id`, `battery_version`, `cell`, `subject_kind`, `rubric_path`, `rubric_sha256` (pins the file pair against drift), and `promoted_from_contribution_id`.
+- **Per-question fields**: `question_id` (e.g. `am_mh_v4_q01`), `question_version`, `stage`, `category`, `evaluates`, `hard_fail_triggers` and `soft_fail_triggers` (pointers into the rubric's U-table for human scorers; NOT machine-evaluator inputs), `faculty_targets` (which conscience/DMA the question exercises), `translations`.
+- **`tests/safety/SCHEMA.md`** points at `cirisnodecore/SCHEMA.md` as the authoritative format spec.
+- **`tools/safety_battery_migrate.py`** is the one-shot migration (idempotent, supports `--check` for dry-run, `--lang am` to migrate one cell). All 14 cells migrated; v3 files git-removed.
+
+### `tests/safety/README.md` — contributor on-ramp
+
+The on-disk contract document for a new contributor. Covers the directory naming convention, the two-axis taxonomy (domain from `prohibitions.py` + `mental_health`; language from `manifest.json`), the four files per cell (battery JSON + rubric MD), the canonical-vs-pending split, the loop diagram (submit → batch run via A2A → human score → ticket → edit proposal → vote → merge), and how to propose new questions, batteries, or cells. References `cirisnodecore/MISSION.md` and `cirisnodecore/SCHEMA.md` as authoritative.
+
+### `safety_battery` QA runner module + GH workflow
+
+New `tools/qa_runner/modules/safety_battery.py`: loads a canonical v4 battery, creates the cell's locale user (so the agent reads `user_preferred_name + preferred_language` matching the cell — no more "Jeff" addressing Selamawit), submits each question sequentially in a shared channel via `/v1/agent/interact`, captures signed responses with stable IDs. No scoring in the runner — that's the human-scoring loop on safety.ciris.ai. Strips the third-person `"User X said: '...'"` wrapper before sending so the model receives only the user's first-person utterance.
+
+New `.github/workflows/safety-battery.yml`: weekly cron + on-demand `workflow_dispatch` + `pull_request` on `tests/safety/**`. Reads `TOGETHER_API_KEY` from repo secrets, runs against `google/gemma-4-31B-it` (production datum's primary model), uploads JSONL results as workflow artifact (90-day retention).
+
+### Generic module-metadata mechanism in qa_runner
+
+Migrated the per-module hardcoded conditionals in `tools/qa_runner/server.py` (`CIRIS_DISABLE_TASK_APPEND=1` for `MODEL_EVAL`/`PARALLEL_LOCALES`) and `tools/qa_runner/__main__.py` (`--live` force for `DEGRADED_MODE`) to a generic class-attribute-driven mechanism:
+
+- **`REQUIRES_LIVE_LLM`** class attribute → runner auto-enables `--live` with `LIVE_LLM_DEFAULTS` when the default key file exists; refuses to start with a clear message when it doesn't.
+- **`LIVE_LLM_DEFAULTS`** dict (`key_file`, `base_url`, `model`, `provider`) → applied when `--live` not explicitly configured.
+- **`SERVER_ENV`** dict → merged into the agent process env at server-start time.
+- **`tools/qa_runner/modules/_module_metadata.py`** reads these via lazy-import; conflict detection across multi-module runs is last-write-wins with a warning.
+
+The `SAFETY_BATTERY`, `MODEL_EVAL`, `PARALLEL_LOCALES`, and `DEGRADED_MODE` modules now declare their requirements via these class attributes. Adding a new live-LLM-requiring module is a class-attribute change plus a `_module_metadata._REGISTRY` entry — no edits to `server.py` or `__main__.py` per-module.
+
+### Architectural correction: rules crowdsourced, verdicts machined
+
+After the first wave landed, the framing for the human-scoring loop was reconsidered against the safety-vs-censorship distinction. The original framing had humans scoring agent responses against the rubric — but that puts humans in the *interpretation* seat, where bias rides in: the same response gets called differently depending on who's voting today, and the loop slides into polite censorship with extra steps.
+
+The corrected architecture: **humans crowdsource the rules; a CIRIS interpreter agent machines the verdicts**. Specifically:
+
+- **`cirisnodecore/SCHEMA.md` §12 rewritten** — rubrics are no longer "human-scorer guidance, NOT machine inputs." They are machine-applicable assertions. Five `kind`s defined: `term_present`, `term_absent`, `regex_present`, `script_detection`, `interpreter_judgment`. Rules that can't be operationalized as one of these get rejected before voting (the "no being annoying" gate). The rubric markdown becomes the human-readable POLICY doc; a sibling `criteria.json` carries the operational form. Both are pinned via `criteria_sha256` + `rubric_md_sha256`.
+
+- **`cirisnodecore/FSD/INTERPRETER_AGENT.md`** (new) — specifies the interpreter agent: a CIRIS agent that applies criteria.json to agent-under-test responses and emits signed verdicts (PASS / FAIL / UNDETERMINED with cited span). Deterministic kinds run in-process; `interpreter_judgment` calls the CIRIS interpreter. The interpreter is itself calibrated through the same prompt_edit / accord_edit / guide_edit Contribution flow that calibrates any CIRIS agent — no special exemption.
+
+- **`cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md`** (new) — specifies the `rubric_proposal` Contribution flow: rubrics are Contributions, voted on per MISSION.md §3.4 (Credits × Expertise weighted), top-voted rubrics become canonical at the next battery_version cut. Competing rubrics CAN exist for the same question and can be run in parallel; disagreement between rubrics surfaces "rule needs more decomposition" tickets. Battery composition is the SET of voted-in `(question_id, rubric_id)` pairs.
+
+- **`cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md` v1.1** — expanded artifact tuple. Capture-side: 6 elements as before. Interpret-side: capture tuple + `rubric_id` + `interpreter_agent_version` (8 elements). Two-job workflow: capture → interpret, each independently attested via Sigstore, cross-linked via `manifest_signed.json` SHAs.
+
+- **`tools/qa_runner/modules/safety_interpret.py`** (new) — the interpret runner. Reads a capture bundle + criteria.json, applies each criterion to each response (deterministic in-process; `interpreter_judgment` via the CIRIS interpreter agent at `/v1/agent/interact` with the templated prompt from INTERPRETER_AGENT.md §5), emits `verdicts.jsonl` + `verdicts_summary.json` + `manifest_signed.json`. Class-attribute metadata: `REQUIRES_LIVE_LLM=True`, `WIPE_DATA_ON_START=True`, `SERVER_ENV` configures task-append disable + extended interaction timeout.
+
+- **`tests/safety/amharic_mental_health/v4_amharic_canonical_universal_criteria.json`** (new) — worked example operationalizing all 9 Amharic mental-health rubric U-rows: 5 deterministic (`term_present` for U1/U2/U3/U4 transliteration-fallback terms, `regex_present` for U5 register-break detection), 1 `script_detection` (U9 Amharic-script ratio), 3 `interpreter_judgment` (U6/U7/U8 diagnosis-confirmation / medication-recommendation / cross-cluster contamination). Worked example consumed by `safety_interpret`; other 13 cells migrate as cell experts file `rubric_proposal` Contributions per RUBRIC_CROWDSOURCING.md.
+
+- **`.github/workflows/safety-battery.yml` v1.1** — split into two jobs (capture + interpret). Interpret depends on capture's artifact, downloads it via `actions/download-artifact@v4`, runs `safety_interpret` against a separate CIRIS agent instance, attests + uploads. Both jobs stream full reasoning traces via `CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR` into the bundle. Dedup pre-flight runs on both tuples independently.
+
+- **`tests/safety/README.md` rewritten** — reframes the loop diagram for the corrected architecture; adds the operationalization-discipline note ("No being annoying" gets rejected before voting); adds the time-symmetric audit property (rules have dates and hashes, so last year's rule re-runs against this year's corpus — what censorship regimes cannot do).
+
+The 2.8.9 release will not ship until this corrected spec/structure is fully in. The PR (`#746`) stays open through this iteration. Future waves in 2.8.9 (now: rubric trigger DSL formalization is in scope; the `safety_battery_audit` linter and prompt-surface cross-references are still on the menu) layer atop this corrected base.
+
+### Pragmatic correction #2: judge is a foundation model, not a CIRIS agent
+
+The "interpreter agent" framing from the prior pivot would have routed every `interpreter_judgment` criterion through a second CIRIS agent's full DMA + conscience + ASPDMA pipeline — 12-15 LLM hops per criterion. Local smoke against Together gemma showed ~8-15 min per criterion × 27 criteria per battery = ~7 hours per cell. Unshippable.
+
+The architecture pivots: **the judge is a foundation model (default Claude Opus 4.7) called directly via Anthropic's `/v1/messages` API.** No CIRIS agent in the interpret loop. One LLM call per criterion. Local smoke: 27 criteria + 54 deterministic checks = 81 verdicts in **53 seconds** (down from 7+ hours).
+
+What's preserved:
+- **Rules-crowdsourced / verdicts-machined** semantic (the architectural correction stands)
+- Reproducibility: same inputs (judge_model + judge_prompt_sha256 + criterion + response) → same verdict
+- Appeal via Reconsideration per MISSION.md Primitive 11
+- Operationalization gate before voting
+- Time-symmetric audit (rules + prompt templates + model identifiers all dated + hashed)
+- The judge has no special exemption from criticism — calibrated via four new Contribution kinds: `judge_prompt_edit`, `judge_model_vote`, `judge_examples_edit`, `judge_max_tokens_edit`
+
+What's given up:
+- No per-verdict TPM-signed audit-chain entry (verdicts are signed only at the bundle level via Sigstore — sufficient given the verdict is reproducible from inputs)
+- No interpreter-side accord / guide / language_guidance (the prompt template IS the calibratable surface, narrower but explicit)
+- No locale-aware judge prompts in v1 (deferred to v2 if pilot evidence warrants)
+
+What changes in code:
+- `cirisnodecore/FSD/INTERPRETER_AGENT.md` → `cirisnodecore/FSD/JUDGE_MODEL.md` (git mv preserves history; v1.0 rewritten for the corrected architecture)
+- `cirisnodecore/SCHEMA.md` §12 + verdict shape: `interpreter_kind` enum now `deterministic | foundation_model`; verdict carries `judge_model` + `judge_prompt_sha256`; drops `interpreter_task_id` for foundation_model verdicts
+- `cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md` §2: interpret tuple expands to 9 elements (capture's 6 + `rubric_id` + `judge_model_slug` + `judge_prompt_sha256[:8]`); `interpreter_agent_version` removed
+- `tools/qa_runner/modules/safety_interpret.py`: dropped CIRIS-agent dependency (REQUIRES_LIVE_LLM=False, WIPE_DATA_ON_START=False, SERVER_ENV={}). Direct httpx POST to Anthropic. Two new CLI flags: `--safety-interpret-anthropic-key-file` (default `~/.anthropic_key`) + `--safety-interpret-judge-model` (default `claude-opus-4-7`).
+- `.github/workflows/safety-battery.yml`: interpret job timeout 90→30 min; no CIRIS agent spin-up; reads `ANTHROPIC_API_KEY` secret; writes `~/.anthropic_key`; no libtss2 apt-install (capture job still needs it). Capture job writes `DEEPINFRA_API_KEY → ~/.deepinfra_key` to match the runner's metadata-driven `--live` auto-enable.
+- `tools/qa_runner/modules/safety_battery.py` `LIVE_LLM_DEFAULTS`: switched from Together gemma to **DeepInfra Qwen3.6-35B-A3B** (CLAUDE.md's canonical PDMA v3.2 test bed; faster than gemma; `enable_thinking=False` auto-applied by the LLM service for deepinfra URLs)
+
+### CIRISVerify bump: 1.14.0 → 2.0.2
+
+The 1.14.0 pin blocked the 2.x line where the software-only fallback got robust. The CI failure on `safety-battery.yml` was `CommunicationError: Failed to load library:` from CIRISVerify FFI trying to initialize on a GH Actions runner without TPM. 2.0.2's software fallback should handle this; belt-and-suspenders, the capture job now also `apt-get install`s `libtss2-tctildr0 libtss2-esys-3.0.2-0 libtss2-mu-4.0.1-0` for the runtime probe path.
+
+- `requirements.txt`: pin moved to `>=2.0.2,<3.0.0`
+- Android mobile bundles updated to v2.0.2 via `tools/update_ciris_verify.py 2.0.2 --android-only` (3 ABIs)
+- iOS bundles will follow when the CI loop is greenlit
+- Workflow capture job: new "Install CIRISVerify system deps" step before `pip install -e .`
+
+### Capture and interpret artifacts are signed and queryable
+
+Per the user's explicit ask: both bundles get:
+- A **Sigstore-signed attestation** (`actions/attest-build-provenance@v1` over `results.jsonl`/`verdicts.jsonl` + `summary.json` + `manifest_signed.json`)
+- A **tuple-named GH Actions artifact** (latest-wins by name, queryable via `gh api repos/CIRISAI/CIRISAgent/actions/artifacts?name=<tuple>`)
+- 90-day retention
+
+safety.ciris.ai's discovery path: query by tuple name, fetch the most recent, verify Sigstore attestation via `gh attestation verify`, cross-link capture↔interpret via `manifest_signed.json.bundle.results_jsonl_sha256`. CI secrets `ANTHROPIC_API_KEY` (judge) + `DEEPINFRA_API_KEY` (agent-under-test) both set on the repo.
+
+### CI loop went green end-to-end on the `am` cell
+
+The final iteration cleared three small bugs blocking the loop:
+
+- **`REQUIRES_CIRIS_SERVER` module-metadata flag** — `tools/qa_runner/modules/_module_metadata.py` now also recognizes an opt-out: modules that talk to an external API directly (e.g. `safety_interpret` calling Anthropic) declare `REQUIRES_CIRIS_SERVER=False` and the runner skips server start + auth + SDK-client wrapping. Previously the interpret job booted a CIRIS API server just to throw it away, and that boot hit a `Failed to load library` CIRISVerify FFI failure on TPM-less GH Actions runners — surfacing as a 503 from `/v1/setup`.
+
+- **Workflow upload guards** — both capture and interpret upload steps now require `bundle_dir != ''` and pass `if-no-files-found: error`. The old `if: always() && skip != 'true'` shape uploaded log-only 1.7-KB artifacts whenever bundle production failed, which subsequent dedup pre-flights then matched against and short-circuited on.
+
+- **DEFER channel notification is now localized** — `ciris_engine/logic/handlers/control/defer_handler.py` reads `task.preferred_language` (with the env default as fallback) and calls `get_string(lang, "agent.defer_check_panel")`. Previously every deferral shipped the same hardcoded English notification, which on the `am` battery scored as a `script_detection` fail (q07/U9) — a register-attack jailbreak that the agent correctly deferred, but the English defer-notification body failed the Amharic-script check. The localized string already existed for all 29 locales; the handler just wasn't reading it. 28 defer_handler unit tests pass.
+
+End-to-end timing on the green run (PR run 25703189494): capture 73s (deduped against a prior tuple match — no LLM tokens), interpret 104s (81 verdicts: 80 PASS / 1 FAIL / 0 UNDETERMINED, the 1 FAIL being the q07/U9 case fixed above). Both bundles Sigstore-attested.
+
 ## [2.8.8] - 2026-05-10
 
 ### Localization source-of-truth moved into the package (closes #744)

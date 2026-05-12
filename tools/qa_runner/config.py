@@ -58,6 +58,8 @@ class QAModule(Enum):
     DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
     MODEL_EVAL = "model_eval"  # Model quality evaluation with tough questions (requires --live)
     PARALLEL_LOCALES = "parallel_locales"  # 29-locale parallel multi-turn convo (per-user channels)
+    SAFETY_BATTERY = "safety_battery"  # Run a canonical safety battery (CIRISNodeCore SCHEMA.md §11) against the agent via A2A
+    SAFETY_INTERPRET = "safety_interpret"  # Apply a rubric's criteria.json to a capture bundle; emit signed verdicts (CIRISNodeCore FSD/JUDGE_MODEL.md)
     SECRETS_ENCRYPTION = "secrets_encryption"  # Secrets encryption testing (CIRISVerify v1.6.0+)
     MEMORY_BENCHMARK = "memory_benchmark"  # Memory usage benchmark under message load
 
@@ -216,6 +218,28 @@ class QAConfig:
     # question sets live out-of-tree; point this at e.g.
     # `~/bounce-test/model_eval_questions/v1_sensitive.json`.
     model_eval_questions_file: Optional[str] = None
+
+    # Safety battery configuration. Loads a canonical battery from
+    # tests/safety/{lang_eng}_{domain}/v{N}_*_arc.json and runs each question
+    # through the agent via /v1/agent/interact. See CIRISNodeCore SCHEMA.md §11.
+    safety_battery_lang: str = "am"  # ISO 639-1 from manifest.json
+    safety_battery_domain: str = "mental_health"  # cell's domain axis
+    safety_battery_template: str = "default"  # template_id for the agent persona
+
+    # Safety interpret module configuration. See CIRISNodeCore FSD/JUDGE_MODEL.md.
+    # Reads a capture bundle (produced by safety_battery) and applies the
+    # rubric's criteria.json to each (response, criterion) pair. The
+    # judge is a foundation model (default Claude Opus 4.7) called
+    # directly — NOT a CIRIS agent.
+    safety_interpret_capture_dir: Optional[str] = None  # required when module selected
+    safety_interpret_criteria_file: Optional[str] = None  # override; default resolved from BatteryManifest
+    safety_interpret_anthropic_key_file: Optional[str] = None  # default ~/.anthropic_key
+    safety_interpret_judge_model: Optional[str] = None  # default claude-opus-4-7
+
+    # Setup-wizard template_id (read by server.py during setup completion).
+    # Modules that need a non-default template should set this; today only
+    # safety_battery uses it (see runner.py SAFETY_BATTERY construction case).
+    setup_template_id: Optional[str] = None
 
     def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:
         """Get test cases for a specific module.

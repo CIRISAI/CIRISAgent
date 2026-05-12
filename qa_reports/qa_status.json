@@ -161,13 +161,22 @@
       "status": "passing",
       "duration_seconds": 22.04,
       "context": null
+    },
+    "safety_interpret": {
+      "last_run": "2026-05-11T23:18:23.578170+00:00",
+      "passed": 80,
+      "failed": 1,
+      "total": 81,
+      "status": "failing",
+      "duration_seconds": 62.74,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 18,
+    "total_modules": 19,
     "passing": 17,
-    "failing": 1,
+    "failing": 2,
     "not_run": 0
   },
-  "last_updated": "2026-05-09T16:44:18.024928+00:00"
+  "last_updated": "2026-05-11T23:18:23.578200+00:00"
 }

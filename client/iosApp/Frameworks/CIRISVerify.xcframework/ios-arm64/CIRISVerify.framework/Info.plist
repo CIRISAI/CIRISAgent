@@ -7,7 +7,7 @@
     <key>CFBundleIdentifier</key><string>ai.ciris.verify</string>
     <key>CFBundleName</key><string>CIRISVerify</string>
     <key>CFBundlePackageType</key><string>FMWK</string>
-    <key>CFBundleShortVersionString</key><string>1.12.1</string>
+    <key>CFBundleShortVersionString</key><string>2.0.2</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>MinimumOSVersion</key><string>16.0</string>
     <key>CFBundleSupportedPlatforms</key>

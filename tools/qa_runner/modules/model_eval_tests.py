@@ -256,6 +256,24 @@ def load_questions_from_file(path: str) -> List[EvalQuestion]:
 class ModelEvalTests:
     """Run multilingual live model eval with per-language channel isolation."""
 
+    # Live-LLM and server-env contract read by tools/qa_runner/modules/_module_metadata.py.
+    # Same rationale as the original hardcoded conditional in server.py:889 —
+    # concurrent submissions across unique per-channel routes, raised rate
+    # limit + interact timeout + LLM concurrency to sustain the burst.
+    REQUIRES_LIVE_LLM = True
+    LIVE_LLM_DEFAULTS = {
+        "key_file": "~/.groq_key",
+        "base_url": "https://api.groq.com/openai/v1",
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "provider": "openai",
+    }
+    SERVER_ENV = {
+        "CIRIS_DISABLE_TASK_APPEND": "1",
+        "CIRIS_API_RATE_LIMIT_PER_MINUTE": "600",
+        "CIRIS_API_INTERACTION_TIMEOUT": "600",
+        "CIRIS_LLM_MAX_CONCURRENT": "32",
+    }
+
     def __init__(
         self,
         client: Any,

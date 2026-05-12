@@ -35,30 +35,46 @@ Fix:
 - Bumped the constant: `__version__ = "1.13.3"` → `"2.0.2"`.
 - Carve-out in `update_ciris_verify.py`: after the AGENT_MANAGED content skip, it explicitly calls `update_python_version_string()` against the agent-managed `__init__.py` so future verify-version bumps update both the FFI binary AND the Python-reported version automatically. File CONTENT stays agent-managed; only the `__version__ = "..."` line tracks the wheel.
 
-**Finding 4 — Registry has the wrong manifest for 2.8.9** (filed upstream — fix is registry-side)
+**Finding 4 — Registry's `get_build_by_version` returns the wrong target when (project, version) has multiple registered manifests**
 
-The L4 attestation UI shows `Agent Code Integrity: 1426/1664 -43 failed`. Initial hypothesis (different build pipelines producing different bytes) was wrong — these are uncompiled Python/JSON/plaintext files, same source produces same hashes everywhere. The actual finding:
+**Architectural framing first.** Python files don't differ across platforms — `ciris_engine`/`ciris_adapters`/`ciris_sdk` are byte-identical on iOS, Android, server, and desktop. The model is:
 
-| | Files | total_hash | GUIDE extension |
-|---|---|---|---|
-| `tools/dev/stage_runtime.py --check` at `554d1a292` (current main) | **1531** | `sha256:536300fe…` | `.txt` (post-2.8.5 migration) |
-| Registry's recorded 2.8.9 manifest (`build_id=dcf30361`) | **1664** | `sha256:1bab32c0…` | **`.md`** (pre-2.8.5 naming) |
+- **ONE canonical Python-file manifest per version** = `python-source-tree`. Every agent on every platform verifies its Python file integrity against the same hashes.
+- **Platform-specific Python shims** get THEIR OWN delta manifests, scoped to platform-specific files only. `ciris_ios` today is 16 files (crypto/bcrypt/psutil shims since iOS Python doesn't have Chaquopy-equivalent system access). Future `ciris_android-shim`, `ciris_windows`, etc. would follow the same pattern.
+- **Binary manifests** (`.so` / `.dylib` per-target) are necessarily per-platform.
 
-The registry's stored manifest for 2.8.9 references files that don't exist at `source_commit=554d1a292` — the 28 `CIRIS_COMPREHENSIVE_GUIDE_*.md` files were renamed to `.txt` in 2.8.5 (`stage_runtime.py` explicitly excludes `.md` from staging post-2.8.5: "Devnotes (post-2.8.5 — load-bearing markdown migrated to .txt)"). The 28 localized `*.json` hashes also disagree at the same commit. Net: 133 files in the registry don't match anything `stage_runtime.py` produces at this source commit.
+Multiple manifests per `(project, version)` is the correct shape. The bug is purely that the registry can't disambiguate between them at version-lookup time.
 
-The registry has stale-manifest data registered against a fresh build_id. Until the 2.8.9 manifest is re-registered with what `stage_runtime.py` actually produces, **no agent — mobile, desktop, server, anywhere — can reach L4 against the live registry for this version**.
+The L4 attestation UI shows `Agent Code Integrity: 1426/1664 -43 failed`. CIRISAgent CI is doing the right thing: it registers **both** manifests per release ([`build.yml:985-1018`](.github/workflows/build.yml#L985)):
 
-Reproduce locally:
+1. **`python-source-tree`** (Call 1): 1531 files, total_hash `sha256:536300fe…`, `.md` exempt. Matches `tools/dev/stage_runtime.py --check` byte-for-byte. This is what desktop/server/Chaquopy agents need.
+2. **`ios-mobile-bundle`** (Call 2): 1664 files, total_hash `sha256:1bab32c0…`, includes `.md` devnotes. iOS-bundle-specific. Registered AFTER call 1.
+
+The registry's function-manifests endpoint correctly enumerates both:
+
 ```bash
-python3 -m tools.dev.stage_runtime --check
-# Files: 1,531  Hash: sha256:536300fe...
-
-curl -s "https://api.registry.ciris-services-1.ai/v1/builds/2.8.9?project=ciris-agent" | \
-  jq -r '"Files: \(.file_manifest_count)  Hash: \(.file_manifest_hash)"'
-# Files: 1664  Hash: sha256:1bab32c0...
+curl -s "https://api.registry.ciris-services-1.ai/v1/verify/function-manifests/2.8.9?project=ciris-agent" | jq
+# {"version":"2.8.9","targets":["ios-mobile-bundle","python-source-tree"]}
 ```
 
-Filed upstream on the CI Build-and-Deploy + CIRISRegistry side. No in-repo fix.
+**The bug is in `GET /v1/builds/{version}`.** Its SQL ([`CIRISRegistry/db/builds.rs::get_build`](https://github.com/CIRISAI/CIRISRegistry/blob/main/rust-registry/src/db/builds.rs)) sorts by `registered_at DESC LIMIT 1` with no target discriminator:
+
+```sql
+SELECT ... FROM builds
+WHERE project = $1 AND version = $2 AND status = 'active'
+ORDER BY registered_at DESC
+LIMIT 1
+```
+
+The iOS row (registered second) wins all subsequent version lookups, irrespective of which target the client wanted. Every agent in the field — mobile, desktop, server, Android Chaquopy — that hits this endpoint (the [`CIRISVerify::registry::get_build_by_version`](https://github.com/CIRISAI/CIRISVerify/blob/main/src/ciris-verify-core/src/registry.rs#L241) call path) gets the iOS manifest. Chaquopy/desktop don't have the `.md` devnotes the iOS manifest expects → 43 hash mismatches + 195 missing files at L4. **CIRISAgent's emitter, source commit, and CI registration are all correct.**
+
+Bug ownership is split across three upstream repos:
+
+- **[CIRISRegistry#11](https://github.com/CIRISAI/CIRISRegistry/issues/11)** (primary, P1) — add target-aware filtering to `get_build_by_version`. Required `?target=` query param is the cleanest contract; canonical default to `python-source-tree` when omitted preserves backward compat. This is the architectural fix that makes the multi-manifest-per-version model actually work as designed and unblocks future platform deltas.
+- **[CIRISVerify](https://github.com/CIRISAI/CIRISVerify)** (P1, follows registry fix) — verify-clients must pass `target=python-source-tree` when fetching the canonical Python-file manifest. Today the client at [`registry.rs:241`](https://github.com/CIRISAI/CIRISVerify/blob/main/src/ciris-verify-core/src/registry.rs#L241) takes whatever version-alone returns. Will file once registry-side is on a versioned API.
+- **[CIRISAgent#748](https://github.com/CIRISAI/CIRISAgent/issues/748)** (P2, secondary CI hygiene) — the iOS sign step in `build.yml:929-946` doesn't apply the same `--tree-exempt-ext md pyi deleted` byte-for-byte exempt list that the `python-source-tree` step (line 883-898) uses. Standalone, the iOS bundle is internally consistent with its own manifest. Once the registry+verify-client target awareness lands, this is purely cosmetic (the iOS manifest is only used by iOS-specific verification paths, not for the shared Python-file integrity check). Fix it anyway for cleanliness.
+
+**No CIRISAgent in-repo fix in 2.8.10** (other than the issue filing). The CI registration is doing the architecturally-correct thing; the bugs are in the registry's lookup query + verify-client's missing target parameter.
 
 **Finding 5 — `startup_python_hashes.json` Algorithm-B path is legacy; mobile can move to the same Algorithm A as desktop**
 

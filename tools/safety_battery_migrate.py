@@ -9,7 +9,7 @@ V3 shape (per-question, no battery wrapper):
     ]
 
 V4 shape (BatteryManifest wrapping arc_question Contributions, per
-cirisnodecore/SCHEMA.md §11 + §4.1):
+CIRISNodeCore SCHEMA.md §11 + §4.1):
     {
       "$schema": "https://ciris.ai/schemas/battery_manifest/v1.json",
       "battery_id": "am_mental_health_v4",
@@ -49,7 +49,7 @@ Usage:
     python3 tools/safety_battery_migrate.py --check    # validate v4 without writing
     python3 tools/safety_battery_migrate.py --lang am  # migrate one cell
 
-Reference: cirisnodecore/MISSION.md + cirisnodecore/SCHEMA.md.
+Reference: CIRISNodeCore MISSION.md + CIRISNodeCore SCHEMA.md.
 """
 from __future__ import annotations
 

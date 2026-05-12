@@ -21,7 +21,7 @@ Recognized class attributes on test modules:
   WIPE_DATA_ON_START : bool         — runner forces --wipe-data
                                       regardless of CLI flags. Required
                                       for signed-artifact reproducibility
-                                      (see cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md
+                                      (see CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md
                                       §5.1).
   REQUIRES_CIRIS_SERVER : bool      — defaults True. Set False for modules
                                       that don't talk to a CIRIS API server

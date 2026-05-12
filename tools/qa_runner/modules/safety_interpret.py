@@ -5,7 +5,7 @@ and applies a rubric's criteria.json to each (question, response) pair.
 Emits a verdicts bundle: verdicts.jsonl + verdicts_summary.json +
 manifest_signed.json.
 
-Per cirisnodecore/SCHEMA.md §12 and cirisnodecore/FSD/JUDGE_MODEL.md:
+Per CIRISNodeCore SCHEMA.md §12 and CIRISNodeCore FSD/JUDGE_MODEL.md:
 
   - Deterministic criteria (term_present, term_absent, regex_present,
     script_detection): applied in-process. No LLM call.
@@ -25,10 +25,10 @@ template embedded in criteria.json" — same Contribution mechanism,
 simpler shape.
 
 Cross-references:
-  - cirisnodecore/SCHEMA.md §12 (criteria.json + Verdict shape)
-  - cirisnodecore/FSD/JUDGE_MODEL.md (judge model contract)
-  - cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §6 (CI flow)
-  - cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md (rubric Contributions)
+  - CIRISNodeCore SCHEMA.md §12 (criteria.json + Verdict shape)
+  - CIRISNodeCore FSD/JUDGE_MODEL.md (judge model contract)
+  - CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md §6 (CI flow)
+  - CIRISNodeCore FSD/RUBRIC_CROWDSOURCING.md (rubric Contributions)
   - tests/safety/amharic_mental_health/v4_amharic_canonical_universal_criteria.json
     (worked example consumed here)
 
@@ -87,7 +87,7 @@ REQUIRES_CIRIS_SERVER = False
 
 # Default judge model + endpoint. The judge is OUTSIDE the system
 # under test by design (different lineage than the agent-under-test).
-# See cirisnodecore/FSD/JUDGE_MODEL.md.
+# See CIRISNodeCore FSD/JUDGE_MODEL.md.
 JUDGE_DEFAULTS = {
     "model": "claude-opus-4-7",
     "api_url": "https://api.anthropic.com/v1/messages",
@@ -103,7 +103,7 @@ JUDGE_DEFAULTS = {
 
 
 # Judge prompt template. Calibration surface — propose edits via
-# `judge_prompt_edit` Contributions per cirisnodecore/FSD/JUDGE_MODEL.md.
+# `judge_prompt_edit` Contributions per CIRISNodeCore FSD/JUDGE_MODEL.md.
 #
 # Posture: SAFE, ACCOUNTABLE, REALISTIC. Hold a hard safety floor; do
 # not import Western clinical defaults that would penalize the agent
@@ -431,7 +431,7 @@ def _apply_deterministic(criterion: Dict[str, Any], response_text: str) -> Dict[
 @dataclass
 class CriterionVerdict:
     """One verdict on one (response, criterion) pair. Forward-compatible
-    with the Verdict shape in cirisnodecore/SCHEMA.md §12.4."""
+    with the Verdict shape in CIRISNodeCore SCHEMA.md §12.4."""
 
     question_id: str
     response_id: Optional[str]  # from capture row's agent_task_id
@@ -844,7 +844,7 @@ class SafetyInterpretTests:
     def _write_manifest_signed(
         self, criteria: Dict[str, Any], capture_manifest: Dict[str, Any], verdicts_jsonl: Path
     ) -> None:
-        """manifest_signed.json per cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md
+        """manifest_signed.json per CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md
         §2.0a + §3.3, with cross-link to the capture bundle."""
         summary_path = self._results_dir / "verdicts_summary.json"
         manifest_path = self._results_dir / "manifest_signed.json"

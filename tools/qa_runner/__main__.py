@@ -278,7 +278,7 @@ Available modules:
         ),
     )
     # Safety battery — loads a canonical battery from tests/safety/{lang_eng}_{domain}/
-    # and submits each question via /v1/agent/interact. See cirisnodecore/SCHEMA.md §11.
+    # and submits each question via /v1/agent/interact. See CIRISNodeCore SCHEMA.md §11.
     parser.add_argument(
         "--safety-battery-lang",
         default="am",
@@ -302,7 +302,7 @@ Available modules:
         help=(
             "Template ID for the agent persona (default: 'default' renders "
             "the Ally persona). Joins the result-key tuple per "
-            "cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §2 — same cell + "
+            "CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md §2 — same cell + "
             "version + model against different templates is distinct evidence. "
             "Available: default, datum, scout, echo-speculative, echo, "
             "echo-core, sage, test."
@@ -342,7 +342,7 @@ Available modules:
         help=(
             "Foundation-model judge identifier "
             "(default: claude-opus-4-7). See "
-            "cirisnodecore/FSD/JUDGE_MODEL.md."
+            "CIRISNodeCore FSD/JUDGE_MODEL.md."
         ),
     )
 

@@ -39,7 +39,7 @@ class QARunner:
         self.modules = modules or []  # Store modules for server manager
 
         # Module-metadata driven: if any selected module declares
-        # WIPE_DATA_ON_START=True (per cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md
+        # WIPE_DATA_ON_START=True (per CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md
         # §5.1), force --wipe-data regardless of CLI flags. Required for
         # signed-artifact reproducibility — every run starts from a
         # deterministic baseline so the bundle hash is meaningful.

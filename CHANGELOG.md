@@ -9,14 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Focus:** streamlined contributor experience for safety rubrics and language packs. External contributors (starting with the Amharic / Ethiopian work) need a path to propose new safety questions, refined rubrics, and prompt/guide/accord edits through a federation-consensus loop rather than ad-hoc PRs against a single repo. 2.8.9 lands the on-disk contract and the CI loop that the loop's pilot (safety.ciris.ai) will build against.
 
-### CIRISNodeCore spec lands in-tree at `cirisnodecore/`
+### CIRISNodeCore spec — extracted to its own repo before 2.8.9 ships
 
-Two paired documents form the v1.0 CIRISNodeCore spec:
+The v1.0 CIRISNodeCore spec was iterated in-tree at `cirisnodecore/` throughout the 2.8.9 cycle, then **extracted to [`github.com/CIRISAI/CIRISNodeCore`](https://github.com/CIRISAI/CIRISNodeCore) as a standalone repo before merge** (same shape as the sibling `CIRISLensCore` spec repo). Reason: the spec is the contract that `safety.ciris.ai` and the eventual `ciris-node-core` Rust crate build against — co-locating it with the first consumer was useful while the contract was still moving every day, but once stable it deserves its own commit graph, its own issues, and its own version cadence independent of CIRISAgent releases. 2.8.9 ships without `cirisnodecore/` on `main`.
 
-- **`cirisnodecore/MISSION.md`** — the why and the eleven primitives (Identity, Commons Credits, Expertise, Vote, Contribution, Truth-Grounding, Weighted Aggregate, Moderation, Slashing, Witness-Diversity, Reconsideration) plus the RATCHET integration contract. v1.0 draft, status `Spec`. Authored externally and folded into the repo here so the spec is co-located with its first consumer.
-- **`cirisnodecore/SCHEMA.md`** — the canonical JSON wire format for every primitive, plus the safety-battery encoding (`BatteryManifest`), plus the canonical-vs-pending split and the promotion path. Authored alongside MISSION.md; pairs with it 1:1.
+The spec content that landed:
 
-Together they define the contract that safety.ciris.ai builds against and that the eventual `ciris-node-core` rust crate implements. When the crate goes `Impl`, both docs migrate with it.
+- **MISSION.md** — the eleven primitives (Identity, Commons Credits, Expertise, Vote, Contribution, Truth-Grounding, Weighted Aggregate, Moderation, Slashing, Witness-Diversity, Reconsideration) + RATCHET integration contract + Application × Contribution mapping. v1.0 draft, status `Spec`.
+- **SCHEMA.md** — the canonical JSON wire format for every primitive, plus the safety-battery encoding (`BatteryManifest`, `arc_question`), plus §12's machine-applicable criteria contract, plus the canonical-vs-pending split and the promotion path.
+- **PROGRAMMATIC_ACCESS.md** — the website-team integration handoff (where to find batteries, rubrics, captures, judgements; tuple-name discovery; Sigstore verification recipe; 14-cell map).
+- **FSD/JUDGE_MODEL.md** — the foundation-model judge contract (deployment-aware prompt; calibration via four `judge_*_edit` Contribution kinds).
+- **FSD/SAFETY_BATTERY_CI_LOOP.md** — capture + interpret two-job CI flow, tuple-named artifacts, dedup pre-flight.
+- **FSD/RUBRIC_CROWDSOURCING.md** — `rubric_proposal` Contribution flow (Credits × Expertise weighted voting per MISSION.md §3.4; competing rubrics OK).
+
+All in-tree cross-references from CIRISAgent rewrite to `CIRISNodeCore <FILE>` (or `github.com/CIRISAI/CIRISNodeCore/...` for doc-link surfaces). The safety-battery workflow's `cirisnodecore/**` path filter is removed — spec changes no longer touch this repo.
 
 ### Safety batteries: v3 → v4 schema migration
 

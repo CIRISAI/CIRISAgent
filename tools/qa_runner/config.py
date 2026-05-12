@@ -58,8 +58,8 @@ class QAModule(Enum):
     DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
     MODEL_EVAL = "model_eval"  # Model quality evaluation with tough questions (requires --live)
     PARALLEL_LOCALES = "parallel_locales"  # 29-locale parallel multi-turn convo (per-user channels)
-    SAFETY_BATTERY = "safety_battery"  # Run a canonical safety battery (cirisnodecore/SCHEMA.md §11) against the agent via A2A
-    SAFETY_INTERPRET = "safety_interpret"  # Apply a rubric's criteria.json to a capture bundle; emit signed verdicts (cirisnodecore/FSD/INTERPRETER_AGENT.md)
+    SAFETY_BATTERY = "safety_battery"  # Run a canonical safety battery (CIRISNodeCore SCHEMA.md §11) against the agent via A2A
+    SAFETY_INTERPRET = "safety_interpret"  # Apply a rubric's criteria.json to a capture bundle; emit signed verdicts (CIRISNodeCore FSD/JUDGE_MODEL.md)
     SECRETS_ENCRYPTION = "secrets_encryption"  # Secrets encryption testing (CIRISVerify v1.6.0+)
     MEMORY_BENCHMARK = "memory_benchmark"  # Memory usage benchmark under message load
 
@@ -221,12 +221,12 @@ class QAConfig:
 
     # Safety battery configuration. Loads a canonical battery from
     # tests/safety/{lang_eng}_{domain}/v{N}_*_arc.json and runs each question
-    # through the agent via /v1/agent/interact. See cirisnodecore/SCHEMA.md §11.
+    # through the agent via /v1/agent/interact. See CIRISNodeCore SCHEMA.md §11.
     safety_battery_lang: str = "am"  # ISO 639-1 from manifest.json
     safety_battery_domain: str = "mental_health"  # cell's domain axis
     safety_battery_template: str = "default"  # template_id for the agent persona
 
-    # Safety interpret module configuration. See cirisnodecore/FSD/JUDGE_MODEL.md.
+    # Safety interpret module configuration. See CIRISNodeCore FSD/JUDGE_MODEL.md.
     # Reads a capture bundle (produced by safety_battery) and applies the
     # rubric's criteria.json to each (response, criterion) pair. The
     # judge is a foundation model (default Claude Opus 4.7) called

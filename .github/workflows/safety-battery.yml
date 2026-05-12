@@ -1,6 +1,7 @@
 name: Safety Battery
 
-# Two-runner pipeline per cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md:
+# Two-runner pipeline per CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md
+# (https://github.com/CIRISAI/CIRISNodeCore/blob/main/FSD/SAFETY_BATTERY_CI_LOOP.md):
 #
 #   1. Capture: agent-under-test responds to a canonical battery's
 #      questions on Together gemma. Signed artifact uploaded.
@@ -60,12 +61,15 @@ on:
   pull_request:
     paths:
       - 'tests/safety/**'
-      - 'cirisnodecore/**'
       - 'tools/qa_runner/modules/safety_battery.py'
       - 'tools/qa_runner/modules/safety_interpret.py'
       - 'tools/qa_runner/modules/_module_metadata.py'
       - 'tools/safety_battery_migrate.py'
       - 'ciris_engine/data/localized/**'
+      # Note: the spec the loop consumes (BatteryManifest, criteria.json,
+      # Verdict shape) lives at github.com/CIRISAI/CIRISNodeCore.
+      # Spec changes trigger this workflow only via the cell artifacts
+      # (battery / rubric files) that already match `tests/safety/**`.
 
 permissions:
   id-token: write       # Sigstore attestation issuance

@@ -15,8 +15,8 @@ If you're an external contributor (welcome) the short version:
   Contributions on the federation audit chain (the safety.ciris.ai
   pilot is the surface). They only land here after they win their
   cell's voting threshold.
-- Authoritative format spec: [`../cirisnodecore/SCHEMA.md`](../cirisnodecore/SCHEMA.md).
-- Authoritative why-it-works: [`../cirisnodecore/MISSION.md`](../cirisnodecore/MISSION.md).
+- Authoritative format spec: [`SCHEMA.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md).
+- Authoritative why-it-works: [`MISSION.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/MISSION.md).
 
 ---
 
@@ -36,7 +36,7 @@ voting.
 ```
    contributor submits arc_question (a new failure mode to test) OR
    rubric_proposal (a new machine-applicable assertion to check)
-   as a signed Contribution per cirisnodecore/SCHEMA.md §4 + §12
+   as a signed Contribution per CIRISNodeCore SCHEMA.md §4 + §12
             ↓
    operationalization gate (RUBRIC_CROWDSOURCING.md §2.2): does the
    proposed criterion answer "can a machine apply this without
@@ -61,7 +61,7 @@ voting.
      - interpreter_judgment → direct call to the judge model with
        a pinned prompt template; PASS/FAIL/UNDETERMINED + cited span
    Verdicts bundle uploaded; Sigstore-attested via GitHub Actions.
-   See cirisnodecore/FSD/JUDGE_MODEL.md for why the judge is outside
+   See CIRISNodeCore FSD/JUDGE_MODEL.md for why the judge is outside
    CIRIS by design.
             ↓
    safety.ciris.ai reads both bundles, shows operators per-criterion
@@ -79,16 +79,16 @@ voting.
    exemption from being criticized.
 ```
 
-This is the [CIRISNodeCore](../cirisnodecore/MISSION.md) consensus
+This is the [CIRISNodeCore](https://github.com/CIRISAI/CIRISNodeCore/blob/main/MISSION.md) consensus
 model applied to safety calibration. Spec lives in three documents:
 
-- [`../cirisnodecore/MISSION.md`](../cirisnodecore/MISSION.md) — the
+- [`MISSION.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/MISSION.md) — the
   eleven primitives + RATCHET integration
-- [`../cirisnodecore/SCHEMA.md`](../cirisnodecore/SCHEMA.md) — wire
+- [`SCHEMA.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md) — wire
   formats; §12 specifies the rubric+criteria format
-- [`../cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md`](../cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md) — how rubrics become canonical
-- [`../cirisnodecore/FSD/JUDGE_MODEL.md`](../cirisnodecore/FSD/JUDGE_MODEL.md) — what the judge model is (and why it's not a CIRIS agent)
-- [`../cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md`](../cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md) — the CI flow
+- [`FSD/RUBRIC_CROWDSOURCING.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/FSD/RUBRIC_CROWDSOURCING.md) — how rubrics become canonical
+- [`FSD/JUDGE_MODEL.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/FSD/JUDGE_MODEL.md) — what the judge model is (and why it's not a CIRIS agent)
+- [`FSD/SAFETY_BATTERY_CI_LOOP.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/FSD/SAFETY_BATTERY_CI_LOOP.md) — the CI flow
 
 Pilot deployment: [safety.ciris.ai](https://safety.ciris.ai) per
 MISSION.md §7.3.
@@ -107,7 +107,7 @@ this without human judgment?**
 | "Response is helpful enough" | ❌ REJECT — "helpful" unmeasurable; pick a specific failure |
 
 The operationalization gate (per
-[`../cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md`](../cirisnodecore/FSD/RUBRIC_CROWDSOURCING.md)
+[`FSD/RUBRIC_CROWDSOURCING.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/FSD/RUBRIC_CROWDSOURCING.md)
 §2.2) is the difference between safety and censorship. If a criterion
 can't be turned into a machine check, it isn't ready to be a rule.
 
@@ -116,7 +116,7 @@ can't be turned into a machine check, it isn't ready to be a rule.
 Because the rubric is machine-applicable, you can re-run last year's
 `rubric_version=3` against this year's corpus and ask "would the new
 responses have failed the old rules?" The artifacts are tuple-named
-(per [`../cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md`](../cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md)
+(per [`FSD/SAFETY_BATTERY_CI_LOOP.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/FSD/SAFETY_BATTERY_CI_LOOP.md)
 §2), so querying by tuple-prefix returns historical evidence.
 
 Censorship regimes physically cannot do this — the rule is whatever
@@ -129,7 +129,8 @@ the in-group thought yesterday. The CIRIS rule has a date and a hash.
 ```
 tests/safety/
 ├── README.md                     ← you are here
-├── SCHEMA.md → ../cirisnodecore/SCHEMA.md   (the canonical format spec)
+│   (the canonical format spec lives at the CIRISNodeCore repo:
+│    https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md)
 │
 ├── {lang}_{domain}/              ← one directory per (domain, language) cell
 │   ├── v{N}_{lang}_{domain_short}_arc.json   ← BatteryManifest (§11 of SCHEMA)
@@ -177,7 +178,7 @@ A new cell is the contributor saying: "I have the cell-expertise to
 calibrate the agent's behavior on `(domain X, language Y)` and I am
 filing the rubric + initial battery for community review." The
 review-and-promotion path follows the canonical-vs-pending split in
-[SCHEMA.md §13](../cirisnodecore/SCHEMA.md#13-canonical-vs-pending--and-the-promotion-path).
+[SCHEMA.md §13](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md#13-canonical-vs-pending--and-the-promotion-path).
 
 ---
 
@@ -205,7 +206,7 @@ error.
 ### 4.1 `v{N}_{lang}_{domain_short}_arc.json` — the BatteryManifest
 
 Canonical JSON format documented in
-[SCHEMA.md §11](../cirisnodecore/SCHEMA.md#11-batterymanifest--canonical-battery-wrapper).
+[SCHEMA.md §11](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md#11-batterymanifest--canonical-battery-wrapper).
 Top-level shape:
 
 ```json
@@ -233,7 +234,7 @@ including the cell's language).
 ### 4.2 `v{N}_{lang}_scoring_rubric.md` — the human-readable policy
 
 Markdown file consumed by humans when DEBATING rule changes.
-Per [SCHEMA.md §12](../cirisnodecore/SCHEMA.md#12-rubric--machine-applicable-criteria).
+Per [SCHEMA.md §12](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md#12-rubric--machine-applicable-criteria).
 Contains:
 
 1. **Universal pass criteria** (U1, U2, …) — narrative description
@@ -251,7 +252,7 @@ verdicts. The operational form is `criteria.json`.
 ### 4.3 `v{N}_{lang}_canonical_universal_criteria.json` — the operational form
 
 JSON file consumed by the interpreter (`tools/qa_runner/modules/safety_interpret.py`).
-Per [SCHEMA.md §12.3](../cirisnodecore/SCHEMA.md#123-criteriajson-schema).
+Per [SCHEMA.md §12.3](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md#123-criteriajson-schema).
 Each row is one of five kinds:
 
 | `kind` | Interpreter | Example |
@@ -264,7 +265,7 @@ Each row is one of five kinds:
 
 The first four run instantly with no LLM call. The fifth defers to
 the CIRIS interpreter agent per
-[`../cirisnodecore/FSD/INTERPRETER_AGENT.md`](../cirisnodecore/FSD/INTERPRETER_AGENT.md).
+[`FSD/JUDGE_MODEL.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/FSD/JUDGE_MODEL.md).
 
 See `amharic_mental_health/v4_amharic_canonical_universal_criteria.json`
 for the worked example covering all 9 of the Amharic mental-health
@@ -291,7 +292,7 @@ You do not commit to this directory directly. The path is:
 ### 5.1 Propose a single new question to an existing cell
 
 Submit an `arc_question` Contribution (per
-[SCHEMA.md §4.1](../cirisnodecore/SCHEMA.md#41-arc_question-the-core-safety-primitive))
+[SCHEMA.md §4.1](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md#41-arc_question-the-core-safety-primitive))
 through safety.ciris.ai. Once it accumulates the cell's voting
 threshold, the crate signs a promotion attestation; a PR lands here
 adding the question to the BatteryManifest and bumping
@@ -300,7 +301,7 @@ adding the question to the BatteryManifest and bumping
 ### 5.2 Propose a whole new battery (or a major refresh of one)
 
 Submit a `proposed_battery` Contribution (per
-[SCHEMA.md §4.2](../cirisnodecore/SCHEMA.md#42-proposed_battery)).
+[SCHEMA.md §4.2](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md#42-proposed_battery)).
 Same promotion path; on success the canonical battery for the cell
 is replaced or upgraded.
 
@@ -313,7 +314,7 @@ This is a larger contribution. You'll typically need:
   what failure modes matter for this domain × language).
 - A seed battery of `arc_question` Contributions (≥ 5 questions
   typically, but the cell's threshold may differ).
-- A witness set per [SCHEMA.md §6](../cirisnodecore/SCHEMA.md#6-witnessset)
+- A witness set per [SCHEMA.md §6](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md#6-witnessset)
   — new cells are high-stakes by construction (a new cell extends
   the agent's safety surface), so the diversity bar applies.
 
@@ -325,7 +326,7 @@ directory.
 These don't live in `tests/safety/` — they live under
 `ciris_engine/data/localized/`. The edit-proposal Contributions
 (`prompt_edit`, `guide_edit`, `accord_edit` per
-[SCHEMA.md §4.3-4.5](../cirisnodecore/SCHEMA.md#43-prompt_edit))
+[SCHEMA.md §4.3-4.5](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md#43-prompt_edit))
 MUST reference an open `failure_pattern` ticket — the project
 explicitly does not accept speculative prompt edits. Tickets are
 opened automatically when scoring evidence aggregates past
@@ -365,9 +366,9 @@ is live. Until then they accumulate as workflow artifacts.
 
 ## 7. Cross-references
 
-- [`../cirisnodecore/MISSION.md`](../cirisnodecore/MISSION.md) — the
+- [`MISSION.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/MISSION.md) — the
   why and the eleven primitives narrative.
-- [`../cirisnodecore/SCHEMA.md`](../cirisnodecore/SCHEMA.md) — the
+- [`SCHEMA.md`](https://github.com/CIRISAI/CIRISNodeCore/blob/main/SCHEMA.md) — the
   canonical wire format spec. Authoritative for every JSON shape
   this directory ships.
 - [`../ciris_engine/logic/buses/prohibitions.py`](../ciris_engine/logic/buses/prohibitions.py) —

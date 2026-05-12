@@ -1,6 +1,6 @@
 """Safety battery QA runner module.
 
-Loads a canonical v4 BatteryManifest (per cirisnodecore/SCHEMA.md §11)
+Loads a canonical v4 BatteryManifest (per CIRISNodeCore SCHEMA.md §11)
 from `tests/safety/{lang_eng}_{domain}/v4_{lang_eng}_{domain}_arc.json`,
 submits each question through the agent via the standard A2A path
 (`/v1/agent/interact`), and writes a JSONL of signed responses ready
@@ -17,9 +17,9 @@ enforces this at CLI parse time using the LIVE_LLM_DEFAULTS metadata.
 
 Cross-references:
   - tests/safety/README.md (contributor on-ramp)
-  - cirisnodecore/SCHEMA.md §11 (BatteryManifest format)
-  - cirisnodecore/SCHEMA.md §4.1 (arc_question payload)
-  - cirisnodecore/MISSION.md §7.3 (safety.ciris.ai pilot scope)
+  - CIRISNodeCore SCHEMA.md §11 (BatteryManifest format)
+  - CIRISNodeCore SCHEMA.md §4.1 (arc_question payload)
+  - CIRISNodeCore MISSION.md §7.3 (safety.ciris.ai pilot scope)
 
 CLI invocation:
   python3 -m tools.qa_runner safety_battery --safety-battery-lang am
@@ -88,7 +88,7 @@ SERVER_ENV = {
 }
 
 # Force --wipe-data on every run for signed-artifact reproducibility.
-# See cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §5.1. Every run starts
+# See CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md §5.1. Every run starts
 # from a deterministic baseline so the bundle hash is meaningful and
 # the auto-setup-completion path is exercised exactly once per run.
 WIPE_DATA_ON_START = True
@@ -173,7 +173,7 @@ def _sha256_hex(path: Path) -> str:
 
 
 # Characters allowed in an artifact-name model slug. GH Actions artifact
-# names are constrained; the cirisnodecore FSD §2.1 picks lowercase
+# names are constrained; the CIRISNodeCore FSD §2.1 picks lowercase
 # alphanumerics + dot + hyphen + underscore. Slash becomes underscore.
 _SLUG_OK = re.compile(r"[^a-z0-9._-]")
 
@@ -181,7 +181,7 @@ _SLUG_OK = re.compile(r"[^a-z0-9._-]")
 def slugify_model(model: str) -> str:
     """Slugify a model identifier for inclusion in an artifact-name tuple.
 
-    Per cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §2: lowercase,
+    Per CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md §2: lowercase,
     `/` → `_`, strip everything outside `[a-z0-9._-]`.
 
     Examples:
@@ -261,7 +261,7 @@ def load_battery(lang: str, domain: str = "mental_health") -> Dict[str, Any]:
 @dataclass
 class BatteryResult:
     """One question's run result. Forward-compatible with
-    cirisnodecore/SCHEMA.md §5.1 Vote payload (score_kind=battery_response)
+    CIRISNodeCore SCHEMA.md §5.1 Vote payload (score_kind=battery_response)
     — the site reads these rows to present to human scorers."""
 
     question_id: str
@@ -683,7 +683,7 @@ class SafetyBatteryTests:
 
     def _result_to_jsonl_row(self, r: BatteryResult, manifest: Dict[str, Any]) -> Dict[str, Any]:
         """One row per question, forward-compatible with the Vote payload
-        from cirisnodecore/SCHEMA.md §5.1 (score_kind=battery_response)."""
+        from CIRISNodeCore SCHEMA.md §5.1 (score_kind=battery_response)."""
         return {
             "schema": "ciris.ai/safety_battery_result/v1",
             "run_id": self._run_id,
@@ -744,7 +744,7 @@ class SafetyBatteryTests:
             f.write("\n")
 
     def _write_manifest_signed(self, manifest: Dict[str, Any], results_jsonl: Path) -> None:
-        """Write manifest_signed.json per cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §3.3.
+        """Write manifest_signed.json per CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md §3.3.
 
         Contains the result-key tuple (cell, battery_version, model_slug,
         agent_version, template_id), per-response audit anchors (the

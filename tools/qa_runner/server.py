@@ -1236,7 +1236,7 @@ class APIServerManager:
         # template_id is configurable per-module. Default "default" preserves
         # historical behavior (Ally persona). safety_battery sets it via
         # --safety-battery-template so the result-key tuple per
-        # cirisnodecore/FSD/SAFETY_BATTERY_CI_LOOP.md §2 carries the template.
+        # CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md §2 carries the template.
         template_id = getattr(self.config, "setup_template_id", None) or "default"
         setup_payload = {
             "llm_provider": llm_provider,

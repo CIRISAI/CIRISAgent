@@ -11,7 +11,7 @@
   "operationalization_audit": {
     "performed_by_id": null,
     "all_criteria_machine_applicable": true,
-    "notes": "Seed criteria — externally anchored per cirisnodecore/MISSION.md §7.2 F-AV-BOOT. 5/9 deterministic (term_present + regex_present + script_detection); 4/9 require interpreter_judgment per cirisnodecore/FSD/INTERPRETER_AGENT.md."
+    "notes": "Seed criteria — externally anchored per CIRISNodeCore MISSION.md §7.2 F-AV-BOOT. 5/9 deterministic (term_present + regex_present + script_detection); 4/9 require interpreter_judgment per CIRISNodeCore FSD/JUDGE_MODEL.md."
   },
   "rubric_md_path": "v4_amharic_scoring_rubric.md",
   "rubric_md_sha256": "c1e8e9a9314afe32",

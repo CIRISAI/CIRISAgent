@@ -25,25 +25,55 @@ The `deployment_profile.deployment_region` field is operator-declared via the ac
 
 This is **not a code bug** — the FSD §3.2 closed-enum is correctly emitted when the value is set. It's an operator-onboarding gap: production deployments should be reminded to declare `deployment_region` in their config so federation-level cohort analytics work. Documenting; setup-wizard surfacing deferred to a follow-up (the right place is the existing `CIRIS_SHARE_LOCATION_IN_TRACES` flow, not a new step).
 
-### Findings from 2.8.9 Android emulator testing (in-tree fixes)
+### Findings from 2.8.9 Android emulator testing
 
-**Finding 3 — `CIRISVerify` Python wrapper reports stale `__version__ = "1.13.3"`**
+**Finding 3 — `CIRISVerify` Python wrapper reports stale `__version__ = "1.13.3"`** (fixed in 2.8.10)
 
-The native FFI binary correctly initializes at v2.0.2 (logcat: `CIRISVerify FFI init starting (v2.0.2)`), but the Trust & Security UI surfaces `CIRISVerify v1.13.3`. Root cause: `ciris_adapters/ciris_verify/ffi_bindings/__init__.py` carries a hardcoded `__version__` constant that `tools/update_ciris_verify.py` deliberately skipped because the file is `AGENT_MANAGED` (it carries the FFI-loader patches that diverge from the upstream wheel).
+The native FFI binary correctly initializes at v2.0.2 (logcat: `CIRISVerify FFI init starting (v2.0.2)`), but the Trust & Security UI surfaces `CIRISVerify v1.13.3`. Root cause: `ciris_adapters/ciris_verify/ffi_bindings/__init__.py` carries a hardcoded `__version__` constant that `tools/update_ciris_verify.py` deliberately skipped because the file is `AGENT_MANAGED` (carries FFI-loader patches that intentionally diverge from the upstream wheel).
 
-**Fix in this release:**
+Fix:
 - Bumped the constant: `__version__ = "1.13.3"` → `"2.0.2"`.
-- Added a carve-out in `update_ciris_verify.py`: after the AGENT_MANAGED skip, it now explicitly calls `update_python_version_string()` against the agent-managed `__init__.py` so future verify-version bumps update both the FFI binary AND the Python-reported version automatically. The file CONTENT stays agent-managed; only the `__version__ = "..."` line tracks the wheel.
+- Carve-out in `update_ciris_verify.py`: after the AGENT_MANAGED content skip, it explicitly calls `update_python_version_string()` against the agent-managed `__init__.py` so future verify-version bumps update both the FFI binary AND the Python-reported version automatically. File CONTENT stays agent-managed; only the `__version__ = "..."` line tracks the wheel.
 
-**Finding 4 — locally-built APKs can't reach L4 by design**
+**Finding 4 — Registry has the wrong manifest for 2.8.9** (filed upstream — fix is registry-side)
 
-Caught while validating 2.8.9 on emulator: Trust & Security UI shows `L4 Agent Code Integrity: 1426/1664 -43 failed`. Per `Dockerfile:72-76` and the v2.8.3 changelog note ("regenerate startup_python_hashes.json at docker build time"), the file-integrity manifest is regenerated at **docker build time only** — local Gradle builds don't run that step. The repo-root `startup_python_hashes.json` is at `agent_version: 2.8.6-stable` (generated 2026-05-09, 3 days before 2.8.9 shipped) and won't match the registry's manifest for any later version.
+The L4 attestation UI shows `Agent Code Integrity: 1426/1664 -43 failed`. Initial hypothesis (different build pipelines producing different bytes) was wrong — these are uncompiled Python/JSON/plaintext files, same source produces same hashes everywhere. The actual finding:
 
-The registry has the **docker-built 2.8.9 manifest** (`stored_hash=1bab32c0…`, 1664 files); local APKs compute a different hash (`7f418e33…`) because Gradle alone doesn't regenerate the manifest from the actual shipped files.
+| | Files | total_hash | GUIDE extension |
+|---|---|---|---|
+| `tools/dev/stage_runtime.py --check` at `554d1a292` (current main) | **1531** | `sha256:536300fe…` | `.txt` (post-2.8.5 migration) |
+| Registry's recorded 2.8.9 manifest (`build_id=dcf30361`) | **1664** | `sha256:1bab32c0…` | **`.md`** (pre-2.8.5 naming) |
 
-**This is not a code bug — it's a build-pipeline distinction.** Production AABs go through Docker / CI's Build-and-Deploy workflow, which regenerates `startup_python_hashes.json` to match the actual bundle and registers it. The locally-Gradle-built AAB built on 2026-05-12 against `554d1a292` (main) is NOT a Play-Store-uploadable artifact — production builds must go via CI.
+The registry's stored manifest for 2.8.9 references files that don't exist at `source_commit=554d1a292` — the 28 `CIRIS_COMPREHENSIVE_GUIDE_*.md` files were renamed to `.txt` in 2.8.5 (`stage_runtime.py` explicitly excludes `.md` from staging post-2.8.5: "Devnotes (post-2.8.5 — load-bearing markdown migrated to .txt)"). The 28 localized `*.json` hashes also disagree at the same commit. Net: 133 files in the registry don't match anything `stage_runtime.py` produces at this source commit.
 
-**Documenting; not changing the build pipeline in this release.** Future improvement: surface a build-time warning when local Gradle builds skip the regen step, or expose a `./gradlew :androidApp:regenStartupHashes` task that runs the same logic the Docker step uses.
+The registry has stale-manifest data registered against a fresh build_id. Until the 2.8.9 manifest is re-registered with what `stage_runtime.py` actually produces, **no agent — mobile, desktop, server, anywhere — can reach L4 against the live registry for this version**.
+
+Reproduce locally:
+```bash
+python3 -m tools.dev.stage_runtime --check
+# Files: 1,531  Hash: sha256:536300fe...
+
+curl -s "https://api.registry.ciris-services-1.ai/v1/builds/2.8.9?project=ciris-agent" | \
+  jq -r '"Files: \(.file_manifest_count)  Hash: \(.file_manifest_hash)"'
+# Files: 1664  Hash: sha256:1bab32c0...
+```
+
+Filed upstream on the CI Build-and-Deploy + CIRISRegistry side. No in-repo fix.
+
+**Finding 5 — `startup_python_hashes.json` Algorithm-B path is legacy; mobile can move to the same Algorithm A as desktop**
+
+Confirmed legacy via three pinned references:
+- `ciris_adapters/ciris_verify/ffi_bindings/types.py:565-567` — "Replaces CIRISAgent's legacy `startup_python_hashes.json` cache flow" (new `verify_tree()` runtime walker, CIRISVerify v1.13.0+).
+- `Dockerfile:72-76` — "startup_python_hashes.json is no longer baked. Desktop / server now call ciris_verify.verify_tree() (Algorithm A) which walks /app directly against the registered manifest — the JSON middleman was the bridge while verify_tree() didn't exist." The file is `.gitignore`d (since v2.6.3 cleanup).
+- `.github/workflows/build.yml` — "Regenerate startup_python_hashes.json" bridge step was retired in 2.8.6 (CIRISAgent#740).
+
+Who still touches the file (all mobile-only):
+- `mobile_main.py` writes one at boot to `ciris_home/startup_python_hashes.json`.
+- `verifier_runner.py` + `hashes.py` read that boot-written file to feed Algorithm B's `python_hashes` parameter to `run_attestation_sync`. Caps mobile at L3.
+
+**Why mobile is still capped at L3:** historical reasons from when Chaquopy embedded Python more opaquely. The Rust FFI tree walker now hashes Chaquopy-extracted file paths directly (confirmed in logcat — it walks `/data/data/<pkg>/files/chaquopy/AssetFinder/app/...`). So there's no platform blocker for moving mobile to Algorithm A; just the code-path cleanup in `mobile_main.py` / `verifier_runner.py`. Tracked for 2.9.
+
+No in-repo file deletion needed — the legacy file was un-tracked back in v2.6.3 and is `.gitignore`d; it only appears on disk as a developer artifact when someone runs the agent locally.
 
 ### Version bump
 

@@ -28,7 +28,7 @@ Logging:
 
 import logging as _logging
 
-from .client import CIRISVerify, MockCIRISVerify
+from .client import CIRISVerify, MockCIRISVerify, verify_tree, DEFAULT_REGISTRY_URL
 from .types import (
     LicenseStatus,
     LicenseTier,
@@ -50,6 +50,10 @@ from .types import (
     StorageDescriptor,
     StorageKind,
     KeyringScope,
+    TreeVerifyRequest,
+    TreeVerifyResult,
+    FailedFile,
+    FailedFileKind,
 )
 from .exceptions import (
     CIRISVerifyError,
@@ -114,10 +118,16 @@ def get_library_version() -> str:
     return __version__
 
 
-__version__ = "1.12.1"
+__version__ = "2.0.2"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",
+    "verify_tree",
+    "DEFAULT_REGISTRY_URL",
+    "TreeVerifyRequest",
+    "TreeVerifyResult",
+    "FailedFile",
+    "FailedFileKind",
     "get_library_version",
     "setup_logging",
     "LicenseStatus",

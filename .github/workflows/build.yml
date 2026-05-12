@@ -1017,6 +1017,33 @@ jobs:
           # Wipe key files immediately after register.
           shred -uz "$ED_KEY_PATH" "$MLDSA_KEY_PATH" 2>/dev/null || rm -f "$ED_KEY_PATH" "$MLDSA_KEY_PATH"
 
+      - name: Verify per-target builds rows registered (CIRISVerify v2.0.3+ contract)
+        # Asserts the CanonicalBuild v2 + per-target row dispatcher landed
+        # correctly. Pre-v2.0.3, both register calls shared one builds row
+        # and whichever ran second silently overwrote the first in version-
+        # lookup — every non-iOS agent failed L4 against the live registry.
+        # v2.0.3+: each target gets its own row; default GET returns the
+        # python-source-tree (canonical Python-file manifest) by default;
+        # ?target= filter returns the requested target. See CIRISVerify#8,
+        # CIRISRegistry#11, CIRISAgent#749.
+        run: |
+          set -eux
+          # Strip channel suffix; mirrors the sign step's normalization
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py | sed -E 's/-(stable|rc[0-9]*|beta[0-9]*|alpha[0-9]*)$//')
+          BASE="https://api.registry.ciris-services-1.ai/v1/builds/$VERSION?project=ciris-agent"
+
+          # Default (no target) → python-source-tree row
+          PY_TARGET=$(curl -fsS "$BASE" | jq -r '.target // "MISSING"')
+          test "$PY_TARGET" = "python-source-tree" \
+            || { echo "::error::Expected target=python-source-tree on default GET, got: $PY_TARGET"; exit 1; }
+
+          # Explicit target=ios-mobile-bundle → iOS row
+          IOS_TARGET=$(curl -fsS "$BASE&target=ios-mobile-bundle" | jq -r '.target // "MISSING"')
+          test "$IOS_TARGET" = "ios-mobile-bundle" \
+            || { echo "::error::Expected target=ios-mobile-bundle on ?target= GET, got: $IOS_TARGET"; exit 1; }
+
+          echo "✓ Both target rows registered correctly (python-source-tree + ios-mobile-bundle)"
+
   deploy:
     name: Notify CIRISManager of Update
     needs: [build, register-build]

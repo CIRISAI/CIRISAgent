@@ -197,17 +197,11 @@ done
 echo "Overlaying ciris_ios from source (iOS-specific, includes kmp_main.py)..."
 rsync -a --exclude='__pycache__' "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
 
-# Overlay ciris_verify Python package (FFI bindings for CIRISVerify)
-# The native library is statically linked into the app binary;
-# this package provides the Python ctypes wrapper that uses CDLL(None) on iOS
-CIRIS_VERIFY_BINDINGS="/Users/macmini/CIRISVerify/bindings/python/ciris_verify"
-if [ -d "$CIRIS_VERIFY_BINDINGS" ]; then
-    echo "Overlaying ciris_verify Python package..."
-    rsync -a --exclude='__pycache__' --exclude='*.pyc' "$CIRIS_VERIFY_BINDINGS/" "$RESOURCES_DIR/app_packages/ciris_verify/"
-    echo "  ciris_verify package added to app_packages"
-else
-    echo "WARNING: ciris_verify bindings not found at $CIRIS_VERIFY_BINDINGS"
-fi
+# ciris_verify Python package: managed by tools/update_ciris_verify.py
+# Do NOT overlay from local CIRISVerify repo — the local repo may have
+# a stale dylib that overwrites the version-matched one placed by the
+# update script. The update script handles: dylib, Python bindings, adapter.
+echo "ciris_verify: using pre-staged bindings (managed by update_ciris_verify.py)"
 
 # Remove any __pycache__ directories
 echo "Cleaning up __pycache__ directories..."

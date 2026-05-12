@@ -869,6 +869,16 @@ def update_python_bindings(version: str, tmpdir: Path, ios: bool = True) -> None
             shutil.copy2(py_file, dest_file)
             print(f"  -> Android: {py_file.name}")
 
+        # Carve-out for AGENT_MANAGED __init__.py: the FILE itself is
+        # intentionally divergent from the wheel (own re-exports for the
+        # FFI-loader patches), but the `__version__ = "..."` line MUST
+        # track the wheel's version — otherwise the agent reports a
+        # stale CIRISVerify version in TraceSummary / UI / verify_status
+        # responses, surfacing as a confused-customer signal even when
+        # the native FFI binary is correctly at the new version (caught
+        # on 2.8.9 emulator testing: native v2.0.2, Python reported v1.13.3).
+        update_python_version_string(version, ANDROID_PYTHON_DIR)
+
         # Update iOS app_packages — pure wheel content (the iOS runtime loads
         # from app_packages/ciris_verify/, not the agent's wrapper, so client.py
         # there should be the upstream wheel's flatter loader).

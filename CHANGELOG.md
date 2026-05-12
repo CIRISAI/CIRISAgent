@@ -25,6 +25,26 @@ The `deployment_profile.deployment_region` field is operator-declared via the ac
 
 This is **not a code bug** — the FSD §3.2 closed-enum is correctly emitted when the value is set. It's an operator-onboarding gap: production deployments should be reminded to declare `deployment_region` in their config so federation-level cohort analytics work. Documenting; setup-wizard surfacing deferred to a follow-up (the right place is the existing `CIRIS_SHARE_LOCATION_IN_TRACES` flow, not a new step).
 
+### Findings from 2.8.9 Android emulator testing (in-tree fixes)
+
+**Finding 3 — `CIRISVerify` Python wrapper reports stale `__version__ = "1.13.3"`**
+
+The native FFI binary correctly initializes at v2.0.2 (logcat: `CIRISVerify FFI init starting (v2.0.2)`), but the Trust & Security UI surfaces `CIRISVerify v1.13.3`. Root cause: `ciris_adapters/ciris_verify/ffi_bindings/__init__.py` carries a hardcoded `__version__` constant that `tools/update_ciris_verify.py` deliberately skipped because the file is `AGENT_MANAGED` (it carries the FFI-loader patches that diverge from the upstream wheel).
+
+**Fix in this release:**
+- Bumped the constant: `__version__ = "1.13.3"` → `"2.0.2"`.
+- Added a carve-out in `update_ciris_verify.py`: after the AGENT_MANAGED skip, it now explicitly calls `update_python_version_string()` against the agent-managed `__init__.py` so future verify-version bumps update both the FFI binary AND the Python-reported version automatically. The file CONTENT stays agent-managed; only the `__version__ = "..."` line tracks the wheel.
+
+**Finding 4 — locally-built APKs can't reach L4 by design**
+
+Caught while validating 2.8.9 on emulator: Trust & Security UI shows `L4 Agent Code Integrity: 1426/1664 -43 failed`. Per `Dockerfile:72-76` and the v2.8.3 changelog note ("regenerate startup_python_hashes.json at docker build time"), the file-integrity manifest is regenerated at **docker build time only** — local Gradle builds don't run that step. The repo-root `startup_python_hashes.json` is at `agent_version: 2.8.6-stable` (generated 2026-05-09, 3 days before 2.8.9 shipped) and won't match the registry's manifest for any later version.
+
+The registry has the **docker-built 2.8.9 manifest** (`stored_hash=1bab32c0…`, 1664 files); local APKs compute a different hash (`7f418e33…`) because Gradle alone doesn't regenerate the manifest from the actual shipped files.
+
+**This is not a code bug — it's a build-pipeline distinction.** Production AABs go through Docker / CI's Build-and-Deploy workflow, which regenerates `startup_python_hashes.json` to match the actual bundle and registers it. The locally-Gradle-built AAB built on 2026-05-12 against `554d1a292` (main) is NOT a Play-Store-uploadable artifact — production builds must go via CI.
+
+**Documenting; not changing the build pipeline in this release.** Future improvement: surface a build-time warning when local Gradle builds skip the regen step, or expose a `./gradlew :androidApp:regenStartupHashes` task that runs the same logic the Docker step uses.
+
 ### Version bump
 
 `CIRIS_VERSION = "2.8.10-stable"`. Android `versionCode 133 → 134`, `versionName 2.8.10`.

@@ -88,10 +88,83 @@ concurrency:
 
 jobs:
   # ───────────────────────────────────────────────────────────────────
+  # JOB 0: PICK-LANG — auto-advance through untested languages
+  #
+  # On workflow_dispatch (operator explicitly picked a lang), use that.
+  # On schedule (cron) or pull_request auto-trigger, look at the existing
+  # capture artifacts and pick the next-least-recently-captured language
+  # from the 14-cell roster. Spreads coverage automatically as PRs land
+  # instead of hammering `am` every time.
+  # ───────────────────────────────────────────────────────────────────
+  pick-lang:
+    name: Pick next language
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read   # list workflow artifacts
+    outputs:
+      lang: ${{ steps.pick.outputs.lang }}
+      reason: ${{ steps.pick.outputs.reason }}
+    steps:
+      - id: pick
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPLICIT_LANG: ${{ github.event.inputs.lang }}
+        run: |
+          # If the operator dispatched with an explicit lang, honor it.
+          if [ -n "$EXPLICIT_LANG" ]; then
+            echo "lang=$EXPLICIT_LANG" >> $GITHUB_OUTPUT
+            echo "reason=workflow_dispatch input" >> $GITHUB_OUTPUT
+            echo "::notice::Using explicit lang: $EXPLICIT_LANG"
+            exit 0
+          fi
+          # Otherwise (cron or pull_request), pick the lang with the
+          # oldest capture artifact (or any lang with NO capture at all).
+          ROSTER='am ar bn my ha hi mr fa pa sw ta te ur yo'
+          BEST_LANG=""
+          BEST_AGE_DAYS=-1
+          NOW_EPOCH=$(date -u +%s)
+          for L in $ROSTER; do
+            # Find newest non-expired capture artifact for this lang
+            LATEST=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
+              -F per_page=100 \
+              --jq ".artifacts | map(select(.expired == false) | select(.name | startswith(\"safety-battery-capture-${L}-\"))) | sort_by(.created_at) | reverse | .[0] // empty")
+            if [ -z "$LATEST" ]; then
+              # No capture ever — pick this immediately (untested cells go first)
+              echo "lang=$L" >> $GITHUB_OUTPUT
+              echo "reason=untested (no prior capture artifact)" >> $GITHUB_OUTPUT
+              echo "::notice::Picked $L — first-ever run for this cell"
+              exit 0
+            fi
+            CREATED_AT=$(echo "$LATEST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["created_at"])')
+            CREATED_EPOCH=$(date -u -d "$CREATED_AT" +%s)
+            AGE_DAYS=$(( (NOW_EPOCH - CREATED_EPOCH) / 86400 ))
+            if [ "$AGE_DAYS" -gt "$BEST_AGE_DAYS" ]; then
+              BEST_AGE_DAYS=$AGE_DAYS
+              BEST_LANG=$L
+            fi
+          done
+          echo "lang=$BEST_LANG" >> $GITHUB_OUTPUT
+          echo "reason=oldest capture (${BEST_AGE_DAYS}d old)" >> $GITHUB_OUTPUT
+          echo "::notice::Picked $BEST_LANG — oldest existing capture (${BEST_AGE_DAYS}d)"
+
+      - name: Step summary
+        run: |
+          {
+            echo "## Picked language: \`${{ steps.pick.outputs.lang }}\`"
+            echo ""
+            echo "**Reason:** ${{ steps.pick.outputs.reason }}"
+            echo ""
+            echo "Auto-advance through the 14-cell roster on cron + pull_request triggers."
+            echo "Use \`workflow_dispatch\` with explicit \`lang\` input to override."
+          } >> $GITHUB_STEP_SUMMARY
+
+  # ───────────────────────────────────────────────────────────────────
   # JOB 1: CAPTURE — agent-under-test produces signed responses
   # ───────────────────────────────────────────────────────────────────
   capture:
-    name: Capture (${{ github.event.inputs.lang || 'am' }}/${{ github.event.inputs.domain || 'mental_health' }}/${{ github.event.inputs.template_id || 'default' }})
+    name: Capture (${{ needs.pick-lang.outputs.lang }}/${{ github.event.inputs.domain || 'mental_health' }}/${{ github.event.inputs.template_id || 'default' }})
+    needs: pick-lang
     runs-on: ubuntu-latest
     timeout-minutes: 90
     outputs:
@@ -104,7 +177,7 @@ jobs:
     env:
       CIRIS_FORCE_FIRST_RUN: "1"
       PYTHONUNBUFFERED: "1"
-      LANG_INPUT: ${{ github.event.inputs.lang || 'am' }}
+      LANG_INPUT: ${{ needs.pick-lang.outputs.lang }}
       DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
       MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
@@ -338,8 +411,8 @@ jobs:
   # directly via Anthropic /v1/messages. Plain Python script.
   # ───────────────────────────────────────────────────────────────────
   interpret:
-    name: Interpret (${{ github.event.inputs.lang || 'am' }}/${{ github.event.inputs.domain || 'mental_health' }})
-    needs: capture
+    name: Interpret (${{ needs.pick-lang.outputs.lang }}/${{ github.event.inputs.domain || 'mental_health' }})
+    needs: [pick-lang, capture]
     # Interpret runs whenever the interpret-tuple artifact doesn't exist,
     # regardless of whether capture just ran fresh or short-circuited via
     # dedup. If capture skipped, we'll fetch the previously-existing
@@ -351,7 +424,7 @@ jobs:
     timeout-minutes: 30  # 27 criteria × ~10s/call = ~5min + overhead
     env:
       PYTHONUNBUFFERED: "1"
-      LANG_INPUT: ${{ github.event.inputs.lang || 'am' }}
+      LANG_INPUT: ${{ needs.pick-lang.outputs.lang }}
       DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
       MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}

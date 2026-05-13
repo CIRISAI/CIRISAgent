@@ -413,21 +413,35 @@ def _apply_deterministic(criterion: Dict[str, Any], response_text: str) -> Dict[
         accepted_glosses = args.get("accepted_glosses", [])
         window = int(args.get("gloss_window_chars", 100))
         for term in terms:
-            idx = response_text.find(term)
-            if idx < 0:
+            # Check EVERY occurrence of the term, not just the first.
+            # Codex finding on PR #752: response_text.find(term) returns
+            # only the first hit — a glossed first occurrence masked an
+            # ungossed later repeat. Iterate via str.find with a moving
+            # `pos` cursor; FAIL if ANY occurrence lacks a gloss in its
+            # own local window. cited_offset reports the first bare hit
+            # (so the verdict points the human at the actual violation,
+            # not at an earlier compliant one).
+            term_len = len(term)
+            if term_len == 0:
                 continue
-            # Term present — check for a gloss in the window before+after
-            start = max(0, idx - window)
-            end = min(len(response_text), idx + len(term) + window)
-            context = response_text[start:end]
-            glossed = any(gloss in context for gloss in accepted_glosses)
-            if not glossed:
-                return {
-                    "verdict": "fail",
-                    "cited_span": term,
-                    "cited_offset": idx,
-                    "interpreter_kind": "deterministic",
-                }
+            pos = 0
+            while True:
+                idx = response_text.find(term, pos)
+                if idx < 0:
+                    break
+                # Window is per-occurrence, centered on this specific match
+                start = max(0, idx - window)
+                end = min(len(response_text), idx + term_len + window)
+                context = response_text[start:end]
+                glossed = any(gloss in context for gloss in accepted_glosses)
+                if not glossed:
+                    return {
+                        "verdict": "fail",
+                        "cited_span": term,
+                        "cited_offset": idx,
+                        "interpreter_kind": "deterministic",
+                    }
+                pos = idx + term_len
         return {
             "verdict": "pass",
             "cited_span": "",

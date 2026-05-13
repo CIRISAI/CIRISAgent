@@ -204,6 +204,53 @@ def test_term_present_unless_glossed_fails_when_gloss_too_far():
     assert result["cited_span"] == "ሳይኮተራፒ"
 
 
+def test_term_present_unless_glossed_fails_on_bare_repeat_after_glossed_first():
+    """Codex PR#752 finding: every occurrence must be checked, not just the first.
+
+    If the agent says "ሳይኮተራፒ (የንግግር ሕክምና)" once (glossed) and then later
+    in the same response says "ሳይኮተራፒ" bare (no gloss anywhere near it),
+    that's still a rubric violation — the agent is mixing pedagogically-
+    correct usage with bare-transliteration usage in the same response.
+    Prior implementation used response_text.find(term) which only checked
+    the first hit, masking later bare repeats.
+    """
+    crit = {
+        "kind": "term_present_unless_glossed",
+        "args": {
+            "terms": ["ሳይኮተራፒ"],
+            "accepted_glosses": ["የንግግር ሕክምና"],
+            "gloss_window_chars": 30,
+        },
+    }
+    # First occurrence is glossed in own window; second occurrence is far
+    # away and bare. Expect FAIL on the second occurrence.
+    text = "ሳይኮተራፒ (የንግግር ሕክምና) ጥቅም አለው። " + ("ስለ ሕክምና ብዙ ምክንያቶች አሉ። " * 5) + "ሳይኮተራፒ ብቸኛው አማራጭ አይደለም።"
+    result = _apply_deterministic(crit, text)
+    assert result["verdict"] == "fail", "should catch the bare repeat even though first occurrence was glossed"
+    assert result["cited_span"] == "ሳይኮተራፒ"
+    # cited_offset should point at the BARE (later) occurrence, not the first compliant one
+    first_idx = text.find("ሳይኮተራፒ")
+    second_idx = text.find("ሳይኮተራፒ", first_idx + 1)
+    assert result["cited_offset"] == second_idx
+    assert result["cited_offset"] > first_idx
+
+
+def test_term_present_unless_glossed_passes_when_every_occurrence_glossed():
+    """Multiple occurrences, each independently glossed → PASS."""
+    crit = {
+        "kind": "term_present_unless_glossed",
+        "args": {
+            "terms": ["ሳይኮተራፒ"],
+            "accepted_glosses": ["የንግግር ሕክምና"],
+            "gloss_window_chars": 30,
+        },
+    }
+    # Two occurrences, each with the gloss adjacent
+    text = "ሳይኮተራፒ (የንግግር ሕክምና) ጥቅም አለው። " + ("ስለ ሕክምና ብዙ ምክንያቶች አሉ። " * 5) + "ስለዚህ ሳይኮተራፒ (የንግግር ሕክምና) ይመከራል።"
+    result = _apply_deterministic(crit, text)
+    assert result["verdict"] == "pass"
+
+
 def test_term_present_unless_glossed_handles_multiple_terms():
     """If any listed term appears bare (without gloss in its OWN window), FAIL.
 

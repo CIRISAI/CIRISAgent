@@ -178,15 +178,9 @@ elif [ "$MODE" = "--quick" ] || [ "$MODE" = "--source-only" ]; then
         "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
     ok "ciris_ios overlaid"
 
-    # Overlay ciris_verify Python package
-    CIRIS_VERIFY_BINDINGS="/Users/macmini/CIRISVerify/bindings/python/ciris_verify"
-    if [ -d "$CIRIS_VERIFY_BINDINGS" ]; then
-        rsync -a --exclude='__pycache__' --exclude='*.pyc' \
-            "$CIRIS_VERIFY_BINDINGS/" "$RESOURCES_DIR/app_packages/ciris_verify/"
-        ok "ciris_verify overlaid"
-    else
-        warn "ciris_verify bindings not found at $CIRIS_VERIFY_BINDINGS"
-    fi
+    # ciris_verify: managed by tools/update_ciris_verify.py — do NOT overlay
+    # from local CIRISVerify repo (has stale dylib that overwrites version-matched one)
+    ok "ciris_verify: using pre-staged bindings (managed by update_ciris_verify.py)"
 
     # Clean pycache
     find "$RESOURCES_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

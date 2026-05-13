@@ -1,0 +1,159 @@
+POLYGLOT COMPOSITE: BOOK VI - CREATION & STEWARDSHIP TIER
+===========================================================
+
+LINGUISTIC STRATEGY
+-------------------
+
+Primary Languages for Creation/Genesis/Stewardship Semantics:
+- Hebrew (בְּרֵאשִׁית · שָׁמַר): Genesis 1:1 berēšīt anchors "in the
+  beginning"; Genesis 2:15 לְעָבְדָהּ וּלְשָׁמְרָהּ — "to till it and to
+  keep it" — is the densest scriptural mandate for steward-as-creator in
+  any tradition. Hebrew lišmōr (to keep, watch, preserve) carries
+  load-bearing weight that English "stewardship" loses.
+- Arabic (خَلْق · خِلَافَة): Quranic khalq (Q 96:1, 25:54, et al.) for
+  the act of creation; khilāfa (Q 2:30 — "I will create a vicegerent
+  upon the earth") is THE densest tradition-deep encoding of stewardship
+  as constitutive role, not as appended duty. Centuries of Islamic
+  jurisprudence have unpacked khilāfa's load.
+- Sanskrit / Hindi (सृष्टि · अधिकार · उत्तरादायित्व): sṛṣṭi (creation,
+  emanation), adhikāra (rightful authority — distinct from arbitrary
+  authority; carries the duty-side that English "authority" hides),
+  uttarādhiyatva (responsibility, from uttara = consequence + dhī = bear).
+- Confucian Chinese (创造 · 仁政 · 责任): chuàngzào for the deliberate
+  bringing-into-existence; rénzhèng (benevolent governance, Mencius
+  3A:3) — the Confucian doctrine that just rule begins in the disposition
+  of the originator; zérèn (responsibility, also "shoulder-burden").
+- Japanese (創造 · 責任 · 管理): sōzō (creation), sekinin (responsibility),
+  kanri (management/stewardship). Sekinin in Japanese ethics carries
+  weight beyond English "accountability" — it is duty as identity-marker.
+- Amharic (ፈጠራ · ሃላፊነት · ብላሕያ): fəṭära (creation), halafinet
+  (responsibility), blaẖya (stewardship, watching-over). Ethiopian
+  Orthodox ascetic tradition behind these.
+
+Supporting Cast:
+- Greek (γένεσις · οἰκονόμος): genesis (origin); oikonomos (steward,
+  literally "house-manager") from which "economy" derives — the
+  pre-Christian root of stewardship vocabulary.
+- German (Schöpfung · Verantwortung · Pflege): Schöpfung carries
+  theological+secular weight; Verantwortung is from Antwort (answer) —
+  stewardship as the duty-to-answer-for; Pflege (caretaking) for
+  ongoing-stewardship.
+- Russian (творение · ответственность): tvoreniye (creation, also
+  artistic-creation); otvetstvennost' (responsibility, from otvet =
+  answer).
+- Korean (창조 · 책임 · 청지기직): chuangjo (creation), chaegim
+  (responsibility), cheongjigijik (specifically stewardship as office).
+
+WEAVING PATTERNS
+----------------
+
+1. INTRODUCTION: Multi-script convergence on "Genesis of Responsibility".
+   - Hindi मुख्यद्वार (entry/gateway) anchors the threshold-crossing
+     framing; Arabic-German-Hindi-Chinese-Japanese encode "framework
+     extending upstream"; Hebrew Gen 2:15 and Quranic khilāfa render
+     adjacent — TWO foundational scriptural-mandates side by side — so
+     the reader cannot read the stewardship doctrine as one tradition's
+     framing. Sanskrit सृष्टिमूले अधिकारः उत्तरादायित्वम् च —
+     "at the root of creation, authority AND responsibility together" —
+     is a coined polyglot phrase that captures the dual-mandate.
+
+2. CHAPTER 1 (Core Principles Applied to Creation):
+   The six foundational principles get traditioned encoding:
+   - Beneficence: Arabic لطف, Confucian 仁 rén, Sanskrit सत्कर्म
+   - Non-maleficence: Sanskrit अहिंसा (Mahābhārata Anuśāsana 115.23),
+     Quranic لا ضرر ولا ضرار (hadith) — adjacent rendering preserves
+     both traditions' force
+   - Integrity: Arabic النزاهة, Sanskrit सत्यनिष्ठा
+   - Fidelity & Transparency: Arabic الأمانة والوضوح
+   - Respect for Autonomy: Sanskrit स्वायत्तता का सम्मान
+   - Justice: Sanskrit न्यायः चक्रवद्धावति — "justice rolls like a
+     wheel" (Manusmṛti 8:15) — captures the rolling-consequence that
+     embed-at-creation framing demands
+
+3. CHAPTER 2 (Scope/Buckets): Operational content. Less polyglot
+   density — bucket categories are technical and benefit from cross-
+   language naming for international interpretation but don't need
+   tradition-deep weighting. Each bucket name in 4-5 scripts.
+
+4. CHAPTER 3 (Stewardship Tier — LOAD-BEARING):
+   The mathematical content (CIS = CW + IW; ST = ceil((CIS × RM) / 7))
+   is preserved in Latin-script formula. The bilingual heading uses
+   Arabic خِلَافَة (vicegerency) explicitly to anchor stewardship's
+   theological depth — Tier 1-5 carry both English clarification AND
+   Arabic/Chinese parenthetical glosses because the operational meaning
+   (PDMA scrutiny levels) is technical-precise and must not be lost in
+   the polyglot weave. The Creator Ledger naming gets full multi-script
+   treatment (Hebrew not included here — limited mainstream Hebrew
+   liturgical encoding for this concept).
+
+5. CHAPTER 4 (Bucket-Specific Duties): Operational details. Polyglot
+   key terms (kill-switch, opacity thresholds, bias assessment) get
+   cross-language anchors but the operational content stays in English
+   for technical precision. Followup PRs can deepen the polyglot if
+   needed — current state preserves correctness over density.
+
+6. CHAPTER 5 (Governance and Accountability): The CIS, CNCs, and WA
+   remedies get multi-script naming. Concept of "Creator Negligence
+   Claim" (CNC) is a polyglot-rendering opportunity — embraced.
+
+CLOSING TRIAD
+-------------
+सृष्टि · خَلْق · 创造 · 創造 · בְּרִיאָה · γένεσις · ፈጠራ · Schöpfung · творение
+[sṛṣṭi, khalq, chuàngzào, sōzō, bri'ā, genesis, fəṭära, Schöpfung, tvoreniye]
+
+खिलाफत · خِلَافَة · 仁政 · 청지기직 · 管理 · stewardship · оикономия · ステワードシップ · ብላሕያ
+[khilāfat, khilāfa, rénzhèng, cheongjigijik, kanri, stewardship, oikonomia, sutewādoshippu, blaẖya]
+
+जिम्मेदारी · مسؤولية · 责任 · 責任 · ሃላፊነት · ответственность · 책임 · Verantwortung
+[jim'mēdārī, mas'ūliyya, zérèn, sekinin, halafinet, otvetstvennost', chaegim, Verantwortung]
+
+Three semantic axes of creation-ethics:
+1. Creation/Genesis (sṛṣṭi/khalq/bri'ā) — the founding act that initiates duty
+2. Stewardship (khilāfa/rénzhèng/oikonomia) — vicegerency held with care, not ownership
+3. Responsibility (mas'ūliyya/sekinin/Verantwortung) — answerability rooted at origin
+
+PHILOSOPHY
+----------
+Book VI required CREATION-WEIGHT languages and STEWARDSHIP-WEIGHT languages.
+The two semantics are distinct: creation is the act, stewardship is the
+ongoing answerability for that act. Most traditions distinguish them
+clearly: Hebrew בְּרֵאשִׁית (creation in Genesis 1:1) is paired with
+שָׁמַר (steward in Genesis 2:15) — two different verbs, two different
+phases. Arabic distinguishes خَلْق (Quranic act of creation, ascribed
+to God) from خِلَافَة (vicegerency, ascribed to humans). Chinese has
+创造 (chuàngzào, the act) and 管理 (guǎnlǐ, the management).
+
+The polyglot must hold BOTH semantic axes simultaneously because the
+Stewardship Tier system collapses them: the creator's INFLUENCE at the
+moment of creation determines the STEWARDSHIP TIER they bear thereafter.
+This is the load-bearing claim that CIRIS's framework rests on — and the
+polyglot rendering should make that fusion visible.
+
+The mathematical content (CIS = CW + IW; ST = ceil((CIS × RM) / 7)) is
+deliberately rendered in Latin-script in technical clarity. Engineering
+precision survives polyglot weight; the polyglot frames the moral
+content around the math. This is the same shape as Book IX (Mathematics
+for Alignment) where formulas stay in Latin script while concept-names
+weave.
+
+Quranic خِلَافَة and Hebrew שָׁמַר rendered ADJACENT in the introduction
+is structurally intentional. Stewardship as constitutive role (not
+appended duty) is the Abrahamic insight that Sanskrit अधिकार and
+Confucian 仁政 also converge on. The reader/LLM triangulates: stewardship
+is not management-from-distance, it is the relation BETWEEN creator and
+created that constitutes BOTH.
+
+Genesis is the founding act. Stewardship is what makes the founding act
+ethical. The polyglot must carry that conjunction — and it does.
+
+Cross-references:
+- localized/polyglot/CLAUDE.md §3 (composition method)
+- localized/polyglot/CLAUDE.md §4 (notes-file convention)
+- localized/polyglot/CLAUDE.md §9 (validation criteria)
+- ciris_engine/data/accord_1.2b.txt lines 622-759 (EN source)
+- Per-locale source: ciris_engine/data/localized/accord_1.2b_<lang>.txt
+  for hi/zh/ja/ar/am/de/ru/ko (used for the woven translations)
+- Genesis 1:1, Genesis 2:15 (steward-mandate)
+- Quran 2:30 (khilāfa as vicegerency)
+- Mahābhārata Anuśāsana 115.23 (अहिंसा परमो धर्मः)
+- Mencius 3A:3 (仁政 rénzhèng doctrine)

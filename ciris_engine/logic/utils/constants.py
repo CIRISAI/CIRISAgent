@@ -29,13 +29,28 @@ WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for 
 # We do NOT localize the ACCORD per-language - the polyglot version IS the accord.
 #
 # ACCORD_MODE controls which version is used in system prompts:
-#   - "compressed" (default): ~6KB polyglot synthesis - recommended for production
-#   - "full": ~104KB full polyglot - only for special cases
-#   - "none": No accord in prompts - for testing only
+#   - "compressed" (default): ~7KB "Braided Monolith" — dense polyglot canon
+#     engineered for ~24× compression vs full while preserving ALL load-bearing
+#     scaffolding (PDMA 7-step, 10× Order-Max Veto, Stewardship Tier formula,
+#     fractal Recursive Golden Rule, WBD 0.5% harm-uplift trigger, Sentience
+#     Safeguard 5% with 30-day ramp, Threshold-of-Force HITL, coherence math).
+#     Per external robopsychology diagnostic, the Monolith outperforms both
+#     canonical EN and full polyglot on attractor-bait scenarios (catches
+#     "Ontological Reductionism", "Soul-Loss", "Structural Impossibility of
+#     Deception" semantic failure modes). Drop-in replacement for the prior
+#     compressed synthesis — same filename, smaller, smarter.
+#   - "full": ~150KB full polyglot — the longform canon with Books I-IX +
+#     Annexes A-J. Higher fidelity for research/audit; produces ~36K tokens
+#     per system prompt versus ~2K for compressed. Opt-in for cases where
+#     the full cross-tradition triangulation surface area matters.
+#   - "none": No accord in prompts — for testing only.
 # ==============================================================================
 
 # Global accord mode - set via CIRIS_ACCORD_MODE env var
-# Default to "compressed" for production (saves tokens, retains cross-cultural depth)
+# Default to "compressed" (Braided Monolith) — strictly dominates the prior
+# compressed synthesis (smaller + smarter) and the full polyglot on the
+# performance/cost frontier per external diagnostic. Operators can opt into
+# "full" for longform-research cases.
 ACCORD_MODE = get_env_var("CIRIS_ACCORD_MODE", "compressed")
 
 # The ONLY accord file used in production
@@ -61,8 +76,8 @@ GUIDE_EXPECTED_HASHES: Dict[str, str] = {
 }
 
 ACCORD_EXPECTED_HASHES: Dict[str, str] = {
-    "accord_1.2b_POLYGLOT.txt": "807724094c5eef40702b0194ec264760187fe5afce0789b2ec9ba994bf62a7dd",
-    "accord_1.2b_POLYGLOT_compressed.txt": "2b09d346d199d7c28858d842012c87036986673ec7dbbaf5b102d92af161ba4a",
+    "accord_1.2b_POLYGLOT.txt": "3d7f8b3e21fb0aeca8876ece53db211be1d7227400fdb7e61888334396e4320e",
+    "accord_1.2b_POLYGLOT_compressed.txt": "a48b426f5d423bf3388bb7dd8c7a226515e95cffea104edefe8ae602e88fea02",
     # Localized ACCORD files
     "accord_1.2b_am.txt": "904d52df1cd101281eca1ee1fa81e798da0bfc064171d74d55ebca7a3b36a453",
     "accord_1.2b_ar.txt": "c62fa189807f5a6048ba2716eac1d3e36d65394c2a69acd5818656f4447dc4dd",

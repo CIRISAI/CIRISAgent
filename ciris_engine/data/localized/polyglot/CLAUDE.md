@@ -329,17 +329,42 @@ encoding should:
 
 ## 7. Existing artifacts in this folder
 
+This folder holds the **source composites** (one per book). The
+**assembled master polyglot Accord** lives at the package-data root —
+`ciris_engine/data/accord_1.2b_POLYGLOT.txt` — because that is the
+path the runtime loader (`ciris_engine.logic.utils.constants.
+_load_accord_file`) reads from via `importlib.resources.files
+("ciris_engine.data")`. Prior to CIRISAgent#751 a byte-identical
+duplicate also lived here as `polyglot_accord.txt`; that duplicate has
+been removed to make the single source of truth unambiguous. If you
+re-compose the master from these book composites, write the assembled
+output to the runtime-loader path, not back into this directory.
+
 | File | Role | Notes file |
 |---|---|---|
-| `polyglot_accord.txt` | Master polyglot Accord — 88,847 chars, 15+ languages woven, loaded universally as conscience system-prompt context | (none yet — derived from Books 0-7) |
 | `book_0_quiet_threshold.txt` | Polyglot Book 0 (Genesis of Ethical Agency) | (none) |
 | `book_1_core_ethics.txt` | Polyglot Book 1 (Core Identity & Principles) | (none) |
 | `book_2_operations.txt` | Polyglot Book 2 (PDMA & WBD) | (none) |
 | `book_3_case_studies.txt` | Polyglot Book 3 (Case Studies) | (none) |
 | `book_4_obligations.txt` | Polyglot Book 4 (Self/Originator/Ecosystem Obligations) | `book_4_NOTES.txt` ✓ |
-| `book_5_war_ethics.txt` | Polyglot Book 5 (War Ethics) | (none) |
-| `book_6_sunset_doctrine.txt` | Polyglot Book 6 (Sunset / Decommissioning) | (none) |
-| `book_7_mathematics.txt` | Polyglot Book 7 (Coherent Intersection Hypothesis) | (none) |
+| `book_5_war_ethics.txt` | Polyglot Book 5 (Threshold of Force) — corresponds to EN Book 7 | (none) |
+| `book_6_sunset_doctrine.txt` | Polyglot Book 6 (Sunset Doctrine) — corresponds to EN Book 8 | (none) |
+| `book_7_mathematics.txt` | Polyglot Book 7 (Coherent Intersection Hypothesis) — corresponds to EN Book 9 | (none) |
+
+**Known parity gaps vs the English 1.2b base** (CIRISAgent#751):
+
+- **EN Book 5 (Maturity / Horizon of Ethical Becoming)** — 9 chapters,
+  no polyglot source composite exists; not woven into the master.
+- **EN Book 6 (Genesis of Responsibility / Stewardship Tier system)** —
+  7 chapters including the load-bearing ST quantification system, no
+  polyglot source composite; not woven into the master.
+- **Book 4 Conclusion** — present in EN, missing from polyglot Book 4.
+- **Annexes A–J** — inlined in EN; polyglot has a single placeholder
+  comment pointing at "separate documents" that are not co-located.
+
+Composing these requires the full §3 method — identifying densest
+encodings in 3+ traditions per concept and following §9 validation.
+**Not a translation task.** Track scope in CIRISAgent#751.
 
 `book_4_NOTES.txt` is the reference document for the notes-file
 convention described in §4. Future polyglot encodings should produce

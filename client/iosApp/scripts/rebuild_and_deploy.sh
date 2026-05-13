@@ -178,9 +178,8 @@ elif [ "$MODE" = "--quick" ] || [ "$MODE" = "--source-only" ]; then
         "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
     ok "ciris_ios overlaid"
 
-    # ciris_verify Python package: managed by tools/update_ciris_verify.py
-    # Do NOT overlay from local CIRISVerify repo — it has stale dylibs.
-    # The update script places the correct version-matched dylib + bindings.
+    # ciris_verify: managed by tools/update_ciris_verify.py — do NOT overlay
+    # from local CIRISVerify repo (has stale dylib that overwrites version-matched one)
     ok "ciris_verify: using pre-staged bindings (managed by update_ciris_verify.py)"
 
     # Clean pycache

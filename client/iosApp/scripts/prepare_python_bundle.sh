@@ -197,10 +197,8 @@ done
 echo "Overlaying ciris_ios from source (iOS-specific, includes kmp_main.py)..."
 rsync -a --exclude='__pycache__' "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
 
-# ciris_verify Python package: managed by tools/update_ciris_verify.py
-# Do NOT overlay from local CIRISVerify repo — the local repo may have
-# a stale dylib that overwrites the version-matched one placed by the
-# update script. The update script handles: dylib, Python bindings, adapter.
+# ciris_verify: managed by tools/update_ciris_verify.py — do NOT overlay
+# from local CIRISVerify repo (stale dylib overwrites version-matched one)
 echo "ciris_verify: using pre-staged bindings (managed by update_ciris_verify.py)"
 
 # Remove any __pycache__ directories

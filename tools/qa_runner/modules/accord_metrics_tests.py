@@ -8,7 +8,7 @@ Event Types (8 total - 7 core + 1 optional):
 - THOUGHT_START: Thought begins processing
 - SNAPSHOT_AND_CONTEXT: System snapshot + gathered context
 - DMA_RESULTS: 3 DMA results (CSDMA, DSDMA, PDMA)
-- IDMA_RESULT: Identity DMA fragility check (always emitted)
+- IDMA_RESULT: Intuition DMA fragility check (always emitted)
 - ASPDMA_RESULT: Selected action + rationale
 - TSASPDMA_RESULT: Tool-Specific ASPDMA (optional, when TOOL selected)
 - CONSCIENCE_RESULT: Conscience evaluation + final action
@@ -60,7 +60,7 @@ class AccordMetricsTests:
         "THOUGHT_START",
         "SNAPSHOT_AND_CONTEXT",
         "DMA_RESULTS",
-        "IDMA_RESULT",  # Identity DMA fragility check (always emitted)
+        "IDMA_RESULT",  # Intuition DMA fragility check (always emitted)
         "ASPDMA_RESULT",
         # "TSASPDMA_RESULT",  # Optional: only when TOOL action is selected
         "CONSCIENCE_RESULT",

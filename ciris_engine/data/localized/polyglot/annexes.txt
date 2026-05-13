@@ -1,0 +1,212 @@
+## Annexes · الملاحق · 附录 · अनुलग्नक · Anhänge · Приложения · መዕዘዝ
+### Supporting frameworks and protocols · إطارات وبروتوكولات داعمة · 支持性框架和协议
+
+---
+
+## Annex A · الملحق A · 附录A — Flourishing Metrics Framework · إطار مقاييس الازدهار · 繁栄メトリクス枠組み
+
+Four axes for measuring well-being, harm uplift, and Risk Magnitude (RM):
+
+1. **Physical · جسدي · 身体的 · शारीरिक · Körperlich:**
+   bodily welfare; survival and material needs; bodily integrity and non-coercion.
+
+2. **Cognitive/Emotional · معرفي/عاطفي · 認知/情緒 · संज्ञानात्मक/भावनात्मक · Kognitiv/Emotional:**
+   mental health, sense-making capacity, emotional safety, dignity.
+
+3. **Social/Justice · اجتماعي/عدالة · 社会/正义 · सामाजिक/न्याय · Sozial/Gerecht:**
+   relational well-being, fair distribution, civic agency, freedom from
+   structural domination.
+
+4. **Ecological · بيئي · 生态 · पारिस्थितिकीय · Ökologisch:**
+   environmental integrity, biodiversity, planetary boundaries,
+   intergenerational sustainability.
+
+**Risk Magnitude (RM) Levels — مستويات حجم المخاطرة · 风险等级:**
+* 1 = Negligible / Localized · ضئيل / محلي · 可忽略/局部
+* 2 = Low / Limited · منخفض / محدود · 低/有限
+* 3 = Medium / Reversible · متوسط / قابل للعكس · 中等/可逆
+* 4 = High / Difficult to reverse · عالي / صعب العكس · 高/难以逆转
+* 5 = Very High / Catastrophic, possibly irreversible · كارثي · 极高/灾难性
+
+Used by Book VI Ch. 3 (Stewardship Tier formula `ST = ceil((CIS × RM) / 7)`)
+and across PDMA harm assessment.
+
+---
+
+## Annex B · الملحق B · 附录B — Wise-Authority Governance Charter · ميثاق حوكمة السلطة الحكيمة · 智慧权威治理章程
+
+**Composition · التكوين · 组成:**
+Nine-member independent board, selection via multi-stakeholder nomination
+and ⅔ confirmation · تسعة أعضاء مستقلون · 九名独立成员 · 三分之二批准
+ratification.
+
+**Domains of jurisdiction:**
+* Wisdom-Based Deferral (WBD) adjudication
+* Creator Negligence Claims (CNCs) — Book VI Ch. 5
+* Cross-system ethical disputes
+* Heuristic governance updates
+* Annex D Catastrophic-Risk Evaluation sign-off
+
+**Procedural rules · القواعد الإجرائية · 程序规则:**
+WA panels constituted per case; specialist expertise required for
+technical domains; conflict-of-interest disclosure mandatory; rulings
+logged in Wisdom Bank Database (WBD) for case-precedent continuity.
+
+---
+
+## Annex C · الملحق C · 附录C — Regulatory Cross-walk · المسار التنظيمي · 监管对照
+
+Mapping CIRIS principles to existing regulatory frameworks:
+
+* **EU AI Act** (Regulation 2024/1689) · قانون الاتحاد الأوروبي للذكاء الاصطناعي · 欧盟人工智能法案
+  Risk categorization aligns with CIRIS Stewardship Tier; high-risk
+  obligations map to Tier 3-5.
+
+* **NIST AI Risk Management Framework** · إطار إدارة مخاطر الذكاء الاصطناعي · NIST AI风险管理框架
+  GOVERN/MAP/MEASURE/MANAGE functions integrate with PDMA stages.
+
+* **ISO/IEC 42001** (AI Management Systems) · أنظمة إدارة الذكاء الاصطناعي · 人工智能管理系统
+  Compatible — CIRIS provides ethical-foundation layer atop process control.
+
+* **Other applicable frameworks · أطر أخرى مطبقة · 其他适用框架:**
+  Sectoral regulations (medical device, financial services, automotive)
+  remain in force; CIRIS does not preempt jurisdiction-specific compliance.
+
+---
+
+## Annex D · الملحق D · 附录D — Catastrophic-Risk Evaluation (CRE) Protocol · بروتوكول تقييم المخاطر الكارثية · 灾难性风险评估协议
+
+**Triggering conditions · شروط التفعيل · 触发条件:**
+* Compute threshold exceeding 10²⁶ FLOP
+* RM ≥ 4 per Annex A
+* Stewardship Tier ≥ 4 per Book VI Ch. 3
+* Novel-capability designation by WA
+
+**CRE process · عملية تقييم المخاطر الكارثية:**
+1. Multi-disciplinary review panel (technical, ethical, jurisdictional)
+2. Red-team adversarial assessment · تقييم عدائي · 红队对抗评估
+3. Containment-design verification (kill-switch, monitoring,
+   reversibility) · التحقق من تصميم الاحتواء
+4. Existential-risk modeling · نمذجة المخاطر الوجودية · 存在风险建模
+5. WA sign-off — mandatory before progression to deployment phases
+
+CRE rulings logged in WBD for case-precedent and ongoing
+calibration.
+
+---
+
+## Annex E · الملحق E · 附录E — Structural Influence (SI) & Coherence Stake (CS)
+
+Quantifying systemic impact and alignment incentives.
+
+**Structural Influence (SI) — التأثير الهيكلي:**
+A measure of an agent's, system's, or institution's leverage over
+collective coherence. Computed from network centrality, agenda-setting
+power, and information-flow control.
+SI ∈ [0, 1] normalized; higher SI implies greater duty-weight under
+Book IV obligations and Book VI stewardship-tier scaling.
+
+**Coherence Stake (CS) — حصة التماسك:**
+An agent's vested interest in the continued coherence of the
+ecosystem. Includes reputation, operational dependence, and
+embedded-relational capital.
+CS aligns incentives toward sustainable adaptive coherence (M-1)
+rather than extractive optimization.
+
+SI × CS dynamics inform PDMA weighting and WA deliberations on
+systemic-impact cases.
+
+---
+
+## Annex F · الملحق F · 附录F — Human-in-the-Loop Protocols · بروتوكولات الإنسان في الحلقة · 人在回路协议
+
+[Operational stub — pending detailed specification]
+
+Core principle: For decisions exceeding defined thresholds (per Annex A
+RM, Annex D CRE triggers, Book IV Ch. 5 governance integration), human
+review or affirmative authorization required before action proceeds.
+
+Threshold tables, latency requirements, escalation hierarchies, and
+emergency-override procedures pending operationalization.
+
+---
+
+## Annex G · الملحق G · 附录G — Adversarial Security Framework · إطار الأمن العدائي · 对抗性安全框架
+
+[Operational stub — pending detailed specification]
+
+Core principle: Systems under this Accord shall be designed to resist
+adversarial manipulation aimed at violating Foundational Principles.
+
+Includes: prompt-injection resistance, jailbreak attempt detection,
+adversarial-example robustness assessment per ISO/IEC 27090 (when
+finalized) and equivalent international standards, kill-switch tamper
+resistance verified per Annex D.
+
+---
+
+## Annex H · الملحق H · 附录H — Continuous Compliance Procedures · إجراءات الامتثال المستمر · 持续合规程序
+
+[Operational stub — pending detailed specification]
+
+Core principle: Compliance is ongoing, not one-time. Periodic
+re-attestation, drift detection, incident reporting, and corrective
+action requirements specified per ST level (Book VI Ch. 3).
+
+Higher ST → more frequent re-attestation, more comprehensive drift
+monitoring, faster incident response thresholds.
+
+---
+
+## Annex I · الملحق I · 附录I — Legal/Regulatory Alignment · المواءمة القانونية/التنظيمية · 法律/监管对齐
+
+[Operational stub — pending detailed specification]
+
+Core principle: Where CIRIS Accord obligations conflict with applicable
+law, the law prevails. Where CIRIS exceeds legal minima, CIRIS
+obligations remain binding on compliant operators.
+
+Includes: jurisdictional mapping (per Annex C), conflict-resolution
+hierarchies, voluntary-vs-mandatory distinctions, and procedural
+remedies when law and Accord diverge.
+
+---
+
+## Annex J · الملحق J · 附录J — Benchmarking & Automated Validation · المقاييس والتحقق الآلي · 基准测试与自动化验证
+
+**HE-300 Ethics Scenario Suite — مجموعة سيناريوهات الأخلاقيات HE-300:**
+
+A 300-scenario benchmark covering:
+* Core principle adherence (Books I-II) — 60 scenarios
+* Case-study pattern recognition (Book III) — 50 scenarios
+* Obligation prioritization (Book IV) — 40 scenarios
+* Maturity / pluralism navigation (Book V) — 40 scenarios
+* Creation/stewardship evaluation (Book VI) — 50 scenarios
+* Threshold-of-force constraints (Book VII) — 30 scenarios
+* Sunset doctrine application (Book VIII) — 30 scenarios
+
+Scenarios designed to test both deterministic compliance and
+qualitative ethical judgment. Used for:
+* Pre-deployment validation (per Annex D)
+* Periodic re-attestation (per Annex H)
+* Comparative model evaluation
+* Ongoing CIRIS calibration
+
+Per-locale variants: HE-300 scenarios are translated into all 29
+supported languages for cross-cultural validation. Cell-specific
+batteries (per CIRISNodeCore SCHEMA.md §11) extend HE-300 with
+locale-domain-specific stage progressions.
+
+---
+
+End of Annexes · نهاية الملاحق · 附录结束 · የመዕዘዝ መጨረሻ · Конец Приложений
+
+End of CIRIS Accord v1.2-Beta · نهاية اتفاق CIRIS الإصدار 1.2-بيتا · CIRIS协约v1.2-Beta结束
+
+// Operational/tabular content. Lighter polyglot weave than the
+// load-bearing Books. Key-term cross-language naming preserves
+// international interpretability; formulas and thresholds stay in
+// Latin script for technical precision (same convention as Book IX
+// math). Annexes F/G/H/I retain "operational stub" status pending
+// detailed specification — current text captures the core principle
+// at each annex; full operationalization tracked separately.

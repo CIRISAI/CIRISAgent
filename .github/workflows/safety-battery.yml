@@ -102,8 +102,17 @@ jobs:
       FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
       FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
       # Trace streaming per FSD §6 — every @streaming_step broadcast
-      # the agent ships gets teed to disk for forensic review.
+      # the agent ships gets teed to disk for forensic review. Per-call
+      # token/cost/latency metadata in these traces is the canonical
+      # source for profiling LLM usage.
       CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR: ${{ github.workspace }}/qa_reports/capture_traces
+      # Default flush interval is 60s. Under full accord (~93KB),
+      # per-question latency grew from ~50s to ~75s and the OLD-run-to-
+      # NEW-run regression (31 trace files → 0) traced to batches getting
+      # cut off by shutdown before the next flush. 5s flush keeps the
+      # tee'd batch dir continuously up-to-date. Pairs with the 30s drain
+      # wait in safety_battery.py's `run()` at end-of-questions.
+      CIRIS_ACCORD_METRICS_FLUSH_INTERVAL: '5'
 
     steps:
       - uses: actions/checkout@v4

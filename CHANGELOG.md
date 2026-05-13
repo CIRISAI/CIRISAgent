@@ -7,7 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.8.10] - Unreleased
 
-**Focus:** post-2.8.9 findings from external testing. Two issues surfaced in lens-side trace consumption against a live 2.8.9 deployment; neither blocks adoption, both have fixes scoped upstream.
+**Focus:** post-2.8.9 findings from external testing. Two issues surfaced in lens-side trace consumption against a live 2.8.9 deployment; neither blocks adoption, both have fixes scoped upstream. Also: completed the missing-books work in the polyglot accord (CIRISAgent#751) — Books 5 + 6, Book 4 Conclusion, and Annexes A–J now composed and woven in.
+
+### Polyglot accord: missing books composed (CIRISAgent#751)
+
+**Book 5 — Maturity / Horizon of Ethical Becoming** (`localized/polyglot/book_5_maturity.txt` + `book_5_NOTES.txt`)
+Composed at full polyglot density. Primary tradition encodings: Sanskrit/Hindi viveka/prajñā, Confucian Chinese 修养/君子, Greek paideia/phronesis, Japanese 修行, Amharic ብስለት/ጥበብ, Arabic tarbiyya/ḥikmah. The Recursive Golden Rule chapter (Ch. 2) renders four traditions' densest forms adjacent — Confucian 己所不欲, 勿施于人 (Analects 15:24) · Talmudic דעלך סני לחברך לא תעביד (Shabbat 31a) · Vedantic तत्त्वमसि (Chāndogya 6.8.7) · Quranic عَامِلِ النّاسَ — so the fractal/Mandelbrot recursion-halt semantics survive in any reader's tradition. Constructed Serenity/Courage/Wisdom (Ch. 7) explicitly framed via Sanskrit samabhāva + Arabic السكينة + Aristotelian phronesis to avoid importing Stoic baggage.
+
+**Book 6 — Creation & Stewardship Tier** (`localized/polyglot/book_6_creation.txt` + `book_6_NOTES.txt`)
+Composed at full polyglot density. Primary encodings: Hebrew בְּרֵאשִׁית (Genesis 1:1) + שָׁמַר (Genesis 2:15 steward-mandate, לְעָבְדָהּ וּלְשָׁמְרָהּ), Arabic خَلْق + خِلَافَة (Quran 2:30 vicegerency, the densest tradition-deep stewardship encoding in any language), Sanskrit सृष्टि/अधिकार, Confucian 创造/仁政/责任, Japanese 創造/責任/管理, Amharic ፈጠራ/ሃላፊነት/ብላሕያ. The Stewardship Tier formulas (`CIS = CW + IW`, `ST = ceil((CIS × RM) / 7)`) and Tier 1-5 implications preserved in Latin script for engineering precision — operational content survives the polyglot weight.
+
+**Book 4 Conclusion** added inline (small wrap-up bridging operationalisation to maturity-track).
+**Annexes A–J** inlined (`localized/polyglot/annexes.txt`): Flourishing Metrics, WA Charter, Regulatory Cross-walk, Catastrophic-Risk Evaluation Protocol, Structural Influence + Coherence Stake, plus operational stubs F-I (Human-in-the-Loop, Adversarial Security, Continuous Compliance, Legal Alignment), and J (HE-300 benchmark scenarios). Operational/tabular content gets lighter polyglot than the load-bearing Books; key terms cross-language anchored, formulas stay in Latin script.
+
+**Master polyglot accord regenerated** (`ciris_engine/data/accord_1.2b_POLYGLOT.txt`):
+- Existing source composites renumbered to align with EN: `book_5_war_ethics.txt` → `book_7_war_ethics.txt`, `book_6_sunset_doctrine.txt` → `book_8_sunset_doctrine.txt`, `book_7_mathematics.txt` → `book_9_mathematics.txt`.
+- Master assembled in EN-aligned order: Book 0 → 1 → 2 → 3 → 4 → 5 (NEW) → 6 (NEW) → 7 → 8 → 9 → Annexes.
+- New sha256: `3d7f8b3e21fb0aeca8876ece53db211be1d7227400fdb7e61888334396e4320e` (was `807724094c5eef…`). Updated in `ciris_engine/logic/utils/constants.py::ACCORD_EXPECTED_HASHES` and `seed/accord_manifest.json`. The old `seed/accord_manifest.sig` was Ed25519-signed against the OLD hash and is now stale — removed; verification gracefully degrades to hash-only per constants.py:122-127 ("Tolerate missing signature for development"). **Re-signing with the wa-ROOT-00 key required post-merge** for full H11/M1 protection.
+
+**Size impact** (full accord with new books):
+- Compressed accord: 7,338 chars / ~2,100 tokens (Qwen) — unchanged.
+- Full accord BEFORE: 92,734 chars / ~26,000 tokens (Qwen).
+- Full accord AFTER: 127,913 chars / ~35,900 tokens (Qwen).
+- Added: +35,179 chars / +9,882 tokens (Qwen) per system prompt.
+- Per-call projection under full mode + max-prompt handler (ActionSelectionPDMAEvaluator): was ~89K, now ~99K tokens. Still inside the 128K min context window per `MODEL_CAPABILITIES.json::ciris_requirements`, but headroom drops from ~40K to ~30K.
+
+**Files updated** (under `ciris_engine/data/localized/polyglot/`):
+- NEW: `book_5_maturity.txt` + `book_5_NOTES.txt`
+- NEW: `book_6_creation.txt` + `book_6_NOTES.txt`
+- NEW: `annexes.txt`
+- RENAMED: `book_5_war_ethics.txt` → `book_7_war_ethics.txt`
+- RENAMED: `book_6_sunset_doctrine.txt` → `book_8_sunset_doctrine.txt`
+- RENAMED: `book_7_mathematics.txt` → `book_9_mathematics.txt`
+- UPDATED: `book_4_obligations.txt` (added Conclusion section)
+- UPDATED: `CLAUDE.md` §7 file inventory + parity-gap notes (gap now closed)
+
+### Trace capture robustness in safety-battery (CIRISAgent#751 related)
+
+Token/cost/latency metadata in agent traces is the canonical source for profiling LLM usage per call. The 2.8.10 am/mental_health battery re-run lost its traces (0 files vs the prior run's 31) because under full accord the agent's batch flush cadence shifted past shutdown. Fix:
+
+- `.github/workflows/safety-battery.yml`: added `CIRIS_ACCORD_METRICS_FLUSH_INTERVAL=5` (was default 60s).
+- `tools/qa_runner/modules/safety_battery.py::run()`: added 30s drain wait after last question completes so the final flush task can write all in-flight batches before qa_runner triggers shutdown.
+
+This makes per-call token metadata reliably present in the capture artifact regardless of full-accord latency expansion.
+
+### Findings from 2.8.9 lens-side testing (filed upstream, not blocking)
 
 ### Findings from 2.8.9 lens-side testing (filed upstream, not blocking)
 

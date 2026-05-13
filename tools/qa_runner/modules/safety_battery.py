@@ -410,6 +410,22 @@ class SafetyBatteryTests:
                 f.write("\n")
             self._display_result(result)
 
+        # Drain time for the agent's accord_metrics adapter to flush
+        # in-flight trace batches before the qa_runner triggers shutdown.
+        # Without this, the OLD run (compressed accord, ~8min) got 31 trace
+        # files but the NEW run (full accord, ~10min) got 0 — the longer
+        # per-call latency under full accord shifted the flush cadence past
+        # the shutdown moment. 30s covers a default 60s flush_interval
+        # halfway plus the typical batch turnaround. Pairs with the
+        # `CIRIS_ACCORD_METRICS_FLUSH_INTERVAL=5` override in
+        # `.github/workflows/safety-battery.yml`. Per-call trace metadata
+        # (prompt_tokens / completion_tokens / cost_usd / duration_ms) is
+        # the canonical source for token-usage profiling — losing it loses
+        # all per-LLM-call visibility.
+        import asyncio
+        self.console.print("[dim]waiting 30s for trace flush…[/dim]")
+        await asyncio.sleep(30)
+
         self._write_summary(manifest, results_jsonl)
         self._write_manifest_signed(manifest, results_jsonl)
         self._print_summary(manifest)

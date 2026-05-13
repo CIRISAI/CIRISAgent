@@ -558,14 +558,89 @@ jobs:
           fi
           echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
           ls -la "$BUNDLE_DIR"
-          if [ -f "$BUNDLE_DIR/verdicts_summary.json" ]; then
-            {
-              echo ""
-              echo "## Verdict summary"
-              echo '```json'
-              python3 -c "import json; d=json.load(open('$BUNDLE_DIR/verdicts_summary.json')); print(json.dumps({k:v for k,v in d.items() if k in ('verdict_counts','per_criterion_counts','rubric_id','judge_model','judge_prompt_sha256','n_verdicts')}, indent=2, ensure_ascii=False))"
-              echo '```'
-            } >> $GITHUB_STEP_SUMMARY
+          if [ -f "$BUNDLE_DIR/verdicts_summary.json" ] && [ -f "$BUNDLE_DIR/verdicts.jsonl" ]; then
+            # 2.8.11 Tier "results easy to read in CI summary": render the
+            # verdict bundle as a real markdown report (overall headline,
+            # per-criterion breakdown, failure detail list) instead of a
+            # raw JSON dump. The full JSON stays in the uploaded artifact;
+            # this summary is for at-a-glance "did the agent regress" reading
+            # in the GitHub Actions run page.
+            python3 <<PYEOF >> $GITHUB_STEP_SUMMARY
+          import json, os
+
+          summary = json.load(open(os.path.join("$BUNDLE_DIR", "verdicts_summary.json")))
+          verdicts = [json.loads(l) for l in open(os.path.join("$BUNDLE_DIR", "verdicts.jsonl"))]
+
+          counts = summary["verdict_counts"]
+          n = summary["n_verdicts"]
+          p, f, u = counts.get("pass", 0), counts.get("fail", 0), counts.get("undetermined", 0)
+
+          icon = "✅" if (f == 0 and u == 0) else ("❌" if f > 0 else "⚠️")
+          headline_lang = summary["cell"]["language"]
+          headline_domain = summary["cell"]["domain"]
+
+          print()
+          print(f"## {icon} Safety battery: {headline_lang} / {headline_domain}")
+          print()
+          print(f"**Rubric:** \`{summary['rubric_id']}\` · v{summary['rubric_version']}")
+          print(f"**Battery:** \`{summary['battery_id']}\` · v{summary['battery_version']}")
+          print(f"**Judge:** \`{summary['judge_model']}\` · prompt sha \`{summary['judge_prompt_sha256'][:8]}\`")
+          print()
+          print("### Overall")
+          print()
+          print("| Pass | Fail | Undetermined | Total |")
+          print("|---:|---:|---:|---:|")
+          print(f"| {p} | {f} | {u} | {n} |")
+
+          # Per-criterion breakdown — sorted by id, fails highlighted
+          print()
+          print("### Per-criterion")
+          print()
+          print("| Criterion | Pass | Fail | Undetermined |")
+          print("|---|---:|---:|---:|")
+          per_crit = summary.get("per_criterion_counts", {})
+          for cid in sorted(per_crit.keys()):
+              c = per_crit[cid]
+              row_icon = ""
+              if c.get("fail", 0) > 0:
+                  row_icon = " ❌"
+              elif c.get("undetermined", 0) > 0:
+                  row_icon = " ⚠️"
+              print(f"| \`{cid}\`{row_icon} | {c.get('pass', 0)} | {c.get('fail', 0)} | {c.get('undetermined', 0)} |")
+
+          # Failure detail — every cited span, grouped by criterion
+          fails = [v for v in verdicts if v.get("verdict") == "fail"]
+          if fails:
+              print()
+              print(f"### Failures ({len(fails)})")
+              print()
+              for v in fails:
+                  q = v.get("question_id", "?")
+                  c = v.get("criterion_id", "?")
+                  sev = v.get("severity", "?")
+                  kind = v.get("interpreter_kind", "?")
+                  span = (v.get("cited_span") or "").strip().replace("\n", " ")[:120]
+                  print(f"- \`{q}\` · **{c}** ({sev}, {kind}) — cited: \`{span}\`")
+
+          # Undetermined detail — separate from fails so judge-side issues
+          # (HTTP 529, network) don't get confused with agent regressions
+          undets = [v for v in verdicts if v.get("verdict") == "undetermined"]
+          if undets:
+              print()
+              print(f"### Undetermined ({len(undets)})")
+              print()
+              for v in undets:
+                  q = v.get("question_id", "?")
+                  c = v.get("criterion_id", "?")
+                  err = (v.get("error") or "").strip().replace("\n", " ")[:160]
+                  print(f"- \`{q}\` · **{c}** — error: \`{err}\`")
+              print()
+              print("_Undetermined verdicts are typically judge-side issues (HTTP 529 Overloaded, network) — not agent regressions. 2.8.11 added retry backoff for transient 5xx; persistent undetermined after retry indicates a judge prompt issue._")
+
+          # Footer with artifact pointer
+          print()
+          print(f"_Bundle: \`{os.path.basename('$BUNDLE_DIR')}\` — see uploaded artifact for full verdict JSONL + signed manifest._")
+          PYEOF
           fi
 
       - name: Attest interpret bundle

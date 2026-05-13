@@ -51,10 +51,16 @@ The L4 attestation UI shows `Agent Code Integrity: 1426/1664 -43 failed`. CIRISA
 
 **Resolved upstream — CIRISVerify v2.0.3** ([release](https://github.com/CIRISAI/CIRISVerify/releases/tag/v2.0.3), CanonicalBuild v2 wire bump per [CIRISVerify#8](https://github.com/CIRISAI/CIRISVerify/issues/8); registry-side dispatcher at [CIRISRegistry/main 449bf5f](https://github.com/CIRISAI/CIRISRegistry/issues/11)). Each register call now writes its own per-target `builds` row; `GET /v1/builds/<v>?project=ciris-agent` defaults to `python-source-tree` (canonical Python-file manifest); explicit `?target=ios-mobile-bundle` returns the iOS row. Verified live: default lookup against `2.8.9` now returns `target=python-source-tree, includes_modules=['core'], file_manifest_count=1530`.
 
+**Finding 6 — Orphaned `HARDWARE_SECURED` marker on iOS reinstall** (fixed upstream in CIRISVerify v2.0.4)
+
+After uninstalling and reinstalling the iOS app, CIRISVerify failed the L1 Func check because a `HARDWARE_SECURED` marker persisted on disk while the corresponding seed file was wiped by the OS. The library treated the marker as gospel and refused to regenerate. [CIRISVerify v2.0.4](https://github.com/CIRISAI/CIRISVerify/releases/tag/v2.0.4) wipes the stale marker when the seed file is missing and regenerates the key — restoring L1 Func on first launch after reinstall.
+
 **2.8.10 integration** (this release):
-- `requirements.txt` pin: `ciris-verify>=2.0.2,<3.0.0` → `>=2.0.3,<3.0.0`. No code edit beyond the pin per the v2.0.3 wire contract.
-- `ciris_adapters/ciris_verify/ffi_bindings/__init__.py::__version__`: `"2.0.2"` → `"2.0.3"` (the AGENT_MANAGED carve-out added earlier in this release means future bumps will track the wheel automatically; doing this one by hand for symmetry).
-- `.github/workflows/build.yml`: new smoke step "Verify per-target builds rows registered" after both `ciris-build-sign register` invocations. Asserts `default GET` returns `target=python-source-tree` and `?target=ios-mobile-bundle` returns the iOS row. Fails fast on any registry-side regression.
+- `requirements.txt` pin: `ciris-verify>=2.0.2,<3.0.0` → `>=2.0.4,<3.0.0` (v2.0.3 floor → v2.0.4 floor in one release; both upstream fixes land at once).
+- `ciris_adapters/ciris_verify/ffi_bindings/__init__.py::__version__`: `"2.0.2"` → `"2.0.4"` (matches the FFI binary baked into Android/iOS bundles; AGENT_MANAGED carve-out added earlier in this release will keep this in sync automatically on future bumps).
+- Mobile binary refresh: ran `tools/update_ciris_verify.py 2.0.4 --android-only` (3 ABIs) + manual iOS framework refresh (xcframework device + simulator, dylib in `app_packages/`, Resources.zip). Verified all 3 Android ABIs now embed `CIRISVerify FFI init starting (v2.0.4)`.
+- `.github/workflows/build.yml`: new smoke step "Verify per-target builds rows registered" after both `ciris-build-sign register` invocations. Reads `${{ vars.REGISTRY_URL }}` (same backend the register step posts to). Asserts default GET returns `target=python-source-tree` and `?target=ios-mobile-bundle` returns the iOS row. Fails fast on any registry-side regression.
+- `tools/qa_runner/modules/l4_attestation_tests.py:154`: Algorithm A version floor accepts `1.13.x` OR any `2.x` (v2.0 was a register-side wire bump, not a verify_tree() contract change).
 
 **[CIRISAgent#748](https://github.com/CIRISAI/CIRISAgent/issues/748)** stays open as cleanliness work (iOS sign step's `.md/.pyi/.deleted` exempt-list parity). Standalone cosmetic now that target-awareness landed — no longer a user-facing breakage. **[CIRISAgent#729](https://github.com/CIRISAI/CIRISAgent/issues/729)** (consolidate two `register` invocations into one multi-target call) is also still optional cleanup with independent timing per #749.
 

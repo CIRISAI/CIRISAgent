@@ -151,9 +151,13 @@ class L4AttestationModule:
             errors.append("CIRISVerify library did not report `loaded=True`.")
 
         version = verify_data.get("version") or ""
-        if not version.startswith("1.13."):
+        # Algorithm A floor was originally CIRISVerify v1.13.x (verify_tree()
+        # runtime walker). v2.0 was the CanonicalBuild v2 wire bump on the
+        # register side (CIRISVerify#8) — same verify_tree() contract on the
+        # client. So the floor on the agent side is now 1.13.x OR any 2.x.
+        if not (version.startswith("1.13.") or version.startswith("2.")):
             errors.append(
-                f"Expected ciris-verify version 1.13.x (Algorithm A floor); got '{version}'."
+                f"Expected ciris-verify version >=1.13.x (Algorithm A floor); got '{version}'."
             )
 
         # The wheel-installed agent must have walked SOMETHING — even a stub

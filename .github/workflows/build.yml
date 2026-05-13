@@ -1026,11 +1026,22 @@ jobs:
         # python-source-tree (canonical Python-file manifest) by default;
         # ?target= filter returns the requested target. See CIRISVerify#8,
         # CIRISRegistry#11, CIRISAgent#749.
+        env:
+          # Use the SAME REGISTRY_URL the register step posted to (vars-driven),
+          # so a staging cutover can't have register hit one backend while the
+          # smoke check validates a different one. Codex feedback on PR #750.
+          REGISTRY_URL: ${{ vars.REGISTRY_URL }}
         run: |
           set -eux
           # Strip channel suffix; mirrors the sign step's normalization
           VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py | sed -E 's/-(stable|rc[0-9]*|beta[0-9]*|alpha[0-9]*)$//')
-          BASE="https://api.registry.ciris-services-1.ai/v1/builds/$VERSION?project=ciris-agent"
+          # Tolerate trailing slash on the configured registry URL
+          REGISTRY="${REGISTRY_URL%/}"
+          if [ -z "$REGISTRY" ]; then
+            echo "::error::vars.REGISTRY_URL is not configured — smoke step cannot run"
+            exit 1
+          fi
+          BASE="$REGISTRY/v1/builds/$VERSION?project=ciris-agent"
 
           # Default (no target) → python-source-tree row
           PY_TARGET=$(curl -fsS "$BASE" | jq -r '.target // "MISSING"')

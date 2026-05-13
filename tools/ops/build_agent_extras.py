@@ -49,7 +49,7 @@ from typing import Dict
 # generator output to the Android-canonical shape so future drift fails CI.
 BUILD_SECRETS_HASHES: Dict[str, str] = {
     "ciris_adapters/wallet/providers/_build_secrets.py": (
-        "45bf41f0408206b39f04257d456e9d346efcb20799c89b694e6149518dd2fb6b"
+        "f3f89a7ec71190dc2f5d85672e2c8dd9ede931d73aa37a09a2084c696fb23d25"
     ),
 }
 

@@ -17,6 +17,7 @@ jobs:
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -278,6 +279,7 @@ jobs:
     name: Test Summary
     needs: [typecheck, test]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -426,6 +428,7 @@ jobs:
   # test-summary to have passed before any wheel is uploaded.
   build-wheel:
     name: Build Wheel (${{ matrix.name }})
+    timeout-minutes: 25
     permissions:
       contents: read
     strategy:
@@ -530,6 +533,7 @@ jobs:
     # Runs in parallel with tests; produces a CI artifact for human download.
     # No downstream job depends on it, so test-summary is not a prerequisite.
     runs-on: windows-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -655,6 +659,7 @@ jobs:
     name: Build Wheel (Headless)
     # Runs in parallel with tests; gated downstream by `publish-wheels`.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -693,6 +698,7 @@ jobs:
     needs: [test-summary, build-wheel, build-wheel-headless]
     if: success()
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -766,6 +772,7 @@ jobs:
     # (which needs both this job and `publish-wheels`, and `publish-wheels`
     # carries the test-summary gate).
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
@@ -861,6 +868,7 @@ jobs:
     name: Register Build with CIRISRegistry
     needs: [build, publish-wheels]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
     permissions:
       contents: read
@@ -1140,6 +1148,7 @@ jobs:
     name: Notify CIRISManager of Update
     needs: [build, register-build]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
     environment: production
     permissions:
@@ -1240,6 +1249,7 @@ jobs:
     name: Publish Release (Android APK + Windows Installer)
     needs: [build, register-build, build-windows-installer]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
     permissions:
       contents: write  # Required for creating releases and tags

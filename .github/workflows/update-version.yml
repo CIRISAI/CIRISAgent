@@ -21,6 +21,7 @@ jobs:
   update-version:
     name: Update BUILD_INFO.txt
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.repository == 'CIRISai/CIRISAgent'
 
     steps:

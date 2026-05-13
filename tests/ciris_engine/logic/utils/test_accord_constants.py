@@ -30,20 +30,22 @@ class TestAccordMode:
         from ciris_engine.logic.config.env_utils import get_env_var
 
         # Test that get_env_var returns correct default
-        result = get_env_var("CIRIS_ACCORD_MODE", "compressed")
+        result = get_env_var("CIRIS_ACCORD_MODE", "full")
         assert result is not None
 
     def test_accord_mode_documented_default(self):
-        """Default ACCORD_MODE should be 'compressed' per documentation."""
+        """Default ACCORD_MODE should be 'full' per CIRISAgent#751.
+
+        Polyglot encoding's epistemic property requires the full surface area;
+        the compressed synthesis drops most of the convergence across traditions
+        and is appropriate only as an opt-in for constrained-context deployments.
+        """
         # This tests the code's documented default, not runtime value
         # (runtime may be overridden by env var)
-        from ciris_engine.logic.config.env_utils import get_env_var
-
-        # Simulate what the default would be without env var
         if "CIRIS_ACCORD_MODE" not in os.environ:
             from ciris_engine.logic.utils.constants import ACCORD_MODE
 
-            assert ACCORD_MODE == "compressed"
+            assert ACCORD_MODE == "full"
         else:
             # Env var is set, just verify it's valid
             pass

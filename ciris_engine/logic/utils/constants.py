@@ -29,14 +29,19 @@ WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for 
 # We do NOT localize the ACCORD per-language - the polyglot version IS the accord.
 #
 # ACCORD_MODE controls which version is used in system prompts:
-#   - "compressed" (default): ~6KB polyglot synthesis - recommended for production
-#   - "full": ~104KB full polyglot - only for special cases
-#   - "none": No accord in prompts - for testing only
+#   - "full" (default): ~104KB full polyglot — the load-bearing canon. Polyglot
+#     encoding's epistemic property only delivers when the convergence across
+#     traditions is actually present in the prompt; the compressed synthesis
+#     drops most of that surface area. Defaulting to full per CIRISAgent#751.
+#   - "compressed": ~6KB polyglot synthesis — opt-in for constrained-context
+#     deployments where full polyglot would exceed prompt budget.
+#   - "none": No accord in prompts — for testing only.
 # ==============================================================================
 
 # Global accord mode - set via CIRIS_ACCORD_MODE env var
-# Default to "compressed" for production (saves tokens, retains cross-cultural depth)
-ACCORD_MODE = get_env_var("CIRIS_ACCORD_MODE", "compressed")
+# Default to "full" per CIRISAgent#751: polyglot encoding's load-bearing
+# property requires the full surface area, not the compressed synthesis.
+ACCORD_MODE = get_env_var("CIRIS_ACCORD_MODE", "full")
 
 # The ONLY accord file used in production
 ACCORD_FILENAME = "accord_1.2b_POLYGLOT.txt"

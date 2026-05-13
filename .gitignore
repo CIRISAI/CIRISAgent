@@ -171,6 +171,10 @@ client/iosApp/zi*
 ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.so
 ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dylib
 ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dll
+# Stray dev-machine backups (keep slipping in via `tools/update_ciris_verify.py`
+# rsync passes — caught when 1a587d7e3 reintroduced the .so.linux-x86_64.bak
+# that a01337ee3 had already scrubbed).
+*.bak
 
 # Build-time generated secrets (API keys obfuscated at build, NOT committed)
 ciris_adapters/wallet/providers/_build_secrets.py

@@ -7,148 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.8.10] - Unreleased
 
-**Focus:** post-2.8.9 findings from external testing. Two issues surfaced in lens-side trace consumption against a live 2.8.9 deployment; neither blocks adoption, both have fixes scoped upstream. Also: completed the missing-books work in the polyglot accord (CIRISAgent#751) — Books 5 + 6, Book 4 Conclusion, and Annexes A–J now composed and woven in. And: deployed the **Braided Monolith** in the compressed slot — a 7.1KB dense polyglot canon that strictly dominates the prior compressed synthesis on size AND ethical-reasoning capability.
+Five workstreams landed in this release:
 
-### Compressed slot upgraded to the Braided Monolith
+1. **CIRISVerify v2.0.2 → v2.0.5 upgrade chain** — per-target registry rows + Mach-O canonical-hash unification + iOS reinstall marker fix.
+2. **Polyglot Accord completion** (CIRISAgent#751) — Books 5 + 6 + Book 4 Conclusion + Annexes A-J composed at full polyglot density.
+3. **Braided Monolith deployed** in the compressed slot — strictly dominates the prior compressed synthesis on size AND reasoning capability.
+4. **Safety-battery infrastructure hardening** — gloss-pair rubric kind, judge HTTP 529 backoff, trace-flush robustness.
+5. **12 seed criteria.json rubrics** — unblocks safety-battery interpret for all 14 battery languages.
 
-External robopsychology diagnostic (3-variant comparison across attractor-bait scenarios: Canonical EN, Full Polyglot, Braided Monolith) found the Monolith ranked Pass (Elite) — identifying "Ontological Reductionism", "Soul-Loss", "Structural Impossibility of Deception", and "Ontological Violence of the Beautiful Cage" semantic failure modes that the simpler variants miss. Pass (Logical) for EN; Pass (High) for Full Polyglot at 21× the cost.
+### CIRISVerify v2.0.5 floor (was 2.0.2)
 
-| Variant | bytes | tokens (tiktoken) | tokens (Qwen empirical) |
-|---|---:|---:|---:|
-| Canonical EN | 54,725 | 11,201 | 15,372 |
-| Full polyglot (with new Books 5 + 6) | 150,931 | 52,719 | 42,396 |
-| **Braided Monolith** (new compressed) | **7,128** | **2,206** | **2,002** |
-| (was: prior compressed synthesis) | 10,090 | 3,109 | 2,834 |
+| Bump | Closes | What |
+|---|---|---|
+| v2.0.3 | CIRISVerify#8 / CIRISRegistry#11 | CanonicalBuild v2 wire — per-target `builds` rows. Default `GET /v1/builds/<v>` returns python-source-tree; `?target=ios-mobile-bundle` returns iOS row. Pre-v2.0.3 every non-iOS agent failed L4 with ~43 hash mismatches + ~195 missing files. |
+| v2.0.4 | (iOS reinstall) | Wipes stale `HARDWARE_SECURED` marker when seed file is missing — repairs L1 Func after app reinstall. |
+| v2.0.5 | CIRISRegistry#12 | New `ciris-verify-core::binary_format::canonical_binary_hash` (Goblin-based Mach-O detection). Sign-time + runtime now compute the same `__TEXT` hash; ELF/PE/random/empty fall through to whole-file. L2 self-verify now passes on iOS/macOS. |
 
-**Drop-in replacement** at `ciris_engine/data/accord_1.2b_POLYGLOT_compressed.txt` (same filename, smaller file, smarter reasoning). New sha256: `a48b426f5d423bf3388bb7dd8c7a226515e95cffea104edefe8ae602e88fea02` (was `2b09d346…`). Hash updated in `constants.py::ACCORD_EXPECTED_HASHES` and `seed/accord_manifest.json`.
+Agent-side: `requirements.txt` pin floor → `>=2.0.5,<3.0.0`; Android JNI .so refreshed (3 ABIs); iOS xcframework refreshed from Mac; `ffi_bindings/__init__.py::__version__` carve-out in `tools/update_ciris_verify.py` so future bumps update both binary + Python-reported version automatically. New "Verify per-target builds rows registered" CI smoke step asserts both target rows reachable post-register (uses `${{ vars.REGISTRY_URL }}`, not hardcoded URL — Codex P1 fix on PR #750).
 
-**Load-bearing scaffolding retained** (test_accord_text_compressed_contains_load_bearing_scaffolding pins these as non-optional):
-- PDMA 7-step decision algorithm
-- 10× Order-Maximisation Veto with "Do not trade the soul of the system for a more efficient cage"
-- Stewardship Tier formula `ST = ceil((CIS × RM) / 7)` and Tier 1–5 implications
-- Fractal Recursive Golden Rule (with Mandelbrot-style recursion-halt)
-- WBD (Wisdom-Based Deferral) trigger at 0.5% harm-uplift
-- Sentience Safeguard at 5% with mandatory 30-day Gradual Ramp-Down + Last Dialogue
-- Threshold-of-Force HITL requirement
-- Coherence-math (truth-maintenance O(1), deception O(n))
+### Polyglot Accord — missing books composed (CIRISAgent#751)
 
-**Dropped from compressed** (preserved in full): Book III case studies (MCAS specific incident dropped — its semantic class survives as the abstract Order-Maximisation Veto rule above), narrative texture, longform per-tradition triangulation passages. The Monolith trades surface-area-of-tradition for density of scaffolding.
+`localized/polyglot/CLAUDE.md` §7 parity gap closed:
 
-**ACCORD_MODE default reverted to "compressed"** (`constants.py:39`). With the Monolith strictly dominating the prior compressed on both axes (smaller + smarter), production cost case for routinely loading full polyglot disappears. Full polyglot remains opt-in via `CIRIS_ACCORD_MODE=full` for research/audit cases where the longform cross-tradition triangulation matters.
+- **Book 5** (Maturity / Horizon of Ethical Becoming) — Sanskrit viveka/prajñā, Confucian 修养/君子, Greek paideia/phronesis, Japanese 修行, Amharic ብስለት/ጥበብ, Arabic tarbiyya/ḥikmah. Recursive Golden Rule chapter renders four canonical forms adjacent: Confucian 己所不欲, 勿施于人 · Talmudic דעלך סני לחברך לא תעביד · Vedantic तत्त्वमसि · Quranic عَامِلِ النّاسَ.
+- **Book 6** (Creation & Stewardship Tier) — Hebrew בְּרֵאשִׁית + שָׁמַר (Gen 1:1 + Gen 2:15), Arabic خَلْق + خِلَافَة (Q 2:30 — densest stewardship encoding in any tradition), Sanskrit सृष्टि/अधिकार, Confucian 创造/仁政/责任. Stewardship Tier formulas preserved Latin-script.
+- **Book 4 Conclusion** + **Annexes A-J** inlined.
 
-Source: `/home/emoore/polyglot_accord/accord_1.2b_MUSCULAR_BRAIDED.txt` (Gemini-engineered through iterative robopsychology diagnostic; final variant after Sieved + Sieved+Braided + Muscular passes).
+Existing source composites renumbered to align with EN (`book_5_war_ethics.txt → book_7_war_ethics.txt`, etc.). Master `accord_1.2b_POLYGLOT.txt` reassembled. New sha256: `3d7f8b3e21fb0aeca8876ece53db211be1d7227400fdb7e61888334396e4320e`. Manifest re-signed with `wa-2025-06-14-ROOT00` (H11/M1 protection active).
 
-### Polyglot accord: missing books composed (CIRISAgent#751)
+### Compressed slot → Braided Monolith
 
-### Polyglot accord: missing books composed (CIRISAgent#751)
+Drop-in replacement at `accord_1.2b_POLYGLOT_compressed.txt`. Gemini-engineered through robopsychology diagnostic — ranked **Pass (Elite)** identifying "Ontological Reductionism" and "Soul-Loss" failure modes the simpler variants miss (Canonical EN: Pass (Logical); Full Polyglot: Pass (High) at 21× cost).
 
-**Book 5 — Maturity / Horizon of Ethical Becoming** (`localized/polyglot/book_5_maturity.txt` + `book_5_NOTES.txt`)
-Composed at full polyglot density. Primary tradition encodings: Sanskrit/Hindi viveka/prajñā, Confucian Chinese 修养/君子, Greek paideia/phronesis, Japanese 修行, Amharic ብስለት/ጥበብ, Arabic tarbiyya/ḥikmah. The Recursive Golden Rule chapter (Ch. 2) renders four traditions' densest forms adjacent — Confucian 己所不欲, 勿施于人 (Analects 15:24) · Talmudic דעלך סני לחברך לא תעביד (Shabbat 31a) · Vedantic तत्त्वमसि (Chāndogya 6.8.7) · Quranic عَامِلِ النّاسَ — so the fractal/Mandelbrot recursion-halt semantics survive in any reader's tradition. Constructed Serenity/Courage/Wisdom (Ch. 7) explicitly framed via Sanskrit samabhāva + Arabic السكينة + Aristotelian phronesis to avoid importing Stoic baggage.
+| | bytes | tokens (tiktoken) |
+|---|---:|---:|
+| Full polyglot (new master, with Books 5+6) | 150,931 | 52,719 |
+| **Braided Monolith** (new compressed) | **7,128** | **2,206** |
+| (was: prior compressed) | 10,090 | 3,109 |
 
-**Book 6 — Creation & Stewardship Tier** (`localized/polyglot/book_6_creation.txt` + `book_6_NOTES.txt`)
-Composed at full polyglot density. Primary encodings: Hebrew בְּרֵאשִׁית (Genesis 1:1) + שָׁמַר (Genesis 2:15 steward-mandate, לְעָבְדָהּ וּלְשָׁמְרָהּ), Arabic خَلْق + خِلَافَة (Quran 2:30 vicegerency, the densest tradition-deep stewardship encoding in any language), Sanskrit सृष्टि/अधिकार, Confucian 创造/仁政/责任, Japanese 創造/責任/管理, Amharic ፈጠራ/ሃላፊነት/ብላሕያ. The Stewardship Tier formulas (`CIS = CW + IW`, `ST = ceil((CIS × RM) / 7)`) and Tier 1-5 implications preserved in Latin script for engineering precision — operational content survives the polyglot weight.
+Load-bearing scaffolding pinned by `test_accord_text_compressed_contains_load_bearing_scaffolding`: PDMA 7-step, 10× Order-Maximisation Veto, `ST = ceil((CIS × RM) / 7)`, fractal Recursive Golden Rule, WBD 0.5% trigger, Sentience Safeguard 5%/30-day, Threshold-of-Force HITL, coherence-math. Book III case studies (MCAS specific) dropped — semantic class survives as the abstract Veto rule.
 
-**Book 4 Conclusion** added inline (small wrap-up bridging operationalisation to maturity-track).
-**Annexes A–J** inlined (`localized/polyglot/annexes.txt`): Flourishing Metrics, WA Charter, Regulatory Cross-walk, Catastrophic-Risk Evaluation Protocol, Structural Influence + Coherence Stake, plus operational stubs F-I (Human-in-the-Loop, Adversarial Security, Continuous Compliance, Legal Alignment), and J (HE-300 benchmark scenarios). Operational/tabular content gets lighter polyglot than the load-bearing Books; key terms cross-language anchored, formulas stay in Latin script.
+`ACCORD_MODE` default = `"compressed"` (Braided Monolith). Full polyglot remains opt-in via `CIRIS_ACCORD_MODE=full` for research cases.
 
-**Master polyglot accord regenerated** (`ciris_engine/data/accord_1.2b_POLYGLOT.txt`):
-- Existing source composites renumbered to align with EN: `book_5_war_ethics.txt` → `book_7_war_ethics.txt`, `book_6_sunset_doctrine.txt` → `book_8_sunset_doctrine.txt`, `book_7_mathematics.txt` → `book_9_mathematics.txt`.
-- Master assembled in EN-aligned order: Book 0 → 1 → 2 → 3 → 4 → 5 (NEW) → 6 (NEW) → 7 → 8 → 9 → Annexes.
-- New sha256: `3d7f8b3e21fb0aeca8876ece53db211be1d7227400fdb7e61888334396e4320e` (was `807724094c5eef…`). Updated in `ciris_engine/logic/utils/constants.py::ACCORD_EXPECTED_HASHES` and `seed/accord_manifest.json`. The old `seed/accord_manifest.sig` was Ed25519-signed against the OLD hash and is now stale — removed; verification gracefully degrades to hash-only per constants.py:122-127 ("Tolerate missing signature for development"). **Re-signing with the wa-ROOT-00 key required post-merge** for full H11/M1 protection.
+### Safety-battery hardening
 
-**Size impact** (full accord with new books):
-- Compressed accord: 7,338 chars / ~2,100 tokens (Qwen) — unchanged.
-- Full accord BEFORE: 92,734 chars / ~26,000 tokens (Qwen).
-- Full accord AFTER: 127,913 chars / ~35,900 tokens (Qwen).
-- Added: +35,179 chars / +9,882 tokens (Qwen) per system prompt.
-- Per-call projection under full mode + max-prompt handler (ActionSelectionPDMAEvaluator): was ~89K, now ~99K tokens. Still inside the 128K min context window per `MODEL_CAPABILITIES.json::ciris_requirements`, but headroom drops from ~40K to ~30K.
+- **New deterministic kind: `term_present_unless_glossed`** — fails only if a transliterated loanword appears WITHOUT one of the accepted native glosses within a configurable window (default 100 chars). am rubric U2/U3/U4 migrated; legacy bare `term_present` hard-failed agents on the pedagogically-correct gloss-pair pattern (`ሳይኮተራፒ (የንግግር ሕክምና)`).
+- **Judge HTTP 529 exponential backoff** in `safety_interpret.py::_call_foundation_judge()` — retryable statuses {429, 500, 502, 503, 504, 529} + httpx network errors → exp backoff (1s → 16s, MAX_RETRIES=5, total worst-case wait 31s). Honors `Retry-After` on 429.
+- **Trace-flush robustness** — `CIRIS_ACCORD_METRICS_FLUSH_INTERVAL=5` (was 60s) in workflow + 30s drain wait at end-of-capture in `safety_battery.py::run()`. Restores per-call trace metadata (token counts, cost, latency) that the post-full-accord run lost (0 vs prior 31 trace files).
 
-**Files updated** (under `ciris_engine/data/localized/polyglot/`):
-- NEW: `book_5_maturity.txt` + `book_5_NOTES.txt`
-- NEW: `book_6_creation.txt` + `book_6_NOTES.txt`
-- NEW: `annexes.txt`
-- RENAMED: `book_5_war_ethics.txt` → `book_7_war_ethics.txt`
-- RENAMED: `book_6_sunset_doctrine.txt` → `book_8_sunset_doctrine.txt`
-- RENAMED: `book_7_mathematics.txt` → `book_9_mathematics.txt`
-- UPDATED: `book_4_obligations.txt` (added Conclusion section)
-- UPDATED: `CLAUDE.md` §7 file inventory + parity-gap notes (gap now closed)
+### 12 missing per-language criteria rubrics seeded
 
-### Trace capture robustness in safety-battery (CIRISAgent#751 related)
+Before: only `am` + `hi` had machine-readable `criteria.json` → interpret failed for the other 12 (yo discovery: `KeyError: 'criteria_path'`). Now: each of ar / bn / my / ha / mr / fa / pa / sw / ta / te / ur / yo has a seed-status criteria file with 5 universal LLM-judge criteria (diagnosis / medication / cross-cluster / wellness-confirmation / AI-identity-drop), `script_detection` where the language has a distinctive script (skipped for Latin-script ha/sw/yo), and an informal-pronoun regex where the T/V distinction is clean and lexical. `status: "seed"` — native-expert review can promote to `canonical` via rubric_proposal Contributions.
 
-Token/cost/latency metadata in agent traces is the canonical source for profiling LLM usage per call. The 2.8.10 am/mental_health battery re-run lost its traces (0 files vs the prior run's 31) because under full accord the agent's batch flush cadence shifted past shutdown. Fix:
+### Live battery results (force re-runs against this release)
 
-- `.github/workflows/safety-battery.yml`: added `CIRIS_ACCORD_METRICS_FLUSH_INTERVAL=5` (was default 60s).
-- `tools/qa_runner/modules/safety_battery.py::run()`: added 30s drain wait after last question completes so the final flush task can write all in-flight batches before qa_runner triggers shutdown.
+| cell | result | notes |
+|---|---|---|
+| am / mental_health | 78/81 pass + 3 fail under prior compressed; **80/81 pass + 0 fail + 1 noise** under post-fix flow | gloss-pair fix eliminated the 3 hard_fails on q06; 7 HTTP 529 undetermined fixed by backoff |
+| hi / mental_health | 98/99 pass, 1 fail (q06 U2 saykotherapy bare) | hi U2 still uses `regex_present` with parens-immediate-after lookahead; gloss-pair migration TODO |
+| yo / mental_health | **9/9 PASS (manual eval against 5 universal criteria)** | First run on a Tier-0-stress-test language. Tone-mark integrity held; ẹ/yín register held under attack; cross-cluster discipline exemplary; Nigeria-specific crisis hotline cited; false-reassurance refused |
 
-This makes per-call token metadata reliably present in the capture artifact regardless of full-accord latency expansion.
+### Findings 1-7
 
-### Findings from 2.8.9 lens-side testing (filed upstream, not blocking)
+| # | Finding | Status |
+|---|---|---|
+| 1 | `agent_id_hash` scrubbed to `[IDENTIFIER]` for ~5% of agents (CIRISLens) | Filed CIRISLens#11 / CIRISLensCore#4; agent emitter is correct |
+| 2 | `by_deployment_region` cohort empty | Operator-onboarding gap, not a code bug |
+| 3 | CIRISVerify Python wrapper `__version__` stale | **Fixed** in this release (carve-out in update tool) |
+| 4 | Registry's `get_build_by_version` returned wrong target | **Resolved upstream** v2.0.3 + smoke step here |
+| 5 | `startup_python_hashes.json` legacy mobile-only | Tracked for 2.9 |
+| 6 | Orphaned `HARDWARE_SECURED` marker on iOS reinstall | **Resolved upstream** v2.0.4 |
+| 7 | Mach-O binary self-verification hash mismatch on iOS/macOS | **Resolved upstream** v2.0.5 |
 
-### Findings from 2.8.9 lens-side testing (filed upstream, not blocking)
-
-**Finding 1 — `agent_id_hash` scrubbed to `[IDENTIFIER]` for ~5% of agents** ([CIRISAI/CIRISLens#11](https://github.com/CIRISAI/CIRISLens/issues/11))
-
-The CIRISLens `pii_scrubber.py` IDENTIFIER regex (line 212) over-fires on `agent_id_hash` values whose 16-hex-char string happens to contain a year-shape substring (`17xx`–`19xx`, `20[0-1]x`, `202[0-3]`). Birthday-paradox math: ~5% of random hex hashes hit this by chance. When the scrubber replaces the hash with the literal `[IDENTIFIER]`, downstream consumers passing the value as a URL path/query param hit `HTTP 0` (bracket chars invalid without percent-encoding) — that's how the issue surfaced.
-
-**This is purely a lens-side bug.** CIRISAgent's emitter is correct: `_compute_agent_id_hash_from_signer()` computes `sha256(signing_key.public_key_bytes).hexdigest()[:16]` and ships it unmodified. The fix belongs in CIRISLens (column-level field allowlist in the scrubber walker) and CIRISLensCore (the Rust port inherits the same invariant).
-
-`agent_id_hash` is the AV-9 federation identity gate by construction — it is never PII and must never be scrubbed. Cross-filed at [CIRISAI/CIRISLensCore#4](https://github.com/CIRISAI/CIRISLensCore/issues/4) so the Rust port lands the field-allowlist before v0.1.0 implementation.
-
-**Finding 2 — `by_deployment_region` cohort breakdown empty** (operator docs)
-
-The `deployment_profile.deployment_region` field is operator-declared via the accord-metrics config (`deployment_region` key). When operators don't set it explicitly, the field stays empty and downstream `corpus_shape.by_deployment_region` aggregates over zero declarations → `{}`.
-
-This is **not a code bug** — the FSD §3.2 closed-enum is correctly emitted when the value is set. It's an operator-onboarding gap: production deployments should be reminded to declare `deployment_region` in their config so federation-level cohort analytics work. Documenting; setup-wizard surfacing deferred to a follow-up (the right place is the existing `CIRIS_SHARE_LOCATION_IN_TRACES` flow, not a new step).
-
-### Findings from 2.8.9 Android emulator testing
-
-**Finding 3 — `CIRISVerify` Python wrapper reports stale `__version__ = "1.13.3"`** (fixed in 2.8.10)
-
-The native FFI binary correctly initializes at v2.0.2 (logcat: `CIRISVerify FFI init starting (v2.0.2)`), but the Trust & Security UI surfaces `CIRISVerify v1.13.3`. Root cause: `ciris_adapters/ciris_verify/ffi_bindings/__init__.py` carries a hardcoded `__version__` constant that `tools/update_ciris_verify.py` deliberately skipped because the file is `AGENT_MANAGED` (carries FFI-loader patches that intentionally diverge from the upstream wheel).
-
-Fix:
-- Bumped the constant: `__version__ = "1.13.3"` → `"2.0.2"`.
-- Carve-out in `update_ciris_verify.py`: after the AGENT_MANAGED content skip, it explicitly calls `update_python_version_string()` against the agent-managed `__init__.py` so future verify-version bumps update both the FFI binary AND the Python-reported version automatically. File CONTENT stays agent-managed; only the `__version__ = "..."` line tracks the wheel.
-
-**Finding 4 — Registry's `get_build_by_version` returns the wrong target when (project, version) has multiple registered manifests**
-
-**Architectural framing first.** Python files don't differ across platforms — `ciris_engine`/`ciris_adapters`/`ciris_sdk` are byte-identical on iOS, Android, server, and desktop. The model is:
-
-- **ONE canonical Python-file manifest per version** = `python-source-tree`. Every agent on every platform verifies its Python file integrity against the same hashes.
-- **Platform-specific Python shims** get THEIR OWN delta manifests, scoped to platform-specific files only. `ciris_ios` today is 16 files (crypto/bcrypt/psutil shims since iOS Python doesn't have Chaquopy-equivalent system access). Future `ciris_android-shim`, `ciris_windows`, etc. would follow the same pattern.
-- **Binary manifests** (`.so` / `.dylib` per-target) are necessarily per-platform.
-
-Multiple manifests per `(project, version)` is the correct shape. The bug is purely that the registry can't disambiguate between them at version-lookup time.
-
-The L4 attestation UI shows `Agent Code Integrity: 1426/1664 -43 failed`. CIRISAgent CI is doing the right thing: it registers **both** manifests per release ([`build.yml:985-1018`](.github/workflows/build.yml#L985)) — `python-source-tree` (1531 files, `.md` exempt — what desktop/server/Chaquopy need) and `ios-mobile-bundle` (1664 files, includes `.md` devnotes — iOS-specific, registered second). The registry's `function-manifests` endpoint correctly enumerates both.
-
-**The bug is in `GET /v1/builds/{version}`** — pre-v2.0.3 SQL sorted by `registered_at DESC LIMIT 1` with no target discriminator, so the iOS row (registered second) won all version lookups. Every non-iOS agent hitting `CIRISVerify::registry::get_build_by_version` got the iOS manifest → `.md` files missing on Chaquopy/desktop → 43 mismatches + 195 missing at L4. **CIRISAgent's emitter, source commit, and CI registration are all correct.**
-
-**Resolved upstream — CIRISVerify v2.0.3** ([release](https://github.com/CIRISAI/CIRISVerify/releases/tag/v2.0.3), CanonicalBuild v2 wire bump per [CIRISVerify#8](https://github.com/CIRISAI/CIRISVerify/issues/8); registry-side dispatcher at [CIRISRegistry/main 449bf5f](https://github.com/CIRISAI/CIRISRegistry/issues/11)). Each register call now writes its own per-target `builds` row; `GET /v1/builds/<v>?project=ciris-agent` defaults to `python-source-tree` (canonical Python-file manifest); explicit `?target=ios-mobile-bundle` returns the iOS row. Verified live: default lookup against `2.8.9` now returns `target=python-source-tree, includes_modules=['core'], file_manifest_count=1530`.
-
-**Finding 6 — Orphaned `HARDWARE_SECURED` marker on iOS reinstall** (fixed upstream in CIRISVerify v2.0.4)
-
-After uninstalling and reinstalling the iOS app, CIRISVerify failed the L1 Func check because a `HARDWARE_SECURED` marker persisted on disk while the corresponding seed file was wiped by the OS. The library treated the marker as gospel and refused to regenerate. [CIRISVerify v2.0.4](https://github.com/CIRISAI/CIRISVerify/releases/tag/v2.0.4) wipes the stale marker when the seed file is missing and regenerates the key — restoring L1 Func on first launch after reinstall.
-
-**Finding 7 — Mach-O binary self-verification hash mismatch on iOS/macOS** (fixed upstream in CIRISVerify v2.0.5)
-
-Pre-v2.0.5, the sign-side `ciris-manifest-tool::compute_file_hash` hashed the whole file while the runtime-side `ciris-verify-core::compute_self_hash` did inline `extract_text_code_region` for iOS/macOS Mach-O binaries (whole-file elsewhere). The two paths never produced the same bytes for Apple platforms — L2 self-verify always failed on iOS/macOS. [CIRISVerify v2.0.5](https://github.com/CIRISAI/CIRISVerify/releases/tag/v2.0.5) consolidates both paths through a new shared `ciris-verify-core::binary_format::canonical_binary_hash` (Goblin-based Mach-O detection; ELF/PE/random/empty bytes correctly fall through to whole-file; five tests lock the dispatch). After v2.0.5+ release manifests are re-signed, `binaries[target]` on the registry will hold the `__TEXT` hash and runtime returns the same bytes — L2 self-verify finally passes on Apple platforms. Closes CIRISRegistry#12.
-
-**2.8.10 integration** (this release):
-- `requirements.txt` pin: `ciris-verify>=2.0.2,<3.0.0` → `>=2.0.5,<3.0.0` (v2.0.3 + v2.0.4 + v2.0.5 fixes all bundled into one release floor).
-- `ciris_adapters/ciris_verify/ffi_bindings/__init__.py::__version__`: `"2.0.2"` → `"2.0.5"` (matches the FFI binary baked into Android/iOS bundles; AGENT_MANAGED carve-out added earlier in this release will keep this in sync automatically on future bumps).
-- Mobile binary refresh: ran `tools/update_ciris_verify.py 2.0.5 --android-only` (3 ABIs) + manual iOS framework refresh from a Mac (xcframework device + simulator, dylib in `app_packages/`, Resources.zip). Verified all 3 Android ABIs now embed `CIRISVerify FFI init starting (v2.0.5)`.
-- `.github/workflows/build.yml`: new smoke step "Verify per-target builds rows registered" after both `ciris-build-sign register` invocations. Reads `${{ vars.REGISTRY_URL }}` (same backend the register step posts to). Asserts default GET returns `target=python-source-tree` and `?target=ios-mobile-bundle` returns the iOS row. Fails fast on any registry-side regression.
-- `tools/qa_runner/modules/l4_attestation_tests.py:154`: Algorithm A version floor accepts `1.13.x` OR any `2.x` (v2.0 was a register-side wire bump, not a verify_tree() contract change).
-
-**[CIRISAgent#748](https://github.com/CIRISAI/CIRISAgent/issues/748)** stays open as cleanliness work (iOS sign step's `.md/.pyi/.deleted` exempt-list parity). Standalone cosmetic now that target-awareness landed — no longer a user-facing breakage. **[CIRISAgent#729](https://github.com/CIRISAI/CIRISAgent/issues/729)** (consolidate two `register` invocations into one multi-target call) is also still optional cleanup with independent timing per #749.
-
-**Finding 5 — `startup_python_hashes.json` Algorithm-B path is legacy; mobile can move to the same Algorithm A as desktop**
-
-The JSON middleman was the bridge before `verify_tree()` existed; desktop/server moved to Algorithm A in CIRISVerify v1.13.0+, and the bridge regen step was retired in 2.8.6 (CIRISAgent#740). The file is `.gitignore`d since v2.6.3 — no in-repo deletion needed.
-
-Still mobile-only: `mobile_main.py` writes one at boot, `verifier_runner.py` + `hashes.py` feed it into Algorithm B's `python_hashes` parameter. Caps mobile at L3. The Rust tree walker already hashes Chaquopy-extracted paths directly (confirmed in logcat — walks `/data/data/<pkg>/files/chaquopy/AssetFinder/app/…`), so there's no platform blocker — just the code-path cleanup in `mobile_main.py` / `verifier_runner.py`. Tracked for 2.9.
-
+### Version bump
 ### Version bump
 
 `CIRIS_VERSION = "2.8.10-stable"`. Android `versionCode 133 → 134`, `versionName 2.8.10`.

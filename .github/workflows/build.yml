@@ -454,6 +454,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Set up Gradle (with distribution + dependency cache)
+        # 2.8.11 Tier 2 CI hardening: setup-gradle@v4 caches the Gradle
+        # distribution itself (the gradle-X.Y-bin.zip download that timed
+        # out post-2.8.10 merge) AND the dependency cache (~/.gradle/caches).
+        # First run on a runner downloads + caches; subsequent runs and
+        # subsequent jobs on the same workflow share the cache.
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
       - name: Build CIRIS Desktop UberJar
         # Retry-wrapped per 2.8.11 CI hardening: gradle's distribution
         # download from services.gradle.org has a 10s socket timeout by
@@ -535,6 +545,13 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Set up Gradle (with distribution + dependency cache)
+        # 2.8.11 Tier 2 CI hardening — see equivalent step in build-wheel
+        # matrix above for rationale.
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
       - name: Install Python dependencies
         # Retry-wrapped per 2.8.11 CI hardening.
@@ -1237,6 +1254,14 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Set up Gradle (with distribution + dependency cache)
+        # 2.8.11 Tier 2 CI hardening — Android job. Caches the Gradle
+        # distribution + the Android Gradle Plugin dependency tree.
+        # First run downloads + caches; subsequent runs are warm.
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
       - name: Set up Python 3.10 (required by Chaquopy)
         uses: actions/setup-python@v5

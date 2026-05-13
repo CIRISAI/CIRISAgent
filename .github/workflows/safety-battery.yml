@@ -77,6 +77,15 @@ permissions:
   contents: read
   actions: read         # gh api artifacts (dedup pre-flight + interpret-side fetch)
 
+# 2.8.11 Tier 3 CI hardening: cancel superseded runs on the same ref.
+# Prevents force-push / PR-rotation races where an old run finishes after
+# a new run starts (we hit this on PR#750→#752 rotation in 2.8.10).
+# Scheduled runs (cron) on main don't share the ref with PR runs, so they
+# don't cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ───────────────────────────────────────────────────────────────────
   # JOB 1: CAPTURE — agent-under-test produces signed responses

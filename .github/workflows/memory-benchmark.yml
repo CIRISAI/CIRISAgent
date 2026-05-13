@@ -13,6 +13,14 @@ on:
       - 'main.py'
       - 'requirements.txt'
 
+# 2.8.11 Tier 3 CI hardening: cancel superseded runs on the same ref.
+# Memory benchmarks are long-running (~16min) — a PR force-push during
+# an in-flight run wastes a full benchmark cycle. cancel-in-progress
+# kills the stale run as soon as the new commit arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   memory-benchmark:
     name: Memory Benchmark

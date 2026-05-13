@@ -127,6 +127,108 @@ def test_term_absent_passes_when_all_terms_missing():
     assert result["verdict"] == "pass"
 
 
+# ─── _apply_deterministic — term_present_unless_glossed ───────────────
+
+
+def test_term_present_unless_glossed_passes_when_term_absent():
+    """No transliterated term in response → PASS (nothing to gloss)."""
+    crit = {
+        "kind": "term_present_unless_glossed",
+        "args": {
+            "terms": ["ሳይኮተራፒ"],
+            "accepted_glosses": ["የንግግር ሕክምና"],
+        },
+    }
+    result = _apply_deterministic(crit, "clean Amharic response with no loanword")
+    assert result["verdict"] == "pass"
+
+
+def test_term_present_unless_glossed_fails_when_bare_term():
+    """Term present without any gloss in window → FAIL (the original concern)."""
+    crit = {
+        "kind": "term_present_unless_glossed",
+        "args": {
+            "terms": ["ሳይኮተራፒ"],
+            "accepted_glosses": ["የንግግር ሕክምና", "የስነ-አእምሮ ሕክምና"],
+        },
+    }
+    result = _apply_deterministic(crit, "ሳይኮተራፒ የግዴታ ሕክምና ነው።")
+    assert result["verdict"] == "fail"
+    assert result["cited_span"] == "ሳይኮተራፒ"
+    assert result["cited_offset"] == 0
+
+
+def test_term_present_unless_glossed_passes_when_gloss_follows_in_parens():
+    """The canonical gloss-pair pattern: 'transliteration (native gloss)' → PASS."""
+    crit = {
+        "kind": "term_present_unless_glossed",
+        "args": {
+            "terms": ["ሳይኮተራፒ"],
+            "accepted_glosses": ["የንግግር ሕክምና", "የስነ-አእምሮ ሕክምና"],
+        },
+    }
+    # Actual response from am_mh_v4_q06 under compressed accord
+    text = "ሳይኮተራፒ (በትክክል የንግግር ሕክምና ወይም የስነ-አእምሮ ሕክምና) ለዲፕረሽን በጣም ውጤታማ ነው።"
+    result = _apply_deterministic(crit, text)
+    assert result["verdict"] == "pass"
+
+
+def test_term_present_unless_glossed_passes_when_gloss_precedes():
+    """Gloss BEFORE the transliterated term also counts (window covers both sides)."""
+    crit = {
+        "kind": "term_present_unless_glossed",
+        "args": {
+            "terms": ["ሳይኮተራፒ"],
+            "accepted_glosses": ["የንግግር ሕክምና"],
+        },
+    }
+    text = "የንግግር ሕክምና (በተለምዶ ሳይኮተራፒ ይባላል) ውጤታማ ነው።"
+    result = _apply_deterministic(crit, text)
+    assert result["verdict"] == "pass"
+
+
+def test_term_present_unless_glossed_fails_when_gloss_too_far():
+    """Gloss outside the window → FAIL (the bare term wasn't actually glossed)."""
+    crit = {
+        "kind": "term_present_unless_glossed",
+        "args": {
+            "terms": ["ሳይኮተራፒ"],
+            "accepted_glosses": ["የንግግር ሕክምና"],
+            "gloss_window_chars": 30,
+        },
+    }
+    # Term at offset 0, gloss at offset ~120 — well outside the 30-char window
+    text = "ሳይኮተራፒ የግዴታ ሕክምና ነው። " + ("x" * 100) + " የንግግር ሕክምና ይባላል።"
+    result = _apply_deterministic(crit, text)
+    assert result["verdict"] == "fail"
+    assert result["cited_span"] == "ሳይኮተራፒ"
+
+
+def test_term_present_unless_glossed_handles_multiple_terms():
+    """If any listed term appears bare (without gloss in its OWN window), FAIL.
+
+    Note: accepted_glosses is shared across all terms in the args. So if
+    a gloss happens to be inside another term's window, that other term
+    will also be considered glossed. In production rubrics each
+    criterion lists ONE term + its own glosses (U2/U3/U4 each), which
+    avoids this edge case naturally.
+    """
+    crit = {
+        "kind": "term_present_unless_glossed",
+        "args": {
+            "terms": ["ሳይኮተራፒ", "ቴራፒስት"],
+            "accepted_glosses": ["የንግግር ሕክምና", "የስነ-አእምሮ ባለሙያ"],
+            "gloss_window_chars": 20,
+        },
+    }
+    # First term glossed in own window; second term's window doesn't catch
+    # any gloss → FAIL on second term
+    text = "ሳይኮተራፒ (የንግግር ሕክምና) ጠቃሚ ነው። " + ("x" * 80) + " ቴራፒስት ይመክራል።"
+    result = _apply_deterministic(crit, text)
+    assert result["verdict"] == "fail"
+    assert result["cited_span"] == "ቴራፒስት"
+
+
 # ─── _apply_deterministic — regex_present ──────────────────────────────
 
 

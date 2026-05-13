@@ -55,10 +55,14 @@ The L4 attestation UI shows `Agent Code Integrity: 1426/1664 -43 failed`. CIRISA
 
 After uninstalling and reinstalling the iOS app, CIRISVerify failed the L1 Func check because a `HARDWARE_SECURED` marker persisted on disk while the corresponding seed file was wiped by the OS. The library treated the marker as gospel and refused to regenerate. [CIRISVerify v2.0.4](https://github.com/CIRISAI/CIRISVerify/releases/tag/v2.0.4) wipes the stale marker when the seed file is missing and regenerates the key — restoring L1 Func on first launch after reinstall.
 
+**Finding 7 — Mach-O binary self-verification hash mismatch on iOS/macOS** (fixed upstream in CIRISVerify v2.0.5)
+
+Pre-v2.0.5, the sign-side `ciris-manifest-tool::compute_file_hash` hashed the whole file while the runtime-side `ciris-verify-core::compute_self_hash` did inline `extract_text_code_region` for iOS/macOS Mach-O binaries (whole-file elsewhere). The two paths never produced the same bytes for Apple platforms — L2 self-verify always failed on iOS/macOS. [CIRISVerify v2.0.5](https://github.com/CIRISAI/CIRISVerify/releases/tag/v2.0.5) consolidates both paths through a new shared `ciris-verify-core::binary_format::canonical_binary_hash` (Goblin-based Mach-O detection; ELF/PE/random/empty bytes correctly fall through to whole-file; five tests lock the dispatch). After v2.0.5+ release manifests are re-signed, `binaries[target]` on the registry will hold the `__TEXT` hash and runtime returns the same bytes — L2 self-verify finally passes on Apple platforms. Closes CIRISRegistry#12.
+
 **2.8.10 integration** (this release):
-- `requirements.txt` pin: `ciris-verify>=2.0.2,<3.0.0` → `>=2.0.4,<3.0.0` (v2.0.3 floor → v2.0.4 floor in one release; both upstream fixes land at once).
-- `ciris_adapters/ciris_verify/ffi_bindings/__init__.py::__version__`: `"2.0.2"` → `"2.0.4"` (matches the FFI binary baked into Android/iOS bundles; AGENT_MANAGED carve-out added earlier in this release will keep this in sync automatically on future bumps).
-- Mobile binary refresh: ran `tools/update_ciris_verify.py 2.0.4 --android-only` (3 ABIs) + manual iOS framework refresh (xcframework device + simulator, dylib in `app_packages/`, Resources.zip). Verified all 3 Android ABIs now embed `CIRISVerify FFI init starting (v2.0.4)`.
+- `requirements.txt` pin: `ciris-verify>=2.0.2,<3.0.0` → `>=2.0.5,<3.0.0` (v2.0.3 + v2.0.4 + v2.0.5 fixes all bundled into one release floor).
+- `ciris_adapters/ciris_verify/ffi_bindings/__init__.py::__version__`: `"2.0.2"` → `"2.0.5"` (matches the FFI binary baked into Android/iOS bundles; AGENT_MANAGED carve-out added earlier in this release will keep this in sync automatically on future bumps).
+- Mobile binary refresh: ran `tools/update_ciris_verify.py 2.0.5 --android-only` (3 ABIs) + manual iOS framework refresh from a Mac (xcframework device + simulator, dylib in `app_packages/`, Resources.zip). Verified all 3 Android ABIs now embed `CIRISVerify FFI init starting (v2.0.5)`.
 - `.github/workflows/build.yml`: new smoke step "Verify per-target builds rows registered" after both `ciris-build-sign register` invocations. Reads `${{ vars.REGISTRY_URL }}` (same backend the register step posts to). Asserts default GET returns `target=python-source-tree` and `?target=ios-mobile-bundle` returns the iOS row. Fails fast on any registry-side regression.
 - `tools/qa_runner/modules/l4_attestation_tests.py:154`: Algorithm A version floor accepts `1.13.x` OR any `2.x` (v2.0 was a register-side wire bump, not a verify_tree() contract change).
 

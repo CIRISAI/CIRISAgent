@@ -45,28 +45,9 @@ Fix:
 
 Multiple manifests per `(project, version)` is the correct shape. The bug is purely that the registry can't disambiguate between them at version-lookup time.
 
-The L4 attestation UI shows `Agent Code Integrity: 1426/1664 -43 failed`. CIRISAgent CI is doing the right thing: it registers **both** manifests per release ([`build.yml:985-1018`](.github/workflows/build.yml#L985)):
+The L4 attestation UI shows `Agent Code Integrity: 1426/1664 -43 failed`. CIRISAgent CI is doing the right thing: it registers **both** manifests per release ([`build.yml:985-1018`](.github/workflows/build.yml#L985)) — `python-source-tree` (1531 files, `.md` exempt — what desktop/server/Chaquopy need) and `ios-mobile-bundle` (1664 files, includes `.md` devnotes — iOS-specific, registered second). The registry's `function-manifests` endpoint correctly enumerates both.
 
-1. **`python-source-tree`** (Call 1): 1531 files, total_hash `sha256:536300fe…`, `.md` exempt. Matches `tools/dev/stage_runtime.py --check` byte-for-byte. This is what desktop/server/Chaquopy agents need.
-2. **`ios-mobile-bundle`** (Call 2): 1664 files, total_hash `sha256:1bab32c0…`, includes `.md` devnotes. iOS-bundle-specific. Registered AFTER call 1.
-
-The registry's function-manifests endpoint correctly enumerates both:
-
-```bash
-curl -s "https://api.registry.ciris-services-1.ai/v1/verify/function-manifests/2.8.9?project=ciris-agent" | jq
-# {"version":"2.8.9","targets":["ios-mobile-bundle","python-source-tree"]}
-```
-
-**The bug is in `GET /v1/builds/{version}`.** Its SQL ([`CIRISRegistry/db/builds.rs::get_build`](https://github.com/CIRISAI/CIRISRegistry/blob/main/rust-registry/src/db/builds.rs)) sorts by `registered_at DESC LIMIT 1` with no target discriminator:
-
-```sql
-SELECT ... FROM builds
-WHERE project = $1 AND version = $2 AND status = 'active'
-ORDER BY registered_at DESC
-LIMIT 1
-```
-
-The iOS row (registered second) wins all subsequent version lookups, irrespective of which target the client wanted. Every agent in the field — mobile, desktop, server, Android Chaquopy — that hits this endpoint (the [`CIRISVerify::registry::get_build_by_version`](https://github.com/CIRISAI/CIRISVerify/blob/main/src/ciris-verify-core/src/registry.rs#L241) call path) gets the iOS manifest. Chaquopy/desktop don't have the `.md` devnotes the iOS manifest expects → 43 hash mismatches + 195 missing files at L4. **CIRISAgent's emitter, source commit, and CI registration are all correct.**
+**The bug is in `GET /v1/builds/{version}`** — pre-v2.0.3 SQL sorted by `registered_at DESC LIMIT 1` with no target discriminator, so the iOS row (registered second) won all version lookups. Every non-iOS agent hitting `CIRISVerify::registry::get_build_by_version` got the iOS manifest → `.md` files missing on Chaquopy/desktop → 43 mismatches + 195 missing at L4. **CIRISAgent's emitter, source commit, and CI registration are all correct.**
 
 **Resolved upstream — CIRISVerify v2.0.3** ([release](https://github.com/CIRISAI/CIRISVerify/releases/tag/v2.0.3), CanonicalBuild v2 wire bump per [CIRISVerify#8](https://github.com/CIRISAI/CIRISVerify/issues/8); registry-side dispatcher at [CIRISRegistry/main 449bf5f](https://github.com/CIRISAI/CIRISRegistry/issues/11)). Each register call now writes its own per-target `builds` row; `GET /v1/builds/<v>?project=ciris-agent` defaults to `python-source-tree` (canonical Python-file manifest); explicit `?target=ios-mobile-bundle` returns the iOS row. Verified live: default lookup against `2.8.9` now returns `target=python-source-tree, includes_modules=['core'], file_manifest_count=1530`.
 
@@ -79,18 +60,9 @@ The iOS row (registered second) wins all subsequent version lookups, irrespectiv
 
 **Finding 5 — `startup_python_hashes.json` Algorithm-B path is legacy; mobile can move to the same Algorithm A as desktop**
 
-Confirmed legacy via three pinned references:
-- `ciris_adapters/ciris_verify/ffi_bindings/types.py:565-567` — "Replaces CIRISAgent's legacy `startup_python_hashes.json` cache flow" (new `verify_tree()` runtime walker, CIRISVerify v1.13.0+).
-- `Dockerfile:72-76` — "startup_python_hashes.json is no longer baked. Desktop / server now call ciris_verify.verify_tree() (Algorithm A) which walks /app directly against the registered manifest — the JSON middleman was the bridge while verify_tree() didn't exist." The file is `.gitignore`d (since v2.6.3 cleanup).
-- `.github/workflows/build.yml` — "Regenerate startup_python_hashes.json" bridge step was retired in 2.8.6 (CIRISAgent#740).
+The JSON middleman was the bridge before `verify_tree()` existed; desktop/server moved to Algorithm A in CIRISVerify v1.13.0+, and the bridge regen step was retired in 2.8.6 (CIRISAgent#740). The file is `.gitignore`d since v2.6.3 — no in-repo deletion needed.
 
-Who still touches the file (all mobile-only):
-- `mobile_main.py` writes one at boot to `ciris_home/startup_python_hashes.json`.
-- `verifier_runner.py` + `hashes.py` read that boot-written file to feed Algorithm B's `python_hashes` parameter to `run_attestation_sync`. Caps mobile at L3.
-
-**Why mobile is still capped at L3:** historical reasons from when Chaquopy embedded Python more opaquely. The Rust FFI tree walker now hashes Chaquopy-extracted file paths directly (confirmed in logcat — it walks `/data/data/<pkg>/files/chaquopy/AssetFinder/app/...`). So there's no platform blocker for moving mobile to Algorithm A; just the code-path cleanup in `mobile_main.py` / `verifier_runner.py`. Tracked for 2.9.
-
-No in-repo file deletion needed — the legacy file was un-tracked back in v2.6.3 and is `.gitignore`d; it only appears on disk as a developer artifact when someone runs the agent locally.
+Still mobile-only: `mobile_main.py` writes one at boot, `verifier_runner.py` + `hashes.py` feed it into Algorithm B's `python_hashes` parameter. Caps mobile at L3. The Rust tree walker already hashes Chaquopy-extracted paths directly (confirmed in logcat — walks `/data/data/<pkg>/files/chaquopy/AssetFinder/app/…`), so there's no platform blocker — just the code-path cleanup in `mobile_main.py` / `verifier_runner.py`. Tracked for 2.9.
 
 ### Version bump
 

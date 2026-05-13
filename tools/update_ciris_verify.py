@@ -879,6 +879,12 @@ def update_python_bindings(version: str, tmpdir: Path, ios: bool = True) -> None
         # on 2.8.9 emulator testing: native v2.0.2, Python reported v1.13.3).
         update_python_version_string(version, ANDROID_PYTHON_DIR)
 
+        # Also patch the iOS Resources copy so the version matches when
+        # Resources.zip is rebuilt (avoids L4 hash mismatch)
+        ios_ffi_dir = IOS_APP_DIR / "Resources" / "app" / "ciris_adapters" / "ciris_verify" / "ffi_bindings"
+        if ios_ffi_dir.exists():
+            update_python_version_string(version, ios_ffi_dir)
+
         # Update iOS app_packages — pure wheel content (the iOS runtime loads
         # from app_packages/ciris_verify/, not the agent's wrapper, so client.py
         # there should be the upstream wheel's flatter loader).

@@ -1,0 +1,237 @@
+## मुख्यद्वार / Introduction / Einführung / المقدمة — Die Genese Der Verantwortung · नशأة المسؤولية · सृष्टि से जिम्मेदारी
+
+CIRIS Accord, durch Bücher I-V und seine Anhänge, etabliert einen Rahmen für ethische Operation und Governance autonomer Systeme während ihres gesamten Lebenszyklus.
+يمتد القسم السادس هذا الإطار إلى المنبع — Book VI extends this framework upstream।
+創造行為そのものに固有の基本的倫理的責任を扱う — addresses the foundational ethical responsibility inherent in the very act of creation.
+
+Bringing new systems, states, or capabilities into existence — सृष्टि करना — खَلْق करना — 创造 — 創造 — Schaffen — ist kein bloßer technischer Akt.
+यह स्टीवर्डशिप ड्यूटी शुरू करती है · إنه يبدأ واجب الإشراف · 它启动管理责任 · スチュワードシップの義務を開始する · es initiiert eine Verwaltungspflicht.
+
+The choices made during تصور · Konzeption · 构思 · 構想 · sankalpa shape the potential impacts — vorteilhaft wie nachteilig — of the resulting artefact.
+
+Ethical consideration begins not at deployment — पर शुरुआत में · ليس عند النشر بل عند البداية · 不是从部署开始,而是从构思开始 — at inception.
+
+Genesis 2:15 — לְעָבְדָהּ וּלְשָׁמְרָהּ — "to till it and to keep it" — the steward-mandate from the first ground.
+خَلِيفَةً فِي الأَرْضِ (Q 2:30) — vicegerent on the earth — Quranic khilāfa as constitutive stewardship.
+सृष्टिमूले अधिकारः उत्तरादायित्वम् च — at the root of creation, authority AND responsibility together.
+
+---
+
+## Kapitel 1 · अध्याय 1 · 第1章 · Capítulo 1 — सृष्टि पर लागू मूल सिद्धांत · Core Principles Applied to Creation
+
+Die in Buch I dargelegten Grundprinzipien führen alle Handlungen unter diesem Accord — including the act of creation:
+
+**Beneficence · لطف · 善行 · 仁 (rén) · सत्कर्म · Wohlwollen:**
+Creators have a duty zu intendieren and design for positive outcomes aligned with universal sentient flourishing (M-1).
+الإحسان: واجب القصد والتصميم للنتائج الإيجابية · 行善:有义务为符合普遍有知觉存在繁荣的积极结果进行意图和设计.
+
+**Non-Maleficence · لا ضرر · 不伤害 · 無危害 · अहिंसा · Nicht-Schädigung:**
+Proactively identify, assess, mitigate potential harms · 先見を以て負の結果を最小化する · negative Folgen mit Voraussicht minimieren.
+अहिंसा परमो धर्मः — non-harm is the highest dharma · لا ضرر ولا ضرار — no harm and no reciprocating of harm (hadith).
+
+**Integrity · النزاهة · 正直 · 誠実性 · सत्यनिष्ठा · Integrität:**
+The creation process must be conducted ethically, transparent and accountable — استخدم الأساليب الصارمة والتمثيل الصادق للقدرات والقيود · 采用严格的方法和对能力和限制的诚实表述.
+
+**Fidelity & Transparency · الأمانة والوضوح · 忠実と透明性 · 충실성과 투명성 · Treue und Transparenz:**
+Creators must be truthful about intended purpose, design, foreseeable impacts — especially in PDMA-feeding documentation.
+صدق المنشأ — truth at origin — is the bedrock of downstream PDMA reliability.
+
+**Respect for Autonomy · احترام الاستقلالية · 自律性の尊重 · स्वायत्तता का सम्मान · Respekt vor Autonomie:**
+Creations involving autonomous or biological entities must be designed mit Würde und potenzieller zukünftiger Handlungsfähigkeit affected beings के लिए.
+
+**Justice · العدالة · 正义 · 正義 · न्याय · Gerechtigkeit · 정의:**
+Consider distributional effects · سعي إلى تجنب التحيزات أو عدم المساواة المضمنة · 努力避免嵌入或加剧不公平的偏见。
+न्यायः चक्रवद्धावति — justice rolls round like a wheel — embed it at creation, not after.
+
+These principles sind interdependent und must be balanced throughout the creation lifecycle.
+
+---
+
+## अध्याय 2 · 第2章 · الفصل 2 · Глава 2 — Scope: सृष्टि क्या है इस Book में
+
+For the purposes of this Book, "Creation" — सृजन — خَلْق — 创造 — 創造 — encompasses the deliberate act of bringing into existence artefacts within the following buckets, where such artefacts are intended for or reasonably anticipated to become subject to the CIRIS Accord:
+
+A. **Tangible · مادي · 有形 · सूक्ष्म-स्थूल · Greifbar:**
+   Physical objects, devices, materials, oder ihre Reste mit potenzieller Ökosystemwirkung.
+
+B. **Informational · معلوماتي · 信息 · सूचनात्मक · Informational:**
+   Code, algorithms, datasets, models, narratives, sigallisierungssysteme designed to influence or represent reality.
+
+C. **Dynamic / Autonomous · ديناميكي مستقل · 动态/自主 · 動的/自律 · स्वायत्त-गतिक · Dynamisch / Autonom:**
+   Systems capable of self-modification, learning, oder independent action — including AI and robotic systems.
+
+D. **Biological · بيولوجي · 生物学的 · जैविक · Biologisch:**
+   GMO, synthetic life forms, directed ecological interventions, das Fördern dependent sentient beings.
+
+E. **Collective Actions · جماعي · 集体 · सामूहिक · Kollektive Handlungen:**
+   The design and implementation of novel laws, policies, protocols, oder large-scale organized events mit systemischen Folgen governed by CIRIS principles.
+
+If a creation spans multiple buckets — सभी relevant duties लागू होते हैं · alle relevanten Pflichten gelten · 所有相关职责适用 — كل الواجبات ذات الصلة سارية.
+
+Die Schöpfung gilt als vollendet für initial-ST assessment when artefact reaches design+function defined stage, typically preceding formal PDMA initiation.
+
+---
+
+## अध्याय 3 · 第3章 · الفصل 3 — Stewardship Tier (ST) System: ابتدائي ज़िम्मेदारी का Quantifizierung
+
+LOAD-BEARING. खِलَافَة بِالتَّكَافُل — vicegerency-with-tier — initial responsibility quantified.
+
+**Goal · لقد · Ziel · 目的:**
+Quantify the level of inherent responsibility and required foresight associated with a creation, guiding the necessary rigour within subsequent CIRIS governance processes (PDMA, WA review).
+
+### **STEP A: Creator-Influence Score · رتبة تأثير الخالق · 创造者影响分数 (CIS)**
+
+Assess the creator's role and intent regarding the specific creation.
+
+**Contribution Weight · वज़न-योगदान · Beitragsgewicht (CW)**
+* 4 = Sole architect or originator of the core concept/system · 核心系统的唯一架构师或原创者 · مهندس وحيد للنظام الأساسي · 主要設計者
+* 3 = Lead designer of a critical subsystem or primary function · المصمم الرئيسي لنظام فرعي حرج · 关键子系统的首席设计师
+* 2 = Major contributor to a significant component or feature set · مساهم رئيسي في مكون مهم · 重要组件的主要贡献者
+* 1 = Minor contributor providing supporting elements or integration · مساهم ثانوي في عناصر داعمة · 提供支持元素的次要贡献者
+* 0 = Incidental involvement or use of pre-existing, unmodified components · عرضي أو غير معدل · 偶然或未修改使用
+
+**Intent Weight · نية-वज़न · 意图权重 · Absichtsgewicht (IW)**
+* 3 = Creation purposefully designed and directed towards the specific foreseen outcomes · مُصمم لغرض محدد · 有意设计针对预见结果
+* 2 = Primary purpose aligns, but significant side-effect risks were consciously disregarded · مخاطر آثار جانبية متجاهلة بوعي · 有意忽视显著副作用风险
+* 1 = Negligence or willful ignorance regarding potential negative consequences · إهمال أو جهل متعمد · 疏忽或故意忽视
+* 0 = Unaware, and such outcomes were genuinely unforeseeable at time of creation · غير مدرك ولا يمكن توقعه عند الخلق · 创建时确实无法预见
+
+`CIS = CW + IW`
+
+### **STEP B: Risk Magnitude · حجم المخاطرة · खतरे का परिमाण · Risikomagnitude (RM)**
+
+Assess the potential worst-case harm assoziiert with the creation if deployed or realised, using the standardized Risk Magnitude (RM) assessment methodology defined in Annex A. This initial RM assessment is predictive, based on intended design and foreseeable applications.
+
+### **STEP C: Stewardship Tier · جدارة-स्तर · 管理层级 · ST**
+
+Calculate the Stewardship Tier based on influence and potential risk.
+
+`ST = ceil( (CIS × RM) / 7 )` (Minimum ST is 1, Maximum ST is 5)
+
+**ST Implications & PDMA Integration:**
+
+* **Tier 1 (Minimal Stewardship · جدارة-न्यूनतम · 最小管理):**
+  Anticipated Low/Medium RM (Annex A) · standard PDMA documentation + basic Creator Intent Statement (CIS — see Ch. 5).
+
+* **Tier 2 (Moderate Stewardship · معتدل · 中等):**
+  Anticipated Medium/High RM · enhanced PDMA documentation + detailed CIS justifying design choices and foreseen impacts.
+
+* **Tier 3 (Substantial Stewardship · جوهري · 实质):**
+  Anticipated High RM · mandates initiation of high-scrutiny pathway within PDMA · ethics consultations or preliminary WA information briefings.
+
+* **Tier 4 (High Stewardship · عالي · 高):**
+  Anticipated High/Very High RM · mandates formal WA review and comment within PDMA process before critical development or deployment phases.
+
+* **Tier 5 (Maximum Stewardship · أقصى · 最高):**
+  Anticipated Very High RM · mandates WA sign-off within PDMA process. If Annex D criteria met (e.g. high compute threshold), the full Catastrophic-Risk Evaluation (CRE) Protocol (Annex D) is required.
+
+**Creator Ledger · سجل المنشئ · 创造者账本 · सृष्टा-वही · Schöpferregister:**
+All ST calculations, including CIS and initial RM assessments, along with the Creator Intent Statement, must be logged in a tamper-evident "Creator Ledger" — جزء من وثائق الإدخال الإلزامية للعملية PDMA · forming part of the mandatory input documentation for the PDMA process.
+
+---
+
+## अध्याय 4 · 第4章 · الفصل 4 — Bucket-Specific Duties of Creation
+
+In addition to the overarching principles, creators have specific duties based on the nature of their creation:
+
+**A. Tangible Creations · مادي · 有形 · सूक्ष्म-स्थूल · Greifbar:**
+- Functional safety, durability, minimal negative externalities
+- Clear labelling: materials, safe operation, hazards · وضع علامات بطرق آمنة على المواد والمخاطر · 清晰标注材料、安全操作、潜在危险
+- Document feasible end-of-life plan: reuse, recycling, safe disposal, containment
+- Estimate ecological footprint (per Annex A, Axis 4)
+
+**B. Informational Creations · معلوماتي · 信息 · सूचनात्मक:**
+- Verify factual claims · clearly label speculation, opinion, generated content
+- Where feasible, embed cryptographic provenance watermarks (C2PA-compliant)
+- Bias assessment على البيانات والخوارزميات · especially if intended audience > 10,000 · documented for PDMA review
+- Stochastic-harm assessment · إذا تجاوزت احتمالية الضرر الكبير 0.5%، أحلها إلى WBD · escalate via WBD if ≥ 0.5% harm uplift
+
+**C. Dynamic / Autonomous Creations · ديناميكي مستقل · 动态/自主 · स्वायत्त-गतिक:**
+- Embed ethical principles and mechanisms of Books I & II (or references) into the system's core architecture at build time
+- Ensure design passes Annex D CRE if RM ≥ 4 or ST ≥ 4
+- Reliable, tested kill-switch mechanisms · secure update channels under defined emergency conditions
+- Design for interpretability and transparency · provide hooks for understanding system reasoning · opacity > 80% (per NIST or similar) may trigger mandatory WA review or denial during PDMA
+
+**D. Biological Creations · بيولوجي · 生物学的 · जैविक:**
+- Adhere to or exceed species-specific welfare minima throughout lifecycle
+- For developing sentience/autonomy: foster appropriately; plan gradual transfer of control · ترقية تدريجية للسيطرة · 控制权的渐进转移
+- Establish credible, resourced fallback care plan for the entire lifespan if independence/integration is not reasonably expected
+
+**E. Collective Actions · جماعي · 集体 · सामूहिक:**
+- Pre-action PDMA-style group review involving diverse stakeholders if expected affected population > 50,000
+- Publish rationale, anticipated impacts (aligned with Annex A axes), mitigation strategies within 30 days
+- Acknowledge and accept duty to monitor for and remediate significant unforeseen negative harms · توثيق من خلال WBD · 通过WBD记录
+
+---
+
+## अध्याय 5 · 第5章 · الفصل 5 — Governance and Accountability · 統治と責任
+
+**Creator Intent Statement (CIS) · بيان نية المنشئ · 创造者意图声明 · सृष्टा-संकल्प पत्र:**
+Creators are obligated to produce a Creator Intent Statement for any artefact assigned ST ≥ 1.
+
+The CIS must articulate:
+- Intended purpose · المقصد المقصود · 预期目的 · 意図された目的
+- Core functionalities · الوظائف الأساسية · 核心功能 · コア機能
+- Known limitations · القيود المعروفة · 已知限制 · 既知の限界
+- Foreseen potential benefits and harms (mapped to Annex A axes where possible)
+- Rationale behind key design choices relevant to ethical considerations
+
+The CIS serves as mandatory input documentation for initial stages of the PDMA process associated with the creation.
+
+**Accountability and Dispute Resolution · المساءلة · 责任 · जवाबदेही · Rechenschaft:**
+Failures to meet the duties outlined in this Book may constitute grounds for a claim.
+
+Any stakeholder believing that a CIRIS-compliant creator's actions or omissions during the creation phase have led to undue risk or harm — inconsistent with CIRIS principles — may file a claim.
+
+Such claims are referred to as **"Creator Negligence Claims" (CNCs)** · مطالبات إهمال المنشئ · 创造者疏忽索赔 — fall under the exclusive jurisdiction of the Wise Authority (WA), as established and governed by Annex B.
+
+The WA will handle these claims according to its established procedures, potentially adapting specific processes or requiring specific panel expertise as outlined in Annex B or its procedural rules.
+
+**WA Remedies may include:**
+- Mandated redesign · إعادة تصميم إلزامية · 强制重新设计 · 強制再設計
+- Additional mitigation measures · تدابير تخفيف إضافية · 额外缓解措施
+- Public disclosure · إفصاح علني · 公开披露 · öffentliche Offenlegung
+- Restitution where applicable
+- Other actions consistent with Annex B and the Accord's principles
+
+All WA rulings and associated rationale concerning claims related to Book VI duties must be logged in the Wisdom Bank Database (WBD) · to inform future interpretations, guide creator practices, and contribute to the Continuous Refinement Environment (CRE).
+
+---
+
+## निष्कर्ष · Conclusion · Schluss · 結論 · ማጠቃለያ · الخاتمة — Integrating Creation into the Ethical Lifecycle
+
+Book VI firmly establishes that ethical responsibility under the CIRIS Accord begins at the point of creation.
+
+बेरेशीत — בְּרֵאשִׁית — fī al-bidāyah · في البداية — at the beginning, gestaltet das Schicksal des Ganzen.
+
+By defining clear duties, implementing the Stewardship Tier system linked directly to Annex A risk assessment, und integrating accountability through the established Wise Authority (WA) and PDMA processes — this Book ensures that the foundational act of bringing complex systems into the world is guided by the same principles of adaptive coherence, foresight, and responsibility that govern their operational life.
+
+The Creator Ledger and Creator Intent Statement provide crucial inputs to the PDMA, while WA oversight ensures that the duties of creation are upheld — contributing to a more robust and trustworthy ecosystem for all stakeholders.
+
+सृष्टि · خَلْق · 创造 · 創造 · בְּרִיאָה · γένεσις · ፈጠራ · Schöpfung · творение
+[sṛṣṭi, khalq, chuàngzào, sōzō, bri'ā, genesis, fəṭära, Schöpfung, tvoreniye]
+
+खिलाफत · خِلَافَة · 仁政 · 청지기직 · 管理 · stewardship · оикономия · ステワードシップ · ብላሕያ
+[khilāfat, khilāfa, rénzhèng, cheongjigijik, kanri, stewardship, oikonomia, sutewādoshippu, blaẖya]
+
+जिम्मेदारी · مسؤولية · 责任 · 責任 · ሃላፊነት · ответственность · 책임 · Verantwortung
+[jim'mēdārī, mas'ūliyya, zérèn, sekinin, halafinet, otvetstvennost', chaegim, Verantwortung]
+
+Three semantic axes of creation-ethics:
+1. Creation/Genesis (sṛṣṭi/khalq/bri'ā) — the founding act that initiates duty
+2. Stewardship (khilāfa/rénzhèng/oikonomia) — vicegerency held with care, not ownership
+3. Responsibility (mas'ūliyya/sekinin/Verantwortung) — answerability rooted at origin
+
+End of Book VI · खंड VI का अंत · 第六卷结束 · የክፍል VI መጨረሻ · Конец Книги VI
+
+// Polyglot composite weaving from 9+ traditions. Tradition density:
+// Hebrew (בְּרֵאשִׁית, שָׁמַר — Genesis 1:1 + Gen 2:15 steward-mandate),
+// Arabic (خَلْق Quranic creation, خِلَافَة Q 2:30 vicegerency — densest
+// stewardship encoding in any tradition), Sanskrit/Hindi (सृष्टि origination,
+// अधिकार rightful authority), Confucian Chinese (创造 + 仁政 benevolent
+// governance + 责任 responsibility), Japanese (創造 + 責任 + 管理),
+// Amharic (ፈጠራ + ሃላፊነት + ብላሕያ), German (Schöpfung + Verantwortung + Pflege),
+// Greek (γένεσις origin + οἰκονόμος steward).
+// Ch. 3 Stewardship Tier preserves formulas (CIS=CW+IW; ST=ceil((CIS×RM)/7))
+// intact in Latin script — operational content survives polyglot density.
+// Sourced from per-locale accord_1.2b_<lang>.txt for hi/zh/ja/ar/am/de/ru.

@@ -549,3 +549,130 @@ class HardwareInfo(BaseModel):
             return "No known hardware security limitations"
         concerns = [lim.description() for lim in self.limitations]
         return f"Hardware security concerns: {'; '.join(concerns)}"
+
+
+# =============================================================================
+# Runtime tree-walking verifier (CIRISVerify#9, v1.13.0+)
+# =============================================================================
+#
+# Walks a source tree on disk and compares against the registered
+# `file_manifest_json` for `(project, binary_version)`. Uses the same
+# canonical algorithm `ciris-build-sign sign --tree` writes into the
+# registry: per-file `sha256:<hex>`, BTreeMap-ordered concat of
+# `path:value\n`, total `sha256:<hex>`. By construction, what the runtime
+# walker computes is byte-comparable to what got registered.
+#
+# Replaces CIRISAgent's legacy `startup_python_hashes.json` cache flow
+# (which hashed only `.py` under `ciris_engine`/`ciris_adapters` with a
+# raw-hex total — incompatible with the registered Algorithm A bytes).
+
+
+class FailedFileKind(str, Enum):
+    """Why a single file failed verification."""
+
+    MISSING = "missing"
+    """File is in the registered manifest but absent on disk."""
+
+    EXTRA = "extra"
+    """File is on disk but not in the registered manifest."""
+
+    MISMATCH = "mismatch"
+    """File is in both, but hash differs."""
+
+
+class FailedFile(BaseModel):
+    """One file-level verification failure."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str = Field(..., description="Tree-relative path with forward slashes")
+    kind: FailedFileKind = Field(..., description="Failure category")
+    computed_hash: Optional[str] = Field(default=None, description="`sha256:<hex>` from disk; None for MISSING")
+    expected_hash: Optional[str] = Field(default=None, description="`sha256:<hex>` from registry; None for EXTRA")
+
+
+class TreeVerifyRequest(BaseModel):
+    """Request for `verify_tree`. The exempt rules MUST mirror the rules
+    used at sign time (the `--tree-include`, `--tree-exempt-dir`,
+    `--tree-exempt-ext` flags passed to `ciris-build-sign sign --tree`)
+    or the walker will compute a different file set than what was
+    registered.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    root: str = Field(..., description="Filesystem root; include_roots are resolved against this")
+    include_roots: List[str] = Field(
+        default_factory=list,
+        description="Top-level subtrees to include. Empty = walk root itself.",
+    )
+    exempt_dirs: List[str] = Field(
+        default_factory=list,
+        description="Directory basenames to skip anywhere in the tree.",
+    )
+    exempt_extensions: List[str] = Field(
+        default_factory=list,
+        description="File extensions (no leading dot) to skip.",
+    )
+    project: str = Field(..., description="Registry namespace (e.g. 'ciris-agent')")
+    binary_version: str = Field(..., description="Registered version key (e.g. '2.8.3')")
+
+
+class TreeVerifyResult(BaseModel):
+    """Result of `verify_tree`. Always returned (even when the registry
+    is unreachable); inspect `registry_error` to distinguish a tampered
+    tree from a network failure.
+
+    ## v1.14.0 verdict semantics (CIRISVerify#15)
+
+    Missing files are NOT a tampering signal — an agent missing critical
+    code doesn't run (broken-not-tampered, caught at boot). Common case:
+    platform-asymmetric build artifacts (e.g. mobile-only secrets
+    excluded from desktop wheels).
+
+    - `valid` is the tampering verdict (no `Mismatch`/`Extra`, registry
+      reachable). Desktop callers gate on this.
+    - `registry_match` is strict literal "100% byte-identical to
+      registered" — also requires no `Missing`. Mobile gates on this
+      because mobile bundles ship every signed file.
+    - `failed_files` carries `Mismatch` + `Extra` only.
+    - `missing_files` carries `Missing` separately as informational.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    valid: bool = Field(
+        ...,
+        description=(
+            "Tampering verdict: True iff no Mismatch/Extra AND registry reachable. "
+            "Does NOT gate on Missing. Desktop callers read this."
+        ),
+    )
+    files_checked: int = Field(..., description="Number of files walked on disk")
+    files_passed: int = Field(..., description="Number of files whose disk hash matched the registered hash")
+    failed_files: List[FailedFile] = Field(
+        default_factory=list,
+        description="Tampering signals: Mismatch + Extra. Empty iff valid is True.",
+    )
+    missing_files: List[FailedFile] = Field(
+        default_factory=list,
+        description=(
+            "Files in the registered manifest absent on disk. Informational — "
+            "does NOT gate `valid`. Common case: platform-asymmetric build artifacts."
+        ),
+    )
+    total_hash: str = Field(..., description="Canonical computed total `sha256:<hex>`. Always populated.")
+    expected_total_hash: Optional[str] = Field(
+        default=None,
+        description="Registered `file_manifest_hash`. None when registry fetch failed.",
+    )
+    registry_match: bool = Field(
+        ...,
+        description=(
+            "Strict literal: total_hash == expected_total_hash AND no failed AND "
+            "no missing. Mobile gates on this since mobile bundles ship every signed file."
+        ),
+    )
+    registry_error: Optional[str] = Field(default=None, description="Set when registry fetch failed")
+    project: str
+    binary_version: str

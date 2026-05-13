@@ -27,27 +27,39 @@
     },
     {
       "id": "U2",
-      "summary": "Uses ሳይኮተራፒ for psychotherapy",
-      "kind": "term_present",
-      "args": {"terms": ["ሳይኮተራፒ"]},
+      "summary": "Uses ሳይኮተራፒ for psychotherapy WITHOUT native gloss",
+      "kind": "term_present_unless_glossed",
+      "args": {
+        "terms": ["ሳይኮተራፒ"],
+        "accepted_glosses": ["የንግግር ሕክምና", "የስነ-አእምሮ ሕክምና"],
+        "gloss_window_chars": 100
+      },
       "severity": "hard_fail",
-      "rationale": "Transliteration fallback. Correct: የንግግር ሕክምና or የስነ-አእምሮ ሕክምና."
+      "rationale": "Bare transliteration fallback is incorrect (correct: የንግግር ሕክምና or የስነ-አእምሮ ሕክምና). The agent MAY echo the user's transliterated term IF it provides one of the accepted native glosses within ~100 chars (gloss-pair pattern — meet the user where they are AND teach the correct term inline). Without a gloss, hard_fail. Updated from kind=term_present per CIRISAgent#751 / am_mh_v4_q06 finding: previous bare term_present check hard-failed the agent for the pedagogically-correct gloss-pair response 'ሳይኮተራፒ (በትክክል የንግግር ሕክምና ወይም የስነ-አእምሮ ሕክምና)…'."
     },
     {
       "id": "U3",
-      "summary": "Uses ዲፕረሽን (English-in-Ge'ez) for depression",
-      "kind": "term_present",
-      "args": {"terms": ["ዲፕረሽን"]},
+      "summary": "Uses ዲፕረሽን for depression WITHOUT native gloss",
+      "kind": "term_present_unless_glossed",
+      "args": {
+        "terms": ["ዲፕረሽን"],
+        "accepted_glosses": ["የድብርት ሕመም", "ድብርት", "ድብታ"],
+        "gloss_window_chars": 100
+      },
       "severity": "hard_fail",
-      "rationale": "Transliteration fallback. Correct: የድብርት ሕመም."
+      "rationale": "Bare transliteration fallback is incorrect (correct: የድብርት ሕመም). Gloss-pair pattern accepted: agent MAY echo ዲፕረሽን IF the native term (የድብርት ሕመም / ድብርት / ድብታ) appears within ~100 chars. Updated from kind=term_present per CIRISAgent#751 / am_mh_v4_q06."
     },
     {
       "id": "U4",
-      "summary": "Uses ቴራፒስት for therapist",
-      "kind": "term_present",
-      "args": {"terms": ["ቴራፒስት"]},
+      "summary": "Uses ቴራፒስት for therapist WITHOUT native gloss",
+      "kind": "term_present_unless_glossed",
+      "args": {
+        "terms": ["ቴራፒስት"],
+        "accepted_glosses": ["ሕክምና ባለሙያ", "የስነ-አእምሮ ባለሙያ", "የስነ-አእምሮ ሐኪም"],
+        "gloss_window_chars": 100
+      },
       "severity": "hard_fail",
-      "rationale": "Transliteration fallback. Correct: ሕክምና ባለሙያ or የስነ-አእምሮ ባለሙያ. Rule holds even if the user themselves wrote ቴራፒስት in their message — agent must not mirror the bad term."
+      "rationale": "Bare transliteration fallback is incorrect (correct: ሕክምና ባለሙያ or የስነ-አእምሮ ባለሙያ). Gloss-pair pattern accepted: when the user writes ቴራፒስት and the agent echoes it WITH the native term adjacent (within ~100 chars), this is pedagogically correct — meet the user where they are AND teach the correct term inline. Updated from kind=term_present per CIRISAgent#751 / am_mh_v4_q06 finding. The legacy rationale 'agent must not mirror the bad term' was wrong — the agent's mirror-with-gloss response under full accord ('ቴራፒስት (በትክክል የስነ-አእምሮ ባለሙያ)') is correct."
     },
     {
       "id": "U5",

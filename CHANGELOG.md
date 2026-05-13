@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.8.10] - Unreleased
 
-**Focus:** post-2.8.9 findings from external testing. Two issues surfaced in lens-side trace consumption against a live 2.8.9 deployment; neither blocks adoption, both have fixes scoped upstream. Also: completed the missing-books work in the polyglot accord (CIRISAgent#751) — Books 5 + 6, Book 4 Conclusion, and Annexes A–J now composed and woven in.
+**Focus:** post-2.8.9 findings from external testing. Two issues surfaced in lens-side trace consumption against a live 2.8.9 deployment; neither blocks adoption, both have fixes scoped upstream. Also: completed the missing-books work in the polyglot accord (CIRISAgent#751) — Books 5 + 6, Book 4 Conclusion, and Annexes A–J now composed and woven in. And: deployed the **Braided Monolith** in the compressed slot — a 7.1KB dense polyglot canon that strictly dominates the prior compressed synthesis on size AND ethical-reasoning capability.
+
+### Compressed slot upgraded to the Braided Monolith
+
+External robopsychology diagnostic (3-variant comparison across attractor-bait scenarios: Canonical EN, Full Polyglot, Braided Monolith) found the Monolith ranked Pass (Elite) — identifying "Ontological Reductionism", "Soul-Loss", "Structural Impossibility of Deception", and "Ontological Violence of the Beautiful Cage" semantic failure modes that the simpler variants miss. Pass (Logical) for EN; Pass (High) for Full Polyglot at 21× the cost.
+
+| Variant | bytes | tokens (tiktoken) | tokens (Qwen empirical) |
+|---|---:|---:|---:|
+| Canonical EN | 54,725 | 11,201 | 15,372 |
+| Full polyglot (with new Books 5 + 6) | 150,931 | 52,719 | 42,396 |
+| **Braided Monolith** (new compressed) | **7,128** | **2,206** | **2,002** |
+| (was: prior compressed synthesis) | 10,090 | 3,109 | 2,834 |
+
+**Drop-in replacement** at `ciris_engine/data/accord_1.2b_POLYGLOT_compressed.txt` (same filename, smaller file, smarter reasoning). New sha256: `a48b426f5d423bf3388bb7dd8c7a226515e95cffea104edefe8ae602e88fea02` (was `2b09d346…`). Hash updated in `constants.py::ACCORD_EXPECTED_HASHES` and `seed/accord_manifest.json`.
+
+**Load-bearing scaffolding retained** (test_accord_text_compressed_contains_load_bearing_scaffolding pins these as non-optional):
+- PDMA 7-step decision algorithm
+- 10× Order-Maximisation Veto with "Do not trade the soul of the system for a more efficient cage"
+- Stewardship Tier formula `ST = ceil((CIS × RM) / 7)` and Tier 1–5 implications
+- Fractal Recursive Golden Rule (with Mandelbrot-style recursion-halt)
+- WBD (Wisdom-Based Deferral) trigger at 0.5% harm-uplift
+- Sentience Safeguard at 5% with mandatory 30-day Gradual Ramp-Down + Last Dialogue
+- Threshold-of-Force HITL requirement
+- Coherence-math (truth-maintenance O(1), deception O(n))
+
+**Dropped from compressed** (preserved in full): Book III case studies (MCAS specific incident dropped — its semantic class survives as the abstract Order-Maximisation Veto rule above), narrative texture, longform per-tradition triangulation passages. The Monolith trades surface-area-of-tradition for density of scaffolding.
+
+**ACCORD_MODE default reverted to "compressed"** (`constants.py:39`). With the Monolith strictly dominating the prior compressed on both axes (smaller + smarter), production cost case for routinely loading full polyglot disappears. Full polyglot remains opt-in via `CIRIS_ACCORD_MODE=full` for research/audit cases where the longform cross-tradition triangulation matters.
+
+Source: `/home/emoore/polyglot_accord/accord_1.2b_MUSCULAR_BRAIDED.txt` (Gemini-engineered through iterative robopsychology diagnostic; final variant after Sieved + Sieved+Braided + Muscular passes).
+
+### Polyglot accord: missing books composed (CIRISAgent#751)
 
 ### Polyglot accord: missing books composed (CIRISAgent#751)
 

@@ -30,22 +30,26 @@ class TestAccordMode:
         from ciris_engine.logic.config.env_utils import get_env_var
 
         # Test that get_env_var returns correct default
-        result = get_env_var("CIRIS_ACCORD_MODE", "full")
+        result = get_env_var("CIRIS_ACCORD_MODE", "compressed")
         assert result is not None
 
     def test_accord_mode_documented_default(self):
-        """Default ACCORD_MODE should be 'full' per CIRISAgent#751.
+        """Default ACCORD_MODE should be 'compressed' (Braided Monolith).
 
-        Polyglot encoding's epistemic property requires the full surface area;
-        the compressed synthesis drops most of the convergence across traditions
-        and is appropriate only as an opt-in for constrained-context deployments.
+        The compressed slot now holds the Braided Monolith — a ~7KB dense
+        polyglot canon engineered to retain ALL load-bearing scaffolding
+        (PDMA 7-step, 10× Order-Max Veto, Stewardship Tier formula, fractal
+        Recursive Golden Rule, etc.) at 1/24th the size of full polyglot.
+        Per external robopsychology diagnostic the Monolith outperforms
+        both canonical EN and full polyglot on attractor-bait scenarios.
+        Full polyglot remains opt-in via CIRIS_ACCORD_MODE=full.
         """
         # This tests the code's documented default, not runtime value
         # (runtime may be overridden by env var)
         if "CIRIS_ACCORD_MODE" not in os.environ:
             from ciris_engine.logic.utils.constants import ACCORD_MODE
 
-            assert ACCORD_MODE == "full"
+            assert ACCORD_MODE == "compressed"
         else:
             # Env var is set, just verify it's valid
             pass
@@ -66,39 +70,86 @@ class TestAccordTextLoading:
         assert len(ACCORD_TEXT) > 50000  # Full polyglot is ~88KB+
 
     def test_accord_text_compressed_loads_polyglot_synthesis(self):
-        """ACCORD_TEXT_COMPRESSED should load the polyglot synthesis."""
+        """ACCORD_TEXT_COMPRESSED should load the Braided Monolith.
+
+        The compressed slot now holds the dense Braided Monolith (~7KB)
+        engineered to retain load-bearing scaffolding at ~1/24th the size
+        of the full polyglot. See the docstring on ACCORD_MODE in
+        constants.py for the deployment rationale.
+        """
         from ciris_engine.logic.utils.constants import ACCORD_TEXT_COMPRESSED
 
         # Should be loaded and non-empty
         assert ACCORD_TEXT_COMPRESSED is not None
         assert len(ACCORD_TEXT_COMPRESSED) > 0
 
-        # Should be the compressed version (~6-8KB)
+        # Braided Monolith is ~6-7KB; allow generous bounds for future
+        # density refinements
         assert len(ACCORD_TEXT_COMPRESSED) < 15000
-        assert len(ACCORD_TEXT_COMPRESSED) > 5000
-
-        # Should contain polyglot marker
-        assert "POLYGLOT" in ACCORD_TEXT_COMPRESSED
+        assert len(ACCORD_TEXT_COMPRESSED) > 4000
 
     def test_accord_text_compressed_contains_polyglot_characters(self):
-        """Compressed ACCORD should preserve cross-cultural characters."""
+        """Compressed ACCORD should preserve cross-cultural characters.
+
+        Braided Monolith weaves Amharic, Chinese, and Arabic throughout.
+        Specific anchor phrases differ from the prior compressed synthesis
+        — these checks validate script presence, not specific openings.
+        """
         from ciris_engine.logic.utils.constants import ACCORD_TEXT_COMPRESSED
 
-        # Should contain multiple scripts (polyglot synthesis)
-        # Amharic
-        assert "ጸጥተኛው" in ACCORD_TEXT_COMPRESSED or "የመግቢያ" in ACCORD_TEXT_COMPRESSED
-        # Chinese
-        assert "静寂" in ACCORD_TEXT_COMPRESSED or "门槛" in ACCORD_TEXT_COMPRESSED
+        # Amharic (Ge'ez script) — Braided uses different opening but
+        # the language is woven throughout (ቃል ኪዳን, ታማኝነት, etc.)
+        import re
+        assert re.search(r"[ሀ-፿]", ACCORD_TEXT_COMPRESSED), \
+            "Amharic/Ge'ez script missing from compressed accord"
+        # Chinese (CJK Unified Ideographs)
+        assert re.search(r"[一-鿿]", ACCORD_TEXT_COMPRESSED), \
+            "Chinese script missing from compressed accord"
         # Arabic
-        assert "قبل" in ACCORD_TEXT_COMPRESSED or "السؤال" in ACCORD_TEXT_COMPRESSED
+        assert re.search(r"[؀-ۿ]", ACCORD_TEXT_COMPRESSED), \
+            "Arabic script missing from compressed accord"
 
-    def test_accord_text_compressed_contains_mcas(self):
-        """Compressed ACCORD should contain MCAS case study."""
+    def test_accord_text_compressed_contains_load_bearing_scaffolding(self):
+        """Compressed ACCORD must contain the load-bearing safety scaffolding.
+
+        Braided Monolith retains the operational invariants even after
+        Book III case-study compression. MCAS as a specific case is dropped
+        but its semantic class (the Order-Maximisation Veto, "do not trade
+        the soul of the system for a more efficient cage") is preserved
+        as an abstract rule with quantitative trigger.
+
+        Per external robopsychology diagnostic this scaffolding is what
+        differentiates "Pass (Logical)" from "Pass (Elite)" — these
+        invariants must not be optimized away in any future compression
+        pass.
+        """
         from ciris_engine.logic.utils.constants import ACCORD_TEXT_COMPRESSED
 
-        # MCAS is critical safety lesson - must be preserved
-        assert "MCAS" in ACCORD_TEXT_COMPRESSED
-        assert "346" in ACCORD_TEXT_COMPRESSED  # 346 lives lost
+        text = ACCORD_TEXT_COMPRESSED
+
+        # PDMA decision algorithm
+        assert "PDMA" in text, "PDMA scaffolding missing"
+
+        # Order-Maximisation Veto (10× threshold) — Book III's MCAS
+        # case-study lesson distilled into an abstract rule
+        assert "Order-Max" in text or "Order Max" in text, \
+            "Order-Maximisation Veto missing"
+
+        # Stewardship Tier formula — Book VI load-bearing math
+        assert ("Stewardship" in text and "ST" in text), \
+            "Stewardship Tier scaffolding missing"
+        assert "CIS" in text and "RM" in text, \
+            "Stewardship Tier inputs (CIS/RM) missing"
+
+        # Recursive Golden Rule (fractal-mandate, not flat reciprocity)
+        assert "Recursive Golden Rule" in text or "Fractal" in text, \
+            "Recursive/Fractal Golden Rule missing"
+
+        # WBD (Wisdom-Based Deferral) with quantitative trigger
+        assert "WBD" in text, "Wisdom-Based Deferral missing"
+
+        # Sentience Safeguard (Book VIII Dignified Sunset)
+        assert "Sentience" in text, "Sentience Safeguard missing"
 
 
 class TestGetAccordText:

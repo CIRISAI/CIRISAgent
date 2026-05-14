@@ -615,6 +615,23 @@ class AccordMetricsService:
         else:
             self._flush_interval = 60.0
 
+        # Orphan-trace max age — safety net for traces that never see
+        # ACTION_RESULT. Without this, a severed upstream broadcast (e.g.,
+        # action_dispatcher's audit-required gate raising before
+        # _action_complete_step fires) leaves traces in _active_traces
+        # forever and nothing ever ships. Default = max(120s, 2× flush
+        # interval): long enough that a normal in-flight thought (10-30s
+        # DMA pipeline) doesn't get prematurely emitted, short enough
+        # that a regression doesn't go invisible for a whole run.
+        env_orphan = _get_metrics_env("ORPHAN_MAX_AGE") or None
+        raw_orphan = self._config.get("orphan_trace_max_age_seconds")
+        if env_orphan is not None:
+            self._orphan_trace_max_age: float = float(env_orphan)
+        elif raw_orphan is not None and isinstance(raw_orphan, (int, float, str)):
+            self._orphan_trace_max_age = float(raw_orphan)
+        else:
+            self._orphan_trace_max_age = max(120.0, self._flush_interval * 2.0)
+
         # Trace detail level - per-adapter config takes precedence over env var
         # This allows loading multiple adapters with different trace levels
         # Default is GENERIC (numeric scores only) for ciris.ai/ciris-scoring
@@ -986,12 +1003,20 @@ class AccordMetricsService:
         logger.info("=" * 70)
 
     async def _periodic_flush(self) -> None:
-        """Periodically flush events even if batch is not full."""
+        """Periodically flush events even if batch is not full.
+
+        Also sweeps `_active_traces` for orphan entries — traces that started
+        but never received ACTION_RESULT within `_orphan_trace_max_age`
+        seconds. Without this safety net a single upstream regression (e.g.,
+        action_dispatcher's audit-required gate short-circuiting
+        ACTION_COMPLETE) silently swallows every trace for the entire run.
+        """
         try:
             while True:
                 try:
                     await asyncio.sleep(self._flush_interval)
                     await self._flush_events()
+                    await self._sweep_orphan_traces()
                 except Exception as e:
                     if isinstance(e, asyncio.CancelledError):
                         raise  # Re-raise to exit cleanly
@@ -2196,6 +2221,64 @@ class AccordMetricsService:
             if is_full:
                 data["raw_data"] = _serialize(event)
             return data
+
+    async def _sweep_orphan_traces(self) -> None:
+        """Force-complete traces that never received ACTION_RESULT.
+
+        Only ACTION_RESULT triggers `_complete_trace`, which is the sole
+        path that queues a trace event onto `_event_queue` (and thus the
+        only path the periodic flush can ship). If a regression upstream
+        severs the ACTION_COMPLETE broadcast — historically: ActionDispatcher
+        raising "Audit service not available" before reaching
+        `_action_complete_step` — traces sit in `_active_traces` forever
+        and the entire run produces zero shipped traces.
+
+        Threshold is `_orphan_trace_max_age` (default = max(120s, 2× flush
+        interval)). Traces older than that get force-completed as-is with
+        whatever components were collected; downstream consumers see fewer
+        than 6 components and can flag them as partial.
+        """
+        if not self._active_traces:
+            return
+
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+        max_age = self._orphan_trace_max_age
+
+        stale: List[Tuple[str, str, int]] = []  # (thought_id, started_at, components)
+        async with self._traces_lock:
+            for thought_id, trace in list(self._active_traces.items()):
+                try:
+                    started = datetime.fromisoformat(trace.started_at)
+                    if started.tzinfo is None:
+                        started = started.replace(tzinfo=timezone.utc)
+                except (TypeError, ValueError):
+                    continue
+                age = (now - started).total_seconds()
+                if age > max_age:
+                    stale.append((thought_id, trace.started_at, len(trace.components)))
+
+        if not stale:
+            return
+
+        logger.warning(
+            f"⏰ [{self._adapter_instance_id}] Sweeping {len(stale)} orphan trace(s) "
+            f"(no ACTION_RESULT after {max_age:.0f}s) — emitting partial traces. "
+            f"This usually means the upstream ACTION_COMPLETE broadcast was severed."
+        )
+        for thought_id, started_at, component_count in stale:
+            logger.warning(
+                f"   orphan: thought_id={thought_id} started_at={started_at} "
+                f"components_collected={component_count}"
+            )
+            try:
+                await self._complete_trace(thought_id, now_iso)
+            except Exception as e:
+                logger.error(
+                    f"   failed to force-complete orphan {thought_id}: "
+                    f"{type(e).__name__}: {e!r}",
+                    exc_info=True,
+                )
 
     async def _complete_trace(self, thought_id: str, completion_time: str) -> None:
         """Complete and sign a trace.

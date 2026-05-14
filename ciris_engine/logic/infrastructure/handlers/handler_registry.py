@@ -55,7 +55,11 @@ def build_action_dispatcher(
         HandlerActionType.PONDER: PonderHandler(deps, max_rounds=max_rounds),
     }
     dispatcher = ActionDispatcher(
-        handlers, telemetry_service=telemetry_service, time_service=time_service, audit_service=audit_service
+        handlers,
+        telemetry_service=telemetry_service,
+        time_service=time_service,
+        audit_service=audit_service,
+        bus_manager=bus_manager,
     )
 
     return dispatcher

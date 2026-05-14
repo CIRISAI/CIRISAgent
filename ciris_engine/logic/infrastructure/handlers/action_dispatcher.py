@@ -29,6 +29,7 @@ class ActionDispatcher:
         telemetry_service: Optional[TelemetryServiceProtocol] = None,
         time_service: Any = None,
         audit_service: Any = None,
+        bus_manager: Any = None,
     ) -> None:
         """Initialize the ActionDispatcher with handler mappings and services."""
         self.handlers: Dict[HandlerActionType, BaseActionHandler] = handlers
@@ -36,6 +37,12 @@ class ActionDispatcher:
         self.telemetry_service = telemetry_service
         self._time_service = time_service or self._create_simple_time_service()
         self.audit_service = audit_service
+        # Retain bus_manager so _ensure_audit_service can late-bind. AuditService
+        # finishes starting ~1.5s after this dispatcher is constructed; the value
+        # captured here would otherwise stay None forever (see
+        # service_initializer.py:1571, which updates BusManager.audit_service
+        # after GraphAuditService starts).
+        self._bus_manager = bus_manager
 
         for action_type, handler_instance in self.handlers.items():
             logger.info(
@@ -427,7 +434,23 @@ class ActionDispatcher:
         return dispatch_result
 
     def _ensure_audit_service(self, action_type: HandlerActionType, context: str) -> None:
-        """Ensure audit service is available."""
+        """Ensure audit service is available.
+
+        Late-binds against bus_manager.audit_service if the value captured at
+        construction time was None. The dispatcher is built ~1.5s before
+        GraphAuditService finishes starting; without this fallback, every
+        dispatch raises forever and ACTION_COMPLETE never broadcasts (severs
+        the ReasoningEvent.ACTION_RESULT pipeline that ciris_accord_metrics
+        anchors on).
+        """
+        if not self.audit_service and self._bus_manager is not None:
+            recovered = getattr(self._bus_manager, "audit_service", None)
+            if recovered is not None:
+                logger.info(
+                    "ActionDispatcher: late-bound audit_service from bus_manager "
+                    "(was None at construction)"
+                )
+                self.audit_service = recovered
         if not self.audit_service:
             raise RuntimeError(
                 f"Audit service not available for action {action_type.value} {context}. "

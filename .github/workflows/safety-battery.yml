@@ -369,7 +369,12 @@ jobs:
           if [ -d "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" ]; then
             mkdir -p "$BUNDLE_DIR/traces"
             cp -r "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"/* "$BUNDLE_DIR/traces/" 2>/dev/null || true
-            TRACE_COUNT=$(ls "$BUNDLE_DIR/traces" 2>/dev/null | wc -l)
+            # wc -l on Linux emits leading whitespace ("       0"); strip it
+            # so the GH Actions string compare `... == '0'` actually matches.
+            # Caught by the ar run: warning + step-summary fired (bash `-eq 0`
+            # handles whitespace), but `Upload agent server logs` step skipped
+            # because YAML string comparison is strict — "       0" != "0".
+            TRACE_COUNT=$(ls "$BUNDLE_DIR/traces" 2>/dev/null | wc -l | tr -d '[:space:]')
           fi
           echo "trace_count=$TRACE_COUNT" >> $GITHUB_OUTPUT
           echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT

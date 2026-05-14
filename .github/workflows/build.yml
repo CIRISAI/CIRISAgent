@@ -887,7 +887,7 @@ jobs:
         # rows (#727). Also cuts over from gRPC RegisterBuild → HTTP POST
         # /v1/builds; drops REGISTRY_JWT_SECRET requirement.
         run: |
-          pip install --upgrade "ciris-verify>=1.10.1"
+          pip install --upgrade "ciris-verify>=2.0.5"
           which ciris-build-sign && ciris-build-sign --version
 
       - name: Emit build-secrets hash file

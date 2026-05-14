@@ -24,7 +24,7 @@ Key security features:
 6. All sends/receives audited via audit service with spam prevention
 
 Dependencies:
-- ciris-verify>=1.3.1       # Unified wallet signing (secp256k1 + EVM support)
+- ciris-verify>=2.0.5       # Unified wallet signing (secp256k1 + EVM support); tracks canonical floor in requirements.txt
 - httpx                     # RPC client for Base L2
 """
 

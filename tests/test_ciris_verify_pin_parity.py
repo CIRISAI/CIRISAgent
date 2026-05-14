@@ -27,9 +27,9 @@ Why this test exists (2.8.2):
   and fails if they don't match, with a directed error pointing the
   fix path:
 
-      requirements.txt pins ciris-verify>=1.11.1
+      requirements.txt pins ciris-verify>=2.0.5
       but Android JNI lib at jniLibs/arm64-v8a/libciris_verify_ffi.so
-      is v1.6.3 — run `python tools/update_ciris_verify.py 1.11.1`
+      is v2.0.2 — run `python tools/update_ciris_verify.py 2.0.5`
       to align mobile binaries before merge.
 
   Same shape as the LANGUAGE_SPECS regression guard in

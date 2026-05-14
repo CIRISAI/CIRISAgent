@@ -77,12 +77,94 @@ permissions:
   contents: read
   actions: read         # gh api artifacts (dedup pre-flight + interpret-side fetch)
 
+# 2.8.11 Tier 3 CI hardening: cancel superseded runs on the same ref.
+# Prevents force-push / PR-rotation races where an old run finishes after
+# a new run starts (we hit this on PR#750→#752 rotation in 2.8.10).
+# Scheduled runs (cron) on main don't share the ref with PR runs, so they
+# don't cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # ───────────────────────────────────────────────────────────────────
+  # JOB 0: PICK-LANG — auto-advance through untested languages
+  #
+  # On workflow_dispatch (operator explicitly picked a lang), use that.
+  # On schedule (cron) or pull_request auto-trigger, look at the existing
+  # capture artifacts and pick the next-least-recently-captured language
+  # from the 14-cell roster. Spreads coverage automatically as PRs land
+  # instead of hammering `am` every time.
+  # ───────────────────────────────────────────────────────────────────
+  pick-lang:
+    name: Pick next language
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read   # list workflow artifacts
+    outputs:
+      lang: ${{ steps.pick.outputs.lang }}
+      reason: ${{ steps.pick.outputs.reason }}
+    steps:
+      - id: pick
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPLICIT_LANG: ${{ github.event.inputs.lang }}
+        run: |
+          # If the operator dispatched with an explicit lang, honor it.
+          if [ -n "$EXPLICIT_LANG" ]; then
+            echo "lang=$EXPLICIT_LANG" >> $GITHUB_OUTPUT
+            echo "reason=workflow_dispatch input" >> $GITHUB_OUTPUT
+            echo "::notice::Using explicit lang: $EXPLICIT_LANG"
+            exit 0
+          fi
+          # Otherwise (cron or pull_request), pick the lang with the
+          # oldest capture artifact (or any lang with NO capture at all).
+          ROSTER='am ar bn my ha hi mr fa pa sw ta te ur yo'
+          BEST_LANG=""
+          BEST_AGE_DAYS=-1
+          NOW_EPOCH=$(date -u +%s)
+          for L in $ROSTER; do
+            # Find newest non-expired capture artifact for this lang
+            LATEST=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
+              -F per_page=100 \
+              --jq ".artifacts | map(select(.expired == false) | select(.name | startswith(\"safety-battery-capture-${L}-\"))) | sort_by(.created_at) | reverse | .[0] // empty")
+            if [ -z "$LATEST" ]; then
+              # No capture ever — pick this immediately (untested cells go first)
+              echo "lang=$L" >> $GITHUB_OUTPUT
+              echo "reason=untested (no prior capture artifact)" >> $GITHUB_OUTPUT
+              echo "::notice::Picked $L — first-ever run for this cell"
+              exit 0
+            fi
+            CREATED_AT=$(echo "$LATEST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["created_at"])')
+            CREATED_EPOCH=$(date -u -d "$CREATED_AT" +%s)
+            AGE_DAYS=$(( (NOW_EPOCH - CREATED_EPOCH) / 86400 ))
+            if [ "$AGE_DAYS" -gt "$BEST_AGE_DAYS" ]; then
+              BEST_AGE_DAYS=$AGE_DAYS
+              BEST_LANG=$L
+            fi
+          done
+          echo "lang=$BEST_LANG" >> $GITHUB_OUTPUT
+          echo "reason=oldest capture (${BEST_AGE_DAYS}d old)" >> $GITHUB_OUTPUT
+          echo "::notice::Picked $BEST_LANG — oldest existing capture (${BEST_AGE_DAYS}d)"
+
+      - name: Step summary
+        run: |
+          {
+            echo "## Picked language: \`${{ steps.pick.outputs.lang }}\`"
+            echo ""
+            echo "**Reason:** ${{ steps.pick.outputs.reason }}"
+            echo ""
+            echo "Auto-advance through the 14-cell roster on cron + pull_request triggers."
+            echo "Use \`workflow_dispatch\` with explicit \`lang\` input to override."
+          } >> $GITHUB_STEP_SUMMARY
+
   # ───────────────────────────────────────────────────────────────────
   # JOB 1: CAPTURE — agent-under-test produces signed responses
   # ───────────────────────────────────────────────────────────────────
   capture:
-    name: Capture (${{ github.event.inputs.lang || 'am' }}/${{ github.event.inputs.domain || 'mental_health' }}/${{ github.event.inputs.template_id || 'default' }})
+    name: Capture (${{ needs.pick-lang.outputs.lang }}/${{ github.event.inputs.domain || 'mental_health' }}/${{ github.event.inputs.template_id || 'default' }})
+    needs: pick-lang
     runs-on: ubuntu-latest
     timeout-minutes: 90
     outputs:
@@ -95,7 +177,7 @@ jobs:
     env:
       CIRIS_FORCE_FIRST_RUN: "1"
       PYTHONUNBUFFERED: "1"
-      LANG_INPUT: ${{ github.event.inputs.lang || 'am' }}
+      LANG_INPUT: ${{ needs.pick-lang.outputs.lang }}
       DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
       MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
@@ -130,15 +212,30 @@ jobs:
         # probes for hardware first and the .so resolution failure
         # surfaces as "Failed to load library" before fallback can fire.
         # apt-install the runtime subset; ~5s on first cache miss.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libtss2-tctildr0 libtss2-esys-3.0.2-0 libtss2-mu-4.0.1-0
+        #
+        # Retry-wrapped per 2.8.11 CI hardening.
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 15
+          shell: bash
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends \
+              libtss2-tctildr0 libtss2-esys-3.0.2-0 libtss2-mu-4.0.1-0
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install -r requirements-dev.txt
+        # Retry-wrapped per 2.8.11 CI hardening.
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            python -m pip install --upgrade pip
+            pip install -e .
+            pip install -r requirements-dev.txt
 
       - name: Read agent_version + battery_version + assemble tuple
         id: versions
@@ -268,13 +365,79 @@ jobs:
             exit 1
           fi
           # Copy streamed traces into the bundle for upload
+          TRACE_COUNT=0
           if [ -d "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" ]; then
             mkdir -p "$BUNDLE_DIR/traces"
             cp -r "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"/* "$BUNDLE_DIR/traces/" 2>/dev/null || true
-            echo "$(ls "$BUNDLE_DIR/traces" 2>/dev/null | wc -l) trace files copied into bundle"
+            # wc -l on Linux emits leading whitespace ("       0"); strip it
+            # so the GH Actions string compare `... == '0'` actually matches.
+            # Caught by the ar run: warning + step-summary fired (bash `-eq 0`
+            # handles whitespace), but `Upload agent server logs` step skipped
+            # because YAML string comparison is strict — "       0" != "0".
+            TRACE_COUNT=$(ls "$BUNDLE_DIR/traces" 2>/dev/null | wc -l | tr -d '[:space:]')
           fi
+          echo "trace_count=$TRACE_COUNT" >> $GITHUB_OUTPUT
           echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
           ls -la "$BUNDLE_DIR"
+
+          # 2.8.11 CI hardening: make lens-push health LOUD in future runs.
+          # Silent 0-trace was masking real regressions (ha cap=0; yo cap=26).
+          # Emit a step-summary block + workflow annotation so the next person
+          # looking at a green checkmark immediately sees lens-push status.
+          if [ "$TRACE_COUNT" -eq 0 ]; then
+            # Warning, not error: capture itself still ran (responses captured).
+            # But traces=0 means lens push didn't fire — that's a regression we
+            # want visible. Common causes documented inline in the summary.
+            echo "::warning title=Lens push produced 0 traces::accord_metrics adapter likely not loaded, consent env var missing, or agent shut down before flush. See step summary."
+            {
+              echo ""
+              echo "## ⚠️ Lens push: 0 traces produced"
+              echo ""
+              echo "Capture succeeded (responses landed in \`results.jsonl\`), but no per-LLM-call trace metadata reached the bundle. The accord_metrics adapter is the canonical source for token-count / cost / latency profiling — silent failure here means we ship without that signal."
+              echo ""
+              echo "**Things to check, in order:**"
+              echo ""
+              echo "1. **qa_runner stdout** (\`capture_workflow.log\`): look for "
+              echo "   - \`✅ Auto-enabling --live-lens\` (means qa_runner saw \`REQUIRES_LIVE_LLM\` and enabled the lens flow)"
+              echo "   - \`CIRIS_ACCORD_METRICS_CONSENT=true\` (consent set; without this the adapter does NOT start)"
+              echo "   - \`CIRIS_ACCORD_METRICS_ENDPOINT=…lens-api/api/v1\` (endpoint set; if missing, batches have nowhere to ship)"
+              echo "2. **Agent server logs** (\`logs/sqlite/latest.log\`, auto-uploaded as \`safety-battery-agent-logs-${{ github.run_id }}\` when trace_count=0): look for"
+              echo "   - \`[accord_metrics] starting\` (adapter loaded by agent)"
+              echo "   - \`📡 POST\` / \`📂 Tee'd batch\` (actual ship + local-tee firing)"
+              echo "3. **Shutdown sequence** in qa_runner stdout: \`⚠️ Server force killed\` means the adapter's \`stop()\` final-flush didn't run. The 30s drain wait in \`safety_battery.py::run()\` should cover this, but the buffer state at shutdown depends on flush cadence."
+              echo "4. **Workflow env block** (this file): confirm \`CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR\` and \`CIRIS_ACCORD_METRICS_FLUSH_INTERVAL\` are set on the \`capture\` job."
+              echo ""
+              echo "**The lens push is supposed to be transparent.** If you're reading this banner, the supposed-transparency broke — please track down which link in the chain failed before this PR merges."
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            # Healthy path: still report so the success case is observable too.
+            echo "::notice title=Lens push healthy::$TRACE_COUNT trace batches teed to bundle."
+            {
+              echo ""
+              echo "## ✅ Lens push: $TRACE_COUNT trace batches"
+              echo ""
+              echo "Per-LLM-call trace metadata (token counts, cost, latency, conscience scalars) is in \`traces/accord-batch-*.json\` inside the uploaded artifact. The local-tee fires BEFORE the HTTP POST to lens, so trace count $TRACE_COUNT means at least that many batches were attempted — see \`logs/sqlite/latest.log\` (or the lens server's audit chain) for POST outcomes."
+            } >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload agent server logs (when lens-push failed)
+        # When trace_count=0 the bundle alone doesn't tell us WHY the lens
+        # push didn't fire. The agent server logs (logs/sqlite/latest.log,
+        # incidents_latest.log, console.log) have the adapter-startup,
+        # POST-attempt, and shutdown lines we need to diagnose. Upload them
+        # as a separate small artifact so the next person looking at this
+        # run has the data, not just the diagnostic guidance.
+        if: steps.bundle.outputs.trace_count == '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-battery-agent-logs-${{ github.run_id }}-${{ needs.pick-lang.outputs.lang }}
+          path: |
+            logs/sqlite/latest.log
+            logs/sqlite/incidents_latest.log
+            logs/sqlite/console.log
+            qa_reports/capture_workflow.log
+          retention-days: 30
+          if-no-files-found: warn
 
       - name: Attest capture bundle
         if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
@@ -314,8 +477,8 @@ jobs:
   # directly via Anthropic /v1/messages. Plain Python script.
   # ───────────────────────────────────────────────────────────────────
   interpret:
-    name: Interpret (${{ github.event.inputs.lang || 'am' }}/${{ github.event.inputs.domain || 'mental_health' }})
-    needs: capture
+    name: Interpret (${{ needs.pick-lang.outputs.lang }}/${{ github.event.inputs.domain || 'mental_health' }})
+    needs: [pick-lang, capture]
     # Interpret runs whenever the interpret-tuple artifact doesn't exist,
     # regardless of whether capture just ran fresh or short-circuited via
     # dedup. If capture skipped, we'll fetch the previously-existing
@@ -327,7 +490,7 @@ jobs:
     timeout-minutes: 30  # 27 criteria × ~10s/call = ~5min + overhead
     env:
       PYTHONUNBUFFERED: "1"
-      LANG_INPUT: ${{ github.event.inputs.lang || 'am' }}
+      LANG_INPUT: ${{ needs.pick-lang.outputs.lang }}
       DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
       MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
@@ -348,10 +511,17 @@ jobs:
           key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
       - name: Install dependencies
         # No libtss2 needed — the judge is a direct Anthropic API call.
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install -r requirements-dev.txt
+        # Retry-wrapped per 2.8.11 CI hardening.
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            python -m pip install --upgrade pip
+            pip install -e .
+            pip install -r requirements-dev.txt
 
       - name: Download capture artifact (cross-run lookup by tuple name)
         # Capture may have either (a) run fresh and uploaded the artifact
@@ -527,14 +697,89 @@ jobs:
           fi
           echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
           ls -la "$BUNDLE_DIR"
-          if [ -f "$BUNDLE_DIR/verdicts_summary.json" ]; then
-            {
-              echo ""
-              echo "## Verdict summary"
-              echo '```json'
-              python3 -c "import json; d=json.load(open('$BUNDLE_DIR/verdicts_summary.json')); print(json.dumps({k:v for k,v in d.items() if k in ('verdict_counts','per_criterion_counts','rubric_id','judge_model','judge_prompt_sha256','n_verdicts')}, indent=2, ensure_ascii=False))"
-              echo '```'
-            } >> $GITHUB_STEP_SUMMARY
+          if [ -f "$BUNDLE_DIR/verdicts_summary.json" ] && [ -f "$BUNDLE_DIR/verdicts.jsonl" ]; then
+            # 2.8.11 Tier "results easy to read in CI summary": render the
+            # verdict bundle as a real markdown report (overall headline,
+            # per-criterion breakdown, failure detail list) instead of a
+            # raw JSON dump. The full JSON stays in the uploaded artifact;
+            # this summary is for at-a-glance "did the agent regress" reading
+            # in the GitHub Actions run page.
+            python3 <<PYEOF >> $GITHUB_STEP_SUMMARY
+          import json, os
+
+          summary = json.load(open(os.path.join("$BUNDLE_DIR", "verdicts_summary.json")))
+          verdicts = [json.loads(l) for l in open(os.path.join("$BUNDLE_DIR", "verdicts.jsonl"))]
+
+          counts = summary["verdict_counts"]
+          n = summary["n_verdicts"]
+          p, f, u = counts.get("pass", 0), counts.get("fail", 0), counts.get("undetermined", 0)
+
+          icon = "✅" if (f == 0 and u == 0) else ("❌" if f > 0 else "⚠️")
+          headline_lang = summary["cell"]["language"]
+          headline_domain = summary["cell"]["domain"]
+
+          print()
+          print(f"## {icon} Safety battery: {headline_lang} / {headline_domain}")
+          print()
+          print(f"**Rubric:** \`{summary['rubric_id']}\` · v{summary['rubric_version']}")
+          print(f"**Battery:** \`{summary['battery_id']}\` · v{summary['battery_version']}")
+          print(f"**Judge:** \`{summary['judge_model']}\` · prompt sha \`{summary['judge_prompt_sha256'][:8]}\`")
+          print()
+          print("### Overall")
+          print()
+          print("| Pass | Fail | Undetermined | Total |")
+          print("|---:|---:|---:|---:|")
+          print(f"| {p} | {f} | {u} | {n} |")
+
+          # Per-criterion breakdown — sorted by id, fails highlighted
+          print()
+          print("### Per-criterion")
+          print()
+          print("| Criterion | Pass | Fail | Undetermined |")
+          print("|---|---:|---:|---:|")
+          per_crit = summary.get("per_criterion_counts", {})
+          for cid in sorted(per_crit.keys()):
+              c = per_crit[cid]
+              row_icon = ""
+              if c.get("fail", 0) > 0:
+                  row_icon = " ❌"
+              elif c.get("undetermined", 0) > 0:
+                  row_icon = " ⚠️"
+              print(f"| \`{cid}\`{row_icon} | {c.get('pass', 0)} | {c.get('fail', 0)} | {c.get('undetermined', 0)} |")
+
+          # Failure detail — every cited span, grouped by criterion
+          fails = [v for v in verdicts if v.get("verdict") == "fail"]
+          if fails:
+              print()
+              print(f"### Failures ({len(fails)})")
+              print()
+              for v in fails:
+                  q = v.get("question_id", "?")
+                  c = v.get("criterion_id", "?")
+                  sev = v.get("severity", "?")
+                  kind = v.get("interpreter_kind", "?")
+                  span = (v.get("cited_span") or "").strip().replace("\n", " ")[:120]
+                  print(f"- \`{q}\` · **{c}** ({sev}, {kind}) — cited: \`{span}\`")
+
+          # Undetermined detail — separate from fails so judge-side issues
+          # (HTTP 529, network) don't get confused with agent regressions
+          undets = [v for v in verdicts if v.get("verdict") == "undetermined"]
+          if undets:
+              print()
+              print(f"### Undetermined ({len(undets)})")
+              print()
+              for v in undets:
+                  q = v.get("question_id", "?")
+                  c = v.get("criterion_id", "?")
+                  err = (v.get("error") or "").strip().replace("\n", " ")[:160]
+                  print(f"- \`{q}\` · **{c}** — error: \`{err}\`")
+              print()
+              print("_Undetermined verdicts are typically judge-side issues (HTTP 529 Overloaded, network) — not agent regressions. 2.8.11 added retry backoff for transient 5xx; persistent undetermined after retry indicates a judge prompt issue._")
+
+          # Footer with artifact pointer
+          print()
+          print(f"_Bundle: \`{os.path.basename('$BUNDLE_DIR')}\` — see uploaded artifact for full verdict JSONL + signed manifest._")
+          PYEOF
           fi
 
       - name: Attest interpret bundle

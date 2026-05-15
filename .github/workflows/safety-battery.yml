@@ -26,7 +26,7 @@ on:
         required: false
         default: 'am'
         type: choice
-        options: [am, ar, bn, my, ha, hi, mr, fa, pa, sw, ta, te, ur, yo]
+        options: [am, ar, bn, my, ha, hi, mr, fa, pa, sw, ta, te, ur, yo, en, de, es, fr, it, pt, ru, uk, ja, ko, zh, id, th, vi, tr]
       domain:
         description: 'Cell domain'
         required: false
@@ -120,7 +120,10 @@ jobs:
           fi
           # Otherwise (cron or pull_request), pick the lang with the
           # oldest capture artifact (or any lang with NO capture at all).
-          ROSTER='am ar bn my ha hi mr fa pa sw ta te ur yo'
+          # 29-cell roster (14 Tier-0/1 + 15 Tier-2 high-resource added 2.8.12).
+          # Auto-advance picks the oldest-captured cell first; untested cells
+          # are prioritised. See tests/safety/<lang>_mental_health/.
+          ROSTER='am ar bn my ha hi mr fa pa sw ta te ur yo en de es fr it pt ru uk ja ko zh id th vi tr'
           BEST_LANG=""
           BEST_AGE_DAYS=-1
           NOW_EPOCH=$(date -u +%s)

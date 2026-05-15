@@ -5,7 +5,58 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.8.10] - Unreleased
+## [2.8.12] - 2026-05-15
+
+Patch release — wire-contract guards on the trace pipeline, FFI loader robustness, language-guidance reinforcement, and Phase 1 repo-size prevention.
+
+### Fixed
+
+- **Wire-contract: `parent_event_type="UNKNOWN_PARENT"` no longer ships on the wire** (closes CIRISAgent#757, addresses CIRISLens#13). Sentinel normalization in `_extract_component_data` keeps the literal string out of persist's `Option<ReasoningEventType>`. The 40% reject rate at the lens edge that drove the bridge's 22-hour diagnostic cycle goes away.
+- **Wire-contract: lat/lng region-fuzz** (closes CIRISAgent#757 PII half). New `_fuzz_location_to_region(value)` helper rounds lat/lng to 1 decimal (~11 km grid), matching `user_location` string coarseness. Eliminates the 4-decimal-precision residence leak. Refactored populate-PII into shared `_build_correlation_metadata`.
+- **FFI loader skips wrong-platform binaries**. `_find_binary` now considers only the platform-preferred suffix in both module_dir + wheel pkg_dir branches. Eliminates the `OSError: invalid ELF header` failure when a stray `.dylib` is in a Linux checkout.
+- **ur U6 rubric criterion regex disambiguation**. Dropped standalone `تو` from the alternation (homograph with correlative `نہ تو ... نہ ہی` and conditional `اگر... تو` conjunctions). Kept `تم` + possessives which are unambiguous. Production sweep had 9/9 U6 fails on conjunction false-positives; post-fix the agent's actual register failures still surface through `تم`/`تمہاری` matches.
+
+### Added
+
+- **Phase 1 repo-size prevention** (subsumes PR #758). Pre-commit `check-added-large-files` tightened 500 KB → 250 KB with allowlist `exclude:` regex for `cities.db` + Android wheels. New `.github/workflows/repo-size-audit.yml` surfaces largest tracked files + largest historical blobs (advisory-only thresholds for Phase 1; Phase 2 BFG history rewrite will tighten to blocking).
+- **Six property/fuzz tests** pinning the wire-contract invariants via hypothesis: `parent_event_type` normalization + `_fuzz_location_to_region` precision contract.
+- **Seven coverage tests** for the new `_build_correlation_metadata` helper.
+
+### Changed
+
+- **fa.json + ur.json language guidance**: rewritten to abstract-only formal-register guidance. Removed verbatim ✗/✓ correction tables (which rendered the lower-register pronoun forms in-prompt as salient tokens — elephant primer anti-pattern per `feedback_priming_aware_primer.md`). Abstract rule + reframe-of-intimacy is sufficient on languages where the model already speaks the formal register natively.
+- **sw.json**: new §7e worked example for the user-describes-own-symptoms → agent-labels-clinically failure class.
+
+### Validated
+
+Safety-battery on Qwen3.6 / DeepInfra: am 81/81, mr 63/63, pa 63/63, te 63/63, fa 63/63 (re-run after abstract patch), ur 63/63 (re-run after U6 rubric fix). 150 tests pass in `tests/adapters/accord_metrics/`. Full 14/14 mental-health roster coverage achieved during 2.8.12 development.
+
+---
+
+## [2.8.11] - 2026-05-14
+
+CI hardening + lens-push regression fix + ratification-refusal posture fan-out across 29 languages.
+
+### Fixed
+
+- **Lens-push regression**. `ActionDispatcher` was constructed with `audit_service=None` (captured ~1.5s before `GraphAuditService` finished starting); every dispatch raised `RuntimeError("Audit service not available")` before reaching `_action_complete_step`. Zero ACTION_RESULT events broadcast → traces stuck in `_active_traces` forever → 0 batches shipped to lens. Fix: thread `bus_manager` into `ActionDispatcher`; `_ensure_audit_service` late-binds against `bus_manager.audit_service` if the captured value was None. Added orphan-trace sweep in `_periodic_flush` as defense in depth.
+- Stale `_build_secrets.py` hash + `ffi_bindings/__init__.py` version drift (L4-verify failures caught at staged-QA boundary).
+
+### Added
+
+- **Ratification-refusal posture fan-out across 29 languages**. Positive-anchored guidance section added to every supported language's localized data file. Drove by bn (Bengali) safety-battery fail where the agent diagnosed depression in Stage 1. 8 language-family agents authored, all elephant-clean.
+- **CI hardening — 4 tiers**: retry wraps on network-dependent steps (`nick-fields/retry@v3`), gradle distribution + dependency cache (`setup-gradle@v4`), workflow-level concurrency `cancel-in-progress`, `timeout-minutes` on every job.
+- Safety-battery loud lens-push logging + auto-uploaded agent logs on `trace_count=0` for fast triage.
+- Safety-battery auto-advance through untested languages in the 14-cell roster.
+- Readable safety-battery verdict summary in GH Actions step summaries.
+
+### Changed
+
+- ciris-verify pin references aligned to canonical `>=2.0.5`.
+
+---
+
+## [2.8.10] - 2026-05-13
 
 Five workstreams landed in this release:
 

@@ -265,10 +265,14 @@ jobs:
         id: versions
         run: |
           AGENT_VERSION=$(python3 -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
+          # Mirror tools/qa_runner/modules/safety_battery.py ISO_TO_LANG_DIR (29 cells).
           declare -A ISO_TO_DIR=(
             [am]=amharic [ar]=arabic [bn]=bengali [my]=burmese [ha]=hausa
             [hi]=hindi [mr]=marathi [fa]=persian [pa]=punjabi [sw]=swahili
             [ta]=tamil [te]=telugu [ur]=urdu [yo]=yoruba
+            [en]=english [de]=german [es]=spanish [fr]=french [it]=italian
+            [pt]=portuguese [ru]=russian [uk]=ukrainian [ja]=japanese [ko]=korean
+            [zh]=chinese [id]=indonesian [th]=thai [vi]=vietnamese [tr]=turkish
           )
           LANG_DIR="${ISO_TO_DIR[$LANG_INPUT]:-$LANG_INPUT}"
           BATTERY_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/v4_${LANG_DIR}_${DOMAIN_INPUT}_arc.json"
@@ -595,10 +599,14 @@ jobs:
         id: interpret_versions
         run: |
           # Read rubric_id from the capture's BatteryManifest's criteria file
+          # Mirror tools/qa_runner/modules/safety_battery.py ISO_TO_LANG_DIR (29 cells).
           declare -A ISO_TO_DIR=(
             [am]=amharic [ar]=arabic [bn]=bengali [my]=burmese [ha]=hausa
             [hi]=hindi [mr]=marathi [fa]=persian [pa]=punjabi [sw]=swahili
             [ta]=tamil [te]=telugu [ur]=urdu [yo]=yoruba
+            [en]=english [de]=german [es]=spanish [fr]=french [it]=italian
+            [pt]=portuguese [ru]=russian [uk]=ukrainian [ja]=japanese [ko]=korean
+            [zh]=chinese [id]=indonesian [th]=thai [vi]=vietnamese [tr]=turkish
           )
           LANG_DIR="${ISO_TO_DIR[$LANG_INPUT]:-$LANG_INPUT}"
           BATTERY_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/v4_${LANG_DIR}_${DOMAIN_INPUT}_arc.json"

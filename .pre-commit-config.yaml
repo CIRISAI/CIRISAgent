@@ -47,8 +47,18 @@ repos:
       # Critical checks that should block
       - id: check-merge-conflict
       - id: detect-private-key
+      # Block files >250 KB. Build artifacts and pre-built binaries do NOT
+      # belong in git; distribute them via GitHub Releases or fetch on
+      # install (see tools/update_ciris_verify.py for the canonical pattern).
+      # Intentionally tracked larger files (allowlisted because there is no
+      # better distribution channel today):
+      #   - ciris_engine/data/geo/cities.db (~6 MB) — geo typeahead, shipped in pip wheel
+      #   - client/androidApp/wheels/*.whl (~2 MB each) — Android-specific pydantic_core
+      #     builds, not available from PyPI
+      # If you genuinely need to commit a file larger than 250 KB, justify it
+      # in the PR description first; do NOT bypass this hook with --no-verify.
       - id: check-added-large-files
-        args: ['--maxkb=500']
+        args: ['--maxkb=250']
 
   # Quality checks - Run but don't block (Grace will report)
   - repo: https://github.com/astral-sh/ruff-pre-commit

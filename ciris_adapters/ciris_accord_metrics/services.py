@@ -1131,6 +1131,51 @@ class AccordMetricsService:
                     self._event_queue = events_to_send + self._event_queue
                     logger.info(f"   Re-queued {len(events_to_send)} events for retry")
 
+    def _build_correlation_metadata(self) -> Dict[str, str]:
+        """Build the correlation_metadata block emitted on outbound wire.
+
+        Single source of truth for the agent-meta fields + PII fuzz.
+        Called by `_send_events_batch` (batch trace shipping) AND
+        `_send_connected_event` (connectivity heartbeats); before this
+        was extracted, both sites carried duplicate populate blocks
+        which (1) tripped SonarCloud's duplicated-lines gate and
+        (2) doubled the surface area where the PII fuzz could be
+        missed (CIRISAgent#757).
+
+        Returns a dict containing only non-empty values:
+        - Always (when configured): deployment_region, deployment_type,
+          agent_role, agent_template
+        - Only when `_share_location_in_traces=True` AND each individual
+          field is set: user_location, user_timezone (raw strings),
+          user_latitude, user_longitude (REGION-FUZZED via
+          `_fuzz_location_to_region` — ~11 km grid matching
+          `user_location` string coarseness per CIRISAgent#757)
+        """
+        correlation_metadata: Dict[str, str] = {}
+        if self._deployment_region:
+            correlation_metadata["deployment_region"] = self._deployment_region
+        if self._deployment_type:
+            correlation_metadata["deployment_type"] = self._deployment_type
+        if self._agent_role:
+            correlation_metadata["agent_role"] = self._agent_role
+        if self._agent_template:
+            correlation_metadata["agent_template"] = self._agent_template
+        # Include user location/timezone if explicitly consented via PREFERENCES step
+        if self._share_location_in_traces:
+            if self._user_location:
+                correlation_metadata["user_location"] = self._user_location
+            if self._user_timezone:
+                correlation_metadata["user_timezone"] = self._user_timezone
+            # Coordinates in ISO 6709 decimal degrees, fuzzed to region
+            # resolution (~11 km grid) so they match `user_location` string
+            # coarseness and don't leak residence. See
+            # `_fuzz_location_to_region` and CIRISAgent#757 PII analysis.
+            if self._user_latitude is not None:
+                correlation_metadata["user_latitude"] = _fuzz_location_to_region(self._user_latitude)
+            if self._user_longitude is not None:
+                correlation_metadata["user_longitude"] = _fuzz_location_to_region(self._user_longitude)
+        return correlation_metadata
+
     async def _send_events_batch(self, events: List[Dict[str, Any]]) -> None:
         """Send a batch of events to CIRISLens API.
 
@@ -1186,30 +1231,10 @@ class AccordMetricsService:
                 "Set CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP env var or provide consent_timestamp in config."
             )
 
-        # Build early warning correlation metadata (only include non-empty values)
-        correlation_metadata: Dict[str, str] = {}
-        if self._deployment_region:
-            correlation_metadata["deployment_region"] = self._deployment_region
-        if self._deployment_type:
-            correlation_metadata["deployment_type"] = self._deployment_type
-        if self._agent_role:
-            correlation_metadata["agent_role"] = self._agent_role
-        if self._agent_template:
-            correlation_metadata["agent_template"] = self._agent_template
-        # Include user location/timezone if explicitly consented via PREFERENCES step
-        if self._share_location_in_traces:
-            if self._user_location:
-                correlation_metadata["user_location"] = self._user_location
-            if self._user_timezone:
-                correlation_metadata["user_timezone"] = self._user_timezone
-            # Coordinates in ISO 6709 decimal degrees, fuzzed to region
-            # resolution (~11 km grid) so they match `user_location` string
-            # coarseness and don't leak residence. See
-            # `_fuzz_location_to_region` and CIRISAgent#757 PII analysis.
-            if self._user_latitude is not None:
-                correlation_metadata["user_latitude"] = _fuzz_location_to_region(self._user_latitude)
-            if self._user_longitude is not None:
-                correlation_metadata["user_longitude"] = _fuzz_location_to_region(self._user_longitude)
+        # Build correlation metadata via shared helper — single source of
+        # truth for the agent-meta fields + PII fuzz. See
+        # `_build_correlation_metadata` docstring for the contract.
+        correlation_metadata = self._build_correlation_metadata()
 
         payload: Dict[str, Any] = {
             "events": events,
@@ -1361,30 +1386,9 @@ class AccordMetricsService:
             logger.warning("Cannot send connected event - HTTP session not initialized")
             return
 
-        # Build correlation metadata
-        correlation_metadata: Dict[str, str] = {}
-        if self._deployment_region:
-            correlation_metadata["deployment_region"] = self._deployment_region
-        if self._deployment_type:
-            correlation_metadata["deployment_type"] = self._deployment_type
-        if self._agent_role:
-            correlation_metadata["agent_role"] = self._agent_role
-        if self._agent_template:
-            correlation_metadata["agent_template"] = self._agent_template
-        # Include user location/timezone if explicitly consented via PREFERENCES step
-        if self._share_location_in_traces:
-            if self._user_location:
-                correlation_metadata["user_location"] = self._user_location
-            if self._user_timezone:
-                correlation_metadata["user_timezone"] = self._user_timezone
-            # Coordinates in ISO 6709 decimal degrees, fuzzed to region
-            # resolution (~11 km grid) so they match `user_location` string
-            # coarseness and don't leak residence. See
-            # `_fuzz_location_to_region` and CIRISAgent#757 PII analysis.
-            if self._user_latitude is not None:
-                correlation_metadata["user_latitude"] = _fuzz_location_to_region(self._user_latitude)
-            if self._user_longitude is not None:
-                correlation_metadata["user_longitude"] = _fuzz_location_to_region(self._user_longitude)
+        # Build correlation metadata via shared helper — same source of
+        # truth as the `_send_events_batch` populate path.
+        correlation_metadata = self._build_correlation_metadata()
 
         timestamp = datetime.now(timezone.utc).isoformat()
 

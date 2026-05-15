@@ -752,3 +752,146 @@ class TestFuzzLocationToRegionPrecision:
                 f"Wire string {wire_str!r} has fractional part {fractional_part!r} "
                 f"(len={len(fractional_part)}) — exceeds 1-decimal precision contract."
             )
+
+
+class TestBuildCorrelationMetadata:
+    """Direct coverage for `_build_correlation_metadata` — the shared
+    helper extracted from `_send_events_batch` + `_send_connected_event`
+    to eliminate the duplicated populate-PII blocks (which tripped
+    SonarCloud's duplicated-lines gate AND doubled the surface where
+    the PII fuzz could be missed).
+
+    Closes the SonarCloud coverage gap on the populate-PII branch.
+    A single direct test of the helper covers BOTH former call sites
+    because both now delegate here.
+    """
+
+    def _make_bare_adapter(self):
+        """Build an AccordMetricsService skeleton with just the attributes
+        `_build_correlation_metadata` reads — no HTTP, no signing key,
+        no consent state. Lets us directly call the helper as a unit.
+        """
+        from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+
+        obj = AccordMetricsService.__new__(AccordMetricsService)
+        # Agent-meta fields — default empty so we can assert each
+        # individually triggers an entry when set.
+        obj._deployment_region = ""
+        obj._deployment_type = ""
+        obj._agent_role = ""
+        obj._agent_template = ""
+        # Location-sharing state — default consent off.
+        obj._share_location_in_traces = False
+        obj._user_location = ""
+        obj._user_timezone = ""
+        obj._user_latitude = None
+        obj._user_longitude = None
+        return obj
+
+    def test_empty_state_yields_empty_dict(self):
+        """No agent-meta + no location-sharing → empty correlation_metadata."""
+        adapter = self._make_bare_adapter()
+        assert adapter._build_correlation_metadata() == {}
+
+    def test_agent_meta_fields_populated_when_set(self):
+        """deployment_region / type / agent_role / agent_template each
+        contribute an entry when their backing attr is truthy."""
+        adapter = self._make_bare_adapter()
+        adapter._deployment_region = "us-west-2"
+        adapter._deployment_type = "production"
+        adapter._agent_role = "moderator"
+        adapter._agent_template = "datum"
+        assert adapter._build_correlation_metadata() == {
+            "deployment_region": "us-west-2",
+            "deployment_type": "production",
+            "agent_role": "moderator",
+            "agent_template": "datum",
+        }
+
+    def test_consent_off_omits_all_pii_even_when_lat_lng_set(self):
+        """Consent gate is load-bearing — even with lat/lng set, if
+        `_share_location_in_traces=False` no PII fields appear."""
+        adapter = self._make_bare_adapter()
+        adapter._user_location = "Schaumburg, Illinois, USA"
+        adapter._user_timezone = "America/Chicago"
+        adapter._user_latitude = 42.0334
+        adapter._user_longitude = -88.0834
+        adapter._share_location_in_traces = False
+        result = adapter._build_correlation_metadata()
+        for pii_field in ("user_location", "user_timezone", "user_latitude", "user_longitude"):
+            assert pii_field not in result, (
+                f"Consent off → {pii_field!r} must NOT appear. Got: {result}"
+            )
+
+    def test_consent_on_emits_fuzzed_lat_lng(self):
+        """Load-bearing case: consent flipped on, lat/lng set → region-fuzz
+        applied at the populate site. Schaumburg example from
+        CIRISAgent#757 PII analysis."""
+        adapter = self._make_bare_adapter()
+        adapter._share_location_in_traces = True
+        adapter._user_location = "Schaumburg, Illinois, USA"
+        adapter._user_timezone = "America/Chicago"
+        adapter._user_latitude = 42.0334
+        adapter._user_longitude = -88.0834
+        result = adapter._build_correlation_metadata()
+        # Raw strings pass through (already coarse city/region)
+        assert result["user_location"] == "Schaumburg, Illinois, USA"
+        assert result["user_timezone"] == "America/Chicago"
+        # PII fuzz invariant: 4-decimal source → 1-decimal wire
+        assert result["user_latitude"] == "42.0", (
+            f"populate path must call _fuzz_location_to_region — got "
+            f"{result['user_latitude']!r}, expected '42.0'"
+        )
+        assert result["user_longitude"] == "-88.1", (
+            f"populate path must call _fuzz_location_to_region — got "
+            f"{result['user_longitude']!r}, expected '-88.1'"
+        )
+
+    def test_consent_on_omits_individual_unset_pii_fields(self):
+        """Consent on but individual PII field empty/None → that one
+        field stays out (per-field guard, not all-or-nothing)."""
+        adapter = self._make_bare_adapter()
+        adapter._share_location_in_traces = True
+        adapter._user_location = "Berlin, Germany"
+        # _user_timezone left "", _user_latitude/longitude left None
+        assert adapter._build_correlation_metadata() == {"user_location": "Berlin, Germany"}
+
+    def test_consent_on_with_only_latitude_set(self):
+        """Per-field gate: only lat set, only lat emitted (fuzzed).
+        Pins the `is not None` discriminator for the numeric fields."""
+        adapter = self._make_bare_adapter()
+        adapter._share_location_in_traces = True
+        adapter._user_latitude = 52.5200  # Berlin
+        # longitude left None
+        assert adapter._build_correlation_metadata() == {"user_latitude": "52.5"}
+
+    def test_zero_latitude_is_emitted_not_treated_as_missing(self):
+        """Edge case: lat=0.0 is valid (equator) and `is not None`
+        correctly admits it. Guards against `if self._user_latitude:`
+        regression."""
+        adapter = self._make_bare_adapter()
+        adapter._share_location_in_traces = True
+        adapter._user_latitude = 0.0
+        adapter._user_longitude = 0.0
+        result = adapter._build_correlation_metadata()
+        assert result["user_latitude"] == "0.0"
+        assert result["user_longitude"] == "0.0"
+
+    def test_send_events_batch_and_send_connected_event_both_call_helper(self):
+        """Pin the delegation invariant — both former populate sites now
+        route through `_build_correlation_metadata`. If a future refactor
+        re-inlines either call site, this test fails."""
+        import inspect
+        from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+
+        seb_source = inspect.getsource(AccordMetricsService._send_events_batch)
+        sce_source = inspect.getsource(AccordMetricsService._send_connected_event)
+        assert "_build_correlation_metadata()" in seb_source, (
+            "_send_events_batch must delegate populate-PII to "
+            "_build_correlation_metadata — re-inlining defeats both the "
+            "duplicated-lines fix AND the single-test coverage gain."
+        )
+        assert "_build_correlation_metadata()" in sce_source, (
+            "_send_connected_event must delegate populate-PII to "
+            "_build_correlation_metadata — same reasoning as above."
+        )

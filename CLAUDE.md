@@ -874,6 +874,12 @@ Long-running commands may need timeout parameters for CI operations and comprehe
 - **Response Time**: <1s API responses
 - **Memory**: 4GB RAM maximum
 - **Security**: Ed25519 signatures throughout
+- **Repo Size**: Pre-commit blocks files >250 KB (`check-added-large-files`).
+  Do NOT bypass with `--no-verify`. Build artifacts and pre-built binaries do
+  not belong in git — distribute via GitHub Releases and fetch on install
+  (canonical pattern: `tools/update_ciris_verify.py`). AWS Security Agent and
+  several SAST products refuse to clone repos >512 MB. CI's
+  `repo-size-audit.yml` warns at 250 MiB pack size, fails at 450 MiB.
 
 ## Getting Help
 

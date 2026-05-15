@@ -33,6 +33,7 @@ data_archive/
 
 # Coverage and CI reports
 coverage.xml
+coverage.json
 htmlcov/
 .coverage
 bandit-report.json

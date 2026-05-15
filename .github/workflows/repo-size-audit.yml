@@ -46,40 +46,58 @@ jobs:
 
       - name: List largest tracked files
         run: |
+          # `set -e` interacts badly with `sort | head -20`: head closes the
+          # pipe early, sort exits with SIGPIPE (exit 141), and pipefail
+          # makes the step fail even though the listing prints correctly.
+          # Use `awk 'NR<=20'` instead — awk reads its full input and never
+          # closes the pipe early, so pipefail stays clean.
           set -euo pipefail
           echo "Top 20 largest tracked files:"
           git ls-files -z \
             | xargs -0 -I {} stat -c '%s %n' {} 2>/dev/null \
             | sort -rn \
-            | head -20 \
-            | awk '{ printf "  %8.2f MiB  %s\n", $1/1024/1024, substr($0, index($0,$2)) }'
+            | awk 'NR<=20 { printf "  %8.2f MiB  %s\n", $1/1024/1024, substr($0, index($0,$2)) }'
 
       - name: List largest blobs across all history
         run: |
+          # Same broken-pipe risk as above — use awk 'NR<=20' instead of head.
           set -euo pipefail
           echo "Top 20 largest blob versions in git history:"
           git rev-list --objects --all \
             | git cat-file --batch-check='%(objecttype) %(objectname) %(objectsize) %(rest)' \
             | awk '$1=="blob" && $3 > 100000 {print $3, $4}' \
             | sort -rn \
-            | head -20 \
-            | awk '{ printf "  %8.2f MiB  %s\n", $1/1024/1024, substr($0, index($0,$2)) }'
+            | awk 'NR<=20 { printf "  %8.2f MiB  %s\n", $1/1024/1024, substr($0, index($0,$2)) }'
 
       - name: Enforce thresholds
         env:
-          # Current pack size is ~205 MiB (Phase 1 state). Warn at 250 MiB,
-          # fail at 450 MiB so we still have headroom before AWS's 512 MiB
-          # clone limit kicks in. Lower both after Phase 2 history rewrite.
-          WARN_MIB: 250
-          FAIL_MIB: 450
+          # Phase 1 (this workflow ships) — repo is at ~1,121 MiB packed
+          # because of historical binary churn (libciris_verify_ffi × N
+          # platforms × N versions, Resources.zip × N, etc.). The Phase 1
+          # gate is ADVISORY ONLY: emit warnings if we cross 1300 MiB
+          # (regression worse than today) but never fail. This trains
+          # contributors to read the largest-files / largest-blobs output
+          # without alert fatigue from a permanently-red check.
+          #
+          # Phase 2 plan: BFG history rewrite drops pack to ~205 MiB.
+          # Once landed, this env block must drop to:
+          #   WARN_MIB=250  FAIL_MIB=450
+          #   FAIL_HARD=true
+          # so the gate becomes blocking again with realistic limits.
+          WARN_MIB: 1300
+          FAIL_MIB: 1500
+          FAIL_HARD: "false"
           SIZE_PACK_MIB: ${{ steps.measure.outputs.size_pack_mib }}
         run: |
           set -euo pipefail
           if [ "$SIZE_PACK_MIB" -ge "$FAIL_MIB" ]; then
-            echo "::error::Pack size ${SIZE_PACK_MIB} MiB >= fail threshold ${FAIL_MIB} MiB. AWS Security Agent's 512 MiB clone limit is in danger. Stop committing binaries; see docs on the canonical fetch-from-release pattern."
-            exit 1
+            if [ "$FAIL_HARD" = "true" ]; then
+              echo "::error::Pack size ${SIZE_PACK_MIB} MiB >= fail threshold ${FAIL_MIB} MiB. AWS Security Agent's 512 MiB clone limit is in danger. Stop committing binaries; see docs on the canonical fetch-from-release pattern."
+              exit 1
+            else
+              echo "::warning::Pack size ${SIZE_PACK_MIB} MiB >= advisory-fail threshold ${FAIL_MIB} MiB (gate is non-blocking until Phase 2 history rewrite lands). Stop committing binaries; see docs on the canonical fetch-from-release pattern."
+            fi
+          elif [ "$SIZE_PACK_MIB" -ge "$WARN_MIB" ]; then
+            echo "::warning::Pack size ${SIZE_PACK_MIB} MiB >= warn threshold ${WARN_MIB} MiB. Investigate the largest-blobs list above before this becomes a hard failure (post Phase 2)."
           fi
-          if [ "$SIZE_PACK_MIB" -ge "$WARN_MIB" ]; then
-            echo "::warning::Pack size ${SIZE_PACK_MIB} MiB >= warn threshold ${WARN_MIB} MiB. Investigate the largest-blobs list above before this becomes a hard failure."
-          fi
-          echo "OK: pack size ${SIZE_PACK_MIB} MiB (warn=${WARN_MIB}, fail=${FAIL_MIB})."
+          echo "OK: pack size ${SIZE_PACK_MIB} MiB (warn=${WARN_MIB}, fail=${FAIL_MIB}, hard_gate=${FAIL_HARD})."

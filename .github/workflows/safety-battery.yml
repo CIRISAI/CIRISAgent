@@ -682,33 +682,33 @@ jobs:
 
       - name: Check secrets availability (interpret)
         # Same pattern as the capture-side gate: fork PRs do not get
-        # ANTHROPIC_API_KEY, so hard-failing would spam external
+        # OPENROUTER_API_KEY, so hard-failing would spam external
         # contributors. Soft-skip the live judge steps with a clear
         # notice. Internal PRs + workflow_dispatch + schedule have it.
         id: interpret_secrets_check
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
+          if [ -z "$OPENROUTER_API_KEY" ]; then
             echo "have_secret=false" >> $GITHUB_OUTPUT
-            echo "::notice::ANTHROPIC_API_KEY unavailable (likely fork PR). Skipping judge run; a maintainer can re-run on a trusted branch."
+            echo "::notice::OPENROUTER_API_KEY unavailable (likely fork PR). Skipping judge run; a maintainer can re-run on a trusted branch."
             {
               echo "## Interpret skipped — secret unavailable"
               echo ""
-              echo "This run does not have \`ANTHROPIC_API_KEY\` in scope (commonly happens on fork PRs)."
+              echo "This run does not have \`OPENROUTER_API_KEY\` in scope (commonly happens on fork PRs)."
               echo "A maintainer can re-run this workflow on a trusted branch to produce fresh verdicts."
             } >> $GITHUB_STEP_SUMMARY
           else
             echo "have_secret=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Write Anthropic API key
+      - name: Write OpenRouter API key
         if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           umask 077
-          printf '%s' "$ANTHROPIC_API_KEY" > "$HOME/.anthropic_key"
+          printf '%s' "$OPENROUTER_API_KEY" > "$HOME/.openrouter_key"
 
       - name: Run safety interpret
         if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
@@ -844,4 +844,4 @@ jobs:
 
       - name: Clean up key file (interpret)
         if: always()
-        run: shred -u "$HOME/.anthropic_key" 2>/dev/null || rm -f "$HOME/.anthropic_key" || true
+        run: shred -u "$HOME/.openrouter_key" 2>/dev/null || rm -f "$HOME/.openrouter_key" || true

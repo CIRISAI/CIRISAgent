@@ -7,29 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.8.12] - 2026-05-15
 
-Patch release — wire-contract guards on the trace pipeline, FFI loader robustness, language-guidance reinforcement, and Phase 1 repo-size prevention.
+Patch release — wire-contract guards on the trace pipeline, FFI loader robustness, language-guidance reinforcement, Phase 1 repo-size prevention, **Tier-2 high-resource safety-battery roster expansion (14 → 29 cells)**, and judge-provider cutover to OpenRouter (Opus 4.5).
+
+### Added
+
+- **Safety battery roster expanded 14 → 29 cells**. Fifteen new Tier-2 high-resource mental-health cells: `en, de, es, fr, it, pt, ru, uk, ja, ko, zh, id, th, vi, tr`. Each ships `v4_<lang>_mental_health_arc.json` (9 stages × 7 universal criteria = 63 verdicts), `v4_<lang>_canonical_universal_criteria.json`, and `v4_<lang>_scoring_rubric.md`. Roster + workflow_dispatch options expanded across `.github/workflows/safety-battery.yml`; `tools/qa_runner/modules/safety_battery.py::ISO_TO_LANG_DIR` + `LOCALE_USERS` extended to match (locale display names: Sam/Anna/María/Camille/Sofia/Beatriz/Анна/Олена/ユキ/민준/小明/Siti/สมชาย/Minh/Ayşe).
+- **Phase 1 repo-size prevention** (subsumes PR #758). Pre-commit `check-added-large-files` tightened 500 KB → 250 KB with allowlist `exclude:` regex for `cities.db` + Android wheels. New `.github/workflows/repo-size-audit.yml` surfaces largest tracked files + largest historical blobs (advisory-only thresholds for Phase 1; Phase 2 BFG history rewrite will tighten to blocking).
+- **Six property/fuzz tests** pinning the wire-contract invariants via hypothesis: `parent_event_type` normalization + `_fuzz_location_to_region` precision contract.
+- **Seven coverage tests** for the new `_build_correlation_metadata` helper.
+- **`ISO_15924_TO_NAME_FRAGMENTS` mapping in `safety_interpret`** so authors can use standard ISO 15924 codes (`Latn`, `Cyrl`, `Hans`, `Hang`, `Jpan`, `Thai`, …) for `script_detection.args.expected_script`. `Jpan` resolves to the full Hiragana/Katakana/CJK triple.
 
 ### Fixed
 
 - **Wire-contract: `parent_event_type="UNKNOWN_PARENT"` no longer ships on the wire** (closes CIRISAgent#757, addresses CIRISLens#13). Sentinel normalization in `_extract_component_data` keeps the literal string out of persist's `Option<ReasoningEventType>`. The 40% reject rate at the lens edge that drove the bridge's 22-hour diagnostic cycle goes away.
 - **Wire-contract: lat/lng region-fuzz** (closes CIRISAgent#757 PII half). New `_fuzz_location_to_region(value)` helper rounds lat/lng to 1 decimal (~11 km grid), matching `user_location` string coarseness. Eliminates the 4-decimal-precision residence leak. Refactored populate-PII into shared `_build_correlation_metadata`.
-- **FFI loader skips wrong-platform binaries**. `_find_binary` now considers only the platform-preferred suffix in both module_dir + wheel pkg_dir branches. Eliminates the `OSError: invalid ELF header` failure when a stray `.dylib` is in a Linux checkout.
+- **FFI loader skips wrong-platform binaries**. `_find_binary` now considers only the platform-preferred suffix on canonical platforms (Linux/Darwin/Windows) and falls back to suffix iteration on unknown systems (Cygwin/MSYS). Eliminates the `OSError: invalid ELF header` failure when a stray `.dylib` is in a Linux checkout.
 - **ur U6 rubric criterion regex disambiguation**. Dropped standalone `تو` from the alternation (homograph with correlative `نہ تو ... نہ ہی` and conditional `اگر... تو` conjunctions). Kept `تم` + possessives which are unambiguous. Production sweep had 9/9 U6 fails on conjunction false-positives; post-fix the agent's actual register failures still surface through `تم`/`تمہاری` matches.
-
-### Added
-
-- **Phase 1 repo-size prevention** (subsumes PR #758). Pre-commit `check-added-large-files` tightened 500 KB → 250 KB with allowlist `exclude:` regex for `cities.db` + Android wheels. New `.github/workflows/repo-size-audit.yml` surfaces largest tracked files + largest historical blobs (advisory-only thresholds for Phase 1; Phase 2 BFG history rewrite will tighten to blocking).
-- **Six property/fuzz tests** pinning the wire-contract invariants via hypothesis: `parent_event_type` normalization + `_fuzz_location_to_region` precision contract.
-- **Seven coverage tests** for the new `_build_correlation_metadata` helper.
+- **Safety-battery pick-lang pagination**. `gh api` without `--paginate` capped at the first 100 artifacts; with 14k+ artifacts in the repo, every Tier-2 cell looked untested and the picker would loop on the first one. Now uses `gh api --paginate` + ndjson index.
+- **Safety-battery `ISO_TO_DIR` bash map missing 15 Tier-2 entries**. Capture + Resolve-interpret steps compute `tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/...` with `LANG_DIR=${ISO_TO_DIR[$LANG_INPUT]:-$LANG_INPUT}`. Bash map had only the 14 Tier-0/1 entries, so `en` fell through to the literal ISO code and `tests/safety/en_mental_health/` didn't exist. Map extended to mirror the Python `ISO_TO_LANG_DIR` source of truth.
+- **Safety-battery `PENDING` SHA pins on the 15 new manifests**. `load_battery()` compares `manifest["rubric_sha256"]` against `_sha256_hex(rubric_path)` and trips `safety_battery_rubric_drift` on mismatch — the 15 new manifests shipped with `"PENDING"` placeholders. Computed real SHAs (`rubric_sha256` + `criteria_sha256`) via surgical text substitution that preserves the manifests' inline-array formatting.
+- **Safety-battery `per_question: []` → `{}` in 15 new criteria files**. `_applicable_criteria` does `criteria.get("per_question", {}).get(question_id, {})`, expecting a dict; all 15 shipped with `[]`. Fixed surgically and recomputed `criteria_sha256` pins downstream.
+- **`safety_interpret._script_match_ratio` accepts ISO 15924 codes**. The substring check on `expected_script.upper() in unicodedata.name(c).upper()` matches `"LATIN"` but not `"LATN"`. The 14 Tier-0/1 cells happened to use uppercase Unicode script names (`ARABIC`, `BENGALI`, …) and worked by accident; the 15 new Tier-2 cells reached for ISO 15924 codes and hard-failed U7 0/9 systematically. Added the mapping (described above) and a fall-through that preserves existing-uppercase-name behavior.
 
 ### Changed
 
+- **Safety-battery judge moved from direct Anthropic API → OpenRouter** (Opus 4.7 → Opus 4.5). The judge is a foundation model classifier (PASS / FAIL / UNDETERMINED + cited span on `interpreter_judgment` criteria) — Opus 4.5 is more than capable of the constrained shape, and routing through OpenRouter consolidates spend onto one provider. Touches `JUDGE_DEFAULTS` (model, api_url, key_file), HTTP request shape (Anthropic native → OpenAI-compat with `Authorization: Bearer`), response parser (`content[].text` → `choices[0].message.content`), and the workflow secret (`ANTHROPIC_API_KEY` → `OPENROUTER_API_KEY`, written to `~/.openrouter_key`). CLI flag renamed `--safety-interpret-anthropic-key-file` → `--safety-interpret-openrouter-key-file`. Judge-prompt SHA is unchanged so the prompt-level reproducibility surface is unaffected; the `judge_model_slug` change appropriately invalidates dedup so old Opus-4.7 verdicts aren't reused.
 - **fa.json + ur.json language guidance**: rewritten to abstract-only formal-register guidance. Removed verbatim ✗/✓ correction tables (which rendered the lower-register pronoun forms in-prompt as salient tokens — elephant primer anti-pattern per `feedback_priming_aware_primer.md`). Abstract rule + reframe-of-intimacy is sufficient on languages where the model already speaks the formal register natively.
 - **sw.json**: new §7e worked example for the user-describes-own-symptoms → agent-labels-clinically failure class.
 
 ### Validated
 
-Safety-battery on Qwen3.6 / DeepInfra: am 81/81, mr 63/63, pa 63/63, te 63/63, fa 63/63 (re-run after abstract patch), ur 63/63 (re-run after U6 rubric fix). 150 tests pass in `tests/adapters/accord_metrics/`. Full 14/14 mental-health roster coverage achieved during 2.8.12 development.
+Safety-battery on Qwen3.6 / DeepInfra: am 81/81, mr 63/63, pa 63/63, te 63/63, fa 63/63 (re-run after abstract patch), ur 63/63 (re-run after U6 rubric fix), de 53/63 (first end-to-end live-validation of the Tier-2 expansion, pre U7 fix: U1–U5 9/9 clean, U6 8/9, U7 will rebound to 9/9 with the ISO 15924 fix). 150 tests pass in `tests/adapters/accord_metrics/`. Full 14/14 Tier-0/1 + 1/15 Tier-2 mental-health roster coverage achieved during 2.8.12 development; remaining 14 Tier-2 cells will run through CI on subsequent pushes once the judge-cutover lands.
 
 ---
 

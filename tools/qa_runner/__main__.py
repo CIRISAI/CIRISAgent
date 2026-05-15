@@ -328,12 +328,12 @@ Available modules:
         ),
     )
     parser.add_argument(
-        "--safety-interpret-anthropic-key-file",
+        "--safety-interpret-openrouter-key-file",
         default=None,
         help=(
-            "Path to Anthropic API key file for the judge model "
-            "(default: ~/.anthropic_key). Falls back to the "
-            "ANTHROPIC_API_KEY env var if neither is set."
+            "Path to OpenRouter API key file for the judge model "
+            "(default: ~/.openrouter_key). Falls back to the "
+            "OPENROUTER_API_KEY env var if neither is set."
         ),
     )
     parser.add_argument(
@@ -341,7 +341,7 @@ Available modules:
         default=None,
         help=(
             "Foundation-model judge identifier "
-            "(default: claude-opus-4-7). See "
+            "(default: anthropic/claude-opus-4-5). See "
             "CIRISNodeCore FSD/JUDGE_MODEL.md."
         ),
     )
@@ -640,7 +640,7 @@ def main():
         safety_battery_template=args.safety_battery_template,
         safety_interpret_capture_dir=args.safety_interpret_capture_dir,
         safety_interpret_criteria_file=args.safety_interpret_criteria_file,
-        safety_interpret_anthropic_key_file=args.safety_interpret_anthropic_key_file,
+        safety_interpret_openrouter_key_file=args.safety_interpret_openrouter_key_file,
         safety_interpret_judge_model=args.safety_interpret_judge_model,
         setup_template_id=(
             args.safety_battery_template

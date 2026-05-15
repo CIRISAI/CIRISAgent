@@ -313,30 +313,47 @@ class CIRISVerify:
                 return path
 
         suffixes = self._get_platform_binary_suffixes(system)
-        # Resolve to the platform-preferred suffix ONLY (e.g., ".so" on
-        # Linux, ".dylib" on Darwin, ".dll" on Windows). Falling back to
-        # other-platform suffixes within a single directory is never the
-        # right move — a wrong-platform binary will fail at `ctypes.CDLL`
-        # with an opaque "invalid ELF header" (or Mach-O equivalent). The
-        # inter-branch fallback (module_dir → wheel pkg_dir) replaces the
-        # intra-directory cross-suffix fallback. This regression has
-        # bitten us repeatedly: stray macOS `.dylib` from
-        # `tools/update_ciris_verify.py` shadows the wheel `.so` on Linux
-        # dev hosts. See `test_find_binary_skips_wrong_platform_*` for
-        # the regression coverage.
-        preferred_suffix = suffixes[0]
+        # Decide search strategy by whether we recognize the platform.
+        #
+        # On KNOWN platforms (Linux/Darwin/Windows), restrict to the
+        # single platform-preferred suffix. Falling back to other-platform
+        # suffixes within a single directory is never the right move on
+        # a recognized platform — a wrong-platform binary will fail at
+        # `ctypes.CDLL` with an opaque "invalid ELF header" (or Mach-O
+        # equivalent). The inter-branch fallback (module_dir → wheel
+        # pkg_dir) replaces the intra-directory cross-suffix fallback.
+        # This regression has bitten us repeatedly: stray macOS `.dylib`
+        # from `tools/update_ciris_verify.py` shadows the wheel `.so` on
+        # Linux dev hosts. See `test_find_binary_skips_wrong_platform_*`
+        # for the regression coverage.
+        #
+        # On UNKNOWN platforms (Cygwin/MSYS on Windows return
+        # "CYGWIN_NT-..." / "MSYS_NT-..."; future runtimes ditto), we
+        # don't know which suffix the platform's loader actually wants,
+        # so iterate the full suffix list and let `ctypes.CDLL` decide.
+        # `_get_platform_binary_suffixes` returns `['.so', '.dylib',
+        # '.dll']` for unknown systems; restricting to suffixes[0] would
+        # never try `.dll` on a Windows-derivative platform. Codex P2
+        # caught this regression — restoring the iterate-all fallback for
+        # unknown platforms while preserving the single-suffix protection
+        # on recognized ones.
+        KNOWN_PLATFORMS = {"Linux", "Darwin", "Windows"}
+        if system in KNOWN_PLATFORMS:
+            search_suffixes = [suffixes[0]]
+        else:
+            search_suffixes = suffixes
 
         # Also check relative to this module (legacy in-repo path — kept
         # as a no-op-when-empty branch for back-compat with pre-2.8.2
         # source checkouts that may still have a binary here. The in-repo
         # binary was deliberately deleted in 2.8.2; desktop FFI is now
-        # pip-resolved via site-packages — see next branch). We only
-        # consider the platform-preferred suffix here so a stray
-        # wrong-platform binary doesn't silently shadow the wheel `.so`.
+        # pip-resolved via site-packages — see next branch). Search
+        # strategy per `search_suffixes` above.
         module_dir = Path(__file__).parent
-        module_candidate = module_dir / f"libciris_verify_ffi{preferred_suffix}"
-        if module_candidate.exists():
-            return module_candidate
+        for suffix in search_suffixes:
+            candidate = module_dir / f"libciris_verify_ffi{suffix}"
+            if candidate.exists():
+                return candidate
 
         # Wheel-distributed location (PRIMARY desktop path post-2.8.2):
         # the `ciris-verify` PyPI package (a Requires-Dist of `ciris-agent`)
@@ -346,17 +363,17 @@ class CIRISVerify:
         # fresh `pip install ciris-agent` on Linux fails desktop init at
         # the audit hash-chain step (see release/2.7.4 incident + 2.8.2
         # PR review where Codex caught this regression after the in-repo
-        # `.so` deletion). Platform-preferred suffix only — same
-        # reasoning as the module_dir branch above.
+        # `.so` deletion). Search strategy per `search_suffixes` above.
         try:
             import ciris_verify as _ciris_verify_pkg
 
             pkg_dir_str = getattr(_ciris_verify_pkg, "__file__", None)
             if pkg_dir_str:
                 pkg_dir = Path(pkg_dir_str).parent
-                pkg_candidate = pkg_dir / f"libciris_verify_ffi{preferred_suffix}"
-                if pkg_candidate.exists():
-                    return pkg_candidate
+                for suffix in search_suffixes:
+                    candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
+                    if candidate.exists():
+                        return candidate
         except ImportError:
             # `ciris_verify` package not installed — drop through to the
             # not-found error below. Production wheel installs always

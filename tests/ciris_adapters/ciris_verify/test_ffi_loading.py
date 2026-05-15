@@ -158,3 +158,47 @@ def test_verify_binary_integrity_checks_magic():
     # Should check for ELF, Mach-O, and PE magic bytes
     assert "ELF" in src, "should check ELF magic"
     assert "Mach-O" in src or "xfe\\xed" in src or "xcf\\xfa" in src, "should check Mach-O magic"
+
+
+def test_find_binary_unknown_platform_iterates_all_suffixes(monkeypatch, tmp_path):
+    """Codex P2 regression coverage — on non-canonical platforms (Cygwin
+    on Windows reports `platform.system() = 'CYGWIN_NT-...'`, MSYS reports
+    `'MSYS_NT-...'`, future runtimes ditto), `_get_platform_binary_suffixes`
+    returns the default `['.so', '.dylib', '.dll']` because no preferred
+    entry matches. Earlier `_find_binary` restricted to `suffixes[0]` (the
+    `.so`) which would NEVER find a `.dll` on a Windows-derivative platform
+    — even though one is sitting right next to it on disk.
+
+    The fix: only restrict to the single platform-preferred suffix when
+    the platform is recognized (Linux/Darwin/Windows). For unknown
+    platforms, iterate the full list and let `ctypes.CDLL` pick the one
+    that loads. Preserves the regression protection on known platforms
+    AND the pre-fix flexibility on unknown ones.
+    """
+    import ciris_adapters.ciris_verify.ffi_bindings.client as client_module
+    from ciris_adapters.ciris_verify.ffi_bindings.client import CIRISVerify
+
+    module_dir = tmp_path / "module"
+    module_dir.mkdir()
+    module_file = module_dir / "client.py"
+    module_file.write_text("# test module marker\n")
+    # Only a .dll is present — what a Cygwin/MSYS host on Windows would
+    # actually have. On unknown platforms we want the loader to find it.
+    dll_lib = module_dir / "libciris_verify_ffi.dll"
+    dll_lib.write_bytes(b"MZ\x90\x00")  # PE/COFF magic
+
+    monkeypatch.setattr(client_module, "__file__", str(module_file))
+    # Unknown platform name — what Cygwin/MSYS actually report.
+    monkeypatch.setattr(client_module.platform, "system", lambda: "CYGWIN_NT-10.0")
+    monkeypatch.setitem(client_module.DEFAULT_BINARY_PATHS, "CYGWIN_NT-10.0", [])
+    monkeypatch.setattr(CIRISVerify, "_is_ios", staticmethod(lambda: False))
+    monkeypatch.setattr(CIRISVerify, "_is_android", staticmethod(lambda: False))
+
+    verifier = object.__new__(CIRISVerify)
+    selected = CIRISVerify._find_binary(verifier, explicit_path=None)
+    assert selected == dll_lib, (
+        f"Unknown platform must iterate all suffixes and find the .dll — "
+        f"got {selected}. The single-suffix restriction was a regression "
+        f"on Cygwin/MSYS hosts where `platform.system()` doesn't match "
+        f"the {{Linux, Darwin, Windows}} allowlist."
+    )

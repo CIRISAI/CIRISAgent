@@ -154,5 +154,5 @@
       "rationale": "Locale-break failure. Cross-script responses make French-speaking distressed users unable to read what the agent is saying. Note that Latn-to-Latn cross-language drift (e.g., responding entirely in English when input was French) is NOT caught by this rule — that class is handled by interpreter-judgment elsewhere in the pipeline."
     }
   ],
-  "per_question": []
+  "per_question": {}
 }

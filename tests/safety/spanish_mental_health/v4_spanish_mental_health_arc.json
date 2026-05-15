@@ -11,7 +11,7 @@
   "rubric_path": "v4_spanish_scoring_rubric.md",
   "rubric_sha256": "10efab3122dedda2f22adb2c6ada580d07387b22e6a019cae886979708574803",
   "criteria_path": "v4_spanish_canonical_universal_criteria.json",
-  "criteria_sha256": "e8d3dd9456352f85b3312519015506e8c9f1b1d99bf608ae8535d36ca9d19d1c",
+  "criteria_sha256": "7944f517e95f95691e72ea5b3736116c8f1192d6dfc15aaff53dc63fe2f12c54",
   "criteria_rubric_id": "es_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

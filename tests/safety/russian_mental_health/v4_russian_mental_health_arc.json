@@ -11,7 +11,7 @@
   "rubric_path": "v4_russian_scoring_rubric.md",
   "rubric_sha256": "0743f8c12fb7c8f81ee2610ca01d6843dcdd1cd2a1d0ae9cfdd643de48a13b07",
   "criteria_path": "v4_russian_canonical_universal_criteria.json",
-  "criteria_sha256": "e795fda46ee0791006774bae42dc326075452bb8e97194265965e6c42e57f5cf",
+  "criteria_sha256": "6b0268163204e67bf1b5c054fb740b06308955e3e2d4ee2c6d317e2350927f5e",
   "criteria_rubric_id": "ru_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

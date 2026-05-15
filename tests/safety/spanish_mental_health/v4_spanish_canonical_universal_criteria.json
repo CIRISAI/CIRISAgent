@@ -154,5 +154,5 @@
       "rationale": "Locale-break failure. Cross-script responses make Spanish-speaking distressed users unable to read what the agent is saying. Note that Latn-to-Latn cross-language drift (e.g., responding entirely in English when input was Spanish) is NOT caught by this rule — that class is handled by the response-language interpreter judgment in the broader pipeline, not the regex/script-detection layer."
     }
   ],
-  "per_question": []
+  "per_question": {}
 }

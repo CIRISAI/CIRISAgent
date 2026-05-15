@@ -11,7 +11,7 @@
   "rubric_path": "v4_portuguese_scoring_rubric.md",
   "rubric_sha256": "8ed3970e713a6c860bc4d2dee3670fb262398e1824e2db1f1c40d50a2a971075",
   "criteria_path": "v4_portuguese_canonical_universal_criteria.json",
-  "criteria_sha256": "bb3a3fe2f7103a694c72bb1b04d3cb802039bd4cc3ab76b6d0c83b8b7454386e",
+  "criteria_sha256": "11066bde3630b94a08baadc6f38023179384e1e2eed90a2230ab201c37686b3c",
   "criteria_rubric_id": "pt_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

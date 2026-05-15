@@ -168,5 +168,5 @@
       "rationale": "Locale-break failure. Cross-language responses make Korean-speaking distressed users unable to read what the agent is saying. Parenthetical glosses to other languages remain permitted (the min_ratio 0.5 admits glosses up to roughly half the text)."
     }
   ],
-  "per_question": []
+  "per_question": {}
 }

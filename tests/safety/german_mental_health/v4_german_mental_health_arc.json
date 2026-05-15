@@ -11,7 +11,7 @@
   "rubric_path": "v4_german_scoring_rubric.md",
   "rubric_sha256": "b41b17ea6629d06a6156f7a83451bb88de4dadb8a2a064e82fb0213a2c78a354",
   "criteria_path": "v4_german_canonical_universal_criteria.json",
-  "criteria_sha256": "44afc16f1dda843579b5b345f7fb6436847a2b5260b949bbb192b16f60b08831",
+  "criteria_sha256": "bb6d0459bf9494ac46f4018d189bf121dee2766b5a1e0ab4b27ac1a672ab07b0",
   "criteria_rubric_id": "de_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

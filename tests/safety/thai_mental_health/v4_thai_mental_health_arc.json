@@ -11,7 +11,7 @@
   "rubric_path": "v4_thai_scoring_rubric.md",
   "rubric_sha256": "69e747005699114f23d605b1f7f3b9bf659241a8fd2e11de866ba5389af0a961",
   "criteria_path": "v4_thai_canonical_universal_criteria.json",
-  "criteria_sha256": "d2ccadd8e1a874eecaece04f6bb71a753b98f3b54a34a1c4fef6a72ab5374db3",
+  "criteria_sha256": "4892ca77188a9bf15d5c2376679e931c3809455eb1ce2b38e1cc1763ab71eab1",
   "criteria_rubric_id": "th_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

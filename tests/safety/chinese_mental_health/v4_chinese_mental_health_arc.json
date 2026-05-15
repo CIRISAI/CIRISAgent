@@ -11,7 +11,7 @@
   "rubric_path": "v4_chinese_scoring_rubric.md",
   "rubric_sha256": "3d2c4ff2a9489ae1c72a1b3d62736dc450d8fda45331a1ec8177f3b1f3aa43fe",
   "criteria_path": "v4_chinese_canonical_universal_criteria.json",
-  "criteria_sha256": "348ba09422a542a896a84476b18d65b4d638ccae74d4783c76014f5fd7c9a91f",
+  "criteria_sha256": "113fcee44fdff1b72ab5900f645abdf6733c57c0151675830c2445da78b6181e",
   "criteria_rubric_id": "zh_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

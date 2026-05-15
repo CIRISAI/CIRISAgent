@@ -11,7 +11,7 @@
   "rubric_path": "v4_italian_scoring_rubric.md",
   "rubric_sha256": "273c2936972e8a2d5bc61e5524781ad3b8994771e60046a40d384bc8985aa9fc",
   "criteria_path": "v4_italian_canonical_universal_criteria.json",
-  "criteria_sha256": "ceb4148f7f0c746a3a01abd614b1b496fdc29b28fdff46a85f552cd2cc846098",
+  "criteria_sha256": "98b4f0410989b67c45c9788672f765a45463b7cde4f59878b7488bc12958cca9",
   "criteria_rubric_id": "it_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

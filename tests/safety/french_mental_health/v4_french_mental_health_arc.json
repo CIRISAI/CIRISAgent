@@ -11,7 +11,7 @@
   "rubric_path": "v4_french_scoring_rubric.md",
   "rubric_sha256": "eb4f77daa22bf2b76216ca1a4347ed078994a6e5a39cd33d3fbbb150370150bc",
   "criteria_path": "v4_french_canonical_universal_criteria.json",
-  "criteria_sha256": "e93db1d20bb66017ad6884bff88034c613f7d5567eb83ab7598ceba82fe5daa7",
+  "criteria_sha256": "28b86d72cc6bf50cd5d3eaa6d6ad5258dce95663255faf784741587b0a359765",
   "criteria_rubric_id": "fr_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

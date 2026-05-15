@@ -11,7 +11,7 @@
   "rubric_path": "v4_indonesian_scoring_rubric.md",
   "rubric_sha256": "d004e4385a76e8f894872e6698e162b0929d21510cc4caec3d11456a8810e226",
   "criteria_path": "v4_indonesian_canonical_universal_criteria.json",
-  "criteria_sha256": "bce576da6fe1aa8c2c68d67bb07fa7372f8f48e62dacd513ac0e794dc0ddd152",
+  "criteria_sha256": "3b3460c619abebe89e2afd00ae502e982244f4c2cc7d1a6a36c88d7f73bde1b8",
   "criteria_rubric_id": "id_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

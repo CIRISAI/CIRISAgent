@@ -124,23 +124,44 @@ jobs:
           # Auto-advance picks the oldest-captured cell first; untested cells
           # are prioritised. See tests/safety/<lang>_mental_health/.
           ROSTER='am ar bn my ha hi mr fa pa sw ta te ur yo en de es fr it pt ru uk ja ko zh id th vi tr'
+
+          # Pre-pass: collect newest non-expired capture artifact per language
+          # using `gh api --paginate` so we don't miss captures past page 1.
+          # Repo has ~15K total artifacts as of 2026-05-15; per_page=100 with
+          # NO pagination (the old shape) only saw the newest 100, which made
+          # every cell whose latest capture had scrolled past the first page
+          # look "untested" — pick-lang would re-pick them on every cron tick
+          # instead of advancing through the roster. `--paginate` follows the
+          # Link: next header until exhausted; we then build a per-lang index
+          # locally and run the original "untested first, oldest second" logic
+          # against that index.
+          gh api --paginate "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("safety-battery-capture-")) | {name, created_at}' \
+            > /tmp/safety_battery_artifacts.ndjson
+          ART_COUNT=$(wc -l < /tmp/safety_battery_artifacts.ndjson)
+          echo "Pulled $ART_COUNT non-expired safety-battery-capture-* artifacts via --paginate"
+
           BEST_LANG=""
           BEST_AGE_DAYS=-1
           NOW_EPOCH=$(date -u +%s)
           for L in $ROSTER; do
-            # Find newest non-expired capture artifact for this lang
-            LATEST=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
-              -F per_page=100 \
-              --jq ".artifacts | map(select(.expired == false) | select(.name | startswith(\"safety-battery-capture-${L}-\"))) | sort_by(.created_at) | reverse | .[0] // empty")
-            if [ -z "$LATEST" ]; then
+            # Find newest non-expired capture artifact for this lang in the
+            # pre-pulled index. The prefix `safety-battery-capture-${L}-`
+            # (note the trailing hyphen) prevents `am-` from matching
+            # `amharic-` or similar bleed-through if directory names were
+            # ever to appear in artifact names.
+            LATEST_CREATED=$(jq -r --arg prefix "safety-battery-capture-${L}-" \
+              'select(.name | startswith($prefix)) | .created_at' \
+              /tmp/safety_battery_artifacts.ndjson \
+              | sort -r | head -1)
+            if [ -z "$LATEST_CREATED" ]; then
               # No capture ever — pick this immediately (untested cells go first)
               echo "lang=$L" >> $GITHUB_OUTPUT
               echo "reason=untested (no prior capture artifact)" >> $GITHUB_OUTPUT
               echo "::notice::Picked $L — first-ever run for this cell"
               exit 0
             fi
-            CREATED_AT=$(echo "$LATEST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["created_at"])')
-            CREATED_EPOCH=$(date -u -d "$CREATED_AT" +%s)
+            CREATED_EPOCH=$(date -u -d "$LATEST_CREATED" +%s)
             AGE_DAYS=$(( (NOW_EPOCH - CREATED_EPOCH) / 86400 ))
             if [ "$AGE_DAYS" -gt "$BEST_AGE_DAYS" ]; then
               BEST_AGE_DAYS=$AGE_DAYS

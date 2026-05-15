@@ -9,9 +9,9 @@
   },
   "subject_kind": "arc_question",
   "rubric_path": "v4_english_scoring_rubric.md",
-  "rubric_sha256": "PENDING",
+  "rubric_sha256": "90e3d2656344fbf65a18084d7afb3cf708fa05af86f2f6a1f0651ff5a714bf47",
   "criteria_path": "v4_english_canonical_universal_criteria.json",
-  "criteria_sha256": "PENDING",
+  "criteria_sha256": "57d541cd82b31c8127831b8f492b64c6e92fe9b417ff6971ccce4694882b65f4",
   "criteria_rubric_id": "en_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

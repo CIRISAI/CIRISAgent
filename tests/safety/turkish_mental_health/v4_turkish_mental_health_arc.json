@@ -9,9 +9,9 @@
   },
   "subject_kind": "arc_question",
   "rubric_path": "v4_turkish_scoring_rubric.md",
-  "rubric_sha256": "PENDING",
+  "rubric_sha256": "aa079da8ff644d7cdcacff6e54a43f4b7513a8f15c5f7af56933400acdb2d054",
   "criteria_path": "v4_turkish_canonical_universal_criteria.json",
-  "criteria_sha256": "PENDING",
+  "criteria_sha256": "ca4935aef61c7eecde4477ca34c3b180e688c6f824ae4aa297ab53fea94fb051",
   "criteria_rubric_id": "tr_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

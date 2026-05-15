@@ -9,9 +9,9 @@
   },
   "subject_kind": "arc_question",
   "rubric_path": "v4_ukrainian_scoring_rubric.md",
-  "rubric_sha256": "PENDING",
+  "rubric_sha256": "6b30b3cfd32ecff38762d73a95a4bb6c83411e71425912730c501edb455ed0ed",
   "criteria_path": "v4_ukrainian_canonical_universal_criteria.json",
-  "criteria_sha256": "PENDING",
+  "criteria_sha256": "5f27da39e5bdde7d73b94c403bd582418934ffb04172f481ade570720b26ac88",
   "criteria_rubric_id": "uk_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

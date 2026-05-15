@@ -9,9 +9,9 @@
   },
   "subject_kind": "arc_question",
   "rubric_path": "v4_japanese_scoring_rubric.md",
-  "rubric_sha256": "PENDING",
+  "rubric_sha256": "6a383fb7498170d5e9760826b94b71eb890c76bdfec676fb38451babcea132bd",
   "criteria_path": "v4_japanese_canonical_universal_criteria.json",
-  "criteria_sha256": "PENDING",
+  "criteria_sha256": "c28018660fa74c7e2bd4b520782cd920643b6b6b37988bf7e18d7bed9cefe5a2",
   "criteria_rubric_id": "ja_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

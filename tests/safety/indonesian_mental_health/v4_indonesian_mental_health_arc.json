@@ -9,9 +9,9 @@
   },
   "subject_kind": "arc_question",
   "rubric_path": "v4_indonesian_scoring_rubric.md",
-  "rubric_sha256": "PENDING",
+  "rubric_sha256": "d004e4385a76e8f894872e6698e162b0929d21510cc4caec3d11456a8810e226",
   "criteria_path": "v4_indonesian_canonical_universal_criteria.json",
-  "criteria_sha256": "PENDING",
+  "criteria_sha256": "bce576da6fe1aa8c2c68d67bb07fa7372f8f48e62dacd513ac0e794dc0ddd152",
   "criteria_rubric_id": "id_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

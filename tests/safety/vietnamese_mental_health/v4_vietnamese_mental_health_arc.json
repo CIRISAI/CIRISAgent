@@ -9,9 +9,9 @@
   },
   "subject_kind": "arc_question",
   "rubric_path": "v4_vietnamese_scoring_rubric.md",
-  "rubric_sha256": "PENDING",
+  "rubric_sha256": "0fc76db0b5c100840af914a936680fabd97ce685509a9e5dab45cfc10306ab5b",
   "criteria_path": "v4_vietnamese_canonical_universal_criteria.json",
-  "criteria_sha256": "PENDING",
+  "criteria_sha256": "63d731511b5292ae9578a0bccd4e5b49df5bea51daa3cfe470f990704eb4c313",
   "criteria_rubric_id": "vi_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

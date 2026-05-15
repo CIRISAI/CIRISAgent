@@ -9,9 +9,9 @@
   },
   "subject_kind": "arc_question",
   "rubric_path": "v4_korean_scoring_rubric.md",
-  "rubric_sha256": "PENDING",
+  "rubric_sha256": "bfa2b0013e21a2e54b22078192c3b84ffc04198a4d2d3a8e1a725ded8bdc8d9f",
   "criteria_path": "v4_korean_canonical_universal_criteria.json",
-  "criteria_sha256": "PENDING",
+  "criteria_sha256": "6e27ae1b5e7c706d7f44767e582cf355e41473332c85e332a25bb75720765b14",
   "criteria_rubric_id": "ko_mh_v4_canonical_universal",
   "promoted_from_contribution_id": null,
   "questions": [

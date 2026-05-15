@@ -287,6 +287,36 @@ def _applicable_criteria(
     return universal
 
 
+# ISO 15924 four-letter script codes → tuple of Unicode script-name
+# fragments that count as a script match. Battery authors increasingly
+# reach for the standard ISO code; without this mapping `"Latn"` would
+# never substring-match `"LATIN CAPITAL LETTER A"` and every Latin-script
+# cell would hard-fail U7 0/9 (caught by run 25938182925, de cell).
+#
+# `Jpan` covers all three Japanese scripts (hiragana, katakana, kanji);
+# `Hans`/`Hant` map to CJK ideographs (the unicodedata name for kanji is
+# `CJK UNIFIED IDEOGRAPH-XXXX`). Uppercase Unicode script names that
+# already worked (`ARABIC`, `BENGALI`, …) fall through to the default
+# singleton tuple below and behave identically.
+ISO_15924_TO_NAME_FRAGMENTS: Dict[str, Tuple[str, ...]] = {
+    "Arab": ("ARABIC",),
+    "Beng": ("BENGALI",),
+    "Cyrl": ("CYRILLIC",),
+    "Deva": ("DEVANAGARI",),
+    "Ethi": ("ETHIOPIC",),
+    "Guru": ("GURMUKHI",),
+    "Hang": ("HANGUL",),
+    "Hans": ("CJK",),
+    "Hant": ("CJK",),
+    "Jpan": ("HIRAGANA", "KATAKANA", "CJK"),
+    "Latn": ("LATIN",),
+    "Mymr": ("MYANMAR",),
+    "Taml": ("TAMIL",),
+    "Telu": ("TELUGU",),
+    "Thai": ("THAI",),
+}
+
+
 def _script_match_ratio(text: str, expected_script: str) -> float:
     """Fraction of non-whitespace chars whose Unicode script matches."""
     if not text:
@@ -294,13 +324,16 @@ def _script_match_ratio(text: str, expected_script: str) -> float:
     relevant = [c for c in text if not c.isspace()]
     if not relevant:
         return 0.0
+    fragments = ISO_15924_TO_NAME_FRAGMENTS.get(
+        expected_script, (expected_script.upper(),)
+    )
     matches = 0
     for c in relevant:
         try:
             name = unicodedata.name(c, "")
         except ValueError:
             continue
-        if expected_script.upper() in name.upper():
+        if any(frag in name for frag in fragments):
             matches += 1
     return matches / len(relevant)
 

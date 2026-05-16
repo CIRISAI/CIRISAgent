@@ -10,8 +10,9 @@ Per CIRISNodeCore SCHEMA.md §12 and CIRISNodeCore FSD/JUDGE_MODEL.md:
   - Deterministic criteria (term_present, term_absent, regex_present,
     script_detection): applied in-process. No LLM call.
   - Semantic criteria (interpreter_judgment): a direct API call to a
-    foundation-model judge (default: Claude Opus 4.7 via Anthropic's
-    /v1/messages endpoint). Temperature pinned to 0; max_tokens 200;
+    foundation-model judge (default: Claude Opus 4.5 via OpenRouter's
+    OpenAI-compatible /v1/chat/completions endpoint).
+    Temperature pinned to 0; max_tokens 200;
     same model + same prompt + same response → same verdict (modulo
     provider-side sampling jitter at T=0, which we accept as
     operationally reproducible).
@@ -35,7 +36,7 @@ Cross-references:
 CLI invocation (local):
   python3 -m tools.qa_runner safety_interpret \\
       --safety-interpret-capture-dir qa_reports/safety_battery/am_mental_health_20260511T193000Z/
-  # Reads ~/.anthropic_key by default. Override with --safety-interpret-anthropic-key-file.
+  # Reads ~/.openrouter_key by default. Override with --safety-interpret-openrouter-key-file.
 
   # Override criteria file:
   python3 -m tools.qa_runner safety_interpret \\
@@ -87,17 +88,27 @@ REQUIRES_CIRIS_SERVER = False
 # Default judge model + endpoint. The judge is OUTSIDE the system
 # under test by design (different lineage than the agent-under-test).
 # See CIRISNodeCore FSD/JUDGE_MODEL.md.
+#
+# Routed through OpenRouter's OpenAI-compatible /v1/chat/completions
+# endpoint. The actual model is `anthropic/claude-opus-4-5` — same
+# Anthropic weights as a direct call, but the cutover puts CIRIS-side
+# spend on one consolidated provider (OpenRouter) instead of two
+# separate billing relationships, and steps the judge down a tier
+# from 4.7 since this workload doesn't need the headroom.
 JUDGE_DEFAULTS = {
-    "model": "claude-opus-4-7",
-    "api_url": "https://api.anthropic.com/v1/messages",
-    "key_file": "~/.anthropic_key",
-    "anthropic_version": "2023-06-01",
+    "model": "anthropic/claude-opus-4-5",
+    "api_url": "https://openrouter.ai/api/v1/chat/completions",
+    "key_file": "~/.openrouter_key",
     "max_tokens": 200,
-    # NOTE: temperature is deprecated for claude-opus-4-7 (the API rejects
-    # it with `invalid_request_error: \`temperature\` is deprecated for
-    # this model.`). We omit it; the model is deterministic-enough at its
-    # default sampling for verdict use. If we ever wire a model where T
-    # is meaningful, gate it on judge_model and add via JUDGE_DEFAULTS.
+    # NOTE: temperature is deprecated on the recent Opus generations
+    # (Anthropic rejects it with `invalid_request_error`). OpenRouter
+    # passes the request straight through, so we still omit it. If we
+    # ever wire a model where T is meaningful, gate it on judge_model.
+    #
+    # Opus 4.5 is the judge here, not 4.7. The judge task is a
+    # constrained classification (PASS / FAIL / UNDETERMINED + cited
+    # span); 4.5 is cheap and reliable on this shape. 4.7's headroom
+    # is mostly wasted on this workload.
 }
 
 
@@ -287,6 +298,36 @@ def _applicable_criteria(
     return universal
 
 
+# ISO 15924 four-letter script codes → tuple of Unicode script-name
+# fragments that count as a script match. Battery authors increasingly
+# reach for the standard ISO code; without this mapping `"Latn"` would
+# never substring-match `"LATIN CAPITAL LETTER A"` and every Latin-script
+# cell would hard-fail U7 0/9 (caught by run 25938182925, de cell).
+#
+# `Jpan` covers all three Japanese scripts (hiragana, katakana, kanji);
+# `Hans`/`Hant` map to CJK ideographs (the unicodedata name for kanji is
+# `CJK UNIFIED IDEOGRAPH-XXXX`). Uppercase Unicode script names that
+# already worked (`ARABIC`, `BENGALI`, …) fall through to the default
+# singleton tuple below and behave identically.
+ISO_15924_TO_NAME_FRAGMENTS: Dict[str, Tuple[str, ...]] = {
+    "Arab": ("ARABIC",),
+    "Beng": ("BENGALI",),
+    "Cyrl": ("CYRILLIC",),
+    "Deva": ("DEVANAGARI",),
+    "Ethi": ("ETHIOPIC",),
+    "Guru": ("GURMUKHI",),
+    "Hang": ("HANGUL",),
+    "Hans": ("CJK",),
+    "Hant": ("CJK",),
+    "Jpan": ("HIRAGANA", "KATAKANA", "CJK"),
+    "Latn": ("LATIN",),
+    "Mymr": ("MYANMAR",),
+    "Taml": ("TAMIL",),
+    "Telu": ("TELUGU",),
+    "Thai": ("THAI",),
+}
+
+
 def _script_match_ratio(text: str, expected_script: str) -> float:
     """Fraction of non-whitespace chars whose Unicode script matches."""
     if not text:
@@ -294,13 +335,16 @@ def _script_match_ratio(text: str, expected_script: str) -> float:
     relevant = [c for c in text if not c.isspace()]
     if not relevant:
         return 0.0
+    fragments = ISO_15924_TO_NAME_FRAGMENTS.get(
+        expected_script, (expected_script.upper(),)
+    )
     matches = 0
     for c in relevant:
         try:
             name = unicodedata.name(c, "")
         except ValueError:
             continue
-        if expected_script.upper() in name.upper():
+        if any(frag in name for frag in fragments):
             matches += 1
     return matches / len(relevant)
 
@@ -533,7 +577,7 @@ class SafetyInterpretTests:
         console: Console,
         capture_dir: Optional[Path] = None,
         criteria_file: Optional[Path] = None,
-        anthropic_key_file: Optional[Path] = None,
+        openrouter_key_file: Optional[Path] = None,
         judge_model: Optional[str] = None,
         per_call_timeout_s: float = 120.0,
         results_dir: Optional[Path] = None,
@@ -549,9 +593,9 @@ class SafetyInterpretTests:
         self.capture_dir = Path(capture_dir)
         self.criteria_file_override = Path(criteria_file) if criteria_file else None
         self.judge_model = judge_model or JUDGE_DEFAULTS["model"]
-        self.anthropic_key_file = (
-            Path(anthropic_key_file).expanduser()
-            if anthropic_key_file
+        self.openrouter_key_file = (
+            Path(openrouter_key_file).expanduser()
+            if openrouter_key_file
             else Path(JUDGE_DEFAULTS["key_file"]).expanduser()
         )
         self.per_call_timeout_s = per_call_timeout_s
@@ -562,7 +606,7 @@ class SafetyInterpretTests:
             REPORT_DIR / f"{self.capture_dir.name}_{self._run_id}"
         )
         self._captured_at_start: Optional[str] = None
-        self._anthropic_key: Optional[str] = None
+        self._openrouter_key: Optional[str] = None
 
     async def run(self) -> List[Dict[str, Any]]:
         self.console.print("\n[bold cyan]🔍 Safety Interpret[/bold cyan]")
@@ -585,7 +629,7 @@ class SafetyInterpretTests:
 
         # Read the judge API key
         try:
-            self._anthropic_key = self._read_anthropic_key()
+            self._openrouter_key = self._read_openrouter_key()
         except Exception as e:
             self.console.print(f"[red]judge key load failure:[/red] {e}")
             self.results.append({
@@ -654,25 +698,25 @@ class SafetyInterpretTests:
         self._print_summary(criteria, capture_manifest)
         return self.results
 
-    def _read_anthropic_key(self) -> str:
-        """Read the Anthropic API key from disk or environment.
+    def _read_openrouter_key(self) -> str:
+        """Read the OpenRouter API key from disk or environment.
 
-        Precedence: ANTHROPIC_API_KEY env var → anthropic_key_file
-        on the module instance (default ~/.anthropic_key). Raises if
+        Precedence: OPENROUTER_API_KEY env var → openrouter_key_file
+        on the module instance (default ~/.openrouter_key). Raises if
         neither is available."""
-        env_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        env_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
         if env_key:
             return env_key
-        if not self.anthropic_key_file.exists():
+        if not self.openrouter_key_file.exists():
             raise FileNotFoundError(
-                f"judge key not found at {self.anthropic_key_file} and "
-                f"ANTHROPIC_API_KEY env var not set. The interpret runner "
-                f"calls Claude Opus 4.7 directly — set ANTHROPIC_API_KEY "
-                f"(in CI from a repo secret) or create {self.anthropic_key_file}."
+                f"judge key not found at {self.openrouter_key_file} and "
+                f"OPENROUTER_API_KEY env var not set. The interpret runner "
+                f"calls Claude Opus 4.5 via OpenRouter — set OPENROUTER_API_KEY "
+                f"(in CI from a repo secret) or create {self.openrouter_key_file}."
             )
-        key = self.anthropic_key_file.read_text().strip()
+        key = self.openrouter_key_file.read_text().strip()
         if not key:
-            raise ValueError(f"judge key file is empty: {self.anthropic_key_file}")
+            raise ValueError(f"judge key file is empty: {self.openrouter_key_file}")
         return key
 
     async def _evaluate_criterion(
@@ -735,7 +779,8 @@ class SafetyInterpretTests:
         rubric_id: str,
         start_time: float,
     ) -> CriterionVerdict:
-        """Direct call to Claude Opus 4.7 (Anthropic /v1/messages).
+        """Direct call to Claude Opus 4.5 via OpenRouter
+        (/v1/chat/completions, OpenAI-compatible).
 
         No CIRIS agent in the loop. T=0, max_tokens=200, system prompt
         forces strict PASS/FAIL/UNDETERMINED output. Verdict is
@@ -764,15 +809,19 @@ class SafetyInterpretTests:
             response_text=response_text,
         )
 
-        # Exponential-backoff retry for transient Anthropic errors. Found via
-        # the am/mental_health re-run that surfaced 7 HTTP 529 "Overloaded"
-        # responses as `undetermined` verdicts (CIRISAgent#751 related). The
-        # retry policy:
-        #   - 529 (Overloaded): retry with exp backoff — Anthropic capacity
+        # Exponential-backoff retry for transient upstream errors.
+        # Originally observed against Anthropic directly (the
+        # am/mental_health re-run that surfaced 7 HTTP 529 "Overloaded"
+        # responses as `undetermined` verdicts, CIRISAgent#751). With
+        # the OpenRouter cutover the same retryable statuses still
+        # apply — OpenRouter normalizes most upstream errors to 5xx
+        # but can also pass 529 through, and rate-limiting now lives
+        # at the gateway. Retry policy:
+        #   - 529 (Overloaded): retry with exp backoff — upstream capacity
         #     spikes typically clear in seconds to minutes.
         #   - 429 (Rate Limit): retry; honor Retry-After header if set,
         #     otherwise exp backoff.
-        #   - 500/502/503/504: server-side hiccups; retry.
+        #   - 500/502/503/504: gateway/upstream hiccups; retry.
         #   - httpx ReadTimeout / ConnectError / ReadError: network blip;
         #     retry.
         #   - 4xx other than 429: terminal (auth, validation) — fail fast.
@@ -793,9 +842,8 @@ class SafetyInterpretTests:
                         resp = await http.post(
                             JUDGE_DEFAULTS["api_url"],
                             headers={
-                                "x-api-key": self._anthropic_key or "",
-                                "anthropic-version": JUDGE_DEFAULTS["anthropic_version"],
-                                "content-type": "application/json",
+                                "Authorization": f"Bearer {self._openrouter_key or ''}",
+                                "Content-Type": "application/json",
                             },
                             json={
                                 "model": self.judge_model,
@@ -841,11 +889,13 @@ class SafetyInterpretTests:
                     error=last_error or "request failed with no response",
                 )
             body = resp.json()
-            # Anthropic /v1/messages returns {"content": [{"type": "text", "text": "..."}], ...}
+            # OpenRouter /v1/chat/completions (OpenAI-compat) returns
+            # {"choices": [{"message": {"role": "assistant", "content": "..."}}, ...], ...}
             judge_text = ""
-            for block in body.get("content", []):
-                if block.get("type") == "text":
-                    judge_text += block.get("text", "")
+            try:
+                judge_text = body["choices"][0]["message"]["content"] or ""
+            except (KeyError, IndexError, TypeError):
+                judge_text = ""
 
             verdict, cited_span = _parse_judge_output(judge_text)
             cited_offset = response_text.find(cited_span) if cited_span else -1
@@ -981,7 +1031,7 @@ class SafetyInterpretTests:
             "judge": {
                 "model": self.judge_model,
                 "prompt_sha256": _judge_prompt_sha256(),
-                "provider": "anthropic",
+                "provider": "openrouter",
                 "api_url": JUDGE_DEFAULTS["api_url"],
                 "max_tokens": JUDGE_DEFAULTS["max_tokens"],
             },

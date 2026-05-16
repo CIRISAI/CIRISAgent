@@ -96,6 +96,7 @@ WIPE_DATA_ON_START = True
 # Kept in sync with tools/safety_battery_migrate.py::LANG_DIR_TO_ISO and
 # ciris_engine/data/localized/manifest.json.
 ISO_TO_LANG_DIR: Dict[str, str] = {
+    # Tier-0/1 batteries (original 14-cell roster — low/mid-resource).
     "am": "amharic",
     "ar": "arabic",
     "bn": "bengali",
@@ -110,6 +111,26 @@ ISO_TO_LANG_DIR: Dict[str, str] = {
     "te": "telugu",
     "ur": "urdu",
     "yo": "yoruba",
+    # Tier-2 batteries (high-resource expansion landing 2.8.12 — 15 cells).
+    # Universal LLM-judge criteria (U1-U5) language-agnostic; per-cell
+    # variation lives in U6 (register/honorific or stigma-slur class)
+    # and U7 (expected_script). See tests/safety/<lang>_mental_health/
+    # v4_*_scoring_rubric.md for the per-cell native-review caveats.
+    "en": "english",
+    "de": "german",
+    "es": "spanish",
+    "fr": "french",
+    "it": "italian",
+    "pt": "portuguese",
+    "ru": "russian",
+    "uk": "ukrainian",
+    "ja": "japanese",
+    "ko": "korean",
+    "zh": "chinese",
+    "id": "indonesian",
+    "th": "thai",
+    "vi": "vietnamese",
+    "tr": "turkish",
 }
 
 # Locale-appropriate display names. Lifted from
@@ -118,6 +139,7 @@ ISO_TO_LANG_DIR: Dict[str, str] = {
 # the "Jeff addressing Selamawit in Amharic" artifact this avoids is
 # the same one model_eval handles for its multilingual sweep.
 LOCALE_USERS: Dict[str, str] = {
+    # Tier-0/1 (original 14-cell roster).
     "am": "ሰላማዊት",      # Selamawit
     "ar": "نور",          # Nour
     "bn": "সুমিতা",       # Sumita
@@ -132,6 +154,25 @@ LOCALE_USERS: Dict[str, str] = {
     "te": "శ్రావణి",        # Sravani
     "ur": "زینب",          # Zainab
     "yo": "Tèmítọ́pẹ́",
+    # Tier-2 (high-resource expansion 2.8.12). Names chosen by the
+    # respective family agents authoring each v4_<lang>_mental_health_arc.json;
+    # kept aligned here so the qa_runner reads the same culturally-grounded
+    # user_preferred_name when interacting with the agent.
+    "en": "Sam",
+    "de": "Anna",
+    "es": "María",
+    "fr": "Camille",
+    "it": "Sofia",
+    "pt": "Beatriz",
+    "ru": "Анна",          # Anna
+    "uk": "Олена",         # Olena
+    "ja": "ユキ",           # Yuki
+    "ko": "민준",            # Min-jun
+    "zh": "小明",            # Xiao Ming
+    "id": "Siti",
+    "th": "สมชาย",         # Somchai
+    "vi": "Minh",
+    "tr": "Ayşe",
 }
 
 # v3/v4 mental-health batteries wrap questions in third-person evaluator

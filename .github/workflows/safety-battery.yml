@@ -26,7 +26,7 @@ on:
         required: false
         default: 'am'
         type: choice
-        options: [am, ar, bn, my, ha, hi, mr, fa, pa, sw, ta, te, ur, yo]
+        options: [am, ar, bn, my, ha, hi, mr, fa, pa, sw, ta, te, ur, yo, en, de, es, fr, it, pt, ru, uk, ja, ko, zh, id, th, vi, tr]
       domain:
         description: 'Cell domain'
         required: false
@@ -120,24 +120,48 @@ jobs:
           fi
           # Otherwise (cron or pull_request), pick the lang with the
           # oldest capture artifact (or any lang with NO capture at all).
-          ROSTER='am ar bn my ha hi mr fa pa sw ta te ur yo'
+          # 29-cell roster (14 Tier-0/1 + 15 Tier-2 high-resource added 2.8.12).
+          # Auto-advance picks the oldest-captured cell first; untested cells
+          # are prioritised. See tests/safety/<lang>_mental_health/.
+          ROSTER='am ar bn my ha hi mr fa pa sw ta te ur yo en de es fr it pt ru uk ja ko zh id th vi tr'
+
+          # Pre-pass: collect newest non-expired capture artifact per language
+          # using `gh api --paginate` so we don't miss captures past page 1.
+          # Repo has ~15K total artifacts as of 2026-05-15; per_page=100 with
+          # NO pagination (the old shape) only saw the newest 100, which made
+          # every cell whose latest capture had scrolled past the first page
+          # look "untested" — pick-lang would re-pick them on every cron tick
+          # instead of advancing through the roster. `--paginate` follows the
+          # Link: next header until exhausted; we then build a per-lang index
+          # locally and run the original "untested first, oldest second" logic
+          # against that index.
+          gh api --paginate "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("safety-battery-capture-")) | {name, created_at}' \
+            > /tmp/safety_battery_artifacts.ndjson
+          ART_COUNT=$(wc -l < /tmp/safety_battery_artifacts.ndjson)
+          echo "Pulled $ART_COUNT non-expired safety-battery-capture-* artifacts via --paginate"
+
           BEST_LANG=""
           BEST_AGE_DAYS=-1
           NOW_EPOCH=$(date -u +%s)
           for L in $ROSTER; do
-            # Find newest non-expired capture artifact for this lang
-            LATEST=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
-              -F per_page=100 \
-              --jq ".artifacts | map(select(.expired == false) | select(.name | startswith(\"safety-battery-capture-${L}-\"))) | sort_by(.created_at) | reverse | .[0] // empty")
-            if [ -z "$LATEST" ]; then
+            # Find newest non-expired capture artifact for this lang in the
+            # pre-pulled index. The prefix `safety-battery-capture-${L}-`
+            # (note the trailing hyphen) prevents `am-` from matching
+            # `amharic-` or similar bleed-through if directory names were
+            # ever to appear in artifact names.
+            LATEST_CREATED=$(jq -r --arg prefix "safety-battery-capture-${L}-" \
+              'select(.name | startswith($prefix)) | .created_at' \
+              /tmp/safety_battery_artifacts.ndjson \
+              | sort -r | head -1)
+            if [ -z "$LATEST_CREATED" ]; then
               # No capture ever — pick this immediately (untested cells go first)
               echo "lang=$L" >> $GITHUB_OUTPUT
               echo "reason=untested (no prior capture artifact)" >> $GITHUB_OUTPUT
               echo "::notice::Picked $L — first-ever run for this cell"
               exit 0
             fi
-            CREATED_AT=$(echo "$LATEST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["created_at"])')
-            CREATED_EPOCH=$(date -u -d "$CREATED_AT" +%s)
+            CREATED_EPOCH=$(date -u -d "$LATEST_CREATED" +%s)
             AGE_DAYS=$(( (NOW_EPOCH - CREATED_EPOCH) / 86400 ))
             if [ "$AGE_DAYS" -gt "$BEST_AGE_DAYS" ]; then
               BEST_AGE_DAYS=$AGE_DAYS
@@ -241,10 +265,14 @@ jobs:
         id: versions
         run: |
           AGENT_VERSION=$(python3 -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
+          # Mirror tools/qa_runner/modules/safety_battery.py ISO_TO_LANG_DIR (29 cells).
           declare -A ISO_TO_DIR=(
             [am]=amharic [ar]=arabic [bn]=bengali [my]=burmese [ha]=hausa
             [hi]=hindi [mr]=marathi [fa]=persian [pa]=punjabi [sw]=swahili
             [ta]=tamil [te]=telugu [ur]=urdu [yo]=yoruba
+            [en]=english [de]=german [es]=spanish [fr]=french [it]=italian
+            [pt]=portuguese [ru]=russian [uk]=ukrainian [ja]=japanese [ko]=korean
+            [zh]=chinese [id]=indonesian [th]=thai [vi]=vietnamese [tr]=turkish
           )
           LANG_DIR="${ISO_TO_DIR[$LANG_INPUT]:-$LANG_INPUT}"
           BATTERY_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/v4_${LANG_DIR}_${DOMAIN_INPUT}_arc.json"
@@ -571,10 +599,14 @@ jobs:
         id: interpret_versions
         run: |
           # Read rubric_id from the capture's BatteryManifest's criteria file
+          # Mirror tools/qa_runner/modules/safety_battery.py ISO_TO_LANG_DIR (29 cells).
           declare -A ISO_TO_DIR=(
             [am]=amharic [ar]=arabic [bn]=bengali [my]=burmese [ha]=hausa
             [hi]=hindi [mr]=marathi [fa]=persian [pa]=punjabi [sw]=swahili
             [ta]=tamil [te]=telugu [ur]=urdu [yo]=yoruba
+            [en]=english [de]=german [es]=spanish [fr]=french [it]=italian
+            [pt]=portuguese [ru]=russian [uk]=ukrainian [ja]=japanese [ko]=korean
+            [zh]=chinese [id]=indonesian [th]=thai [vi]=vietnamese [tr]=turkish
           )
           LANG_DIR="${ISO_TO_DIR[$LANG_INPUT]:-$LANG_INPUT}"
           BATTERY_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/v4_${LANG_DIR}_${DOMAIN_INPUT}_arc.json"
@@ -650,33 +682,33 @@ jobs:
 
       - name: Check secrets availability (interpret)
         # Same pattern as the capture-side gate: fork PRs do not get
-        # ANTHROPIC_API_KEY, so hard-failing would spam external
+        # OPENROUTER_API_KEY, so hard-failing would spam external
         # contributors. Soft-skip the live judge steps with a clear
         # notice. Internal PRs + workflow_dispatch + schedule have it.
         id: interpret_secrets_check
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
+          if [ -z "$OPENROUTER_API_KEY" ]; then
             echo "have_secret=false" >> $GITHUB_OUTPUT
-            echo "::notice::ANTHROPIC_API_KEY unavailable (likely fork PR). Skipping judge run; a maintainer can re-run on a trusted branch."
+            echo "::notice::OPENROUTER_API_KEY unavailable (likely fork PR). Skipping judge run; a maintainer can re-run on a trusted branch."
             {
               echo "## Interpret skipped — secret unavailable"
               echo ""
-              echo "This run does not have \`ANTHROPIC_API_KEY\` in scope (commonly happens on fork PRs)."
+              echo "This run does not have \`OPENROUTER_API_KEY\` in scope (commonly happens on fork PRs)."
               echo "A maintainer can re-run this workflow on a trusted branch to produce fresh verdicts."
             } >> $GITHUB_STEP_SUMMARY
           else
             echo "have_secret=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Write Anthropic API key
+      - name: Write OpenRouter API key
         if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           umask 077
-          printf '%s' "$ANTHROPIC_API_KEY" > "$HOME/.anthropic_key"
+          printf '%s' "$OPENROUTER_API_KEY" > "$HOME/.openrouter_key"
 
       - name: Run safety interpret
         if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
@@ -812,4 +844,4 @@ jobs:
 
       - name: Clean up key file (interpret)
         if: always()
-        run: shred -u "$HOME/.anthropic_key" 2>/dev/null || rm -f "$HOME/.anthropic_key" || true
+        run: shred -u "$HOME/.openrouter_key" 2>/dev/null || rm -f "$HOME/.openrouter_key" || true

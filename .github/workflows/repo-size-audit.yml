@@ -1,0 +1,103 @@
+name: Repo Size Audit
+
+# Advisory size check: surfaces packfile growth before it accumulates into
+# another 600 MB-of-binary-churn situation (see the Phase 1 / Phase 2 plan
+# in commit history for context). Does NOT block PRs today — but the warning
+# threshold should drop after the Phase 2 history rewrite, and the failure
+# threshold should drop with it.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  size-audit:
+    name: Repo Size Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so size-pack reflects the actual cost a fresh clone pays.
+          fetch-depth: 0
+
+      - name: Measure pack and working-tree size
+        id: measure
+        run: |
+          set -euo pipefail
+          # size-pack is the on-disk size of the packed git objects (KiB).
+          size_pack_kib=$(git count-objects -v | awk '/^size-pack:/ {print $2}')
+          size_pack_mib=$(( size_pack_kib / 1024 ))
+          tracked_bytes=$(git ls-files -z | xargs -0 stat -c '%s' 2>/dev/null | awk '{s+=$1} END {print s+0}')
+          tracked_mib=$(( tracked_bytes / 1024 / 1024 ))
+          echo "size_pack_mib=${size_pack_mib}" >> "$GITHUB_OUTPUT"
+          echo "tracked_mib=${tracked_mib}" >> "$GITHUB_OUTPUT"
+          echo "Pack size: ${size_pack_mib} MiB"
+          echo "Tracked working tree: ${tracked_mib} MiB"
+
+      - name: List largest tracked files
+        run: |
+          # `set -e` interacts badly with `sort | head -20`: head closes the
+          # pipe early, sort exits with SIGPIPE (exit 141), and pipefail
+          # makes the step fail even though the listing prints correctly.
+          # Use `awk 'NR<=20'` instead — awk reads its full input and never
+          # closes the pipe early, so pipefail stays clean.
+          set -euo pipefail
+          echo "Top 20 largest tracked files:"
+          git ls-files -z \
+            | xargs -0 -I {} stat -c '%s %n' {} 2>/dev/null \
+            | sort -rn \
+            | awk 'NR<=20 { printf "  %8.2f MiB  %s\n", $1/1024/1024, substr($0, index($0,$2)) }'
+
+      - name: List largest blobs across all history
+        run: |
+          # Same broken-pipe risk as above — use awk 'NR<=20' instead of head.
+          set -euo pipefail
+          echo "Top 20 largest blob versions in git history:"
+          git rev-list --objects --all \
+            | git cat-file --batch-check='%(objecttype) %(objectname) %(objectsize) %(rest)' \
+            | awk '$1=="blob" && $3 > 100000 {print $3, $4}' \
+            | sort -rn \
+            | awk 'NR<=20 { printf "  %8.2f MiB  %s\n", $1/1024/1024, substr($0, index($0,$2)) }'
+
+      - name: Enforce thresholds
+        env:
+          # Phase 1 (this workflow ships) — repo is at ~1,121 MiB packed
+          # because of historical binary churn (libciris_verify_ffi × N
+          # platforms × N versions, Resources.zip × N, etc.). The Phase 1
+          # gate is ADVISORY ONLY: emit warnings if we cross 1300 MiB
+          # (regression worse than today) but never fail. This trains
+          # contributors to read the largest-files / largest-blobs output
+          # without alert fatigue from a permanently-red check.
+          #
+          # Phase 2 plan: BFG history rewrite drops pack to ~205 MiB.
+          # Once landed, this env block must drop to:
+          #   WARN_MIB=250  FAIL_MIB=450
+          #   FAIL_HARD=true
+          # so the gate becomes blocking again with realistic limits.
+          WARN_MIB: 1300
+          FAIL_MIB: 1500
+          FAIL_HARD: "false"
+          SIZE_PACK_MIB: ${{ steps.measure.outputs.size_pack_mib }}
+        run: |
+          set -euo pipefail
+          if [ "$SIZE_PACK_MIB" -ge "$FAIL_MIB" ]; then
+            if [ "$FAIL_HARD" = "true" ]; then
+              echo "::error::Pack size ${SIZE_PACK_MIB} MiB >= fail threshold ${FAIL_MIB} MiB. AWS Security Agent's 512 MiB clone limit is in danger. Stop committing binaries; see docs on the canonical fetch-from-release pattern."
+              exit 1
+            else
+              echo "::warning::Pack size ${SIZE_PACK_MIB} MiB >= advisory-fail threshold ${FAIL_MIB} MiB (gate is non-blocking until Phase 2 history rewrite lands). Stop committing binaries; see docs on the canonical fetch-from-release pattern."
+            fi
+          elif [ "$SIZE_PACK_MIB" -ge "$WARN_MIB" ]; then
+            echo "::warning::Pack size ${SIZE_PACK_MIB} MiB >= warn threshold ${WARN_MIB} MiB. Investigate the largest-blobs list above before this becomes a hard failure (post Phase 2)."
+          fi
+          echo "OK: pack size ${SIZE_PACK_MIB} MiB (warn=${WARN_MIB}, fail=${FAIL_MIB}, hard_gate=${FAIL_HARD})."

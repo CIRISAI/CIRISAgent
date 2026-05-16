@@ -1104,10 +1104,11 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     """Construct the ciris-persist Engine, run A0a migration if needed,
     and wire the engine into `persistence.models.graph` (2.9.0).
 
-    Idempotent: A0a runs only if the sentinel file (`.persist_migrated`
-    next to the engine DB) is absent. Engine construction is cheap and
-    safe to repeat — persist's refinery migrations are no-ops once
-    applied.
+    Idempotent per-process: if an Engine is already wired, this is a
+    no-op. Persist's Engine holds the tokio runtime + connection pool
+    and is designed for one instance per process — tests that need
+    multiple isolated DBs must explicitly call set_persist_engine()
+    with their own Engine instance.
 
     Tolerant: if persist is unavailable or migration fails, logs the
     error but does not block startup. The agent will then hit the
@@ -1116,6 +1117,32 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     """
     import os
     from pathlib import Path
+
+    # Compute the expected DSN up front so we can decide whether to
+    # re-wire. Production calls initialize_database() once per process
+    # with the same db_path — second/third calls are no-ops. Tests
+    # call it with a fresh temp_db each time — those re-wire.
+    from ciris_engine.logic.persistence.models import graph as graph_persistence
+    if db_path is None:
+        _resolved_db_path = get_sqlite_db_full_path()
+    else:
+        _resolved_db_path = db_path
+    if isinstance(_resolved_db_path, str) and not (
+        _resolved_db_path.startswith("postgres://")
+        or _resolved_db_path.startswith("postgresql://")
+    ):
+        from pathlib import Path
+        _abs = Path(_resolved_db_path).resolve()
+        _expected_dsn = f"sqlite:///{_abs}"
+    else:
+        _expected_dsn = _resolved_db_path
+
+    if (
+        graph_persistence._engine is not None
+        and graph_persistence._engine_dsn == _expected_dsn
+    ):
+        logger.debug("persist engine already wired to %s, skipping re-bootstrap", _expected_dsn)
+        return
 
     # Resolve the DSN. Postgres takes its own URL; SQLite uses
     # SQLAlchemy-style sqlite:// + (3 or 4 slashes).

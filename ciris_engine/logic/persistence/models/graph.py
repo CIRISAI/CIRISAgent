@@ -126,17 +126,45 @@ def parse_json_field(value: Any) -> Any:
     return {}
 
 
-def _attributes_to_json_str(attrs: Any) -> str:
-    """Normalize attributes to a JSON string for persist's `attributes` col."""
+def _ensure_tz(iso_str: Optional[str]) -> Optional[str]:
+    """Ensure an ISO datetime string carries a timezone suffix.
+
+    Persist's RFC 3339 decoder rejects naive datetimes (e.g.
+    `'2026-05-16T11:34:09.731717'`). When `datetime.now().isoformat()`
+    produces a naive string, append `Z` so persist treats it as UTC.
+    """
+    if not iso_str:
+        return iso_str
+    if iso_str.endswith("Z"):
+        return iso_str
+    # Look for ±HH:MM or ±HHMM at the tail
+    if len(iso_str) >= 6 and iso_str[-6] in "+-" and iso_str[-3] == ":":
+        return iso_str
+    if len(iso_str) >= 5 and iso_str[-5] in "+-" and iso_str[-3].isdigit():
+        return iso_str
+    return iso_str + "Z"
+
+
+def _attributes_to_payload(attrs: Any) -> Any:
+    """Normalize attributes to a JSON-serializable dict for persist's
+    `attributes` payload field. Persist json.dumps it once on the way to
+    storage; passing a pre-encoded JSON string would double-encode."""
     if attrs is None:
-        return "{}"
+        return {}
     if hasattr(attrs, "model_dump"):
         attrs = attrs.model_dump()
     if isinstance(attrs, dict):
-        return json.dumps(attrs, cls=DateTimeEncoder)
+        # Round-trip through DateTimeEncoder to coerce datetimes; result
+        # is a plain dict persist can json.dumps once.
+        return json.loads(json.dumps(attrs, cls=DateTimeEncoder))
     if isinstance(attrs, str):
-        return attrs
-    return json.dumps(attrs, cls=DateTimeEncoder)
+        # Caller already serialized — try to parse so persist gets a
+        # dict, not a string. Fall back to empty dict on parse failure.
+        try:
+            return json.loads(attrs)
+        except Exception:
+            return {}
+    return json.loads(json.dumps(attrs, cls=DateTimeEncoder))
 
 
 def _node_from_persist_json(blob: str) -> GraphNode:
@@ -203,7 +231,13 @@ def add_graph_node(
     engine = _get_engine()
     scope_str = _to_persist_scope(node.scope)
 
-    now_iso = time_service.now().isoformat() if time_service else None
+    # Persist's GraphNode decoder rejects null updated_at / created_at,
+    # so always fall back to wall clock if the caller didn't supply one
+    # and time_service isn't available either.
+    if time_service is not None:
+        now_iso = time_service.now().isoformat()
+    else:
+        now_iso = datetime.utcnow().isoformat() + "Z"
     new_attrs_dict: Any
     if hasattr(node.attributes, "model_dump"):
         new_attrs_dict = node.attributes.model_dump()
@@ -238,20 +272,34 @@ def add_graph_node(
         logger.exception("read-before-upsert failed for node %s/%s", node.id, node.scope.value)
         existing_node = False
 
+    if isinstance(node.updated_at, str):
+        updated_at_str = node.updated_at
+    elif node.updated_at is not None:
+        updated_at_str = node.updated_at.isoformat()
+    else:
+        updated_at_str = now_iso
+
+    # Pass attributes as a dict — persist json.dumps it once when
+    # storing. Passing a pre-encoded JSON string double-encodes
+    # (column ends up containing '"{\\"key\\":...}"' instead of '{"key":...}').
+    # Round-trip through DateTimeEncoder + json.loads coerces datetime
+    # values to ISO strings while keeping the outer shape as a dict.
+    attrs_for_payload = json.loads(json.dumps(new_attrs_dict, cls=DateTimeEncoder))
+
     payload = {
         "node_id": node.id,
         "scope": scope_str,
         "node_type": node.type.value,
-        "attributes": json.dumps(new_attrs_dict, cls=DateTimeEncoder),
+        "attributes": attrs_for_payload,
         "version": (expected_version + 1) if existing_node else (node.version or 1),
         "updated_by": node.updated_by or "system",
-        "updated_at": node.updated_at if isinstance(node.updated_at, str) else (
-            node.updated_at.isoformat() if node.updated_at else now_iso
-        ),
+        # Both updated_at and created_at must be RFC 3339 (tz-aware);
+        # _ensure_tz appends 'Z' if the caller's isoformat was naive.
+        "updated_at": _ensure_tz(updated_at_str),
         # Required by persist's GraphNode decoder. On update we preserve
         # the existing created_at; on insert we stamp now. Persist may
         # override with its own now() anyway (see CIRISPersist#49).
-        "created_at": existing_created_at if existing_node else now_iso,
+        "created_at": _ensure_tz(existing_created_at if existing_node else now_iso),
     }
 
     try:
@@ -368,8 +416,8 @@ def add_graph_edge(edge: GraphEdge, db_path: Optional[str] = None) -> str:
         "scope": _to_persist_scope(edge.scope),
         "relationship": edge.relationship,
         "weight": edge.weight,
-        "attributes": _attributes_to_json_str(edge.attributes),
-        "created_at": created_at,
+        "attributes": _attributes_to_payload(edge.attributes),
+        "created_at": _ensure_tz(created_at),
     }
     try:
         engine.cirisgraph_upsert_edge(json.dumps(payload))

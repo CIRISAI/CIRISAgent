@@ -1089,6 +1089,94 @@ def initialize_database(db_path: Optional[str] = None) -> None:
         run_migrations(db_path)
 
         logger.info(f"Database initialized at {db_path or get_sqlite_db_full_path()}")
+
+        # 2.9.0: bootstrap the ciris-persist Engine and run A0a graph
+        # migration on first boot. After this call, every reader/writer
+        # of persistence.models.graph routes through persist's typed API
+        # instead of legacy sqlite. See CIRISAgent#763 Lane A.
+        _bootstrap_persist_engine(db_path)
     except Exception as e:
         logger.exception(f"Database error during initialization: {e}")
         raise
+
+
+def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
+    """Construct the ciris-persist Engine, run A0a migration if needed,
+    and wire the engine into `persistence.models.graph` (2.9.0).
+
+    Idempotent: A0a runs only if the sentinel file (`.persist_migrated`
+    next to the engine DB) is absent. Engine construction is cheap and
+    safe to repeat — persist's refinery migrations are no-ops once
+    applied.
+
+    Tolerant: if persist is unavailable or migration fails, logs the
+    error but does not block startup. The agent will then hit the
+    "engine not initialized" RuntimeError on the first persistence call,
+    surfacing the problem loud rather than silently.
+    """
+    import os
+    from pathlib import Path
+
+    # Resolve the DSN. Postgres takes its own URL; SQLite uses
+    # SQLAlchemy-style sqlite:// + (3 or 4 slashes).
+    if db_path is None:
+        db_path = get_sqlite_db_full_path()
+
+    if not isinstance(db_path, str):
+        db_path = str(db_path)
+
+    if db_path.startswith("postgres://") or db_path.startswith("postgresql://"):
+        dsn = db_path
+        sentinel_dir = None
+    else:
+        abs_path = Path(db_path).resolve()
+        # `sqlite:///{abs_path}` where abs_path begins with '/' yields
+        # 'sqlite:////absolute/path' — 4 slashes, absolute as required.
+        dsn = f"sqlite:///{abs_path}"
+        sentinel_dir = abs_path.parent
+
+    signing_key_id = os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
+
+    try:
+        from ciris_persist import Engine
+    except ImportError:
+        logger.warning(
+            "ciris-persist not importable; 2.9.0 absorption disabled. "
+            "Pin ciris-persist>=1.3.0 in requirements.txt."
+        )
+        return
+
+    engine = Engine(dsn, signing_key_id)
+    logger.info("ciris-persist Engine constructed (dsn=%s)", dsn)
+
+    # Run A0a graph migration if sentinel absent.
+    if sentinel_dir is not None:
+        sentinel = sentinel_dir / ".persist_migrated"
+        if not sentinel.exists():
+            try:
+                from tools.ops.migrate_to_persist import run as run_migration
+
+                logger.info("A0a migration sentinel absent — running graph migration")
+                stats = run_migration(
+                    engine_db=Path(db_path),
+                    signing_key_id=signing_key_id,
+                    dry_run=False,
+                )
+                if stats.errors == 0:
+                    sentinel.write_text(
+                        f'{{"nodes_written":{stats.nodes_written},'
+                        f'"edges_written":{stats.edges_written}}}'
+                    )
+                    logger.info(
+                        "A0a migration complete: %d nodes, %d edges",
+                        stats.nodes_written, stats.edges_written,
+                    )
+                else:
+                    logger.error("A0a migration had %d errors; sentinel NOT written",
+                                 stats.errors)
+            except Exception:
+                logger.exception("A0a migration failed; persist engine wired anyway")
+
+    # Wire the engine into persistence.models.graph.
+    from ciris_engine.logic.persistence.models import graph as graph_persistence
+    graph_persistence.set_persist_engine(engine, dsn)

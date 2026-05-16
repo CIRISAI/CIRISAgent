@@ -73,6 +73,17 @@ def _get_engine() -> Engine:
     return _engine
 
 
+def get_persist_engine() -> Optional[Engine]:
+    """Public accessor — returns the wired engine, or None if not yet set.
+
+    Services outside the persistence module use this to call persist's
+    non-graph APIs (federation directory, audit chain, secrets, etc.).
+    Returns None rather than raising so callers can short-circuit
+    cleanly before the engine is wired (e.g., during early boot).
+    """
+    return _engine
+
+
 # ---------------------------------------------------------------------------
 # Scope mapping. Agent's GraphScope enum uses lowercase values ('local',
 # 'community', 'identity', 'environment'); persist's `NodeFilter` /

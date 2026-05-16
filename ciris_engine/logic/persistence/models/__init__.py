@@ -25,6 +25,7 @@ from .graph import (
     get_edges_for_node,
     get_graph_node,
     get_nodes_by_type,
+    get_persist_engine,
 )
 from .identity import (
     get_identity_for_context,

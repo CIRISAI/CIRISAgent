@@ -14,6 +14,8 @@ This service provides:
 """
 
 import asyncio
+import base64
+import hashlib
 import json
 import logging
 import sqlite3
@@ -49,6 +51,11 @@ if TYPE_CHECKING:
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.audit.hash_chain import AuditHashChain
+from ciris_engine.logic.audit.persist_signing import (
+    get_signer_material as _audit_signer_material,
+    resolve_tenant_id as _audit_tenant_id,
+    sign_with_verifier as _audit_sign,
+)
 from ciris_engine.logic.audit.verifier import AuditVerifier
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.base_graph_service import BaseGraphService
@@ -164,6 +171,13 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
 
         # Lock for hash chain operations
         self._hash_chain_lock = asyncio.Lock()
+
+        # A3 cutover: persist-routed chain state. Lazy-loaded on first
+        # write via _refresh_persist_chain_state. _next_seq=None signals
+        # "not yet primed from persist"; sequence_number values written
+        # are always >= 1 (1 == fresh genesis, 2+ == post-A0b-bridge).
+        self._next_seq: Optional[int] = None
+        self._last_entry_hash_b64: Optional[str] = None
 
     async def attach_registry(self, registry: "ServiceRegistryProtocol") -> None:
         """
@@ -1285,81 +1299,153 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         self._db_connection.execute(PRAGMA_SYNCHRONOUS_NORMAL)
 
     async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[JSONDict]:
-        """Add an entry to the hash chain.
+        """Add an entry to the hash chain via persist.
+
+        A3 cutover (CIRISAgent#763 Lane A): the agent no longer writes to
+        the legacy `ciris_audit.db` audit_log table. All writes route
+        through persist's `cirislens_audit_log` substrate via the
+        canonicalize-hash → sign → record_entry pattern that A0b
+        established for the bridge entry.
 
         Returns:
-            Dict with hash chain data (sequence_number, entry_hash, previous_hash, signature, signing_key_id)
-            or None if hash chain is disabled
+            Dict with hash chain data (sequence_number, entry_hash,
+            previous_hash, signature, signing_key_id) or None if hash
+            chain is disabled.
         """
         if not self.enable_hash_chain:
             return None
 
         async with self._hash_chain_lock:
-            hash_chain_data: Optional[JSONDict] = None
-
-            def _write_to_chain() -> JSONDict:
-                entry_dict: JSONDict = {
-                    "event_id": entry.entry_id,
-                    "event_timestamp": entry.timestamp.isoformat(),
-                    "event_type": entry.event_type,
-                    "originator_id": entry.entity_id,
-                    "event_payload": json.dumps(entry.details),
-                }
-
-                if not self.hash_chain or not self.signature_manager:
-                    raise RuntimeError("Hash chain not available")
-
-                prepared = self.hash_chain.prepare_entry(entry_dict)
-                entry_hash_val = get_str(prepared, "entry_hash", "")
-                signature = self.signature_manager.sign_entry(entry_hash_val)
-
-                if not self._db_connection:
-                    raise RuntimeError("Database connection not available")
-
-                cursor = self._db_connection.cursor()
-                cursor.execute(
-                    """
-                    INSERT INTO audit_log
-                    (event_id, event_timestamp, event_type, originator_id,
-                     event_summary, event_payload, sequence_number, previous_hash,
-                     entry_hash, signature, signing_key_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        entry.entry_id,
-                        entry.timestamp.isoformat(),
-                        entry.event_type,
-                        entry.entity_id,
-                        f"{entry.event_type} by {entry.actor}",
-                        json.dumps(entry.details),
-                        prepared["sequence_number"],
-                        prepared["previous_hash"],
-                        prepared["entry_hash"],
-                        signature,
-                        self.signature_manager.key_id or "unknown",
-                    ),
-                )
-
-                self._db_connection.commit()
-
-                # Return hash chain data
-                result_dict: JSONDict = {
-                    "sequence_number": get_int(prepared, "sequence_number", 0),
-                    "entry_hash": entry_hash_val,
-                    "previous_hash": get_str(prepared, "previous_hash", ""),
-                    "signature": signature,
-                    "signing_key_id": self.signature_manager.key_id or "unknown",
-                }
-                return result_dict
-
             try:
-                logger.debug(f"About to write to hash chain for entry {entry.entry_id}")
-                hash_chain_data = await asyncio.to_thread(_write_to_chain)
-                logger.debug(f"Successfully wrote to hash chain for entry {entry.entry_id}")
-                return hash_chain_data
+                return await asyncio.to_thread(self._write_to_persist_chain, entry)
             except Exception as e:
-                logger.error(f"Failed to add to hash chain: {e}", exc_info=True)
+                logger.error(f"Failed to add to persist audit chain: {e}", exc_info=True)
                 return None
+
+    def _write_to_persist_chain(self, entry: AuditRequest) -> JSONDict:
+        """Synchronous persist-routed write — assemble, hash, sign, record.
+
+        Runs in a worker thread (called via asyncio.to_thread from the
+        async wrapper). Holds the chain-state cache under the service's
+        async lock, so we never race on `_next_seq` / `_last_entry_hash_b64`.
+        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError(
+                "persist engine not wired — A3 audit cutover requires the "
+                "engine to be initialized by ServiceInitializer first"
+            )
+
+        # Lazy-load chain state (next sequence + last entry hash) on first call.
+        if self._next_seq is None or self._last_entry_hash_b64 is None:
+            self._refresh_persist_chain_state(engine)
+
+        _pubkey_bytes, actor_id_b64, signing_key_id = _audit_signer_material()
+        tenant_id = _audit_tenant_id()
+
+        recorded_at = entry.timestamp.isoformat().replace("+00:00", "Z")
+        if not recorded_at.endswith("Z"):
+            recorded_at = recorded_at + "Z" if "T" in recorded_at and "+" not in recorded_at else recorded_at
+
+        payload_obj: JSONDict = {
+            "event_type": entry.event_type,
+            "actor": entry.actor,
+            "details": entry.details,
+            "outcome": entry.outcome,
+        }
+
+        # `audit_event` is the generic action_type for agent-emitted audit
+        # rows. Persist also accepts handler_action / task_event / etc. —
+        # future refinement can map AuditRequest.event_type to a tighter
+        # enum, but `audit_event` is unambiguously correct for now.
+        persist_entry: JSONDict = {
+            "entry_id": entry.entry_id,
+            "sequence_number": self._next_seq,
+            "tenant_id": tenant_id,
+            "actor_id": actor_id_b64,
+            "action_type": "audit_event",
+            "subject_kind": "agent_event",
+            "subject_id": entry.entity_id,
+            "payload": json.dumps(payload_obj, sort_keys=True, separators=(",", ":")),
+            "prev_hash": self._last_entry_hash_b64,
+            "recorded_at": recorded_at,
+            "signing_key_id": signing_key_id,
+            "entry_hash": "",
+            "signature": "",
+        }
+
+        # Persist owns canonicalization for hash + signing.
+        hash_canon = engine.audit_canonicalize_for_hash(json.dumps(persist_entry))
+        hash_bytes = hash_canon if isinstance(hash_canon, bytes) else hash_canon.encode()
+        entry_hash_b64 = base64.b64encode(hashlib.sha256(hash_bytes).digest()).decode()
+        persist_entry["entry_hash"] = entry_hash_b64
+
+        sign_canon = engine.audit_canonicalize_for_signing(json.dumps(persist_entry))
+        sign_bytes = sign_canon if isinstance(sign_canon, bytes) else sign_canon.encode()
+        signature_b64 = base64.b64encode(_audit_sign(sign_bytes)).decode()
+        persist_entry["signature"] = signature_b64
+
+        engine.audit_record_entry(json.dumps(persist_entry))
+
+        result: JSONDict = {
+            "sequence_number": self._next_seq,
+            "entry_hash": entry_hash_b64,
+            "previous_hash": self._last_entry_hash_b64,
+            "signature": signature_b64,
+            "signing_key_id": signing_key_id,
+        }
+
+        # Advance chain-state cache for the next write.
+        self._last_entry_hash_b64 = entry_hash_b64
+        self._next_seq = (self._next_seq or 0) + 1
+        return result
+
+    def _refresh_persist_chain_state(self, engine: Any) -> None:
+        """Query persist for the last entry; set _next_seq and _last_entry_hash_b64.
+
+        Called once per service lifetime on the first write. The bridge
+        entry written by A0b is sequence_number=1; the first agent-emitted
+        entry is therefore sequence_number=2 with prev_hash = bridge
+        entry's entry_hash. On a fresh install (no bridge, no prior
+        writes), start at sequence_number=1 with the all-zeros prev_hash.
+
+        persist's `audit_list_entries` paginates with an AuditCursor
+        (`version`, `last_ts`, `last_id`); setting last_ts to a far-future
+        timestamp + empty last_id returns the latest entry first (DESC by
+        recorded_at). Response is a JSON string `{"items": [...]}`.
+        """
+        filter_json = json.dumps({"tenant_id": _audit_tenant_id()})
+        cursor_json = json.dumps(
+            {"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}
+        )
+        raw = engine.audit_list_entries(filter_json, cursor_json, 1)
+
+        items: List[Any] = []
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                items = list(parsed.get("items") or [])
+
+        if not items:
+            self._next_seq = 1
+            self._last_entry_hash_b64 = base64.b64encode(b"\x00" * 32).decode()
+            logger.info("audit chain state: fresh genesis (no prior entries in persist)")
+            return
+
+        last = items[0]
+        last_seq = int(last.get("sequence_number", 0)) if isinstance(last, dict) else 0
+        last_hash = str(last.get("entry_hash", "")) if isinstance(last, dict) else ""
+        self._next_seq = last_seq + 1
+        self._last_entry_hash_b64 = last_hash
+        logger.info(
+            "audit chain state: resumed at seq=%d after last_entry=%s...",
+            self._next_seq, last_hash[:16],
+        )
 
     def _cache_entry(self, entry: AuditRequest) -> None:
         """Add entry to cache."""

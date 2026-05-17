@@ -113,64 +113,13 @@ def _derive_prev_hash_b64(legacy_root_hash: str, legacy_root_id: str) -> str:
     return base64.b64encode(hashlib.sha256(marker.encode("utf-8")).digest()).decode()
 
 
-def _get_signer_material() -> tuple[bytes, str, str]:
-    """Return (pubkey_bytes, actor_id_b64, signing_key_id) from CIRISVerify.
-
-    The agent's TPM-backed Ed25519 key is the source of truth for
-    audit-chain signatures; we register its pubkey in
-    `accord_public_keys` via C3 so audit verifiers can resolve
-    `signing_key_id` -> pubkey.
-    """
-    import os
-    from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
-        get_verifier,
-    )
-
-    verifier = get_verifier()
-    if verifier is None or not hasattr(verifier, "get_ed25519_public_key_sync"):
-        raise RuntimeError(
-            "CIRISVerify verifier unavailable — cannot bridge audit chain "
-            "without the agent's signing key"
-        )
-    pubkey_bytes: bytes = verifier.get_ed25519_public_key_sync()
-    if not pubkey_bytes:
-        raise RuntimeError(
-            "CIRISVerify returned empty pubkey — key may not be initialized"
-        )
-    actor_id_b64 = base64.b64encode(pubkey_bytes).decode("ascii")
-    agent_id = os.environ.get("CIRIS_AGENT_ID")
-    if agent_id:
-        signing_key_id = f"agent-{agent_id}"
-    else:
-        fingerprint = hashlib.sha256(pubkey_bytes).hexdigest()[:12]
-        signing_key_id = f"agent-{fingerprint}"
-    return pubkey_bytes, actor_id_b64, signing_key_id
-
-
-def _sign_with_verifier(canonical_bytes: bytes) -> bytes:
-    """Sign `canonical_bytes` with CIRISVerify's TPM-backed Ed25519 key.
-
-    The signer abstraction is at `ciris_engine.logic.audit.signing_protocol`
-    — the same path the audit handler uses for normal entries.
-    """
-    from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
-        get_verifier,
-    )
-
-    verifier = get_verifier()
-    sig: bytes = verifier.sign_ed25519_sync(canonical_bytes)
-    return sig
-
-
-def _resolve_tenant_id() -> str:
-    """Tenant ID per AUDIT_CHAIN_BRIDGE.md §2.1.
-
-    Prefer the env var `CIRIS_AGENT_ID` (stable per-deployment value);
-    otherwise derive from the pubkey fingerprint.
-    """
-    import os
-    agent_id = os.environ.get("CIRIS_AGENT_ID")
-    return agent_id if agent_id else "agent-default"
+# Signer + tenant helpers moved to ciris_engine/logic/audit/persist_signing.py
+# so the A3 GraphAuditService cutover can reuse the same primitives.
+from ciris_engine.logic.audit.persist_signing import (  # noqa: E402
+    get_signer_material as _get_signer_material,
+    resolve_tenant_id as _resolve_tenant_id,
+    sign_with_verifier as _sign_with_verifier,
+)
 
 
 def run(

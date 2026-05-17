@@ -499,6 +499,8 @@ jobs:
         # fixture. Scenario-tag carries the (lang, domain, template) tuple
         # so the next major release's upgrade-compat matrix can pin a
         # specific shape if needed. See tools/release/UPGRADE_FIXTURE.md.
+        # qa_runner sets CIRIS_HOME=project_root, so DBs land at
+        # $GITHUB_WORKSPACE/data — the action's default location.
         if: steps.dedup.outputs.skip != 'true' && steps.bundle.outputs.bundle_dir != ''
         uses: ./.github/actions/capture-upgrade-fixture
         with:

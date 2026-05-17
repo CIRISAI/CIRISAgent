@@ -260,6 +260,8 @@ jobs:
         # upgrade fixture. qa_runner exercises every module's API surface,
         # so the DB carries the widest variety of graph/audit/secrets
         # state of the three host workflows. See tools/release/UPGRADE_FIXTURE.md.
+        # qa_runner sets CIRIS_HOME=project_root, so DBs land at
+        # $GITHUB_WORKSPACE/data — the action's default location.
         if: success()
         uses: ./.github/actions/capture-upgrade-fixture
         with:

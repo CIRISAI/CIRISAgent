@@ -180,6 +180,8 @@ jobs:
         # Snapshot the post-1000-msg-burst agent state as a "synthetic load"
         # upgrade fixture. The next major release consumes this through its
         # upgrade-bootstrap matrix. See tools/release/UPGRADE_FIXTURE.md.
+        # memory_benchmark.py runs with cwd=checkout, so DBs land at
+        # $GITHUB_WORKSPACE/data — the action's default location.
         if: success()
         uses: ./.github/actions/capture-upgrade-fixture
         with:

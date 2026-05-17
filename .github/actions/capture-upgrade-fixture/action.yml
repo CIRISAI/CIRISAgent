@@ -18,6 +18,15 @@ inputs:
       lang/domain/template tuple). Empty by default.
     required: false
     default: ""
+  data-dir:
+    description: >-
+      Directory containing ciris_engine.db (+ ciris_audit.db, secrets.db).
+      Defaults to $GITHUB_WORKSPACE/data — which is where all three current
+      host workflows land their DBs (qa_runner sets CIRIS_HOME=project_root,
+      memory_benchmark.py runs with cwd=checkout, safety-battery uses
+      qa_runner). Override only if your workflow puts data elsewhere.
+    required: false
+    default: ""
 
 outputs:
   artifact-name:
@@ -31,29 +40,34 @@ runs:
       id: build
       shell: bash
       run: |
-        set -e
+        set -euo pipefail
 
         AGENT_VERSION=$(python3 -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
         SOURCE_NAME="${{ inputs.source-name }}"
         SCENARIO_TAG="${{ inputs.scenario-tag }}"
 
-        # Locate the agent's data dir. Path depends on how the host workflow
-        # launched main.py: development mode (cwd has .git) → ./data,
-        # CIRIS_HOME mode → $CIRIS_HOME/data, staged-qa → /tmp/ciris-staged-qa/data.
-        # Search broadly to be resilient. Skip pip-installed site-packages
-        # caches so we don't pick up stale wheel-bundled DB skeletons.
-        DB_FILE=$(find / -type f -name "ciris_engine.db" \
-          -not -path "*/site-packages/*" \
-          -not -path "*/.cache/*" \
-          2>/dev/null | head -1)
-        if [ -z "$DB_FILE" ]; then
-          echo "::error::Capture failed: no ciris_engine.db found anywhere on the runner."
-          echo "::error::This action must run AFTER the agent has been brought up at least once."
+        # Use the explicit data-dir input if provided, else the canonical
+        # location all three host workflows use: $GITHUB_WORKSPACE/data.
+        # qa_runner pins CIRIS_HOME=project_root; memory_benchmark.py runs
+        # with cwd=checkout; both land DBs at <checkout>/data/.
+        DATA_DIR="${{ inputs.data-dir }}"
+        if [ -z "$DATA_DIR" ]; then
+          DATA_DIR="$GITHUB_WORKSPACE/data"
+        fi
+
+        echo "[capture] data_dir=$DATA_DIR"
+        if [ ! -d "$DATA_DIR" ]; then
+          echo "::error::Capture failed: data dir $DATA_DIR does not exist."
+          echo "::error::The host workflow must run the agent before invoking this action."
           exit 1
         fi
-        DATA_DIR=$(dirname "$DB_FILE")
-        echo "Capturing from: $DATA_DIR"
         ls -la "$DATA_DIR"
+        if [ ! -f "$DATA_DIR/ciris_engine.db" ]; then
+          echo "::error::Capture failed: $DATA_DIR/ciris_engine.db not found."
+          echo "::error::Listing above shows what IS in $DATA_DIR — agent may have used a different path."
+          echo "::error::If your workflow uses a non-standard data dir, pass it via the data-dir input."
+          exit 1
+        fi
 
         FIXTURE_DIR="/tmp/upgrade-fixture"
         rm -rf "$FIXTURE_DIR"
@@ -115,10 +129,11 @@ runs:
         echo "Artifact: $ARTIFACT_NAME"
 
     - name: Upload fixture artifact
+      if: steps.build.outputs.artifact-name != ''
       uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.build.outputs.artifact-name }}
         path: /tmp/upgrade-fixture/
         retention-days: 90
-        if-no-files-found: error
+        if-no-files-found: warn
         overwrite: true

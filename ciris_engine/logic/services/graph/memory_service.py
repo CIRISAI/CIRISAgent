@@ -237,10 +237,14 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         from ciris_engine.logic.formatters.identity import format_agent_identity
 
         def _query_identity() -> str:
+            # 2.9.0: data lives in persist's cirisgraph_nodes; scope enum
+            # is UPPERCASE there. attributes column is named `attributes`
+            # not `attributes_json`.
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT node_id, attributes_json FROM graph_nodes WHERE scope = ?", (GraphScope.IDENTITY.value,)
+                    "SELECT node_id, attributes FROM cirisgraph_nodes WHERE scope = ?",
+                    ("IDENTITY",),
                 )
                 rows = cursor.fetchall()
 
@@ -248,7 +252,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                 # (typically there's only one identity node per agent)
                 if rows:
                     # Handle PostgreSQL JSONB vs SQLite TEXT
-                    attrs_json = rows[0]["attributes_json"]
+                    attrs_json = rows[0]["attributes"]
                     if attrs_json:
                         attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
                     else:
@@ -436,10 +440,14 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                     # ORDER BY DESC to get most recent metrics first
                     # PostgreSQL: created_at is already TIMESTAMP, no conversion needed
                     # SQLite: created_at is TEXT, use datetime() for comparison
+                    # 2.9.0: read from persist's cirisgraph_nodes (scope
+                    # is UPPERCASE there; attributes column renamed from
+                    # attributes_json -> attributes).
+                    persist_scope = scope.upper() if isinstance(scope, str) else scope
                     if adapter.is_postgresql():
                         sql = """
-                            SELECT node_id, attributes_json, created_at
-                            FROM graph_nodes
+                            SELECT node_id, attributes, created_at
+                            FROM cirisgraph_nodes
                             WHERE node_type = 'tsdb_data'
                               AND scope = ?
                               AND created_at >= ?
@@ -449,8 +457,8 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                         """
                     else:
                         sql = """
-                            SELECT node_id, attributes_json, created_at
-                            FROM graph_nodes
+                            SELECT node_id, attributes, created_at
+                            FROM cirisgraph_nodes
                             WHERE node_type = 'tsdb_data'
                               AND scope = ?
                               AND datetime(created_at) >= datetime(?)
@@ -459,7 +467,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                             LIMIT 1000
                         """
 
-                    cursor.execute(sql, (scope, start_time.isoformat(), end_time.isoformat()))
+                    cursor.execute(sql, (persist_scope, start_time.isoformat(), end_time.isoformat()))
                     return cursor.fetchall()
 
             rows = await loop.run_in_executor(None, _query_tsdb_nodes)
@@ -467,7 +475,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             for row in rows:
                 try:
                     # Parse attributes - handle PostgreSQL JSONB vs SQLite TEXT
-                    attrs_json = row["attributes_json"]
+                    attrs_json = row["attributes"]
                     if attrs_json:
                         attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
                     else:
@@ -803,13 +811,13 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
 
-                # Get node count
-                cursor.execute("SELECT COUNT(*) FROM graph_nodes")
+                # 2.9.0: count persist's cirisgraph_* tables instead of
+                # the legacy graph_* tables (which are now read-only).
+                cursor.execute("SELECT COUNT(*) FROM cirisgraph_nodes")
                 result = cursor.fetchone()
                 node_count = result[0] if result else 0
 
-                # Get edge count
-                cursor.execute("SELECT COUNT(*) FROM graph_edges")
+                cursor.execute("SELECT COUNT(*) FROM cirisgraph_edges")
                 result = cursor.fetchone()
                 edge_count = result[0] if result else 0
 
@@ -858,10 +866,11 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         def _check_database() -> bool:
             try:
-                # Try a simple database operation
+                # Try a simple database operation against persist's table
+                # (legacy graph_nodes is read-only after 2.9.0).
                 with get_db_connection(db_path=self.db_path) as conn:
                     cursor = conn.cursor()
-                    cursor.execute("SELECT COUNT(*) FROM graph_nodes")
+                    cursor.execute("SELECT COUNT(*) FROM cirisgraph_nodes")
                     cursor.fetchone()
                 return True
             except Exception:

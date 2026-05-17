@@ -1761,6 +1761,116 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         except Exception as e:
             logger.warning(f"WA key migration failed (non-fatal): {e}")
 
+    def _register_agent_pubkey_with_persist(self) -> None:
+        """Register the agent's CIRISVerify-managed Ed25519 pubkey with
+        persist's `accord_public_keys` table (the lens audit-chain
+        pubkey directory). 2.9.0 Lane C C3, CIRISAgent#765.
+
+        `accord_public_keys` is the table audit-chain verifiers query
+        to resolve `signing_key_id` → raw Ed25519 pubkey. Required for
+        A0b (audit chain bridge entry — verifier looks up the agent's
+        TPM-backed signing key here to validate the bridge signature)
+        and A3 (GraphAuditService cutover — every audit_record_entry
+        write carries a signing_key_id that resolves through this
+        table).
+
+        Distinct from `federation_keys` (the federation directory for
+        peer trust / Counter-RII / consent_role / V020 trust columns),
+        which uses `engine.register_federation_key(...)` and requires
+        the Engine to be constructed with `local_key_id` +
+        `local_key_path`. That's a follow-up step (C3') with its own
+        key-bootstrap design question — the agent's TPM-backed key
+        isn't loadable as a filesystem path.
+
+        Idempotent:
+          - register_public_key is a no-op on (key_id, public_key)
+            collision with matching content
+          - raises on collision with differing content (intentional —
+            signals key rotation that the operator must approve)
+        """
+        import base64
+
+        from ciris_engine.logic.persistence import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            logger.debug(
+                "[AuthenticationService] persist engine not wired; "
+                "skipping steward key registration"
+            )
+            return
+
+        # CIRISVerify is the trust anchor for the agent's signing key.
+        # Pull the pubkey via the same path the audit signer uses.
+        try:
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                get_verifier,
+            )
+            verifier = get_verifier()
+        except Exception as exc:
+            logger.debug(
+                f"[AuthenticationService] CIRISVerify not yet available for "
+                f"key registration: {exc}"
+            )
+            return
+
+        if not hasattr(verifier, "get_ed25519_public_key_sync"):
+            logger.debug(
+                "[AuthenticationService] CIRISVerify version lacks "
+                "get_ed25519_public_key_sync; skipping registration"
+            )
+            return
+
+        pubkey_bytes = verifier.get_ed25519_public_key_sync()
+        if not pubkey_bytes:
+            logger.debug(
+                "[AuthenticationService] CIRISVerify returned no pubkey; "
+                "key may not be initialized yet"
+            )
+            return
+
+        pubkey_b64 = base64.b64encode(pubkey_bytes).decode("ascii")
+
+        # Stable key_id: prefer CIRIS_AGENT_ID env var when set;
+        # otherwise derive from the pubkey fingerprint so the value is
+        # deterministic across reboots without operator coordination.
+        import hashlib
+        import os
+
+        agent_id = os.environ.get("CIRIS_AGENT_ID")
+        if agent_id:
+            key_id = f"agent-{agent_id}"
+        else:
+            fingerprint = hashlib.sha256(pubkey_bytes).hexdigest()[:12]
+            key_id = f"agent-{fingerprint}"
+
+        try:
+            engine.register_public_key(
+                signature_key_id=key_id,
+                public_key_b64=pubkey_b64,
+                algorithm="ed25519",
+                description="CIRISAgent signing key (CIRISVerify-managed)",
+                added_by="agent_bootstrap",
+            )
+            logger.info(
+                f"[AuthenticationService] agent pubkey registered with persist "
+                f"directory: key_id={key_id}"
+            )
+        except Exception as exc:
+            # Idempotent no-op on match; raises on content collision.
+            # We log + swallow either way — the boot path is non-blocking.
+            msg = str(exc).lower()
+            if "already" in msg or "exists" in msg or "conflict" in msg:
+                logger.debug(
+                    f"[AuthenticationService] steward key already registered "
+                    f"(key_id={key_id}): {exc}"
+                )
+            else:
+                logger.warning(
+                    f"[AuthenticationService] steward key registration failed "
+                    f"(key_id={key_id}): {exc}"
+                )
+
     async def start(self) -> None:
         """Start the service."""
         await super().start()
@@ -1789,6 +1899,23 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # MUST NOT raise from start(); identity-seed observability is
             # opt-in by ciris-verify version, not a hard dependency.
             logger.debug(f"[AuthenticationService] storage_descriptor boot log skipped: {e}")
+
+        # 2.9.0 Lane C C3: register agent's CIRISVerify-managed pubkey
+        # with persist's `accord_public_keys` table so audit-chain
+        # verifiers (A0b bridge entry, A3 audit_record_entry calls)
+        # can resolve our signing_key_id back to the raw Ed25519
+        # pubkey. Distinct from `federation_keys` registration (C3'),
+        # which needs the Engine constructed with local_key_id +
+        # local_key_path. MUST NOT raise from start(); persist
+        # availability is checked at call sites that need it.
+        # See CIRISAgent#765.
+        try:
+            self._register_agent_pubkey_with_persist()
+        except Exception as e:
+            logger.warning(
+                f"[AuthenticationService] persist federation key registration "
+                f"skipped (non-fatal): {e}"
+            )
 
         # Kick off startup attestation in the BACKGROUND — but capture the
         # task so any code that *needs* the attestation result can await it.

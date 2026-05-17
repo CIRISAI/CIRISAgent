@@ -25,6 +25,10 @@ def comprehensive_system_snapshot_mocks():
     directly access global persistence and services instead of
     receiving them as parameters.
     """
+    # 2.9.0: persistence.models.graph no longer imports get_db_connection
+    # (A1 absorption — CIRISAgent#763); graph operations route through
+    # the persist Engine. The mock_persistence patch above is the right
+    # intercept for graph calls.
     with patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence, patch(
         "ciris_engine.logic.context.system_snapshot.persistence"
     ) as mock_main_persistence, patch(
@@ -32,10 +36,9 @@ def comprehensive_system_snapshot_mocks():
     ) as mock_secrets, patch(
         "ciris_engine.logic.persistence.models.tasks.get_db_connection"
     ) as mock_task_db, patch(
-        "ciris_engine.logic.persistence.models.graph.get_db_connection"
-    ) as mock_graph_db, patch(
         "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path"
     ) as mock_db_path:
+        mock_graph_db = MagicMock()  # back-compat placeholder for removed patch
 
         # Mock database path to avoid config dependency
         mock_db_path.return_value = "/tmp/test.db"

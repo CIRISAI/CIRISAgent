@@ -1,22 +1,133 @@
+"""Graph persistence layer — 2.9.0 absorption into ciris-persist.
+
+Pre-2.9.0 this module was the agent's sqlite-direct CRUD over `graph_nodes`
+and `graph_edges`. Post-2.9.0 every function routes through the
+`ciris-persist` Engine — agent owns the typing, persist owns the storage.
+
+ServiceInitializer calls `set_persist_engine(engine)` after the post-A0a
+migration (CIRISAgent#763 Lane A) wires `cirisgraph_*` with the agent's
+existing data. After that, all callers of this module talk to persist
+transparently.
+
+`db_path` arguments are accepted for signature compatibility but ignored
+— persist's Engine owns its own DSN. Tests that need to redirect storage
+construct their own Engine and call `set_persist_engine` directly.
+
+Missing persist API (filed upstream): edge-level deletion is not exposed
+on the Engine surface, so `delete_graph_edge` and `delete_edges_for_node`
+issue direct SQL against persist's `cirisgraph_edges` table. Once
+persist exposes `cirisgraph_delete_edge` / `cirisgraph_delete_edges_for_node`
+those two functions become typed-API calls too.
+"""
+
 import json
 import logging
+import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
-from ciris_engine.logic.persistence.db import get_db_connection
-from ciris_engine.logic.persistence.db.dialect import get_adapter
+from ciris_persist import Engine, NotFound  # type: ignore[import-untyped]
+
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.services.graph_core import GraphEdge, GraphEdgeAttributes, GraphNode, GraphScope, NodeType
+from ciris_engine.schemas.services.graph_core import (
+    GraphEdge,
+    GraphEdgeAttributes,
+    GraphNode,
+    GraphScope,
+    NodeType,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def parse_json_field(value: Any) -> Any:
-    """Parse JSON field from database.
+# ---------------------------------------------------------------------------
+# Module-level Engine singleton.
+# ---------------------------------------------------------------------------
 
-    PostgreSQL JSONB returns dict, SQLite returns string.
-    This function handles both cases.
+_engine: Optional[Engine] = None
+_engine_dsn: Optional[str] = None
+
+
+def set_persist_engine(engine: Engine, dsn: Optional[str] = None) -> None:
+    """Wire the agent's PersistEngine into the persistence module.
+
+    Called by ServiceInitializer post-A0a on first 2.9.0 boot. After this
+    call, every function in this module routes through persist's typed
+    API instead of legacy sqlite. The DSN argument is informational —
+    used in error messages — and may be `None` for in-memory engines.
     """
+    global _engine, _engine_dsn
+    _engine = engine
+    _engine_dsn = dsn
+    logger.info("persist engine wired into persistence.models.graph (dsn=%s)", dsn)
+
+
+def _get_engine() -> Engine:
+    """Return the wired engine; raise if not yet set."""
+    if _engine is None:
+        raise RuntimeError(
+            "persist engine not initialized. Call "
+            "`ciris_engine.logic.persistence.models.graph.set_persist_engine(engine)` "
+            "before any graph operation (typically via ServiceInitializer)."
+        )
+    return _engine
+
+
+def get_persist_engine() -> Optional[Engine]:
+    """Public accessor — returns the wired engine, or None if not yet set.
+
+    Services outside the persistence module use this to call persist's
+    non-graph APIs (federation directory, audit chain, secrets, etc.).
+    Returns None rather than raising so callers can short-circuit
+    cleanly before the engine is wired (e.g., during early boot).
+    """
+    return _engine
+
+
+# ---------------------------------------------------------------------------
+# Scope mapping. Agent's GraphScope enum uses lowercase values ('local',
+# 'community', 'identity', 'environment'); persist's `NodeFilter` /
+# `GraphScope` enum is UPPERCASE per the CHECK constraint on
+# `cirisgraph_nodes.scope`.
+# ---------------------------------------------------------------------------
+
+_SCOPE_TO_PERSIST = {
+    "local": "LOCAL",
+    "community": "COMMUNITY",
+    "identity": "IDENTITY",
+    "environment": "ENVIRONMENT",
+}
+_SCOPE_FROM_PERSIST = {v: k for k, v in _SCOPE_TO_PERSIST.items()}
+
+
+def _to_persist_scope(scope: GraphScope) -> str:
+    return _SCOPE_TO_PERSIST[scope.value]
+
+
+def _from_persist_scope(scope_str: str) -> GraphScope:
+    return GraphScope(_SCOPE_FROM_PERSIST[scope_str])
+
+
+# ---------------------------------------------------------------------------
+# JSON helpers.
+# ---------------------------------------------------------------------------
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles datetime objects and Pydantic models."""
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if hasattr(obj, "model_dump"):
+            return obj.model_dump()
+        if hasattr(obj, "dict"):
+            return obj.dict()
+        return super().default(obj)
+
+
+def parse_json_field(value: Any) -> Any:
+    """Parse a JSON field that may already be a dict (persist auto-parses)
+    or still a JSON string (raw column read)."""
     if value is None:
         return {}
     if isinstance(value, dict):
@@ -26,363 +137,473 @@ def parse_json_field(value: Any) -> Any:
     return {}
 
 
-class DateTimeEncoder(json.JSONEncoder):
-    """Custom JSON encoder that handles datetime objects and Pydantic models."""
+def _ensure_tz(iso_str: Optional[str]) -> Optional[str]:
+    """Ensure an ISO datetime string carries a timezone suffix.
 
-    def default(self, obj: Any) -> Any:
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        # Handle Pydantic models
-        if hasattr(obj, "model_dump"):
-            return obj.model_dump()
-        # Handle objects with dict() method
-        if hasattr(obj, "dict"):
-            return obj.dict()
-        return super().default(obj)
+    Persist's RFC 3339 decoder rejects naive datetimes (e.g.
+    `'2026-05-16T11:34:09.731717'`). When `datetime.now().isoformat()`
+    produces a naive string, append `Z` so persist treats it as UTC.
+    """
+    if not iso_str:
+        return iso_str
+    if iso_str.endswith("Z"):
+        return iso_str
+    # Look for ±HH:MM or ±HHMM at the tail
+    if len(iso_str) >= 6 and iso_str[-6] in "+-" and iso_str[-3] == ":":
+        return iso_str
+    if len(iso_str) >= 5 and iso_str[-5] in "+-" and iso_str[-3].isdigit():
+        return iso_str
+    return iso_str + "Z"
 
 
-def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: Optional[str] = None) -> str:
-    """Insert or update a graph node, merging attributes if it exists."""
-    logger.debug(
-        f"add_graph_node: node_id={node.id!r}, scope={node.scope.value!r}, type={node.type.value!r}, db_path={db_path!r}"
+def _attributes_to_payload(attrs: Any) -> Any:
+    """Normalize attributes to a JSON-serializable dict for persist's
+    `attributes` payload field. Persist json.dumps it once on the way to
+    storage; passing a pre-encoded JSON string would double-encode."""
+    if attrs is None:
+        return {}
+    if hasattr(attrs, "model_dump"):
+        attrs = attrs.model_dump()
+    if isinstance(attrs, dict):
+        # Round-trip through DateTimeEncoder to coerce datetimes; result
+        # is a plain dict persist can json.dumps once.
+        return json.loads(json.dumps(attrs, cls=DateTimeEncoder))
+    if isinstance(attrs, str):
+        # Caller already serialized — try to parse so persist gets a
+        # dict, not a string. Fall back to empty dict on parse failure.
+        try:
+            return json.loads(attrs)
+        except Exception:
+            return {}
+    return json.loads(json.dumps(attrs, cls=DateTimeEncoder))
+
+
+def _node_from_persist_json(blob: str) -> GraphNode:
+    """Reshape persist's GraphNode JSON response into the agent's
+    GraphNode pydantic model."""
+    d = json.loads(blob) if isinstance(blob, str) else blob
+    attrs_field = d.get("attributes")
+    if isinstance(attrs_field, str):
+        attrs = json.loads(attrs_field) if attrs_field else {}
+    else:
+        attrs = attrs_field or {}
+    return GraphNode(
+        id=d["node_id"],
+        type=d["node_type"],
+        scope=_from_persist_scope(d["scope"]),
+        attributes=attrs,
+        version=d.get("version", 1),
+        updated_by=d.get("updated_by", "system"),
+        updated_at=d.get("updated_at"),
     )
+
+
+def _edge_from_persist_json(blob: Any, fallback_scope: Optional[GraphScope] = None) -> GraphEdge:
+    """Reshape persist's GraphEdge JSON response into the agent's
+    GraphEdge pydantic model."""
+    d = json.loads(blob) if isinstance(blob, str) else blob
+    attrs_field = d.get("attributes")
+    if isinstance(attrs_field, str):
+        attrs = json.loads(attrs_field) if attrs_field else {}
+    else:
+        attrs = attrs_field or {}
+    valid_attrs = {k: attrs[k] for k in ("created_at", "context") if k in attrs}
+    scope_str = d.get("scope")
+    scope = _from_persist_scope(scope_str) if scope_str else (fallback_scope or GraphScope.LOCAL)
+    return GraphEdge(
+        source=d["source_node_id"],
+        target=d["target_node_id"],
+        relationship=d["relationship"],
+        scope=scope,
+        weight=d.get("weight"),
+        attributes=GraphEdgeAttributes(**valid_attrs) if valid_attrs else GraphEdgeAttributes(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Node CRUD.
+# ---------------------------------------------------------------------------
+
+def add_graph_node(
+    node: GraphNode,
+    time_service: TimeServiceProtocol,
+    db_path: Optional[str] = None,
+) -> str:
+    """Insert or update a graph node, merging attributes if it exists.
+
+    Goes through `engine.cirisgraph_upsert_node`. Optimistic concurrency
+    via `expected_version` — if the row exists we pass its current
+    version; otherwise 0.
+
+    Preserves the legacy USER-node side effect: when a new USER node is
+    inserted, a 14-day TEMPORARY consent node is created (recursively
+    through this same function).
+    """
+    engine = _get_engine()
+    scope_str = _to_persist_scope(node.scope)
+
+    # Lazy wall-clock: persist's decoder requires non-null updated_at /
+    # created_at, but only ask time_service.now() if we actually need it
+    # AND it returns something usable. Tests sometimes pass AsyncMock
+    # time_services whose .now() returns a coroutine that breaks
+    # .isoformat() — fall back to datetime.utcnow() in that case.
+    def _wall_clock_iso() -> str:
+        if time_service is not None:
+            try:
+                v = time_service.now()
+                if hasattr(v, "isoformat"):
+                    return str(v.isoformat())
+            except Exception:
+                pass
+        return datetime.utcnow().isoformat() + "Z"
+
+    new_attrs_dict: Any
+    if hasattr(node.attributes, "model_dump"):
+        new_attrs_dict = node.attributes.model_dump()
+    elif isinstance(node.attributes, dict):
+        new_attrs_dict = node.attributes
+    else:
+        new_attrs_dict = {}
+
+    # Optimistic concurrency: read-then-upsert. Merge attributes when the
+    # row exists so existing keys aren't lost (matches legacy semantics).
+    # Persist returns None (not raise NotFound) when the row is missing.
+    expected_version = 0
+    existing_node = False
+    existing_created_at: Optional[str] = None
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            # First check if node exists and get its current attributes
-            cursor = conn.cursor()
-            logger.debug("DEBUG add_graph_node: Executing SELECT to check if node exists")
-            cursor.execute(
-                "SELECT attributes_json FROM graph_nodes WHERE node_id = ? AND scope = ?", (node.id, node.scope.value)
-            )
-            existing_row = cursor.fetchone()
-            logger.debug(f"DEBUG add_graph_node: existing_row = {existing_row}")
-
-            if existing_row:
-                # Node exists - merge attributes
-                existing_attrs = parse_json_field(existing_row["attributes_json"])
-
-                # Convert node.attributes to dict if it's a Pydantic model
-                if hasattr(node.attributes, "model_dump"):
-                    new_attrs = node.attributes.model_dump()
-                elif hasattr(node.attributes, "dict"):
-                    new_attrs = node.attributes.dict()
-                else:  # isinstance(node.attributes, dict)
-                    new_attrs = node.attributes
-
-                # Merge attributes - new values override old ones
-                merged_attrs = {**existing_attrs, **new_attrs}
-
-                # Update the node
-                sql = """
-                    UPDATE graph_nodes
-                    SET attributes_json = :attributes_json,
-                        version = version + 1,
-                        updated_by = :updated_by,
-                        updated_at = :updated_at
-                    WHERE node_id = :node_id AND scope = :scope
-                """
-                params = {
-                    "node_id": node.id,
-                    "scope": node.scope.value,
-                    "attributes_json": json.dumps(merged_attrs, cls=DateTimeEncoder),
-                    "updated_by": node.updated_by,
-                    "updated_at": node.updated_at or time_service.now().isoformat(),
-                }
-                logger.debug("Updating graph node %s with merged attributes", node.id)
+        existing_blob = engine.cirisgraph_get_node(node.id, scope_str)
+        if existing_blob is not None:
+            existing = json.loads(existing_blob) if isinstance(existing_blob, str) else existing_blob
+            existing_node = True
+            expected_version = existing.get("version", 0)
+            existing_created_at = existing.get("created_at")
+            existing_attrs_field = existing.get("attributes")
+            if isinstance(existing_attrs_field, str):
+                existing_attrs = json.loads(existing_attrs_field) if existing_attrs_field else {}
             else:
-                # Node doesn't exist - insert new
-                sql = """
-                    INSERT INTO graph_nodes
-                    (node_id, scope, node_type, attributes_json, version, updated_by, updated_at)
-                    VALUES (:node_id, :scope, :node_type, :attributes_json, :version, :updated_by, :updated_at)
-                """
-                params = {
-                    "node_id": node.id,
-                    "scope": node.scope.value,
-                    "node_type": node.type.value,
-                    "attributes_json": json.dumps(node.attributes, cls=DateTimeEncoder),
-                    "version": str(node.version),  # Convert to string for SQL params
-                    "updated_by": node.updated_by,
-                    "updated_at": node.updated_at or time_service.now().isoformat(),
-                }
-                logger.debug("Inserting new graph node %s", node.id)
+                existing_attrs = existing_attrs_field or {}
+            if isinstance(existing_attrs, dict) and isinstance(new_attrs_dict, dict):
+                new_attrs_dict = {**existing_attrs, **new_attrs_dict}
+    except NotFound:
+        existing_node = False
+    except Exception:
+        logger.exception("read-before-upsert failed for node %s/%s", node.id, node.scope.value)
+        existing_node = False
 
-            logger.debug(f"add_graph_node: Executing {'UPDATE' if existing_row else 'INSERT'} with params: {params}")
-            cursor.execute(sql, params)
-            logger.debug(f"add_graph_node: cursor.rowcount = {cursor.rowcount}")
-            conn.commit()
-            logger.debug("add_graph_node: Committed successfully")
+    if isinstance(node.updated_at, str):
+        updated_at_str = node.updated_at
+    elif node.updated_at is not None:
+        updated_at_str = node.updated_at.isoformat()
+    else:
+        updated_at_str = _wall_clock_iso()
 
-            # If we just created a new USER node, ensure TEMPORARY consent exists
-            if not existing_row and node.type == NodeType.USER:
-                logger.info(f"New USER node created: {node.id}. Creating TEMPORARY consent.")
-                try:
-                    # Import here to avoid circular dependencies
-                    from ciris_engine.schemas.consent.core import ConsentStream
+    # Pass attributes as a dict — persist json.dumps it once when
+    # storing. Passing a pre-encoded JSON string double-encodes
+    # (column ends up containing '"{\\"key\\":...}"' instead of '{"key":...}').
+    # Round-trip through DateTimeEncoder + json.loads coerces datetime
+    # values to ISO strings while keeping the outer shape as a dict.
+    attrs_for_payload = json.loads(json.dumps(new_attrs_dict, cls=DateTimeEncoder))
 
-                    # Store consent directly in database
-                    # NOTE: Cannot use ConsentService.grant_consent() here because:
-                    # 1. add_graph_node() is synchronous but grant_consent() is async
-                    # 2. This runs during node persistence, before services are fully initialized
-                    consent_node = GraphNode(
-                        id=f"consent_{node.id}",
-                        type=NodeType.CONSENT,
-                        scope=GraphScope.LOCAL,
-                        attributes={
-                            "user_id": node.id,
-                            "stream": ConsentStream.TEMPORARY.value,
-                            "granted_at": time_service.now().isoformat(),
-                            "expires_at": (
-                                time_service.now() + timedelta(days=14)
-                            ).isoformat(),  # 14-day temporary consent
-                            "reason": "Default TEMPORARY consent on user creation",
-                            "categories": [],
-                            "impact_score": 0.0,
-                            "attribution_count": 0,
-                        },
-                        updated_by="system_user_creation",
-                        updated_at=time_service.now(),
-                    )
+    payload = {
+        "node_id": node.id,
+        "scope": scope_str,
+        "node_type": node.type.value,
+        "attributes": attrs_for_payload,
+        "version": (expected_version + 1) if existing_node else (node.version or 1),
+        "updated_by": node.updated_by or "system",
+        # Both updated_at and created_at must be RFC 3339 (tz-aware);
+        # _ensure_tz appends 'Z' if the caller's isoformat was naive.
+        "updated_at": _ensure_tz(updated_at_str),
+        # Required by persist's GraphNode decoder. On update we preserve
+        # the existing created_at; on insert we stamp now. Persist may
+        # override with its own now() anyway (see CIRISPersist#49).
+        "created_at": _ensure_tz(existing_created_at if existing_node else _wall_clock_iso()),
+    }
 
-                    # Recursively add the consent node (but it won't trigger again since it's not a USER type)
-                    add_graph_node(consent_node, time_service=time_service, db_path=db_path)
-                    logger.info(f"Created TEMPORARY consent for new user {node.id}")
-
-                except Exception as e:
-                    logger.warning(f"Could not create consent for user {node.id}: {e}")
-                    # Don't fail the node creation if consent fails
-
-        logger.debug("Successfully saved graph node %s in scope %s", node.id, node.scope.value)
-        return node.id
-    except Exception as e:
-        logger.exception("Failed to add/update graph node %s: %s", node.id, e)
+    try:
+        engine.cirisgraph_upsert_node(json.dumps(payload), expected_version)
+    except Exception:
+        logger.exception("Failed to upsert graph node %s/%s", node.id, node.scope.value)
         raise
 
+    # Legacy side effect: new USER nodes trigger 14-day TEMPORARY consent.
+    # Preserved verbatim from pre-2.9.0 — see CIRISAgent#756 consent matrix.
+    if not existing_node and node.type == NodeType.USER:
+        logger.info("New USER node created: %s — creating TEMPORARY consent.", node.id)
+        try:
+            from ciris_engine.schemas.consent.core import ConsentStream
 
-def get_graph_node(node_id: str, scope: GraphScope, db_path: Optional[str] = None) -> Optional[GraphNode]:
-    sql = "SELECT * FROM graph_nodes WHERE node_id = ? AND scope = ?"
-    logger.debug(f"get_graph_node: node_id={node_id!r}, scope={scope.value!r}, db_path={db_path!r}")
+            consent_node = GraphNode(
+                id=f"consent_{node.id}",
+                type=NodeType.CONSENT,
+                scope=GraphScope.LOCAL,
+                attributes={
+                    "user_id": node.id,
+                    "stream": ConsentStream.TEMPORARY.value,
+                    "granted_at": time_service.now().isoformat(),
+                    "expires_at": (time_service.now() + timedelta(days=14)).isoformat(),
+                    "reason": "Default TEMPORARY consent on user creation",
+                    "categories": [],
+                    "impact_score": 0.0,
+                    "attribution_count": 0,
+                },
+                updated_by="system_user_creation",
+                updated_at=time_service.now(),
+            )
+            add_graph_node(consent_node, time_service=time_service)
+            logger.info("Created TEMPORARY consent for new user %s", node.id)
+        except Exception as e:
+            logger.warning("Could not create consent for user %s: %s", node.id, e)
+
+    return node.id
+
+
+def get_graph_node(
+    node_id: str,
+    scope: GraphScope,
+    db_path: Optional[str] = None,
+) -> Optional[GraphNode]:
+    """Fetch a single graph node by (node_id, scope). None on miss.
+
+    Persist's `cirisgraph_get_node` returns None on miss (not raises) — we
+    accept both shapes defensively.
+    """
+    engine = _get_engine()
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            logger.debug("DEBUG get_graph_node: Executing SELECT")
-            cursor.execute(sql, (node_id, scope.value))
-            row = cursor.fetchone()
-            logger.debug(f"get_graph_node: row = {row}")
-            if row:
-                attrs = parse_json_field(row["attributes_json"])
-                return GraphNode(
-                    id=row["node_id"],
-                    type=row["node_type"],
-                    scope=scope,
-                    attributes=attrs,
-                    version=row["version"],
-                    updated_by=row["updated_by"],
-                    updated_at=row["updated_at"],
-                )
+        blob = engine.cirisgraph_get_node(node_id, _to_persist_scope(scope))
+        if blob is None:
             return None
-    except Exception as e:
-        logger.exception("Failed to fetch graph node %s: %s", node_id, e)
+        return _node_from_persist_json(blob)
+    except NotFound:
+        return None
+    except Exception:
+        logger.exception("get_graph_node failed for %s/%s", node_id, scope.value)
         return None
 
 
-def delete_graph_node(node_id: str, scope: GraphScope, db_path: Optional[str] = None) -> int:
-    sql = "DELETE FROM graph_nodes WHERE node_id = ? AND scope = ?"
+def delete_graph_node(
+    node_id: str,
+    scope: GraphScope,
+    db_path: Optional[str] = None,
+) -> int:
+    """Delete a graph node. Returns 1 if deleted, 0 if not found."""
+    engine = _get_engine()
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.execute(sql, (node_id, scope.value))
-            conn.commit()
-            return cursor.rowcount
-    except Exception as e:
-        logger.exception("Failed to delete graph node %s: %s", node_id, e)
+        # hard=True: actually remove the row (vs soft-delete which persist
+        # may support for cirislens audit retention — not our concern here).
+        engine.cirisgraph_delete_node(node_id, _to_persist_scope(scope), True)
+        return 1
+    except NotFound:
+        return 0
+    except Exception:
+        logger.exception("delete_graph_node failed for %s/%s", node_id, scope.value)
         return 0
 
 
-def add_graph_edge(edge: GraphEdge, db_path: Optional[str] = None) -> str:
-    adapter = get_adapter()
-    columns = ["edge_id", "source_node_id", "target_node_id", "scope", "relationship", "weight", "attributes_json"]
-    sql = adapter.upsert(table="graph_edges", columns=columns, conflict_columns=["edge_id"])
+# ---------------------------------------------------------------------------
+# Edge CRUD.
+# ---------------------------------------------------------------------------
 
-    edge_id = f"{edge.source}->{edge.target}->{edge.relationship}"  # deterministic
-    params = {
+def add_graph_edge(edge: GraphEdge, db_path: Optional[str] = None) -> str:
+    """Insert or update a graph edge. Deterministic edge_id:
+    `{source}->{target}->{relationship}` (matches legacy semantics)."""
+    engine = _get_engine()
+    edge_id = f"{edge.source}->{edge.target}->{edge.relationship}"
+    # Pull created_at from attributes if the caller provided one (legacy
+    # GraphEdgeAttributes uses created_at); otherwise stamp now. Persist
+    # may override (see CIRISPersist#49) but the field is required by
+    # the decoder either way.
+    attrs_obj = edge.attributes
+    created_at: Optional[str] = None
+    if attrs_obj is not None:
+        if hasattr(attrs_obj, "created_at"):
+            ca = getattr(attrs_obj, "created_at", None)
+            if ca is not None:
+                created_at = ca.isoformat() if hasattr(ca, "isoformat") else str(ca)
+        elif isinstance(attrs_obj, dict):
+            ca = attrs_obj.get("created_at")
+            if ca is not None:
+                created_at = ca.isoformat() if hasattr(ca, "isoformat") else str(ca)
+    if created_at is None:
+        created_at = datetime.utcnow().isoformat() + "Z"
+
+    payload = {
         "edge_id": edge_id,
         "source_node_id": edge.source,
         "target_node_id": edge.target,
-        "scope": edge.scope.value,
+        "scope": _to_persist_scope(edge.scope),
         "relationship": edge.relationship,
         "weight": edge.weight,
-        "attributes_json": json.dumps(edge.attributes, cls=DateTimeEncoder),
+        "attributes": _attributes_to_payload(edge.attributes),
+        "created_at": _ensure_tz(created_at),
     }
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            conn.execute(sql, params)
-            conn.commit()
-        logger.debug("Added graph edge %s", edge_id)
-        return edge_id
-    except Exception as e:
-        logger.exception("Failed to add graph edge %s: %s", edge_id, e)
+        engine.cirisgraph_upsert_edge(json.dumps(payload))
+    except Exception:
+        logger.exception("Failed to upsert graph edge %s", edge_id)
         raise
+    return edge_id
+
+
+def _engine_db_path() -> Optional[str]:
+    """Best-effort extraction of the underlying sqlite file path from the
+    engine's DSN. Returns None for postgres or in-memory engines.
+    Used only by the two edge-delete fallbacks below.
+
+    SQLAlchemy-style DSN convention:
+      - `sqlite:////abs/path.db` → 4 slashes → absolute path `/abs/path.db`
+      - `sqlite:///rel/path.db`  → 3 slashes → relative path `rel/path.db`
+    """
+    if not _engine_dsn:
+        return None
+    if _engine_dsn.startswith("sqlite:////"):
+        return "/" + _engine_dsn[len("sqlite:////"):]
+    if _engine_dsn.startswith("sqlite:///"):
+        return _engine_dsn[len("sqlite:///"):]
+    return None
 
 
 def delete_graph_edge(edge_id: str, db_path: Optional[str] = None) -> int:
-    sql = "DELETE FROM graph_edges WHERE edge_id = ?"
+    """Delete an edge by edge_id.
+
+    Persist does not expose a typed `cirisgraph_delete_edge` (upstream
+    ask filed). Falls back to direct SQL against persist's own
+    `cirisgraph_edges` table — same storage, just bypassing the missing
+    API.
+    """
+    path = _engine_db_path()
+    if path is None:
+        logger.warning("delete_graph_edge: non-sqlite engine; cannot fall back without typed API")
+        return 0
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.execute(sql, (edge_id,))
+        with sqlite3.connect(path) as conn:
+            cur = conn.execute("DELETE FROM cirisgraph_edges WHERE edge_id = ?", (edge_id,))
             conn.commit()
-            return cursor.rowcount
-    except Exception as e:
-        logger.exception("Failed to delete graph edge %s: %s", edge_id, e)
+            return cur.rowcount
+    except Exception:
+        logger.exception("Failed to delete graph edge %s", edge_id)
         return 0
 
 
-def delete_edges_for_node(node_id: str, scope: GraphScope, db_path: Optional[str] = None) -> int:
+def delete_edges_for_node(
+    node_id: str,
+    scope: GraphScope,
+    db_path: Optional[str] = None,
+) -> int:
     """Delete all edges where this node is source or target.
 
-    This should be called before deleting a node to avoid foreign key violations
-    on PostgreSQL. SQLite doesn't enforce FK constraints by default, but PostgreSQL does.
+    Persist does not expose a typed bulk-delete API (upstream ask filed).
+    Falls back to direct SQL against persist's own `cirisgraph_edges`.
     """
-    sql = "DELETE FROM graph_edges WHERE scope = ? AND (source_node_id = ? OR target_node_id = ?)"
+    path = _engine_db_path()
+    if path is None:
+        logger.warning("delete_edges_for_node: non-sqlite engine; cannot fall back without typed API")
+        return 0
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.execute(sql, (scope.value, node_id, node_id))
+        with sqlite3.connect(path) as conn:
+            cur = conn.execute(
+                "DELETE FROM cirisgraph_edges "
+                "WHERE scope = ? AND (source_node_id = ? OR target_node_id = ?)",
+                (_to_persist_scope(scope), node_id, node_id),
+            )
             conn.commit()
-            count = cursor.rowcount
-            if count > 0:
-                logger.debug("Deleted %d edges for node %s", count, node_id)
-            return count
-    except Exception as e:
-        logger.exception("Failed to delete edges for node %s: %s", node_id, e)
+            return cur.rowcount
+    except Exception:
+        logger.exception("Failed to delete edges for node %s", node_id)
         return 0
 
 
 def get_edges_for_node(
-    node_id: str, scope: Optional[GraphScope] = None, db_path: Optional[str] = None
+    node_id: str,
+    scope: Optional[GraphScope] = None,
+    db_path: Optional[str] = None,
 ) -> List[GraphEdge]:
-    """Get edges connected to a node.
-
-    Args:
-        node_id: The node ID to get edges for
-        scope: Optional scope filter. If None, returns edges from all scopes.
-        db_path: Optional database path
-
-    Returns:
-        List of GraphEdge objects
-    """
-    if scope is not None:
-        sql = "SELECT * FROM graph_edges WHERE scope = ? AND (source_node_id = ? OR target_node_id = ?)"
-        params = [scope.value, node_id, node_id]
-    else:
-        sql = "SELECT * FROM graph_edges WHERE (source_node_id = ? OR target_node_id = ?)"
-        params = [node_id, node_id]
-
+    """Get edges connected to a node. If scope is None, queries all 4
+    scopes and merges — persist requires a scope per call."""
+    engine = _get_engine()
     edges: List[GraphEdge] = []
-    try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            # Note: PostgreSQLCursorWrapper automatically translates ? to %s
-            cursor.execute(sql, tuple(params))
-            rows = cursor.fetchall()
-            for row in rows:
-                attrs = parse_json_field(row["attributes_json"])
-                # Extract only valid GraphEdgeAttributes fields
-                valid_attrs = {}
-                if "created_at" in attrs:
-                    valid_attrs["created_at"] = attrs["created_at"]
-                if "context" in attrs:
-                    valid_attrs["context"] = attrs["context"]
-
-                # Parse scope from row if not provided
-                edge_scope = scope if scope is not None else GraphScope(row["scope"])
-
-                edges.append(
-                    GraphEdge(
-                        source=row["source_node_id"],
-                        target=row["target_node_id"],
-                        relationship=row["relationship"],
-                        scope=edge_scope,
-                        weight=row["weight"],
-                        attributes=GraphEdgeAttributes(**valid_attrs) if valid_attrs else GraphEdgeAttributes(),
-                    )
-                )
-    except Exception as e:
-        logger.exception("Failed to fetch edges for node %s: %s", node_id, e)
+    scopes = [scope] if scope is not None else [
+        GraphScope.LOCAL, GraphScope.COMMUNITY, GraphScope.IDENTITY, GraphScope.ENVIRONMENT,
+    ]
+    for s in scopes:
+        try:
+            blob = engine.cirisgraph_get_edges_for_node(
+                node_id, _to_persist_scope(s), "both", None
+            )
+            arr = json.loads(blob) if isinstance(blob, str) else blob
+            for item in arr or []:
+                edges.append(_edge_from_persist_json(item, fallback_scope=s))
+        except NotFound:
+            continue
+        except Exception:
+            logger.exception("get_edges_for_node failed for %s/%s", node_id, s.value)
     return edges
 
 
 def get_edges_for_nodes_batch(
-    node_ids: List[str], scope: Optional[GraphScope] = None, db_path: Optional[str] = None
+    node_ids: List[str],
+    scope: Optional[GraphScope] = None,
+    db_path: Optional[str] = None,
 ) -> List[GraphEdge]:
-    """Get edges for multiple nodes in a single query.
+    """Get edges for multiple nodes, deduplicated by (source, target, relationship).
 
-    Args:
-        node_ids: List of node IDs to get edges for
-        scope: Optional scope filter. If None, returns edges from all scopes.
-        db_path: Optional database path
-
-    Returns:
-        List of GraphEdge objects (deduplicated)
-    """
+    Persist doesn't expose a batch edge query, so we iterate
+    `cirisgraph_get_edges_for_node` per node_id. Cost is linear in
+    len(node_ids); for hot paths this could justify an upstream ask."""
     if not node_ids:
         return []
+    seen: set[tuple[str, str, str]] = set()
+    out: List[GraphEdge] = []
+    for nid in node_ids:
+        for e in get_edges_for_node(nid, scope=scope):
+            key = (e.source, e.target, e.relationship)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(e)
+    return out
 
-    import time
 
-    start = time.time()
+# ---------------------------------------------------------------------------
+# Node listing / querying.
+# ---------------------------------------------------------------------------
 
-    # Build placeholders for IN clause
-    placeholders = ",".join(["?" for _ in node_ids])
-
-    if scope is not None:
-        sql = f"""SELECT DISTINCT * FROM graph_edges
-                  WHERE scope = ? AND (source_node_id IN ({placeholders}) OR target_node_id IN ({placeholders}))"""
-        params = [scope.value] + node_ids + node_ids
-    else:
-        sql = f"""SELECT DISTINCT * FROM graph_edges
-                  WHERE (source_node_id IN ({placeholders}) OR target_node_id IN ({placeholders}))"""
-        params = node_ids + node_ids
-
-    edges: List[GraphEdge] = []
-    seen_edges: set[tuple[str, str, str]] = set()  # Deduplicate by (source, target, relationship)
-
-    try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, tuple(params))
-            rows = cursor.fetchall()
-
-            for row in rows:
-                edge_key = (row["source_node_id"], row["target_node_id"], row["relationship"])
-                if edge_key in seen_edges:
-                    continue
-                seen_edges.add(edge_key)
-
-                attrs = parse_json_field(row["attributes_json"])
-                valid_attrs = {}
-                if "created_at" in attrs:
-                    valid_attrs["created_at"] = attrs["created_at"]
-                if "context" in attrs:
-                    valid_attrs["context"] = attrs["context"]
-
-                edge_scope = scope if scope is not None else GraphScope(row["scope"])
-
-                edges.append(
-                    GraphEdge(
-                        source=row["source_node_id"],
-                        target=row["target_node_id"],
-                        relationship=row["relationship"],
-                        scope=edge_scope,
-                        weight=row["weight"],
-                        attributes=GraphEdgeAttributes(**valid_attrs) if valid_attrs else GraphEdgeAttributes(),
-                    )
-                )
-
-            elapsed = (time.time() - start) * 1000
-            logger.info(f"[BATCH-EDGES] Fetched {len(edges)} edges for {len(node_ids)} nodes in {elapsed:.1f}ms")
-
-    except Exception as e:
-        logger.exception("Failed to fetch batch edges: %s", e)
-    return edges
+def _query_nodes_paged(
+    persist_scope: str,
+    node_type: Optional[str],
+    limit: int,
+) -> List[GraphNode]:
+    """Walk persist's cursor-paged node listing until we have `limit`
+    rows or exhaust the page chain."""
+    engine = _get_engine()
+    out: List[GraphNode] = []
+    cursor: Optional[str] = None
+    remaining = limit
+    while remaining > 0:
+        filt: dict[str, Any] = {"scope": persist_scope}
+        if node_type is not None:
+            filt["node_type"] = node_type
+        page_size = min(remaining, 100)
+        blob = engine.cirisgraph_query_nodes(
+            json.dumps(filt),
+            json.dumps({"cursor": cursor}) if cursor else None,
+            page_size,
+        )
+        page = json.loads(blob) if isinstance(blob, str) else blob
+        items = page.get("items", []) if isinstance(page, dict) else []
+        for it in items:
+            try:
+                out.append(_node_from_persist_json(it))
+            except Exception:
+                logger.exception("Failed to parse persist node row")
+        if not items:
+            break
+        remaining -= len(items)
+        cursor = page.get("next_cursor") if isinstance(page, dict) else None
+        if not cursor:
+            break
+    return out
 
 
 def get_all_graph_nodes(
@@ -392,67 +613,29 @@ def get_all_graph_nodes(
     offset: Optional[int] = None,
     db_path: Optional[str] = None,
 ) -> List[GraphNode]:
+    """Return all graph nodes matching the filter.
+
+    Persist requires `scope` on every query (AV-47). When the caller
+    passes None, we walk all 4 scopes and merge. `offset` is honored via
+    in-Python slicing because persist uses opaque cursors rather than
+    integer offsets — callers that rely on heavy offsets should switch
+    to cursor pagination directly.
     """
-    Get all graph nodes with optional filters.
-
-    Args:
-        scope: Filter by scope (optional)
-        node_type: Filter by node type (optional)
-        limit: Maximum number of nodes to return
-        offset: Number of nodes to skip (for pagination)
-        db_path: Optional database path
-
-    Returns:
-        List of GraphNode objects
-    """
-    sql = "SELECT * FROM graph_nodes WHERE 1=1"
-    params: List[Any] = []
-
-    if scope is not None:
-        sql += " AND scope = ?"
-        params.append(scope.value if hasattr(scope, "value") else scope)
-
-    if node_type is not None:
-        sql += " AND node_type = ?"
-        params.append(node_type)
-
-    sql += " ORDER BY updated_at DESC"
-
+    effective_limit = limit if limit is not None else 1000
+    scopes = [scope] if scope is not None else [
+        GraphScope.LOCAL, GraphScope.COMMUNITY, GraphScope.IDENTITY, GraphScope.ENVIRONMENT,
+    ]
+    nodes: List[GraphNode] = []
+    for s in scopes:
+        try:
+            nodes.extend(_query_nodes_paged(_to_persist_scope(s), node_type, effective_limit))
+        except Exception:
+            logger.exception("get_all_graph_nodes scope-walk failed for %s", s.value)
+    if offset:
+        nodes = nodes[offset:]
     if limit is not None:
-        sql += " LIMIT ?"
-        params.append(limit)
-
-    if offset is not None:
-        sql += " OFFSET ?"
-        params.append(offset)
-
-    nodes = []
-    try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-
-            for row in rows:
-                attrs = parse_json_field(row["attributes_json"])
-                nodes.append(
-                    GraphNode(
-                        id=row["node_id"],
-                        type=row["node_type"],
-                        scope=row["scope"],
-                        attributes=attrs,
-                        version=row["version"],
-                        updated_by=row["updated_by"],
-                        updated_at=row["updated_at"],
-                    )
-                )
-
-        logger.debug("Retrieved %d graph nodes with filters scope=%s, type=%s", len(nodes), scope, node_type)
-        return nodes
-
-    except Exception as e:
-        logger.exception("Failed to fetch all graph nodes: %s", e)
-        return []
+        nodes = nodes[:limit]
+    return nodes
 
 
 def get_nodes_by_type(
@@ -462,17 +645,7 @@ def get_nodes_by_type(
     offset: Optional[int] = None,
     db_path: Optional[str] = None,
 ) -> List[GraphNode]:
-    """
-    Get all nodes of a specific type.
-
-    Args:
-        node_type: The type of nodes to retrieve
-        scope: Filter by scope (optional)
-        limit: Maximum number of nodes to return
-        offset: Number of nodes to skip (for pagination)
-        db_path: Optional database path
-
-    Returns:
-        List of GraphNode objects of the specified type
-    """
-    return get_all_graph_nodes(scope=scope, node_type=node_type, limit=limit, offset=offset, db_path=db_path)
+    """Return all nodes of a given type — thin wrapper over `get_all_graph_nodes`."""
+    return get_all_graph_nodes(
+        scope=scope, node_type=node_type, limit=limit, offset=offset, db_path=db_path
+    )

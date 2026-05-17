@@ -25,6 +25,7 @@ from .graph import (
     get_edges_for_node,
     get_graph_node,
     get_nodes_by_type,
+    get_persist_engine,
 )
 from .identity import (
     get_identity_for_context,
@@ -140,4 +141,6 @@ __all__ = [
     "update_dsar_ticket_status",
     "list_dsar_tickets_by_status",
     "list_dsar_tickets_by_email",
+    # 2.9.0: persist Engine accessor (CIRISAgent#763 Lane A wiring)
+    "get_persist_engine",
 ]

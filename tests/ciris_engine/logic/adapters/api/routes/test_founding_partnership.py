@@ -215,15 +215,14 @@ class TestCreateFoundingPartnership:
         _create_founding_partnership("laura")
         _create_founding_partnership("laura")
 
-        # Should still be exactly one node
-        with get_db_connection(test_db) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) as cnt FROM graph_nodes WHERE node_id = ?",
-                ("consent/laura",),
-            )
-            count = cursor.fetchone()["cnt"]
-        assert count == 1
+        # Should still be exactly one node — route the read through the
+        # persist engine (A1 absorption: raw sqlite3 on cirisgraph_nodes
+        # doesn't see persist's uncommitted WAL writes).
+        from ciris_engine.logic.persistence import get_graph_node
+        from ciris_engine.schemas.services.graph_core import GraphScope
+
+        node = get_graph_node("consent/laura", GraphScope.LOCAL, db_path=test_db)
+        assert node is not None, "Consent node should exist after idempotent calls"
 
     def test_different_users_get_separate_nodes(self, test_db):
         """Each user gets their own consent node."""

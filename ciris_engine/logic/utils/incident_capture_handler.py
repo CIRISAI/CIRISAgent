@@ -148,13 +148,23 @@ class IncidentCaptureHandler(logging.Handler):
                     pass
 
             # D1-full: schedule the persist write if an event loop is running.
-            # If not (early startup, sync context), drop silently — the
-            # rotating file above is the forensic safety net.
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self._save_incident_to_graph(record))
-            except RuntimeError:
-                pass  # no running loop; rotating file is the only record
+            # ITIL-aligned filter: only ERROR+CRITICAL get persisted as
+            # incidents. WARNING-level log records are operational noise
+            # (startup chatter, deprecation warnings, missing-optional-
+            # services, etc.) — they go to the rotating file only.
+            #
+            # The WARNING filter is also load-bearing for concurrency
+            # safety: agent startup emits ~50+ warning records in a few
+            # seconds; firing engine.incident_record for each one piles
+            # up concurrent persist writes while raw sqlite3 connections
+            # from other services hold the same ciris_engine.db open,
+            # which empirically corrupts the WAL on CI runners.
+            if record.levelno >= logging.ERROR:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self._save_incident_to_graph(record))
+                except RuntimeError:
+                    pass  # no running loop; rotating file is the only record
 
         except Exception:
             # Failsafe - if we can't capture incident, don't crash

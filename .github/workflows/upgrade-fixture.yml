@@ -31,8 +31,13 @@ jobs:
     name: Build upgrade fixture
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # PRs and workflow_dispatch only need read; tag builds need write to
+    # attach the fixture files to the GitHub Release via
+    # softprops/action-gh-release. Granting write at the job level keeps
+    # the workflow simple — the upload step is gated by `if: ref_type == 'tag'`
+    # so non-tag runs never exercise the write capability.
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
 

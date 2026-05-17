@@ -92,15 +92,21 @@ def _wait_for_health(base_url: str, timeout: float = 60.0) -> None:
     raise RuntimeError(f"server did not become healthy within {timeout}s: {last_err}")
 
 
-def _run_scenario(base_url: str) -> None:
-    # Setup wizard — creates admin user
+def _run_scenario(base_url: str, port: int) -> None:
+    # Setup wizard — POST /v1/setup/complete (shape matches qa_runner._complete_qa_setup)
+    setup_payload = {
+        "llm_provider": "openai",
+        "llm_api_key": "test-key-for-fixture",
+        "llm_model": "gpt-4",
+        "template_id": "default",
+        "enabled_adapters": ["api"],
+        "adapter_config": {},
+        "admin_username": ADMIN_USER,
+        "admin_password": ADMIN_PASSWORD,
+        "agent_port": port,
+    }
     try:
-        _http_json(
-            "POST",
-            f"{base_url}/v1/system/setup",
-            {"admin_username": ADMIN_USER, "admin_password": ADMIN_PASSWORD},
-            timeout=30.0,
-        )
+        _http_json("POST", f"{base_url}/v1/setup/complete", setup_payload, timeout=60.0)
     except urllib.error.HTTPError as e:
         if e.code != 409:  # already configured
             raise
@@ -119,7 +125,13 @@ def _graceful_shutdown(base_url: str, token: str | None) -> None:
     if not token:
         return
     try:
-        _http_json("POST", f"{base_url}/v1/system/shutdown", {"reason": "fixture build"}, token=token, timeout=10.0)
+        _http_json(
+            "POST",
+            f"{base_url}/v1/system/shutdown",
+            {"reason": "fixture build", "confirm": True},
+            token=token,
+            timeout=10.0,
+        )
     except Exception:
         pass  # we'll SIGTERM the process anyway
 
@@ -129,19 +141,26 @@ def build_fixture(out_dir: Path, port: int = 8123, ciris_version: str | None = N
     out_dir.mkdir(parents=True, exist_ok=True)
 
     work = Path(tempfile.mkdtemp(prefix="upgrade-fixture-"))
-    data_dir = work / "data"
-    data_dir.mkdir()
+    # CIRIS_HOME is the root; engine writes to $CIRIS_HOME/data/ciris_engine.db
+    ciris_home = work
+    data_dir = ciris_home / "data"
+    data_dir.mkdir(exist_ok=True)
 
     env = os.environ.copy()
-    env["CIRIS_DATA_DIR"] = str(data_dir)
+    # CIRIS treats a cwd containing .git as "development mode" and overrides
+    # CIRIS_HOME with cwd. We run from an isolated work dir (no .git), put
+    # the repo on PYTHONPATH so main.py can import ciris_engine, and pin
+    # CIRIS_HOME to the work dir so the DB lands at work/data/.
+    env["CIRIS_HOME"] = str(ciris_home)
     env["CIRIS_PORT"] = str(port)
+    env["PYTHONPATH"] = str(REPO_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
 
     base_url = f"http://127.0.0.1:{port}"
-    print(f"[fixture] data_dir={data_dir} port={port}", flush=True)
+    print(f"[fixture] ciris_home={ciris_home} port={port}", flush=True)
 
     proc = subprocess.Popen(
-        [sys.executable, "main.py", "--adapter", "api", "--mock-llm", "--port", str(port)],
-        cwd=REPO_ROOT,
+        [sys.executable, str(REPO_ROOT / "main.py"), "--adapter", "api", "--mock-llm", "--port", str(port)],
+        cwd=ciris_home,
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -151,7 +170,7 @@ def build_fixture(out_dir: Path, port: int = 8123, ciris_version: str | None = N
     try:
         _wait_for_health(base_url, timeout=90.0)
         print("[fixture] server healthy — running scenario", flush=True)
-        _run_scenario(base_url)
+        _run_scenario(base_url, port)
         # Re-login to capture token for shutdown
         token = _http_json(
             "POST", f"{base_url}/v1/auth/login", {"username": ADMIN_USER, "password": ADMIN_PASSWORD}

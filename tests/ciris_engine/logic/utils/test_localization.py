@@ -348,12 +348,14 @@ class TestGetLanguageGuidance:
         # The three load-bearing terminology fixes that motivated this block
         # MUST be present. Test by Amharic substring (not English) so the
         # pack can't be quietly replaced with English filler.
-        assert "ምርመራ" in guidance, "Amharic 'diagnosis' fix (ምርመራ vs ማንነት ማወቅ) is missing"
+        assert "ምርመራ" in guidance, "Amharic 'diagnosis' fix (ምርመራ vs ማንነትን ማወቅ) is missing"
         assert "የንግግር ሕክምና" in guidance, "Amharic 'talk therapy' fix (የንግግር ሕክምና vs ሳይኮተራፒ transliteration) is missing"
         # The negative-example pattern is load-bearing per the diagnostic
         # notes — a flat glossary without the wrong-candidate disambiguation
-        # doesn't fix the sense-collision error.
-        assert "ማንነት ማወቅ" in guidance, "Wrong-sense disambiguation for 'diagnosis' must name the bad candidate"
+        # doesn't fix the sense-collision error. Esu's 2.8.13 revision uses
+        # the accusative form (ማንነትን ማወቅ, with object marker -ን on ማንነት)
+        # — grammatically tighter than the bare ማንነት ማወቅ.
+        assert "ማንነትን ማወቅ" in guidance, "Wrong-sense disambiguation for 'diagnosis' must name the bad candidate"
         assert "ሳይኮተራፒ" in guidance, "Transliteration disambiguation for 'talk therapy' must name the bad candidate"
 
     def test_amharic_2_7_8_grammar_and_terminology_findings(self):

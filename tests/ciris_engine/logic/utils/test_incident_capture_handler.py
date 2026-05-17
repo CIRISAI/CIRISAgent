@@ -97,50 +97,79 @@ class TestIncidentCaptureHandler:
 
     @pytest.mark.asyncio
     async def test_save_incident_to_graph(self, mock_time_service, mock_graph_audit_service):
+        """D1-full: _save_incident_to_graph routes to engine.incident_record."""
+        from unittest.mock import MagicMock, patch
+
+        mock_engine = MagicMock()
         handler = IncidentCaptureHandler(time_service=mock_time_service, graph_audit_service=mock_graph_audit_service)
 
         record = logging.LogRecord("test.component", logging.ERROR, "test.py", 123, "Graph save test", (), None)
         record.correlation_id = "corr-123"
         record.task_id = "task-456"
 
-        await handler._save_incident_to_graph(record)
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=mock_engine,
+        ):
+            await handler._save_incident_to_graph(record)
 
-        mock_graph_audit_service._memory_bus.memorize.assert_called_once()
-        call_args = mock_graph_audit_service._memory_bus.memorize.call_args
+        mock_engine.incident_record.assert_called_once()
+        payload_json = mock_engine.incident_record.call_args.args[0]
+        import json as _json
 
-        # Check the incident node passed to memorize
-        incident_node_graph = call_args.kwargs["node"]
-        incident = IncidentNode.from_graph_node(incident_node_graph)
+        payload = _json.loads(payload_json)
 
-        assert incident.severity == IncidentSeverity.HIGH
-        assert incident.description == "Graph save test"
-        assert incident.source_component == "test.component"
-        assert incident.correlation_id == "corr-123"
-        assert incident.task_id == "task-456"
+        # severity error from logging.ERROR (HIGH → "error" per persist enum)
+        assert payload["severity"] == "error"
+        assert payload["description"] == "Graph save test"
+        assert payload["title"] == "Graph save test"
+        assert payload["source_component"] == "test.component"
+        # correlation_keys carries the per-record extras
+        assert "corr:corr-123" in payload["correlation_keys"]
+        assert "task:task-456" in payload["correlation_keys"]
+        assert payload["state"] == "open"
+        assert payload["occurrences"] == 1
 
     @pytest.mark.asyncio
-    async def test_save_incident_to_graph_memorize_fails(self, mock_time_service, mock_graph_audit_service, caplog):
-        mock_graph_audit_service._memory_bus.memorize.return_value = MemoryOpResult(
-            status=MemoryOpStatus.ERROR, error="DB down"
-        )
+    async def test_save_incident_to_graph_persist_unavailable(
+        self, mock_time_service, mock_graph_audit_service, caplog
+    ):
+        """When persist isn't wired, the handler drops silently (file is the safety net)."""
+        from unittest.mock import patch
+
         handler = IncidentCaptureHandler(time_service=mock_time_service, graph_audit_service=mock_graph_audit_service)
 
-        record = logging.LogRecord("test.fail", logging.WARNING, "fail.py", 10, "Memorize fail", (), None)
+        record = logging.LogRecord("test.fail", logging.WARNING, "fail.py", 10, "Pre-bootstrap warn", (), None)
 
-        with caplog.at_level(logging.ERROR):
-            await handler._save_incident_to_graph(record)
-            assert "Failed to store incident in graph: DB down" in caplog.text
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=None,
+        ):
+            with caplog.at_level(logging.ERROR):
+                await handler._save_incident_to_graph(record)
+                # No error log — silent drop, not a failure
+                assert "Failed to save incident to persist" not in caplog.text
 
     @pytest.mark.asyncio
-    async def test_save_incident_to_graph_no_memory_bus(self, mock_time_service, mock_graph_audit_service, caplog):
-        mock_graph_audit_service._memory_bus = None
+    async def test_save_incident_to_graph_persist_raises(
+        self, mock_time_service, mock_graph_audit_service, caplog
+    ):
+        """If engine.incident_record raises, the handler logs + swallows."""
+        from unittest.mock import MagicMock, patch
+
+        mock_engine = MagicMock()
+        mock_engine.incident_record.side_effect = RuntimeError("persist exploded")
         handler = IncidentCaptureHandler(time_service=mock_time_service, graph_audit_service=mock_graph_audit_service)
 
-        record = logging.LogRecord("test.nombus", logging.CRITICAL, "nombus.py", 20, "No mem bus", (), None)
+        record = logging.LogRecord("test.nombus", logging.CRITICAL, "nombus.py", 20, "Critical", (), None)
 
-        with caplog.at_level(logging.ERROR):
-            await handler._save_incident_to_graph(record)
-            assert "Graph audit service does not have memory bus available" in caplog.text
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=mock_engine,
+        ):
+            with caplog.at_level(logging.ERROR):
+                await handler._save_incident_to_graph(record)
+                assert "Failed to save incident to persist: persist exploded" in caplog.text
 
     def test_map_log_level_to_severity(self, mock_time_service):
         handler = IncidentCaptureHandler(time_service=mock_time_service)

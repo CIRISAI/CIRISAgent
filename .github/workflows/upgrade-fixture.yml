@@ -59,6 +59,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install TPM2 TSS runtime libraries (CIRISVerify dep)
+        # CIRISVerify needs libtss2-* runtime libs to initialize its
+        # signing key — without these, setup/complete aborts with
+        # UNSUPPORTED_PLATFORM_CIRIS_VERIFY and rolls back. Same 3-way
+        # fallback chain memory-benchmark.yml + safety-battery.yml use
+        # (Debian / newer Debian / Ubuntu 24.04 t64 package renames),
+        # wrapped in retry to survive apt mirror flakes.
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 15
+          shell: bash
+          command: |
+            if ! sudo apt-get install -y libtss2-esys0 libtss2-tctildr0 libtss2-mu0; then
+              if ! sudo apt-get install -y libtss2-esys-3.0.2-0 libtss2-tctildr0 libtss2-mu-4.0.1-0; then
+                sudo apt-get install -y libtss2-esys-3.0.2-0t64 libtss2-tctildr0t64 libtss2-mu-4.0.1-0t64
+              fi
+            fi
+
       - name: Resolve version label
         id: ver
         run: |

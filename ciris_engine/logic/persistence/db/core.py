@@ -1165,7 +1165,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     signing_key_id = os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
 
     try:
-        from ciris_persist import Engine
+        from ciris_persist import Engine  # type: ignore[import-untyped]
     except ImportError:
         logger.warning(
             "ciris-persist not importable; 2.9.0 absorption disabled. "
@@ -1184,10 +1184,15 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
                 from tools.ops.migrate_to_persist import run as run_migration
 
                 logger.info("A0a migration sentinel absent — running graph migration")
+                # Pass our constructed Engine so the migration doesn't
+                # build a second one. Persist is one-Engine-per-process;
+                # two instances on the same SQLite DB cause silent
+                # write-no-ops on the first.
                 stats = run_migration(
                     engine_db=Path(db_path),
                     signing_key_id=signing_key_id,
                     dry_run=False,
+                    engine=engine,
                 )
                 if stats.errors == 0:
                     sentinel.write_text(

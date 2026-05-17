@@ -141,4 +141,6 @@ __all__ = [
     "update_dsar_ticket_status",
     "list_dsar_tickets_by_status",
     "list_dsar_tickets_by_email",
+    # 2.9.0: persist Engine accessor (CIRISAgent#763 Lane A wiring)
+    "get_persist_engine",
 ]

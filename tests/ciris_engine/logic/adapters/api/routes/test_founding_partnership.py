@@ -56,17 +56,31 @@ def test_db():
 
 
 def _get_consent_node(db_path: str, user_id: str) -> dict | None:
-    """Read a consent graph node from the DB by user_id."""
-    with get_db_connection(db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM graph_nodes WHERE node_id = ? AND scope = 'local'",
-            (f"consent/{user_id}",),
-        )
-        row = cursor.fetchone()
-        if row is None:
-            return None
-        return dict(row)
+    """Read a consent graph node from the DB by user_id.
+
+    2.9.0: route through the agent's persistence layer (which uses
+    persist's typed Engine). Raw sqlite3 reads from a separate
+    connection don't see persist's uncommitted WAL writes.
+    """
+    import json
+    from ciris_engine.logic.persistence import get_graph_node
+    from ciris_engine.schemas.services.graph_core import GraphScope
+
+    node = get_graph_node(f"consent/{user_id}", GraphScope.LOCAL, db_path=db_path)
+    if node is None:
+        return None
+    attrs = node.attributes
+    if hasattr(attrs, "model_dump"):
+        attrs = attrs.model_dump()
+    return {
+        "node_id": node.id,
+        "scope": node.scope.value,
+        "node_type": node.type.value,
+        "attributes_json": json.dumps(attrs) if isinstance(attrs, dict) else attrs,
+        "version": node.version,
+        "updated_by": node.updated_by,
+        "updated_at": node.updated_at,
+    }
 
 
 class TestCreateFoundingPartnership:

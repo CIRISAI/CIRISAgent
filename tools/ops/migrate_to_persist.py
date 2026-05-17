@@ -54,7 +54,7 @@ import sqlite3
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, List, Optional
 
 logger = logging.getLogger("migrate_to_persist")
 
@@ -278,12 +278,32 @@ def migrate_edges(
             stats.errors += 1
 
 
-def run(engine_db: Path, signing_key_id: str, dry_run: bool) -> MigrationStats:
+def run(
+    engine_db: Path,
+    signing_key_id: str,
+    dry_run: bool,
+    engine: Optional[Any] = None,
+) -> MigrationStats:
+    """Run the graph migration.
+
+    Args:
+        engine_db: Path to the legacy ciris_engine.db
+        signing_key_id: Scrub key id for any Engine we construct ourselves
+        dry_run: If True, validate but don't write
+        engine: Optional pre-constructed Engine. ServiceInitializer's
+            bootstrap path passes the wired engine here so we don't
+            construct a second instance pointed at the same DB —
+            persist's Engine is designed for one-per-process and a second
+            instance causes silent write-no-ops on the first (connection
+            pool / WAL coordination). CLI invocation (no engine kwarg)
+            constructs its own.
+    """
     if not engine_db.exists():
         raise FileNotFoundError(f"engine DB not found: {engine_db}")
 
-    from ciris_persist import Engine
-    engine = Engine(f"sqlite:///{engine_db.resolve()}", signing_key_id)
+    if engine is None:
+        from ciris_persist import Engine  # type: ignore[import-untyped]
+        engine = Engine(f"sqlite:///{engine_db.resolve()}", signing_key_id)
 
     stats = MigrationStats()
     con = sqlite3.connect(str(engine_db))
@@ -296,7 +316,7 @@ def run(engine_db: Path, signing_key_id: str, dry_run: bool) -> MigrationStats:
     return stats
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--engine-db",

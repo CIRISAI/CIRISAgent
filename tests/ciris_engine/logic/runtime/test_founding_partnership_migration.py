@@ -53,31 +53,59 @@ def test_db():
 def _get_consent_node(db_path: str, user_id: str) -> dict | None:
     """Read a consent graph node from the DB by user_id.
 
-    Args:
-        db_path: Path to the database
-        user_id: The user identifier (without 'wa-' prefix).
-                 Will look for consent/wa-{user_id} to match the
-                 actual node_id format used by _create_founding_partnership.
+    2.9.0: route through the agent's persistence layer (which goes
+    through persist's typed Engine). Raw sqlite3 reads from a separate
+    connection don't see persist's uncommitted WAL writes — the
+    persistence-layer get_graph_node uses the same Engine that did the
+    write, so the read is guaranteed to see it.
     """
-    with get_db_connection(db_path) as conn:
-        cursor = conn.cursor()
-        # Consent nodes are stored as consent/wa-{name} where wa_id = "wa-{name}"
-        cursor.execute(
-            "SELECT * FROM graph_nodes WHERE node_id = ? AND scope = 'local'",
-            (f"consent/wa-{user_id}",),
-        )
-        row = cursor.fetchone()
-        if row is None:
-            return None
-        return dict(row)
+    import json
+    from ciris_engine.logic.persistence import get_graph_node
+    from ciris_engine.schemas.services.graph_core import GraphScope
+
+    node = get_graph_node(f"consent/wa-{user_id}", GraphScope.LOCAL, db_path=db_path)
+    if node is None:
+        return None
+    # Re-shape to match existing test assertions that expect raw-row fields.
+    attrs = node.attributes
+    if hasattr(attrs, "model_dump"):
+        attrs = attrs.model_dump()
+    return {
+        "node_id": node.id,
+        "scope": node.scope.value,
+        "node_type": node.type.value,
+        "attributes_json": json.dumps(attrs) if isinstance(attrs, dict) else attrs,
+        "version": node.version,
+        "updated_by": node.updated_by,
+        "updated_at": node.updated_at,
+    }
 
 
 def _count_consent_nodes(db_path: str) -> int:
-    """Count all consent graph nodes in the DB."""
-    with get_db_connection(db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) as cnt FROM graph_nodes WHERE node_id LIKE 'consent/%'")
-        return cursor.fetchone()["cnt"]
+    """Count all consent graph nodes (2.9.0: scan via persist engine)."""
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+    import json as _json
+    engine = get_persist_engine()
+    if engine is None:
+        return 0
+    cnt = 0
+    cursor = None
+    while True:
+        blob = engine.cirisgraph_query_nodes(
+            _json.dumps({"scope": "LOCAL"}),
+            _json.dumps({"cursor": cursor}) if cursor else None,
+            100,
+        )
+        page = _json.loads(blob) if isinstance(blob, str) else blob
+        items = page.get("items", []) if isinstance(page, dict) else []
+        for it in items:
+            d = _json.loads(it) if isinstance(it, str) else it
+            if d.get("node_id", "").startswith("consent/"):
+                cnt += 1
+        cursor = page.get("next_cursor") if isinstance(page, dict) else None
+        if not items or not cursor:
+            break
+    return cnt
 
 
 class _MockWA:

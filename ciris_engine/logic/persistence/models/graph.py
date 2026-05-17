@@ -26,7 +26,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
-from ciris_persist import Engine, NotFound
+from ciris_persist import Engine, NotFound  # type: ignore[import-untyped]
 
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.services.graph_core import (
@@ -242,13 +242,21 @@ def add_graph_node(
     engine = _get_engine()
     scope_str = _to_persist_scope(node.scope)
 
-    # Persist's GraphNode decoder rejects null updated_at / created_at,
-    # so always fall back to wall clock if the caller didn't supply one
-    # and time_service isn't available either.
-    if time_service is not None:
-        now_iso = time_service.now().isoformat()
-    else:
-        now_iso = datetime.utcnow().isoformat() + "Z"
+    # Lazy wall-clock: persist's decoder requires non-null updated_at /
+    # created_at, but only ask time_service.now() if we actually need it
+    # AND it returns something usable. Tests sometimes pass AsyncMock
+    # time_services whose .now() returns a coroutine that breaks
+    # .isoformat() — fall back to datetime.utcnow() in that case.
+    def _wall_clock_iso() -> str:
+        if time_service is not None:
+            try:
+                v = time_service.now()
+                if hasattr(v, "isoformat"):
+                    return str(v.isoformat())
+            except Exception:
+                pass
+        return datetime.utcnow().isoformat() + "Z"
+
     new_attrs_dict: Any
     if hasattr(node.attributes, "model_dump"):
         new_attrs_dict = node.attributes.model_dump()
@@ -288,7 +296,7 @@ def add_graph_node(
     elif node.updated_at is not None:
         updated_at_str = node.updated_at.isoformat()
     else:
-        updated_at_str = now_iso
+        updated_at_str = _wall_clock_iso()
 
     # Pass attributes as a dict — persist json.dumps it once when
     # storing. Passing a pre-encoded JSON string double-encodes
@@ -310,7 +318,7 @@ def add_graph_node(
         # Required by persist's GraphNode decoder. On update we preserve
         # the existing created_at; on insert we stamp now. Persist may
         # override with its own now() anyway (see CIRISPersist#49).
-        "created_at": _ensure_tz(existing_created_at if existing_node else now_iso),
+        "created_at": _ensure_tz(existing_created_at if existing_node else _wall_clock_iso()),
     }
 
     try:
@@ -573,7 +581,7 @@ def _query_nodes_paged(
     cursor: Optional[str] = None
     remaining = limit
     while remaining > 0:
-        filt: dict = {"scope": persist_scope}
+        filt: dict[str, Any] = {"scope": persist_scope}
         if node_type is not None:
             filt["node_type"] = node_type
         page_size = min(remaining, 100)

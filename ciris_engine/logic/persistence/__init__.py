@@ -130,4 +130,6 @@ __all__ = [
     "get_service_correlations_table_schema_sql",
     "get_queue_status",
     "QueueStatus",
+    # 2.9.0: persist Engine accessor (CIRISAgent#763 Lane A wiring)
+    "get_persist_engine",
 ]

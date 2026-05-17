@@ -81,6 +81,14 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         # Increment vacuum operations counter for periodic maintenance
         self._vacuum_runs += 1
 
+        # 2.9.0 Lane D D2: delegate generic DB maintenance (vacuum +
+        # archive of expired telemetry/incident/federation_keys/secrets
+        # rows) to persist's typed umbrella. The agent-specific
+        # cleanups below (stale wakeup tasks, orphaned active tasks)
+        # stay in this service — they're business logic over agent
+        # tables, not generic DB ops.
+        await self._invoke_persist_maintenance()
+
         # Clean up stale wakeup/shutdown tasks from dead occurrences
         # This is critical for multi-occurrence deployments where an occurrence
         # may die mid-wakeup, leaving shared tasks in ACTIVE state forever
@@ -90,6 +98,42 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         await self._cleanup_old_active_tasks()
 
         logger.info("Periodic maintenance tasks completed.")
+
+    async def _invoke_persist_maintenance(self) -> None:
+        """Call engine.maintain() — persist's umbrella for vacuum +
+        archive-expired across telemetry, incidents, federation_keys,
+        secrets_access_log. Idempotent + non-blocking; logs the stats
+        payload at INFO so the maintenance window is observable.
+
+        Graceful skip if persist engine isn't wired yet (e.g., early
+        boot or test fixtures that bypass initialize_database).
+        """
+        from ciris_engine.logic.persistence import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            logger.debug(
+                "persist engine not wired; skipping engine.maintain()"
+            )
+            return
+
+        try:
+            import json as _json
+            # engine.maintain() returns a JSON string with vacuum +
+            # archive stats per module.
+            blob = engine.maintain()
+            stats = _json.loads(blob) if isinstance(blob, str) else blob
+            logger.info(
+                "persist.maintain() complete: vacuum_ms=%s archive_total=%s elapsed_ms=%s",
+                stats.get("vacuum", {}).get("elapsed_ms"),
+                stats.get("archive", {}).get("total_removed"),
+                stats.get("elapsed_ms"),
+            )
+        except Exception as exc:
+            logger.warning(
+                "persist.maintain() failed (non-fatal — agent cleanup still runs): %s",
+                exc,
+            )
 
     async def _on_stop(self) -> None:
         """Stop hook for cleanup."""

@@ -249,7 +249,13 @@ class IncidentCaptureHandler(logging.Handler):
 
             import json as _json
 
-            engine.incident_record(_json.dumps(payload))
+            # Run persist's sync incident_record off the event loop —
+            # mirrors the pattern A3 uses for engine.audit_record_entry.
+            # Calling it inline would block the loop while persist's
+            # tokio runtime services the call, starving other coroutines
+            # and (under load) racing with raw sqlite3 connections that
+            # other services hold on ciris_engine.db.
+            await asyncio.to_thread(engine.incident_record, _json.dumps(payload))
 
         except Exception as e:
             # Incident capture must never break the system — log + swallow.

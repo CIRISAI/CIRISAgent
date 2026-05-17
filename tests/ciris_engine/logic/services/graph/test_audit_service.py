@@ -84,7 +84,17 @@ async def audit_service(memory_bus, temp_db, time_service):
     # audit service's audit_record_entry calls land in cirislens_audit_log.
     # The pubkey is registered in accord_public_keys so persist's chain
     # verifier can resolve signing_key_id -> pubkey at read time.
+    #
+    # IMPORTANT: this fixture mutates the module-global `_engine` in
+    # ciris_engine.logic.persistence.models.graph. We reset it in the
+    # finally-block below so subsequent tests (especially the incident
+    # service tests, which expect `get_persist_engine() is None` to fall
+    # through to the memory-bus mock) don't inherit our engine.
+    import ciris_engine.logic.persistence.models.graph as _graph_mod
     import hashlib as _hashlib
+
+    _prior_engine = _graph_mod._engine
+    _prior_dsn = _graph_mod._engine_dsn
 
     fingerprint = _hashlib.sha256(pub_bytes).hexdigest()[:12]
     key_id = f"agent-{fingerprint}"
@@ -120,7 +130,11 @@ async def audit_service(memory_bus, temp_db, time_service):
                 await service.stop()
             except asyncio.CancelledError:
                 pass  # Expected when cancelling export task
-    # Tear down persist engine + DB
+    # Tear down persist engine + DB. Restore the prior module-global so
+    # subsequent tests aren't affected by our wiring (cross-test isolation
+    # — see comment above set_persist_engine call).
+    _graph_mod._engine = _prior_engine
+    _graph_mod._engine_dsn = _prior_dsn
     try:
         os.unlink(persist_db_path)
     except OSError:

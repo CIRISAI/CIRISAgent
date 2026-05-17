@@ -208,6 +208,11 @@ class IncidentCaptureHandler(logging.Handler):
 
             now_iso = self._time_service.now().isoformat().replace("+00:00", "Z")
             message = record.getMessage()
+            # persist's incident schema requires `title` to be non-empty.
+            # Some log records have an empty message (e.g. record.msg=""
+            # with no args); fall back to a level+component synthetic title
+            # so we never POST an empty string.
+            title = (message[:200].strip() if message else "") or f"{record.levelname}: {record.name}"
             incident_id = f"incident_{uuid.uuid4()}"
             exception_type = (
                 record.exc_info[0].__name__ if record.exc_info and record.exc_info[0] else None
@@ -223,8 +228,8 @@ class IncidentCaptureHandler(logging.Handler):
                 "tenant_id": resolve_tenant_id(),
                 "severity": severity,
                 "category": "log_warning" if severity in ("warning", "info") else "log_error",
-                "title": message[:200],  # title is bounded; description carries the full message
-                "description": message,
+                "title": title,
+                "description": message if message else title,
                 "correlation_keys": correlation_keys,
                 "state": "open",
                 "first_seen_at": now_iso,

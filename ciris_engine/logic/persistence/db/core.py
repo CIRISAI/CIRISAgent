@@ -1209,6 +1209,46 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             except Exception:
                 logger.exception("A0a migration failed; persist engine wired anyway")
 
+        # 2.9.0 A0b: bridge the legacy audit chain into persist's
+        # cirislens_audit_log. Sentinel-gated like A0a; runs once on
+        # first 2.9.0 boot. Tolerant: if CIRISVerify isn't ready yet
+        # (early-boot ordering) or if the legacy audit DB is absent
+        # (fresh deployment with no legacy chain), log + skip.
+        audit_sentinel = sentinel_dir / ".audit_bridged"
+        legacy_audit_db = sentinel_dir / "ciris_audit.db"
+        if not audit_sentinel.exists() and legacy_audit_db.exists():
+            try:
+                from tools.ops.audit_chain_bridge import run as run_bridge
+
+                logger.info("A0b audit-bridge sentinel absent — running chain bridge")
+                result = run_bridge(
+                    engine_db=Path(db_path),
+                    audit_db=legacy_audit_db,
+                    dry_run=False,
+                    engine=engine,
+                )
+                audit_sentinel.write_text(
+                    f'{{"bridge_id":"{result.bridge_id}",'
+                    f'"legacy_terminal_seq":{result.legacy_terminal_seq},'
+                    f'"legacy_db_sha256":"{result.legacy_db_sha256}"}}'
+                )
+                logger.info(
+                    "A0b audit bridge complete: legacy_seq=%d bridge_id=%s",
+                    result.legacy_terminal_seq, result.bridge_id,
+                )
+            except Exception:
+                # CIRISVerify availability + signing-key access are
+                # ordering-sensitive at boot; we don't block startup on
+                # bridge failure. Next boot retries (sentinel absent).
+                logger.exception(
+                    "A0b audit bridge failed; persist engine wired anyway"
+                )
+        elif not legacy_audit_db.exists():
+            logger.debug(
+                "no legacy audit DB at %s — fresh deployment, no chain to bridge",
+                legacy_audit_db,
+            )
+
     # Wire the engine into persistence.models.graph.
     from ciris_engine.logic.persistence.models import graph as graph_persistence
     graph_persistence.set_persist_engine(engine, dsn)

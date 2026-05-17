@@ -325,9 +325,14 @@ class TestReasoningModeDisabling:
         assert extra_body["chat_template_kwargs"] == {"enable_thinking": False}
         assert extra_body["reasoning"] == {"enabled": False}
 
-    def test_openrouter_carries_reasoning_enabled_false(self):
+    def test_openrouter_carries_reasoning_effort_minimal(self):
+        # OpenRouter rejects reasoning.enabled=false for reasoning-mandatory
+        # models like openai/gpt-5 (400 "Reasoning is mandatory…"). The safe
+        # universal key is reasoning.effort=minimal — honoured by reasoning-
+        # mandatory models (0 reasoning tokens emitted), treated as lowest
+        # setting by reasoning-capable models, silently ignored otherwise.
         extra_body = self._build_for("https://openrouter.ai/api/v1", "kimi/k2-0130-preview")["extra_body"]
-        assert extra_body["reasoning"] == {"enabled": False}
+        assert extra_body["reasoning"] == {"effort": "minimal"}
 
     def test_local_endpoint_carries_vllm_key(self):
         extra_body = self._build_for("http://localhost:8080/v1", "llama")["extra_body"]
@@ -453,9 +458,11 @@ class TestReasoningModeDisabling:
             retry_state=RetryState(),
         )
 
-        # Verify reasoning is disabled
+        # Verify reasoning is suppressed via effort=minimal
+        # (universal OpenRouter key — accepted by reasoning-mandatory models
+        # like openai/gpt-5 which reject `enabled=false` with 400).
         assert "extra_body" in extra_kwargs
         extra_body = extra_kwargs["extra_body"]
         # Provider config may or may not be present depending on env
         assert "reasoning" in extra_body
-        assert extra_body["reasoning"]["enabled"] is False
+        assert extra_body["reasoning"] == {"effort": "minimal"}

@@ -1763,17 +1763,24 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     def _register_agent_pubkey_with_persist(self) -> None:
         """Register the agent's CIRISVerify-managed Ed25519 pubkey with
-        persist's federation_keys directory (2.9.0 Lane C, CIRISAgent#765).
+        persist's `accord_public_keys` table (the lens audit-chain
+        pubkey directory). 2.9.0 Lane C C3, CIRISAgent#765.
 
-        Registers as an agent identity (NOT steward — steward is a
-        separate directory role held by bootstrap-trusted keys packaged
-        with CIRISVerify, per CIRISVerify#22). Federation peers verify
-        any signature this agent produces via
-        `engine.verify_hybrid_via_directory(canonical, key_id, ed_sig, ...)`,
-        which resolves through this directory.
+        `accord_public_keys` is the table audit-chain verifiers query
+        to resolve `signing_key_id` → raw Ed25519 pubkey. Required for
+        A0b (audit chain bridge entry — verifier looks up the agent's
+        TPM-backed signing key here to validate the bridge signature)
+        and A3 (GraphAuditService cutover — every audit_record_entry
+        write carries a signing_key_id that resolves through this
+        table).
 
-        Same directory backs LensCore + future federation peers; every
-        identity (agent, steward, peer) registers itself once on boot.
+        Distinct from `federation_keys` (the federation directory for
+        peer trust / Counter-RII / consent_role / V020 trust columns),
+        which uses `engine.register_federation_key(...)` and requires
+        the Engine to be constructed with `local_key_id` +
+        `local_key_path`. That's a follow-up step (C3') with its own
+        key-bootstrap design question — the agent's TPM-backed key
+        isn't loadable as a filesystem path.
 
         Idempotent:
           - register_public_key is a no-op on (key_id, public_key)
@@ -1893,13 +1900,15 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # opt-in by ciris-verify version, not a hard dependency.
             logger.debug(f"[AuthenticationService] storage_descriptor boot log skipped: {e}")
 
-        # 2.9.0 Lane C: register agent's CIRISVerify-managed pubkey with
-        # persist's federation_keys directory so peers can verify our
-        # signatures via engine.verify_hybrid_via_directory(...).
-        # Idempotent — register_public_key is a no-op on content match,
-        # raises on content collision (which we log + swallow at boot).
-        # MUST NOT raise from start(); persist availability is checked
-        # at call sites that need it. See CIRISAgent#765.
+        # 2.9.0 Lane C C3: register agent's CIRISVerify-managed pubkey
+        # with persist's `accord_public_keys` table so audit-chain
+        # verifiers (A0b bridge entry, A3 audit_record_entry calls)
+        # can resolve our signing_key_id back to the raw Ed25519
+        # pubkey. Distinct from `federation_keys` registration (C3'),
+        # which needs the Engine constructed with local_key_id +
+        # local_key_path. MUST NOT raise from start(); persist
+        # availability is checked at call sites that need it.
+        # See CIRISAgent#765.
         try:
             self._register_agent_pubkey_with_persist()
         except Exception as e:

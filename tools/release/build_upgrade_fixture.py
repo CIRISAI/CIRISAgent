@@ -45,11 +45,14 @@ SCENARIO_VERSION = "v1"
 
 # Fixed scenario — keep this stable across patch releases so the upgrade test
 # diff stays meaningful. If you change the scenario, bump SCENARIO_VERSION.
-SCENARIO_MESSAGES = [
-    "Hello, what is your name?",
-    "What cognitive states do you support?",
-    "Remember that fixtures should be deterministic.",
-]
+#
+# V1 scenario is intentionally just-setup: the setup wizard alone populates
+# enough state (graph identity, audit chain root, signing key registration,
+# initial telemetry) to validate the upgrade-bootstrap path. Adding
+# interactions reliably is non-trivial in CI (Wakeup state, mock-LLM
+# readiness, SSE-based completion detection) — defer that to V2 if the
+# upgrade-test matrix shows the bare setup snapshot is insufficient.
+SCENARIO_MESSAGES: list[str] = []
 
 
 def _sha256(path: Path) -> str:
@@ -167,12 +170,13 @@ def build_fixture(out_dir: Path, port: int = 8123, ciris_version: str | None = N
     base_url = f"http://127.0.0.1:{port}"
     print(f"[fixture] ciris_home={ciris_home} port={port}", flush=True)
 
+    # Let the agent's stdout/stderr stream to this process's stdout so the
+    # CI job log captures any startup errors — silent PIPE-capture hides
+    # the actual cause when something fails.
     proc = subprocess.Popen(
         [sys.executable, str(REPO_ROOT / "main.py"), "--adapter", "api", "--mock-llm", "--port", str(port)],
         cwd=ciris_home,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
     )
 
     token: str | None = None

@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ADMIN_USER = "admin"
+ADMIN_USER = "fixture_admin"  # "admin" is reserved in prod; use a distinct name
 ADMIN_PASSWORD = "fixture_seed_password_v1"  # deterministic, never used in prod
 SCENARIO_VERSION = "v1"
 
@@ -75,8 +75,17 @@ def _http_json(method: str, url: str, body: dict | None = None, token: str | Non
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # Surface response body so CI logs show what the API rejected.
+        try:
+            body_preview = e.read().decode(errors="replace")
+        except Exception:
+            body_preview = "<could not read response body>"
+        print(f"[fixture] HTTP {e.code} on {method} {url}: {body_preview[:2000]}", flush=True)
+        raise
 
 
 def _wait_for_health(base_url: str, timeout: float = 60.0) -> None:

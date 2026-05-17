@@ -494,6 +494,17 @@ jobs:
           overwrite: true
           if-no-files-found: error
 
+      - name: Capture upgrade-compat fixture (safety)
+        # Snapshot the post-capture agent state as a "real-scenario" upgrade
+        # fixture. Scenario-tag carries the (lang, domain, template) tuple
+        # so the next major release's upgrade-compat matrix can pin a
+        # specific shape if needed. See tools/release/UPGRADE_FIXTURE.md.
+        if: steps.dedup.outputs.skip != 'true' && steps.bundle.outputs.bundle_dir != ''
+        uses: ./.github/actions/capture-upgrade-fixture
+        with:
+          source-name: safety
+          scenario-tag: ${{ env.LANG_INPUT }}-${{ env.DOMAIN_INPUT }}-${{ env.TEMPLATE_INPUT }}
+
       - name: Clean up key file (capture)
         if: always()
         run: shred -u "$HOME/.deepinfra_key" 2>/dev/null || rm -f "$HOME/.deepinfra_key" || true

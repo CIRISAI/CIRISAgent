@@ -175,3 +175,12 @@ jobs:
             100msg.log
             1000msg.log
           retention-days: 90
+
+      - name: Capture upgrade-compat fixture (memory-burst)
+        # Snapshot the post-1000-msg-burst agent state as a "synthetic load"
+        # upgrade fixture. The next major release consumes this through its
+        # upgrade-bootstrap matrix. See tools/release/UPGRADE_FIXTURE.md.
+        if: success()
+        uses: ./.github/actions/capture-upgrade-fixture
+        with:
+          source-name: memory-burst

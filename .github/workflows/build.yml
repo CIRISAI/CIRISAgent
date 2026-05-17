@@ -255,6 +255,16 @@ jobs:
           # --no-mock-llm not set → uses mock LLM (no API keys needed in CI).
           python3 -m tools.qa_runner --from-staged
 
+      - name: Capture upgrade-compat fixture (qa-full)
+        # Snapshot the post-QA-sweep agent state as a "full-coverage"
+        # upgrade fixture. qa_runner exercises every module's API surface,
+        # so the DB carries the widest variety of graph/audit/secrets
+        # state of the three host workflows. See tools/release/UPGRADE_FIXTURE.md.
+        if: success()
+        uses: ./.github/actions/capture-upgrade-fixture
+        with:
+          source-name: qa-full
+
       - name: Upload qa_status snapshot
         uses: actions/upload-artifact@v4
         if: always()

@@ -1,0 +1,99 @@
+name: Upgrade Fixture
+
+# Builds a deterministic agent-DB snapshot for the current release. The
+# snapshot is consumed by the *next* major release's upgrade-compat test
+# matrix (golden-snapshot upgrade test). See tools/release/UPGRADE_FIXTURE.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_label:
+        description: "Version label to embed in MANIFEST (e.g. v2.8.13)"
+        required: false
+        type: string
+  push:
+    tags:
+      - "v2.*"
+      - "release/2.*"
+  # Run on PRs that touch the fixture builder itself so a broken builder
+  # gets caught before it lands on a release branch.
+  pull_request:
+    paths:
+      - "tools/release/build_upgrade_fixture.py"
+      - ".github/workflows/upgrade-fixture.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build upgrade fixture
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Resolve version label
+        id: ver
+        run: |
+          if [ -n "${{ inputs.version_label }}" ]; then
+            echo "label=${{ inputs.version_label }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "label=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            # Derive from constants.py — keeps PR runs labelled correctly
+            label=$(python -c "from ciris_engine.constants import CIRIS_VERSION; print('v' + CIRIS_VERSION.replace('-stable',''))")
+            echo "label=$label" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build fixture
+        run: |
+          python -m tools.release.build_upgrade_fixture \
+            --out "fixtures/${{ steps.ver.outputs.label }}" \
+            --version "${{ steps.ver.outputs.label }}" \
+            --port 8123
+
+      - name: Show MANIFEST
+        run: cat "fixtures/${{ steps.ver.outputs.label }}/MANIFEST.json"
+
+      - name: Upload fixture artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: upgrade-fixture-${{ steps.ver.outputs.label }}
+          path: fixtures/${{ steps.ver.outputs.label }}/
+          if-no-files-found: error
+          retention-days: 90
+
+      # On tagged release, also attach to the GitHub Release so consumers
+      # don't need to chase workflow artifacts.
+      - name: Attach to release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            fixtures/${{ steps.ver.outputs.label }}/ciris_engine.db
+            fixtures/${{ steps.ver.outputs.label }}/ciris_audit.db
+            fixtures/${{ steps.ver.outputs.label }}/MANIFEST.json
+          tag_name: ${{ github.ref_name }}
+          fail_on_unmatched_files: false

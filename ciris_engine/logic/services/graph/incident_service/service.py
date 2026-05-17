@@ -257,9 +257,21 @@ class IncidentManagementService(BaseGraphService):
         that mock the memory_service; production agents go through persist.
         File-based fallback below still works as a last-resort forensic
         path when persist hasn't seen any incidents (e.g. fresh boot).
+
+        Resolution priority:
+          1. persist returns >0 incidents → use those (production happy path)
+          2. persist raises (engine not wired) → fall through to memory bus
+          3. persist returns 0 incidents → also check memory bus, because
+             tests routinely mock memory_service.search to return incidents
+             while leaving persist empty (the engine may be wired by an
+             earlier test's initialize_database side effect)
         """
         try:
-            return await asyncio.to_thread(self._query_persist_incidents, cutoff_time)
+            persist_incidents = await asyncio.to_thread(self._query_persist_incidents, cutoff_time)
+            if persist_incidents:
+                return persist_incidents
+            # Persist returned empty — fall through to memory-bus + file
+            # paths below in case a test mock has results.
         except Exception as e:
             logger.warning(f"persist incident query failed, falling back to legacy path: {e}")
 

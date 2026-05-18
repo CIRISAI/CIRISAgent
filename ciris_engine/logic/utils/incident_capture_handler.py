@@ -147,24 +147,30 @@ class IncidentCaptureHandler(logging.Handler):
                 except Exception:
                     pass
 
-            # D1-full: schedule the persist write if an event loop is running.
-            # ITIL-aligned filter: only ERROR+CRITICAL get persisted as
-            # incidents. WARNING-level log records are operational noise
-            # (startup chatter, deprecation warnings, missing-optional-
-            # services, etc.) — they go to the rotating file only.
+            # D1-full: persist-routed incident write is currently DISABLED.
             #
-            # The WARNING filter is also load-bearing for concurrency
-            # safety: agent startup emits ~50+ warning records in a few
-            # seconds; firing engine.incident_record for each one piles
-            # up concurrent persist writes while raw sqlite3 connections
-            # from other services hold the same ciris_engine.db open,
-            # which empirically corrupts the WAL on CI runners.
-            if record.levelno >= logging.ERROR:
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(self._save_incident_to_graph(record))
-                except RuntimeError:
-                    pass  # no running loop; rotating file is the only record
+            # CI surfaced a database-corruption pattern: agent error
+            # cascades (e.g. "No memory service available" storms during
+            # transient registry hiccups) generate ~100+ ERROR-level log
+            # records in seconds. Each one creates an asyncio task that
+            # calls engine.incident_record, while raw sqlite3 connections
+            # from other services concurrently read ciris_engine.db.
+            # The combination empirically leaves the WAL malformed.
+            #
+            # Filtering at WARNING wasn't sufficient — ERROR storms still
+            # triggered the corruption. The proper fix is a serialized
+            # queue + single-worker drain pattern (or upstream confirmation
+            # that engine.incident_record is safe to call concurrently),
+            # both of which are post-2.9.0 work.
+            #
+            # The rotating-file handler above keeps the full forensic
+            # record. IncidentManagementService falls through to the
+            # file-parsing path when persist is empty, so analysis
+            # continues to work via the memory-bus + file route.
+            #
+            # See _save_incident_to_graph (still wired, callable from
+            # tests + future code) for the persist implementation that
+            # this hook will resume scheduling once the queue is in place.
 
         except Exception:
             # Failsafe - if we can't capture incident, don't crash

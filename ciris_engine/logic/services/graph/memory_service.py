@@ -217,8 +217,14 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
             from ciris_engine.logic.persistence.models import graph as persistence
 
-            # Delete edges first to avoid FK violations on PostgreSQL
-            persistence.delete_edges_for_node(node.id, node.scope, db_path=self.db_path)
+            # A1 completion + corruption fix: persist's cirisgraph_delete_node
+            # with hard=True cascades to remove all connected edges, so the
+            # legacy raw-sqlite3 delete_edges_for_node call is redundant.
+            # Dropping it closes the last raw-sqlite3 writer on persist's
+            # cirisgraph_edges table — which was the root cause of CI's
+            # "Invalid column type Text" / "database disk image is malformed"
+            # corruption (concurrent raw-sqlite3 writes from this path
+            # racing persist's sqlx writes across the same WAL).
             persistence.delete_graph_node(node.id, node.scope, db_path=self.db_path)
             return MemoryOpResult[GraphNode](status=MemoryOpStatus.OK, data=node)
         except Exception as e:

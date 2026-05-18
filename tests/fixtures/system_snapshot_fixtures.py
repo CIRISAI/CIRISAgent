@@ -54,8 +54,6 @@ def comprehensive_system_snapshot_mocks():
     ) as mock_task_db, patch(
         "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path"
     ) as mock_db_path:
-        mock_graph_db = MagicMock()  # back-compat placeholder for the removed patch
-
         # Mock database path to avoid config dependency
         mock_db_path.return_value = "/tmp/test.db"
 
@@ -69,7 +67,6 @@ def comprehensive_system_snapshot_mocks():
         mock_conn.__exit__ = MagicMock(return_value=None)
 
         mock_task_db.return_value = mock_conn
-        mock_graph_db.return_value = mock_conn
 
         # Mock persistence functions
         mock_persistence.get_recent_completed_tasks.return_value = []
@@ -94,7 +91,6 @@ def comprehensive_system_snapshot_mocks():
             "main_persistence": mock_main_persistence,
             "secrets": mock_secrets,
             "task_db": mock_task_db,
-            "graph_db": mock_graph_db,
             "db_path": mock_db_path,
             "db_connection": mock_conn,
             "cursor": mock_cursor,

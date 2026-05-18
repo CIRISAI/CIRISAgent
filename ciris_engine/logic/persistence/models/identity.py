@@ -9,7 +9,6 @@ import json
 import logging
 from typing import Optional
 
-from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.models.graph import add_graph_node, get_graph_node
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.persistence.core import IdentityContext
@@ -159,30 +158,30 @@ def store_creation_ceremony(
         ceremony_request: The creation ceremony request
         new_agent_id: ID of the newly created agent
         ceremony_id: Unique ceremony identifier
-        db_path: Optional database path override
+        db_path: Optional database path override (retained for signature
+            compat; persist owns its connection via the wired engine)
 
     Returns:
         True if successful, False otherwise
+
+    Note (CIRISAgent#763): routes through ciris-persist's `ceremony_record`
+    substrate instead of raw sqlite3 writes to legacy `creation_ceremonies`
+    table.
     """
     try:
-        sql = """
-            INSERT INTO creation_ceremonies (
-                ceremony_id, timestamp, creator_agent_id, creator_human_id,
-                wise_authority_id, new_agent_id, new_agent_name, new_agent_purpose,
-                new_agent_description, creation_justification, expected_capabilities,
-                ethical_considerations, template_profile_hash, ceremony_status
-            ) VALUES (
-                :ceremony_id, :timestamp, :creator_agent_id, :creator_human_id,
-                :wise_authority_id, :new_agent_id, :new_agent_name, :new_agent_purpose,
-                :new_agent_description, :creation_justification, :expected_capabilities,
-                :ethical_considerations, :template_profile_hash, :ceremony_status
-            )
-        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-        params = {
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError(
+                "persist engine not initialized — call initialize_database() "
+                "before any ceremony operation"
+            )
+
+        payload = {
             "ceremony_id": ceremony_id,
             "timestamp": time_service.now().isoformat(),
-            "creator_agent_id": "system",  # Or current agent ID if agent-initiated
+            "creator_agent_id": "system",
             "creator_human_id": ceremony_request.human_id,
             "wise_authority_id": ceremony_request.wise_authority_id or ceremony_request.human_id,
             "new_agent_id": new_agent_id,
@@ -192,14 +191,12 @@ def store_creation_ceremony(
             "creation_justification": ceremony_request.creation_justification,
             "expected_capabilities": json.dumps(ceremony_request.expected_capabilities),
             "ethical_considerations": ceremony_request.ethical_considerations,
-            "template_profile_hash": hash(ceremony_request.template_profile),
+            # Persist requires `template_profile_hash` as a string.
+            "template_profile_hash": str(hash(ceremony_request.template_profile)),
             "ceremony_status": "completed",
         }
 
-        with get_db_connection(db_path=db_path) as conn:
-            conn.execute(sql, params)
-            conn.commit()
-
+        engine.ceremony_record(json.dumps(payload))
         logger.info(f"Stored creation ceremony {ceremony_id} for agent {new_agent_id}")
         return True
 

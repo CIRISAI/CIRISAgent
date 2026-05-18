@@ -302,19 +302,25 @@ def test_transfer_thought_ownership_no_event_loop(
 # ========== add_thought and get_thought_by_id Exception Tests ==========
 
 
-def test_add_thought_exception_handling():
-    """Test that add_thought raises exception on database error."""
-    thought = create_test_thought("test-t1", "occ1", db_path=None)
+def test_add_thought_exception_handling(temp_db):
+    """Test that add_thought raises when the persist engine surface fails."""
+    thought = create_test_thought("test-t1", "occ1", db_path=temp_db)
 
-    # Try to add to invalid database
-    with pytest.raises(Exception):
-        add_thought(thought, db_path="/invalid/path/db.db")
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._get_engine"
+    ) as mock_engine:
+        mock_engine.return_value.thought_upsert.side_effect = RuntimeError("simulated")
+        with pytest.raises(Exception):
+            add_thought(thought, db_path=temp_db)
 
 
-def test_get_thought_by_id_exception_returns_none():
-    """Test that get_thought_by_id returns None on database error."""
-    # This should handle the exception and return None
-    result = get_thought_by_id("test-t1", "occ1", db_path="/invalid/path/db.db")
+def test_get_thought_by_id_exception_returns_none(temp_db):
+    """get_thought_by_id swallows persist engine errors and returns None."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._get_engine"
+    ) as mock_engine:
+        mock_engine.return_value.thought_get.side_effect = RuntimeError("boom")
+        result = get_thought_by_id("test-t1", "occ1", db_path=temp_db)
     assert result is None
 
 
@@ -371,13 +377,17 @@ def test_get_thoughts_by_status_empty_result(temp_db: str):
     assert len(result) == 0
 
 
-def test_get_thoughts_by_status_database_error():
-    """Test handling database error gracefully."""
-    result = get_thoughts_by_status(
-        ThoughtStatus.PENDING,
-        "occ1",
-        db_path="/invalid/path.db",
-    )
+def test_get_thoughts_by_status_database_error(temp_db):
+    """Test handling persist engine error gracefully — returns empty list."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._list_with_filter",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = get_thoughts_by_status(
+            ThoughtStatus.PENDING,
+            "occ1",
+            db_path=temp_db,
+        )
 
     assert len(result) == 0
 
@@ -434,9 +444,13 @@ def test_get_thoughts_by_ids_wrong_occurrence(temp_db: str):
     assert len(result) == 0
 
 
-def test_get_thoughts_by_ids_database_error():
-    """Test handling database error."""
-    result = get_thoughts_by_ids(["t1"], "occ1", db_path="/invalid/path.db")
+def test_get_thoughts_by_ids_database_error(temp_db):
+    """Test handling persist engine error — returns empty dict."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._get_engine"
+    ) as mock_engine:
+        mock_engine.return_value.thought_get.side_effect = RuntimeError("boom")
+        result = get_thoughts_by_ids(["t1"], "occ1", db_path=temp_db)
 
     assert result == {}
 
@@ -502,9 +516,13 @@ async def test_async_get_thought_status_not_found(temp_db: str):
 
 
 @pytest.mark.asyncio
-async def test_async_get_thought_status_database_error():
-    """Test async status retrieval with database error."""
-    status = await async_get_thought_status("t1", "occ1", db_path="/invalid/path.db")
+async def test_async_get_thought_status_database_error(temp_db):
+    """Test async status retrieval returns None on persist engine error."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._get_engine"
+    ) as mock_engine:
+        mock_engine.return_value.thought_get.side_effect = RuntimeError("boom")
+        status = await async_get_thought_status("t1", "occ1", db_path=temp_db)
 
     assert status is None
 
@@ -546,9 +564,13 @@ def test_count_thoughts_occurrence_isolation(temp_db: str):
     assert count_occ2 == 2
 
 
-def test_count_thoughts_database_error():
-    """Test count with database error."""
-    count = count_thoughts("occ1", db_path="/invalid/path.db")
+def test_count_thoughts_database_error(temp_db):
+    """Test count returns 0 when persist engine surface fails."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._list_with_filter",
+        side_effect=RuntimeError("boom"),
+    ):
+        count = count_thoughts("occ1", db_path=temp_db)
 
     assert count == 0
 
@@ -557,7 +579,12 @@ def test_count_thoughts_database_error():
 
 
 def test_delete_thoughts_by_ids_success(temp_db: str):
-    """Test deleting multiple thoughts."""
+    """delete_thoughts_by_ids is a soft no-op after the 2.9.0 persist absorption.
+
+    Persist 1.5.19 does not expose `thought_delete`; the function logs
+    a warning and returns 0 rather than attempting a raw-sqlite3 delete
+    that would race the substrate. See CIRISPersist follow-up.
+    """
     thoughts = [
         create_test_thought("del-t1", "occ1", db_path=temp_db),
         create_test_thought("del-t2", "occ1", db_path=temp_db),
@@ -568,11 +595,10 @@ def test_delete_thoughts_by_ids_success(temp_db: str):
 
     deleted = delete_thoughts_by_ids(["del-t1", "del-t2"], "occ1", db_path=temp_db)
 
-    assert deleted == 2
-
-    # Verify deletion
-    assert get_thought_by_id("del-t1", "occ1", db_path=temp_db) is None
-    assert get_thought_by_id("del-t2", "occ1", db_path=temp_db) is None
+    # Soft no-op: returns 0; rows remain.
+    assert deleted == 0
+    assert get_thought_by_id("del-t1", "occ1", db_path=temp_db) is not None
+    assert get_thought_by_id("del-t2", "occ1", db_path=temp_db) is not None
     assert get_thought_by_id("del-t3", "occ1", db_path=temp_db) is not None
 
 
@@ -656,13 +682,17 @@ def test_get_thoughts_older_than_occurrence_isolation(temp_db: str):
     assert result[0].agent_occurrence_id == "occ1"
 
 
-def test_get_thoughts_older_than_database_error():
-    """Test handling database error."""
-    result = get_thoughts_older_than(
-        datetime.now(timezone.utc).isoformat(),
-        "occ1",
-        db_path="/invalid/path.db",
-    )
+def test_get_thoughts_older_than_database_error(temp_db):
+    """Test handling persist engine error — returns empty list."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._list_with_filter",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = get_thoughts_older_than(
+            datetime.now(timezone.utc).isoformat(),
+            "occ1",
+            db_path=temp_db,
+        )
 
     assert len(result) == 0
 
@@ -703,9 +733,13 @@ def test_get_recent_thoughts_occurrence_isolation(temp_db: str):
     assert result[0].thought_id == "rec1"
 
 
-def test_get_recent_thoughts_database_error():
-    """Test handling database error."""
-    result = get_recent_thoughts("occ1", limit=10, db_path="/invalid/path.db")
+def test_get_recent_thoughts_database_error(temp_db):
+    """Test handling persist engine error — returns empty list."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._list_with_filter",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = get_recent_thoughts("occ1", limit=10, db_path=temp_db)
 
     assert len(result) == 0
 
@@ -744,9 +778,13 @@ def test_get_thoughts_by_task_id_occurrence_isolation(temp_db: str):
     assert result[0].agent_occurrence_id == "occ1"
 
 
-def test_get_thoughts_by_task_id_database_error():
-    """Test handling database error."""
-    result = get_thoughts_by_task_id("task-123", "occ1", db_path="/invalid/path.db")
+def test_get_thoughts_by_task_id_database_error(temp_db):
+    """Test handling persist engine error — returns empty list."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._list_with_filter",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = get_thoughts_by_task_id("task-123", "occ1", db_path=temp_db)
 
     assert len(result) == 0
 

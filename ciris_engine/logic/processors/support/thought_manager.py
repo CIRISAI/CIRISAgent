@@ -181,14 +181,29 @@ class ThoughtManager:
                 f"(occurrence: {task.agent_occurrence_id})"
             )
 
-            # Clear the updated_info_available flag now that we've created a recovery thought
+            # Clear the updated_info_available flag now that we've created a
+            # recovery thought. Route through persist so we don't reintroduce
+            # a second libsqlite writer on the DB (CIRISAgent#763).
             try:
-                with get_db_connection() as conn:
-                    conn.execute(
-                        "UPDATE tasks SET updated_info_available = 0 WHERE task_id = ?",
-                        (task.task_id,),
-                    )
-                    conn.commit()
+                from ciris_engine.logic.persistence.models.graph import get_persist_engine
+                from ciris_engine.logic.persistence.models.tasks import (
+                    _persist_row_to_task,
+                    _task_to_persist_payload,
+                )
+
+                engine = get_persist_engine()
+                if engine is not None:
+                    raw = engine.task_get(task.task_id)
+                    if raw is not None:
+                        import json as _json
+
+                        row = _json.loads(raw) if isinstance(raw, str) else raw
+                        if isinstance(row, dict):
+                            existing_task = _persist_row_to_task(row)
+                            existing_task.updated_info_available = False
+                            engine.task_upsert(
+                                _json.dumps(_task_to_persist_payload(existing_task))
+                            )
                 logger.debug(f"[RECOVERY] Cleared updated_info_available flag for task {task.task_id}")
             except Exception as e:
                 logger.warning(f"[RECOVERY] Failed to clear updated_info_available flag for task {task.task_id}: {e}")

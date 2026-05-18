@@ -22,6 +22,22 @@ from ciris_engine.logic.persistence.models.tasks import (
     try_claim_shared_task,
     update_task_status,
 )
+
+
+def _backdate_task_created_at(temp_db: str, task_id: str, new_created_at: str) -> None:
+    """Force-update created_at on the persist substrate row directly.
+
+    Post-2.9.0 absorption, the `tasks` table is no longer the write
+    target — `cirislens_tasks` (managed by ciris-persist) is. These
+    tests need to age a row to simulate stale-task scenarios; we hit
+    the persist row directly so the migrated readers see the change.
+    """
+    with get_db_connection(temp_db) as conn:
+        conn.execute(
+            "UPDATE cirislens_tasks SET created_at = ? WHERE task_id = ?",
+            (new_created_at, task_id),
+        )
+        conn.commit()
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import TaskStatus
 from ciris_engine.schemas.runtime.models import Task
@@ -187,9 +203,7 @@ def test_get_shared_task_status_outside_window(temp_db: str, time_service: TimeS
 
     # Manually update created_at to be 48 hours ago
     old_time = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
-    with get_db_connection(temp_db) as conn:
-        conn.execute("UPDATE tasks SET created_at = ? WHERE task_id = ?", (old_time, task.task_id))
-        conn.commit()
+    _backdate_task_created_at(temp_db, task.task_id, old_time)
 
     # Query with 24-hour window - should return None
     status = get_shared_task_status("wakeup", within_hours=24, db_path=temp_db)
@@ -637,9 +651,7 @@ def test_try_claim_shared_task_deletes_old_active_task(temp_db: str, time_servic
 
     # Manually update created_at to be 15 minutes ago (stale)
     old_time = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
-    with get_db_connection(temp_db) as conn:
-        conn.execute("UPDATE tasks SET created_at = ? WHERE task_id = ?", (old_time, task1.task_id))
-        conn.commit()
+    _backdate_task_created_at(temp_db, task1.task_id, old_time)
 
     # Try to claim again - should create NEW task (delete stale active one)
     task2, was_created2 = try_claim_shared_task(
@@ -673,9 +685,7 @@ def test_try_claim_shared_task_boundary_10_minute_age(temp_db: str, time_service
 
     # Manually update created_at to be exactly 9 minutes 59 seconds ago (should still be fresh)
     boundary_time = (datetime.now(timezone.utc) - timedelta(minutes=9, seconds=59)).isoformat()
-    with get_db_connection(temp_db) as conn:
-        conn.execute("UPDATE tasks SET created_at = ? WHERE task_id = ?", (boundary_time, task1.task_id))
-        conn.commit()
+    _backdate_task_created_at(temp_db, task1.task_id, boundary_time)
 
     # Try to claim again - should REUSE (still fresh)
     task2, was_created2 = try_claim_shared_task(
@@ -708,9 +718,7 @@ def test_try_claim_shared_task_datum_bug_scenario(temp_db: str, time_service: Ti
 
     # Manually update created_at to be 20 hours ago (simulating Datum's stale task)
     old_time = (datetime.now(timezone.utc) - timedelta(hours=20)).isoformat()
-    with get_db_connection(temp_db) as conn:
-        conn.execute("UPDATE tasks SET created_at = ? WHERE task_id = ?", (old_time, task1.task_id))
-        conn.commit()
+    _backdate_task_created_at(temp_db, task1.task_id, old_time)
 
     # Now simulate Datum's second shutdown attempt - should DELETE stale task and create new one
     task2, was_created2 = try_claim_shared_task(

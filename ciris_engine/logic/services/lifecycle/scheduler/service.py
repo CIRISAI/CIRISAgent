@@ -14,7 +14,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from ciris_engine.logic.persistence import add_thought, get_db_connection
+from ciris_engine.logic.persistence import add_thought
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.protocols.services import ServiceProtocol as TaskSchedulerServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -114,17 +114,15 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         await super()._on_stop()
 
     async def _load_active_tasks(self) -> None:
-        """Load all active tasks from the database."""
-        try:
-            if not self.conn:
-                self.conn = get_db_connection(self.db_path)  # type: ignore[assignment]
+        """Load all active tasks.
 
-            # For now, we'll use the existing thought/task tables
-            # In the future, this could be a dedicated scheduled_tasks table
-            logger.info("Loading active scheduled tasks")
-
-        except Exception as e:
-            logger.error(f"Failed to load active tasks: {e}")
+        Scheduled tasks are currently held in-memory in `self._active_tasks`.
+        Persistence through ciris-persist's `scheduled_task_*` substrate
+        is wired separately (CIRISAgent#763 / 2.9.0 absorption); legacy
+        raw-sqlite3 path is removed to avoid a second libsqlite writer
+        on `ciris_engine.db`.
+        """
+        logger.info("Loading active scheduled tasks (in-memory state)")
 
     def _create_scheduled_task(
         self,

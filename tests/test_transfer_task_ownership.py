@@ -391,7 +391,11 @@ def test_transfer_preserves_all_task_data(mock_audit_service):
         assert transferred.context.user_id == task.context.user_id
         assert transferred.context.correlation_id == task.context.correlation_id
         assert transferred.context.parent_task_id == task.context.parent_task_id
-        assert transferred.created_at == original_time
+        # Persist normalizes ISO timestamps to use 'Z' suffix instead of '+00:00';
+        # compare as datetimes for stable equivalence rather than as raw strings.
+        assert datetime.fromisoformat(
+            transferred.created_at.replace("Z", "+00:00")
+        ) == datetime.fromisoformat(original_time.replace("Z", "+00:00"))
 
         # Only occurrence_id should change
         assert transferred.agent_occurrence_id == "occurrence-preserve"

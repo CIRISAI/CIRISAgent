@@ -1,7 +1,8 @@
 """Universal Ticket Persistence Layer
 
 This module provides database operations for the universal ticket system.
-Tickets are CIRIS's mechanism for tracking multi-stage workflows with SOP (Standard Operating Procedure) enforcement.
+Tickets are CIRIS's mechanism for tracking multi-stage workflows with SOP
+(Standard Operating Procedure) enforcement.
 
 Universal Ticket Types:
 - DSAR (Data Subject Access Requests) - Required for all agents (GDPR compliance)
@@ -18,17 +19,23 @@ GDPR Requirements (Universal DSAR Support):
 - Article 16 (Rectification): Track correction requests
 - Article 17 (Erasure): Track deletion requests with 90-day decay protocol
 - Article 20 (Portability): Track export requests
+
+Note (CIRISAgent#763): public function signatures preserved verbatim; internals
+routed through ciris-persist's `ticket_*` substrate (CIRISPersist#58 fix).
 """
+
+from __future__ import annotations
 
 import json
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
-
-from ciris_engine.logic.persistence.db import get_db_connection
+from typing import Any, Dict, List, Optional, cast
 
 logger = logging.getLogger(__name__)
+
+
+_TERMINAL_STATUSES = {"completed", "cancelled", "failed"}
 
 
 def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
@@ -40,6 +47,120 @@ def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."
     return sanitized
+
+
+def _get_engine() -> Any:
+    """Return the wired persist engine; raise if not yet bootstrapped."""
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    engine = get_persist_engine()
+    if engine is None:
+        raise RuntimeError(
+            "persist engine not initialized — call initialize_database() "
+            "before any ticket operation"
+        )
+    return engine
+
+
+def _iso_or_str(value: Any) -> Optional[str]:
+    """Coerce a datetime/ISO-string/None into RFC-3339 string."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def _row_from_persist(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize a persist `ticket_get`/`ticket_list` row to the legacy `_row_to_dict` shape.
+
+    Legacy callers expect:
+        ticket_id, sop, ticket_type, status, priority,
+        email, user_identifier,
+        submitted_at, deadline, last_updated, completed_at,
+        metadata (dict | None), notes, automated (bool),
+        correlation_id, agent_occurrence_id
+    """
+    metadata_raw = row.get("metadata")
+    metadata: Optional[Dict[str, Any]]
+    if metadata_raw is None:
+        metadata = None
+    elif isinstance(metadata_raw, str):
+        try:
+            metadata = json.loads(metadata_raw)
+        except json.JSONDecodeError:
+            logger.warning("ticket %s: malformed metadata json, defaulting to empty", row.get("ticket_id"))
+            metadata = {}
+    elif isinstance(metadata_raw, dict):
+        metadata = dict(metadata_raw)
+    else:
+        metadata = {}
+
+    return {
+        "ticket_id": row.get("ticket_id"),
+        "sop": row.get("sop"),
+        "ticket_type": row.get("ticket_type"),
+        "status": row.get("status"),
+        "priority": row.get("priority"),
+        "email": row.get("email"),
+        "user_identifier": row.get("user_identifier"),
+        "submitted_at": _iso_or_str(row.get("submitted_at")),
+        "deadline": _iso_or_str(row.get("deadline")),
+        "last_updated": _iso_or_str(row.get("last_updated")),
+        "completed_at": _iso_or_str(row.get("completed_at")),
+        "metadata": metadata,
+        "notes": row.get("notes"),
+        "automated": bool(row.get("automated", False)),
+        "correlation_id": row.get("correlation_id"),
+        "agent_occurrence_id": row.get("agent_occurrence_id"),
+    }
+
+
+def _build_upsert_payload(
+    *,
+    ticket_id: str,
+    sop: str,
+    ticket_type: str,
+    status: str,
+    priority: int,
+    email: str,
+    user_identifier: Optional[str],
+    submitted_at_iso: str,
+    deadline_iso: Optional[str],
+    last_updated_iso: str,
+    completed_at_iso: Optional[str],
+    metadata: Dict[str, Any],
+    notes: Optional[str],
+    automated: bool,
+    correlation_id: Optional[str],
+    agent_occurrence_id: str,
+) -> Dict[str, Any]:
+    """Build a persist ticket_upsert payload (drops None where persist treats absence as null)."""
+    payload: Dict[str, Any] = {
+        "ticket_id": ticket_id,
+        "sop": sop,
+        "ticket_type": ticket_type,
+        "status": status,
+        "priority": priority,
+        "email": email,
+        "submitted_at": submitted_at_iso,
+        "last_updated": last_updated_iso,
+        "created_at": submitted_at_iso,  # persist preserves created_at on conflict
+        "metadata": metadata,
+        "automated": automated,
+        "agent_occurrence_id": agent_occurrence_id,
+    }
+    if user_identifier is not None:
+        payload["user_identifier"] = user_identifier
+    if deadline_iso is not None:
+        payload["deadline"] = deadline_iso
+    if completed_at_iso is not None:
+        payload["completed_at"] = completed_at_iso
+    if notes is not None:
+        payload["notes"] = notes
+    if correlation_id is not None:
+        payload["correlation_id"] = correlation_id
+    return payload
 
 
 def create_ticket(
@@ -59,78 +180,38 @@ def create_ticket(
     agent_occurrence_id: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> bool:
-    """Create a new ticket in the database.
+    """Create a new ticket in the database (routed through persist `ticket_upsert`).
 
-    Args:
-        ticket_id: Unique ticket identifier (format: TYPE-YYYYMMDD-XXXXXX)
-        sop: Standard Operating Procedure (e.g., "DSAR_ACCESS", "APPOINTMENT_SCHEDULE")
-        ticket_type: Category (e.g., "dsar", "appointment", "incident")
-        email: Contact email for the ticket
-        status: Initial status (default: "pending")
-        priority: Priority level 1-10 (default: 5, urgent: 9-10)
-        user_identifier: Optional user identifier for data lookup
-        submitted_at: Submission timestamp (defaults to now)
-        deadline: Deadline timestamp (calculated from SOP config if not provided)
-        metadata: JSON metadata for stage progress and results
-        notes: Optional notes about the ticket
-        automated: Whether this was created automatically
-        correlation_id: Optional correlation ID linking to tasks/thoughts
-        agent_occurrence_id: Optional occurrence ID (defaults to __shared__ for pending, None for others)
-        db_path: Optional database path override
-
-    Returns:
-        True if ticket was created successfully, False otherwise
+    `db_path` retained for signature compat; persist owns its connection.
     """
-    if submitted_at is None:
-        submitted_at = datetime.now(timezone.utc)
+    submitted_dt = submitted_at if submitted_at is not None else datetime.now(timezone.utc)
+    submitted_at_str = submitted_dt.isoformat() if isinstance(submitted_dt, datetime) else str(submitted_dt)
+    deadline_str = _iso_or_str(deadline)
 
-    # Handle both datetime objects and ISO strings
-    submitted_at_str = submitted_at.isoformat() if isinstance(submitted_at, datetime) else submitted_at
-
-    # Convert deadline to string format
-    if deadline is None:
-        deadline_str = None
-    elif isinstance(deadline, datetime):
-        deadline_str = deadline.isoformat()
-    else:
-        deadline_str = deadline
-
-    # Default agent_occurrence_id to __shared__ so tickets can be claimed
     if agent_occurrence_id is None:
         agent_occurrence_id = "__shared__"
 
-    sql = """
-        INSERT INTO tickets (
-            ticket_id, sop, ticket_type, status, priority,
-            email, user_identifier,
-            submitted_at, deadline, last_updated,
-            metadata, notes, automated, correlation_id, agent_occurrence_id
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """
-
-    params = (
-        ticket_id,
-        sop,
-        ticket_type,
-        status,
-        priority,
-        email,
-        user_identifier,
-        submitted_at_str,
-        deadline_str,
-        submitted_at_str,  # last_updated = submitted_at initially
-        json.dumps(metadata or {}),
-        notes,
-        automated,  # Pass boolean directly - db adapter handles dialect conversion
-        correlation_id,
-        agent_occurrence_id,
+    payload = _build_upsert_payload(
+        ticket_id=ticket_id,
+        sop=sop,
+        ticket_type=ticket_type,
+        status=status,
+        priority=priority,
+        email=email,
+        user_identifier=user_identifier,
+        submitted_at_iso=submitted_at_str,
+        deadline_iso=deadline_str,
+        last_updated_iso=submitted_at_str,
+        completed_at_iso=None,
+        metadata=dict(metadata or {}),
+        notes=notes,
+        automated=automated,
+        correlation_id=correlation_id,
+        agent_occurrence_id=agent_occurrence_id,
     )
 
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            conn.execute(sql, params)
-            conn.commit()
+        _get_engine().ticket_upsert(json.dumps(payload))
         logger.info(
             "Created ticket %s (sop: %s, type: %s, status: %s)",
             _sanitize_for_log(ticket_id),
@@ -145,34 +226,17 @@ def create_ticket(
 
 
 def get_ticket(ticket_id: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Retrieve a ticket by ID.
-
-    Args:
-        ticket_id: Unique ticket identifier
-        db_path: Optional database path override
-
-    Returns:
-        Dict containing ticket data, or None if not found
-    """
-    sql = "SELECT * FROM tickets WHERE ticket_id = ?"
-
+    """Retrieve a ticket by ID via persist `ticket_get`. Returns legacy-shaped dict or None."""
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (ticket_id,))
-            row = cursor.fetchone()
-
-            if row:
-                logger.debug(f"get_ticket: Retrieved row for {ticket_id}, row type: {type(row)}")
-                try:
-                    result = _row_to_dict(row)
-                    logger.debug(f"get_ticket: Converted to dict for {ticket_id}")
-                    return result
-                except Exception as convert_error:
-                    logger.exception(f"get_ticket: Failed to convert row to dict for {ticket_id}: {convert_error}")
-                    raise
+        engine = _get_engine()
+        raw = engine.ticket_get(ticket_id)
+        if raw is None:
             logger.debug(f"get_ticket: No row found for {ticket_id}")
             return None
+        row = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(row, dict):
+            return None
+        return _row_from_persist(row)
     except Exception as e:
         logger.exception("Failed to retrieve ticket %s: %s", _sanitize_for_log(ticket_id), e)
         return None
@@ -186,61 +250,85 @@ def update_ticket_status(
     require_current_occurrence_id: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> bool:
-    """Update the status of a ticket.
+    """Update ticket status via persist substrate.
 
-    Args:
-        ticket_id: Unique ticket identifier
-        new_status: New status (pending|assigned|in_progress|blocked|deferred|completed|cancelled|failed)
-        notes: Optional notes about the status update
-        agent_occurrence_id: Optional occurrence ID to assign ticket to (for claiming)
-        require_current_occurrence_id: If set, only update if ticket currently has this occurrence ID (for atomic claiming)
-        db_path: Optional database path override
-
-    Returns:
-        True if update was successful, False otherwise
+    Persist's `ticket_update_status` handles status + completed_at + notes but
+    does NOT update `agent_occurrence_id`. When a caller asks to assign a new
+    occurrence (e.g., atomic claiming from `__shared__`), we read-verify-upsert.
     """
-    now = datetime.now(timezone.utc).isoformat()
-    completed_at = now if new_status in ("completed", "cancelled", "failed") else None
-
-    # Build SQL dynamically based on what's being updated
-    updates = ["status = ?", "last_updated = ?", "completed_at = ?"]
-    params = [new_status, now, completed_at]
-
-    if notes:
-        updates.append("notes = ?")
-        params.append(notes)
-
-    if agent_occurrence_id:
-        updates.append("agent_occurrence_id = ?")
-        params.append(agent_occurrence_id)
-
-    # Build WHERE clause
-    where_clauses = ["ticket_id = ?"]
-    params.append(ticket_id)
-
-    if require_current_occurrence_id is not None:
-        where_clauses.append("agent_occurrence_id = ?")
-        params.append(require_current_occurrence_id)
-
-    sql = f"""
-        UPDATE tickets
-        SET {', '.join(updates)}
-        WHERE {' AND '.join(where_clauses)}
-    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    completed_at_iso: Optional[str] = now_iso if new_status in _TERMINAL_STATUSES else None
 
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.execute(sql, params)
-            conn.commit()
+        engine = _get_engine()
 
-            if cursor.rowcount > 0:
-                logger.info(
-                    "Updated ticket %s status to %s", _sanitize_for_log(ticket_id), _sanitize_for_log(new_status)
-                )
-                return True
-            else:
+        # If caller wants to reassign occurrence or enforce a current-occurrence
+        # gate, we have to go through a read-verify-upsert path because persist's
+        # focused update_status doesn't expose those.
+        if agent_occurrence_id is not None or require_current_occurrence_id is not None:
+            raw = engine.ticket_get(ticket_id)
+            if raw is None:
                 logger.warning("Ticket %s not found for status update", _sanitize_for_log(ticket_id))
                 return False
+            existing_dict = json.loads(raw) if isinstance(raw, str) else raw
+            if not isinstance(existing_dict, dict):
+                return False
+
+            if require_current_occurrence_id is not None:
+                current = existing_dict.get("agent_occurrence_id")
+                if current != require_current_occurrence_id:
+                    logger.debug(
+                        "Ticket %s claim failed: current occurrence=%s, required=%s",
+                        _sanitize_for_log(ticket_id),
+                        _sanitize_for_log(current),
+                        _sanitize_for_log(require_current_occurrence_id),
+                    )
+                    return False
+
+            existing = _row_from_persist(existing_dict)
+            new_metadata = existing["metadata"] or {}
+            target_occurrence_id = (
+                agent_occurrence_id
+                if agent_occurrence_id is not None
+                else existing["agent_occurrence_id"]
+            )
+            payload = _build_upsert_payload(
+                ticket_id=ticket_id,
+                sop=existing["sop"],
+                ticket_type=existing["ticket_type"],
+                status=new_status,
+                priority=existing["priority"] if existing["priority"] is not None else 5,
+                email=existing["email"],
+                user_identifier=existing["user_identifier"],
+                submitted_at_iso=existing["submitted_at"] or now_iso,
+                deadline_iso=existing["deadline"],
+                last_updated_iso=now_iso,
+                completed_at_iso=completed_at_iso,
+                metadata=cast(Dict[str, Any], new_metadata),
+                notes=notes if notes is not None else existing["notes"],
+                automated=existing["automated"],
+                correlation_id=existing["correlation_id"],
+                agent_occurrence_id=target_occurrence_id or "__shared__",
+            )
+            engine.ticket_upsert(json.dumps(payload))
+            logger.info(
+                "Updated ticket %s status to %s (via upsert)",
+                _sanitize_for_log(ticket_id),
+                _sanitize_for_log(new_status),
+            )
+            return True
+
+        # Fast path: focused status update.
+        success = bool(engine.ticket_update_status(ticket_id, new_status, completed_at_iso, notes))
+        if success:
+            logger.info(
+                "Updated ticket %s status to %s",
+                _sanitize_for_log(ticket_id),
+                _sanitize_for_log(new_status),
+            )
+        else:
+            logger.warning("Ticket %s not found for status update", _sanitize_for_log(ticket_id))
+        return success
     except Exception as e:
         logger.exception("Failed to update ticket %s: %s", _sanitize_for_log(ticket_id), e)
         return False
@@ -251,55 +339,82 @@ def update_ticket_metadata(
     metadata: Dict[str, Any],
     db_path: Optional[str] = None,
 ) -> bool:
-    """Update the metadata of a ticket (used for stage progress tracking).
+    """Replace metadata for a ticket via read-modify-upsert.
 
-    Args:
-        ticket_id: Unique ticket identifier
-        metadata: New metadata dict (completely replaces existing metadata)
-        db_path: Optional database path override
-
-    Returns:
-        True if update was successful, False otherwise
+    Persist doesn't expose a focused `metadata` update; we re-upsert the full
+    ticket payload.
     """
-    import time
-
-    start_time = time.time()
-
-    logger.debug(f"[DB_UPDATE_METADATA] T+0.000s START ticket_id={ticket_id} metadata={metadata}")
-
-    sql = """
-        UPDATE tickets
-        SET metadata = ?, last_updated = ?
-        WHERE ticket_id = ?
-    """
-
-    params = (
-        json.dumps(metadata),
-        datetime.now(timezone.utc).isoformat(),
-        ticket_id,
-    )
-
     try:
-        logger.debug(f"[DB_UPDATE_METADATA] T+{time.time()-start_time:.3f}s EXECUTE_SQL ticket_id={ticket_id}")
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.execute(sql, params)
-            logger.debug(f"[DB_UPDATE_METADATA] T+{time.time()-start_time:.3f}s PRE_COMMIT rowcount={cursor.rowcount}")
-            conn.commit()
-            logger.debug(f"[DB_UPDATE_METADATA] T+{time.time()-start_time:.3f}s POST_COMMIT")
+        engine = _get_engine()
+        raw = engine.ticket_get(ticket_id)
+        if raw is None:
+            logger.warning(
+                "[DB_UPDATE_METADATA] NOT_FOUND ticket_id=%s",
+                _sanitize_for_log(ticket_id),
+            )
+            return False
+        existing_dict = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(existing_dict, dict):
+            return False
+        existing = _row_from_persist(existing_dict)
 
-            if cursor.rowcount > 0:
-                logger.debug(f"[DB_UPDATE_METADATA] T+{time.time()-start_time:.3f}s SUCCESS ticket_id={ticket_id}")
-                return True
-            else:
-                logger.warning(
-                    "[DB_UPDATE_METADATA] T+%.3fs NOT_FOUND ticket_id=%s",
-                    time.time() - start_time,
-                    _sanitize_for_log(ticket_id),
-                )
-                return False
+        now_iso = datetime.now(timezone.utc).isoformat()
+        payload = _build_upsert_payload(
+            ticket_id=ticket_id,
+            sop=existing["sop"],
+            ticket_type=existing["ticket_type"],
+            status=existing["status"],
+            priority=existing["priority"] if existing["priority"] is not None else 5,
+            email=existing["email"],
+            user_identifier=existing["user_identifier"],
+            submitted_at_iso=existing["submitted_at"] or now_iso,
+            deadline_iso=existing["deadline"],
+            last_updated_iso=now_iso,
+            completed_at_iso=existing["completed_at"],
+            metadata=dict(metadata),
+            notes=existing["notes"],
+            automated=existing["automated"],
+            correlation_id=existing["correlation_id"],
+            agent_occurrence_id=existing["agent_occurrence_id"] or "__shared__",
+        )
+        engine.ticket_upsert(json.dumps(payload))
+        return True
     except Exception as e:
         logger.exception("Failed to update ticket %s metadata: %s", _sanitize_for_log(ticket_id), e)
         return False
+
+
+def _iter_ticket_pages(
+    filter_dict: Dict[str, Any],
+    *,
+    page_size: int = 200,
+) -> List[Dict[str, Any]]:
+    """Iterate all pages of `ticket_list` for the given filter."""
+    engine = _get_engine()
+    last_ts = "9999-12-31T23:59:59Z"
+    last_id = ""
+    collected: List[Dict[str, Any]] = []
+
+    while True:
+        cursor_json = json.dumps(
+            {"version": "v1", "last_ts": last_ts, "last_id": last_id}
+        )
+        raw = engine.ticket_list(json.dumps(filter_dict), cursor_json, page_size)
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except json.JSONDecodeError:
+            break
+        items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+        if not items:
+            break
+        for row in items:
+            if isinstance(row, dict):
+                collected.append(row)
+                last_ts = str(row.get("submitted_at", last_ts))
+                last_id = str(row.get("ticket_id", ""))
+        if len(items) < page_size:
+            break
+    return collected
 
 
 def list_tickets(
@@ -310,50 +425,23 @@ def list_tickets(
     limit: Optional[int] = None,
     db_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """List tickets with optional filters.
-
-    Args:
-        sop: Optional SOP filter (e.g., "DSAR_ACCESS")
-        ticket_type: Optional type filter (e.g., "dsar", "appointment")
-        status: Optional status filter (pending|in_progress|completed|cancelled|failed)
-        email: Optional email filter
-        limit: Optional result limit
-        db_path: Optional database path override
-
-    Returns:
-        List of ticket dicts sorted by submission date (newest first)
-    """
-    sql = "SELECT * FROM tickets WHERE 1=1"
-    params: List[Any] = []
-
+    """List tickets with optional filters (newest-first by submitted_at)."""
+    filter_dict: Dict[str, Any] = {}
     if sop:
-        sql += " AND sop = ?"
-        params.append(sop)
-
+        filter_dict["sop"] = sop
     if ticket_type:
-        sql += " AND ticket_type = ?"
-        params.append(ticket_type)
-
+        filter_dict["ticket_type"] = ticket_type
     if status:
-        sql += " AND status = ?"
-        params.append(status)
-
+        filter_dict["status"] = status
     if email:
-        sql += " AND email = ?"
-        params.append(email)
-
-    sql += " ORDER BY submitted_at DESC"
-
-    if limit:
-        sql += " LIMIT ?"
-        params.append(limit)
+        filter_dict["email"] = email
 
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-            return [_row_to_dict(row) for row in rows]
+        rows = _iter_ticket_pages(filter_dict)
+        result = [_row_from_persist(r) for r in rows]
+        if limit is not None and limit >= 0:
+            result = result[:limit]
+        return result
     except Exception as e:
         logger.exception(
             "Failed to list tickets (sop=%s, type=%s, status=%s): %s",
@@ -366,28 +454,35 @@ def list_tickets(
 
 
 def delete_ticket(ticket_id: str, db_path: Optional[str] = None) -> bool:
-    """Delete a ticket (used for cancellation).
+    """Delete a ticket.
 
-    Args:
-        ticket_id: Unique ticket identifier
-        db_path: Optional database path override
-
-    Returns:
-        True if deletion was successful, False otherwise
+    NOTE (CIRISAgent#763 / CIRISPersist follow-up): persist 1.5.19 does not
+    expose a `ticket_delete` substrate yet. Use status-cancel instead — the
+    only production caller paths funnel through cancellation flows. This
+    function now marks the ticket as `cancelled` if it exists, returning True
+    on successful state transition, False otherwise. Hard-delete will return
+    once persist adds the API.
     """
-    sql = "DELETE FROM tickets WHERE ticket_id = ?"
-
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.execute(sql, (ticket_id,))
-            conn.commit()
-
-            if cursor.rowcount > 0:
-                logger.info("Deleted ticket %s", _sanitize_for_log(ticket_id))
-                return True
-            else:
-                logger.warning("Ticket %s not found for deletion", _sanitize_for_log(ticket_id))
-                return False
+        engine = _get_engine()
+        raw = engine.ticket_get(ticket_id)
+        if raw is None:
+            logger.warning("Ticket %s not found for deletion", _sanitize_for_log(ticket_id))
+            return False
+        # Soft-delete via cancel status; warn so call-site reviewers see this.
+        logger.warning(
+            "delete_ticket(%s): persist substrate has no hard-delete; marking cancelled. "
+            "See CIRISAgent#763.",
+            _sanitize_for_log(ticket_id),
+        )
+        success = bool(
+            engine.ticket_update_status(
+                ticket_id, "cancelled", datetime.now(timezone.utc).isoformat(), None
+            )
+        )
+        if success:
+            logger.info("Cancelled ticket %s (delete path)", _sanitize_for_log(ticket_id))
+        return success
     except Exception as e:
         logger.exception("Failed to delete ticket %s: %s", _sanitize_for_log(ticket_id), e)
         return False
@@ -397,114 +492,71 @@ def get_tickets_by_correlation_id(
     correlation_id: str,
     db_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Get all tickets linked to a correlation ID.
+    """Get all tickets linked to a correlation_id.
 
-    Args:
-        correlation_id: Correlation ID linking tickets to tasks/thoughts
-        db_path: Optional database path override
-
-    Returns:
-        List of ticket dicts sorted by submission date (newest first)
+    Persist's `ticket_list` accepts `correlation_id` in the filter dict but as
+    of 1.5.19 silently ignores it. We paginate everything and filter
+    client-side; this matches the legacy ordering (newest-first).
     """
-    sql = "SELECT * FROM tickets WHERE correlation_id = ? ORDER BY submitted_at DESC"
-
     try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (correlation_id,))
-            rows = cursor.fetchall()
-            return [_row_to_dict(row) for row in rows]
+        rows = _iter_ticket_pages({})
+        return [_row_from_persist(r) for r in rows if r.get("correlation_id") == correlation_id]
     except Exception as e:
         logger.exception(f"Failed to get tickets by correlation_id {correlation_id}: {e}")
         return []
 
 
+# ---------------------------------------------------------------------------
+# Internal helpers kept for backwards compat with test imports.
+# ---------------------------------------------------------------------------
+
+
 def _parse_metadata_value(value: Any) -> Optional[Dict[str, Any]]:
-    """Parse metadata value from database.
+    """Parse metadata value from database row.
 
-    Args:
-        value: Metadata value (JSON string from SQLite or dict from PostgreSQL)
-
-    Returns:
-        Parsed metadata dict, empty dict on error, or None if value is None
+    Preserves legacy semantics for tests that exercise this helper directly.
     """
     if not value:
-        return None  # Preserve None for missing metadata
-
+        return None
     try:
-        # PostgreSQL JSONB returns dict, SQLite returns string
         if isinstance(value, str):
             parsed: Dict[str, Any] = json.loads(value)
             return parsed
-        # Already a dict from PostgreSQL JSONB
         return dict(value) if value else {}
     except (json.JSONDecodeError, TypeError) as e:
         logger.warning(
-            f"_parse_metadata_value: Failed to parse metadata, using empty dict. Error: {e}, value type: {type(value)}"
+            "_parse_metadata_value: Failed to parse metadata, using empty dict. Error: %s, value type: %s",
+            e,
+            type(value),
         )
         return {}
 
 
 def _parse_automated_value(value: Any) -> bool:
-    """Parse automated boolean value from database.
-
-    Args:
-        value: Automated value (INTEGER from SQLite or BOOLEAN from PostgreSQL)
-
-    Returns:
-        Boolean value (defaults to False if None)
-    """
     return bool(value) if value is not None else False
 
 
 def _parse_datetime_value(value: Any) -> Optional[str]:
-    """Parse datetime value from database.
-
-    Args:
-        value: Datetime value (ISO string from SQLite or datetime from PostgreSQL)
-
-    Returns:
-        ISO string or None
-    """
     if value is None:
         return None
     if isinstance(value, datetime):
-        # PostgreSQL returns datetime objects
         return value.isoformat()
-    # SQLite returns ISO strings already
     return str(value)
 
 
 def _get_row_value(row: Any, key: str) -> Any:
-    """Safely get value from database row.
-
-    Args:
-        row: Database row
-        key: Column name
-
-    Returns:
-        Column value or None if not found
-    """
     try:
         return row[key]
-    except (KeyError, IndexError) as e:
-        logger.debug(f"_get_row_value: Key {key} not found in row, using None. Error: {e}")
+    except (KeyError, IndexError, TypeError):
         return None
 
 
 def _row_to_dict(row: Any) -> Dict[str, Any]:
-    """Convert a database row to a dict.
+    """Compat wrapper for legacy callers expecting a row → dict converter.
 
-    Args:
-        row: Database row from cursor.fetchone() or cursor.fetchall()
-            - SQLite: sqlite3.Row (supports both dict and int indexing)
-            - PostgreSQL: psycopg2.extras.RealDictRow (dict-only access)
-
-    Returns:
-        Dict with ticket data
+    With the persist migration in place, `row` is now expected to be a dict
+    returned from persist; legacy sqlite3.Row callers should already be gone.
     """
-    result: Dict[str, Any] = {}
-
     columns = [
         "ticket_id",
         "sop",
@@ -521,21 +573,12 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
         "notes",
         "automated",
         "correlation_id",
-        "created_at",
         "agent_occurrence_id",
     ]
-
-    # Datetime columns that need special parsing
     datetime_columns = ("submitted_at", "deadline", "last_updated", "completed_at")
-
+    result: Dict[str, Any] = {}
     for key in columns:
-        # Skip internal-only column
-        if key == "created_at":
-            continue
-
         value = _get_row_value(row, key)
-
-        # Apply type-specific parsing
         if key == "metadata":
             result[key] = _parse_metadata_value(value)
         elif key == "automated":
@@ -544,5 +587,4 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
             result[key] = _parse_datetime_value(value)
         else:
             result[key] = value
-
     return result

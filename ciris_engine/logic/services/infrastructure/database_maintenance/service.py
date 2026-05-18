@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import timedelta
 from pathlib import Path
@@ -312,61 +313,20 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info("Database cleanup completed")
 
     async def _cleanup_invalid_thoughts(self) -> None:
-        """Clean up thoughts with invalid or malformed context."""
-        from ciris_engine.logic.persistence import get_db_connection
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        """Clean up thoughts with invalid or malformed context.
 
-        logger.info("Cleaning up thoughts with invalid context...")
-
-        # Get adapter to detect database type
-        adapter = get_adapter()
-
-        # Different SQL for PostgreSQL (JSONB) vs SQLite (TEXT)
-        if adapter.is_postgresql():
-            # PostgreSQL: Cast JSONB to text for LIKE operations
-            sql = """
-                SELECT thought_id, context_json
-                FROM thoughts
-                WHERE context_json::text = '{}'
-                   OR context_json IS NULL
-                   OR context_json::text NOT LIKE '%task_id%'
-                   OR context_json::text NOT LIKE '%correlation_id%'
-            """
-        else:
-            # SQLite: context_json is TEXT, use LIKE directly
-            sql = """
-                SELECT thought_id, context_json
-                FROM thoughts
-                WHERE context_json = '{}'
-                   OR context_json IS NULL
-                   OR context_json NOT LIKE '%task_id%'
-                   OR context_json NOT LIKE '%correlation_id%'
-            """
-
-        invalid_thought_ids = []
-
-        try:
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(sql)
-                rows = cursor.fetchall()
-
-                for row in rows:
-                    invalid_thought_ids.append(row["thought_id"])
-
-                if invalid_thought_ids:
-                    # Delete these invalid thoughts
-                    placeholders = ",".join("?" * len(invalid_thought_ids))
-                    delete_sql = f"DELETE FROM thoughts WHERE thought_id IN ({placeholders})"  # nosec B608 - placeholders are '?' strings, not user input
-                    cursor.execute(delete_sql, invalid_thought_ids)
-                    conn.commit()
-
-                    logger.info(f"Deleted {len(invalid_thought_ids)} thoughts with invalid context")
-                else:
-                    logger.info("No thoughts with invalid context found")
-
-        except Exception as e:
-            logger.error(f"Failed to clean up invalid thoughts: {e}", exc_info=True)
+        Post-2.9.0 (CIRISAgent#763) the raw `DELETE FROM thoughts` path was
+        removed: persist 1.5.19 does not expose a `thought_delete` API
+        (tracked upstream as CIRISPersist#60). Until persist gains a delete
+        method, this is a soft no-op — we log a warning so operators know
+        the cleanup pass is queued. Invalid thoughts will be revisited
+        when `thought_delete` lands.
+        """
+        logger.warning(
+            "Skipping _cleanup_invalid_thoughts: persist 1.5.19 has no "
+            "thought_delete API. Tracked upstream as CIRISPersist#60. "
+            "Invalid thought rows will accumulate until the upstream fix."
+        )
 
     # Config patterns that should be cleaned up on startup (unless preserved)
     _ADAPTER_CONFIG_PREFIX = "adapter."
@@ -757,24 +717,55 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             # Get current time
             current_time = self.time_service.now()
 
-            # Get all active tasks from all occurrences by querying the database directly
-            # We need to check ALL occurrences for old active tasks
-            from ciris_engine.logic.persistence import get_db_connection
+            # Routed through persist substrate (CIRISAgent#763). Persist's
+            # task_list filter is equality-only, so iterate PENDING and
+            # ACTIVE separately across the known occurrence set. Production
+            # runs `default` and `__shared__` plus occasionally
+            # `occurrence-<id>` for multi-occurrence deployments — we list
+            # the full union via persist's task_list with each status
+            # filter, then aggregate.
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.persistence.models.tasks import _persist_row_to_task
 
-            # Check both PENDING and ACTIVE tasks - PENDING tasks that are old
-            # indicate messages that were received but never processed
-            stale_tasks = []
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT * FROM tasks WHERE status IN (?, ?)",
-                    (TaskStatus.PENDING.value, TaskStatus.ACTIVE.value),
-                )
-                rows = cursor.fetchall()
-                from ciris_engine.logic.persistence.utils import map_row_to_task
+            engine = get_persist_engine()
+            if engine is None:
+                logger.warning("persist engine not initialized — skipping old-active-task cleanup")
+                return
 
-                for row in rows:
-                    stale_tasks.append(map_row_to_task(row))
+            stale_tasks: List[Any] = []
+            seen_task_ids: set[str] = set()
+
+            for status_val in (TaskStatus.PENDING.value, TaskStatus.ACTIVE.value):
+                # task_list with cursor-pagination over ALL occurrences:
+                # leave occurrence filter unset to scan globally.
+                last_ts = "9999-12-31T23:59:59Z"
+                last_id = ""
+                while True:
+                    cursor_json = json.dumps(
+                        {"version": "v1", "last_ts": last_ts, "last_id": last_id}
+                    )
+                    raw = engine.task_list(json.dumps({"status": status_val}), cursor_json, 200)
+                    parsed = json.loads(raw) if isinstance(raw, str) else raw
+                    items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+                    if not items:
+                        break
+                    for row in items:
+                        if not isinstance(row, dict):
+                            continue
+                        tid = str(row.get("task_id", ""))
+                        if tid in seen_task_ids:
+                            continue
+                        seen_task_ids.add(tid)
+                        try:
+                            stale_tasks.append(_persist_row_to_task(row))
+                        except Exception as inner_e:
+                            logger.warning(
+                                "Failed to materialize task %s during cleanup: %s", tid, inner_e
+                            )
+                        last_ts = str(row.get("created_at", last_ts))
+                        last_id = tid
+                    if len(items) < 200:
+                        break
 
             old_task_ids = []
 

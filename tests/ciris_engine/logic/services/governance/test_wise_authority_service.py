@@ -31,13 +31,18 @@ def time_service():
 
 @pytest.fixture
 def temp_db():
-    """Create a temporary database for testing."""
+    """Create a temporary database for testing.
+
+    Legacy tasks/thoughts tables are created up-front; the persist Engine
+    for the WA deferral path is wired separately by the
+    `wise_authority_service` fixture below — wiring it here would interact
+    with AuthenticationService.start() under pytest-asyncio and deadlock.
+    """
     import sqlite3
 
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
 
-    # Create the tasks table (needed for new deferral system)
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
@@ -60,9 +65,8 @@ def temp_db():
             signed_at TEXT,
             agent_occurrence_id TEXT NOT NULL DEFAULT 'default'
         )
-    """
+        """
     )
-    # Also create thoughts table for compatibility
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS thoughts (
@@ -80,13 +84,14 @@ def temp_db():
             defer_until TIMESTAMP,
             metadata TEXT
         )
-    """
+        """
     )
     conn.commit()
     conn.close()
 
     yield db_path
-    os.unlink(db_path)
+    if os.path.exists(db_path):
+        os.unlink(db_path)
 
 
 @pytest_asyncio.fixture
@@ -109,9 +114,69 @@ async def auth_service(temp_db, time_service):
 
 @pytest_asyncio.fixture
 async def wise_authority_service(auth_service, time_service, temp_db):
-    """Create a wise authority service for testing."""
-    service = WiseAuthorityService(time_service=time_service, auth_service=auth_service, db_path=temp_db)
-    yield service
+    """Create a wise authority service for testing.
+
+    Also wires a ciris-persist Engine pointed at the temp DB so the WA
+    deferral path (routed through `engine.task_*` post-2.9.0 absorption,
+    CIRISAgent#763) can find a real engine. Wired here (rather than in
+    `temp_db`) so the AuthenticationService start path runs without
+    persist interference.
+    """
+    from ciris_persist import Engine  # type: ignore[import-untyped]
+
+    import ciris_engine.logic.persistence.models.graph as _graph_mod
+    from ciris_engine.logic.persistence.models.graph import set_persist_engine
+
+    prior_engine = _graph_mod._engine
+    prior_dsn = _graph_mod._engine_dsn
+    persist_engine = Engine(f"sqlite:///{temp_db}", "test-key")
+    set_persist_engine(persist_engine, dsn=f"sqlite:///{temp_db}")
+
+    try:
+        service = WiseAuthorityService(time_service=time_service, auth_service=auth_service, db_path=temp_db)
+        yield service
+    finally:
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
+
+
+def _insert_task_via_persist(
+    task_id: str,
+    channel_id: str,
+    description: str,
+    status: str,
+    priority: int,
+    created_at_iso: str,
+    updated_at_iso: str,
+    agent_occurrence_id: str = "default",
+    context: dict | None = None,
+) -> None:
+    """Insert a task into the persist substrate.
+
+    Mirrors the legacy raw `INSERT INTO tasks` rows that pre-2.9.0 tests
+    used to seed the WA deferral path. Routed through `engine.task_upsert`
+    so the migrated WA service code finds the row in cirislens_tasks.
+    """
+    import json as _json
+
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    engine = get_persist_engine()
+    assert engine is not None, "persist engine must be wired for test"
+
+    payload: dict = {
+        "task_id": task_id,
+        "channel_id": channel_id,
+        "agent_occurrence_id": agent_occurrence_id,
+        "description": description,
+        "status": status,
+        "priority": priority,
+        "created_at": created_at_iso,
+        "updated_at": updated_at_iso,
+    }
+    if context is not None:
+        payload["context"] = context
+    engine.task_upsert(_json.dumps(payload))
 
 
 @pytest.mark.asyncio
@@ -157,27 +222,15 @@ async def test_request_approval(wise_authority_service, time_service, auth_servi
     await wise_authority_service.start()
 
     # Create task in database for deferral
-    import sqlite3
-
-    conn = sqlite3.connect(temp_db)
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """,
-        (
-            "task-123",
-            "test-channel",
-            "Test task",
-            "active",
-            0,
-            time_service.now().isoformat(),
-            time_service.now().isoformat(),
-        ),
+    _insert_task_via_persist(
+        task_id="task-123",
+        channel_id="test-channel",
+        description="Test task",
+        status="active",
+        priority=0,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
     )
-    conn.commit()
-    conn.close()
 
     # Test auto-approval for ROOT
     auth_service.get_wa.return_value = MagicMock(wa_id="wa-2025-06-24-ROOT01", role=WARole.ROOT, active=True)
@@ -214,27 +267,15 @@ async def test_send_deferral(wise_authority_service, time_service, temp_db):
     await wise_authority_service.start()
 
     # First create a task in the database
-    import sqlite3
-
-    conn = sqlite3.connect(temp_db)
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """,
-        (
-            "task-789",
-            "test-channel",
-            "Test task",
-            "active",
-            0,
-            time_service.now().isoformat(),
-            time_service.now().isoformat(),
-        ),
+    _insert_task_via_persist(
+        task_id="task-789",
+        channel_id="test-channel",
+        description="Test task",
+        status="active",
+        priority=0,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
     )
-    conn.commit()
-    conn.close()
 
     # Create a deferral request
     deferral = DeferralRequest(
@@ -261,31 +302,17 @@ async def test_get_pending_deferrals(wise_authority_service, time_service, temp_
     """Test getting pending deferrals."""
     await wise_authority_service.start()
 
-    # Create tasks in the database first
-    import sqlite3
-
-    conn = sqlite3.connect(temp_db)
-    cursor = conn.cursor()
-
     # Create all tasks first
     for i in range(3):
-        cursor.execute(
-            """
-            INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                f"task-{i}",
-                "test-channel",
-                f"Test task {i}",
-                "active",
-                0,
-                time_service.now().isoformat(),
-                time_service.now().isoformat(),
-            ),
+        _insert_task_via_persist(
+            task_id=f"task-{i}",
+            channel_id="test-channel",
+            description=f"Test task {i}",
+            status="active",
+            priority=0,
+            created_at_iso=time_service.now().isoformat(),
+            updated_at_iso=time_service.now().isoformat(),
         )
-    conn.commit()
-    conn.close()
 
     # Then add deferrals
     for i in range(3):
@@ -316,30 +343,18 @@ async def test_resolve_deferral(wise_authority_service, time_service, temp_db):
     """Test resolving deferrals creates new guidance task."""
     await wise_authority_service.start()
 
-    # Create task in database first
-    import sqlite3
-
-    conn = sqlite3.connect(temp_db)
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at, agent_occurrence_id, context_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """,
-        (
-            "task-resolve",
-            "test-channel",
-            "Test task",
-            "active",
-            5,
-            time_service.now().isoformat(),
-            time_service.now().isoformat(),
-            "default",
-            '{"correlation_id": "test-correlation-123"}',
-        ),
+    # Create task in database first (via persist substrate)
+    _insert_task_via_persist(
+        task_id="task-resolve",
+        channel_id="test-channel",
+        description="Test task",
+        status="active",
+        priority=5,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+        agent_occurrence_id="default",
+        context={"correlation_id": "test-correlation-123"},
     )
-    conn.commit()
-    conn.close()
 
     # Create and send a deferral
     deferral = DeferralRequest(
@@ -359,18 +374,20 @@ async def test_resolve_deferral(wise_authority_service, time_service, temp_db):
     resolved = await wise_authority_service.resolve_deferral(deferral_id, response)
     assert resolved is True
 
-    # Check original task was marked as COMPLETED
-    conn = sqlite3.connect(temp_db)
-    cursor = conn.cursor()
-    cursor.execute("SELECT status, outcome_json FROM tasks WHERE task_id = ?", ("task-resolve",))
-    row = cursor.fetchone()
-    assert row is not None
-    status, outcome_json = row
-    assert status == "completed"
-    # outcome_json follows TaskOutcome schema: status, summary, actions_taken, memories_created, errors
+    # Check original task was marked as COMPLETED via persist
     import json
 
-    outcome_data = json.loads(outcome_json)
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    engine = get_persist_engine()
+    raw = engine.task_get("task-resolve")
+    assert raw is not None
+    row = json.loads(raw) if isinstance(raw, str) else raw
+    assert row["status"] == "completed"
+    outcome_data = row.get("outcome")
+    if isinstance(outcome_data, str):
+        outcome_data = json.loads(outcome_data)
+    assert outcome_data is not None
     assert outcome_data["status"] == "success"
     assert "approved" in outcome_data["summary"].lower()
     assert "wa-2025-06-24-AUTH01" in outcome_data["summary"]
@@ -378,31 +395,29 @@ async def test_resolve_deferral(wise_authority_service, time_service, temp_db):
     assert "memories_created" in outcome_data
     assert "errors" in outcome_data
 
-    # Check new guidance task was created
-    cursor.execute(
-        "SELECT task_id, description, status, priority, parent_task_id, context_json FROM tasks WHERE parent_task_id = ?",
-        ("task-resolve",),
-    )
-    guidance_row = cursor.fetchone()
-    assert guidance_row is not None
-    guidance_task_id, description, status, priority, parent_task_id, context_json = guidance_row
+    # Check new guidance task was created — scan all tasks via persist for parent_task_id == "task-resolve"
+    from ciris_engine.logic.persistence.models.tasks import _list_with_filter
 
-    assert status == "pending"
-    assert parent_task_id == "task-resolve"
-    assert "[WA GUIDANCE]" in description
-    assert "Approved after review" in description
-    assert priority == 5  # Same priority as original
+    all_tasks = _list_with_filter({"agent_occurrence_id": "default"})
+    guidance_tasks = [t for t in all_tasks if t.parent_task_id == "task-resolve"]
+    assert len(guidance_tasks) == 1
+    guidance_task = guidance_tasks[0]
+    assert guidance_task.status.value == "pending"
+    assert guidance_task.parent_task_id == "task-resolve"
+    assert "[WA GUIDANCE]" in guidance_task.description
+    assert "Approved after review" in guidance_task.description
+    assert guidance_task.priority == 5  # Same priority as original
 
-    # Check context includes WA guidance
-    import json
-
-    context = json.loads(context_json)
+    # Check context includes WA guidance — re-fetch raw row to access non-TaskContext fields
+    raw_guidance = engine.task_get(guidance_task.task_id)
+    guidance_row = json.loads(raw_guidance) if isinstance(raw_guidance, str) else raw_guidance
+    context = guidance_row.get("context") or {}
+    if isinstance(context, str):
+        context = json.loads(context)
     assert "wa_guidance" in context
     assert context["wa_guidance"] == "Approved after review"
     assert context["original_task_id"] == "task-resolve"
     assert context["resolved_deferral_id"] == deferral_id
-
-    conn.close()
 
     # Check no pending deferrals remain (original marked complete)
     pending = await wise_authority_service.get_pending_deferrals()
@@ -540,30 +555,18 @@ async def test_deferral_with_modified_time(wise_authority_service, time_service,
     """Test resolving deferral with modified time creates new task."""
     await wise_authority_service.start()
 
-    # Create task in database first
-    import sqlite3
-
-    conn = sqlite3.connect(temp_db)
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at, agent_occurrence_id, context_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """,
-        (
-            "task-mod-time",
-            "test-channel",
-            "Test task",
-            "active",
-            0,
-            time_service.now().isoformat(),
-            time_service.now().isoformat(),
-            "default",
-            '{"correlation_id": "test-mod-time-123"}',
-        ),
+    # Create task in database first (via persist substrate)
+    _insert_task_via_persist(
+        task_id="task-mod-time",
+        channel_id="test-channel",
+        description="Test task",
+        status="active",
+        priority=0,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+        agent_occurrence_id="default",
+        context={"correlation_id": "test-mod-time-123"},
     )
-    conn.commit()
-    conn.close()
 
     # Create and send a deferral
     original_defer_time = time_service.now() + timedelta(hours=1)
@@ -589,14 +592,17 @@ async def test_deferral_with_modified_time(wise_authority_service, time_service,
     resolved = await wise_authority_service.resolve_deferral(deferral_id, response)
     assert resolved is True
 
-    # Resolution with modification should succeed and create new task
-    conn = sqlite3.connect(temp_db)
-    cursor = conn.cursor()
-    cursor.execute("SELECT status FROM tasks WHERE task_id = ?", ("task-mod-time",))
-    row = cursor.fetchone()
-    assert row is not None
-    assert row[0] == "completed"
-    conn.close()
+    # Resolution with modification should succeed and create new task. Read
+    # back the task status via persist (post-2.9.0 absorption).
+    import json as _json
+
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    engine = get_persist_engine()
+    raw = engine.task_get("task-mod-time")
+    assert raw is not None
+    row = _json.loads(raw) if isinstance(raw, str) else raw
+    assert row["status"] == "completed"
 
 
 # ========== Helper Method Tests ==========
@@ -844,28 +850,16 @@ class TestPostgreSQLDictRowHandling:
         """
         await wise_authority_service.start()
 
-        # Create a task with a specific priority value
-        import sqlite3
-
-        conn = sqlite3.connect(temp_db)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                "task-dict-test",
-                "test-channel-123",
-                "Test task for dict row handling",
-                "active",
-                7,  # Specific priority value to verify it's read correctly
-                time_service.now().isoformat(),
-                time_service.now().isoformat(),
-            ),
+        # Create a task with a specific priority value (via persist substrate)
+        _insert_task_via_persist(
+            task_id="task-dict-test",
+            channel_id="test-channel-123",
+            description="Test task for dict row handling",
+            status="active",
+            priority=7,  # Specific priority value to verify it's read correctly
+            created_at_iso=time_service.now().isoformat(),
+            updated_at_iso=time_service.now().isoformat(),
         )
-        conn.commit()
-        conn.close()
 
         # Create a deferral for the task
         from ciris_engine.schemas.services.authority_core import DeferralRequest
@@ -896,12 +890,7 @@ class TestPostgreSQLDictRowHandling:
         """Test priority parsing works correctly for all priority levels."""
         await wise_authority_service.start()
 
-        import sqlite3
-
-        conn = sqlite3.connect(temp_db)
-        cursor = conn.cursor()
-
-        # Create tasks with different priorities
+        # Create tasks with different priorities (via persist substrate)
         priorities = [
             ("task-priority-0", 0, "low"),
             ("task-priority-3", 3, "medium"),
@@ -911,23 +900,15 @@ class TestPostgreSQLDictRowHandling:
         ]
 
         for task_id, priority, _ in priorities:
-            cursor.execute(
-                """
-                INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    task_id,
-                    "test-channel",
-                    f"Task with priority {priority}",
-                    "active",
-                    priority,
-                    time_service.now().isoformat(),
-                    time_service.now().isoformat(),
-                ),
+            _insert_task_via_persist(
+                task_id=task_id,
+                channel_id="test-channel",
+                description=f"Task with priority {priority}",
+                status="active",
+                priority=priority,
+                created_at_iso=time_service.now().isoformat(),
+                updated_at_iso=time_service.now().isoformat(),
             )
-        conn.commit()
-        conn.close()
 
         # Create deferrals for all tasks
         from ciris_engine.schemas.services.authority_core import DeferralRequest
@@ -959,27 +940,19 @@ class TestPostgreSQLDictRowHandling:
         """Test that NULL priority is handled correctly (should be 'low')."""
         await wise_authority_service.start()
 
-        import sqlite3
-
-        conn = sqlite3.connect(temp_db)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                "task-null-priority",
-                "test-channel",
-                "Task with NULL priority",
-                "active",
-                None,  # NULL priority
-                time_service.now().isoformat(),
-                time_service.now().isoformat(),
-            ),
+        # NULL priority is interpreted as the persist-default 0 (which maps
+        # to "low"). The legacy raw-SQL path could insert literal NULL into
+        # the priority column; persist's CHECK keeps priority NOT NULL but
+        # defaults to 0 when unspecified, producing the same "low" output.
+        _insert_task_via_persist(
+            task_id="task-null-priority",
+            channel_id="test-channel",
+            description="Task with NULL priority",
+            status="active",
+            priority=0,
+            created_at_iso=time_service.now().isoformat(),
+            updated_at_iso=time_service.now().isoformat(),
         )
-        conn.commit()
-        conn.close()
 
         # Create deferral
         from ciris_engine.schemas.services.authority_core import DeferralRequest
@@ -1003,27 +976,15 @@ class TestPostgreSQLDictRowHandling:
         """Test that all fields are correctly preserved when parsing rows."""
         await wise_authority_service.start()
 
-        import sqlite3
-
-        conn = sqlite3.connect(temp_db)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                "task-fields-test",
-                "channel-abc-123",
-                "Detailed task description for field testing",
-                "active",
-                5,
-                time_service.now().isoformat(),
-                time_service.now().isoformat(),
-            ),
+        _insert_task_via_persist(
+            task_id="task-fields-test",
+            channel_id="channel-abc-123",
+            description="Detailed task description for field testing",
+            status="active",
+            priority=5,
+            created_at_iso=time_service.now().isoformat(),
+            updated_at_iso=time_service.now().isoformat(),
         )
-        conn.commit()
-        conn.close()
 
         # Create deferral with detailed context
         from ciris_engine.schemas.services.authority_core import DeferralRequest

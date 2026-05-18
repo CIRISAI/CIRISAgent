@@ -26,6 +26,43 @@ from ciris_engine.schemas.runtime.models import Task, TaskContext
 # ============================================================================
 
 
+@pytest.fixture(autouse=True)
+def _wire_persist_engine():
+    """Auto-wire a temp ciris-persist Engine for each test.
+
+    Post-2.9.0 absorption (CIRISAgent#763) `update_task_context_and_signing`,
+    `try_claim_shared_task`, etc. route through persist substrates rather
+    than raw sqlite3. Existing shutdown_processor tests mock most paths but
+    leak through to the real persist call sites — wire a per-test Engine
+    so those calls succeed against an isolated temp DB.
+    """
+    import os
+    import tempfile
+
+    from ciris_persist import Engine  # type: ignore[import-untyped]
+
+    import ciris_engine.logic.persistence.models.graph as _graph_mod
+    from ciris_engine.logic.persistence.models.graph import set_persist_engine
+
+    with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as pf:
+        db_path = pf.name
+
+    prior_engine = _graph_mod._engine
+    prior_dsn = _graph_mod._engine_dsn
+    engine = Engine(f"sqlite:///{db_path}", "test-key")
+    set_persist_engine(engine, dsn=f"sqlite:///{db_path}")
+
+    try:
+        yield engine
+    finally:
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
+        try:
+            os.unlink(db_path)
+        except OSError:
+            pass
+
+
 @pytest.fixture
 def mock_time_service():
     """Mock time service"""

@@ -137,13 +137,17 @@ def execute_with_retry(
         Result of the operation
 
     Example:
-        def insert_task(conn):
+        # NB post-2.9.0 absorption (CIRISAgent#763): the canonical task
+        # writer is ciris-persist's `engine.task_upsert`, not raw INSERTs.
+        # This helper survives for any remaining legacy ad-hoc SQL that
+        # needs busy-retry semantics — do not introduce new `INSERT INTO
+        # tasks` callers; route through `engine.task_upsert` instead.
+        def read_some_legacy_table(conn):
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO tasks ...")
-            conn.commit()
-            return cursor.lastrowid
+            cursor.execute("SELECT ... FROM <legacy_table>")
+            return cursor.fetchall()
 
-        task_id = execute_with_retry(insert_task)
+        rows = execute_with_retry(read_some_legacy_table)
     """
 
     @with_retry(max_retries=max_retries, base_delay=base_delay)  # type: ignore

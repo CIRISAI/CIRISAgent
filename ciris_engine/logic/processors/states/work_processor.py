@@ -338,9 +338,13 @@ class WorkProcessor(BaseProcessor):
         Returns:
             True if task creation succeeded, False otherwise
         """
+        # Routed through persist substrate (CIRISAgent#763); ticket-context
+        # carry-through happens via task.context.__agent_ticket__ which the
+        # migrated _task_to_persist_payload mirrors into context_json.
         import json
+        import uuid
 
-        from ciris_engine.logic.persistence.db.core import get_db_connection
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
         ticket_id = ticket.get("ticket_id")
         if not ticket_id:
@@ -351,7 +355,7 @@ class WorkProcessor(BaseProcessor):
         ticket_sop = ticket.get("sop", "UNKNOWN")
         current_stage = ticket_metadata.get("current_stage", "starting")
 
-        task_context = {
+        ticket_context_payload = {
             "ticket_id": ticket_id,
             "ticket_sop": ticket_sop,
             "ticket_type": ticket.get("ticket_type"),
@@ -361,50 +365,33 @@ class WorkProcessor(BaseProcessor):
             "ticket_email": ticket.get("email"),
             "ticket_user_identifier": ticket.get("user_identifier"),
             "is_ticket_task": True,
+            # Required TaskContext fields synthesized so downstream readers
+            # that load the row via map_row_to_task get a valid context.
+            "correlation_id": str(uuid.uuid4()),
+            "channel_id": self.startup_channel_id or "ticket_processing",
+            "agent_occurrence_id": self.agent_occurrence_id,
         }
 
-        # Create Task object
         now = self.time_service.now().isoformat()
-        task = Task(
-            task_id=task_id,
-            channel_id=self.startup_channel_id or "ticket_processing",
-            agent_occurrence_id=self.agent_occurrence_id,
-            description=f"Process ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
-            status=TaskStatus.PENDING,
-            priority=ticket.get("priority", 5),
-            created_at=now,
-            updated_at=now,
-            context=None,
-        )
-
-        task_dict = task.model_dump(mode="json")
-        task_dict["context"] = task_context
-
-        sql = """
-            INSERT INTO tasks (task_id, channel_id, agent_occurrence_id, description, status, priority,
-                              created_at, updated_at, parent_task_id, context_json, outcome_json,
-                              signed_by, signature, signed_at, updated_info_available, updated_info_content)
-            VALUES (:task_id, :channel_id, :agent_occurrence_id, :description, :status, :priority,
-                    :created_at, :updated_at, :parent_task_id, :context, :outcome,
-                    :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content)
-        """
-        params = {
-            **task_dict,
-            "status": task.status.value,
-            "context": json.dumps(task_context),
-            "outcome": None,
-            "signed_by": None,
-            "signature": None,
-            "signed_at": None,
+        payload = {
+            "task_id": task_id,
+            "channel_id": self.startup_channel_id or "ticket_processing",
+            "agent_occurrence_id": self.agent_occurrence_id,
+            "description": f"Process ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
+            "status": TaskStatus.PENDING.value,
+            "priority": ticket.get("priority", 5),
+            "created_at": now,
+            "updated_at": now,
             "parent_task_id": None,
-            "updated_info_available": 0,
-            "updated_info_content": None,
+            "context": ticket_context_payload,
         }
 
         try:
-            with get_db_connection(db_path=db_path) as conn:
-                conn.execute(sql, params)
-                conn.commit()
+            engine = get_persist_engine()
+            if engine is None:
+                logger.error(f"Failed to create task {task_id}: persist engine not initialized")
+                return False
+            engine.task_upsert(json.dumps(payload))
             logger.info(f"Claimed ticket {ticket_id} and created seed task {task_id}")
             return True
         except Exception as e:
@@ -446,29 +433,21 @@ class WorkProcessor(BaseProcessor):
         Returns:
             True if task exists, False otherwise
         """
-        from ciris_engine.logic.persistence.db import get_db_connection
+        # Routed through persist substrate (CIRISAgent#763); paginate
+        # PENDING + ACTIVE tasks for the occurrence and prefix-match on
+        # task_id. Persist's `task_list` filter is equality-only, so the
+        # `LIKE TICKET-<id>-%` prefix match happens client-side here.
+        from ciris_engine.logic.persistence.models.tasks import get_tasks_by_status
 
-        sql = (
-            "SELECT COUNT(*) as count FROM tasks WHERE task_id LIKE ? AND agent_occurrence_id = ? AND status IN (?, ?)"
-        )
-        task_prefix = f"TICKET-{ticket_id}-%"
+        task_prefix = f"TICKET-{ticket_id}-"
 
         try:
-            with get_db_connection(db_path=db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    sql,
-                    (task_prefix, self.agent_occurrence_id, TaskStatus.PENDING.value, TaskStatus.ACTIVE.value),
-                )
-                row = cursor.fetchone()
-                # PostgreSQL returns RealDictRow (dict), SQLite returns tuple
-                count = row["count"] if isinstance(row, dict) else row[0]
-                has_task = bool(count > 0)
-
-                if has_task:
+            for status in (TaskStatus.PENDING, TaskStatus.ACTIVE):
+                tasks = get_tasks_by_status(status, self.agent_occurrence_id, db_path=db_path)
+                if any(t.task_id.startswith(task_prefix) for t in tasks):
                     logger.debug(f"Ticket {ticket_id} already has pending/active task, skipping")
-
-                return has_task
+                    return True
+            return False
         except Exception as e:
             logger.warning(f"Failed to check for existing tasks for ticket {ticket_id}: {e}")
             return False
@@ -517,9 +496,11 @@ class WorkProcessor(BaseProcessor):
         Returns:
             True if task creation succeeded, False otherwise
         """
+        # Routed through persist substrate (CIRISAgent#763).
         import json
+        import uuid
 
-        from ciris_engine.logic.persistence.db import get_db_connection
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
         ticket_id = ticket.get("ticket_id")
         if not ticket_id:
@@ -533,7 +514,7 @@ class WorkProcessor(BaseProcessor):
         continuation_task_id = f"TICKET-{ticket_id}-{self.time_service.now().strftime('%Y%m%d%H%M%S')}"
         ticket_channel_id = self.startup_channel_id or "ticket_processing"
 
-        task_context = {
+        ticket_context_payload = {
             "channel_id": ticket_channel_id,
             "ticket_id": ticket_id,
             "ticket_sop": ticket_sop,
@@ -544,43 +525,32 @@ class WorkProcessor(BaseProcessor):
             "ticket_email": ticket.get("email"),
             "ticket_user_identifier": ticket.get("user_identifier"),
             "is_ticket_task": True,
+            "correlation_id": str(uuid.uuid4()),
+            "agent_occurrence_id": self.agent_occurrence_id,
         }
 
         now = self.time_service.now().isoformat()
-        task = Task(
-            task_id=continuation_task_id,
-            channel_id=ticket_channel_id,
-            agent_occurrence_id=self.agent_occurrence_id,
-            description=f"Continue ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
-            status=TaskStatus.PENDING,
-            priority=ticket.get("priority", 5),
-            created_at=now,
-            updated_at=now,
-            context=None,
-        )
-
-        task_dict = task.model_dump(mode="json")
-
-        sql = """
-            INSERT INTO tasks (task_id, channel_id, agent_occurrence_id, description, status, priority,
-                              created_at, updated_at, parent_task_id, context_json, outcome_json,
-                              signed_by, signature, signed_at, updated_info_available, updated_info_content)
-            VALUES (:task_id, :channel_id, :agent_occurrence_id, :description, :status, :priority,
-                    :created_at, :updated_at, :parent_task_id, :context, :outcome,
-                    :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content)
-        """
-        params = {
-            **task_dict,
-            "status": task.status.value,
-            "context": json.dumps(task_context),
-            "outcome": json.dumps(task_dict.get("outcome")) if task_dict.get("outcome") is not None else None,
-            "updated_info_available": 1 if task_dict.get("updated_info_available") else 0,
+        payload = {
+            "task_id": continuation_task_id,
+            "channel_id": ticket_channel_id,
+            "agent_occurrence_id": self.agent_occurrence_id,
+            "description": f"Continue ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
+            "status": TaskStatus.PENDING.value,
+            "priority": ticket.get("priority", 5),
+            "created_at": now,
+            "updated_at": now,
+            "parent_task_id": None,
+            "context": ticket_context_payload,
         }
 
         try:
-            with get_db_connection(db_path=db_path) as conn:
-                conn.execute(sql, params)
-                conn.commit()
+            engine = get_persist_engine()
+            if engine is None:
+                logger.error(
+                    f"Failed to create continuation task {continuation_task_id}: persist engine not initialized"
+                )
+                return False
+            engine.task_upsert(json.dumps(payload))
             logger.info(f"Created continuation task {continuation_task_id} for ticket {ticket_id}")
             return True
         except Exception as e:

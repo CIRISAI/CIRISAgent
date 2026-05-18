@@ -20,10 +20,26 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 import pytest_asyncio
 
+from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.persistence.models.tasks import add_task, get_all_tasks
 from ciris_engine.logic.persistence.models.tickets import create_ticket, get_ticket, update_ticket_status
 from ciris_engine.logic.processors.states.work_processor import WorkProcessor
 from ciris_engine.schemas.runtime.enums import TaskStatus
+
+
+def _init_temp_db() -> str:
+    """Create a temp SQLite DB initialized via the standard bootstrap.
+
+    `initialize_database` runs all migrations, constructs the persist
+    Engine, and wires it into `persistence.models.graph` — the same
+    side effects production gets. Tests that previously cherry-picked
+    SQL migration files must use this so the migrated tasks/thoughts
+    code can find the engine via `get_persist_engine()`.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+    initialize_database(db_path)
+    return db_path
 
 
 class TestWorkProcessorPhase1Claiming:
@@ -31,35 +47,9 @@ class TestWorkProcessorPhase1Claiming:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        migrations_dir = (
-            Path(__file__).parent.parent.parent.parent.parent.parent
-            / "ciris_engine"
-            / "logic"
-            / "persistence"
-            / "migrations"
-            / "sqlite"
-        )
-
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 11):  # Include migration 010 for images_json column
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug in migration 001
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
-
+        """Create temporary database with migrations + persist engine wired."""
+        db_path = _init_temp_db()
         yield db_path
-
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -250,35 +240,9 @@ class TestWorkProcessorPhase2Continuation:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        migrations_dir = (
-            Path(__file__).parent.parent.parent.parent.parent.parent
-            / "ciris_engine"
-            / "logic"
-            / "persistence"
-            / "migrations"
-            / "sqlite"
-        )
-
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 11):  # Include migration 010 for images_json column
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug in migration 001
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
-
+        """Create temporary database with migrations + persist engine wired."""
+        db_path = _init_temp_db()
         yield db_path
-
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -545,30 +509,9 @@ class TestWorkProcessorTwoPhaseIntegration:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
-
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 11):  # Include migration 010 for images_json column
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug in migration 001
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
-
+        """Create temporary database with migrations + persist engine wired."""
+        db_path = _init_temp_db()
         yield db_path
-
         if os.path.exists(db_path):
             os.unlink(db_path)
 

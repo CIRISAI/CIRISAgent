@@ -19,7 +19,6 @@ from .dsar import (
 from .graph import (
     add_graph_edge,
     add_graph_node,
-    delete_graph_edge,
     delete_graph_node,
     get_all_graph_nodes,
     get_edges_for_node,
@@ -112,7 +111,6 @@ __all__ = [
     "get_nodes_by_type",
     "delete_graph_node",
     "add_graph_edge",
-    "delete_graph_edge",
     "get_edges_for_node",
     "add_correlation",
     "add_correlation_with_telemetry",

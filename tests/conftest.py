@@ -101,6 +101,7 @@ import time  # noqa: E402
 from tests.fixtures.api import random_api_port  # noqa: E402
 from tests.fixtures.database import clean_db, test_db  # noqa: E402
 from tests.fixtures.mocks import MockRuntime  # noqa: E402
+from tests.fixtures.persist_engine import persist_engine  # noqa: E402, F401
 from tests.fixtures.runtime_control import (  # noqa: E402
     mock_api_runtime_control_service,
     mock_step_result_gather_context,

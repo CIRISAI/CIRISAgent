@@ -13,16 +13,17 @@ transparently.
 — persist's Engine owns its own DSN. Tests that need to redirect storage
 construct their own Engine and call `set_persist_engine` directly.
 
-Missing persist API (filed upstream): edge-level deletion is not exposed
-on the Engine surface, so `delete_graph_edge` and `delete_edges_for_node`
-issue direct SQL against persist's `cirisgraph_edges` table. Once
-persist exposes `cirisgraph_delete_edge` / `cirisgraph_delete_edges_for_node`
-those two functions become typed-API calls too.
+Note: `cirisgraph_delete_node(hard=True)` cascades to remove all connected
+edges, so the previous edge-level delete helpers (`delete_graph_edge`,
+`delete_edges_for_node`) were redundant raw-sqlite3 fallbacks. They were
+removed during the 2.9.0 cleanup pass after verifying no production code
+or test invoked them — the memory service's forget path now relies on
+the hard-delete cascade entirely (closes the last raw-sqlite3 writer on
+persist's cirisgraph_edges table).
 """
 
 import json
 import logging
-import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
@@ -444,74 +445,6 @@ def add_graph_edge(edge: GraphEdge, db_path: Optional[str] = None) -> str:
         logger.exception("Failed to upsert graph edge %s", edge_id)
         raise
     return edge_id
-
-
-def _engine_db_path() -> Optional[str]:
-    """Best-effort extraction of the underlying sqlite file path from the
-    engine's DSN. Returns None for postgres or in-memory engines.
-    Used only by the two edge-delete fallbacks below.
-
-    SQLAlchemy-style DSN convention:
-      - `sqlite:////abs/path.db` → 4 slashes → absolute path `/abs/path.db`
-      - `sqlite:///rel/path.db`  → 3 slashes → relative path `rel/path.db`
-    """
-    if not _engine_dsn:
-        return None
-    if _engine_dsn.startswith("sqlite:////"):
-        return "/" + _engine_dsn[len("sqlite:////"):]
-    if _engine_dsn.startswith("sqlite:///"):
-        return _engine_dsn[len("sqlite:///"):]
-    return None
-
-
-def delete_graph_edge(edge_id: str, db_path: Optional[str] = None) -> int:
-    """Delete an edge by edge_id.
-
-    Persist does not expose a typed `cirisgraph_delete_edge` (upstream
-    ask filed). Falls back to direct SQL against persist's own
-    `cirisgraph_edges` table — same storage, just bypassing the missing
-    API.
-    """
-    path = _engine_db_path()
-    if path is None:
-        logger.warning("delete_graph_edge: non-sqlite engine; cannot fall back without typed API")
-        return 0
-    try:
-        with sqlite3.connect(path) as conn:
-            cur = conn.execute("DELETE FROM cirisgraph_edges WHERE edge_id = ?", (edge_id,))
-            conn.commit()
-            return cur.rowcount
-    except Exception:
-        logger.exception("Failed to delete graph edge %s", edge_id)
-        return 0
-
-
-def delete_edges_for_node(
-    node_id: str,
-    scope: GraphScope,
-    db_path: Optional[str] = None,
-) -> int:
-    """Delete all edges where this node is source or target.
-
-    Persist does not expose a typed bulk-delete API (upstream ask filed).
-    Falls back to direct SQL against persist's own `cirisgraph_edges`.
-    """
-    path = _engine_db_path()
-    if path is None:
-        logger.warning("delete_edges_for_node: non-sqlite engine; cannot fall back without typed API")
-        return 0
-    try:
-        with sqlite3.connect(path) as conn:
-            cur = conn.execute(
-                "DELETE FROM cirisgraph_edges "
-                "WHERE scope = ? AND (source_node_id = ? OR target_node_id = ?)",
-                (_to_persist_scope(scope), node_id, node_id),
-            )
-            conn.commit()
-            return cur.rowcount
-    except Exception:
-        logger.exception("Failed to delete edges for node %s", node_id)
-        return 0
 
 
 def get_edges_for_node(

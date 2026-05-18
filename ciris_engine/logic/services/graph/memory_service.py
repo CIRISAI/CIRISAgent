@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.config import get_sqlite_db_full_path
-from ciris_engine.logic.persistence import get_db_connection, initialize_database
+from ciris_engine.logic.persistence import initialize_database
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.base_graph_service import BaseGraphService, GraphNodeConvertible
 from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_list, get_str
@@ -237,29 +237,33 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         from ciris_engine.logic.formatters.identity import format_agent_identity
 
         def _query_identity() -> str:
-            # 2.9.0: data lives in persist's cirisgraph_nodes; scope enum
-            # is UPPERCASE there. attributes column is named `attributes`
-            # not `attributes_json`.
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT node_id, attributes FROM cirisgraph_nodes WHERE scope = ?",
-                    ("IDENTITY",),
-                )
-                rows = cursor.fetchall()
+            # A1 completion: route through persist Engine instead of raw
+            # sqlite3 on cirisgraph_nodes. Closes the concurrency boundary
+            # that was causing "database disk image is malformed" cascades
+            # when persist writes raced raw-sqlite3 reads in CI.
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-                # If we have identity nodes, format the first one
-                # (typically there's only one identity node per agent)
-                if rows:
-                    # Handle PostgreSQL JSONB vs SQLite TEXT
-                    attrs_json = rows[0]["attributes"]
-                    if attrs_json:
-                        attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
-                    else:
-                        attrs = {}
-                    return format_agent_identity(attrs)
-
+            engine = get_persist_engine()
+            if engine is None:
+                logger.warning("persist engine not wired — _query_identity returning empty")
                 return ""
+
+            cursor_json = json.dumps(
+                {"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}
+            )
+            raw = engine.cirisgraph_query_nodes(
+                json.dumps({"scope": "IDENTITY"}), cursor_json, 10
+            )
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+            items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+            if not items:
+                return ""
+            first = items[0]
+            attrs_raw = first.get("attributes") if isinstance(first, dict) else None
+            if not attrs_raw:
+                return ""
+            attrs = attrs_raw if isinstance(attrs_raw, dict) else json.loads(attrs_raw)
+            return format_agent_identity(attrs)
 
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, _query_identity)
@@ -430,45 +434,69 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             loop = asyncio.get_event_loop()
 
             def _query_tsdb_nodes() -> List[Any]:
-                from ciris_engine.logic.persistence.db.dialect import get_adapter
+                # A1 completion: route through persist Engine instead of
+                # raw sqlite3 on cirisgraph_nodes. The persist NodeFilter
+                # honors scope + node_type but ignores time-range fields
+                # (silently accepted but unfiltered), so we paginate by
+                # cursor (DESC by recorded_at) and stop when we cross
+                # start_time. Limit-1000 mirrors the legacy bound.
+                from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-                adapter = get_adapter()
-                with get_db_connection(db_path=self.db_path) as conn:
-                    cursor = conn.cursor()
+                engine = get_persist_engine()
+                if engine is None:
+                    logger.warning("persist engine not wired — recall_timeseries returning empty")
+                    return []
 
-                    # Query for TSDB_DATA nodes in the time range
-                    # ORDER BY DESC to get most recent metrics first
-                    # PostgreSQL: created_at is already TIMESTAMP, no conversion needed
-                    # SQLite: created_at is TEXT, use datetime() for comparison
-                    # 2.9.0: read from persist's cirisgraph_nodes (scope
-                    # is UPPERCASE there; attributes column renamed from
-                    # attributes_json -> attributes).
-                    persist_scope = scope.upper() if isinstance(scope, str) else scope
-                    if adapter.is_postgresql():
-                        sql = """
-                            SELECT node_id, attributes, created_at
-                            FROM cirisgraph_nodes
-                            WHERE node_type = 'tsdb_data'
-                              AND scope = ?
-                              AND created_at >= ?
-                              AND created_at <= ?
-                            ORDER BY created_at DESC
-                            LIMIT 1000
-                        """
-                    else:
-                        sql = """
-                            SELECT node_id, attributes, created_at
-                            FROM cirisgraph_nodes
-                            WHERE node_type = 'tsdb_data'
-                              AND scope = ?
-                              AND datetime(created_at) >= datetime(?)
-                              AND datetime(created_at) <= datetime(?)
-                            ORDER BY created_at DESC
-                            LIMIT 1000
-                        """
+                persist_scope = scope.upper() if isinstance(scope, str) else scope
+                filter_json = json.dumps(
+                    {"scope": persist_scope, "node_type": "tsdb_data"}
+                )
+                # last_ts at "future infinity" + empty last_id anchors at head;
+                # persist returns DESC by recorded_at so newest matches first.
+                last_ts = "9999-12-31T23:59:59Z"
+                last_id = ""
+                collected: List[Any] = []
+                page_size = 200
+                max_total = 1000  # parity with legacy LIMIT 1000
 
-                    cursor.execute(sql, (persist_scope, start_time.isoformat(), end_time.isoformat()))
-                    return cursor.fetchall()
+                while len(collected) < max_total:
+                    cursor_json = json.dumps(
+                        {"version": "v1", "last_ts": last_ts, "last_id": last_id}
+                    )
+                    raw = engine.cirisgraph_query_nodes(filter_json, cursor_json, page_size)
+                    parsed = json.loads(raw) if isinstance(raw, str) else raw
+                    items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+                    if not items:
+                        break
+
+                    crossed_start = False
+                    for row in items:
+                        if not isinstance(row, dict):
+                            continue
+                        created_at_str = str(row.get("created_at", ""))
+                        try:
+                            created_dt = datetime.fromisoformat(
+                                created_at_str.replace("Z", "+00:00")
+                            )
+                        except ValueError:
+                            continue
+                        if created_dt > end_time:
+                            # Newer than our window — page hasn't reached us yet.
+                            last_ts = created_at_str
+                            last_id = str(row.get("node_id", ""))
+                            continue
+                        if created_dt < start_time:
+                            # Crossed the window's lower bound — done.
+                            crossed_start = True
+                            break
+                        collected.append(row)
+                        last_ts = created_at_str
+                        last_id = str(row.get("node_id", ""))
+
+                    if crossed_start or len(items) < page_size:
+                        break
+
+                return collected
 
             rows = await loop.run_in_executor(None, _query_tsdb_nodes)
 
@@ -808,19 +836,48 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         storage_size_mb = 0.0
 
         try:
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
+            # A1 completion: query through persist Engine instead of raw
+            # sqlite3 on cirisgraph_nodes/edges. persist doesn't expose a
+            # cheap count helper, so we paginate per scope and sum. The
+            # LOCAL scope dominates in practice; checking the others is
+            # cheap (typically 0-few rows each) so we cover them all for
+            # an honest total.
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-                # 2.9.0: count persist's cirisgraph_* tables instead of
-                # the legacy graph_* tables (which are now read-only).
-                cursor.execute("SELECT COUNT(*) FROM cirisgraph_nodes")
-                result = cursor.fetchone()
-                node_count = result[0] if result else 0
-
-                cursor.execute("SELECT COUNT(*) FROM cirisgraph_edges")
-                result = cursor.fetchone()
-                edge_count = result[0] if result else 0
-
+            engine = get_persist_engine()
+            if engine is not None:
+                # Persist caps limit at 10000 per call, so paginate by
+                # cursor (DESC by recorded_at) and accumulate. For very
+                # large graphs this is O(n / page_size) calls; in practice
+                # 1-5 pages per scope.
+                PAGE = 10000
+                MAX_PAGES = 50  # safety cap = 500k nodes per scope
+                for sc in ("LOCAL", "COMMUNITY", "IDENTITY", "ENVIRONMENT"):
+                    last_ts = "9999-12-31T23:59:59Z"
+                    last_id = ""
+                    for _ in range(MAX_PAGES):
+                        cursor_json = json.dumps(
+                            {"version": "v1", "last_ts": last_ts, "last_id": last_id}
+                        )
+                        raw = engine.cirisgraph_query_nodes(
+                            json.dumps({"scope": sc}), cursor_json, PAGE
+                        )
+                        parsed = json.loads(raw) if isinstance(raw, str) else raw
+                        items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+                        if not items:
+                            break
+                        node_count += len(items)
+                        if len(items) < PAGE:
+                            break
+                        tail = items[-1]
+                        last_ts = str(tail.get("created_at", last_ts)) if isinstance(tail, dict) else last_ts
+                        last_id = str(tail.get("node_id", "")) if isinstance(tail, dict) else ""
+                # Edges: no per-scope filter needed. cirisgraph_get_edges_for_node
+                # is per-node; for a count we'd need to enumerate all nodes,
+                # which is expensive. Leave edge_count=0 for now; a follow-up
+                # can land a cheaper helper from persist if this metric
+                # becomes load-bearing.
+                edge_count = 0
         except Exception:
             pass
 
@@ -865,13 +922,21 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             return False
 
         def _check_database() -> bool:
+            # A1 completion: probe through persist Engine rather than raw
+            # sqlite3 on cirisgraph_nodes. A 1-row query against the LOCAL
+            # scope is the cheapest possible reachability check.
             try:
-                # Try a simple database operation against persist's table
-                # (legacy graph_nodes is read-only after 2.9.0).
-                with get_db_connection(db_path=self.db_path) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT COUNT(*) FROM cirisgraph_nodes")
-                    cursor.fetchone()
+                from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+                engine = get_persist_engine()
+                if engine is None:
+                    return False
+                cursor_json = json.dumps(
+                    {"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}
+                )
+                engine.cirisgraph_query_nodes(
+                    json.dumps({"scope": "LOCAL"}), cursor_json, 1
+                )
                 return True
             except Exception:
                 return False

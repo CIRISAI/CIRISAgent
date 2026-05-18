@@ -49,31 +49,27 @@ class TestUpdateTicketStatus:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired.
+
+        CIRISAgent#763: ticket persistence routes through ciris-persist's
+        `ticket_*` substrate, so we bootstrap the persist Engine onto the
+        temp DB via `initialize_database` (which also runs all SQLite
+        migrations) and restore the previous engine on teardown.
+        """
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        # Apply migrations to create schema
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):  # Apply migrations 001-009
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug: fix active_scheduled_tasks view
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -253,30 +249,21 @@ class TestTicketStatusTransitions:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug in migration 001
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -359,29 +346,21 @@ class TestCreateTicket:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -562,29 +541,21 @@ class TestGetTicket:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -644,29 +615,21 @@ class TestUpdateTicketMetadata:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -760,29 +723,21 @@ class TestListTickets:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -898,29 +853,21 @@ class TestDeleteTicket:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -964,29 +911,21 @@ class TestGetTicketsByCorrelationId:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -1177,29 +1116,21 @@ class TestUpdateTicketStatusAdvanced:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 

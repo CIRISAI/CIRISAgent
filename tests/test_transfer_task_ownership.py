@@ -68,7 +68,7 @@ def test_transfer_task_ownership_success(mock_audit_service):
         add_task(task, db_path=db_path)
 
         # Verify task exists with __shared__ occurrence
-        retrieved = get_task_by_id(task.task_id, "__shared__", db_path=db_path)
+        retrieved = get_task_by_id(task.task_id, "__shared__")
         assert retrieved is not None
         assert retrieved.agent_occurrence_id == "__shared__"
 
@@ -79,18 +79,17 @@ def test_transfer_task_ownership_success(mock_audit_service):
             to_occurrence_id="occurrence-123",
             time_service=time_service,
             audit_service=mock_audit_service,
-            db_path=db_path,
         )
 
         # Verify transfer succeeded
         assert result is True
 
         # Verify task is no longer accessible via __shared__
-        shared_task = get_task_by_id(task.task_id, "__shared__", db_path=db_path)
+        shared_task = get_task_by_id(task.task_id, "__shared__")
         assert shared_task is None, "Task should not be accessible via __shared__ after transfer"
 
         # Verify task IS accessible via new occurrence
-        transferred = get_task_by_id(task.task_id, "occurrence-123", db_path=db_path)
+        transferred = get_task_by_id(task.task_id, "occurrence-123")
         assert transferred is not None, "Task should be accessible via new occurrence"
         assert transferred.agent_occurrence_id == "occurrence-123"
         assert transferred.task_id == task.task_id
@@ -146,7 +145,6 @@ def test_transfer_task_ownership_enables_status_update(mock_audit_service):
             to_occurrence_id="occurrence-456",
             time_service=time_service,
             audit_service=mock_audit_service,
-            db_path=db_path,
         )
         assert transfer_result is True
 
@@ -162,7 +160,7 @@ def test_transfer_task_ownership_enables_status_update(mock_audit_service):
         assert status_result is True, "Status update should succeed after ownership transfer"
 
         # Verify status was actually updated
-        updated_task = get_task_by_id(task.task_id, "occurrence-456", db_path=db_path)
+        updated_task = get_task_by_id(task.task_id, "occurrence-456")
         assert updated_task is not None
         assert updated_task.status == TaskStatus.ACTIVE, "Status should be ACTIVE after update"
 
@@ -212,14 +210,13 @@ def test_transfer_task_ownership_wrong_from_occurrence(mock_audit_service):
             to_occurrence_id="occurrence-new",
             time_service=time_service,
             audit_service=mock_audit_service,
-            db_path=db_path,
         )
 
         # Transfer should fail
         assert result is False, "Transfer should fail when from_occurrence_id doesn't match"
 
         # Verify task still has original occurrence
-        original = get_task_by_id(task.task_id, "occurrence-original", db_path=db_path)
+        original = get_task_by_id(task.task_id, "occurrence-original")
         assert original is not None
         assert original.agent_occurrence_id == "occurrence-original"
 
@@ -247,7 +244,6 @@ def test_transfer_task_ownership_nonexistent_task(mock_audit_service):
             to_occurrence_id="occurrence-789",
             time_service=time_service,
             audit_service=mock_audit_service,
-            db_path=db_path,
         )
 
         # Should fail gracefully
@@ -299,12 +295,11 @@ def test_transfer_task_ownership_multiple_times(mock_audit_service):
             to_occurrence_id="occurrence-1",
             time_service=time_service,
             audit_service=mock_audit_service,
-            db_path=db_path,
         )
         assert result1 is True
 
         # Verify first transfer
-        task1 = get_task_by_id(task.task_id, "occurrence-1", db_path=db_path)
+        task1 = get_task_by_id(task.task_id, "occurrence-1")
         assert task1 is not None
         assert task1.agent_occurrence_id == "occurrence-1"
 
@@ -315,17 +310,16 @@ def test_transfer_task_ownership_multiple_times(mock_audit_service):
             to_occurrence_id="occurrence-2",
             time_service=time_service,
             audit_service=mock_audit_service,
-            db_path=db_path,
         )
         assert result2 is True
 
         # Verify second transfer
-        task2 = get_task_by_id(task.task_id, "occurrence-2", db_path=db_path)
+        task2 = get_task_by_id(task.task_id, "occurrence-2")
         assert task2 is not None
         assert task2.agent_occurrence_id == "occurrence-2"
 
         # Verify no longer accessible via occurrence-1
-        task1_after = get_task_by_id(task.task_id, "occurrence-1", db_path=db_path)
+        task1_after = get_task_by_id(task.task_id, "occurrence-1")
         assert task1_after is None
 
         print("✓ Test 5 passed: Multiple transfers work correctly")
@@ -375,11 +369,10 @@ def test_transfer_preserves_all_task_data(mock_audit_service):
             to_occurrence_id="occurrence-preserve",
             time_service=time_service,
             audit_service=mock_audit_service,
-            db_path=db_path,
         )
 
         # Retrieve transferred task
-        transferred = get_task_by_id(task.task_id, "occurrence-preserve", db_path=db_path)
+        transferred = get_task_by_id(task.task_id, "occurrence-preserve")
         assert transferred is not None
 
         # Verify all data preserved except occurrence_id

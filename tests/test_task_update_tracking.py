@@ -76,14 +76,14 @@ class TestTaskUpdateTracking:
 
     def test_get_active_task_for_channel_no_tasks(self, temp_db):
         """Test getting active task when none exist."""
-        result = get_active_task_for_channel("channel-123", db_path=temp_db)
+        result = get_active_task_for_channel("channel-123")
         assert result is None
 
     def test_get_active_task_for_channel_with_active_task(self, temp_db, sample_task):
         """Test getting active task when one exists."""
         add_task(sample_task, db_path=temp_db)
 
-        result = get_active_task_for_channel("test-channel-123", db_path=temp_db)
+        result = get_active_task_for_channel("test-channel-123")
         assert result is not None
         assert result.task_id == sample_task.task_id
         assert result.channel_id == "test-channel-123"
@@ -95,7 +95,7 @@ class TestTaskUpdateTracking:
         sample_task.status = TaskStatus.COMPLETED
         add_task(sample_task, db_path=temp_db)
 
-        result = get_active_task_for_channel("test-channel-123", db_path=temp_db)
+        result = get_active_task_for_channel("test-channel-123")
         assert result is None
 
     def test_get_active_task_for_channel_returns_most_recent(self, temp_db, mock_time_service):
@@ -141,7 +141,7 @@ class TestTaskUpdateTracking:
         )
         add_task(task2, db_path=temp_db)
 
-        result = get_active_task_for_channel("test-channel-123", db_path=temp_db)
+        result = get_active_task_for_channel("test-channel-123")
         assert result is not None
         assert result.task_id == task2.task_id  # Most recent
 
@@ -156,7 +156,7 @@ class TestTaskUpdateTracking:
         assert success is True
 
         # Verify flag was set
-        updated_task = get_task_by_id(sample_task.task_id, "default", db_path=temp_db)
+        updated_task = get_task_by_id(sample_task.task_id, "default")
         assert updated_task is not None
         assert updated_task.updated_info_available is True
         assert updated_task.updated_info_content == "New message: @user says hello"
@@ -230,7 +230,7 @@ class TestTaskUpdateTracking:
         assert success is False
 
         # Verify flag was NOT set
-        updated_task = get_task_by_id(sample_task.task_id, "default", db_path=temp_db)
+        updated_task = get_task_by_id(sample_task.task_id, "default")
         assert updated_task is not None
         assert updated_task.updated_info_available is False
 
@@ -300,7 +300,7 @@ class TestTaskUpdateTracking:
 
         # Save and retrieve
         add_task(task, db_path=temp_db)
-        retrieved = get_task_by_id(task.task_id, "default", db_path=temp_db)
+        retrieved = get_task_by_id(task.task_id, "default")
 
         assert retrieved is not None
         assert retrieved.updated_info_available is True

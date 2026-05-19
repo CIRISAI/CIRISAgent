@@ -167,7 +167,7 @@ class TestUpdatedStatusConscience:
         assert result.updated_status_detected is True
 
         # Verify flag is cleared in database
-        updated_task = get_task_by_id(sample_task.task_id, db_path=patch_db_path)
+        updated_task = get_task_by_id(sample_task.task_id)
         assert updated_task.updated_info_available is False
 
         # Second check should pass

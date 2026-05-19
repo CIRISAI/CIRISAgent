@@ -115,7 +115,7 @@ class TestWorkProcessorPhase1Claiming:
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
         # Verify task created
-        tasks = get_all_tasks(occurrence_id="occurrence-1", db_path=temp_db_path)
+        tasks = get_all_tasks(occurrence_id="occurrence-1")
         assert len(tasks) == 1
         assert tasks[0].task_id.startswith(f"TICKET-{ticket_id}-")
         assert tasks[0].agent_occurrence_id == "occurrence-1"
@@ -168,8 +168,8 @@ class TestWorkProcessorPhase1Claiming:
         assert (tasks1 + tasks2) == 1, "Only one occurrence should create task"
 
         # Verify only one task exists (check both occurrences)
-        tasks1_final = get_all_tasks(occurrence_id="occurrence-1", db_path=temp_db_path)
-        tasks2_final = get_all_tasks(occurrence_id="occurrence-2", db_path=temp_db_path)
+        tasks1_final = get_all_tasks(occurrence_id="occurrence-1")
+        tasks2_final = get_all_tasks(occurrence_id="occurrence-2")
         assert len(tasks1_final) + len(tasks2_final) == 1
 
     @pytest.mark.asyncio
@@ -287,7 +287,7 @@ class TestWorkProcessorPhase2Continuation:
 
         assert tasks_created == 1
 
-        tasks = get_all_tasks(occurrence_id="occurrence-1", db_path=temp_db_path)
+        tasks = get_all_tasks(occurrence_id="occurrence-1")
         assert len(tasks) == 1
         assert tasks[0].task_id.startswith(f"TICKET-{ticket_id}-")
         assert tasks[0].agent_occurrence_id == "occurrence-1"
@@ -588,7 +588,7 @@ class TestWorkProcessorTwoPhaseIntegration:
         assert ticket_a_updated["agent_occurrence_id"] == "occurrence-1"
 
         # Verify tasks
-        tasks = get_all_tasks(occurrence_id="occurrence-1", db_path=temp_db_path)
+        tasks = get_all_tasks(occurrence_id="occurrence-1")
         # We should have 3 tasks total (1 from TICKET-A claim, 2 from TICKET-B/C continuation)
         assert len(tasks) == 3
 
@@ -644,7 +644,7 @@ class TestWorkProcessorTwoPhaseIntegration:
         await processor._discover_incomplete_tickets()
 
         # Verify task created
-        tasks = get_all_tasks(occurrence_id="occurrence-1", db_path=temp_db_path)
+        tasks = get_all_tasks(occurrence_id="occurrence-1")
         assert len(tasks) == 1
 
         task = tasks[0]

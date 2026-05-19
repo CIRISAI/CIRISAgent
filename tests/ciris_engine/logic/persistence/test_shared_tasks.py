@@ -248,7 +248,7 @@ def test_is_shared_task_completed_true(temp_db: str, time_service: TimeServicePr
 
 def test_get_latest_shared_task_not_found(temp_db: str):
     """Test get_latest_shared_task returns None when no task exists."""
-    task = get_latest_shared_task("wakeup", within_hours=24, db_path=temp_db)
+    task = get_latest_shared_task("wakeup", within_hours=24)
     assert task is None
 
 
@@ -265,7 +265,7 @@ def test_get_latest_shared_task_found(temp_db: str, time_service: TimeServicePro
     )
 
     # Retrieve it
-    retrieved_task = get_latest_shared_task("wakeup", within_hours=24, db_path=temp_db)
+    retrieved_task = get_latest_shared_task("wakeup", within_hours=24)
 
     assert retrieved_task is not None
     assert retrieved_task.task_id == original_task.task_id
@@ -385,7 +385,7 @@ def test_get_task_by_correlation_id_found(temp_db: str, time_service: TimeServic
     add_task(task, db_path=temp_db)
 
     # Retrieve by correlation_id
-    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="default", db_path=temp_db)
+    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="default")
 
     assert retrieved_task is not None
     assert retrieved_task.task_id == task.task_id
@@ -397,7 +397,7 @@ def test_get_task_by_correlation_id_not_found(temp_db: str):
     """Test retrieving a task by correlation_id when it doesn't exist."""
     from ciris_engine.logic.persistence.models.tasks import get_task_by_correlation_id
 
-    retrieved_task = get_task_by_correlation_id("nonexistent_correlation_id", occurrence_id="default", db_path=temp_db)
+    retrieved_task = get_task_by_correlation_id("nonexistent_correlation_id", occurrence_id="default")
 
     assert retrieved_task is None
 
@@ -458,7 +458,7 @@ def test_get_task_by_correlation_id_multiple_tasks_returns_latest(temp_db: str, 
     ), "add_task should return existing task_id when duplicate correlation_id is detected"
 
     # Verify only task1 exists in database
-    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="default", db_path=temp_db)
+    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="default")
 
     assert retrieved_task is not None
     assert retrieved_task.task_id == task1.task_id, "Should return the first task since duplicate was prevented"
@@ -495,12 +495,12 @@ def test_get_task_by_correlation_id_different_occurrence(temp_db: str, time_serv
     add_task(task, db_path=temp_db)
 
     # Try to retrieve with different occurrence_id
-    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="occurrence-2", db_path=temp_db)
+    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="occurrence-2")
 
     assert retrieved_task is None  # Should not find task from different occurrence
 
     # Retrieve with correct occurrence_id
-    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="occurrence-1", db_path=temp_db)
+    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="occurrence-1")
 
     assert retrieved_task is not None
     assert retrieved_task.task_id == task.task_id
@@ -737,7 +737,7 @@ def test_try_claim_shared_task_datum_bug_scenario(temp_db: str, time_service: Ti
     # Verify the old task was actually deleted and replaced (check created_at is recent)
     from ciris_engine.logic.persistence.models.tasks import get_task_by_id
 
-    retrieved_task = get_task_by_id(task2.task_id, "__shared__", db_path=temp_db)
+    retrieved_task = get_task_by_id(task2.task_id, "__shared__")
     assert retrieved_task is not None
 
     # Task should have been created very recently (within last minute)

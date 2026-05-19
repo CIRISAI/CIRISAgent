@@ -83,7 +83,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         # Note: This gets the most recent active task, as the processor's current task
         # is not directly accessible from here
         current_task = None
-        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, db_path=self._db_path)
+        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE)
         if active_tasks:
             current_task = active_tasks[0]
 
@@ -153,7 +153,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         tasks = []
 
         # First try to get completed tasks
-        completed_tasks = get_tasks_by_status(TaskStatus.COMPLETED, db_path=self._db_path)
+        completed_tasks = get_tasks_by_status(TaskStatus.COMPLETED)
         if completed_tasks:
             # Sort by updated_at timestamp (most recent first)
             completed_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
@@ -161,7 +161,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
         # If we need more tasks, add active ones
         if len(tasks) < limit:
-            active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, db_path=self._db_path)
+            active_tasks = get_tasks_by_status(TaskStatus.ACTIVE)
             if active_tasks:
                 active_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
                 remaining = limit - len(tasks)
@@ -169,7 +169,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
         # If still need more, add failed tasks
         if len(tasks) < limit:
-            failed_tasks = get_tasks_by_status(TaskStatus.FAILED, db_path=self._db_path)
+            failed_tasks = get_tasks_by_status(TaskStatus.FAILED)
             if failed_tasks:
                 failed_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
                 remaining = limit - len(tasks)
@@ -177,7 +177,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
         # If still need more, add pending
         if len(tasks) < limit:
-            pending_tasks = get_tasks_by_status(TaskStatus.PENDING, db_path=self._db_path)
+            pending_tasks = get_tasks_by_status(TaskStatus.PENDING)
             if pending_tasks:
                 pending_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
                 remaining = limit - len(tasks)
@@ -191,7 +191,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         from ciris_engine.schemas.services.visibility import ThoughtStep
 
         # Get the task from persistence
-        task = get_task_by_id(task_id, db_path=self._db_path)
+        task = get_task_by_id(task_id)
         if not task:
             # Return empty trace if task not found
             return ReasoningTrace(
@@ -291,7 +291,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         from ciris_engine.schemas.services.visibility import DecisionRecord
 
         # Get the task from persistence
-        task = get_task_by_id(task_id, db_path=self._db_path)
+        task = get_task_by_id(task_id)
         task_description = "Unknown task"
         created_at = self._now()
 

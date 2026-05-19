@@ -442,7 +442,7 @@ class WorkProcessor(BaseProcessor):
 
         try:
             for status in (TaskStatus.PENDING, TaskStatus.ACTIVE):
-                tasks = get_tasks_by_status(status, self.agent_occurrence_id, db_path=db_path)
+                tasks = get_tasks_by_status(status, self.agent_occurrence_id)
                 if any(t.task_id.startswith(task_prefix) for t in tasks):
                     logger.debug(f"Ticket {ticket_id} already has pending/active task, skipping")
                     return True

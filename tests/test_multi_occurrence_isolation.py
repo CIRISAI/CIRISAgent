@@ -104,21 +104,21 @@ class TestMultiOccurrenceIsolation:
         add_task(task_b, db_path=clean_db)
 
         # Verify occurrence A only sees its task
-        task_a_retrieved = get_task_by_id("task_a_001", occurrence_a, db_path=clean_db)
+        task_a_retrieved = get_task_by_id("task_a_001", occurrence_a)
         assert task_a_retrieved is not None
         assert task_a_retrieved.agent_occurrence_id == occurrence_a
 
         # Verify occurrence A cannot see occurrence B's task
-        task_b_from_a = get_task_by_id("task_b_001", occurrence_a, db_path=clean_db)
+        task_b_from_a = get_task_by_id("task_b_001", occurrence_a)
         assert task_b_from_a is None
 
         # Verify occurrence B only sees its task
-        task_b_retrieved = get_task_by_id("task_b_001", occurrence_b, db_path=clean_db)
+        task_b_retrieved = get_task_by_id("task_b_001", occurrence_b)
         assert task_b_retrieved is not None
         assert task_b_retrieved.agent_occurrence_id == occurrence_b
 
         # Verify occurrence B cannot see occurrence A's task
-        task_a_from_b = get_task_by_id("task_a_001", occurrence_b, db_path=clean_db)
+        task_a_from_b = get_task_by_id("task_a_001", occurrence_b)
         assert task_a_from_b is None
 
     def test_get_all_tasks_filtered_by_occurrence(self, clean_db, time_service, occurrence_a, occurrence_b):
@@ -166,12 +166,12 @@ class TestMultiOccurrenceIsolation:
             add_task(task, db_path=clean_db)
 
         # Verify occurrence A sees only its 3 tasks
-        tasks_a = get_all_tasks(occurrence_a, db_path=clean_db)
+        tasks_a = get_all_tasks(occurrence_a)
         assert len(tasks_a) == 3
         assert all(t.agent_occurrence_id == occurrence_a for t in tasks_a)
 
         # Verify occurrence B sees only its 2 tasks
-        tasks_b = get_all_tasks(occurrence_b, db_path=clean_db)
+        tasks_b = get_all_tasks(occurrence_b)
         assert len(tasks_b) == 2
         assert all(t.agent_occurrence_id == occurrence_b for t in tasks_b)
 
@@ -220,13 +220,13 @@ class TestMultiOccurrenceIsolation:
         add_task(task_b, db_path=clean_db)
 
         # Occurrence A should only see its task
-        active_task_a = get_active_task_for_channel(channel_id, occurrence_a, db_path=clean_db)
+        active_task_a = get_active_task_for_channel(channel_id, occurrence_a)
         assert active_task_a is not None
         assert active_task_a.task_id == "task_a_channel"
         assert active_task_a.agent_occurrence_id == occurrence_a
 
         # Occurrence B should only see its task
-        active_task_b = get_active_task_for_channel(channel_id, occurrence_b, db_path=clean_db)
+        active_task_b = get_active_task_for_channel(channel_id, occurrence_b)
         assert active_task_b is not None
         assert active_task_b.task_id == "task_b_channel"
         assert active_task_b.agent_occurrence_id == occurrence_b
@@ -517,17 +517,17 @@ class TestMultiOccurrenceIsolation:
         add_task(task_b, db_path=clean_db)
 
         # Verify tasks are properly isolated using get_all_tasks
-        all_tasks_a = get_all_tasks(occurrence_a, db_path=clean_db)
+        all_tasks_a = get_all_tasks(occurrence_a)
         assert len(all_tasks_a) == 2
         assert all(t.agent_occurrence_id == occurrence_a for t in all_tasks_a)
 
-        all_tasks_b = get_all_tasks(occurrence_b, db_path=clean_db)
+        all_tasks_b = get_all_tasks(occurrence_b)
         assert len(all_tasks_b) == 1
         assert all(t.agent_occurrence_id == occurrence_b for t in all_tasks_b)
 
         # Verify cross-occurrence access fails
-        assert get_task_by_id("task_a1_manager", occurrence_b, db_path=clean_db) is None
-        assert get_task_by_id("task_b_manager", occurrence_a, db_path=clean_db) is None
+        assert get_task_by_id("task_a1_manager", occurrence_b) is None
+        assert get_task_by_id("task_b_manager", occurrence_a) is None
 
     def test_thought_manager_isolation(self, clean_db, time_service, occurrence_a, occurrence_b):
         """Test that thoughts created with occurrence_id are properly isolated."""
@@ -691,9 +691,9 @@ class TestMultiOccurrenceIsolation:
         add_task(task, db_path=clean_db)
 
         # Should be retrievable with 'default'
-        retrieved = get_task_by_id("task_default", "default", db_path=clean_db)
+        retrieved = get_task_by_id("task_default", "default")
         assert retrieved is not None
         assert retrieved.agent_occurrence_id == "default"
 
         # Should not be accessible from other occurrences
-        assert get_task_by_id("task_default", "other", db_path=clean_db) is None
+        assert get_task_by_id("task_default", "other") is None

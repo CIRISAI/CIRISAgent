@@ -114,8 +114,8 @@ def get_queue_status(db_path: Optional[str] = None) -> QueueStatus:
         QueueStatus object with counts
     """
     # Get task counts
-    pending_tasks = count_tasks(TaskStatus.PENDING, db_path=db_path)
-    total_tasks = count_tasks(db_path=db_path)
+    pending_tasks = count_tasks(TaskStatus.PENDING)
+    total_tasks = count_tasks()
 
     # Get thought counts
     # Note: count_thoughts() already returns PENDING + PROCESSING count

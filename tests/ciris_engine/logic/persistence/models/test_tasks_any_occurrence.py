@@ -74,7 +74,7 @@ class TestGetTaskByIdAnyOccurrence:
     def test_accepts_custom_db_path(self, persist_engine):
         """db_path is preserved for back-compat but unused; should still work."""
         add_task(_make_task("task_x", "default"))
-        result = get_task_by_id_any_occurrence("task_x", db_path="/ignored/path.db")
+        result = get_task_by_id_any_occurrence("task_x")
         assert result is not None
         assert result.task_id == "task_x"
 
@@ -106,7 +106,7 @@ class TestGetTaskOccurrenceIdForUpdate:
 
     def test_accepts_custom_db_path(self, persist_engine):
         add_task(_make_task("task_y", "default"))
-        assert get_task_occurrence_id_for_update("task_y", db_path="/ignored/path.db") == "default"
+        assert get_task_occurrence_id_for_update("task_y") == "default"
 
     def test_returns_str_type(self, persist_engine):
         add_task(_make_task("task_z", "default"))

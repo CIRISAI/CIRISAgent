@@ -255,7 +255,7 @@ def _list_with_filter(
 # ---------------------------------------------------------------------------
 
 
-def get_task_by_id_any_occurrence(task_id: str, db_path: Optional[str] = None) -> Optional[Task]:
+def get_task_by_id_any_occurrence(task_id: str) -> Optional[Task]:
     """Get a task by ID without filtering by occurrence_id."""
     engine = _get_engine()
     try:
@@ -272,7 +272,7 @@ def get_task_by_id_any_occurrence(task_id: str, db_path: Optional[str] = None) -
     return _persist_row_to_task(row)
 
 
-def get_task_occurrence_id_for_update(task_id: str, db_path: Optional[str] = None) -> Optional[str]:
+def get_task_occurrence_id_for_update(task_id: str) -> Optional[str]:
     """Get the correct occurrence_id for updating a task's status.
 
     See the docstring on the legacy impl for the 6-scenario matrix; this
@@ -296,8 +296,8 @@ def get_task_occurrence_id_for_update(task_id: str, db_path: Optional[str] = Non
 
 def get_tasks_by_status(
     status: TaskStatus,
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
+    occurrence_id: str = "default"
+
 ) -> List[Task]:
     """Returns all tasks with the given status and occurrence as Task objects, ASC by created_at."""
     if not isinstance(status, TaskStatus):
@@ -314,7 +314,7 @@ def get_tasks_by_status(
     return tasks
 
 
-def get_all_tasks(occurrence_id: str = "default", db_path: Optional[str] = None) -> List[Task]:
+def get_all_tasks(occurrence_id: str = "default") -> List[Task]:
     """Returns all tasks for the occurrence, ASC by created_at."""
     try:
         tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
@@ -389,8 +389,8 @@ def add_task(task: Task, db_path: Optional[str] = None) -> str:
 
 def get_task_by_id(
     task_id: str,
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
+    occurrence_id: str = "default"
+
 ) -> Optional[Task]:
     engine = _get_engine()
     try:
@@ -438,8 +438,8 @@ def transfer_task_ownership(
     from_occurrence_id: str,
     to_occurrence_id: str,
     time_service: TimeServiceProtocol,
-    audit_service: AuditServiceProtocol,
-    db_path: Optional[str] = None,
+    audit_service: AuditServiceProtocol
+
 ) -> bool:
     """Transfer task ownership from one occurrence to another.
 
@@ -574,7 +574,7 @@ def clear_task_images(
 
 
 def task_exists(task_id: str, db_path: Optional[str] = None) -> bool:
-    return get_task_by_id(task_id, db_path=db_path) is not None
+    return get_task_by_id(task_id) is not None
 
 
 async def add_system_task(
@@ -604,7 +604,7 @@ def get_recent_completed_tasks(
     limit: int = 10,
     db_path: Optional[str] = None,
 ) -> List[Task]:
-    tasks_list = get_all_tasks(occurrence_id, db_path=db_path)
+    tasks_list = get_all_tasks(occurrence_id)
     completed = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.COMPLETED]
     completed_sorted = sorted(completed, key=lambda t: getattr(t, "updated_at", ""), reverse=True)
     return completed_sorted[:limit]
@@ -616,7 +616,7 @@ def get_top_tasks(
     db_path: Optional[str] = None,
 ) -> List[Task]:
     """Get top pending tasks for occurrence ordered by priority (highest first) then by creation date."""
-    tasks_list = get_all_tasks(occurrence_id, db_path=db_path)
+    tasks_list = get_all_tasks(occurrence_id)
     pending = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.PENDING]
     sorted_tasks = sorted(
         pending, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", ""))
@@ -630,7 +630,7 @@ def get_pending_tasks_for_activation(
     db_path: Optional[str] = None,
 ) -> List[Task]:
     """Get pending tasks for occurrence ordered by priority (highest first) then by creation date."""
-    pending_tasks = get_tasks_by_status(TaskStatus.PENDING, occurrence_id, db_path=db_path)
+    pending_tasks = get_tasks_by_status(TaskStatus.PENDING, occurrence_id)
     sorted_tasks = sorted(
         pending_tasks, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", ""))
     )
@@ -639,8 +639,8 @@ def get_pending_tasks_for_activation(
 
 def count_tasks(
     status: Optional[TaskStatus] = None,
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
+    occurrence_id: str = "default"
+
 ) -> int:
     """Count tasks matching the criteria."""
     try:
@@ -656,7 +656,7 @@ def count_tasks(
         return 0
 
 
-def delete_tasks_by_ids(task_ids: List[str], db_path: Optional[str] = None) -> bool:
+def delete_tasks_by_ids(task_ids: List[str]) -> bool:
     """Deletes tasks (and cascades thoughts + feedback_mappings) with the given IDs.
 
     Persist's `task_delete` cascades to thoughts via FK. The legacy
@@ -717,8 +717,8 @@ def delete_tasks_by_ids(task_ids: List[str], db_path: Optional[str] = None) -> b
 
 def get_tasks_older_than(
     older_than_timestamp: str,
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
+    occurrence_id: str = "default"
+
 ) -> List[Task]:
     """Get all tasks for occurrence with created_at older than the given ISO timestamp."""
     try:
@@ -733,8 +733,8 @@ def get_tasks_older_than(
 
 def get_active_task_for_channel(
     channel_id: str,
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
+    occurrence_id: str = "default"
+
 ) -> Optional[Task]:
     """Get the active task for a specific channel and occurrence, if one exists."""
     try:
@@ -959,8 +959,8 @@ def is_shared_task_completed(
 
 def get_latest_shared_task(
     task_type: str,
-    within_hours: int = 24,
-    db_path: Optional[str] = None,
+    within_hours: int = 24
+
 ) -> Optional[Task]:
     """Get the most recent shared task of a given type."""
     cutoff_time = datetime.now(timezone.utc) - timedelta(hours=within_hours)
@@ -985,8 +985,8 @@ def get_latest_shared_task(
 
 def get_task_by_correlation_id(
     correlation_id: str,
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
+    occurrence_id: str = "default"
+
 ) -> Optional[Task]:
     """Query for a task by correlation_id (e.g., Reddit post/comment ID)."""
     try:

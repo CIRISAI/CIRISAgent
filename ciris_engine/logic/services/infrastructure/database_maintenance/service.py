@@ -201,7 +201,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         orphaned_tasks_deleted_count = 0
         orphaned_thoughts_deleted_count = 0
 
-        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, db_path=self.db_path)
+        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE)
         task_ids_to_delete: List[Any] = []
 
         for task in active_tasks:
@@ -227,7 +227,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             elif task.parent_task_id:
                 # CRITICAL: Pass task's own occurrence_id to find parent in same namespace
                 # This prevents shared tasks from being marked as orphans in multi-occurrence setups
-                parent_task = get_task_by_id(task.parent_task_id, task.agent_occurrence_id, db_path=self.db_path)
+                parent_task = get_task_by_id(task.parent_task_id, task.agent_occurrence_id)
                 if not parent_task or parent_task.status not in [TaskStatus.ACTIVE, TaskStatus.COMPLETED]:
                     is_orphan = True
             elif task.parent_task_id is None:
@@ -241,7 +241,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 task_ids_to_delete.append(task.task_id)
 
         if task_ids_to_delete:
-            orphaned_tasks_deleted_count = delete_tasks_by_ids(task_ids_to_delete, db_path=self.db_path)
+            orphaned_tasks_deleted_count = delete_tasks_by_ids(task_ids_to_delete)
             logger.info(
                 f"Deleted {orphaned_tasks_deleted_count} orphaned active tasks (and their thoughts via cascade)."
             )
@@ -253,7 +253,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         for thought in all_potentially_orphaned_thoughts:
             # CRITICAL: Pass thought's own occurrence_id to find task in same namespace
-            source_task = get_task_by_id(thought.source_task_id, thought.agent_occurrence_id, db_path=self.db_path)
+            source_task = get_task_by_id(thought.source_task_id, thought.agent_occurrence_id)
             if not source_task or source_task.status != TaskStatus.ACTIVE:
                 logger.info(
                     f"Orphaned thought found: {thought.thought_id} (Task: {thought.source_task_id} not found or not active). Marking for deletion."
@@ -959,7 +959,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             current_time = self.time_service.now()
 
             # Get all wakeup and shutdown related tasks from __shared__ occurrence
-            all_tasks = get_all_tasks("__shared__", db_path=self.db_path)
+            all_tasks = get_all_tasks("__shared__")
             stale_tasks = [
                 task
                 for task in all_tasks
@@ -978,7 +978,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 logger.info(f"Deleted {deleted_thoughts} stale wakeup thoughts from previous runs")
 
             if stale_task_ids:
-                deleted_tasks = delete_tasks_by_ids(stale_task_ids, db_path=self.db_path)
+                deleted_tasks = delete_tasks_by_ids(stale_task_ids)
                 logger.info(f"Deleted {deleted_tasks} stale active wakeup tasks from interrupted startups")
 
             if not stale_task_ids and not stale_thought_ids:

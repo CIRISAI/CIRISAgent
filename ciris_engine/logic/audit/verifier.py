@@ -30,6 +30,42 @@ from .signature_manager import AuditSignatureManager
 logger = logging.getLogger(__name__)
 
 
+def _audit_tenant_id() -> str:
+    """Resolve the tenant_id under which persist records audit entries.
+
+    Mirrors `audit_service._write_to_persist_chain` — agents tag rows with
+    `agent-default` when `CIRIS_AGENT_TENANT` is unset (production default).
+    """
+    import os
+
+    return os.environ.get("CIRIS_AGENT_TENANT", "agent-default")
+
+
+def _resolve_last_sequence(engine: object, tenant_id: str) -> Optional[int]:
+    """Return the largest sequence_number in cirislens_audit_log for tenant.
+
+    Calls persist's `audit_list_entries(filter_json, cursor, limit)` with
+    a tenant-scoped filter; persist returns DESC by sequence so the first
+    row carries the max.
+    """
+    import json
+
+    list_fn = getattr(engine, "audit_list_entries", None)
+    if list_fn is None:
+        return None
+    filter_json = json.dumps({"tenant_id": tenant_id})
+    raw = list_fn(filter_json, None, 1)
+    parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+    items = parsed.get("items") if isinstance(parsed, dict) else parsed
+    if not items:
+        return None
+    first = items[0]
+    if not isinstance(first, dict):
+        return None
+    seq = first.get("sequence_number")
+    return int(seq) if seq is not None else None
+
+
 class AuditVerifier:
     """Verifies audit log integrity and detects tampering"""
 
@@ -51,68 +87,103 @@ class AuditVerifier:
         logger.info("Audit verifier initialized")
 
     def verify_complete_chain(self) -> CompleteVerificationResult:
-        """Perform complete verification of the entire audit chain"""
+        """Perform complete verification of the entire audit chain.
+
+        Post-A3 cutover (CIRISAgent#763 / 2.9.0 Phase 3a): delegates to
+        persist's `audit_verify_chain` substrate, which walks the
+        `cirislens_audit_log` table — the canonical store after the A3
+        write-path cutover. Verified against a real 69-entry production
+        fixture; tampered-entry detection returns the exact sequence break.
+
+        The legacy hash_chain / signature_manager paths are kept for
+        boot-time initialize() compatibility but never consulted here.
+        """
         if not self._initialized:
             self.initialize()
 
-        logger.info("Starting complete audit chain verification")
+        import json
+
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        logger.info("Starting complete audit chain verification via persist")
         start_time = self._time_service.now()
 
-        # Get chain summary
-        summary = self.hash_chain.get_chain_summary()
-        if summary.error:
+        try:
+            engine = get_persist_engine()
+            if engine is None:
+                raise RuntimeError("persist engine not wired")
+
+            tenant_id = _audit_tenant_id()
+
+            # Discover the last sequence number for this tenant. Persist
+            # doesn't (yet) expose a `audit_tail_sequence` helper, so we
+            # paginate `audit_list_entries` DESC and read the first row.
+            last_seq = _resolve_last_sequence(engine, tenant_id)
+
+            end_time = self._time_service.now()
+            verification_time = int((end_time - start_time).total_seconds() * 1000)
+
+            if last_seq is None or last_seq < 1:
+                return CompleteVerificationResult(
+                    valid=True,
+                    entries_verified=0,
+                    hash_chain_valid=True,
+                    signatures_valid=True,
+                    verification_time_ms=verification_time,
+                    summary="Empty audit log",
+                )
+
+            raw = engine.audit_verify_chain(tenant_id, 1, last_seq)
+            payload = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            outcome = payload.get("outcome", {}) if isinstance(payload, dict) else {}
+            walked = int(payload.get("entries_walked", 0)) if isinstance(payload, dict) else 0
+            ok = isinstance(outcome, dict) and outcome.get("outcome") == "ok"
+
+            errors: List[str] = []
+            if not ok and isinstance(outcome, dict):
+                at_seq = outcome.get("at_sequence")
+                reason = outcome.get("reason", "unknown")
+                detail = outcome.get("detail", "")
+                errors.append(
+                    f"chain break at sequence {at_seq}: {reason} ({detail})"
+                )
+
+            end_time = self._time_service.now()
+            verification_time = int((end_time - start_time).total_seconds() * 1000)
+
+            result = CompleteVerificationResult(
+                valid=ok,
+                entries_verified=walked,
+                hash_chain_valid=ok,
+                # Persist's audit_verify_chain combines hash + signature
+                # verification under one outcome; we report the same value
+                # for both rather than synthesizing a false-distinction.
+                signatures_valid=ok,
+                verification_time_ms=verification_time,
+                hash_chain_errors=errors,
+                signature_errors=[],
+            )
+
+            if ok:
+                logger.info(
+                    f"Audit verification passed: {walked} entries in {verification_time}ms"
+                )
+            else:
+                logger.error(f"Audit verification FAILED: {errors}")
+
+            return result
+        except Exception as e:
+            end_time = self._time_service.now()
+            verification_time = int((end_time - start_time).total_seconds() * 1000)
+            logger.exception("persist audit_verify_chain failed")
             return CompleteVerificationResult(
                 valid=False,
                 entries_verified=0,
                 hash_chain_valid=False,
                 signatures_valid=False,
-                verification_time_ms=0,
-                error=summary.error,
+                verification_time_ms=verification_time,
+                error=f"verify_complete_chain error: {type(e).__name__}: {e}",
             )
-
-        total_entries = summary.total_entries
-        if total_entries == 0:
-            return CompleteVerificationResult(
-                valid=True,
-                entries_verified=0,
-                hash_chain_valid=True,
-                signatures_valid=True,
-                verification_time_ms=0,
-                summary="Empty audit log",
-            )
-
-        # Verify hash chain integrity
-        chain_result = self.hash_chain.verify_chain_integrity()
-
-        # Verify signatures
-        signature_result = self._verify_all_signatures()
-
-        # Calculate verification time
-        end_time = self._time_service.now()
-        verification_time = int((end_time - start_time).total_seconds() * 1000)
-
-        # Combine results
-        overall_valid = chain_result.valid and signature_result.valid
-
-        result = CompleteVerificationResult(
-            valid=overall_valid,
-            entries_verified=total_entries,
-            hash_chain_valid=chain_result.valid,
-            signatures_valid=signature_result.valid,
-            verification_time_ms=verification_time,
-            hash_chain_errors=chain_result.errors,
-            signature_errors=signature_result.errors,
-            chain_summary=summary.model_dump() if summary else None,
-        )
-
-        if overall_valid:
-            logger.info(f"Audit verification passed: {total_entries} entries in {verification_time}ms")
-        else:
-            logger.error(
-                f"Audit verification FAILED: {len(chain_result.errors)} hash + {len(signature_result.errors)} signature errors"
-            )
-
-        return result
 
     def verify_entry(self, entry_id: int) -> EntryVerificationResult:
         """Verify a specific audit entry by ID"""

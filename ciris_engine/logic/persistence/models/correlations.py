@@ -443,8 +443,8 @@ def _row_tags(row: Dict[str, Any]) -> Dict[str, Any]:
 
 def add_correlation(
     corr: ServiceCorrelation,
-    time_service: Optional[TimeServiceProtocol] = None,
-    db_path: Optional[str] = None,
+    time_service: Optional[TimeServiceProtocol] = None
+
 ) -> str:
     """Persist a ServiceCorrelation via the wired persist Engine.
 
@@ -512,8 +512,8 @@ def update_correlation(
 
 def _update_correlation_impl(
     update_request: CorrelationUpdateRequest,
-    time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None,
+    time_service: TimeServiceProtocol
+
 ) -> bool:
     """Apply a CorrelationUpdateRequest via persist.
 
@@ -612,7 +612,7 @@ def _update_correlation_impl(
         return False
 
 
-def get_correlation(correlation_id: str, db_path: Optional[str] = None) -> Optional[ServiceCorrelation]:
+def get_correlation(correlation_id: str) -> Optional[ServiceCorrelation]:
     """Fetch a single correlation by id."""
     engine = _get_engine()
     try:
@@ -634,8 +634,8 @@ def get_correlation(correlation_id: str, db_path: Optional[str] = None) -> Optio
 def get_correlations_by_task_and_action(
     task_id: str,
     action_type: str,
-    status: Optional[ServiceCorrelationStatus] = None,
-    db_path: Optional[str] = None,
+    status: Optional[ServiceCorrelationStatus] = None
+
 ) -> List[ServiceCorrelation]:
     """Get correlations for a specific task and action type.
 
@@ -688,8 +688,8 @@ def get_correlations_by_type_and_time(
     end_time: Optional[str] = None,
     metric_names: Optional[List[str]] = None,
     log_levels: Optional[List[str]] = None,
-    limit: int = 1000,
-    db_path: Optional[str] = None,
+    limit: int = 1000
+
 ) -> List[ServiceCorrelation]:
     """Get correlations by type with optional time filtering for TSDB queries.
 
@@ -768,8 +768,8 @@ def get_correlations_by_type_and_time(
 def get_correlations_by_channel(
     channel_id: str,
     limit: int = 50,
-    before: Optional[datetime] = None,
-    db_path: Optional[str] = None,
+    before: Optional[datetime] = None
+
 ) -> List[ServiceCorrelation]:
     """Get correlations for a specific channel (for message history).
 
@@ -813,7 +813,7 @@ def get_correlations_by_channel(
     return matched
 
 
-def get_metrics_timeseries(query: MetricsQuery, db_path: Optional[str] = None) -> List[ServiceCorrelation]:
+def get_metrics_timeseries(query: MetricsQuery) -> List[ServiceCorrelation]:
     """Get metric correlations as time series data.
 
     Returns metric correlations matching `query.metric_name`, optional
@@ -866,8 +866,8 @@ def get_metrics_timeseries(query: MetricsQuery, db_path: Optional[str] = None) -
 def get_active_channels_by_adapter(
     adapter_type: str,
     since_days: float = 30,
-    time_service: Optional[TimeServiceProtocol] = None,
-    db_path: Optional[str] = None,
+    time_service: Optional[TimeServiceProtocol] = None
+
 ) -> List[ChannelInfo]:
     """Get active channels for a specific adapter type from correlations.
 
@@ -971,8 +971,8 @@ def get_active_channels_by_adapter(
 
 def get_channel_last_activity(
     channel_id: str,
-    time_service: Optional[TimeServiceProtocol] = None,
-    db_path: Optional[str] = None,
+    time_service: Optional[TimeServiceProtocol] = None
+
 ) -> Optional[datetime]:
     """Get the last activity timestamp for a specific channel.
 
@@ -1035,7 +1035,7 @@ def get_channel_last_activity(
     return last_activity
 
 
-def is_admin_channel(channel_id: str, db_path: Optional[str] = None) -> bool:
+def is_admin_channel(channel_id: str) -> bool:
     """Determine if a channel belongs to an admin user.
 
     For API channels, checks if any correlation has admin role tags.
@@ -1073,7 +1073,7 @@ def is_admin_channel(channel_id: str, db_path: Optional[str] = None) -> bool:
     return False
 
 
-def get_recent_correlations(limit: int = 100, db_path: Optional[str] = None) -> List[ServiceCorrelation]:
+def get_recent_correlations(limit: int = 100) -> List[ServiceCorrelation]:
     """Get recent correlations ordered by timestamp DESC.
 
     Persist returns DESC by `created_at` (which we use as proxy for

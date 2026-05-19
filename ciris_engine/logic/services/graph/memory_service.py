@@ -728,7 +728,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             )
 
             if self._time_service:
-                add_correlation(correlation, db_path=self.db_path, time_service=self._time_service)
+                add_correlation(correlation, time_service=self._time_service)
             else:
                 raise RuntimeError("TimeService is required for add_correlation")
 

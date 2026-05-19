@@ -279,7 +279,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_thought(thought_a, db_path=clean_db)
+        add_thought(thought_a)
 
         # Create task for occurrence B
         task_b = Task(
@@ -327,24 +327,24 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_b,
             ),
         )
-        add_thought(thought_b, db_path=clean_db)
+        add_thought(thought_b)
 
         # Verify occurrence A only sees its thought
-        thought_a_retrieved = get_thought_by_id("thought_a_001", occurrence_a, db_path=clean_db)
+        thought_a_retrieved = get_thought_by_id("thought_a_001", occurrence_a)
         assert thought_a_retrieved is not None
         assert thought_a_retrieved.agent_occurrence_id == occurrence_a
 
         # Verify occurrence A cannot see occurrence B's thought
-        thought_b_from_a = get_thought_by_id("thought_b_001", occurrence_a, db_path=clean_db)
+        thought_b_from_a = get_thought_by_id("thought_b_001", occurrence_a)
         assert thought_b_from_a is None
 
         # Verify thoughts by task isolation
-        thoughts_for_task_a = get_thoughts_by_task_id("task_a_thoughts", occurrence_a, db_path=clean_db)
+        thoughts_for_task_a = get_thoughts_by_task_id("task_a_thoughts", occurrence_a)
         assert len(thoughts_for_task_a) == 1
         assert thoughts_for_task_a[0].thought_id == "thought_a_001"
 
         # Occurrence A should not see task B's thoughts
-        thoughts_for_task_b_from_a = get_thoughts_by_task_id("task_b_thoughts", occurrence_a, db_path=clean_db)
+        thoughts_for_task_b_from_a = get_thoughts_by_task_id("task_b_thoughts", occurrence_a)
         assert len(thoughts_for_task_b_from_a) == 0
 
     def test_pending_thoughts_for_active_tasks(self, clean_db, time_service, occurrence_a, occurrence_b):
@@ -394,7 +394,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_thought(thought_a, db_path=clean_db)
+        add_thought(thought_a)
 
         # Create active task and pending thought for occurrence B
         task_b = Task(
@@ -441,20 +441,20 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_b,
             ),
         )
-        add_thought(thought_b, db_path=clean_db)
+        add_thought(thought_b)
 
         # Verify thoughts are isolated by occurrence via direct queries
-        thoughts_a_for_task = get_thoughts_by_task_id("task_a_pending", occurrence_a, db_path=clean_db)
+        thoughts_a_for_task = get_thoughts_by_task_id("task_a_pending", occurrence_a)
         assert len(thoughts_a_for_task) == 1
         assert thoughts_a_for_task[0].thought_id == "thought_a_pending"
 
-        thoughts_b_for_task = get_thoughts_by_task_id("task_b_pending", occurrence_b, db_path=clean_db)
+        thoughts_b_for_task = get_thoughts_by_task_id("task_b_pending", occurrence_b)
         assert len(thoughts_b_for_task) == 1
         assert thoughts_b_for_task[0].thought_id == "thought_b_pending"
 
         # Verify cross-occurrence isolation
-        assert len(get_thoughts_by_task_id("task_a_pending", occurrence_b, db_path=clean_db)) == 0
-        assert len(get_thoughts_by_task_id("task_b_pending", occurrence_a, db_path=clean_db)) == 0
+        assert len(get_thoughts_by_task_id("task_a_pending", occurrence_b)) == 0
+        assert len(get_thoughts_by_task_id("task_b_pending", occurrence_a)) == 0
 
     def test_task_manager_isolation(self, clean_db, time_service, occurrence_a, occurrence_b):
         """Test that tasks created with occurrence_id are properly isolated."""
@@ -576,7 +576,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_thought(thought_a1, db_path=clean_db)
+        add_thought(thought_a1)
 
         thought_a2 = Thought(
             thought_id="thought_a2_tm",
@@ -603,7 +603,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_thought(thought_a2, db_path=clean_db)
+        add_thought(thought_a2)
 
         task_b = Task(
             task_id="task_b_tm",
@@ -649,24 +649,24 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_b,
             ),
         )
-        add_thought(thought_b, db_path=clean_db)
+        add_thought(thought_b)
 
         # Verify thoughts are properly stamped and isolated
-        thoughts_a = get_thoughts_by_task_id("task_a_tm", occurrence_a, db_path=clean_db)
+        thoughts_a = get_thoughts_by_task_id("task_a_tm", occurrence_a)
         assert len(thoughts_a) == 2
         assert all(t.agent_occurrence_id == occurrence_a for t in thoughts_a)
         thought_ids_a = {t.thought_id for t in thoughts_a}
         assert "thought_a1_tm" in thought_ids_a
         assert "thought_a2_tm" in thought_ids_a
 
-        thoughts_b = get_thoughts_by_task_id("task_b_tm", occurrence_b, db_path=clean_db)
+        thoughts_b = get_thoughts_by_task_id("task_b_tm", occurrence_b)
         assert len(thoughts_b) == 1
         assert thoughts_b[0].agent_occurrence_id == occurrence_b
         assert thoughts_b[0].thought_id == "thought_b_tm"
 
         # Verify cross-occurrence access fails
-        assert len(get_thoughts_by_task_id("task_a_tm", occurrence_b, db_path=clean_db)) == 0
-        assert len(get_thoughts_by_task_id("task_b_tm", occurrence_a, db_path=clean_db)) == 0
+        assert len(get_thoughts_by_task_id("task_a_tm", occurrence_b)) == 0
+        assert len(get_thoughts_by_task_id("task_b_tm", occurrence_a)) == 0
 
     def test_default_occurrence_backward_compatibility(self, clean_db, time_service):
         """Test that 'default' occurrence_id maintains backward compatibility."""

@@ -246,8 +246,8 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 f"Deleted {orphaned_tasks_deleted_count} orphaned active tasks (and their thoughts via cascade)."
             )
 
-        pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING, db_path=self.db_path)
-        processing_thoughts = get_thoughts_by_status(ThoughtStatus.PROCESSING, db_path=self.db_path)
+        pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING)
+        processing_thoughts = get_thoughts_by_status(ThoughtStatus.PROCESSING)
         all_potentially_orphaned_thoughts = pending_thoughts + processing_thoughts
         thought_ids_to_delete_orphan: List[Any] = []
 
@@ -286,7 +286,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info("Task archival skipped - tasks are now managed by TSDB consolidator")
         task_ids_actually_archived_and_deleted: set[str] = set()
 
-        thoughts_to_archive = get_thoughts_older_than(older_than_timestamp, db_path=self.db_path)
+        thoughts_to_archive = get_thoughts_older_than(older_than_timestamp)
         if thoughts_to_archive:
             thought_archive_file = self.archive_dir / f"archive_thoughts_{archive_timestamp_str}.jsonl"
             thought_ids_to_delete_for_archive: List[Any] = []
@@ -934,7 +934,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         self, task: Any, stale_task_ids: List[str], stale_thought_ids: List[str]
     ) -> None:
         """Collect stale thought IDs and task IDs from an old task."""
-        thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id, db_path=self.db_path)
+        thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id)
         for thought in thoughts:
             if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
                 logger.info(

@@ -273,7 +273,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 )
 
                 # Add thought to database
-                add_thought(thought, db_path=self.db_path)
+                add_thought(thought)
 
             # Update scheduled task status
             await self._update_task_triggered(task)

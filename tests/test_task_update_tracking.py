@@ -186,7 +186,7 @@ class TestTaskUpdateTracking:
                 depth=0,
             ),
         )
-        add_thought(thought, db_path=temp_db)
+        add_thought(thought)
 
         # Should still succeed because PONDER is allowed
         success = set_task_updated_info_flag(
@@ -220,7 +220,7 @@ class TestTaskUpdateTracking:
                 depth=0,
             ),
         )
-        add_thought(thought, db_path=temp_db)
+        add_thought(thought)
 
         # Should fail because task already committed to SPEAK action
         success = set_task_updated_info_flag(
@@ -257,7 +257,7 @@ class TestTaskUpdateTracking:
                 depth=0,
             ),
         )
-        add_thought(thought, db_path=temp_db)
+        add_thought(thought)
 
         # Should fail because task already committed to TASK_COMPLETE
         success = set_task_updated_info_flag(

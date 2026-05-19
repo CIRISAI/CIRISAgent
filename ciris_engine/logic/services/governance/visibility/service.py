@@ -91,7 +91,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         active_thoughts = []
         try:
             # Get recent pending/active thoughts
-            pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING, db_path=self._db_path)
+            pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING)
             active_thoughts = pending_thoughts[:10]  # Limit to 10 most recent
         except Exception:
             pass
@@ -99,7 +99,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         # Get recent decisions from completed thoughts
         recent_decisions: List[Thought] = []
         try:
-            completed_thoughts = get_thoughts_by_status(ThoughtStatus.COMPLETED, db_path=self._db_path)
+            completed_thoughts = get_thoughts_by_status(ThoughtStatus.COMPLETED)
             # Get the most recent thoughts that have final_action (which they all should)
             for thought in completed_thoughts[:10]:  # Get last 10
                 if thought.final_action:
@@ -216,7 +216,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         actions_taken = []
 
         try:
-            thoughts = get_thoughts_by_task_id(task_id, db_path=self._db_path)
+            thoughts = get_thoughts_by_task_id(task_id)
 
             for thought in thoughts:
                 try:
@@ -304,7 +304,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         successful_decisions = 0
 
         try:
-            thoughts = get_thoughts_by_task_id(task_id, db_path=self._db_path)
+            thoughts = get_thoughts_by_task_id(task_id)
 
             for thought in thoughts:
                 try:
@@ -371,7 +371,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         # Action ID is typically the thought_id that decided on the action
         try:
             # Get the thought from persistence
-            thought = get_thought_by_id(action_id, db_path=self._db_path)
+            thought = get_thought_by_id(action_id)
 
             if thought:
                 if thought.final_action:

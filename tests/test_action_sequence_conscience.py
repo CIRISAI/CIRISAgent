@@ -178,7 +178,7 @@ class TestActionSequenceConscience:
                 depth=0,
             ),
         )
-        add_thought(thought, db_path=temp_db)
+        add_thought(thought)
         return thought
 
     # ==================== CORE LOGIC TESTS ====================
@@ -379,7 +379,7 @@ class TestActionSequenceConscience:
                 depth=0,
             ),
         )
-        add_thought(pending_thought, db_path=patch_db_path)
+        add_thought(pending_thought)
 
         context = ConscienceCheckContext(thought=sample_thought)
         result = await conscience.check(speak_action, context)

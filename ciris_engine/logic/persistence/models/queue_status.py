@@ -119,15 +119,15 @@ def get_queue_status(db_path: Optional[str] = None) -> QueueStatus:
 
     # Get thought counts
     # Note: count_thoughts() already returns PENDING + PROCESSING count
-    pending_thoughts = len(get_thoughts_by_status(ThoughtStatus.PENDING, db_path=db_path))
-    processing_thoughts = len(get_thoughts_by_status(ThoughtStatus.PROCESSING, db_path=db_path))
+    pending_thoughts = len(get_thoughts_by_status(ThoughtStatus.PENDING))
+    processing_thoughts = len(get_thoughts_by_status(ThoughtStatus.PROCESSING))
 
     # For total thoughts, we need all statuses
     total_thoughts = (
         pending_thoughts
         + processing_thoughts
-        + len(get_thoughts_by_status(ThoughtStatus.COMPLETED, db_path=db_path))
-        + len(get_thoughts_by_status(ThoughtStatus.FAILED, db_path=db_path))
+        + len(get_thoughts_by_status(ThoughtStatus.COMPLETED))
+        + len(get_thoughts_by_status(ThoughtStatus.FAILED))
     )
 
     return QueueStatus(

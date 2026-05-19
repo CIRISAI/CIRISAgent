@@ -245,8 +245,8 @@ def transfer_thought_ownership(
     from_occurrence_id: str,
     to_occurrence_id: str,
     time_service: TimeServiceProtocol,
-    audit_service: AuditServiceProtocol,
-    db_path: Optional[str] = None,
+    audit_service: AuditServiceProtocol
+
 ) -> bool:
     """Transfer thought ownership from one occurrence to another."""
     success = False
@@ -307,9 +307,9 @@ def transfer_thought_ownership(
 
 def get_thoughts_by_status(
     status: ThoughtStatus,
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
-    limit: Optional[int] = None,
+    occurrence_id: str = "default"
+,
+    limit: Optional[int] = None
 ) -> List[Thought]:
     """Returns all thoughts with the given status, ASC by created_at."""
     if not isinstance(status, ThoughtStatus):
@@ -333,7 +333,7 @@ def get_thoughts_by_status(
     return thoughts
 
 
-def add_thought(thought: Thought, db_path: Optional[str] = None) -> str:
+def add_thought(thought: Thought) -> str:
     engine = _get_engine()
     try:
         engine.thought_upsert(json.dumps(_thought_to_persist_payload(thought)))
@@ -348,8 +348,8 @@ def add_thought(thought: Thought, db_path: Optional[str] = None) -> str:
 
 def get_thought_by_id(
     thought_id: str,
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
+    occurrence_id: str = "default"
+
 ) -> Optional[Thought]:
     engine = _get_engine()
     try:
@@ -378,8 +378,8 @@ async def async_get_thought_by_id(
 
 def get_thoughts_by_ids(
     thought_ids: List[str],
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
+    occurrence_id: str = "default"
+
 ) -> Dict[str, Thought]:
     """Fetch multiple thoughts by their IDs. Returns dict thought_id -> Thought."""
     if not thought_ids:
@@ -434,8 +434,8 @@ async def async_get_thought_status(
 
 def get_thoughts_by_task_id(
     task_id: str,
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
+    occurrence_id: str = "default"
+
 ) -> List[Thought]:
     """Return all thoughts for a given source_task_id as Thought objects, ASC by created_at."""
     try:
@@ -472,7 +472,7 @@ def delete_thoughts_by_ids(
     return 0
 
 
-def count_thoughts(occurrence_id: str = "default", db_path: Optional[str] = None) -> int:
+def count_thoughts(occurrence_id: str = "default") -> int:
     """Return the count of thoughts that are PENDING or PROCESSING."""
     try:
         # Persist doesn't have OR filter support in `thought_list`; do two queries.
@@ -549,8 +549,8 @@ def update_thought_status(
 
 def get_thoughts_older_than(
     older_than_timestamp: str,
-    occurrence_id: str = "default",
-    db_path: Optional[str] = None,
+    occurrence_id: str = "default"
+
 ) -> List[Thought]:
     """Returns all thoughts with created_at older than the given ISO timestamp, ASC."""
     # Persist's `thought_list` doesn't accept a created_at range filter; we
@@ -571,8 +571,8 @@ def get_thoughts_older_than(
 
 def get_recent_thoughts(
     occurrence_id: str = "default",
-    limit: int = 10,
-    db_path: Optional[str] = None,
+    limit: int = 10
+
 ) -> List[ThoughtSummary]:
     """Get recent thoughts as typed summaries for status reporting."""
     try:

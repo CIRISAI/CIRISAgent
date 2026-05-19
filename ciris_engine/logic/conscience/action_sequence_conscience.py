@@ -159,7 +159,7 @@ class ActionSequenceConscience(ConscienceInterface):
         )
 
         # Add correlation
-        persistence.add_correlation(correlation, self._time_service)
+        persistence.add_correlation(correlation)
 
         # Only check SPEAK actions
         if action.selected_action != HandlerActionType.SPEAK.value:

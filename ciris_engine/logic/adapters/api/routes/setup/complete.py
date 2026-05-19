@@ -272,7 +272,7 @@ def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None
     )
 
     time_service = TimeService()
-    add_graph_node(node, time_service, None)
+    add_graph_node(node, time_service)
     print(f"[SETUP_COMPLETE] ✅ Founding partnership created: {node_id} (PARTNERED)")
     logger.info(f"✅ Founding partnership created for setup user: {node_id}")
 
@@ -334,7 +334,7 @@ def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
     )
 
     time_service = TimeService()
-    add_graph_node(node, time_service, None)
+    add_graph_node(node, time_service)
     lang = attributes.get("preferred_language", "not set")
     loc = attributes.get("location", "not set")
     share_loc = attributes.get("share_location_in_traces", False)

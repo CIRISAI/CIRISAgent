@@ -469,7 +469,7 @@ class ApiPlatform(Service):
 
         # Get time service if available
         time_service = getattr(self.runtime, "time_service", None)
-        persistence.add_correlation(correlation, time_service)
+        persistence.add_correlation(correlation)
         logger.debug(f"Created observe correlation for message {msg.message_id}")
 
     def _discover_and_register_configurable_adapters(self) -> None:

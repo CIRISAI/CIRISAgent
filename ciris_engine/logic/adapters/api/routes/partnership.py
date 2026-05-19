@@ -205,7 +205,7 @@ def _handle_partnership_accept(
     )
 
     time_service = TimeService()
-    add_graph_node(node, time_service, None)
+    add_graph_node(node, time_service)
 
     # Update task status to COMPLETED
     update_task_status(

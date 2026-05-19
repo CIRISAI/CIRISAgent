@@ -144,7 +144,7 @@ class ThoughtProcessor(
             updated_at=start_time,
             timestamp=start_time,
         )
-        persistence.add_correlation(correlation, self._time_service)
+        persistence.add_correlation(correlation)
         return correlation
 
     async def _fetch_and_validate_thought(self, thought_item: ProcessingQueueItem) -> Optional[Thought]:

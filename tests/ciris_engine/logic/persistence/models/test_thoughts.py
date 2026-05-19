@@ -419,7 +419,7 @@ def test_get_thoughts_by_ids_partial_match(temp_db: str):
     thought = create_test_thought("t1", "occ1", db_path=temp_db)
     add_thought(thought)
 
-    result = get_thoughts_by_ids(["t1", "nonexistent"], "occ1")
+    result = get_thoughts_by_ids(["t1", "nonexistent"])
 
     assert len(result) == 1
     assert "t1" in result
@@ -586,7 +586,7 @@ def test_delete_thoughts_by_ids_success(temp_db: str):
     for t in thoughts:
         add_thought(t)
 
-    deleted = delete_thoughts_by_ids(["del-t1", "del-t2"], "occ1")
+    deleted = delete_thoughts_by_ids(["del-t1", "del-t2"])
 
     # Soft no-op: returns 0; rows remain.
     assert deleted == 0
@@ -613,7 +613,7 @@ def test_delete_thoughts_by_ids_occurrence_isolation(temp_db: str):
         add_thought(t)
 
     # Try to delete occ2 thought using occ1 context (should not delete)
-    deleted = delete_thoughts_by_ids(["del-occ2-t1"], "occ1", db_path=temp_db)
+    deleted = delete_thoughts_by_ids(["del-occ2-t1"], "occ1")
 
     assert deleted == 0  # Should not delete thought from different occurrence
 
@@ -623,8 +623,9 @@ def test_delete_thoughts_by_ids_occurrence_isolation(temp_db: str):
 
 
 def test_delete_thoughts_by_ids_database_error():
-    """Test delete with database error."""
-    deleted = delete_thoughts_by_ids(["t1"], "occ1", db_path="/invalid/path.db")
+    """Soft no-op semantics: persist 1.5.19 has no thought_delete; the
+    function logs and returns 0 regardless of the engine state."""
+    deleted = delete_thoughts_by_ids(["t1"], "occ1")
 
     assert deleted == 0
 
@@ -668,7 +669,6 @@ def test_get_thoughts_older_than_occurrence_isolation(temp_db: str):
     result = get_thoughts_older_than(
         (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
         "occ1",
-        db_path=temp_db,
     )
 
     assert len(result) == 1
@@ -684,7 +684,6 @@ def test_get_thoughts_older_than_database_error(temp_db):
         result = get_thoughts_older_than(
             datetime.now(timezone.utc).isoformat(),
             "occ1",
-            db_path=temp_db,
         )
 
     assert len(result) == 0

@@ -467,7 +467,7 @@ class BaseActionHandler(ABC):
         )
 
         # Add correlation
-        persistence.add_correlation(self._current_correlation, self.time_service)
+        persistence.add_correlation(self._current_correlation)
 
     def _update_trace_correlation(self, success: bool, result_summary: str) -> None:
         """Update the trace correlation with results."""

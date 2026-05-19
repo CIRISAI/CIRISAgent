@@ -156,7 +156,7 @@ class _BaseConscience(ConscienceInterface):
 
         # Add correlation
         if self._time_service:
-            persistence.add_correlation(correlation, self._time_service)
+            persistence.add_correlation(correlation)
 
         return correlation
 

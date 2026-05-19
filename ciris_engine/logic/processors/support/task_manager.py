@@ -283,7 +283,7 @@ class TaskManager:
 
     def get_pending_task_count(self) -> int:
         """Get count of pending tasks."""
-        return persistence.count_tasks(TaskStatus.PENDING, self.agent_occurrence_id)
+        return persistence.count_tasks(TaskStatus.PENDING)
 
     def cleanup_old_completed_tasks(self, days_old: int = 7) -> int:
         """Clean up completed tasks older than specified days."""
@@ -296,7 +296,7 @@ class TaskManager:
 
         if completed_old:
             task_ids = [t.task_id for t in completed_old]
-            deleted = persistence.delete_tasks_by_ids(task_ids, self.agent_occurrence_id)
+            deleted = persistence.delete_tasks_by_ids(task_ids)
             logger.info(f"Cleaned up {deleted} old completed tasks for occurrence {self.agent_occurrence_id}")
             return deleted
 

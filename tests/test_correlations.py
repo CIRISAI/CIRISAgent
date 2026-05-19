@@ -244,7 +244,7 @@ class TestAddCorrelation:
     """Test add_correlation function."""
 
     def test_add_correlation_success(self, sample_correlation, time_service, persist_engine):
-        correlation_id = add_correlation(sample_correlation, time_service)
+        correlation_id = add_correlation(sample_correlation)
 
         assert correlation_id == "test_corr_001"
 
@@ -272,7 +272,7 @@ class TestAddCorrelation:
             ),
         )
 
-        correlation_id = add_correlation(correlation, time_service)
+        correlation_id = add_correlation(correlation)
         assert correlation_id == "metric_corr_001"
 
         retrieved = get_correlation(correlation_id)
@@ -297,7 +297,7 @@ class TestAddCorrelation:
             ),
         )
 
-        correlation_id = add_correlation(correlation, time_service)
+        correlation_id = add_correlation(correlation)
         assert correlation_id == "trace_corr_001"
 
         retrieved = get_correlation(correlation_id)
@@ -316,7 +316,7 @@ class TestAddCorrelation:
             return_value=mock_engine,
         ):
             with pytest.raises(Exception) as exc_info:
-                add_correlation(sample_correlation, time_service)
+                add_correlation(sample_correlation)
 
             assert "Engine error" in str(exc_info.value)
 
@@ -333,7 +333,7 @@ class TestUpdateCorrelation:
         are no-ops on the persisted row (production code never sets them on
         update). The legacy SQL implementation did support them.
         """
-        add_correlation(sample_correlation, time_service)
+        add_correlation(sample_correlation)
 
         update_request = CorrelationUpdateRequest(
             correlation_id="test_corr_001",
@@ -350,7 +350,7 @@ class TestUpdateCorrelation:
 
     def test_update_status_only(self, time_service, persist_engine, sample_correlation):
         """Status-only updates flow through correlation_update_status cleanly."""
-        add_correlation(sample_correlation, time_service)
+        add_correlation(sample_correlation)
 
         update_request = CorrelationUpdateRequest(
             correlation_id="test_corr_001",
@@ -364,7 +364,7 @@ class TestUpdateCorrelation:
         assert retrieved.status == ServiceCorrelationStatus.FAILED
 
     def test_update_with_old_signature(self, time_service, persist_engine, sample_correlation):
-        add_correlation(sample_correlation, time_service)
+        add_correlation(sample_correlation)
 
         updated_corr = ServiceCorrelation(
             correlation_id="test_corr_001",
@@ -408,7 +408,7 @@ class TestGetCorrelation:
     """Test get_correlation function."""
 
     def test_get_existing_correlation(self, sample_correlation, time_service, persist_engine):
-        add_correlation(sample_correlation, time_service)
+        add_correlation(sample_correlation)
 
         retrieved = get_correlation("test_corr_001")
         assert retrieved is not None
@@ -456,7 +456,7 @@ class TestGetCorrelationsByTaskAndAction:
                 created_at=datetime.now(timezone.utc).isoformat(),
                 updated_at=datetime.now(timezone.utc).isoformat(),
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         correlations = get_correlations_by_task_and_action("task_123", "process")
         assert len(correlations) == 3
@@ -495,7 +495,7 @@ class TestGetCorrelationsByTypeAndTime:
                 created_at=(base_time - timedelta(hours=i)).isoformat(),
                 updated_at=(base_time - timedelta(hours=i)).isoformat(),
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         start_time = (base_time - timedelta(hours=3)).isoformat()
         end_time = base_time.isoformat()
@@ -540,7 +540,7 @@ class TestGetCorrelationsByChannel:
                 created_at=datetime.now(timezone.utc).isoformat(),
                 updated_at=datetime.now(timezone.utc).isoformat(),
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         channel_correlations = get_correlations_by_channel("channel_123")
         assert len(channel_correlations) == 3
@@ -573,7 +573,7 @@ class TestGetMetricsTimeseries:
                     labels={},
                 ),
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         query = MetricsQuery(
             metric_name="cpu_usage",
@@ -607,7 +607,7 @@ class TestGetMetricsTimeseries:
                     labels={},
                 ),
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         query = MetricsQuery(metric_name="test_metric", start_time=base_time - timedelta(hours=6), end_time=base_time)
 
@@ -634,7 +634,7 @@ class TestGetRecentCorrelations:
                 updated_at=(base_time - timedelta(minutes=i)).isoformat(),
                 retention_policy="raw",
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         recent = get_recent_correlations()
 
@@ -657,7 +657,7 @@ class TestGetRecentCorrelations:
                 created_at=(base_time - timedelta(seconds=i)).isoformat(),
                 updated_at=(base_time - timedelta(seconds=i)).isoformat(),
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         recent = get_recent_correlations(limit=5)
 
@@ -687,7 +687,7 @@ class TestGetRecentCorrelations:
                 created_at=(base_time - timedelta(minutes=i)).isoformat(),
                 updated_at=(base_time - timedelta(minutes=i)).isoformat(),
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         recent = get_recent_correlations(limit=10)
 
@@ -715,7 +715,7 @@ class TestGetRecentCorrelations:
                     labels={"test": f"value_{i}"},
                 ),
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         recent = get_recent_correlations(limit=5)
 
@@ -744,7 +744,7 @@ class TestGetRecentCorrelations:
                     parent_span_id=f"parent_{i}" if i > 0 else None,
                 ),
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         recent = get_recent_correlations(limit=5)
 
@@ -775,7 +775,7 @@ class TestGetRecentCorrelations:
                     line_number=100 + i,
                 ),
             )
-            add_correlation(correlation, time_service)
+            add_correlation(correlation)
 
         recent = get_recent_correlations(limit=5)
 
@@ -812,7 +812,7 @@ class TestGetRecentCorrelations:
             tags={"environment": "test", "priority": "high"},
         )
 
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         recent = get_recent_correlations(limit=1)
 
@@ -841,7 +841,7 @@ class TestGetRecentCorrelations:
 
     def test_get_recent_correlations_zero_limit(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("test_zero_limit")
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         recent = get_recent_correlations(limit=0)
         assert recent == []
@@ -871,7 +871,7 @@ class TestGetActiveChannelsByAdapter:
         ]
 
         for corr in correlations:
-            add_correlation(corr, time_service)
+            add_correlation(corr)
 
         channels = get_active_channels_by_adapter("api", since_days=0.1, time_service=time_service)
 
@@ -883,7 +883,7 @@ class TestGetActiveChannelsByAdapter:
 
     def test_get_active_channels_with_memory_graph(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("api_1", channel_id="api_test_channel", action_type="speak")
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         channels = get_active_channels_by_adapter("api", since_days=1, time_service=time_service)
 
@@ -921,7 +921,7 @@ class TestGetChannelLastActivity:
         correlation = correlation_factory(
             "activity_1", channel_id="api_active_channel", action_type="speak", timestamp=target_time
         )
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         last_activity = get_channel_last_activity("api_active_channel")
 
@@ -934,7 +934,7 @@ class TestGetChannelLastActivity:
 
     def test_get_channel_last_activity_memory_graph_fallback(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("memory_1", channel_id="api_memory_channel", action_type="speak")
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         last_activity = get_channel_last_activity("api_memory_channel")
         assert last_activity is not None
@@ -958,13 +958,13 @@ class TestIsAdminChannel:
         correlation = correlation_factory(
             "admin_1", channel_id="api_admin_channel", tags={"user_role": "ADMIN", "test": "true"}
         )
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         assert is_admin_channel("api_admin_channel") is True
 
     def test_is_admin_channel_true_for_authority_role(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("auth_1", channel_id="api_authority_channel", tags={"user_role": "AUTHORITY"})
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         assert is_admin_channel("api_authority_channel") is True
 
@@ -972,14 +972,14 @@ class TestIsAdminChannel:
         correlation = correlation_factory(
             "sys_1", channel_id="api_sysadmin_channel", tags={"user_role": "SYSTEM_ADMIN"}
         )
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         assert is_admin_channel("api_sysadmin_channel") is True
 
     def test_is_admin_channel_true_for_is_admin_flag(self, correlation_factory, time_service, persist_engine):
         """Identifying admin channel by is_admin flag (Python-side comparison now allows string '1')."""
         correlation = correlation_factory("flag_1", channel_id="api_isadmin_channel", tags={"is_admin": "1"})
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         assert is_admin_channel("api_isadmin_channel") is True
 
@@ -987,7 +987,7 @@ class TestIsAdminChannel:
         correlation = correlation_factory(
             "nested_1", channel_id="api_nested_channel", tags={"auth.role": "ADMIN"}
         )
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         result = is_admin_channel("api_nested_channel")
         assert isinstance(result, bool)
@@ -996,13 +996,13 @@ class TestIsAdminChannel:
 
     def test_is_admin_channel_false_for_regular_user(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("user_1", channel_id="api_user_channel", tags={"user_role": "USER"})
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         assert is_admin_channel("api_user_channel") is False
 
     def test_is_admin_channel_false_for_discord_channel(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("discord_1", channel_id="discord_admin_channel", tags={"user_role": "ADMIN"})
-        add_correlation(correlation, time_service)
+        add_correlation(correlation)
 
         assert is_admin_channel("discord_admin_channel") is False
 

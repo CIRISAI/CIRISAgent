@@ -426,7 +426,7 @@ async def async_get_thought_status(
     """Retrieve just the status of a thought asynchronously."""
 
     def _query() -> Optional[ThoughtStatus]:
-        thought = get_thought_by_id(thought_id, occurrence_id, db_path)
+        thought = get_thought_by_id(thought_id, occurrence_id)
         return thought.status if thought else None
 
     return await asyncio.to_thread(_query)
@@ -501,7 +501,7 @@ def update_thought_status(
 
     # Occurrence-id safety: persist's update_status doesn't filter by
     # occurrence; mirror the legacy WHERE clause via a read+verify first.
-    existing = get_thought_by_id(thought_id, occurrence_id, db_path)
+    existing = get_thought_by_id(thought_id, occurrence_id)
     if existing is None:
         logger.warning(
             f"No thought found with id {thought_id} in occurrence {occurrence_id} to update status."

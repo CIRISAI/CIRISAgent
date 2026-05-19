@@ -224,7 +224,7 @@ class DiscordChannelManager:
                     timestamp=now,
                 )
 
-                persistence.add_correlation(correlation, None)  # Discord doesn't have time_service
+                persistence.add_correlation(correlation)  # Discord doesn't have time_service
                 logger.debug(f"Created observe correlation for Discord message {message.id} from channel {channel_id}")
             except Exception as e:
                 logger.warning(f"Failed to create observe correlation: {e}")

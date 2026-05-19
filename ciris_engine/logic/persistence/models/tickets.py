@@ -336,8 +336,7 @@ def update_ticket_status(
 
 def update_ticket_metadata(
     ticket_id: str,
-    metadata: Dict[str, Any]
-
+    metadata: Dict[str, Any],
 ) -> bool:
     """Replace metadata for a ticket via read-modify-upsert.
 

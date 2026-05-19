@@ -586,7 +586,7 @@ class AgentProcessor:
         )
 
         # Add correlation to track this processing
-        persistence.add_correlation(correlation, self._time_service)
+        persistence.add_correlation(correlation)
 
         try:
             # Create processing queue item

@@ -151,7 +151,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         )
         if self._time_service is None:
             raise ValueError("TimeService required for extending expiry")
-        add_graph_node(node, self._time_service, self._db_path)
+        add_graph_node(node, self._time_service)
 
         # Update cache
         self._consent_cache[user_id] = status
@@ -188,7 +188,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
     async def _load_consent_from_graph(self, user_id: str) -> ConsentStatus:
         """Load consent from graph storage."""
-        node = get_graph_node(f"consent/{user_id}", GraphScope.LOCAL, self._db_path)
+        node = get_graph_node(f"consent/{user_id}", GraphScope.LOCAL)
         if not node:
             raise ConsentNotFoundError(f"No consent found for user {user_id}")
 
@@ -384,7 +384,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         )
         if self._time_service is None:
             raise ValueError("TimeService required for persisting consent")
-        add_graph_node(node, self._time_service, self._db_path)
+        add_graph_node(node, self._time_service)
 
         # Create audit entry
         audit = ConsentAuditEntry(
@@ -410,7 +410,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             updated_by="consent_manager",
             updated_at=now,
         )
-        add_graph_node(audit_node, self._time_service, self._db_path)
+        add_graph_node(audit_node, self._time_service)
 
         # Update cache
         self._consent_cache[new_status.user_id] = new_status
@@ -466,7 +466,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         if self._time_service is None:
             raise ValueError("TimeService required for updating consent")
-        add_graph_node(node, self._time_service, self._db_path)
+        add_graph_node(node, self._time_service)
 
         # Create audit entry
         audit = ConsentAuditEntry(
@@ -492,7 +492,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             updated_by="consent_manager",
             updated_at=now,
         )
-        add_graph_node(audit_node, self._time_service, self._db_path)
+        add_graph_node(audit_node, self._time_service)
 
         # Update cache
         self._consent_cache[user_id] = new_status
@@ -742,7 +742,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         if self._time_service is None:
             raise ValueError("TimeService required for finalizing partnership")
-        add_graph_node(node, self._time_service, self._db_path)
+        add_graph_node(node, self._time_service)
 
         # Update cache
         self._consent_cache[user_id] = partnered_status

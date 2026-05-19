@@ -47,7 +47,6 @@ class TestMultiOccurrenceWakeupCleanup:
         retrieved_before = persistence.get_task_by_id(
             old_shutdown_task_data["task_id"],
             old_shutdown_task_data["agent_occurrence_id"],
-            clean_db,
         )
         assert retrieved_before is not None
         assert retrieved_before.task_id == "SHUTDOWN_SHARED_20251027"
@@ -59,7 +58,6 @@ class TestMultiOccurrenceWakeupCleanup:
         retrieved_after = persistence.get_task_by_id(
             old_shutdown_task_data["task_id"],
             old_shutdown_task_data["agent_occurrence_id"],
-            clean_db,
         )
         assert retrieved_after is None
 
@@ -87,7 +85,6 @@ class TestMultiOccurrenceWakeupCleanup:
         retrieved_task = persistence.get_task_by_id(
             fresh_wakeup_task_data["task_id"],
             fresh_wakeup_task_data["agent_occurrence_id"],
-            clean_db,
         )
         assert retrieved_task is not None
         assert retrieved_task.status == TaskStatus.ACTIVE
@@ -116,7 +113,6 @@ class TestMultiOccurrenceWakeupCleanup:
         retrieved_task = persistence.get_task_by_id(
             old_wakeup_task_data["task_id"],
             old_wakeup_task_data["agent_occurrence_id"],
-            clean_db,
         )
         assert retrieved_task is None
 
@@ -151,7 +147,6 @@ class TestMultiOccurrenceWakeupCleanup:
         retrieved_child = persistence.get_task_by_id(
             occurrence_specific_task_data["task_id"],
             occurrence_specific_task_data["agent_occurrence_id"],
-            clean_db,
         )
         assert retrieved_child is not None
         assert retrieved_child.status == TaskStatus.ACTIVE
@@ -180,7 +175,7 @@ class TestMultiOccurrenceThoughtCleanup:
 
         # Create stale thought for that task
         thought = Thought(**stale_thought_data)
-        persistence.add_thought(thought, clean_db)
+        persistence.add_thought(thought)
 
         # Run startup cleanup
         await database_maintenance_service.perform_startup_cleanup()
@@ -192,7 +187,6 @@ class TestMultiOccurrenceThoughtCleanup:
         retrieved_thought = persistence.get_thought_by_id(
             stale_thought_data["thought_id"],
             stale_thought_data["agent_occurrence_id"],
-            clean_db,
         )
         # Thought row remains; the cleanup pass logged a warning and moved on.
         # When CIRISPersist#60 lands, this assertion flips back to `is None`.
@@ -221,7 +215,7 @@ class TestMultiOccurrenceThoughtCleanup:
         # Create all thoughts
         for thought_data in scenario["thoughts"]:
             thought = Thought(**thought_data)
-            persistence.add_thought(thought, clean_db)
+            persistence.add_thought(thought)
 
         # Run startup cleanup
         await database_maintenance_service.perform_startup_cleanup()
@@ -234,7 +228,7 @@ class TestMultiOccurrenceThoughtCleanup:
         # flip back to expect physical deletion.
         for task_id in scenario["expected_cleaned_tasks"]:
             task_data = next(t for t in scenario["tasks"] if t["task_id"] == task_id)
-            retrieved = persistence.get_task_by_id(task_id, task_data["agent_occurrence_id"], clean_db)
+            retrieved = persistence.get_task_by_id(task_id, task_data["agent_occurrence_id"])
             # Row remains; soft-cancelled to FAILED status (or already gone if
             # it had no child thoughts and persist.task_delete succeeded).
             if retrieved is not None:
@@ -246,7 +240,7 @@ class TestMultiOccurrenceThoughtCleanup:
         # cleanup pass, so they remain active/unchanged).
         for task_id in scenario["expected_preserved_tasks"]:
             task_data = next(t for t in scenario["tasks"] if t["task_id"] == task_id)
-            retrieved = persistence.get_task_by_id(task_id, task_data["agent_occurrence_id"], clean_db)
+            retrieved = persistence.get_task_by_id(task_id, task_data["agent_occurrence_id"])
             assert retrieved is not None, f"Expected {task_id} to be preserved"
 
         # Thought rows: soft-cancel of parent task does NOT physically remove
@@ -254,7 +248,7 @@ class TestMultiOccurrenceThoughtCleanup:
         # CIRISPersist#60 lands).
         for thought_id in scenario["expected_preserved_thoughts"]:
             thought_data = next(t for t in scenario["thoughts"] if t["thought_id"] == thought_id)
-            retrieved = persistence.get_thought_by_id(thought_id, thought_data["agent_occurrence_id"], clean_db)
+            retrieved = persistence.get_thought_by_id(thought_id, thought_data["agent_occurrence_id"])
             assert retrieved is not None, f"Expected {thought_id} to be preserved"
 
 
@@ -296,12 +290,12 @@ class TestMultiOccurrenceOldActiveTaskCleanup:
         # Verify task was marked with a terminal status under its
         # correct occurrence_id (COMPLETED via update_task_status, or
         # FAILED via the soft-cancel fallback path).
-        retrieved = persistence.get_task_by_id("old_user_task_123", "occurrence_1", clean_db)
+        retrieved = persistence.get_task_by_id("old_user_task_123", "occurrence_1")
         assert retrieved is not None
         assert retrieved.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
 
         # Verify it's NOT accessible under "default" occurrence_id
-        retrieved_default = persistence.get_task_by_id("old_user_task_123", "default", clean_db)
+        retrieved_default = persistence.get_task_by_id("old_user_task_123", "default")
         assert retrieved_default is None
 
 
@@ -366,11 +360,11 @@ class TestSharedWakeupTaskIsolation:
         await database_maintenance_service.perform_startup_cleanup()
 
         # Verify old wakeups cleaned
-        assert persistence.get_task_by_id("WAKEUP_SHARED_DAY1", "__shared__", clean_db) is None
-        assert persistence.get_task_by_id("WAKEUP_SHARED_10MIN", "__shared__", clean_db) is None
+        assert persistence.get_task_by_id("WAKEUP_SHARED_DAY1", "__shared__") is None
+        assert persistence.get_task_by_id("WAKEUP_SHARED_10MIN", "__shared__") is None
 
         # Verify fresh wakeup preserved
-        retrieved = persistence.get_task_by_id("WAKEUP_SHARED_NOW", "__shared__", clean_db)
+        retrieved = persistence.get_task_by_id("WAKEUP_SHARED_NOW", "__shared__")
         assert retrieved is not None
         assert retrieved.status == TaskStatus.ACTIVE
 
@@ -450,7 +444,7 @@ class TestInsertRawThoughtHelper:
         insert_raw_thought(clean_db, "helper_test_001", '{"task_id": "t1", "correlation_id": "c1"}')
 
         # Verify thought exists
-        retrieved = persistence.get_thought_by_id("helper_test_001", "default", clean_db)
+        retrieved = persistence.get_thought_by_id("helper_test_001", "default")
         assert retrieved is not None
         assert retrieved.thought_id == "helper_test_001"
         assert retrieved.source_task_id == "task_123"
@@ -646,9 +640,9 @@ class TestMultiOccurrenceRaceConditionProtection:
             step_tasks.append(task)
 
         # Verify all tasks exist before cleanup
-        assert persistence.get_task_by_id(parent_task_id, "__shared__", clean_db) is not None
+        assert persistence.get_task_by_id(parent_task_id, "__shared__") is not None
         for task in step_tasks:
-            assert persistence.get_task_by_id(task.task_id, "002", clean_db) is not None
+            assert persistence.get_task_by_id(task.task_id, "002") is not None
 
         # Simulate Scout 001 starting up 10 seconds later
         # Run orphan cleanup (should SKIP recent tasks)
@@ -656,11 +650,11 @@ class TestMultiOccurrenceRaceConditionProtection:
 
         # Verify all tasks still exist (were NOT deleted due to age check)
         assert (
-            persistence.get_task_by_id(parent_task_id, "__shared__", clean_db) is not None
+            persistence.get_task_by_id(parent_task_id, "__shared__") is not None
         ), "Shared parent task should still exist"
 
         for task in step_tasks:
-            retrieved = persistence.get_task_by_id(task.task_id, "002", clean_db)
+            retrieved = persistence.get_task_by_id(task.task_id, "002")
             assert retrieved is not None, (
                 f"Task {task.task_id} should still exist (created {(mock_time_service.now() - now).seconds}s ago, "
                 "under 2-minute threshold)"
@@ -720,7 +714,7 @@ class TestMultiOccurrenceRaceConditionProtection:
         persistence.add_task(orphaned_task, clean_db)
 
         # Verify task exists before cleanup
-        assert persistence.get_task_by_id(orphaned_task.task_id, "default", clean_db) is not None
+        assert persistence.get_task_by_id(orphaned_task.task_id, "default") is not None
 
         # Run orphan cleanup (should DELETE old orphan)
         await database_maintenance_service.perform_startup_cleanup()
@@ -730,7 +724,7 @@ class TestMultiOccurrenceRaceConditionProtection:
         # Post-2.9.0 (CIRISAgent#763 / CIRISPersist#60): the soft-cancel
         # fallback in `delete_tasks_by_ids` may also flip it to FAILED if
         # cleanup tried task_delete first and hit the FK constraint.
-        retrieved = persistence.get_task_by_id(orphaned_task.task_id, "default", clean_db)
+        retrieved = persistence.get_task_by_id(orphaned_task.task_id, "default")
         assert retrieved is not None, "Task should still exist (marked terminal, not deleted)"
         assert retrieved.status in (TaskStatus.COMPLETED, TaskStatus.FAILED), (
             f"Old orphaned task should be marked terminal (COMPLETED or FAILED); "

@@ -339,7 +339,7 @@ def _get_correlation_id_from_task(task: Task) -> Optional[str]:
     return getattr(task.context, "correlation_id", None)
 
 
-def _handle_duplicate_task(task: Task, db_path: Optional[str]) -> str:
+def _handle_duplicate_task(task: Task) -> str:
     """Handle duplicate task detection by returning existing task_id."""
     correlation_id = _get_correlation_id_from_task(task)
     logger.info(
@@ -348,7 +348,7 @@ def _handle_duplicate_task(task: Task, db_path: Optional[str]) -> str:
     )
     if not correlation_id:
         return task.task_id
-    existing_task = get_task_by_correlation_id(correlation_id, task.agent_occurrence_id, db_path)
+    existing_task = get_task_by_correlation_id(correlation_id, task.agent_occurrence_id)
     if existing_task:
         return existing_task.task_id
     return task.task_id
@@ -364,9 +364,9 @@ def add_task(task: Task, db_path: Optional[str] = None) -> str:
     engine = _get_engine()
     correlation_id = _get_correlation_id_from_task(task)
     if correlation_id:
-        existing = get_task_by_correlation_id(correlation_id, task.agent_occurrence_id, db_path)
+        existing = get_task_by_correlation_id(correlation_id, task.agent_occurrence_id)
         if existing is not None and existing.task_id != task.task_id:
-            return _handle_duplicate_task(task, db_path)
+            return _handle_duplicate_task(task)
     try:
         engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
         images_count = len(task.images) if task.images else 0
@@ -418,7 +418,7 @@ def update_task_status(
     """Update the status of a task."""
     engine = _get_engine()
 
-    existing = get_task_by_id(task_id, occurrence_id, db_path)
+    existing = get_task_by_id(task_id, occurrence_id)
     if existing is None:
         logger.warning(f"Task ID {task_id} not found for status update in occurrence {occurrence_id}.")
         return False
@@ -514,7 +514,7 @@ def update_task_context_and_signing(
     """Update the context and signing metadata for an existing task."""
     engine = _get_engine()
 
-    existing = get_task_by_id(task_id, occurrence_id, db_path)
+    existing = get_task_by_id(task_id, occurrence_id)
     if existing is None:
         logger.warning(
             "Task %s not found when updating context/signature for occurrence %s",
@@ -557,7 +557,7 @@ def clear_task_images(
     """Clear images from a task (for privacy/storage cleanup on completion)."""
     engine = _get_engine()
 
-    existing = get_task_by_id(task_id, occurrence_id, db_path)
+    existing = get_task_by_id(task_id, occurrence_id)
     if existing is None:
         logger.debug(f"Task {task_id} not found or no images to clear (occurrence: {occurrence_id})")
         return False
@@ -769,7 +769,7 @@ def _task_has_committed_action(task_id: str, occurrence_id: str, db_path: Option
     """Check if task has any completed thoughts with non-PONDER action."""
     from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_task_id
 
-    thoughts = get_thoughts_by_task_id(task_id, occurrence_id, db_path)
+    thoughts = get_thoughts_by_task_id(task_id, occurrence_id)
     for thought in thoughts:
         if thought.status != ThoughtStatus.COMPLETED:
             continue
@@ -822,7 +822,7 @@ def set_task_updated_info_flag(
 
     Returns False if task already committed to non-PONDER action or doesn't belong to occurrence.
     """
-    task = get_task_by_id(task_id, occurrence_id, db_path)
+    task = get_task_by_id(task_id, occurrence_id)
     if not task or task.agent_occurrence_id != occurrence_id:
         logger.warning(
             f"Task {task_id} does not belong to occurrence {occurrence_id}, cannot set updated_info_available flag"
@@ -873,7 +873,7 @@ def try_claim_shared_task(
 
     # Stale-task pre-check: if an existing shared task is in terminal status
     # or too old, delete it before claiming so the new agent gets a fresh task.
-    existing = get_task_by_id(task_id, "__shared__", db_path)
+    existing = get_task_by_id(task_id, "__shared__")
     if existing:
         try:
             created_at = datetime.fromisoformat(existing.created_at.replace("Z", "+00:00"))
@@ -888,13 +888,13 @@ def try_claim_shared_task(
                 f"Shared task {task_id} exists but has terminal status {existing.status.value}. "
                 "This stale task should have been cleaned up. Creating new task instead."
             )
-            delete_tasks_by_ids([task_id], db_path)
+            delete_tasks_by_ids([task_id])
         elif not is_fresh:
             logger.warning(
                 f"Shared task {task_id} exists but is stale (age: {task_age}). "
                 "This old active task should have been cleaned up. Creating new task instead."
             )
-            delete_tasks_by_ids([task_id], db_path)
+            delete_tasks_by_ids([task_id])
         else:
             logger.info(
                 f"Shared task {task_id} already exists (status={existing.status.value}, age={task_age}), "
@@ -941,7 +941,7 @@ def get_shared_task_status(
     db_path: Optional[str] = None,
 ) -> Optional[TaskStatus]:
     """Get the status of the most recent shared task of a given type."""
-    latest = get_latest_shared_task(task_type, within_hours, db_path)
+    latest = get_latest_shared_task(task_type, within_hours)
     if latest is None:
         return None
     return latest.status

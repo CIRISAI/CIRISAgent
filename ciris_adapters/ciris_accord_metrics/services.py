@@ -914,7 +914,7 @@ class AccordMetricsService:
                 updated_at=datetime.now(timezone.utc),
             )
             time_service = TimeService()
-            add_graph_node(node, time_service, None)
+            add_graph_node(node, time_service)
         except Exception as e:
             logger.debug(f"Could not persist events total: {e}")
 

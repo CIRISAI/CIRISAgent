@@ -71,7 +71,7 @@ class TSDBLogHandler(logging.Handler):
                 self._async_loop.create_task(self._store_log_correlation(log_correlation))
             else:
                 if self._time_service:
-                    add_correlation(log_correlation, self._time_service)
+                    add_correlation(log_correlation)
                 else:
                     # Skip if no time service available
                     print("Warning: TSDBLogHandler requires time_service to store correlations")
@@ -83,7 +83,7 @@ class TSDBLogHandler(logging.Handler):
         """Store log correlation asynchronously."""
         try:
             if self._time_service:
-                add_correlation(correlation, self._time_service)
+                add_correlation(correlation)
             else:
                 print("Warning: TSDBLogHandler requires time_service to store correlations")
         except Exception as e:

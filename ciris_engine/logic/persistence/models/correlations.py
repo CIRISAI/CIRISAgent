@@ -507,7 +507,7 @@ def update_correlation(
     else:
         raise ValueError("Invalid arguments to update_correlation")
 
-    return _update_correlation_impl(update_request, actual_time_service, db_path)  # type: ignore[arg-type]
+    return _update_correlation_impl(update_request, actual_time_service)  # type: ignore[arg-type]
 
 
 def _update_correlation_impl(
@@ -1110,7 +1110,7 @@ async def add_correlation_with_telemetry(
     memory graph for OTLP export while also persisting them via the
     correlation substrate for durability.
     """
-    correlation_id = add_correlation(corr, time_service, db_path)
+    correlation_id = add_correlation(corr, time_service)
 
     if telemetry_service and hasattr(telemetry_service, "_store_correlation"):
         try:

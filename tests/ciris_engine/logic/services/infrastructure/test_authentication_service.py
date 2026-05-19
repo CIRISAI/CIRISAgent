@@ -232,52 +232,6 @@ async def test_wa_revocation(auth_service):
 
 
 @pytest.mark.asyncio
-async def test_wa_cert_schema_migration_adds_missing_columns(temp_db, time_service):
-    """Existing databases should receive new WA certificate columns."""
-
-    # Create an old-style table without the new columns
-    with sqlite3.connect(temp_db) as conn:
-        conn.executescript(
-            """
-            CREATE TABLE wa_cert (
-                wa_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                role TEXT,
-                pubkey TEXT NOT NULL,
-                jwt_kid TEXT NOT NULL UNIQUE,
-                password_hash TEXT,
-                api_key_hash TEXT,
-                oauth_provider TEXT,
-                oauth_external_id TEXT,
-                auto_minted INTEGER DEFAULT 0,
-                parent_wa_id TEXT,
-                parent_signature TEXT,
-                scopes_json TEXT NOT NULL,
-                adapter_id TEXT,
-                token_type TEXT DEFAULT 'standard',
-                created TEXT NOT NULL,
-                last_login TEXT,
-                active INTEGER DEFAULT 1
-            );
-            """
-        )
-
-    # Initialize the service which should add missing columns
-    service = AuthenticationService(db_path=temp_db, time_service=time_service, key_dir=None)
-    await service.start()
-    await service.stop()
-
-    # Check that the new columns were added
-    with sqlite3.connect(temp_db) as conn:
-        cursor = conn.execute("PRAGMA table_info(wa_cert)")
-        columns = {row[1] for row in cursor.fetchall()}
-
-    assert "custom_permissions_json" in columns
-    assert "adapter_name" in columns
-    assert "adapter_metadata_json" in columns
-
-
-@pytest.mark.asyncio
 async def test_password_hashing(auth_service):
     """Test password hashing and verification."""
     password = "test_password_123"

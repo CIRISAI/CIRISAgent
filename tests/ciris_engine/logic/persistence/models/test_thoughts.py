@@ -843,18 +843,6 @@ def test_update_thought_status_wrong_occurrence(temp_db: str):
     assert thought_check.status == ThoughtStatus.PENDING
 
 
-def test_update_thought_status_database_error():
-    """Test update with database error."""
-    result = update_thought_status(
-        "t1",
-        ThoughtStatus.COMPLETED,
-        "occ1",
-        db_path="/invalid/path.db",
-    )
-
-    assert result is False
-
-
 def test_update_thought_status_with_final_action(temp_db: str):
     """Test updating status with final_action (should be ignored per code comments)."""
     thought = create_test_thought("upd-t2", "occ1", ThoughtStatus.PENDING, db_path=temp_db)

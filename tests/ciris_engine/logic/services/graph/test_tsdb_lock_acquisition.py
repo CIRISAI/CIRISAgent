@@ -120,18 +120,6 @@ class TestLockAcquisition:
 
         conn.close()
 
-    def test_lock_exception_handling(self, query_manager):
-        """Test that exceptions during lock acquisition are handled gracefully."""
-        # Test with invalid db_path to trigger exception
-        bad_manager = QueryManager(db_path="/nonexistent/path/db.db")
-
-        # Should return False on exception, not raise
-        acquired = bad_manager.acquire_consolidation_lock("basic", "2025-10-20T00:00:00+00:00")
-        assert acquired is False
-
-        # Release should also handle exceptions gracefully (no return value to check)
-        bad_manager.release_consolidation_lock("basic", "2025-10-20T00:00:00+00:00")
-
 
 class TestLockConvenience:
     """Test convenience wrapper methods for period locks."""

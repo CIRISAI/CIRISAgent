@@ -135,25 +135,32 @@ class TestWiseAuthorityServiceMetrics(BaseMetricsTest):
         )
         initial_total = initial_metrics.get("wise_authority_deferrals_total", 0)
 
-        # Create a task to defer
-        conn = sqlite3.connect(temp_db)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO tasks (task_id, channel_id, description, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """,
-            (
-                "test_task",
-                "test_channel",
-                "Test task",
-                "pending",
-                datetime.now().isoformat(),
-                datetime.now().isoformat(),
+        # Create a task to defer via the persist substrate so the wise
+        # authority's read path sees it. (A sibling sqlite3 INSERT lands in
+        # the file but isn't visible to persist's pool — see CIRISAgent#763.)
+        from ciris_engine.logic.persistence.models.tasks import add_task
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+        from ciris_engine.schemas.runtime.models import Task, TaskContext
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        add_task(
+            Task(
+                task_id="test_task",
+                channel_id="test_channel",
+                description="Test task",
+                status=TaskStatus.PENDING,
+                priority=5,
+                created_at=now_iso,
+                updated_at=now_iso,
+                context=TaskContext(
+                    channel_id="test_channel",
+                    user_id="test_user",
+                    correlation_id="test_correlation",
+                    parent_task_id=None,
+                ),
             ),
+            db_path=temp_db,
         )
-        conn.commit()
-        conn.close()
 
         # Create and send a deferral
         deferral = DeferralRequest(

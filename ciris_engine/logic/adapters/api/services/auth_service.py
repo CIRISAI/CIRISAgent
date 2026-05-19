@@ -13,12 +13,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import aiofiles
-import aiosqlite
 import bcrypt
 
 logger = logging.getLogger(__name__)
 
-from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.api import APIRole
@@ -134,14 +132,11 @@ class APIAuthService:
         self._users_loaded = False
 
         # Revoked service tokens (in-memory set of token hashes)
-        # Persisted to database for multi-occurrence deployment support
+        # Backed by persist's service_token_revocation_* substrate
+        # (CIRISPersist#64, v1.5.23). Cached in memory for hot-path checks;
+        # source of truth is persist.
         self._revoked_service_tokens: set[str] = set()
         self._revoked_tokens_loaded: bool = False  # Track if async load completed
-
-        # Database path for revocation persistence
-        self._revocations_db_path = os.path.join(
-            os.environ.get("CIRIS_DATA_DIR", os.path.expanduser("~/.ciris")), "revoked_service_tokens.db"
-        )
 
         # Don't load from DB in __init__ - this causes asyncio.run() errors
         # Instead, we'll load lazily on first access
@@ -151,39 +146,36 @@ class APIAuthService:
     # Service Token Revocation Persistence
     # ==========================================================================
 
-    async def _init_revocations_db(self) -> None:
-        """Initialize the revocations database table."""
-        try:
-            async with aiosqlite.connect(self._revocations_db_path) as db:
-                await db.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS revoked_service_tokens (
-                        token_hash TEXT PRIMARY KEY,
-                        revoked_at TEXT NOT NULL,
-                        revoked_by TEXT NOT NULL,
-                        reason TEXT NOT NULL
-                    )
-                """
-                )
-                await db.commit()
-                logger.debug("[AUTH] Revocations database initialized")
-        except Exception as e:
-            logger.error(f"[AUTH] Failed to initialize revocations database: {type(e).__name__}: {e}")
-
     async def _load_revoked_tokens(self) -> None:
-        """Load revoked tokens from database into memory."""
-        try:
-            # Ensure database exists
-            await self._init_revocations_db()
+        """Load revoked tokens from persist into the in-memory cache.
 
-            async with aiosqlite.connect(self._revocations_db_path) as db:
-                async with db.execute("SELECT token_hash FROM revoked_service_tokens") as cursor:
-                    rows = await cursor.fetchall()
-                    self._revoked_service_tokens = {row[0] for row in rows}
-                    self._revoked_tokens_loaded = True
-                    logger.info(
-                        f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from database"
-                    )
+        Routes through persist's `service_token_revocation_list` (CIRISPersist#64).
+        Runs once on first auth access; in-memory cache serves hot-path checks
+        afterwards. Persist owns the table — no per-process db file.
+        """
+        import json
+
+        try:
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            engine = get_persist_engine()
+            if engine is None:
+                logger.warning("[AUTH] persist engine not wired — skipping revocation load")
+                self._revoked_service_tokens = set()
+                self._revoked_tokens_loaded = True
+                return
+
+            raw = engine.service_token_revocation_list()
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
+            self._revoked_service_tokens = {
+                str(row.get("token_hash"))
+                for row in parsed
+                if isinstance(row, dict) and row.get("token_hash")
+            }
+            self._revoked_tokens_loaded = True
+            logger.info(
+                f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from persist"
+            )
         except Exception as e:
             logger.error(f"[AUTH] Failed to load revoked tokens: {type(e).__name__}: {e}")
             # Initialize empty set on error to avoid blocking startup
@@ -1160,15 +1152,18 @@ class APIAuthService:
         if self._revoked_tokens_loaded:
             return token_hash in self._revoked_service_tokens
 
-        # Fallback: synchronous DB check if async load hasn't completed yet
-        # This prevents revoked tokens from being accepted after restart
-        # before the async load has run
+        # Fallback: persist point-lookup if async load hasn't completed yet.
+        # Prevents revoked tokens from being accepted after restart before
+        # the async load has run. Persist's service_token_revocation_check
+        # is backed by the PRIMARY KEY index.
         try:
-            if not os.path.exists(self._revocations_db_path):
-                return False  # No revocations DB yet
-            with get_safe_sqlite_connection(str(self._revocations_db_path)) as conn:
-                cursor = conn.execute("SELECT 1 FROM revoked_service_tokens WHERE token_hash = ?", (token_hash,))
-                return cursor.fetchone() is not None
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            engine = get_persist_engine()
+            if engine is None:
+                return False
+            raw = engine.service_token_revocation_check(token_hash)
+            return raw is not None
         except Exception as e:
             logger.warning(f"[AUTH] Failed to check revocation synchronously: {e}")
             # On error, also check in-memory set (may have partial data)
@@ -1195,19 +1190,27 @@ class APIAuthService:
         # Add to revoked set
         self._revoked_service_tokens.add(token_hash)
 
-        # Persist to database
+        # Persist via service_token_revocation_record (CIRISPersist#64).
+        # Idempotent — duplicate token_hash inserts are no-ops on the
+        # PRIMARY KEY.
         try:
-            # Ensure database is initialized before writing
-            await self._init_revocations_db()
+            import json
 
-            async with aiosqlite.connect(self._revocations_db_path) as db:
-                await db.execute(
-                    "INSERT OR IGNORE INTO revoked_service_tokens VALUES (?, ?, ?, ?)",
-                    (token_hash, datetime.now(timezone.utc).isoformat(), revoked_by, reason),
-                )
-                await db.commit()
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            engine = get_persist_engine()
+            if engine is None:
+                logger.warning("[AUTH] persist engine not wired — revocation in-memory only")
+            else:
+                payload = json.dumps({
+                    "token_hash": token_hash,
+                    "revoked_at": datetime.now(timezone.utc).isoformat(),
+                    "revoked_by": revoked_by,
+                    "reason": reason,
+                })
+                engine.service_token_revocation_record(payload)
         except Exception as e:
-            logger.error(f"[AUTH] Failed to persist revocation: {type(e).__name__}")
+            logger.error(f"[AUTH] Failed to persist revocation: {type(e).__name__}: {e}")
 
         # Log audit event
         logger.info(f"[AUTH] Service token revoked: hash={token_hash[:8]}..., reason={reason}, revoked_by={revoked_by}")

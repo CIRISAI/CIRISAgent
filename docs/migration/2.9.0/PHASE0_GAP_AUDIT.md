@@ -538,20 +538,30 @@ Substrate that does NOT exist in persist 1.5.19 today.
 ### Gap #2 — Token revocations
 **Scale:** 3 call sites in `adapters/api/services/auth_service.py`, single-purpose `revocations.db` file.
 
-**Today:** no `revocation_*` substrate. Persist has `wa_cert_set_active` which could carry revocation state.
+**Today:** no `revocation_*` substrate. Schema is `(token_hash, revoked_at, revoked_by, reason)`. Persist has `revoke_trust_grant` and `federation_revoke_trust` but those are trust-grant revocations, not service-token revocations.
 
-**Options:**
-1. New `revocation_*` substrate methods.
-2. Fold revocations into `wa_cert.active = false` (semantically equivalent for most callers; need to verify no separate revocation-reason / timestamp data is dropped).
+**Decision:** folding into `wa_cert.active` does **NOT** work — `token_hash` is not a `wa_id`. These are service tokens, not WA certificates.
 
-**Recommendation:** Option 2 if data model permits. Cleaner.
+**Resolved approach:** new `service_token_revocation_*` substrate filed upstream. Schema mirrors the existing table verbatim. Methods needed:
+- `service_token_revocation_record(payload)` — insert
+- `service_token_revocation_list()` — load all on startup (agent caches in memory)
+- `service_token_revocation_check(token_hash)` — optional point lookup
 
 ### Gap #3 — Memory query helpers
 **Scale:** `adapters/api/routes/memory_queries.py`, `memory_query_helpers.py`, `memory_filters.py`; ~5 call sites.
 
-**Today:** these run raw SQL (LIKE patterns, JSON-extract style queries) against the graph_nodes table directly. Persist exposes `cirisgraph_node_*` substrate plus generic `graph_*` methods.
+**Queries audited:**
+1. `SELECT node_id, scope, node_type, attributes_json, version, updated_by, updated_at, created_at FROM graph_nodes WHERE updated_at >= ? AND updated_at < ? AND NOT (node_type = 'tsdb_data' AND node_id LIKE 'metric_%') [AND scope = ?] [AND node_type = ?]` — time-range listing with exclusion filter.
+2. `SELECT COUNT(*) FROM graph_nodes` / `FROM graph_edges` — aggregate counts.
+3. `SELECT node_type, COUNT(*) FROM graph_nodes GROUP BY node_type` — group-by aggregate.
+4. `SELECT oauth_provider, oauth_external_id FROM wa_cert WHERE wa_id = ? AND oauth_provider IS NOT NULL AND active = 1` — OAuth identity lookup. Already covered by `wa_cert_get_by_oauth` (reverse direction works for one site; for `wa_id → oauth` direction we can use `wa_cert_get(wa_id)` and read the fields).
 
-**Needed:** audit each raw query and confirm it maps to an existing persist method. If a query has no persist analogue (e.g., complex JSON-path filtering), file a new `cirisgraph_query_*` substrate method.
+**Coverage check:**
+- Query 1: persist's `cirisgraph_list_nodes` does time-range + scope + type filters. Missing: the `NOT (node_type = 'tsdb_data' AND node_id LIKE ...)` exclusion. Either filter client-side after a wider query, or file a `cirisgraph_list_nodes` extension that accepts an exclusion pattern.
+- Query 2-3: persist has `cirisgraph_count_nodes` and `cirisgraph_count_edges` (verify in Phase 0 deep dive); group-by is the gap. File `cirisgraph_count_nodes_by_type` if missing.
+- Query 4: maps to `wa_cert_get(wa_id)` — no upstream work needed.
+
+**Resolved approach:** file a single upstream issue covering: (a) optional exclusion-pattern arg on `cirisgraph_list_nodes`, (b) `cirisgraph_count_*_by_type` group-by counters. If persist already has them, this gap is closed without filings.
 
 
 ### Gap #4 — Postgres path verification
@@ -575,8 +585,13 @@ How each gap maps to the waterfall phases:
 
 ## Files filed upstream
 
-_(populated as CIRISPersist issues are opened)_
+Verified persist 1.5.19 surface (198 methods). Confirmed gaps:
 
-- [ ] CIRISPersist#TBD — TSDB consolidation substrate
-- [ ] CIRISPersist#TBD — revocation substrate (only if Option 1 above is chosen)
+- [ ] **CIRISPersist#TBD — TSDB consolidation substrate.** Need `tsdb_*` methods covering period-window queries (basic/extensive/profound), cross-period aggregation, edge aggregation, cleanup/pruning. Replaces 6,680 LOC of Python aggregation under `services/graph/tsdb_consolidation/`.
+- [ ] **CIRISPersist#TBD — service token revocation substrate.** Three methods: `service_token_revocation_record`, `service_token_revocation_list`, `service_token_revocation_check`. Replaces `revoked_service_tokens.db` (aiosqlite) entirely.
+- [ ] **CIRISPersist#TBD — cirisgraph_list_nodes + count-by-type.** `cirisgraph_query_nodes` exists but the agent needs: (a) optional exclusion-pattern arg (for the `NOT (node_type='tsdb_data' AND node_id LIKE 'metric_%')` filter), (b) `cirisgraph_count_nodes_by_type` group-by counter, (c) `cirisgraph_count_nodes` / `cirisgraph_count_edges` totals.
+
+Verification gap (no upstream filing — agent-side work only):
+
+- [ ] **Postgres CI matrix.** Stand up a real Postgres container in CI. Run the QA suite against persist's sqlx-Postgres backend. Document any divergence from SQLite behavior. Lands inside Phase 1.
 - [ ] CIRISPersist#TBD — memory query gaps (filled in after per-query audit)

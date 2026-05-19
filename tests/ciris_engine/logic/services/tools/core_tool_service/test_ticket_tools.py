@@ -93,8 +93,7 @@ class TestCoreToolServiceTicketTools:
             status="in_progress",
             email="tooltest@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
-            metadata={"stages": {"identity_resolution": {"status": "completed", "result": "user@example.com"}}},
-            db_path=temp_db_path,
+            metadata={"stages": {"identity_resolution": {"status": "completed", "result": "user@example.com"}}}
         )
         return ticket_id
 
@@ -139,7 +138,7 @@ class TestCoreToolServiceTicketTools:
         # Verify deep merge
         from ciris_engine.logic.persistence.models.tickets import get_ticket
 
-        ticket = get_ticket(test_ticket_id, db_path=tool_service.db_path)
+        ticket = get_ticket(test_ticket_id)
         metadata = ticket["metadata"]
 
         # Original stage preserved
@@ -166,7 +165,7 @@ class TestCoreToolServiceTicketTools:
 
         from ciris_engine.logic.persistence.models.tickets import get_ticket
 
-        ticket = get_ticket(test_ticket_id, db_path=tool_service.db_path)
+        ticket = get_ticket(test_ticket_id)
         metadata = ticket["metadata"]
 
         # Stages preserved from original
@@ -217,7 +216,7 @@ class TestCoreToolServiceTicketTools:
         # Verify status in database
         from ciris_engine.logic.persistence.models.tickets import get_ticket
 
-        ticket = get_ticket(test_ticket_id, db_path=tool_service.db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "deferred"
 
     @pytest.mark.asyncio
@@ -234,7 +233,7 @@ class TestCoreToolServiceTicketTools:
         # Verify metadata
         from ciris_engine.logic.persistence.models.tickets import get_ticket
 
-        ticket = get_ticket(test_ticket_id, db_path=tool_service.db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "deferred"
         assert ticket["metadata"]["awaiting_human_response"] is True
 
@@ -324,8 +323,7 @@ class TestCoreToolServiceTicketTools:
             ticket_type="dsar",
             status="in_progress",
             email="test2@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=tool_service.db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Defer both tickets
@@ -397,8 +395,7 @@ class TestCoreToolServiceGetTicket:
             status="in_progress",
             email="get@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
-            metadata={"test": "data"},
-            db_path=tool_service.db_path,
+            metadata={"test": "data"}
         )
 
         result = await tool_service.execute_tool("get_ticket", {"ticket_id": ticket_id})

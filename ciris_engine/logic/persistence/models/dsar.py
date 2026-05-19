@@ -130,7 +130,6 @@ def create_dsar_ticket(
         metadata=metadata,
         notes=details,
         automated=automated,
-        db_path=db_path,
     )
 
 
@@ -146,7 +145,7 @@ def get_dsar_ticket(ticket_id: str, db_path: Optional[str] = None) -> Optional[D
     Returns:
         Dict containing ticket data in old format, or None if not found
     """
-    ticket = get_ticket(ticket_id, db_path=db_path)
+    ticket = get_ticket(ticket_id)
     if not ticket:
         return None
 
@@ -196,7 +195,6 @@ def update_dsar_ticket_status(
         ticket_id=ticket_id,
         new_status=mapped_status,
         notes=notes,
-        db_path=db_path,
     )
 
 
@@ -221,8 +219,7 @@ def list_dsar_tickets_by_status(
     # Get tickets from new API
     tickets = list_tickets(
         ticket_type="dsar",
-        status=new_status,
-        db_path=db_path,
+        status=new_status
     )
 
     # Transform each ticket to old format
@@ -246,8 +243,7 @@ def list_dsar_tickets_by_email(
     """
     tickets = list_tickets(
         ticket_type="dsar",
-        email=email,
-        db_path=db_path,
+        email=email
     )
 
     return [_transform_ticket_to_old_format(t) for t in tickets]

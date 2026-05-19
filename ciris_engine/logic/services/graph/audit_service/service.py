@@ -1318,8 +1318,8 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         async with self._hash_chain_lock:
             try:
                 return await asyncio.to_thread(self._write_to_persist_chain, entry)
-            except Exception as e:
-                logger.error(f"Failed to add to persist audit chain: {e}", exc_info=True)
+            except Exception:
+                logger.exception("Failed to add to persist audit chain")
                 return None
 
     def _write_to_persist_chain(self, entry: AuditRequest) -> JSONDict:

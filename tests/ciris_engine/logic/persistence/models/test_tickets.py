@@ -89,20 +89,19 @@ class TestUpdateTicketStatus:
             deadline=None,
             metadata={"test": True},
             notes="Test ticket",
-            automated=False,
-            db_path=temp_db_path,
+            automated=False
         )
         return ticket_id
 
     def test_update_status_only(self, temp_db_path, test_ticket_id):
         """TC-TP001: Verify updating status alone."""
         # Update status
-        result = update_ticket_status(test_ticket_id, "in_progress", db_path=temp_db_path)
+        result = update_ticket_status(test_ticket_id, "in_progress")
 
         assert result is True, "Update should succeed"
 
         # Verify update
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "in_progress"
         assert ticket["completed_at"] is None, "Non-terminal status should not set completed_at"
 
@@ -112,24 +111,22 @@ class TestUpdateTicketStatus:
     def test_update_status_with_notes(self, temp_db_path, test_ticket_id):
         """TC-TP002: Verify status update with notes."""
         result = update_ticket_status(
-            test_ticket_id, "blocked", notes="Waiting for legal approval", db_path=temp_db_path
-        )
+            test_ticket_id, "blocked", notes="Waiting for legal approval")
 
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "blocked"
         assert ticket["notes"] == "Waiting for legal approval"
 
     def test_update_status_with_agent_occurrence_id(self, temp_db_path, test_ticket_id):
         """TC-TP003: Verify updating agent_occurrence_id during status change."""
         result = update_ticket_status(
-            test_ticket_id, "assigned", agent_occurrence_id="occurrence-1", db_path=temp_db_path
-        )
+            test_ticket_id, "assigned", agent_occurrence_id="occurrence-1")
 
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "assigned"
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
@@ -140,12 +137,11 @@ class TestUpdateTicketStatus:
             "assigned",
             notes="Claimed by occurrence",
             agent_occurrence_id="occurrence-2",
-            db_path=temp_db_path,
         )
 
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "assigned"
         assert ticket["notes"] == "Claimed by occurrence"
         assert ticket["agent_occurrence_id"] == "occurrence-2"
@@ -162,18 +158,17 @@ class TestUpdateTicketStatus:
                 ticket_type="dsar",
                 status="in_progress",  # Start non-terminal
                 email="test@example.com",
-                submitted_at=datetime.now(timezone.utc).isoformat(),
-                db_path=temp_db_path,
+                submitted_at=datetime.now(timezone.utc).isoformat()
             )
             ticket_ids.append((ticket_id, status))
 
         # Update to terminal statuses
         for ticket_id, terminal_status in ticket_ids:
-            update_ticket_status(ticket_id, terminal_status, db_path=temp_db_path)
+            update_ticket_status(ticket_id, terminal_status)
 
         # Verify all have completed_at
         for ticket_id, _ in ticket_ids:
-            ticket = get_ticket(ticket_id, db_path=temp_db_path)
+            ticket = get_ticket(ticket_id)
             assert ticket["completed_at"] is not None, f"Ticket {ticket_id} should have completed_at"
 
     def test_non_terminal_leaves_completed_at_null(self, temp_db_path, test_ticket_id):
@@ -181,13 +176,13 @@ class TestUpdateTicketStatus:
         non_terminal_statuses = ["pending", "assigned", "in_progress", "blocked", "deferred"]
 
         for status in non_terminal_statuses:
-            update_ticket_status(test_ticket_id, status, db_path=temp_db_path)
-            ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+            update_ticket_status(test_ticket_id, status)
+            ticket = get_ticket(test_ticket_id)
             assert ticket["completed_at"] is None, f"Status {status} should not set completed_at"
 
     def test_nonexistent_ticket(self, temp_db_path):
         """TC-TP007: Verify error handling for missing ticket."""
-        result = update_ticket_status("NONEXISTENT", "completed", db_path=temp_db_path)
+        result = update_ticket_status("NONEXISTENT", "completed")
 
         assert result is False, "Update of nonexistent ticket should fail"
 
@@ -196,10 +191,10 @@ class TestUpdateTicketStatus:
         all_statuses = ["pending", "assigned", "in_progress", "blocked", "deferred", "completed", "cancelled", "failed"]
 
         for status in all_statuses:
-            result = update_ticket_status(test_ticket_id, status, db_path=temp_db_path)
+            result = update_ticket_status(test_ticket_id, status)
             assert result is True, f"Status {status} should be accepted"
 
-            ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+            ticket = get_ticket(test_ticket_id)
             assert ticket["status"] == status
 
     def test_dynamic_sql_construction(self, temp_db_path, test_ticket_id):
@@ -221,11 +216,10 @@ class TestUpdateTicketStatus:
         for status, notes, agent_occurrence_id, expected_fields in test_cases:
             # Update with specific parameters
             update_ticket_status(
-                test_ticket_id, status, notes=notes, agent_occurrence_id=agent_occurrence_id, db_path=temp_db_path
-            )
+                test_ticket_id, status, notes=notes, agent_occurrence_id=agent_occurrence_id)
 
             # Verify update succeeded
-            ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+            ticket = get_ticket(test_ticket_id)
             assert ticket["status"] == status
 
             if notes:
@@ -267,8 +261,7 @@ class TestTicketStatusTransitions:
             ticket_type="dsar",
             status="pending",
             email="workflow@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Typical workflow: PENDING → ASSIGNED → IN_PROGRESS → COMPLETED
@@ -279,10 +272,10 @@ class TestTicketStatusTransitions:
         ]
 
         for status, occurrence_id in transitions:
-            result = update_ticket_status(ticket_id, status, agent_occurrence_id=occurrence_id, db_path=temp_db_path)
+            result = update_ticket_status(ticket_id, status, agent_occurrence_id=occurrence_id)
             assert result is True, f"Transition to {status} should succeed"
 
-            ticket = get_ticket(ticket_id, db_path=temp_db_path)
+            ticket = get_ticket(ticket_id)
             assert ticket["status"] == status
             assert ticket["agent_occurrence_id"] == occurrence_id
 
@@ -295,8 +288,7 @@ class TestTicketStatusTransitions:
             ticket_type="dsar",
             status="in_progress",
             email="blocked@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # IN_PROGRESS → BLOCKED → IN_PROGRESS → COMPLETED
@@ -307,7 +299,7 @@ class TestTicketStatusTransitions:
         ]
 
         for status, note in transitions:
-            result = update_ticket_status(ticket_id, status, notes=note, db_path=temp_db_path)
+            result = update_ticket_status(ticket_id, status, notes=note)
             assert result is True
 
     def test_deferred_workflow(self, temp_db_path):
@@ -319,15 +311,14 @@ class TestTicketStatusTransitions:
             ticket_type="dsar",
             status="in_progress",
             email="deferred@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # IN_PROGRESS → DEFERRED → IN_PROGRESS → COMPLETED
-        result = update_ticket_status(ticket_id, "deferred", notes="Awaiting data", db_path=temp_db_path)
+        result = update_ticket_status(ticket_id, "deferred", notes="Awaiting data")
         assert result is True
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["status"] == "deferred"
 
 
@@ -362,11 +353,10 @@ class TestCreateTicket:
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="test@example.com",
-            db_path=temp_db_path,
         )
 
         assert result is True
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket is not None
         assert ticket["ticket_id"] == ticket_id
         assert ticket["sop"] == "DSAR_ACCESS"
@@ -399,11 +389,10 @@ class TestCreateTicket:
             automated=True,
             correlation_id="corr-123",
             agent_occurrence_id="occurrence-1",
-            db_path=temp_db_path,
         )
 
         assert result is True
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["status"] == "assigned"
         assert ticket["priority"] == 8
         assert ticket["user_identifier"] == "user456"
@@ -430,11 +419,10 @@ class TestCreateTicket:
             email="str@example.com",
             submitted_at=submitted_at_str,
             deadline=deadline_str,
-            db_path=temp_db_path,
         )
 
         assert result is True
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert datetime.fromisoformat(ticket["submitted_at"].replace("Z", "+00:00")) == datetime.fromisoformat(
             submitted_at_str
         )
@@ -456,7 +444,6 @@ class TestCreateTicket:
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="dup@example.com",
-            db_path=temp_db_path,
         )
         assert result1 is True
 
@@ -465,11 +452,10 @@ class TestCreateTicket:
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="dup2@example.com",
-            db_path=temp_db_path,
         )
         assert result2 is True
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["email"] == "dup2@example.com"
 
     def test_create_ticket_empty_metadata(self, temp_db_path):
@@ -481,11 +467,10 @@ class TestCreateTicket:
             ticket_type="dsar",
             email="empty@example.com",
             metadata={},
-            db_path=temp_db_path,
         )
 
         assert result is True
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["metadata"] == {}
 
     def test_create_ticket_none_metadata(self, temp_db_path):
@@ -497,11 +482,10 @@ class TestCreateTicket:
             ticket_type="dsar",
             email="none@example.com",
             metadata=None,
-            db_path=temp_db_path,
         )
 
         assert result is True
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["metadata"] == {}
 
     def test_create_ticket_default_submitted_at(self, temp_db_path):
@@ -514,13 +498,12 @@ class TestCreateTicket:
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="default@example.com",
-            db_path=temp_db_path,
         )
 
         after = datetime.now(timezone.utc)
         assert result is True
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         submitted_at = datetime.fromisoformat(ticket["submitted_at"])
         assert before <= submitted_at <= after
 
@@ -550,7 +533,7 @@ class TestGetTicket:
 
     def test_get_ticket_nonexistent(self, temp_db_path):
         """TC-GT001: Verify get_ticket returns None for nonexistent ticket."""
-        result = get_ticket("NONEXISTENT-001", db_path=temp_db_path)
+        result = get_ticket("NONEXISTENT-001")
         assert result is None
 
     def test_get_ticket_existing(self, temp_db_path):
@@ -561,10 +544,9 @@ class TestGetTicket:
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="get@example.com",
-            db_path=temp_db_path,
         )
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket is not None
         assert ticket["ticket_id"] == ticket_id
         assert "submitted_at" in ticket
@@ -604,7 +586,6 @@ class TestUpdateTicketMetadata:
             ticket_type="dsar",
             email="meta@example.com",
             metadata={"stage": 1, "progress": 0.0},
-            db_path=temp_db_path,
         )
         return ticket_id
 
@@ -612,10 +593,10 @@ class TestUpdateTicketMetadata:
         """TC-UM001: Update metadata with simple dict."""
         new_metadata = {"stage": 2, "progress": 0.5, "notes": "Updated"}
 
-        result = update_ticket_metadata(test_ticket_id, new_metadata, db_path=temp_db_path)
+        result = update_ticket_metadata(test_ticket_id, new_metadata)
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["metadata"]["stage"] == 2
         assert ticket["metadata"]["progress"] == 0.5
         assert ticket["metadata"]["notes"] == "Updated"
@@ -631,30 +612,30 @@ class TestUpdateTicketMetadata:
             "data": {"records_found": 42, "files": ["doc1.pdf", "doc2.pdf"]},
         }
 
-        result = update_ticket_metadata(test_ticket_id, new_metadata, db_path=temp_db_path)
+        result = update_ticket_metadata(test_ticket_id, new_metadata)
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["metadata"]["stage"] == 3
         assert len(ticket["metadata"]["stages"]) == 2
         assert ticket["metadata"]["data"]["records_found"] == 42
 
     def test_update_metadata_empty_dict(self, temp_db_path, test_ticket_id):
         """TC-UM003: Update metadata to empty dict (clears metadata)."""
-        result = update_ticket_metadata(test_ticket_id, {}, db_path=temp_db_path)
+        result = update_ticket_metadata(test_ticket_id, {})
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["metadata"] == {}
 
     def test_update_metadata_nonexistent_ticket(self, temp_db_path):
         """TC-UM004: Verify error handling for nonexistent ticket."""
-        result = update_ticket_metadata("NONEXISTENT", {"test": True}, db_path=temp_db_path)
+        result = update_ticket_metadata("NONEXISTENT", {"test": True})
         assert result is False
 
     def test_update_metadata_updates_last_updated(self, temp_db_path, test_ticket_id):
         """TC-UM006: Verify last_updated timestamp is updated."""
-        ticket_before = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket_before = get_ticket(test_ticket_id)
         last_updated_before = ticket_before["last_updated"]
 
         # Small delay to ensure timestamp difference
@@ -662,10 +643,10 @@ class TestUpdateTicketMetadata:
 
         time.sleep(0.1)
 
-        result = update_ticket_metadata(test_ticket_id, {"updated": True}, db_path=temp_db_path)
+        result = update_ticket_metadata(test_ticket_id, {"updated": True})
         assert result is True
 
-        ticket_after = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket_after = get_ticket(test_ticket_id)
         last_updated_after = ticket_after["last_updated"]
 
         assert last_updated_after > last_updated_before
@@ -736,60 +717,60 @@ class TestListTickets:
         ]
 
         for ticket in tickets:
-            create_ticket(db_path=temp_db_path, **ticket)
+            create_ticket(**ticket)
 
         return tickets
 
     def test_list_tickets_no_filters(self, temp_db_path, sample_tickets):
         """TC-LT001: List all tickets without filters."""
-        tickets = list_tickets(db_path=temp_db_path)
+        tickets = list_tickets()
         assert len(tickets) == 5
         # Verify sorted by submitted_at DESC
         assert tickets[0]["ticket_id"] == "INC-001"  # Last created
 
     def test_list_tickets_filter_by_sop(self, temp_db_path, sample_tickets):
         """TC-LT002: Filter tickets by SOP."""
-        tickets = list_tickets(sop="DSAR_ACCESS", db_path=temp_db_path)
+        tickets = list_tickets(sop="DSAR_ACCESS")
         assert len(tickets) == 1
         assert tickets[0]["ticket_id"] == "DSAR-001"
 
     def test_list_tickets_filter_by_type(self, temp_db_path, sample_tickets):
         """TC-LT003: Filter tickets by ticket_type."""
-        tickets = list_tickets(ticket_type="dsar", db_path=temp_db_path)
+        tickets = list_tickets(ticket_type="dsar")
         assert len(tickets) == 2
         assert all(t["ticket_type"] == "dsar" for t in tickets)
 
     def test_list_tickets_filter_by_status(self, temp_db_path, sample_tickets):
         """TC-LT004: Filter tickets by status."""
-        tickets = list_tickets(status="pending", db_path=temp_db_path)
+        tickets = list_tickets(status="pending")
         assert len(tickets) == 2
         assert all(t["status"] == "pending" for t in tickets)
 
     def test_list_tickets_filter_by_email(self, temp_db_path, sample_tickets):
         """TC-LT005: Filter tickets by email."""
-        tickets = list_tickets(email="user1@example.com", db_path=temp_db_path)
+        tickets = list_tickets(email="user1@example.com")
         assert len(tickets) == 2
         assert all(t["email"] == "user1@example.com" for t in tickets)
 
     def test_list_tickets_multiple_filters(self, temp_db_path, sample_tickets):
         """TC-LT006: Combine multiple filters."""
-        tickets = list_tickets(ticket_type="dsar", status="pending", email="user1@example.com", db_path=temp_db_path)
+        tickets = list_tickets(ticket_type="dsar", status="pending", email="user1@example.com")
         assert len(tickets) == 1
         assert tickets[0]["ticket_id"] == "DSAR-001"
 
     def test_list_tickets_with_limit(self, temp_db_path, sample_tickets):
         """TC-LT007: Limit number of results."""
-        tickets = list_tickets(limit=3, db_path=temp_db_path)
+        tickets = list_tickets(limit=3)
         assert len(tickets) == 3
 
     def test_list_tickets_no_matches(self, temp_db_path, sample_tickets):
         """TC-LT008: Filter with no matching results."""
-        tickets = list_tickets(sop="NONEXISTENT_SOP", db_path=temp_db_path)
+        tickets = list_tickets(sop="NONEXISTENT_SOP")
         assert len(tickets) == 0
 
     def test_list_tickets_empty_database(self, temp_db_path):
         """TC-LT010: List tickets from empty database."""
-        tickets = list_tickets(db_path=temp_db_path)
+        tickets = list_tickets()
         assert len(tickets) == 0
 
 
@@ -824,24 +805,23 @@ class TestDeleteTicket:
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="delete@example.com",
-            db_path=temp_db_path,
         )
 
-        assert get_ticket(ticket_id, db_path=temp_db_path) is not None
+        assert get_ticket(ticket_id) is not None
 
-        result = delete_ticket(ticket_id, db_path=temp_db_path)
+        result = delete_ticket(ticket_id)
         assert result is True
 
         # Persist 1.5.19 has no hard-delete substrate; delete_ticket marks
         # the row cancelled instead. Row stays queryable until ticket_delete
         # lands upstream.
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket is not None
         assert ticket["status"] == "cancelled"
 
     def test_delete_ticket_nonexistent(self, temp_db_path):
         """TC-DT002: Try to delete nonexistent ticket."""
-        result = delete_ticket("NONEXISTENT", db_path=temp_db_path)
+        result = delete_ticket("NONEXISTENT")
         assert result is False
 
 
@@ -880,7 +860,6 @@ class TestGetTicketsByCorrelationId:
                 ticket_type="dsar",
                 email=f"corr{i}@example.com",
                 correlation_id=correlation_id,
-                db_path=temp_db_path,
             )
 
         # Create ticket with different correlation ID
@@ -890,16 +869,15 @@ class TestGetTicketsByCorrelationId:
             ticket_type="dsar",
             email="other@example.com",
             correlation_id="other-corr",
-            db_path=temp_db_path,
         )
 
-        tickets = get_tickets_by_correlation_id(correlation_id, db_path=temp_db_path)
+        tickets = get_tickets_by_correlation_id(correlation_id)
         assert len(tickets) == 3
         assert all(t["correlation_id"] == correlation_id for t in tickets)
 
     def test_get_tickets_by_correlation_id_none_found(self, temp_db_path):
         """TC-CORR002: Get tickets with nonexistent correlation ID."""
-        tickets = get_tickets_by_correlation_id("nonexistent-corr", db_path=temp_db_path)
+        tickets = get_tickets_by_correlation_id("nonexistent-corr")
         assert len(tickets) == 0
 
 
@@ -1074,7 +1052,6 @@ class TestUpdateTicketStatusAdvanced:
             ticket_type="dsar",
             email="claim@example.com",
             agent_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
 
         # Claim ticket from __shared__ to occurrence-1
@@ -1083,12 +1060,11 @@ class TestUpdateTicketStatusAdvanced:
             "assigned",
             agent_occurrence_id="occurrence-1",
             require_current_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
 
         assert result is True
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["status"] == "assigned"
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
@@ -1101,8 +1077,7 @@ class TestUpdateTicketStatusAdvanced:
             ticket_type="dsar",
             email="claim@example.com",
             agent_occurrence_id="occurrence-1",  # Already claimed
-            db_path=temp_db_path,
-        )
+            )
 
         # Try to claim from __shared__ (but it's actually occurrence-1)
         result = update_ticket_status(
@@ -1110,12 +1085,11 @@ class TestUpdateTicketStatusAdvanced:
             "assigned",
             agent_occurrence_id="occurrence-2",
             require_current_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
 
         assert result is False  # Should fail because occurrence_id doesn't match
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["agent_occurrence_id"] == "occurrence-1"  # Unchanged
 
     def test_atomic_claim_race_condition_simulation(self, temp_db_path):
@@ -1127,7 +1101,6 @@ class TestUpdateTicketStatusAdvanced:
             ticket_type="dsar",
             email="race@example.com",
             agent_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
 
         # First occurrence claims
@@ -1136,7 +1109,6 @@ class TestUpdateTicketStatusAdvanced:
             "assigned",
             agent_occurrence_id="occurrence-1",
             require_current_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
         assert result1 is True
 
@@ -1146,11 +1118,10 @@ class TestUpdateTicketStatusAdvanced:
             "assigned",
             agent_occurrence_id="occurrence-2",
             require_current_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
         assert result2 is False
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
 

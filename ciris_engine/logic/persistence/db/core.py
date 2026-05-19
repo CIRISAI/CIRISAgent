@@ -1127,9 +1127,8 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         _resolved_db_path = get_sqlite_db_full_path()
     else:
         _resolved_db_path = db_path
-    if isinstance(_resolved_db_path, str) and not (
-        _resolved_db_path.startswith("postgres://")
-        or _resolved_db_path.startswith("postgresql://")
+    if isinstance(_resolved_db_path, str) and not _resolved_db_path.startswith(
+        ("postgres://", "postgresql://")
     ):
         from pathlib import Path
         _abs = Path(_resolved_db_path).resolve()
@@ -1152,7 +1151,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     if not isinstance(db_path, str):
         db_path = str(db_path)
 
-    if db_path.startswith("postgres://") or db_path.startswith("postgresql://"):
+    if db_path.startswith(("postgres://", "postgresql://")):
         dsn = db_path
         sentinel_dir = None
     else:

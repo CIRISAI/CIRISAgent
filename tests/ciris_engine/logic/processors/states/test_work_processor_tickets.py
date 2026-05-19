@@ -100,8 +100,7 @@ class TestWorkProcessorPhase1Claiming:
             ticket_type="dsar",
             status="pending",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Execute discovery
@@ -111,7 +110,7 @@ class TestWorkProcessorPhase1Claiming:
         assert tasks_created == 1, "Should create one task"
 
         # Verify ticket claimed
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["status"] == "assigned"
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
@@ -133,8 +132,7 @@ class TestWorkProcessorPhase1Claiming:
             ticket_type="dsar",
             status="pending",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Create two processors
@@ -186,11 +184,10 @@ class TestWorkProcessorPhase1Claiming:
             ticket_type="dsar",
             status="pending",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
         # Assign to different occurrence
-        update_ticket_status(ticket_id, "pending", agent_occurrence_id="occurrence-2", db_path=temp_db_path)
+        update_ticket_status(ticket_id, "pending", agent_occurrence_id="occurrence-2")
 
         tasks_created = await work_processor._discover_incomplete_tickets()
 
@@ -207,8 +204,7 @@ class TestWorkProcessorPhase1Claiming:
             ticket_type="dsar",
             status="blocked",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -226,8 +222,7 @@ class TestWorkProcessorPhase1Claiming:
             ticket_type="dsar",
             status="deferred",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -286,8 +281,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-1",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
+            )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
 
@@ -311,8 +305,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-1",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
+            )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
 
@@ -331,10 +324,9 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-2",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
+            )
         # Assign to different occurrence
-        update_ticket_status(ticket_id, "assigned", agent_occurrence_id="occurrence-2", db_path=temp_db_path)
+        update_ticket_status(ticket_id, "assigned", agent_occurrence_id="occurrence-2")
 
         tasks_created = await work_processor._discover_incomplete_tickets()
 
@@ -351,8 +343,7 @@ class TestWorkProcessorPhase2Continuation:
             ticket_type="dsar",
             status="blocked",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -370,8 +361,7 @@ class TestWorkProcessorPhase2Continuation:
             ticket_type="dsar",
             status="deferred",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -391,8 +381,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-1",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
+            )
 
         # Create existing ACTIVE task for ticket
         from ciris_engine.schemas.runtime.models import Task
@@ -429,8 +418,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             metadata={"deferred_until": future_time},
-            agent_occurrence_id="occurrence-1",
-            db_path=temp_db_path,
+            agent_occurrence_id="occurrence-1"
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -452,8 +440,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             metadata={"deferred_until": past_time},
-            agent_occurrence_id="occurrence-1",
-            db_path=temp_db_path,
+            agent_occurrence_id="occurrence-1"
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -473,8 +460,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             metadata={"awaiting_human_response": True},
-            agent_occurrence_id="occurrence-1",
-            db_path=temp_db_path,
+            agent_occurrence_id="occurrence-1"
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -494,8 +480,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             metadata={"deferred_until": "invalid-date-format"},
-            agent_occurrence_id="occurrence-1",
-            db_path=temp_db_path,
+            agent_occurrence_id="occurrence-1"
         )
 
         # Should not crash, should continue and create task
@@ -552,8 +537,7 @@ class TestWorkProcessorTwoPhaseIntegration:
             ticket_type="dsar",
             status="pending",
             email="a@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Ticket B: ASSIGNED to occurrence-1 (should get continuation)
@@ -566,9 +550,8 @@ class TestWorkProcessorTwoPhaseIntegration:
             email="b@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-1",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
-        update_ticket_status(ticket_b, "assigned", agent_occurrence_id="occurrence-1", db_path=temp_db_path)
+            )
+        update_ticket_status(ticket_b, "assigned", agent_occurrence_id="occurrence-1")
 
         # Ticket C: IN_PROGRESS for occurrence-1 (should get continuation)
         ticket_c = "TICKET-C"
@@ -580,9 +563,8 @@ class TestWorkProcessorTwoPhaseIntegration:
             email="c@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-1",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
-        update_ticket_status(ticket_c, "in_progress", agent_occurrence_id="occurrence-1", db_path=temp_db_path)
+            )
+        update_ticket_status(ticket_c, "in_progress", agent_occurrence_id="occurrence-1")
 
         # Ticket D: BLOCKED (should be skipped)
         ticket_d = create_ticket(
@@ -591,8 +573,7 @@ class TestWorkProcessorTwoPhaseIntegration:
             ticket_type="dsar",
             status="blocked",
             email="d@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Execute
@@ -602,7 +583,7 @@ class TestWorkProcessorTwoPhaseIntegration:
         assert tasks_created == 3, "Should create 3 tasks (A claimed, B+C continued)"
 
         # Verify Ticket A was claimed
-        ticket_a_updated = get_ticket("TICKET-A", db_path=temp_db_path)
+        ticket_a_updated = get_ticket("TICKET-A")
         assert ticket_a_updated["status"] == "assigned"
         assert ticket_a_updated["agent_occurrence_id"] == "occurrence-1"
 
@@ -657,8 +638,7 @@ class TestWorkProcessorTwoPhaseIntegration:
             user_identifier="user123",
             priority=8,
             submitted_at=datetime.now(timezone.utc).isoformat(),
-            metadata={"test_meta": "value"},
-            db_path=temp_db_path,
+            metadata={"test_meta": "value"}
         )
 
         await processor._discover_incomplete_tickets()

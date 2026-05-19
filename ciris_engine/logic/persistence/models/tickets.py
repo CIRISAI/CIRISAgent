@@ -177,8 +177,8 @@ def create_ticket(
     notes: Optional[str] = None,
     automated: bool = False,
     correlation_id: Optional[str] = None,
-    agent_occurrence_id: Optional[str] = None,
-    db_path: Optional[str] = None,
+    agent_occurrence_id: Optional[str] = None
+
 ) -> bool:
     """Create a new ticket in the database (routed through persist `ticket_upsert`).
 
@@ -225,7 +225,7 @@ def create_ticket(
         return False
 
 
-def get_ticket(ticket_id: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_ticket(ticket_id: str) -> Optional[Dict[str, Any]]:
     """Retrieve a ticket by ID via persist `ticket_get`. Returns legacy-shaped dict or None."""
     try:
         engine = _get_engine()
@@ -247,8 +247,8 @@ def update_ticket_status(
     new_status: str,
     notes: Optional[str] = None,
     agent_occurrence_id: Optional[str] = None,
-    require_current_occurrence_id: Optional[str] = None,
-    db_path: Optional[str] = None,
+    require_current_occurrence_id: Optional[str] = None
+
 ) -> bool:
     """Update ticket status via persist substrate.
 
@@ -336,8 +336,8 @@ def update_ticket_status(
 
 def update_ticket_metadata(
     ticket_id: str,
-    metadata: Dict[str, Any],
-    db_path: Optional[str] = None,
+    metadata: Dict[str, Any]
+
 ) -> bool:
     """Replace metadata for a ticket via read-modify-upsert.
 
@@ -422,8 +422,8 @@ def list_tickets(
     ticket_type: Optional[str] = None,
     status: Optional[str] = None,
     email: Optional[str] = None,
-    limit: Optional[int] = None,
-    db_path: Optional[str] = None,
+    limit: Optional[int] = None
+
 ) -> List[Dict[str, Any]]:
     """List tickets with optional filters (newest-first by submitted_at)."""
     filter_dict: Dict[str, Any] = {}
@@ -453,7 +453,7 @@ def list_tickets(
         return []
 
 
-def delete_ticket(ticket_id: str, db_path: Optional[str] = None) -> bool:
+def delete_ticket(ticket_id: str) -> bool:
     """Delete a ticket.
 
     NOTE (CIRISAgent#763 / CIRISPersist follow-up): persist 1.5.19 does not
@@ -489,8 +489,8 @@ def delete_ticket(ticket_id: str, db_path: Optional[str] = None) -> bool:
 
 
 def get_tickets_by_correlation_id(
-    correlation_id: str,
-    db_path: Optional[str] = None,
+    correlation_id: str
+
 ) -> List[Dict[str, Any]]:
     """Get all tickets linked to a correlation_id.
 

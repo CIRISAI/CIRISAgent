@@ -669,8 +669,8 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             update_payload["updated_at"] = now_iso
             try:
                 engine.task_upsert(json.dumps(update_payload))
-            except Exception as inner_e:
-                logger.error(f"Failed to update original task {task_id}: {inner_e}")
+            except Exception:
+                logger.exception("Failed to update original task %s", task_id)
                 return False
 
             logger.info(f"Marked original deferred task {task_id} as COMPLETED with outcome")

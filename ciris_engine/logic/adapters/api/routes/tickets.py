@@ -334,8 +334,7 @@ async def create_new_ticket(
         metadata=initial_metadata,
         notes=request.notes,
         automated=False,  # User-created
-        db_path=getattr(req.app.state, "db_path", None),
-    )
+        )
 
     if not success:
         raise HTTPException(
@@ -344,7 +343,7 @@ async def create_new_ticket(
         )
 
     # Retrieve and return created ticket
-    ticket = get_ticket(ticket_id, db_path=getattr(req.app.state, "db_path", None))
+    ticket = get_ticket(ticket_id)
     if not ticket:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -373,7 +372,7 @@ async def get_ticket_by_id(
     Raises:
         404: Ticket not found
     """
-    ticket = get_ticket(ticket_id, db_path=getattr(req.app.state, "db_path", None))
+    ticket = get_ticket(ticket_id)
     if not ticket:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -410,8 +409,7 @@ async def list_all_tickets(
         ticket_type=ticket_type,
         status=status_filter,
         email=email,
-        limit=limit,
-        db_path=getattr(req.app.state, "db_path", None),
+        limit=limit
     )
 
     return [TicketResponse(**ticket) for ticket in tickets]
@@ -428,14 +426,9 @@ def _deep_merge(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def _get_db_path(req: Request) -> Optional[str]:
-    """Get database path from request app state."""
-    return getattr(req.app.state, "db_path", None)
-
-
-def _verify_ticket_exists(ticket_id: str, db_path: Optional[str]) -> Dict[str, Any]:
+def _verify_ticket_exists(ticket_id: str) -> Dict[str, Any]:
     """Verify ticket exists and return it, raising 404 if not found."""
-    ticket = get_ticket(ticket_id, db_path=db_path)
+    ticket = get_ticket(ticket_id)
     if not ticket:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -444,7 +437,7 @@ def _verify_ticket_exists(ticket_id: str, db_path: Optional[str]) -> Dict[str, A
     return ticket
 
 
-def _update_ticket_status_if_provided(ticket_id: str, request: UpdateTicketRequest, db_path: Optional[str]) -> None:
+def _update_ticket_status_if_provided(ticket_id: str, request: UpdateTicketRequest) -> None:
     """Update ticket status if provided in request."""
     if not request.status:
         return
@@ -453,7 +446,6 @@ def _update_ticket_status_if_provided(ticket_id: str, request: UpdateTicketReque
         ticket_id=ticket_id,
         new_status=request.status,
         notes=request.notes,
-        db_path=db_path,
     )
     if not success:
         raise HTTPException(
@@ -463,7 +455,7 @@ def _update_ticket_status_if_provided(ticket_id: str, request: UpdateTicketReque
 
 
 def _update_ticket_metadata_if_provided(
-    ticket_id: str, request: UpdateTicketRequest, ticket: Dict[str, Any], db_path: Optional[str]
+    ticket_id: str, request: UpdateTicketRequest, ticket: Dict[str, Any]
 ) -> None:
     """Update ticket metadata if provided in request (deep merge with existing)."""
     if not request.metadata:
@@ -476,7 +468,6 @@ def _update_ticket_metadata_if_provided(
     success = update_ticket_metadata(
         ticket_id=ticket_id,
         metadata=merged_metadata,
-        db_path=db_path,
     )
     if not success:
         raise HTTPException(
@@ -485,9 +476,9 @@ def _update_ticket_metadata_if_provided(
         )
 
 
-def _retrieve_updated_ticket(ticket_id: str, db_path: Optional[str]) -> Dict[str, Any]:
+def _retrieve_updated_ticket(ticket_id: str) -> Dict[str, Any]:
     """Retrieve updated ticket, raising 500 if retrieval fails."""
-    updated_ticket = get_ticket(ticket_id, db_path=db_path)
+    updated_ticket = get_ticket(ticket_id)
     if not updated_ticket:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -518,19 +509,17 @@ async def update_existing_ticket(
         404: Ticket not found
         500: Update failed
     """
-    db_path = _get_db_path(req)
-
     # Verify ticket exists
-    ticket = _verify_ticket_exists(ticket_id, db_path)
+    ticket = _verify_ticket_exists(ticket_id)
 
     # Update status if provided
-    _update_ticket_status_if_provided(ticket_id, request, db_path)
+    _update_ticket_status_if_provided(ticket_id, request)
 
     # Update metadata if provided (merge with existing)
-    _update_ticket_metadata_if_provided(ticket_id, request, ticket, db_path)
+    _update_ticket_metadata_if_provided(ticket_id, request, ticket)
 
     # Retrieve and return updated ticket
-    updated_ticket = _retrieve_updated_ticket(ticket_id, db_path)
+    updated_ticket = _retrieve_updated_ticket(ticket_id)
 
     return TicketResponse(**updated_ticket)
 
@@ -557,7 +546,7 @@ async def cancel_ticket(
         500: Deletion failed
     """
     # Verify ticket exists
-    ticket = get_ticket(ticket_id, db_path=getattr(req.app.state, "db_path", None))
+    ticket = get_ticket(ticket_id)
     if not ticket:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -565,7 +554,7 @@ async def cancel_ticket(
         )
 
     # Delete ticket
-    success = delete_ticket(ticket_id, db_path=getattr(req.app.state, "db_path", None))
+    success = delete_ticket(ticket_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

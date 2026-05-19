@@ -149,7 +149,6 @@ def store_creation_ceremony(
     new_agent_id: str,
     ceremony_id: str,
     time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None,
 ) -> bool:
     """
     Store a creation ceremony record in the database.
@@ -158,8 +157,6 @@ def store_creation_ceremony(
         ceremony_request: The creation ceremony request
         new_agent_id: ID of the newly created agent
         ceremony_id: Unique ceremony identifier
-        db_path: Optional database path override (retained for signature
-            compat; persist owns its connection via the wired engine)
 
     Returns:
         True if successful, False otherwise

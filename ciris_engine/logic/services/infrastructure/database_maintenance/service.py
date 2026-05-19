@@ -262,7 +262,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         if thought_ids_to_delete_orphan:
             unique_thought_ids_to_delete = list(set(thought_ids_to_delete_orphan))
-            count = delete_thoughts_by_ids(unique_thought_ids_to_delete, db_path=self.db_path)
+            count = delete_thoughts_by_ids(unique_thought_ids_to_delete)
             orphaned_thoughts_deleted_count += count
             logger.info(f"Deleted {count} additional orphaned active/processing thoughts.")
 
@@ -298,9 +298,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                     thought_ids_to_delete_for_archive.append(thought.thought_id)
 
             if thought_ids_to_delete_for_archive:
-                archived_thoughts_count = delete_thoughts_by_ids(
-                    thought_ids_to_delete_for_archive, db_path=self.db_path
-                )
+                archived_thoughts_count = delete_thoughts_by_ids(thought_ids_to_delete_for_archive)
                 logger.info(
                     f"Archived and deleted {archived_thoughts_count} thoughts older than {self.archive_older_than_hours} hours to {thought_archive_file}."
                 )
@@ -976,7 +974,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                     self._collect_stale_items_from_task(task, stale_task_ids, stale_thought_ids)
 
             if stale_thought_ids:
-                deleted_thoughts = delete_thoughts_by_ids(stale_thought_ids, db_path=self.db_path)
+                deleted_thoughts = delete_thoughts_by_ids(stale_thought_ids)
                 logger.info(f"Deleted {deleted_thoughts} stale wakeup thoughts from previous runs")
 
             if stale_task_ids:

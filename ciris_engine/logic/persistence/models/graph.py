@@ -24,7 +24,7 @@ persist's cirisgraph_edges table).
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 
 from ciris_persist import Engine, NotFound  # type: ignore[import-untyped]
@@ -247,7 +247,7 @@ def add_graph_node(
     # created_at, but only ask time_service.now() if we actually need it
     # AND it returns something usable. Tests sometimes pass AsyncMock
     # time_services whose .now() returns a coroutine that breaks
-    # .isoformat() — fall back to datetime.utcnow() in that case.
+    # .isoformat() — fall back to a fresh tz-aware now() in that case.
     def _wall_clock_iso() -> str:
         if time_service is not None:
             try:
@@ -256,7 +256,7 @@ def add_graph_node(
                     return str(v.isoformat())
             except Exception:
                 pass
-        return datetime.utcnow().isoformat() + "Z"
+        return datetime.now(timezone.utc).isoformat()
 
     new_attrs_dict: Any
     if hasattr(node.attributes, "model_dump"):
@@ -427,7 +427,7 @@ def add_graph_edge(edge: GraphEdge, db_path: Optional[str] = None) -> str:
             if ca is not None:
                 created_at = ca.isoformat() if hasattr(ca, "isoformat") else str(ca)
     if created_at is None:
-        created_at = datetime.utcnow().isoformat() + "Z"
+        created_at = datetime.now(timezone.utc).isoformat()
 
     payload = {
         "edge_id": edge_id,

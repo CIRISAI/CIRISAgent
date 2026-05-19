@@ -182,11 +182,7 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
                 except Exception as e:
                     logger.warning(f"Failed to decode image for task {row.get('task_id')}: {e}")
 
-    updated_info_available_raw = row.get("updated_info_available", False)
-    if isinstance(updated_info_available_raw, int):
-        updated_info_available = bool(updated_info_available_raw)
-    else:
-        updated_info_available = bool(updated_info_available_raw)
+    updated_info_available = bool(row.get("updated_info_available", False))
 
     return Task(
         task_id=str(row["task_id"]),

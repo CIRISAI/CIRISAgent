@@ -393,7 +393,7 @@ class CoreToolService(BaseService, ToolService):
 
         notes = params.get("notes")
         notes_str = str(notes) if notes is not None else None
-        success = update_ticket_status(ticket_id, new_status, notes=notes_str, db_path=self._db_path)
+        success = update_ticket_status(ticket_id, new_status, notes=notes_str)
 
         if not success:
             return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} status")
@@ -452,7 +452,7 @@ class CoreToolService(BaseService, ToolService):
         logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s AFTER_MERGE merged={merged_metadata}")
 
         # Update database
-        success = update_ticket_metadata(ticket_id, merged_metadata, db_path=self._db_path)
+        success = update_ticket_metadata(ticket_id, merged_metadata)
         logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s DB_UPDATE_RESULT success={success}")
 
         if not success:
@@ -478,7 +478,7 @@ class CoreToolService(BaseService, ToolService):
             logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s START ticket_id={ticket_id}")
 
             # Get current ticket to validate and merge metadata
-            current_ticket = get_ticket(ticket_id, db_path=self._db_path)
+            current_ticket = get_ticket(ticket_id)
             if not current_ticket:
                 return ToolResult(success=False, error=f"Ticket {ticket_id} not found")
 
@@ -522,7 +522,7 @@ class CoreToolService(BaseService, ToolService):
                 return ToolResult(success=False, error=ERROR_TICKET_ID_REQUIRED)
 
             # Use self._db_path to respect provided path or current config
-            ticket = get_ticket(ticket_id, db_path=self._db_path)
+            ticket = get_ticket(ticket_id)
             if not ticket:
                 return ToolResult(success=False, error=f"Ticket {ticket_id} not found")
 
@@ -553,7 +553,7 @@ class CoreToolService(BaseService, ToolService):
                 return ToolResult(success=False, error=ERROR_TICKET_ID_REQUIRED)
 
             # Get current ticket - use self._db_path to respect provided path or current config
-            current_ticket = get_ticket(ticket_id, db_path=self._db_path)
+            current_ticket = get_ticket(ticket_id)
             if not current_ticket:
                 return ToolResult(success=False, error=f"Ticket {ticket_id} not found")
 
@@ -603,13 +603,12 @@ class CoreToolService(BaseService, ToolService):
 
             # Update ticket status to 'deferred' (prevents task generation)
             status_success = update_ticket_status(
-                ticket_id, "deferred", notes=f"Deferred: {reason}", db_path=self._db_path
-            )
+                ticket_id, "deferred", notes=f"Deferred: {reason}")
             if not status_success:
                 return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} status to deferred")
 
             # Update ticket metadata
-            success = update_ticket_metadata(ticket_id, current_metadata, db_path=self._db_path)
+            success = update_ticket_metadata(ticket_id, current_metadata)
             if not success:
                 return ToolResult(success=False, error=f"Failed to defer ticket {ticket_id}")
 

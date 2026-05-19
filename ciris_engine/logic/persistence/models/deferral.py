@@ -35,13 +35,8 @@ def save_deferral_report_mapping(
     task_id: str,
     thought_id: str,
     package: Optional[DeferralPackage] = None,
-    db_path: Optional[str] = None,
 ) -> None:
-    """Persist a deferral report mapping via persist's deferral substrate.
-
-    `db_path` is retained for signature compatibility but ignored; persist owns
-    its connection via the wired engine.
-    """
+    """Persist a deferral report mapping via persist's deferral substrate."""
     engine = _get_engine()
 
     payload: dict[str, Any] = {
@@ -90,11 +85,8 @@ def _parse_package(raw: Any) -> Optional[DeferralPackage]:
         return None
 
 
-def get_deferral_report_context(message_id: str, db_path: Optional[str] = None) -> Optional[DeferralReportContext]:
-    """Return DeferralReportContext for `message_id` or None.
-
-    `db_path` is retained for signature compatibility but ignored.
-    """
+def get_deferral_report_context(message_id: str) -> Optional[DeferralReportContext]:
+    """Return DeferralReportContext for `message_id` or None."""
     try:
         engine = _get_engine()
         raw = engine.deferral_get(message_id)

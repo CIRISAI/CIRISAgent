@@ -593,7 +593,7 @@ def test_delete_thoughts_by_ids_success(temp_db: str):
     for t in thoughts:
         add_thought(t, db_path=temp_db)
 
-    deleted = delete_thoughts_by_ids(["del-t1", "del-t2"], "occ1", db_path=temp_db)
+    deleted = delete_thoughts_by_ids(["del-t1", "del-t2"], "occ1")
 
     # Soft no-op: returns 0; rows remain.
     assert deleted == 0
@@ -604,7 +604,7 @@ def test_delete_thoughts_by_ids_success(temp_db: str):
 
 def test_delete_thoughts_by_ids_empty_list(temp_db: str):
     """Test delete with empty list."""
-    deleted = delete_thoughts_by_ids([], "occ1", db_path=temp_db)
+    deleted = delete_thoughts_by_ids([], "occ1")
 
     assert deleted == 0
 

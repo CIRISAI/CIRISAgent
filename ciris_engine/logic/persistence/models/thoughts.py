@@ -452,27 +452,23 @@ def get_thoughts_by_task_id(
 def delete_thoughts_by_ids(
     thought_ids: List[str],
     occurrence_id: str = "default",
-    db_path: Optional[str] = None,
 ) -> int:
     """Delete thoughts by a list of IDs. Returns the number deleted.
 
     Persist 1.5.19 does not expose a `thought_delete` API. Production code
-    does not currently call this function except via `delete_tasks_by_ids`
-    (cascade via task_delete) and bulk cleanup utilities; on the persist
-    side, deleting the parent task cascades thought rows. This function is
-    a soft no-op with a warning so legacy unit tests keep importing it
-    without crashing. See CIRISPersist follow-up for `thought_delete`.
+    that hits this path relies on the `task_delete` → thoughts cascade or
+    on persist's bulk cleanup. We keep the symbol so legacy imports don't
+    crash, log a warning when called with anything to delete, and return
+    0. See the upstream CIRISPersist follow-up for `thought_delete`.
     """
-    if not thought_ids:
-        return 0
-
-    logger.warning(
-        "delete_thoughts_by_ids called on %d thoughts for occurrence %s, "
-        "but persist 1.5.19 has no thought_delete API. No-op; rely on "
-        "cascade via task_delete or upstream `thought_delete` issue.",
-        len(thought_ids),
-        occurrence_id,
-    )
+    if thought_ids:
+        logger.warning(
+            "delete_thoughts_by_ids called on %d thoughts for occurrence %s, "
+            "but persist 1.5.19 has no thought_delete API. No-op; rely on "
+            "cascade via task_delete or upstream `thought_delete` issue.",
+            len(thought_ids),
+            occurrence_id,
+        )
     return 0
 
 

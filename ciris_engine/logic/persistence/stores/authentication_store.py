@@ -58,6 +58,15 @@ def _get_engine() -> Any:
 _PERSIST_OAUTH_LINK_KEYS = {"provider", "external_id", "account_name", "linked_at", "metadata", "is_primary"}
 
 
+def _iso_or_none(val: Any) -> Optional[str]:
+    """Coerce a datetime / ISO string / None to an ISO 8601 string (or None)."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.isoformat()
+    return str(val)
+
+
 def _coerce_oauth_links(value: Any) -> List[OAuthIdentityLink]:
     """Coerce persist's `oauth_links` list (or legacy JSON string) into pydantic models."""
     if not value:
@@ -376,7 +385,7 @@ def update_wa_certificate(wa_id: str, updates: Dict[str, Any], db_path: str) -> 
 
     if set(updates.keys()) == {"last_login"} or set(updates.keys()) == {"last_auth"}:
         val = updates.get("last_login", updates.get("last_auth"))
-        iso = val.isoformat() if isinstance(val, datetime) else (str(val) if val is not None else None)
+        iso = _iso_or_none(val)
         if iso is not None:
             engine.wa_cert_update_last_login(wa_id, iso)
         return
@@ -391,12 +400,12 @@ def update_wa_certificate(wa_id: str, updates: Dict[str, Any], db_path: str) -> 
     # Apply updates to the persist-shape row in place.
     for k, v in updates.items():
         if k in ("created_at", "created"):
-            iso = v.isoformat() if isinstance(v, datetime) else (str(v) if v is not None else None)
+            iso = _iso_or_none(v)
             if iso is not None:
                 row["created"] = iso
             continue
         if k in ("last_auth", "last_login"):
-            iso = v.isoformat() if isinstance(v, datetime) else (str(v) if v is not None else None)
+            iso = _iso_or_none(v)
             if iso is not None:
                 row["last_login"] = iso
             continue

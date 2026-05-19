@@ -319,7 +319,6 @@ class WorkProcessor(BaseProcessor):
             notes=f"Claimed by occurrence {self.agent_occurrence_id}",
             agent_occurrence_id=self.agent_occurrence_id,
             require_current_occurrence_id="__shared__",
-            db_path=db_path,
         )
 
         if not success:
@@ -599,7 +598,7 @@ class WorkProcessor(BaseProcessor):
         from ciris_engine.logic.persistence.models.tickets import list_tickets
 
         tasks_created = 0
-        pending_tickets = list_tickets(status="pending", db_path=db_path)
+        pending_tickets = list_tickets(status="pending")
 
         for ticket in pending_tickets:
             # Attempt to claim the ticket
@@ -627,8 +626,8 @@ class WorkProcessor(BaseProcessor):
         from ciris_engine.logic.persistence.models.tickets import list_tickets
 
         tasks_created = 0
-        assigned_tickets = list_tickets(status="assigned", db_path=db_path)
-        in_progress_tickets = list_tickets(status="in_progress", db_path=db_path)
+        assigned_tickets = list_tickets(status="assigned")
+        in_progress_tickets = list_tickets(status="in_progress")
         active_tickets = assigned_tickets + in_progress_tickets
 
         for ticket in active_tickets:

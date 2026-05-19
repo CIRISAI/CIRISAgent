@@ -86,6 +86,26 @@ def temp_db():
         )
         """
     )
+    # Pre-mark every legacy migration as applied so the AuthenticationService
+    # init path's `initialize_database(db_path)` call skips them — otherwise
+    # migration 004 ALTER TABLE tasks ADD COLUMN agent_occurrence_id fails
+    # because the column is baked into the CREATE TABLE above.
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            filename TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    from pathlib import Path
+
+    migrations_dir = Path(__file__).resolve().parents[5] / "ciris_engine/logic/persistence/migrations/sqlite"
+    for sql_file in sorted(migrations_dir.glob("*.sql")):
+        cursor.execute(
+            "INSERT OR IGNORE INTO schema_migrations (filename) VALUES (?)",
+            (sql_file.name,),
+        )
     conn.commit()
     conn.close()
 

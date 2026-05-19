@@ -94,7 +94,7 @@ class ThoughtDepthGuardrail(ConscienceInterface):
         )
 
         # Add correlation
-        persistence.add_correlation(correlation)
+        persistence.add_correlation(correlation, self._time_service)
         if not thought:
             logger.warning("No thought provided to ThoughtDepthconscience")
             # Update correlation with completion

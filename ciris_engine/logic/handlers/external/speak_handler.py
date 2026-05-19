@@ -225,7 +225,7 @@ class SpeakHandler(BaseActionHandler):
             updated_at=now,
             timestamp=now,
         )
-        persistence.add_correlation(correlation)
+        persistence.add_correlation(correlation, self.time_service)
 
     def _complete_speak_action(
         self, thought: Thought, result: ActionSelectionDMAResult, channel_id: str, success: bool

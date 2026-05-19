@@ -457,7 +457,7 @@ async def test_async_get_thought_by_id(temp_db: str):
     thought = create_test_thought("async-t1", "occ1", db_path=temp_db)
     add_thought(thought)
 
-    result = await async_get_thought_by_id("async-t1", "occ1", db_path=temp_db)
+    result = await async_get_thought_by_id("async-t1", "occ1")
 
     assert result is not None
     assert result.thought_id == "async-t1"
@@ -467,7 +467,7 @@ async def test_async_get_thought_by_id(temp_db: str):
 @pytest.mark.asyncio
 async def test_async_get_thought_by_id_not_found(temp_db: str):
     """Test async get when thought doesn't exist."""
-    result = await async_get_thought_by_id("nonexistent", "occ1", db_path=temp_db)
+    result = await async_get_thought_by_id("nonexistent", "occ1")
 
     assert result is None
 
@@ -482,7 +482,7 @@ async def test_async_get_thoughts_by_ids(temp_db: str):
     for t in thoughts:
         add_thought(t)
 
-    result = await async_get_thoughts_by_ids(["async-t1", "async-t2"], "occ1", db_path=temp_db)
+    result = await async_get_thoughts_by_ids(["async-t1", "async-t2"], "occ1")
 
     assert len(result) == 2
     assert "async-t1" in result
@@ -495,7 +495,7 @@ async def test_async_get_thought_status(temp_db: str):
     thought = create_test_thought("status-t1", "occ1", ThoughtStatus.PROCESSING, db_path=temp_db)
     add_thought(thought)
 
-    status = await async_get_thought_status("status-t1", "occ1", db_path=temp_db)
+    status = await async_get_thought_status("status-t1", "occ1")
 
     assert status == ThoughtStatus.PROCESSING
 
@@ -503,7 +503,7 @@ async def test_async_get_thought_status(temp_db: str):
 @pytest.mark.asyncio
 async def test_async_get_thought_status_not_found(temp_db: str):
     """Test async status retrieval when thought doesn't exist."""
-    status = await async_get_thought_status("nonexistent", "occ1", db_path=temp_db)
+    status = await async_get_thought_status("nonexistent", "occ1")
 
     assert status is None
 
@@ -515,7 +515,7 @@ async def test_async_get_thought_status_database_error(temp_db):
         "ciris_engine.logic.persistence.models.thoughts._get_engine"
     ) as mock_engine:
         mock_engine.return_value.thought_get.side_effect = RuntimeError("boom")
-        status = await async_get_thought_status("t1", "occ1", db_path=temp_db)
+        status = await async_get_thought_status("t1", "occ1")
 
     assert status is None
 

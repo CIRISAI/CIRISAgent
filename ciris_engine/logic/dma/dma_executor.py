@@ -209,7 +209,7 @@ async def run_pdma(
 
     # Add correlation
     if time_service:
-        persistence.add_correlation(correlation)
+        persistence.add_correlation(correlation, time_service)
 
     try:
         ctx = context
@@ -327,7 +327,7 @@ async def run_csdma(
 
     # Add correlation
     if time_service:
-        persistence.add_correlation(correlation)
+        persistence.add_correlation(correlation, time_service)
 
     try:
         # Pass context through to CSDMA evaluate() - it handles its own context internally
@@ -426,7 +426,7 @@ async def run_dsdma(
 
     # Add correlation
     if time_service:
-        persistence.add_correlation(correlation)
+        persistence.add_correlation(correlation, time_service)
 
     try:
         # Use evaluate method which handles JSONDict to DMAInputData conversion
@@ -533,7 +533,7 @@ async def run_idma(
 
     # Add correlation
     if time_service:
-        persistence.add_correlation(correlation)
+        persistence.add_correlation(correlation, time_service)
 
     try:
         # Pass prior DMA results for context analysis
@@ -649,7 +649,7 @@ async def run_action_selection_pdma(
 
     # Add correlation
     if time_service:
-        persistence.add_correlation(correlation)
+        persistence.add_correlation(correlation, time_service)
 
     try:
         # Handle both dict and EnhancedDMAInputs
@@ -778,7 +778,7 @@ async def run_dsaspdma(
         parent_correlation_id=None,
     )
 
-    persistence.add_correlation(correlation)
+    persistence.add_correlation(correlation, time_service)
 
     try:
         result = await evaluator.evaluate_deferral_action(
@@ -899,7 +899,7 @@ async def run_tsaspdma(
 
     # Add correlation
     if time_service:
-        persistence.add_correlation(correlation)
+        persistence.add_correlation(correlation, time_service)
 
     try:
         result = await evaluator.evaluate_tool_action(
@@ -1019,7 +1019,7 @@ async def run_tsaspdma_correction(
     )
 
     # Add correlation
-    persistence.add_correlation(correlation)
+    persistence.add_correlation(correlation, time_service)
 
     try:
         result = await evaluator.evaluate_tool_correction(

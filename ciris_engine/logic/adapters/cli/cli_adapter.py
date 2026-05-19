@@ -536,7 +536,7 @@ class CLIAdapter(Service, CommunicationService, ToolService):
                     parent_correlation_id=None,
                 )
 
-                persistence.add_correlation(correlation)
+                persistence.add_correlation(correlation, self._get_time_service())
                 logger.debug(f"Created observe correlation for CLI message {msg.message_id}")
 
                 if self.on_message:

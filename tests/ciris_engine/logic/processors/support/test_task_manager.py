@@ -442,7 +442,7 @@ class TestTaskManager:
         assert cutoff_call.startswith("2024-12-25")
 
         # Verify only completed tasks were deleted
-        mock_delete.assert_called_once_with(["old-complete-1", "old-complete-2"], "default")
+        mock_delete.assert_called_once_with(["old-complete-1", "old-complete-2"])
 
     @patch("ciris_engine.logic.persistence.get_tasks_older_than")
     def test_cleanup_old_completed_tasks_none_found(self, mock_get_old, task_manager):

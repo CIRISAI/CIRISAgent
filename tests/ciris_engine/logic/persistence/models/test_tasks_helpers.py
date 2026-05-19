@@ -197,7 +197,7 @@ class TestHandleDuplicateTask:
         )
 
         # Handle duplicate should return original task_id
-        returned_id = _handle_duplicate_task(duplicate_task, temp_db)
+        returned_id = _handle_duplicate_task(duplicate_task)
         assert returned_id == original_task.task_id
 
     def test_handle_duplicate_with_empty_correlation_id(self, temp_db):
@@ -220,7 +220,7 @@ class TestHandleDuplicateTask:
         )
 
         # Should return the attempted task_id when correlation_id is empty
-        returned_id = _handle_duplicate_task(task, temp_db)
+        returned_id = _handle_duplicate_task(task)
         assert returned_id == task.task_id
 
     def test_handle_duplicate_without_context(self, temp_db):
@@ -237,7 +237,7 @@ class TestHandleDuplicateTask:
         )
 
         # Should return the attempted task_id
-        returned_id = _handle_duplicate_task(task, temp_db)
+        returned_id = _handle_duplicate_task(task)
         assert returned_id == task.task_id
 
     def test_handle_duplicate_no_existing_task_found(self, temp_db):
@@ -260,7 +260,7 @@ class TestHandleDuplicateTask:
         )
 
         # Should return the attempted task_id since no existing task found
-        returned_id = _handle_duplicate_task(task, temp_db)
+        returned_id = _handle_duplicate_task(task)
         assert returned_id == task.task_id
 
 

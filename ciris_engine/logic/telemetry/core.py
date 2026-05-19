@@ -155,7 +155,7 @@ class BasicTelemetryCollector(BaseService):
     async def _store_metric_correlation(self, correlation: ServiceCorrelation) -> None:
         """Store metric correlation in TSDB asynchronously."""
         try:
-            add_correlation(correlation)
+            add_correlation(correlation, self._time_service)
         except Exception as e:
             logger.error(f"Failed to store metric correlation in TSDB: {e}")
 

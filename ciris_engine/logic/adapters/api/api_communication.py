@@ -76,7 +76,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         )
 
         time_service = getattr(self, "_time_service", None)
-        persistence.add_correlation(correlation)
+        persistence.add_correlation(correlation, time_service)
         logger.debug(f"Created speak correlation for channel {channel_id}")
 
     async def _send_websocket_message(self, channel_id: str, content: str) -> bool:
@@ -209,7 +209,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             )
 
             time_service = getattr(self, "_time_service", None)
-            persistence.add_correlation(correlation)
+            persistence.add_correlation(correlation, time_service)
             logger.debug(f"Created {message_type} message correlation for channel {channel_id}")
 
             # Try WebSocket first

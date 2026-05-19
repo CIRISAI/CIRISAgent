@@ -370,10 +370,9 @@ def get_thought_by_id(
 async def async_get_thought_by_id(
     thought_id: str,
     occurrence_id: str = "default",
-    db_path: Optional[str] = None,
 ) -> Optional[Thought]:
     """Asynchronous wrapper for get_thought_by_id using asyncio.to_thread."""
-    return await asyncio.to_thread(get_thought_by_id, thought_id, occurrence_id, db_path)
+    return await asyncio.to_thread(get_thought_by_id, thought_id, occurrence_id)
 
 
 def get_thoughts_by_ids(
@@ -412,16 +411,14 @@ def get_thoughts_by_ids(
 async def async_get_thoughts_by_ids(
     thought_ids: List[str],
     occurrence_id: str = "default",
-    db_path: Optional[str] = None,
 ) -> Dict[str, Thought]:
     """Asynchronous wrapper for get_thoughts_by_ids."""
-    return await asyncio.to_thread(get_thoughts_by_ids, thought_ids, occurrence_id, db_path)
+    return await asyncio.to_thread(get_thoughts_by_ids, thought_ids, occurrence_id)
 
 
 async def async_get_thought_status(
     thought_id: str,
     occurrence_id: str = "default",
-    db_path: Optional[str] = None,
 ) -> Optional[ThoughtStatus]:
     """Retrieve just the status of a thought asynchronously."""
 

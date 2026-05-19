@@ -435,7 +435,7 @@ class TestActionSequenceConscience:
 
         original_add_correlation = persistence.add_correlation
 
-        def mock_add_correlation(correlation, time_service):
+        def mock_add_correlation(correlation, time_service=None):
             correlations_added.append(correlation)
             return original_add_correlation(correlation, time_service)
 

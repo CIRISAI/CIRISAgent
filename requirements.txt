@@ -12,11 +12,13 @@ jsonref>=1.0.0,<2.0.0  # Required by google-genai for schema resolution
 instructor>=1.11.3,<2.0.0
 PyYAML>=6.0.1,<7.0.0
 
-# Database — 2.9.0 Phase 2b dropped aiosqlite (revocations now via
-# persist's service_token_revocation_* substrate per CIRISPersist#64).
-# psycopg2-binary stays through 2.9.0; Phase 5 bootstrap teardown drops
-# it once Phases 2-4 have retired every raw-SQL Postgres caller.
-psycopg2-binary>=2.9.0,<3.0.0  # PostgreSQL adapter for production deployments
+# Database — 2.9.0 Phase 5 bootstrap teardown removed psycopg2-binary
+# and aiosqlite. The agent ships zero raw SQL libraries: all Postgres +
+# SQLite access routes through ciris-persist (sqlx) and the stdlib
+# `sqlite3` module only services the static cities.db lookup file (see
+# adapters/api/routes/setup/location.py) and the SQLite bootstrap
+# upgrade-path inside ciris_engine/logic/persistence/db/. No new
+# callers — persist's Engine substrate is the only writer.
 SQLAlchemy>=2.0.0,<3.0.0  # SQL toolkit and ORM for external data sources
 
 # Async and HTTP

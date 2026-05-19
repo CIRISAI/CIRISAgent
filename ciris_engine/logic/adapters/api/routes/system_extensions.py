@@ -615,8 +615,6 @@ def _determine_user_role(current_user: JSONDict) -> Any:
 
 async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[str]:
     """Get set of channel IDs user is allowed to see (user_id + OAuth links + API-prefixed versions)."""
-    import sqlite3
-
     allowed_channel_ids = {user_id}
     # BUGFIX: API adapter prefixes channel_id with "api_"
     # See agent.py:221: channel_id = f"api_{auth.user_id}"

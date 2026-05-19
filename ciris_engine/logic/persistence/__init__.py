@@ -12,7 +12,6 @@ from .analytics import (
 )
 from .db import (
     MIGRATIONS_BASE_DIR,
-    get_db_connection,
     get_graph_edges_table_schema_sql,
     get_graph_nodes_table_schema_sql,
     get_service_correlations_table_schema_sql,
@@ -69,7 +68,6 @@ from .models import (
 )
 
 __all__ = [
-    "get_db_connection",
     "initialize_database",
     "get_tasks_older_than",
     "get_thoughts_older_than",

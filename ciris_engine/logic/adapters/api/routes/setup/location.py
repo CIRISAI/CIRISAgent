@@ -15,7 +15,6 @@ from typing import Annotated, Any, Optional
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from ciris_engine.logic.utils.path_resolution import get_env_file_path
 
 logger = logging.getLogger(__name__)
@@ -75,10 +74,16 @@ class CountriesResponse(BaseModel):
 
 
 def _get_db_connection() -> sqlite3.Connection:
-    """Get a connection to the cities database."""
-    conn = get_safe_sqlite_connection(str(GEO_DB_PATH), row_factory=sqlite3.Row)
-    # iOS returns proxy, desktop returns Connection - both work identically
-    return conn  # type: ignore[return-value]
+    """Open the static cities.db lookup file (stdlib sqlite3).
+
+    This is the documented exception to the 2.9.0 "no SQL libs outside
+    ciris_adapters" rule: cities.db is read-only static reference data
+    that ships with the app, not agent state. Persist is not the right
+    substrate for FTS5-indexed lookup files.
+    """
+    conn = sqlite3.connect(str(GEO_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def _search_locations_impl(

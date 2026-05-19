@@ -50,15 +50,6 @@ from .retry import DEFAULT_BASE_DELAY, DEFAULT_MAX_DELAY, DEFAULT_MAX_RETRIES, i
 
 logger = logging.getLogger(__name__)
 
-# Try to import psycopg2 for PostgreSQL support
-try:
-    import psycopg2
-    import psycopg2.extras
-
-    POSTGRES_AVAILABLE = True
-except ImportError:
-    POSTGRES_AVAILABLE = False
-    logger.debug("psycopg2 not available - PostgreSQL support disabled")
 
 
 # Test database path override - set by test fixtures
@@ -88,168 +79,6 @@ def _ensure_adapters_registered() -> None:
         sqlite3.register_converter("timestamp", convert_datetime)
         _adapters_registered = True
 
-
-class PostgreSQLCursorWrapper:
-    """Wrapper for PostgreSQL cursor to translate SQL placeholders.
-
-    This wrapper ensures that ? placeholders are translated to %s
-    even when code directly uses cursor.execute().
-    """
-
-    def __init__(self, cursor: Any):
-        """Initialize wrapper with psycopg2 cursor."""
-        self._cursor = cursor
-
-    def execute(self, sql: str, parameters: Any = None) -> Any:
-        """Execute SQL with placeholder translation.
-
-        Translates:
-        - ? -> %s (for positional parameters with tuple/list)
-        - :name -> %(name)s (for named parameters with dict)
-        """
-        import re
-
-        # If using named parameters (dict), convert :name to %(name)s
-        if parameters and isinstance(parameters, dict):
-            # Replace :param_name with %(param_name)s
-            translated_sql = re.sub(r":(\w+)", r"%(\1)s", sql)
-        else:
-            # Using positional parameters, convert ? to %s
-            translated_sql = sql.replace("?", "%s")
-
-        if parameters:
-            return self._cursor.execute(translated_sql, parameters)
-        else:
-            return self._cursor.execute(translated_sql)
-
-    def executemany(self, sql: str, seq_of_parameters: Any) -> Any:
-        """Execute many SQL statements with placeholder translation."""
-        translated_sql = sql.replace("?", "%s")
-        return self._cursor.executemany(translated_sql, seq_of_parameters)
-
-    def fetchone(self) -> Any:
-        """Fetch one row."""
-        return self._cursor.fetchone()
-
-    def fetchall(self) -> Any:
-        """Fetch all rows."""
-        return self._cursor.fetchall()
-
-    def fetchmany(self, size: Optional[int] = None) -> Any:
-        """Fetch many rows."""
-        if size is None:
-            return self._cursor.fetchmany()
-        return self._cursor.fetchmany(size)
-
-    def close(self) -> None:
-        """Close cursor."""
-        self._cursor.close()
-
-    @property
-    def rowcount(self) -> Any:
-        """Get row count."""
-        return self._cursor.rowcount
-
-    @property
-    def description(self) -> Any:
-        """Get description."""
-        return self._cursor.description
-
-    def __getattr__(self, name: str) -> Any:
-        """Delegate all other attributes to the underlying cursor."""
-        return getattr(self._cursor, name)
-
-    def __iter__(self) -> Any:
-        """Make cursor iterable."""
-        return iter(self._cursor)
-
-
-class PostgreSQLConnectionWrapper:
-    """Wrapper for PostgreSQL connection to provide SQLite-like interface.
-
-    This wrapper allows code written for SQLite (which supports conn.execute())
-    to work with PostgreSQL (which requires cursor.execute()).
-    """
-
-    def __init__(self, conn: Any):
-        """Initialize wrapper with psycopg2 connection."""
-        self._conn = conn
-
-    def execute(self, sql: str, parameters: Any = None) -> Any:
-        """Execute SQL statement using a cursor.
-
-        CRITICAL: Translates SQL placeholders for PostgreSQL compatibility:
-        - ? -> %s (for positional parameters)
-        - :name -> %(name)s (for named parameters)
-        """
-        import re
-
-        # Translate placeholders based on parameter type
-        if parameters and isinstance(parameters, dict):
-            # Named parameters: :name -> %(name)s
-            translated_sql = re.sub(r":(\w+)", r"%(\1)s", sql)
-        else:
-            # Positional parameters: ? -> %s
-            translated_sql = sql.replace("?", "%s")
-
-        cursor = self._conn.cursor()
-        logger.debug("PostgreSQLConnectionWrapper.execute: Placeholder translation")
-        logger.debug(f"  original: {sql[:150]}...")
-        logger.debug(f"  translated: {translated_sql[:150]}...")
-        logger.debug(f"  param type: {type(parameters).__name__}, value: {parameters}")
-
-        if parameters:
-            cursor.execute(translated_sql, parameters)
-        else:
-            cursor.execute(translated_sql)
-
-        logger.debug(f"PostgreSQLConnectionWrapper.execute: SUCCESS, rowcount={cursor.rowcount}")
-        return cursor
-
-    def executemany(self, sql: str, seq_of_parameters: Any) -> Any:
-        """Execute SQL statement multiple times.
-
-        CRITICAL: Translates ? placeholders to %s for PostgreSQL compatibility.
-        """
-        # CRITICAL: Translate placeholders for PostgreSQL
-        translated_sql = sql.replace("?", "%s")
-
-        cursor = self._conn.cursor()
-        cursor.executemany(translated_sql, seq_of_parameters)
-        return cursor
-
-    def cursor(self) -> Any:
-        """Create and return a new cursor wrapped for PostgreSQL compatibility."""
-        # Return a wrapped cursor that translates placeholders
-        return PostgreSQLCursorWrapper(self._conn.cursor())
-
-    def commit(self) -> None:
-        """Commit the current transaction."""
-        self._conn.commit()
-
-    def rollback(self) -> None:
-        """Rollback the current transaction."""
-        self._conn.rollback()
-
-    def close(self) -> None:
-        """Close the connection."""
-        self._conn.close()
-
-    def __getattr__(self, name: str) -> Any:
-        """Delegate all other attributes to the underlying connection."""
-        return getattr(self._conn, name)
-
-    def __enter__(self) -> "PostgreSQLConnectionWrapper":
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Context manager exit - commit if no exception, rollback otherwise."""
-        if exc_type is None:
-            self._conn.commit()
-        else:
-            self._conn.rollback()
-        self._conn.close()
 
 
 class IOSDictRow(dict[str, Any]):
@@ -630,17 +459,6 @@ def _resolve_db_path(db_path: Optional[str]) -> str:
     return resolved
 
 
-def _create_postgres_connection(adapter: Any) -> Any:
-    """Create a PostgreSQL connection."""
-    if not POSTGRES_AVAILABLE:
-        raise RuntimeError(
-            "PostgreSQL connection requested but psycopg2 not installed. Install with: pip install psycopg2-binary"
-        )
-    conn = psycopg2.connect(adapter.db_url)
-    conn.cursor_factory = psycopg2.extras.RealDictCursor
-    return PostgreSQLConnectionWrapper(conn)
-
-
 class _IOSCursorProxy:
     """Proxy that prevents sqlite3_finalize() from running on the wrong thread.
 
@@ -837,69 +655,41 @@ def _execute_pragmas(conn: Any, adapter: Any, pragma_statements: list[str]) -> N
 def get_db_connection(
     db_path: Optional[str] = None, busy_timeout: Optional[int] = None, enable_retry: bool = True
 ) -> Union[sqlite3.Connection, RetryConnection, Any]:
-    """Establishes a connection to the database (SQLite or PostgreSQL).
+    """Open a stdlib sqlite3 connection for the bootstrap-layer schema init.
 
-    Supports both SQLite and PostgreSQL backends via connection string detection.
-    Connection string format:
-    - SQLite: "sqlite://path/to/db.db" or just "path/to/db.db"
-    - PostgreSQL: "postgresql://user:pass@host:port/dbname"
-
-    Args:
-        db_path: Optional database connection string (defaults to SQLite data/ciris.db)
-        busy_timeout: Optional busy timeout in milliseconds (SQLite only)
-        enable_retry: Enable automatic retry for write operations (SQLite only)
-
-    Returns:
-        Database connection:
-        - SQLite: RetryConnection wrapper (if enable_retry=True) or raw Connection
-        - PostgreSQL: psycopg2 connection with dict cursor factory
+    Post-2.9.0 absorption: this function is consumed only by the bootstrap
+    layer (initialize_database, run_migrations, retry.get_db_connection_with_retry,
+    db.operations). PostgreSQL deployments route schema management through
+    persist's Engine — this function rejects postgres:// DSNs.
     """
-    import traceback
-
-    caller_info = "".join(traceback.format_stack()[-4:-1])
-    logger.debug(f"[DB_CONNECT] get_db_connection called from:\n{caller_info}")
-
     db_path = _resolve_db_path(db_path)
     adapter = init_dialect(db_path)
 
-    # PostgreSQL connection
+    # PostgreSQL no longer wires through psycopg2 — persist's sqlx backend
+    # owns the connection pool. The bootstrap layer's legacy schema is a
+    # SQLite-only concern (a 2.8.x upgrade-path concept); fresh Postgres
+    # deployments skip legacy CREATE TABLE entirely (see initialize_database).
     if adapter.is_postgresql():
-        return _create_postgres_connection(adapter)
+        raise RuntimeError(
+            "get_db_connection() does not support PostgreSQL after 2.9.0. "
+            "Route through persist's Engine substrate instead."
+        )
 
-    # SQLite connection (default)
-    logger.debug(f"[DB_CONNECT] Creating SQLite connection to: {db_path}")
     _ensure_adapters_registered()
-
     is_ios = _check_ios_platform()
-    logger.debug(f"[DB_CONNECT] Platform detection: is_ios={is_ios}")
-
-    # Create connection based on platform
-    # Use union type since conn can be either proxy or raw connection
     conn: Union[_IOSConnectionProxy, sqlite3.Connection]
     if is_ios:
         conn = _create_sqlite_connection_ios(db_path)
     else:
         conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
 
-    logger.debug("[DB_CONNECT] Setting row_factory...")
     conn.row_factory = sqlite3.Row
-
-    # iOS: thread-local connections mean each thread owns its handle.
-    # No need for IOSSerializedConnection wrapper — it was needed when connections
-    # were shared across threads, but thread-local caching fixes the root cause.
-    # The wrapper's global lock actually makes things worse by serializing independent
-    # threads and can cause the main thread to block on DB operations from other threads.
 
     pragma_statements = _get_pragma_statements(is_ios, busy_timeout)
     _execute_pragmas(conn, adapter, pragma_statements)
 
-    # Return wrapped connection with retry logic by default
     if enable_retry and not is_ios:
-        logger.debug("[DB_CONNECT] Returning RetryConnection wrapper")
-        # At this point we know is_ios=False so conn is sqlite3.Connection
         return RetryConnection(cast(sqlite3.Connection, conn))
-
-    logger.debug(f"[DB_CONNECT] Returning connection: {type(conn).__name__}")
     return conn
 
 
@@ -1032,15 +822,19 @@ def get_connection_diagnostics(db_path: Optional[str] = None) -> ConnectionDiagn
 
 
 def initialize_database(db_path: Optional[str] = None) -> None:
-    """Initialize the database with base schema and apply migrations.
+    """Bootstrap the database for 2.9.0.
 
-    Note: Each deployment uses either SQLite or PostgreSQL exclusively.
-    No migration between database backends is supported.
+    PostgreSQL deployments: persist's Engine owns the schema entirely.
+    `_bootstrap_persist_engine` runs sqlx migrations on first connect.
+
+    SQLite deployments: persist owns the active schema (`cirislens_*`)
+    via the same sqlx path. For 2.8.x → 2.9.0 upgrade compatibility we
+    still create the legacy tables (tasks, thoughts, graph_nodes, ...)
+    so that persist's A0a migration finds the existing rows to copy
+    forward; on fresh installs this is a one-time CREATE TABLE IF NOT
+    EXISTS sequence that produces empty tables.
     """
     import traceback
-
-    caller_info = "".join(traceback.format_stack()[-4:-1])
-    logger.info(f"[DB_INIT] initialize_database called from:\n{caller_info}")
 
     from ciris_engine.logic.persistence.db.execution_helpers import (
         execute_sql_statements,
@@ -1048,22 +842,28 @@ def initialize_database(db_path: Optional[str] = None) -> None:
         split_sql_statements,
     )
 
+    caller_info = "".join(traceback.format_stack()[-4:-1])
+    logger.info(f"[DB_INIT] initialize_database called from:\n{caller_info}")
+
     try:
-        # Determine if we're using PostgreSQL or SQLite
         if db_path is None:
             db_path = get_sqlite_db_full_path()
 
         adapter = init_dialect(db_path)
 
-        # Log which database type we're initializing
-        tables_module: types.ModuleType
         if adapter.is_postgresql():
+            # Postgres: persist's Engine owns all schema management. No
+            # legacy CREATE TABLE — the 2.8.x→2.9.0 upgrade for Postgres
+            # deployments runs A0a against rows persist already sees via
+            # sqlx's connection pool. Bootstrap directly.
             safe_url = mask_password_in_url(adapter.db_url)
-            logger.info(f"Initializing PostgreSQL database: {safe_url}")
-            tables_module = postgres_tables
-        else:
-            logger.info(f"Initializing SQLite database: {db_path}")
-            tables_module = sqlite_tables
+            logger.info(f"Initializing PostgreSQL via persist Engine: {safe_url}")
+            _bootstrap_persist_engine(db_path)
+            return
+
+        # SQLite path: keep legacy schema init for upgrade compatibility.
+        logger.info(f"Initializing SQLite database: {db_path}")
+        tables_module = sqlite_tables
 
         with get_db_connection(db_path) as conn:
             base_tables = [
@@ -1079,21 +879,15 @@ def initialize_database(db_path: Optional[str] = None) -> None:
                 tables_module.WA_CERT_TABLE_V1,
                 tables_module.SCHEDULED_TASKS_TABLE_V1,
             ]
-
             for table_sql in base_tables:
                 statements = split_sql_statements(table_sql)
                 execute_sql_statements(conn, statements, adapter)
-
             conn.commit()
 
         run_migrations(db_path)
+        logger.info(f"Database initialized at {db_path}")
 
-        logger.info(f"Database initialized at {db_path or get_sqlite_db_full_path()}")
-
-        # 2.9.0: bootstrap the ciris-persist Engine and run A0a graph
-        # migration on first boot. After this call, every reader/writer
-        # of persistence.models.graph routes through persist's typed API
-        # instead of legacy sqlite. See CIRISAgent#763 Lane A.
+        # Bootstrap persist Engine + run A0a graph migration if needed.
         _bootstrap_persist_engine(db_path)
     except Exception as e:
         logger.exception(f"Database error during initialization: {e}")

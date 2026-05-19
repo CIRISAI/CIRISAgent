@@ -22,7 +22,6 @@ from typing import Annotated, Any, Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
@@ -879,26 +878,46 @@ def _count_recent_task_completes_sqlite(days: int = SIGMA_WINDOW_DAYS) -> int:
     """Count ``task_complete`` events in the audit SQLite DB over the last
     ``days`` days. Synchronous; called via run_in_executor.
 
-    The graph-memory audit store (``audit_service.query_audit_trail``) does
-    not receive handler-action events — those land in the signed audit log
-    at ``data/ciris_audit.db`` (``/v1/audit/entries`` queries all three
-    sources and merges). For σ we only need the cheap rate signal, so we
-    query SQLite directly with a COUNT.
+    Routes through persist's `audit_list_entries` substrate filtering on
+    `action_type='task_complete'` and `recorded_after`. The 2.9.0 A3
+    cutover moved every audit write to `cirislens_audit_log`; the legacy
+    `audit_log` table (in `ciris_audit.db`) is empty on fresh deployments.
     """
     try:
-        from ciris_engine.logic.utils.path_resolution import get_data_dir
+        import json as _json
+        import os
 
-        db_path = str(get_data_dir() / "ciris_audit.db")
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            return 0
+        tenant_id = os.environ.get("CIRIS_AGENT_TENANT", "agent-default")
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-        with get_safe_sqlite_connection(db_path, read_only=True, timeout=2.0) as conn:
-            cur = conn.execute(
-                "SELECT COUNT(*) FROM audit_log WHERE event_type = ? AND event_timestamp >= ?",
-                ("task_complete", since),
-            )
-            row = cur.fetchone()
-            return int(row[0]) if row else 0
+        filter_json = _json.dumps({
+            "tenant_id": tenant_id,
+            "action_type": "task_complete",
+            "recorded_after": since,
+        })
+
+        # Page through and count. The σ proxy caps at ~30 completions, so
+        # a single page of 500 is more than sufficient as a fast bound.
+        cursor_json: Optional[str] = None
+        count = 0
+        for _ in range(20):  # hard ceiling — sigma proxy bounded at 30
+            raw = engine.audit_list_entries(filter_json, cursor_json, 500)
+            parsed = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            items = parsed.get("items", []) if isinstance(parsed, dict) else []
+            count += len(items)
+            if len(items) < 500:
+                break
+            next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None
+            if not next_cursor:
+                break
+            cursor_json = next_cursor if isinstance(next_cursor, str) else _json.dumps(next_cursor)
+        return count
     except Exception as e:
-        logger.debug(f"[capacity.sigma] SQLite audit count failed: {type(e).__name__}: {e}")
+        logger.debug(f"[capacity.sigma] persist audit count failed: {type(e).__name__}: {e}")
         return 0
 
 

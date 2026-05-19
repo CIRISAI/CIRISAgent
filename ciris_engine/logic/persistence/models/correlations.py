@@ -22,12 +22,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 
-# Legacy alias — pre-migration tests `monkeypatch.setattr(correlations,
-# "get_db_connection", ...)` to redirect the SQL connection. The migrated
-# module no longer uses raw sqlite3, so this re-export exists purely so
-# strict monkeypatch.setattr calls keep succeeding (and become harmless
-# no-ops). Safe to remove once the test sweep updates those patches.
-from ciris_engine.logic.persistence.db import get_db_connection  # noqa: F401
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest, MetricsQuery
 from ciris_engine.schemas.persistence.correlations import ChannelInfo

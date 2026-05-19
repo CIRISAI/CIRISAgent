@@ -41,12 +41,18 @@ The original plan was "delete the psycopg2 wrappers + wire persist for Postgres"
 
 Drop the standalone `secrets.db` file path; persist owns that table.
 
-**Scope finding (Phase 1 investigation):** This is not a connection swap — it's a semantic API change. The agent's current `SecretRecord` exposes `encrypted_value`/`salt`/`nonce`/`encryption_key_ref` as fields and runs its own AES-GCM encryption before storing the ciphertext. Persist's `secrets_*` substrate owns the entire crypto + storage lifecycle and returns opaque handles. Migrating requires:
-1. Adapting `SecretRecord` to be a persist-handle wrapper, not a struct of crypto bytes.
-2. Re-encrypting existing stored secrets under persist's master key (one-shot boot-time migration).
-3. Verifying persist's `secrets_decapsulate` / `secrets_process_incoming_text` match the agent's pipeline semantics for detected-secret auto-decapsulation.
+**Scope finding (Phase 1 investigation, corrected after audit):**
 
-Sequenced **after** 2c + 3a to let those establish the pattern. Treat 2a as its own design pass with a follow-up doc.
+Initial framing claimed this was a "semantic API change" because `SecretRecord` exposed `encrypted_value`/`salt`/`nonce` fields. That framing was wrong: a codebase grep confirmed zero callers outside `secrets/store.py` and `secrets/encryption.py` read those fields. The exposure was sqlite-column leakage onto a dataclass, not an API contract.
+
+The actual blocker is upstream substrate gaps in persist 1.5.19:
+
+1. `secrets_process_incoming_text` is officially a stub (docstring: "Stub: v0.6.2 wires this with the pipeline classify stage"). Live behavior returns valid JSON but `refs` is always empty — no detection happens.
+2. `secrets_store_secret(key, value, accessor)` is designed for manually-keyed secrets. The agent's `DetectedSecret` flow needs to preserve an agent-assigned `secret_uuid` plus rich detection metadata (`pattern_name`, `sensitivity`, `context_hint`, `source_message_id`, `auto_decapsulate_for_actions`, `manual_access_only`). No public method accepts that payload.
+
+Filed as [CIRISPersist#66](https://github.com/CIRISAI/CIRISPersist/issues/66) — proposed `secrets_store_detected_secret(payload_json, accessor)` or an extension of `secrets_store_secret` to accept optional `metadata_json`.
+
+The agent owns 29-language locale-aware secret detection in Python and needs persist to accept the detected payload verbatim. Phase 2a unblocks once #66 lands.
 
 ### 2b. Token revocations → persist substrate
 `auth_service.py` swaps `aiosqlite.connect(self._revocations_db_path)` for a persist substrate call (substrate decided in Phase 0 — either new `revocation_*` methods or fold into `wa_cert.active`).

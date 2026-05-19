@@ -1408,40 +1408,39 @@ def _extract_user_from_thought_context(thought: Any, user_ids: Set[str]) -> None
 
 
 def _extract_users_from_correlation_history(task: Optional[Task], user_ids: Set[str]) -> None:
-    """Extract user IDs from correlation history database."""
+    """Extract user IDs from persist's correlation substrate.
+
+    Post-A1 absorption (CIRISAgent#763): routes through
+    `engine.correlation_query` with a correlation_id filter; reads tags.user_id
+    off the returned rows. Persist's correlation_record / correlation_query
+    surface (CIRISPersist#61) replaces the legacy raw SQL path.
+    """
     if not (task and task.context and task.context.correlation_id):
         return
 
     try:
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        import json as _json
 
-        adapter = get_adapter()
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-        with persistence.get_db_connection() as conn:
-            cursor = conn.cursor()
+        engine = get_persist_engine()
+        if engine is None:
+            return
 
-            # Build dialect-specific SQL
-            if adapter.is_postgresql():
-                sql = """
-                    SELECT DISTINCT tags->>'user_id' as user_id
-                    FROM service_correlations
-                    WHERE correlation_id = %s
-                    AND tags->>'user_id' IS NOT NULL
-                """
-            else:
-                sql = """
-                    SELECT DISTINCT json_extract(tags, '$.user_id') as user_id
-                    FROM service_correlations
-                    WHERE correlation_id = ?
-                    AND json_extract(tags, '$.user_id') IS NOT NULL
-                """
-
-            cursor.execute(sql, (task.context.correlation_id,))
-            correlation_users = cursor.fetchall()
-            for row in correlation_users:
-                if row["user_id"]:
-                    user_ids.add(str(row["user_id"]))
-                    logger.debug(f"[USER EXTRACTION] Found user {row['user_id']} from correlation history")
+        filter_json = _json.dumps({"correlation_id": task.context.correlation_id})
+        cursor = _json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
+        raw = engine.correlation_query(filter_json, cursor, 100)
+        parsed = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+        items = parsed.get("items", []) if isinstance(parsed, dict) else []
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            tags = row.get("tags")
+            if isinstance(tags, dict):
+                uid = tags.get("user_id")
+                if uid:
+                    user_ids.add(str(uid))
+                    logger.debug(f"[USER EXTRACTION] Found user {uid} from correlation history")
     except Exception as e:
         logger.warning(f"[USER EXTRACTION] Failed to extract users from correlation history: {e}")
 
@@ -2045,81 +2044,83 @@ def _create_user_profile_from_node(
 
 
 async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List[JSONDict]:
-    """Collect recent messages from this user in other channels."""
-    recent_messages = []
+    """Collect this user's recent messages in channels other than `channel_id`.
+
+    Post-A1 absorption (CIRISAgent#763): paginate persist's correlation
+    substrate filtering by service_type='communication', then check
+    tags.user_id + tags.channel_id client-side. Persist's CorrelationFilter
+    doesn't predicate on tag-JSON keys directly, so the user_id /
+    channel_id match runs in Python after pagination.
+    """
+    recent_messages: List[JSONDict] = []
     try:
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-        adapter = get_adapter()
+        engine = get_persist_engine()
+        if engine is None:
+            return recent_messages
 
-        # Query service correlations for user's recent messages
-        with persistence.get_db_connection() as conn:
-            cursor = conn.cursor()
+        filter_json = json.dumps({"service_type": "communication"})
+        cursor_json = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
 
-            # Build dialect-specific SQL
-            if adapter.is_postgresql():
-                # PostgreSQL: Cast JSONB to text for LIKE operator
-                sql = """
-                    SELECT
-                        c.correlation_id,
-                        c.handler_name,
-                        c.request_data,
-                        c.created_at,
-                        c.tags
-                    FROM service_correlations c
-                    WHERE
-                        c.tags::text LIKE %s
-                        AND c.tags::text NOT LIKE %s
-                        AND c.handler_name IN ('ObserveHandler', 'SpeakHandler')
-                    ORDER BY c.created_at DESC
-                    LIMIT 3
-                """
-            else:
-                # SQLite: tags is TEXT, LIKE works directly
-                sql = """
-                    SELECT
-                        c.correlation_id,
-                        c.handler_name,
-                        c.request_data,
-                        c.created_at,
-                        c.tags
-                    FROM service_correlations c
-                    WHERE
-                        c.tags LIKE ?
-                        AND c.tags NOT LIKE ?
-                        AND c.handler_name IN ('ObserveHandler', 'SpeakHandler')
-                    ORDER BY c.created_at DESC
-                    LIMIT 3
-                """
+        collected = 0
+        max_messages = 3
+        while collected < max_messages:
+            raw = engine.correlation_query(filter_json, cursor_json, 200)
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            items = parsed.get("items", []) if isinstance(parsed, dict) else []
+            if not items:
+                break
 
-            cursor.execute(sql, (f'%"user_id":"{user_id}"%', f'%"channel_id":"{channel_id}"%'))
+            for row in items:
+                if not isinstance(row, dict):
+                    continue
+                handler = row.get("handler_name")
+                if handler not in ("ObserveHandler", "SpeakHandler"):
+                    continue
+                tags = row.get("tags") or {}
+                if not isinstance(tags, dict):
+                    try:
+                        tags = json.loads(tags)
+                    except Exception:
+                        continue
+                if str(tags.get("user_id", "")) != user_id:
+                    continue
+                msg_channel = str(tags.get("channel_id", "unknown"))
+                if msg_channel == channel_id:
+                    continue  # Cross-channel ONLY
 
-            for row in cursor.fetchall():
-                try:
-                    tags = json.loads(row["tags"]) if row["tags"] else {}
-                    msg_channel = tags.get("channel_id", "unknown")
-                    msg_content = "Message in " + msg_channel
+                req_data = row.get("request_data") or {}
+                if isinstance(req_data, str):
+                    try:
+                        req_data = json.loads(req_data)
+                    except Exception:
+                        req_data = {}
+                msg_content = (
+                    req_data.get("content")
+                    or req_data.get("message")
+                    or f"Message in {msg_channel}"
+                ) if isinstance(req_data, dict) else f"Message in {msg_channel}"
 
-                    # Try to extract content from request_data
-                    if row["request_data"]:
-                        req_data = json.loads(row["request_data"])
-                        if isinstance(req_data, dict):
-                            msg_content = req_data.get("content", req_data.get("message", msg_content))
+                created_at = row.get("created_at", "")
+                ts_str = (
+                    created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+                )
+                recent_messages.append({
+                    "channel": msg_channel,
+                    "content": msg_content,
+                    "timestamp": ts_str,
+                })
+                collected += 1
+                if collected >= max_messages:
+                    break
 
-                    recent_messages.append(
-                        {
-                            "channel": msg_channel,
-                            "content": msg_content,
-                            "timestamp": (
-                                row["created_at"].isoformat()
-                                if hasattr(row["created_at"], "isoformat")
-                                else str(row["created_at"])
-                            ),
-                        }
-                    )
-                except (json.JSONDecodeError, TypeError, AttributeError, KeyError):
-                    # Skip malformed entries
-                    pass
+            if len(items) < 200:
+                break
+            next_cursor = parsed.get("cursor")
+            if not next_cursor:
+                break
+            cursor_json = next_cursor if isinstance(next_cursor, str) else json.dumps(next_cursor)
     except Exception as e:
         logger.warning(f"Failed to collect cross-channel messages for user {user_id}: {e}")
 

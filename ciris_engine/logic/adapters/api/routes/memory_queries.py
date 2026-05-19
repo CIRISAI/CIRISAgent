@@ -53,10 +53,8 @@ async def query_timeline_nodes(
     Returns:
         List of GraphNode objects
     """
-    # Get database path
+    # db_path retained for signature compat; persist owns the connection.
     db_path = DatabaseExecutor.get_db_path(memory_service)
-    if not db_path:
-        return []
 
     # Calculate time range
     start_time, end_time = TimeRangeCalculator.calculate_range(hours)
@@ -65,8 +63,8 @@ async def query_timeline_nodes(
         f"[TIMELINE-QUERY] Time range: start={start_time.isoformat()}, end={end_time.isoformat()}, hours={hours}"
     )
 
-    # Build query with all filters (including user filtering for OBSERVER users)
-    query, params = QueryBuilder.build_timeline_query(
+    # Build persist NodeFilter + client-side post-options.
+    node_filter, post_options = QueryBuilder.build_timeline_query(
         start_time=start_time,
         end_time=end_time,
         scope=scope,
@@ -76,10 +74,10 @@ async def query_timeline_nodes(
         user_filter_ids=user_filter_ids,
     )
 
-    # Execute query and get rows
-    rows = DatabaseExecutor.execute_query(db_path, query, params)
+    # Execute via persist substrate.
+    rows = DatabaseExecutor.execute_query(db_path, node_filter, post_options)
 
-    # Build GraphNode objects from rows
+    # Build GraphNode objects from persist rows.
     return GraphNodeBuilder.build_from_rows(rows)
 
 
@@ -200,13 +198,11 @@ async def search_nodes(
     Returns:
         List of matching GraphNode objects
     """
-    # Get database path
+    # db_path retained for signature compat; persist owns the connection.
     db_path = DatabaseExecutor.get_db_path(memory_service)
-    if not db_path:
-        return []
 
-    # Build search query with all filters (including user filtering for OBSERVER users)
-    sql_query, params = QueryBuilder.build_search_query(
+    # Build persist NodeFilter + client-side post-options.
+    node_filter, post_options = QueryBuilder.build_search_query(
         query=query,
         node_type=node_type,
         scope=scope,
@@ -218,10 +214,10 @@ async def search_nodes(
         user_filter_ids=user_filter_ids,
     )
 
-    # Execute query and get rows
-    rows = DatabaseExecutor.execute_query(db_path, sql_query, params)
+    # Execute via persist substrate.
+    rows = DatabaseExecutor.execute_query(db_path, node_filter, post_options)
 
-    # Build GraphNode objects from rows
+    # Build GraphNode objects from persist rows.
     return GraphNodeBuilder.build_from_rows(rows)
 
 

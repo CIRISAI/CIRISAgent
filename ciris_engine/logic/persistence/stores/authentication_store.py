@@ -240,9 +240,23 @@ def store_wa_certificate(wa: WACertificate, db_path: str) -> None:
     """Store a WA certificate via persist `wa_cert_upsert`.
 
     `db_path` retained for signature compat; persist is single-engine per process.
+
+    INSERT-only semantics: persist's substrate is upsert, but every caller of
+    this function is creating a brand-new WA (observer, system_wa, root_wa,
+    new admin). Silently overwriting an existing wa_id would let an
+    accidental duplicate-create reset the password — see
+    `tests/test_password_persistence_comprehensive::test_default_admin_no_accidental_reset`.
+    Guard with an explicit pre-existence check.
     """
+    engine = _get_engine()
+    if engine.wa_cert_get(wa.wa_id) is not None:
+        raise ValueError(
+            f"WA certificate {wa.wa_id} already exists; refusing to overwrite "
+            f"via store_wa_certificate. Use the explicit update path if a "
+            f"mutation is intended."
+        )
     payload = _wa_to_persist_payload(wa)
-    _get_engine().wa_cert_upsert(json.dumps(payload))
+    engine.wa_cert_upsert(json.dumps(payload))
 
 
 def _parse_persist_payload(raw: Any) -> Optional[Dict[str, Any]]:

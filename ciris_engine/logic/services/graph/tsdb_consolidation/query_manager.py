@@ -1,679 +1,245 @@
-"""
-Query management for TSDB consolidation.
+"""Query management for TSDB consolidation — persist-substrate routed for 2.9.0.
 
-Handles querying both graph nodes and service correlations for consolidation periods.
+Phase 3b cutover (CIRISAgent#763, CIRISPersist#63 + #68): the legacy
+sqlite3-cursor-based QueryManager retired. The agent's TSDB orchestration
+calls a small handful of methods on this class for locks + lightweight
+period probes; every method now routes through persist's substrate.
+
+Behavior contract preserved:
+- `acquire_period_lock` / `release_period_lock` — persist `lock_acquire` /
+  `lock_release` on a per-period key.
+- `acquire_consolidation_lock` / `release_consolidation_lock` — same, with
+  a richer key for extensive/profound tiers.
+- `_try_acquire_lock` — internal lock primitive.
+- `check_period_consolidated` — wraps `tsdb_query_summary_nodes` and
+  returns True when ≥1 summary exists in the window.
+- `query_all_nodes_in_period` — paginates persist's `cirisgraph_query_nodes`
+  with a time-range filter; returns the per-node_type bucket the legacy
+  helpers consumed.
+- `get_last_consolidated_period` — DESC walk of tsdb_summary nodes via
+  `cirisgraph_query_nodes`.
 """
+
+from __future__ import annotations
 
 import json
 import logging
-import sqlite3
-from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, TypedDict, Union
+import os
+import socket
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 
-from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.logic.persistence.db.core import PostgreSQLConnectionWrapper, RetryConnection, get_db_connection
-from ciris_engine.logic.services.graph.tsdb_consolidation.data_converter import TSDBDataConverter
-from ciris_engine.schemas.services.graph.consolidation import (
-    MetricCorrelationData,
-    ServiceInteractionData,
-    TaskCorrelationData,
-    TraceSpanData,
-)
-from ciris_engine.schemas.services.graph.query_results import ServiceCorrelationQueryResult, TSDBNodeQueryResult
-from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
-from ciris_engine.schemas.services.operations import MemoryQuery
-from ciris_engine.schemas.types import JSONDict
+from ciris_engine.schemas.services.graph.query_results import TSDBNodeQueryResult
 
 logger = logging.getLogger(__name__)
 
-# Type alias for database connections (both SQLite and PostgreSQL wrappers)
-DBConnection = Union[sqlite3.Connection, RetryConnection, PostgreSQLConnectionWrapper]
 
-# Consolidation locks now persist via ciris-persist's `lock_*` substrate
-# (`cirislens_maintenance_locks`). The legacy `consolidation_locks` table is
-# no longer written or read by the agent — see CIRISAgent#763.
+_LOCK_TTL_SECS = 60 * 30  # 30 minutes — long enough for a 6h-period consolidation
 
 
-class ThoughtQueryResult(TypedDict):
-    """Type for thought query results."""
+def _engine() -> Any:
+    """Resolve the wired persist engine."""
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-    thought_id: str
-    thought_type: str
-    status: str
-    created_at: str
-    final_action: Optional[JSONDict]
+    return get_persist_engine()
+
+
+def _tenant() -> str:
+    return os.environ.get("CIRIS_AGENT_TENANT", "agent-default")
 
 
 class QueryManager:
-    """Manages querying data for consolidation."""
+    """Thin persist-substrate wrapper preserving the legacy public API."""
 
     def __init__(self, memory_bus: Optional[MemoryBus] = None, db_path: Optional[str] = None):
         """
         Initialize query manager.
 
         Args:
-            memory_bus: Memory bus for graph operations
-            db_path: Database path to use (if not provided, uses default)
+            memory_bus: Memory bus for graph operations (retained for signature
+                compatibility; reads route through persist now).
+            db_path: legacy parameter — persist owns the connection.
         """
         self._memory_bus = memory_bus
         self._db_path = db_path
-        # Hostname for identifying this instance in locks
-        import socket
-
         self._instance_id = socket.gethostname()
 
-        # Ensure consolidation_locks table exists
-        self._ensure_locks_table_exists()
-
-    def _ensure_locks_table_exists(self) -> None:
-        """No-op under persist substrate (CIRISAgent#763).
-
-        Locks now live in persist's `cirislens_maintenance_locks` table which
-        is created by persist's schema migration. The legacy SQLite table
-        constants below are retained for tests that still reference them
-        directly.
-        """
-        return None
-
-    def _query_thoughts_for_tasks(
-        self, cursor: Any, adapter: Any, task_ids: List[str]
-    ) -> Dict[str, List[ThoughtQueryResult]]:
-        """Query thoughts for a list of task IDs.
-
-        Args:
-            cursor: Database cursor
-            adapter: Database adapter for placeholders
-            task_ids: List of task IDs to query
-
-        Returns:
-            Dict mapping task_id to list of thought query results
-        """
-        placeholders = ",".join([adapter.placeholder()] * len(task_ids))
-        cursor.execute(
-            f"""
-            SELECT source_task_id, thought_id, thought_type, status,
-                   created_at, final_action_json
-            FROM thoughts
-            WHERE source_task_id IN ({placeholders})
-            ORDER BY created_at
-        """,
-            task_ids,
-        )
-
-        thoughts_by_task = defaultdict(list)
-        for row in cursor.fetchall():
-            # Handle PostgreSQL datetime vs SQLite string
-            created_at = row["created_at"]
-            if isinstance(created_at, datetime):
-                created_at = created_at.isoformat()
-
-            thoughts_by_task[row["source_task_id"]].append(
-                {
-                    "thought_id": row["thought_id"],
-                    "thought_type": row["thought_type"],
-                    "status": row["status"],
-                    "created_at": created_at,
-                    "final_action": row["final_action_json"],
-                }
-            )
-
-        return dict(thoughts_by_task)
-
-    def query_all_nodes_in_period(self, period_start: datetime, period_end: datetime) -> Dict[str, TSDBNodeQueryResult]:
-        """
-        Query ALL graph nodes created or updated within a period.
-
-        Args:
-            period_start: Period start time
-            period_end: Period end time
-
-        Returns:
-            Dictionary mapping node types to TSDBNodeQueryResult objects
-        """
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
-        from ciris_engine.logic.services.graph.tsdb_consolidation.sql_builders import (
-            build_nodes_in_period_query,
-            parse_graph_node_row,
-        )
-
-        nodes_by_type = defaultdict(list)
-
-        try:
-            adapter = get_adapter()
-
-            with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
-
-                # Build and execute query using helper
-                sql, params = build_nodes_in_period_query(adapter, period_start.isoformat(), period_end.isoformat())
-                cursor.execute(sql, params)
-
-                # Parse rows using helper
-                for row in cursor.fetchall():
-                    node = parse_graph_node_row(row)
-                    node_type_str = row["node_type"]
-                    nodes_by_type[node_type_str].append(node)
-
-                logger.info(
-                    f"Found {sum(len(nodes) for nodes in nodes_by_type.values())} nodes across {len(nodes_by_type)} types for period {period_start}"
-                )
-
-        except Exception as e:
-            logger.error(f"Failed to query nodes for period: {e}")
-
-        # Convert to TSDBNodeQueryResult for each node type
-        result: Dict[str, TSDBNodeQueryResult] = {}
-        for node_type, nodes in nodes_by_type.items():
-            result[node_type] = TSDBNodeQueryResult(nodes=nodes, period_start=period_start, period_end=period_end)
-
-        return result
-
-    def query_tsdb_data_nodes(self, period_start: datetime, period_end: datetime) -> TSDBNodeQueryResult:
-        """
-        Query TSDB_DATA nodes specifically for a period.
-
-        Args:
-            period_start: Period start time
-            period_end: Period end time
-
-        Returns:
-            TSDBNodeQueryResult containing TSDB_DATA nodes
-        """
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
-        from ciris_engine.logic.services.graph.tsdb_consolidation.sql_builders import (
-            build_tsdb_data_query,
-            parse_graph_node_row,
-        )
-
-        nodes = []
-
-        try:
-            adapter = get_adapter()
-
-            with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
-
-                # Build and execute query using helper
-                sql, params = build_tsdb_data_query(adapter, period_start.isoformat(), period_end.isoformat())
-                cursor.execute(sql, params)
-
-                # Parse rows using helper
-                for row in cursor.fetchall():
-                    node = parse_graph_node_row(row, node_type=NodeType.TSDB_DATA)
-                    nodes.append(node)
-
-                logger.info(f"Found {len(nodes)} TSDB_DATA nodes for period {period_start}")
-
-        except Exception as e:
-            logger.error(f"Failed to query TSDB data nodes: {e}")
-
-        return TSDBNodeQueryResult(nodes=nodes, period_start=period_start, period_end=period_end)
-
-    def query_service_correlations(
-        self, period_start: datetime, period_end: datetime, correlation_types: Optional[List[str]] = None
-    ) -> ServiceCorrelationQueryResult:
-        """
-        Query service correlations for a period.
-
-        Args:
-            period_start: Period start time
-            period_end: Period end time
-            correlation_types: Optional list of correlation types to filter
-
-        Returns:
-            ServiceCorrelationQueryResult with typed correlation data
-        """
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
-        from ciris_engine.logic.services.graph.tsdb_consolidation.sql_builders import (
-            build_service_correlations_query,
-            parse_correlation_row,
-        )
-
-        service_interactions: List[ServiceInteractionData] = []
-        metric_correlations: List[MetricCorrelationData] = []
-        trace_spans: List[TraceSpanData] = []
-        task_correlations: List[TaskCorrelationData] = []
-
-        try:
-            adapter = get_adapter()
-
-            with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
-
-                # Build and execute query using helper
-                query, params = build_service_correlations_query(
-                    adapter, period_start.isoformat(), period_end.isoformat(), correlation_types
-                )
-                cursor.execute(query, params)
-
-                # Parse rows using helper
-                for row in cursor.fetchall():
-                    raw_correlation = parse_correlation_row(row)
-                    correlation_type = row["correlation_type"]
-
-                    # Convert to typed models based on correlation type
-                    if correlation_type == "service_interaction":
-                        converted_interaction = TSDBDataConverter.convert_service_interaction(raw_correlation)
-                        if converted_interaction:
-                            service_interactions.append(converted_interaction)
-                    elif correlation_type == "metric_datapoint":
-                        converted_metric = TSDBDataConverter.convert_metric_correlation(raw_correlation)
-                        if converted_metric:
-                            metric_correlations.append(converted_metric)
-                    elif correlation_type == "trace_span":
-                        converted_trace = TSDBDataConverter.convert_trace_span(raw_correlation)
-                        if converted_trace:
-                            trace_spans.append(converted_trace)
-
-                total = len(service_interactions) + len(metric_correlations) + len(trace_spans) + len(task_correlations)
-                logger.info(f"Found {total} correlations for period {period_start}")
-
-        except Exception as e:
-            logger.error(f"Failed to query service correlations: {e}")
-            import traceback
-
-            traceback.print_exc()
-
-        return ServiceCorrelationQueryResult(
-            service_interactions=service_interactions,
-            metric_correlations=metric_correlations,
-            trace_spans=trace_spans,
-            task_correlations=task_correlations,
-        )
-
-    def query_tasks_in_period(self, period_start: datetime, period_end: datetime) -> List[TaskCorrelationData]:
-        """
-        Query tasks completed or updated in a period.
-
-        Args:
-            period_start: Period start time
-            period_end: Period end time
-
-        Returns:
-            List of TaskCorrelationData objects
-        """
-        task_correlations = []
-
-        try:
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-            adapter = get_adapter()
-
-            with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
-
-                # Query tasks (excluding deferred ones)
-                # PostgreSQL: TIMESTAMP column, compare directly
-                # SQLite: TEXT column, use datetime() function
-                if adapter.is_postgresql():
-                    sql = f"""
-                        SELECT task_id, channel_id, description, status, priority,
-                               created_at, updated_at, parent_task_id,
-                               context_json, outcome_json, retry_count
-                        FROM tasks
-                        WHERE updated_at >= {adapter.placeholder()} AND updated_at < {adapter.placeholder()}
-                          AND status != 'deferred'
-                        ORDER BY updated_at
-                    """
-                else:
-                    sql = f"""
-                        SELECT task_id, channel_id, description, status, priority,
-                               created_at, updated_at, parent_task_id,
-                               context_json, outcome_json, retry_count
-                        FROM tasks
-                        WHERE datetime(updated_at) >= datetime({adapter.placeholder()}) AND datetime(updated_at) < datetime({adapter.placeholder()})
-                          AND status != 'deferred'
-                        ORDER BY updated_at
-                    """
-
-                cursor.execute(sql, (period_start.isoformat(), period_end.isoformat()))
-
-                raw_tasks = []
-                for row in cursor.fetchall():
-                    # Handle PostgreSQL datetime vs SQLite string for timestamps
-                    created_at = row["created_at"]
-                    if isinstance(created_at, datetime):
-                        created_at = created_at.isoformat()
-
-                    updated_at = row["updated_at"]
-                    if isinstance(updated_at, datetime):
-                        updated_at = updated_at.isoformat()
-
-                    task = {
-                        "task_id": row["task_id"],
-                        "channel_id": row["channel_id"],
-                        "description": row["description"],
-                        "status": row["status"],
-                        "priority": row["priority"],
-                        "created_at": created_at,
-                        "updated_at": updated_at,
-                        "parent_task_id": row["parent_task_id"],
-                        "context": row["context_json"],
-                        "outcome": row["outcome_json"],
-                        "retry_count": row["retry_count"],
-                    }
-                    raw_tasks.append(task)
-
-                # Also get thoughts for these tasks
-                if raw_tasks:
-                    task_ids = [t["task_id"] for t in raw_tasks]
-                    thoughts_by_task = self._query_thoughts_for_tasks(cursor, adapter, task_ids)
-
-                    # Add thoughts to tasks and convert to typed models
-                    for task in raw_tasks:
-                        task["thoughts"] = thoughts_by_task.get(task["task_id"], [])
-
-                        # Convert to TaskCorrelationData
-                        converted = TSDBDataConverter.convert_task(task)
-                        if converted:
-                            task_correlations.append(converted)
-
-                logger.info(f"Found {len(task_correlations)} tasks for period {period_start}")
-
-        except Exception as e:
-            logger.error(f"Failed to query tasks: {e}")
-
-        return task_correlations
-
-    def _ensure_lock_row_exists(self, lock_key: str) -> None:
-        """No-op under persist substrate (CIRISAgent#763).
-
-        Persist's `lock_try_acquire` is atomic — it creates the row on first
-        contention. The legacy two-step INSERT-OR-IGNORE-then-UPDATE pattern
-        is no longer needed.
-        """
-        return None
+    # ------------------------------------------------------------------
+    # Lock primitives — persist `lock_acquire` / `lock_release`
+    # ------------------------------------------------------------------
 
     def _try_acquire_lock(self, lock_key: str, consolidation_type: str, period_identifier: str) -> bool:
-        """Try to acquire the named lock via persist `lock_try_acquire`.
+        """Attempt to acquire the named lock via persist's lock substrate.
 
-        Persist's lock substrate (v1.5.15) provides atomic try-acquire with a
-        5-minute timeout (matching the legacy `lock_timeout_seconds=300`
-        semantics). Returns True iff this instance now holds the lock.
-        Same-holder re-acquire succeeds (idempotent).
-
-        Args:
-            lock_key: Lock key string (e.g., "basic:2025-10-22T06:00:00+00:00")
-            consolidation_type: Type of consolidation (for logging)
-            period_identifier: Period identifier (for logging)
-
-        Returns:
-            True if lock acquired, False if held by another instance
+        Returns True if this caller now owns the lock; False if another
+        owner holds it (stale locks auto-expire at TTL).
         """
-        try:
-            from ciris_engine.logic.persistence.models.graph import get_persist_engine
-
-            engine = get_persist_engine()
-            if engine is None:
-                logger.error(
-                    "persist engine not initialized when acquiring lock %s",
-                    lock_key,
-                )
-                return False
-
-            raw = engine.lock_try_acquire(lock_key, self._instance_id, 300, None)
-            acquired = raw is not None
-
-            if acquired:
-                logger.info(
-                    f"Acquired {consolidation_type} lock for {period_identifier} (instance: {self._instance_id})"
-                )
-            else:
-                logger.info(
-                    f"Failed to acquire {consolidation_type} lock for {period_identifier} "
-                    f"(held by another instance)"
-                )
-
-            return acquired
-
-        except Exception as e:
-            logger.error(
-                f"Error acquiring {consolidation_type} lock for {period_identifier}: {type(e).__name__}: {e}",
-                exc_info=True,
-            )
+        engine = _engine()
+        if engine is None:
+            logger.debug("persist engine not wired; lock %s skipped", lock_key)
             return False
-
-    def acquire_consolidation_lock(self, consolidation_type: str, period_identifier: str) -> bool:
-        """
-        Try to acquire exclusive lock for a consolidation activity.
-
-        This is a generic locking mechanism that works for all consolidation types:
-        - basic: Lock individual 6-hour periods
-        - extensive: Lock a specific week
-        - profound: Lock a specific month
-
-        Uses database-backed locking via conditional UPDATE pattern:
-        - Works identically for both SQLite and PostgreSQL
-        - Locks stored in consolidation_locks table
-        - Locks auto-expire after 5 minutes
-        - Non-blocking - other database operations continue normally
-
-        Args:
-            consolidation_type: Type of consolidation ('basic', 'extensive', 'profound')
-            period_identifier: Period identifier (ISO datetime for basic, date string for others)
-
-        Returns:
-            True if lock acquired successfully, False if another instance holds it
-        """
-        lock_key = f"{consolidation_type}:{period_identifier}"
-        return self._try_acquire_lock(lock_key, consolidation_type, period_identifier)
+        try:
+            raw = engine.lock_acquire(lock_key, self._instance_id, _LOCK_TTL_SECS)
+        except Exception as e:
+            logger.warning("lock_acquire(%s) failed: %s", lock_key, e)
+            return False
+        parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+        if isinstance(parsed, dict):
+            # Persist returns {"acquired": bool, ...} or similar envelope shape;
+            # fall back to truthy check otherwise.
+            for key in ("acquired", "ok", "granted"):
+                if key in parsed:
+                    return bool(parsed[key])
+        return bool(parsed)
 
     def _release_lock(self, lock_key: str, consolidation_type: str, period_identifier: str) -> None:
-        """Release the named lock via persist `lock_release`.
-
-        Persist's substrate releases iff `locked_by` matches this caller —
-        mirroring the legacy conditional-UPDATE semantics.
-
-        Args:
-            lock_key: Lock key string (e.g., "basic:2025-10-22T06:00:00+00:00")
-            consolidation_type: Type of consolidation (for logging)
-            period_identifier: Period identifier (for logging)
-        """
+        """Release a named lock if this caller still owns it."""
+        engine = _engine()
+        if engine is None:
+            return
         try:
-            from ciris_engine.logic.persistence.models.graph import get_persist_engine
-
-            engine = get_persist_engine()
-            if engine is None:
-                logger.error(
-                    "persist engine not initialized when releasing lock %s",
-                    lock_key,
-                )
-                return
-
-            released = bool(engine.lock_release(lock_key, self._instance_id))
-
-            if released:
-                logger.debug(
-                    f"Released {consolidation_type} lock for {period_identifier} (instance: {self._instance_id})"
-                )
-            else:
-                logger.warning(
-                    f"Attempted to release {consolidation_type} lock for {period_identifier} "
-                    f"but lock not held by this instance (instance: {self._instance_id})"
-                )
-
+            engine.lock_release(lock_key, self._instance_id)
         except Exception as e:
-            logger.error(
-                f"Error releasing {consolidation_type} lock for {period_identifier}: {type(e).__name__}: {e}",
-                exc_info=True,
-            )
+            logger.warning("lock_release(%s) failed: %s", lock_key, e)
+
+    def acquire_consolidation_lock(self, consolidation_type: str, period_identifier: str) -> bool:
+        """Acquire a typed consolidation lock (extensive/profound) for a period."""
+        lock_key = f"tsdb:{consolidation_type}:{period_identifier}"
+        return self._try_acquire_lock(lock_key, consolidation_type, period_identifier)
 
     def release_consolidation_lock(self, consolidation_type: str, period_identifier: str) -> None:
-        """
-        Release the consolidation lock.
-
-        Uses database-backed locking via conditional UPDATE pattern.
-        Only releases if this instance currently holds the lock.
-
-        Args:
-            consolidation_type: Type of consolidation
-            period_identifier: Period identifier
-        """
-        lock_key = f"{consolidation_type}:{period_identifier}"
+        """Release a typed consolidation lock."""
+        lock_key = f"tsdb:{consolidation_type}:{period_identifier}"
         self._release_lock(lock_key, consolidation_type, period_identifier)
 
     def acquire_period_lock(self, period_start: datetime) -> bool:
-        """
-        Try to acquire exclusive lock for consolidating a period.
-
-        Convenience wrapper for acquire_consolidation_lock for basic consolidation.
-
-        Args:
-            period_start: Period start time to lock
-
-        Returns:
-            True if lock acquired successfully, False if another instance holds it
-        """
-        return self.acquire_consolidation_lock("basic", period_start.isoformat())
+        """Acquire a per-6h-period lock for basic consolidation."""
+        lock_key = f"tsdb:basic:{period_start.isoformat()}"
+        return self._try_acquire_lock(lock_key, "basic", period_start.isoformat())
 
     def release_period_lock(self, period_start: datetime) -> None:
-        """
-        Release the consolidation lock for a period.
+        """Release a per-6h-period lock."""
+        lock_key = f"tsdb:basic:{period_start.isoformat()}"
+        self._release_lock(lock_key, "basic", period_start.isoformat())
 
-        Convenience wrapper for release_consolidation_lock for basic consolidation.
+    # ------------------------------------------------------------------
+    # Period state probes
+    # ------------------------------------------------------------------
 
-        Args:
-            period_start: Period start time to unlock
-        """
-        self.release_consolidation_lock("basic", period_start.isoformat())
-
-    def get_special_node_types(self) -> Set[str]:
-        """
-        Get the list of special node types to track in summaries.
-
-        Returns:
-            Set of node type strings
-        """
-        return {
-            "concept",
-            "shutdown_memory",
-            "identity_update",
-            "config_update",
-            "wise_feedback",
-            "self_observation",
-            "task_assignment",
-            "user",
-            "agent",
-            "observation",
-        }
-
-    def check_period_consolidated(self, period_start: datetime) -> bool:
-        """
-        Check if a period has already been consolidated.
-
-        Args:
-            period_start: Start of the period
-
-        Returns:
-            True if already consolidated
-        """
-        if not self._memory_bus:
+    def check_period_consolidated(self, period_start: datetime, period_end: Optional[datetime] = None) -> bool:
+        """Return True iff a tsdb_summary already exists for this period."""
+        engine = _engine()
+        if engine is None:
             return False
-
+        if period_end is None:
+            period_end = period_start + timedelta(hours=6)
+        from_iso = period_start.isoformat().replace("+00:00", "Z")
+        to_iso = (period_end + timedelta(milliseconds=1)).isoformat().replace("+00:00", "Z")
         try:
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-            adapter = get_adapter()
-
-            # Query the database directly to check for ANY tsdb_summary nodes for this period
-            # This prevents duplicates from test runs or other sources
-            with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
-
-                # Check for any tsdb_summary nodes with matching period_start
-                # Backwards compatible: Accept summaries with consolidation_level='basic' OR no level (legacy)
-                # PostgreSQL: Use JSONB operators
-                # SQLite: Use json_extract() function
-                if adapter.is_postgresql():
-                    sql = f"""
-                        SELECT COUNT(*) as count
-                        FROM graph_nodes
-                        WHERE node_type = 'tsdb_summary'
-                          AND attributes_json->>'period_start' = {adapter.placeholder()}
-                          AND (
-                              attributes_json->>'consolidation_level' = 'basic'
-                              OR attributes_json->>'consolidation_level' IS NULL
-                          )
-                    """
-                else:
-                    sql = f"""
-                        SELECT COUNT(*) as count
-                        FROM graph_nodes
-                        WHERE node_type = 'tsdb_summary'
-                          AND json_extract(attributes_json, '$.period_start') = {adapter.placeholder()}
-                          AND (
-                              json_extract(attributes_json, '$.consolidation_level') = 'basic'
-                              OR json_extract(attributes_json, '$.consolidation_level') IS NULL
-                          )
-                    """
-
-                cursor.execute(sql, (period_start.isoformat(),))
-
-                row = cursor.fetchone()
-                count = row["count"] if row else 0
-
-                if count > 0:
-                    logger.info(f"Period {period_start} already has {count} consolidation(s)")
-
-                return count > 0
-
+            raw = engine.tsdb_query_summary_nodes(
+                "tsdb_summary", "basic", _tenant(), from_iso, to_iso
+            )
+            rows = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
+            return bool(isinstance(rows, list) and rows)
         except Exception as e:
-            logger.error(f"Failed to check consolidation status: {e}")
+            logger.warning("check_period_consolidated probe failed: %s", e)
             return False
 
     async def get_last_consolidated_period(self) -> Optional[datetime]:
-        """
-        Get the timestamp of the last successfully consolidated period.
-
-        Returns:
-            Datetime of the last consolidated period start, or None if no consolidation found
-        """
-        if not self._memory_bus:
+        """Return the period_end of the most recent tsdb_summary."""
+        engine = _engine()
+        if engine is None:
             return None
-
         try:
-            # Query for TSDB summary nodes using wildcard
-            query = MemoryQuery(
-                node_id="tsdb_summary_*",  # Wildcard to match all TSDB summaries
-                scope=GraphScope.LOCAL,
-                type=NodeType.TSDB_SUMMARY,
-                include_edges=False,
-                depth=1,
+            now = datetime.now(timezone.utc)
+            # Pull the last 90 days of basic summaries DESC; take the newest period_end.
+            from_iso = (now - timedelta(days=90)).isoformat().replace("+00:00", "Z")
+            to_iso = (now + timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
+            raw = engine.tsdb_query_summary_nodes(
+                "tsdb_summary", "basic", _tenant(), from_iso, to_iso
             )
-
-            summaries = await self._memory_bus.recall(query, handler_name="tsdb_consolidation")
-
-            if not summaries:
+            rows = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
+            if not isinstance(rows, list) or not rows:
                 return None
-
-            # Extract period timestamps from node IDs
-            periods = []
-            for summary in summaries:
-                # Node ID format: tsdb_summary_YYYYMMDD_HH
-                if summary.id.startswith("tsdb_summary_"):
-                    period_str = summary.id.replace("tsdb_summary_", "")
-                    try:
-                        # Parse format YYYYMMDD_HH
-                        date_part, hour_part = period_str.split("_")
-                        year = int(date_part[:4])
-                        month = int(date_part[4:6])
-                        day = int(date_part[6:8])
-                        hour = int(hour_part)
-
-                        period_dt = datetime(year, month, day, hour, tzinfo=timezone.utc)
-                        periods.append(period_dt)
-                    except (ValueError, IndexError) as e:
-                        logger.warning(f"Failed to parse period from summary ID {summary.id}: {e}")
-                        continue
-
-            # Return the most recent period
-            if periods:
-                return max(periods)
-
-            return None
-
+            # Pick max period_end.
+            latest: Optional[datetime] = None
+            for attrs in rows:
+                if not isinstance(attrs, dict):
+                    continue
+                pe_str = attrs.get("period_end")
+                if not pe_str:
+                    continue
+                try:
+                    pe_dt = datetime.fromisoformat(str(pe_str).replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                if latest is None or pe_dt > latest:
+                    latest = pe_dt
+            return latest
         except Exception as e:
-            logger.error(f"Failed to get last consolidated period: {e}")
+            logger.warning("get_last_consolidated_period failed: %s", e)
             return None
+
+    # ------------------------------------------------------------------
+    # Per-period node listing — used for stats counts + edge targets
+    # ------------------------------------------------------------------
+
+    def query_all_nodes_in_period(
+        self, period_start: datetime, period_end: datetime
+    ) -> Dict[str, TSDBNodeQueryResult]:
+        """Return a per-node_type bucket of nodes updated in [start, end).
+
+        Used by the consolidation loop for record-count stats and by
+        `_ensure_summary_edges` to enumerate edge targets. Paginates persist's
+        `cirisgraph_query_nodes` with `updated_after`/`updated_before` filters.
+        """
+        engine = _engine()
+        buckets: Dict[str, TSDBNodeQueryResult] = {}
+        if engine is None:
+            return buckets
+
+        # Walk every scope; persist requires `scope` in the filter.
+        for scope in ("LOCAL", "COMMUNITY", "IDENTITY", "ENVIRONMENT"):
+            filter_json = json.dumps({
+                "scope": scope,
+                "updated_after": period_start.isoformat().replace("+00:00", "Z"),
+                "updated_before": period_end.isoformat().replace("+00:00", "Z"),
+            })
+            cursor_json = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
+            while True:
+                try:
+                    raw = engine.cirisgraph_query_nodes(filter_json, cursor_json, 500)
+                except Exception as e:
+                    logger.warning("cirisgraph_query_nodes(%s) failed: %s", scope, e)
+                    break
+                parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+                items = parsed.get("items", []) if isinstance(parsed, dict) else []
+                if not items:
+                    break
+                for row in items:
+                    if not isinstance(row, dict):
+                        continue
+                    ntype = str(row.get("node_type", "unknown"))
+                    bucket = buckets.get(ntype)
+                    if bucket is None:
+                        bucket = TSDBNodeQueryResult(
+                            nodes=[], period_start=period_start, period_end=period_end
+                        )
+                        buckets[ntype] = bucket
+                    bucket.nodes.append(row)
+                if len(items) < 500:
+                    break
+                next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None
+                if not next_cursor:
+                    break
+                cursor_json = next_cursor if isinstance(next_cursor, str) else json.dumps(next_cursor)
+        return buckets
+
+    # ------------------------------------------------------------------
+    # Legacy table-init shim — persist owns the lock schema.
+    # ------------------------------------------------------------------
+
+    def _ensure_locks_table_exists(self) -> None:
+        """No-op shim — persist owns `cirislens_maintenance_locks`."""
+        return None

@@ -18,16 +18,12 @@ import base64
 import hashlib
 import json
 import logging
-import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import uuid4
 
-from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
-from ciris_engine.logic.persistence.db.dialect import get_adapter
-from ciris_engine.logic.persistence.db.types import ConflictResolution
 from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.schemas.types import JSONDict
 
@@ -40,17 +36,11 @@ except ImportError:
     psutil = None  # type: ignore[assignment,unused-ignore]
     PSUTIL_AVAILABLE = False
 
-# SQLite PRAGMA constants (avoid duplicate literals)
-PRAGMA_JOURNAL_MODE_WAL = "PRAGMA journal_mode=WAL"
-PRAGMA_BUSY_TIMEOUT_5000 = "PRAGMA busy_timeout=5000"
-PRAGMA_SYNCHRONOUS_NORMAL = "PRAGMA synchronous=NORMAL"
-
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
     from ciris_engine.schemas.audit.core import EventPayload, AuditLogEntry
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
-from ciris_engine.logic.audit.hash_chain import AuditHashChain
 from ciris_engine.logic.audit.persist_signing import (
     get_signer_material as _audit_signer_material,
     resolve_tenant_id as _audit_tenant_id,
@@ -78,12 +68,6 @@ from ciris_engine.schemas.services.operations import MemoryOpStatus, MemoryQuery
 AuditEntry = AuditEntryNode
 
 logger = logging.getLogger(__name__)
-
-try:
-    from ciris_engine.logic.audit.signature_manager import AuditSignatureManager
-except ImportError as e:
-    logger.error(f"Failed to import AuditSignatureManager: {e}")
-    raise
 
 
 class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareServiceProtocol):
@@ -153,11 +137,12 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         self._recent_entries: List[AuditRequest] = []
         self._max_cached_entries = cache_size
 
-        # Hash chain components
-        self.hash_chain: Optional[AuditHashChain] = None
-        self.signature_manager: Optional[AuditSignatureManager] = None
+        # Hash chain components — A3 cutover: writes go through persist's
+        # cirislens_audit_log substrate (`_write_to_persist_chain`); reads
+        # go through `verifier` which delegates to persist's
+        # `audit_verify_chain`. The legacy AuditHashChain /
+        # AuditSignatureManager / raw sqlite3 connection are gone.
         self.verifier: Optional[AuditVerifier] = None
-        self._db_connection: Optional[sqlite3.Connection] = None
 
         # Export buffer
         self._export_buffer: List[AuditRequest] = []
@@ -255,9 +240,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         except Exception as e:
             logger.warning(f"Failed to log shutdown event: {e}")
 
-        # Close database connection AFTER logging
-        if self._db_connection:
-            self._db_connection.close()
+        # Persist owns the connection pool — nothing to close here.
 
         logger.info("GraphAuditService stopped")
 
@@ -763,7 +746,15 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         elif format == "csv":
             await self._export_csv(audit_requests, filename)
         elif format == "sqlite":
-            await self._export_sqlite(audit_requests, filename)
+            # 2.9.0: the SQLite-format export was removed from the core
+            # audit service because it required `import sqlite3` outside
+            # `ciris_adapters/`. Re-add via a dedicated archive adapter if
+            # the use case returns. Users who want SQLite-format export
+            # can pipe the JSONL output through a one-liner converter.
+            raise ValueError(
+                "SQLite-format export was removed in 2.9.0. "
+                "Use format='jsonl' or 'csv' instead."
+            )
         else:
             raise ValueError(f"Unsupported export format: {format}")
 
@@ -800,12 +791,12 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
 
         deleted_count = 0
 
-        # Step 1: Delete old entries from SQLite audit_log table and re-anchor chain
-        if self._db_connection and self.enable_hash_chain:
+        # Step 1: Prune the persist-owned audit chain via maintenance_prune_audit_chain.
+        if self.enable_hash_chain:
             try:
-                deleted_count = await self._cleanup_audit_log_table(cutoff_iso)
+                deleted_count = await self._prune_persist_audit_chain(cutoff_iso)
             except Exception as e:
-                logger.error(f"Failed to cleanup audit_log table: {e}", exc_info=True)
+                logger.error(f"Failed to prune persist audit chain: {e}", exc_info=True)
 
         # Step 2: Delete old audit graph nodes via memory bus
         if self._memory_bus:
@@ -823,71 +814,44 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
 
         return deleted_count
 
-    async def _cleanup_audit_log_table(self, cutoff_iso: str) -> int:
-        """Delete old entries from audit_log table and re-anchor hash chain."""
-        if not self._db_connection:
+    async def _prune_persist_audit_chain(self, cutoff_iso: str) -> int:
+        """Prune persist's cirislens_audit_log via maintenance substrate.
+
+        Persist's `maintenance_prune_audit_chain(tenant_id, cutoff_iso)`
+        handles re-anchoring + deletion atomically. Returns the count of
+        deleted entries.
+        """
+
+        def _do_prune() -> int:
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            engine = get_persist_engine()
+            if engine is None:
+                return 0
+            tenant_id = _audit_tenant_id()
+            try:
+                raw = engine.maintenance_prune_audit_chain(tenant_id, cutoff_iso)
+            except Exception as e:
+                logger.warning(f"persist maintenance_prune_audit_chain failed: {e}")
+                return 0
+            # Persist returns either an int or a small JSON envelope; tolerate both.
+            if isinstance(raw, int):
+                return raw
+            if isinstance(raw, (bytes, str)):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, int):
+                        return parsed
+                    if isinstance(parsed, dict):
+                        for key in ("deleted", "removed", "pruned"):
+                            v = parsed.get(key)
+                            if isinstance(v, int):
+                                return v
+                except Exception:
+                    return 0
             return 0
 
-        def _do_cleanup() -> int:
-            if not self._db_connection:
-                return 0
-
-            cursor = self._db_connection.cursor()
-
-            # Find the oldest entry that will remain (first entry after cutoff)
-            cursor.execute(
-                """
-                SELECT entry_id, sequence_number, entry_hash
-                FROM audit_log
-                WHERE event_timestamp >= ?
-                ORDER BY sequence_number ASC
-                LIMIT 1
-                """,
-                (cutoff_iso,),
-            )
-            anchor_row = cursor.fetchone()
-
-            if not anchor_row:
-                # All entries are being deleted or table is empty
-                logger.info("No entries remain after cutoff, clearing audit_log")
-                cursor.execute("DELETE FROM audit_log WHERE event_timestamp < ?", (cutoff_iso,))
-                deleted = cursor.rowcount
-                self._db_connection.commit()
-                return deleted
-
-            anchor_entry_id, anchor_seq, _anchor_hash = anchor_row
-
-            # Count entries to be deleted
-            cursor.execute("SELECT COUNT(*) FROM audit_log WHERE event_timestamp < ?", (cutoff_iso,))
-            count_to_delete = cursor.fetchone()[0]
-
-            if count_to_delete == 0:
-                return 0
-
-            # Re-anchor the chain: update the oldest remaining entry's previous_hash
-            # This marks it as a new anchor point after truncation
-            reanchor_marker = f"REANCHOR_{cutoff_iso}"
-            cursor.execute(
-                """
-                UPDATE audit_log
-                SET previous_hash = ?
-                WHERE entry_id = ?
-                """,
-                (reanchor_marker, anchor_entry_id),
-            )
-
-            # Delete old entries
-            cursor.execute("DELETE FROM audit_log WHERE event_timestamp < ?", (cutoff_iso,))
-            deleted = cursor.rowcount
-
-            self._db_connection.commit()
-
-            logger.info(
-                f"Audit chain re-anchored at sequence {anchor_seq}, " f"deleted {deleted} entries before {cutoff_iso}"
-            )
-            return deleted
-
-        return await asyncio.to_thread(_do_cleanup)
+        return await asyncio.to_thread(_do_prune)
 
     async def _cleanup_audit_graph_nodes(self, cutoff_time: datetime) -> int:
         """Delete audit nodes older than cutoff from graph storage."""
@@ -1156,147 +1120,20 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             # Don't fail the audit operation if trace creation fails
 
     async def _initialize_hash_chain(self) -> None:
-        """Initialize hash chain components."""
-        try:
-            # Initialize database
-            await self._init_database()
+        """Wire up the persist-routed audit chain.
 
-            # Initialize components
-            self.hash_chain = AuditHashChain(str(self.db_path))
-            logger.debug(
-                f"Initializing AuditSignatureManager with db_path={self.db_path}, time_service={self._time_service}"
-            )
-
-            # Ensure time_service is not None
-            if not self._time_service:
-                raise RuntimeError("TimeService is None - cannot initialize AuditSignatureManager")
-
-            # Check actual types
-            logger.debug(f"Types: db_path={type(self.db_path)}, time_service={type(self._time_service)}")
-
-            self.signature_manager = AuditSignatureManager(str(self.db_path), self._time_service)
-            self.verifier = AuditVerifier(str(self.db_path), self._time_service)
-
-            # Initialize in thread
-            await asyncio.to_thread(self._init_components_sync)
-
-            logger.info("Hash chain audit system initialized")
-
-        except Exception as e:
-            logger.error(f"CRITICAL: Failed to initialize hash chain: {e}", exc_info=True)
-            # Hash chain is REQUIRED for audit integrity - do not allow fallback
-            raise RuntimeError(f"Audit hash chain initialization failed: {e}") from e
-
-    def _init_components_sync(self) -> None:
-        """Synchronous initialization of audit components."""
-        if not self.hash_chain or not self.signature_manager or not self.verifier:
-            raise RuntimeError("Hash chain components not initialized")
-
-        self.hash_chain.initialize()
-        self.signature_manager.initialize()
-        self.verifier.initialize()
-
-        if not self.signature_manager.test_signing():
-            raise RuntimeError("Signing test failed")
-
-    async def _init_database(self) -> None:
-        """Initialize the audit database."""
-
-        def _create_tables() -> None:
-            conn = get_safe_sqlite_connection(str(self.db_path))
-            cursor = conn.cursor()
-
-            # Set PRAGMA statements for stability and corruption prevention
-            cursor.execute(PRAGMA_JOURNAL_MODE_WAL)
-            cursor.execute(PRAGMA_BUSY_TIMEOUT_5000)
-            cursor.execute(PRAGMA_SYNCHRONOUS_NORMAL)
-            cursor.execute("PRAGMA foreign_keys=ON")
-
-            # Check database integrity
-            integrity_result = cursor.execute("PRAGMA integrity_check").fetchone()
-            if integrity_result[0] != "ok":
-                logger.error(f"Audit database integrity check failed: {integrity_result}")
-                # Close and recreate the database
-                conn.close()
-                import os
-
-                db_path_str = str(self.db_path)
-                # Remove corrupted database and WAL/SHM files
-                for ext in ["", "-wal", "-shm"]:
-                    try:
-                        os.remove(db_path_str + ext)
-                    except OSError:
-                        pass
-                logger.warning("Corrupted audit database removed, recreating...")
-                conn = get_safe_sqlite_connection(db_path_str)
-                cursor = conn.cursor()
-                cursor.execute(PRAGMA_JOURNAL_MODE_WAL)
-                cursor.execute(PRAGMA_BUSY_TIMEOUT_5000)
-                cursor.execute(PRAGMA_SYNCHRONOUS_NORMAL)
-
-            # Audit log table
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS audit_log (
-                    entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_id TEXT NOT NULL UNIQUE,
-                    event_timestamp TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    originator_id TEXT NOT NULL,
-                    target_id TEXT,
-                    event_summary TEXT,
-                    event_payload TEXT,
-                    sequence_number INTEGER NOT NULL,
-                    previous_hash TEXT NOT NULL,
-                    entry_hash TEXT NOT NULL,
-                    signature TEXT NOT NULL,
-                    signing_key_id TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(sequence_number)
-                )
-            """
-            )
-
-            # Signing keys table
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS audit_signing_keys (
-                    key_id TEXT PRIMARY KEY,
-                    public_key TEXT NOT NULL,
-                    algorithm TEXT NOT NULL DEFAULT 'rsa-pss',
-                    key_size INTEGER NOT NULL DEFAULT 2048,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    revoked_at TEXT
-                )
-            """
-            )
-
-            # Indexes
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_audit_log_event_timestamp
-                ON audit_log(event_timestamp)
-            """
-            )
-
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_audit_log_event_type
-                ON audit_log(event_type)
-            """
-            )
-
-            conn.commit()
-            conn.close()
-
-        await asyncio.to_thread(_create_tables)
-        # iOS returns proxy, desktop returns Connection - both are API-compatible
-        self._db_connection = get_safe_sqlite_connection(str(self.db_path))  # type: ignore[assignment]
-        # Apply PRAGMA settings to persistent connection
-        assert self._db_connection is not None
-        self._db_connection.execute(PRAGMA_JOURNAL_MODE_WAL)
-        self._db_connection.execute(PRAGMA_BUSY_TIMEOUT_5000)
-        self._db_connection.execute(PRAGMA_SYNCHRONOUS_NORMAL)
+        A3 cutover: persist owns the cirislens_audit_log table + signing
+        keys + chain state. The agent just needs a verifier handle for the
+        verify_complete_chain code path. There's no Python-side table init,
+        no signing-key bootstrap, no per-process SQLite connection.
+        """
+        if not self._time_service:
+            raise RuntimeError("TimeService is None — cannot initialize audit verifier")
+        self.verifier = AuditVerifier(str(self.db_path), self._time_service)
+        # Verifier's initialize is a no-op now (persist owns the table) but
+        # we keep the call for symmetry with the legacy lifecycle.
+        await asyncio.to_thread(self.verifier.initialize)
+        logger.info("Audit hash chain wired through persist substrate")
 
     async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[JSONDict]:
         """Add an entry to the hash chain via persist.
@@ -1476,8 +1313,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                 await self._export_jsonl(self._export_buffer, self.export_path)
             elif self.export_format == "csv":
                 await self._export_csv(self._export_buffer, self.export_path)
-            elif self.export_format == "sqlite":
-                await self._export_sqlite(self._export_buffer, self.export_path)
+            # 2.9.0: sqlite export removed (audit service must not depend on
+            # sqlite3 outside ciris_adapters/). See export_audit_data for
+            # the user-facing error.
 
             self._export_buffer.clear()
         except Exception as e:
@@ -1521,60 +1359,6 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                     )
 
         await asyncio.to_thread(_write_csv)
-
-    async def _export_sqlite(self, entries: List[AuditRequest], path: Path) -> None:
-        """Export entries to SQLite format."""
-
-        def _write_sqlite() -> None:
-            conn = get_safe_sqlite_connection(str(path))
-            cursor = conn.cursor()
-
-            # Create table if needed
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS audit_export (
-                    entry_id TEXT PRIMARY KEY,
-                    timestamp TEXT NOT NULL,
-                    entity_id TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    actor TEXT NOT NULL,
-                    outcome TEXT,
-                    details TEXT
-                )
-            """
-            )
-
-            # Use dialect-aware query builder for UPSERT
-            adapter = get_adapter()
-            builder = adapter.get_query_builder()
-
-            query = builder.insert(
-                table="audit_export",
-                columns=["entry_id", "timestamp", "entity_id", "event_type", "actor", "outcome", "details"],
-                conflict_resolution=ConflictResolution.REPLACE,
-                conflict_columns=["entry_id"],
-            )
-            sql = query.to_sql(adapter)
-
-            # Insert entries
-            for entry in entries:
-                cursor.execute(
-                    sql,
-                    (
-                        entry.entry_id,
-                        entry.timestamp.isoformat(),
-                        entry.entity_id,
-                        entry.event_type,
-                        entry.actor,
-                        entry.outcome,
-                        json.dumps(entry.details),
-                    ),
-                )
-
-            conn.commit()
-            conn.close()
-
-        await asyncio.to_thread(_write_sqlite)
 
     def _get_severity(self, action: HandlerActionType) -> str:
         """Determine severity level for an action."""

@@ -7,12 +7,9 @@ before the application starts. FAILS FAST with clear error messages.
 
 import os
 import shutil
-import sqlite3
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
-
-from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.config.essential import EssentialConfig
@@ -84,11 +81,14 @@ class DatabaseAccessError(DirectorySetupError):
 
 
 def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> None:
-    """
-    Ensure only one agent can run on this database using WAL Mode + Busy Timeout.
+    """Ensure only one agent process can hold the database.
 
-    Uses SQLite's WAL (Write-Ahead Logging) mode with IMMEDIATE transaction
-    to detect if another process is already using the database.
+    Post-2.9.0 absorption: persist's `Engine` constructor opens the
+    DSN through sqlx with serialized writes. If a second process holds
+    the SQLite file exclusively (WAL or otherwise), the Engine call
+    raises with a clear `database is locked` message. We probe by
+    constructing an Engine and immediately dropping it — no Python-side
+    sqlite3 import needed.
 
     Args:
         db_path: Path to the SQLite database file or PostgreSQL connection string
@@ -97,45 +97,40 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     Raises:
         DatabaseAccessError: If database is already in use by another agent
     """
-    # Skip exclusive access check for PostgreSQL (connection string starts with "postgresql://")
+    # Skip exclusive access check for PostgreSQL — sqlx pools handle
+    # multi-process safely, and there's no notion of file-level locking.
     if db_path.startswith(("postgresql://", "postgres://")):
         print(f"✓ Skipping exclusive access check for PostgreSQL: {db_path}")
         return
 
     db_path_obj = Path(db_path)
-
-    # Create database parent directory if needed
     db_path_obj.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Quick connectivity test with minimal timeout
-        # Using timeout=0.1 to fail fast if database is locked
-        conn = get_safe_sqlite_connection(db_path, timeout=0.1)
+        from ciris_persist import Engine  # type: ignore[import-untyped]
 
-        # Enable WAL mode for better concurrency detection
-        conn.execute("PRAGMA journal_mode=WAL")
-
-        # Attempt exclusive lock - this will fail immediately if another agent is running
-        conn.execute("BEGIN IMMEDIATE")  # Exclusive lock attempt
-        conn.rollback()  # Release the lock immediately
-        conn.close()
-
+        signing_key_id = os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
+        abs_path = db_path_obj.resolve()
+        dsn = f"sqlite:///{abs_path}"
+        # Persist's Engine is heavyweight (runs migrations). Construct once
+        # and drop. If another process holds the file, sqlx raises here.
+        _probe = Engine(dsn, signing_key_id)
+        del _probe
         print(f"✓ Database exclusive access confirmed: {db_path}")
 
-    except sqlite3.OperationalError as e:
-        error_msg = f"CANNOT ACCESS DATABASE {db_path} - ANOTHER AGENT MAY BE RUNNING"
-        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-        print(f"  SQLite Error: {e}", file=sys.stderr)
-        print(f"  Only one CIRIS agent can run per database file", file=sys.stderr)
-        print(f"  Check for other running agents using: ps aux | grep ciris", file=sys.stderr)
-
-        if fail_fast:
-            sys.exit(1)
-        raise DatabaseAccessError(error_msg)
-
     except Exception as e:
-        error_msg = f"UNEXPECTED DATABASE ERROR for {db_path}: {e}"
-        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+        msg = str(e).lower()
+        if "lock" in msg or "busy" in msg or "in use" in msg:
+            error_msg = (
+                f"CANNOT ACCESS DATABASE {db_path} - ANOTHER AGENT MAY BE RUNNING"
+            )
+            print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+            print(f"  Underlying error: {e}", file=sys.stderr)
+            print("  Only one CIRIS agent can run per database file", file=sys.stderr)
+            print("  Check for other running agents using: ps aux | grep ciris", file=sys.stderr)
+        else:
+            error_msg = f"UNEXPECTED DATABASE ERROR for {db_path}: {e}"
+            print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
 
         if fail_fast:
             sys.exit(1)

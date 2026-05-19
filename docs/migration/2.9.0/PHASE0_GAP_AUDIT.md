@@ -587,9 +587,9 @@ How each gap maps to the waterfall phases:
 
 Verified persist 1.5.19 surface (198 methods). Confirmed gaps:
 
-- [ ] **CIRISPersist#TBD — TSDB consolidation substrate.** Need `tsdb_*` methods covering period-window queries (basic/extensive/profound), cross-period aggregation, edge aggregation, cleanup/pruning. Replaces 6,680 LOC of Python aggregation under `services/graph/tsdb_consolidation/`.
-- [ ] **CIRISPersist#TBD — service token revocation substrate.** Three methods: `service_token_revocation_record`, `service_token_revocation_list`, `service_token_revocation_check`. Replaces `revoked_service_tokens.db` (aiosqlite) entirely.
-- [ ] **CIRISPersist#TBD — cirisgraph_list_nodes + count-by-type.** `cirisgraph_query_nodes` exists but the agent needs: (a) optional exclusion-pattern arg (for the `NOT (node_type='tsdb_data' AND node_id LIKE 'metric_%')` filter), (b) `cirisgraph_count_nodes_by_type` group-by counter, (c) `cirisgraph_count_nodes` / `cirisgraph_count_edges` totals.
+- [x] [**CIRISPersist#63** — TSDB consolidation substrate.](https://github.com/CIRISAI/CIRISPersist/issues/63) `tsdb_*` methods covering period-window queries (basic/extensive/profound), cross-period aggregation, edge aggregation, cleanup/pruning. Replaces 6,680 LOC of Python aggregation under `services/graph/tsdb_consolidation/`.
+- [x] [**CIRISPersist#64** — service token revocation substrate.](https://github.com/CIRISAI/CIRISPersist/issues/64) Three methods: `service_token_revocation_record`, `service_token_revocation_list`, `service_token_revocation_check`. Replaces `revoked_service_tokens.db` (aiosqlite) entirely.
+- [x] [**CIRISPersist#65** — cirisgraph list/count gaps.](https://github.com/CIRISAI/CIRISPersist/issues/65) `cirisgraph_query_nodes` exists but the agent needs: (a) optional exclusion-pattern arg (for the `NOT (node_type='tsdb_data' AND node_id LIKE 'metric_%')` filter), (b) `cirisgraph_count_nodes_by_type` group-by counter, (c) `cirisgraph_count_nodes` / `cirisgraph_count_edges` totals.
 
 Verification gap (no upstream filing — agent-side work only):
 

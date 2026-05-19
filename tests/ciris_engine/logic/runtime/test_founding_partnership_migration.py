@@ -63,7 +63,7 @@ def _get_consent_node(db_path: str, user_id: str) -> dict | None:
     from ciris_engine.logic.persistence import get_graph_node
     from ciris_engine.schemas.services.graph_core import GraphScope
 
-    node = get_graph_node(f"consent/wa-{user_id}", GraphScope.LOCAL, db_path=db_path)
+    node = get_graph_node(f"consent/wa-{user_id}", GraphScope.LOCAL)
     if node is None:
         return None
     # Re-shape to match existing test assertions that expect raw-row fields.

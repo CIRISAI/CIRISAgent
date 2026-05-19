@@ -66,7 +66,7 @@ def _get_consent_node(db_path: str, user_id: str) -> dict | None:
     from ciris_engine.logic.persistence import get_graph_node
     from ciris_engine.schemas.services.graph_core import GraphScope
 
-    node = get_graph_node(f"consent/{user_id}", GraphScope.LOCAL, db_path=db_path)
+    node = get_graph_node(f"consent/{user_id}", GraphScope.LOCAL)
     if node is None:
         return None
     attrs = node.attributes
@@ -221,7 +221,7 @@ class TestCreateFoundingPartnership:
         from ciris_engine.logic.persistence import get_graph_node
         from ciris_engine.schemas.services.graph_core import GraphScope
 
-        node = get_graph_node("consent/laura", GraphScope.LOCAL, db_path=test_db)
+        node = get_graph_node("consent/laura", GraphScope.LOCAL)
         assert node is not None, "Consent node should exist after idempotent calls"
 
     def test_different_users_get_separate_nodes(self, test_db):

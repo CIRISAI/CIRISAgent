@@ -78,7 +78,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             from ciris_engine.logic.persistence.models import graph as persistence
 
             if self._time_service:
-                persistence.add_graph_node(processed_node, db_path=self.db_path, time_service=self._time_service)
+                persistence.add_graph_node(processed_node, time_service=self._time_service)
             else:
                 raise RuntimeError("TimeService is required for adding graph nodes")
             return MemoryOpResult[GraphNode](status=MemoryOpStatus.OK, data=processed_node)
@@ -135,7 +135,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         from ciris_engine.logic.persistence.models import graph as persistence
 
         logger.debug(f"Memory recall: getting node {recall_query.node_id} scope {recall_query.scope}")
-        stored = persistence.get_graph_node(recall_query.node_id, recall_query.scope, db_path=self.db_path)
+        stored = persistence.get_graph_node(recall_query.node_id, recall_query.scope)
         if not stored:
             return []
 
@@ -200,7 +200,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         from ciris_engine.logic.persistence.models.graph import get_edges_for_node
 
         logger.debug(f"get_edges: node_id={node_id}, scope={scope}")
-        edges = get_edges_for_node(node_id, scope=scope, db_path=self.db_path)
+        edges = get_edges_for_node(node_id, scope=scope)
         logger.debug(f"get_edges: found {len(edges)} edges for node {node_id}")
         return edges
 
@@ -211,7 +211,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             # First retrieve the node to check for secrets
             from ciris_engine.logic.persistence.models import graph as persistence
 
-            stored = persistence.get_graph_node(node.id, node.scope, db_path=self.db_path)
+            stored = persistence.get_graph_node(node.id, node.scope)
             if stored:
                 self._process_secrets_for_forget(stored.attributes)
 
@@ -225,7 +225,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             # "Invalid column type Text" / "database disk image is malformed"
             # corruption (concurrent raw-sqlite3 writes from this path
             # racing persist's sqlx writes across the same WAL).
-            persistence.delete_graph_node(node.id, node.scope, db_path=self.db_path)
+            persistence.delete_graph_node(node.id, node.scope)
             return MemoryOpResult[GraphNode](status=MemoryOpStatus.OK, data=node)
         except Exception as e:
             logger.exception("Error forgetting node %s: %s", node.id, e)
@@ -636,7 +636,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         try:
             from ciris_engine.logic.persistence.models.graph import add_graph_edge
 
-            edge_id = add_graph_edge(edge, db_path=self.db_path)
+            edge_id = add_graph_edge(edge)
             logger.info(f"Created edge {edge_id}: {edge.source} -{edge.relationship}-> {edge.target}")
 
             return MemoryOpResult[GraphEdge](status=MemoryOpStatus.OK, data=edge)
@@ -649,7 +649,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         try:
             from ciris_engine.logic.persistence.models.graph import get_edges_for_node
 
-            edges = get_edges_for_node(node_id, scope, db_path=self.db_path)
+            edges = get_edges_for_node(node_id, scope)
             return edges
         except Exception as e:
             logger.exception(f"Error getting edges for node {node_id}: {e}")
@@ -1007,7 +1007,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         from ciris_engine.logic.persistence.models.graph import get_edges_for_node
 
-        edges = get_edges_for_node(node.id, node.scope, db_path=self.db_path)
+        edges = get_edges_for_node(node.id, node.scope)
         if not edges:
             return node
 
@@ -1061,7 +1061,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                 continue
 
             # Get edges for current node
-            current_edges = get_edges_for_node(current_node.id, current_node.scope, db_path=self.db_path)
+            current_edges = get_edges_for_node(current_node.id, current_node.scope)
 
             for edge in current_edges:
                 # Process this edge's connected node
@@ -1086,7 +1086,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             return None
 
         # Fetch the connected node
-        connected_node = persistence.get_graph_node(connected_id, edge.scope, db_path=self.db_path)
+        connected_node = persistence.get_graph_node(connected_id, edge.scope)
 
         if not connected_node:
             return None

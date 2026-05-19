@@ -227,8 +227,8 @@ def _edge_from_persist_json(blob: Any, fallback_scope: Optional[GraphScope] = No
 
 def add_graph_node(
     node: GraphNode,
-    time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None,
+    time_service: TimeServiceProtocol
+
 ) -> str:
     """Insert or update a graph node, merging attributes if it exists.
 
@@ -362,8 +362,8 @@ def add_graph_node(
 
 def get_graph_node(
     node_id: str,
-    scope: GraphScope,
-    db_path: Optional[str] = None,
+    scope: GraphScope
+
 ) -> Optional[GraphNode]:
     """Fetch a single graph node by (node_id, scope). None on miss.
 
@@ -385,8 +385,8 @@ def get_graph_node(
 
 def delete_graph_node(
     node_id: str,
-    scope: GraphScope,
-    db_path: Optional[str] = None,
+    scope: GraphScope
+
 ) -> int:
     """Delete a graph node. Returns 1 if deleted, 0 if not found."""
     engine = _get_engine()
@@ -406,7 +406,7 @@ def delete_graph_node(
 # Edge CRUD.
 # ---------------------------------------------------------------------------
 
-def add_graph_edge(edge: GraphEdge, db_path: Optional[str] = None) -> str:
+def add_graph_edge(edge: GraphEdge) -> str:
     """Insert or update a graph edge. Deterministic edge_id:
     `{source}->{target}->{relationship}` (matches legacy semantics)."""
     engine = _get_engine()
@@ -449,8 +449,8 @@ def add_graph_edge(edge: GraphEdge, db_path: Optional[str] = None) -> str:
 
 def get_edges_for_node(
     node_id: str,
-    scope: Optional[GraphScope] = None,
-    db_path: Optional[str] = None,
+    scope: Optional[GraphScope] = None
+
 ) -> List[GraphEdge]:
     """Get edges connected to a node. If scope is None, queries all 4
     scopes and merges — persist requires a scope per call."""
@@ -476,8 +476,8 @@ def get_edges_for_node(
 
 def get_edges_for_nodes_batch(
     node_ids: List[str],
-    scope: Optional[GraphScope] = None,
-    db_path: Optional[str] = None,
+    scope: Optional[GraphScope] = None
+
 ) -> List[GraphEdge]:
     """Get edges for multiple nodes, deduplicated by (source, target, relationship).
 
@@ -543,8 +543,8 @@ def get_all_graph_nodes(
     scope: Optional[GraphScope] = None,
     node_type: Optional[str] = None,
     limit: Optional[int] = None,
-    offset: Optional[int] = None,
-    db_path: Optional[str] = None,
+    offset: Optional[int] = None
+
 ) -> List[GraphNode]:
     """Return all graph nodes matching the filter.
 
@@ -580,5 +580,4 @@ def get_nodes_by_type(
 ) -> List[GraphNode]:
     """Return all nodes of a given type — thin wrapper over `get_all_graph_nodes`."""
     return get_all_graph_nodes(
-        scope=scope, node_type=node_type, limit=limit, offset=offset, db_path=db_path
-    )
+        scope=scope, node_type=node_type, limit=limit, offset=offset)

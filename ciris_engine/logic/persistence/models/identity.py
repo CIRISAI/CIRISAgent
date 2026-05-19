@@ -43,7 +43,7 @@ def store_agent_identity(
         graph_node = identity_node.to_graph_node()
 
         # Store in graph
-        add_graph_node(graph_node, time_service, db_path=db_path)
+        add_graph_node(graph_node, time_service)
         logger.info(f"Stored identity for agent {identity.agent_id}")
         return True
 
@@ -67,7 +67,7 @@ def retrieve_agent_identity(db_path: Optional[str] = None) -> Optional[AgentIden
         from ciris_engine.schemas.services.nodes import IdentityNode
 
         # Get identity node
-        graph_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY, db_path=db_path)
+        graph_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY)
 
         if not graph_node:
             logger.debug("No identity node found in graph")
@@ -109,7 +109,7 @@ def update_agent_identity(
         from ciris_engine.schemas.services.nodes import IdentityNode
 
         # Get current node to preserve version info
-        current_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY, db_path=db_path)
+        current_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY)
 
         version = 1
         if current_node:
@@ -135,7 +135,7 @@ def update_agent_identity(
             graph_node.attributes.tags.append(f"version:{version}")
 
         # Store updated identity
-        add_graph_node(graph_node, time_service, db_path=db_path)
+        add_graph_node(graph_node, time_service)
         logger.info(f"Updated identity for agent {identity.agent_id} by {updated_by} (version {version})")
         return True
 
@@ -215,7 +215,7 @@ def get_identity_for_context(db_path: Optional[str] = None) -> IdentityContext:
         # Import IdentityNode
         from ciris_engine.schemas.services.nodes import IdentityNode
 
-        graph_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY, db_path=db_path)
+        graph_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY)
 
         if not graph_node:
             raise RuntimeError(

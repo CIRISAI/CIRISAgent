@@ -556,7 +556,7 @@ async def get_timeline(
             node_ids = [n.id for n in nodes]
             # Parse scope for edge query (None = all scopes)
             edge_scope = GraphScope(scope) if scope else None
-            edges = get_edges_for_nodes_batch(node_ids=node_ids, scope=edge_scope, db_path=memory_service.db_path)
+            edges = get_edges_for_nodes_batch(node_ids=node_ids, scope=edge_scope)
             edge_ms = (time_module.time() - edge_start) * 1000
             logger.info(f"[TIMELINE] Batch edge fetch: {len(edges)} edges in {edge_ms:.1f}ms")
 

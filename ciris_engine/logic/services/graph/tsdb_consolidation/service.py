@@ -672,6 +672,74 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
             logger.error(f"Error checking if period consolidated: {e}")
             return False
 
+    async def _consolidate_period(
+        self, period_start: datetime, period_end: datetime
+    ) -> List[Dict[str, Any]]:
+        """Basic (6-hour) consolidation: run persist's 5 consolidators for
+        this period at `level=basic`, then read back the summary rows
+        they produced via `tsdb_query_summary_nodes`.
+
+        Mirrors the pattern in `_run_extensive_consolidation` (`level=daily`)
+        and `_run_profound_consolidation` (`level=weekly`/`monthly`), but
+        scoped to the single period. Returns the list of summary node
+        dicts the caller uses to count and report.
+        """
+        import json as _json
+        import os
+
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            logger.warning("persist engine not wired — basic consolidation skipped")
+            return []
+
+        tenant_id = os.environ.get("CIRIS_AGENT_TENANT", "agent-default")
+        req_json = _json.dumps({
+            "tenant_id": tenant_id,
+            "period_start": period_start.isoformat().replace("+00:00", "Z"),
+            "period_end": period_end.isoformat().replace("+00:00", "Z"),
+            "locked_by": f"ciris-agent-{os.environ.get('CIRIS_AGENT_ID', 'default')}",
+            "level": "basic",
+        })
+
+        for name in (
+            "telemetry_consolidate_period",
+            "tsdb_consolidate_tasks",
+            "tsdb_consolidate_conversations",
+            "tsdb_consolidate_traces",
+            "tsdb_consolidate_audit",
+        ):
+            try:
+                await asyncio.to_thread(getattr(engine, name), req_json)
+            except Exception as e:
+                logger.error(f"persist {name}(level=basic) failed: {e}", exc_info=True)
+
+        # Read back any summary rows produced for this period.
+        summaries: List[Dict[str, Any]] = []
+        filter_json = _json.dumps({
+            "tenant_id": tenant_id,
+            "period_start_after": period_start.isoformat().replace("+00:00", "Z"),
+            "period_start_before": period_end.isoformat().replace("+00:00", "Z"),
+            "level": "basic",
+        })
+        try:
+            raw = await asyncio.to_thread(engine.tsdb_query_summary_nodes, filter_json)
+            parsed = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            if isinstance(parsed, list):
+                summaries = parsed
+            elif isinstance(parsed, dict):
+                items = parsed.get("items")
+                if isinstance(items, list):
+                    summaries = items
+        except Exception as e:
+            logger.error(f"reading summaries for period failed: {e}", exc_info=True)
+
+        if summaries:
+            self._basic_consolidations += 1
+            self._records_consolidated += len(summaries)
+        return summaries
+
     async def _ensure_summary_edges(self, period_start: datetime, period_end: datetime) -> None:
         """
         Ensure edges exist for an already-consolidated period.

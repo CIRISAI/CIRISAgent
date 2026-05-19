@@ -30,6 +30,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
+from ciris_engine.logic.persistence.models.graph import _node_from_persist_json
 from ciris_engine.schemas.services.graph.query_results import TSDBNodeQueryResult
 
 logger = logging.getLogger(__name__)
@@ -227,7 +228,10 @@ class QueryManager:
                             nodes=[], period_start=period_start, period_end=period_end
                         )
                         buckets[ntype] = bucket
-                    bucket.nodes.append(row)
+                    try:
+                        bucket.nodes.append(_node_from_persist_json(row))
+                    except Exception as e:
+                        logger.debug("could not materialize persist row: %s", e)
                 if len(items) < 500:
                     break
                 next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None

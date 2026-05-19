@@ -124,7 +124,9 @@ async def get_memory_stats(memory_service: Any) -> JSONDict:
             raw = engine.cirisgraph_count_nodes_by_type(scope)
             per_type = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or {})
             for ntype, count in per_type.items():
-                nodes_by_type[ntype] = nodes_by_type.get(ntype, 0) + int(count)
+                prior = nodes_by_type.get(ntype, 0)
+                prior_int = int(prior) if isinstance(prior, (int, str, float)) else 0
+                nodes_by_type[ntype] = prior_int + int(count)
 
         stats["total_nodes"] = total_nodes
         stats["total_edges"] = total_edges

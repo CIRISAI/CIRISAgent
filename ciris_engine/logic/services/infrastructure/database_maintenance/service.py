@@ -26,9 +26,6 @@ from ciris_engine.protocols.services.infrastructure.database_maintenance import 
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus
 
-if TYPE_CHECKING:
-    from ciris_engine.logic.audit import MigrationResult
-
 logger = logging.getLogger(__name__)
 
 
@@ -1113,37 +1110,3 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         return metrics
 
-    async def migrate_audit_key_to_ed25519(self, backup: bool = True) -> "MigrationResult":
-        """Migrate audit signing key from RSA-2048 to Ed25519.
-
-        This is a one-time migration operation that:
-        1. Creates a backup of the current state
-        2. Generates or uses unified Ed25519 key
-        3. Re-signs the entire audit chain
-        4. Verifies chain integrity
-        5. Archives the old RSA key
-
-        Args:
-            backup: Create backup before migration (recommended)
-
-        Returns:
-            MigrationResult with migration details
-        """
-        from ciris_engine.logic.audit import migrate_audit_key_to_ed25519
-
-        logger.info("=" * 70)
-        logger.info("🔐 AUDIT KEY MIGRATION REQUESTED")
-        logger.info("=" * 70)
-
-        # Get database path
-        db_path = self.db_path
-        if not db_path:
-            from ciris_engine.logic.persistence import get_sqlite_db_full_path
-
-            db_path = get_sqlite_db_full_path()
-
-        return await migrate_audit_key_to_ed25519(
-            db_path=str(db_path),
-            time_service=self.time_service,
-            backup=backup,
-        )

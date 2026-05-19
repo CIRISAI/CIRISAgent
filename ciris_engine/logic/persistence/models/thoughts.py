@@ -250,9 +250,12 @@ def transfer_thought_ownership(
 ) -> bool:
     """Transfer thought ownership from one occurrence to another."""
     success = False
-    engine = _get_engine()
-
-    raw = engine.thought_get(thought_id)
+    try:
+        engine = _get_engine()
+        raw = engine.thought_get(thought_id)
+    except Exception as e:
+        logger.exception(f"Failed to access thought {thought_id} for ownership transfer: {e}")
+        raw = None
     if raw is None:
         logger.warning(
             f"Thought {thought_id} not found with occurrence {from_occurrence_id} for ownership transfer"

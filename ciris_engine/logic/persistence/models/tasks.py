@@ -382,7 +382,7 @@ def add_task(task: Task, db_path: Optional[str] = None) -> str:
     except Exception as e:
         error_msg = str(e).lower()
         if _is_correlation_id_constraint_violation(error_msg):
-            return _handle_duplicate_task(task, db_path)
+            return _handle_duplicate_task(task)
         logger.exception(f"Failed to add task {task.task_id}: {e}")
         raise
 

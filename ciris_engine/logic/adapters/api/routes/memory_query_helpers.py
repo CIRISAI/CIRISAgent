@@ -145,7 +145,7 @@ class AttributeParser:
         if not attributes:
             return {}
         if isinstance(attributes, dict):
-            return attributes  # type: ignore[return-value]
+            return attributes
         try:
             result = json.loads(attributes) if isinstance(attributes, (bytes, str)) else {}
             return result if isinstance(result, dict) else {}

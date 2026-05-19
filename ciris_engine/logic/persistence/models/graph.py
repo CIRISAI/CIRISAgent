@@ -179,9 +179,11 @@ def _attributes_to_payload(attrs: Any) -> Any:
     return json.loads(json.dumps(attrs, cls=DateTimeEncoder))
 
 
-def _node_from_persist_json(blob: str) -> GraphNode:
+def _node_from_persist_json(blob: Any) -> GraphNode:
     """Reshape persist's GraphNode JSON response into the agent's
-    GraphNode pydantic model."""
+    GraphNode pydantic model. Accepts either persist's JSON string
+    response or a pre-parsed dict (some substrates return JSON, some
+    return dicts directly via PyO3)."""
     d = json.loads(blob) if isinstance(blob, str) else blob
     attrs_field = d.get("attributes")
     if isinstance(attrs_field, str):

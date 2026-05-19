@@ -142,6 +142,21 @@ def _parse_attrs(attrs_json: Any) -> Any:
     return {}
 
 
+def _legacy_table_exists(con: sqlite3.Connection, name: str) -> bool:
+    """Return True iff a legacy table is present in the source DB.
+
+    Fresh-install path (post-2.9.0 bootstrap-layer removal): the SQLite
+    file persist just created has no legacy `graph_nodes` / `graph_edges`
+    / `audit_log` tables. A0a should detect that, treat as "nothing to
+    migrate", and let the sentinel be written normally.
+    """
+    cur = con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (name,),
+    )
+    return cur.fetchone() is not None
+
+
 def migrate_nodes(
     con: sqlite3.Connection,
     engine: Any,
@@ -156,6 +171,11 @@ def migrate_nodes(
     `created_at` / `updated_at`, so historical timestamps survive.
     """
     import json as _json
+
+    if not _legacy_table_exists(con, "graph_nodes"):
+        logger.info("graph_nodes table absent — fresh install, no nodes to migrate")
+        return
+
     rows = con.execute(
         "SELECT node_id, scope, node_type, attributes_json, version, "
         "       updated_by, updated_at, created_at "
@@ -228,6 +248,11 @@ def migrate_edges(
     per edge), and check edges_seen for already-written edge_ids.
     """
     import json as _json
+
+    if not _legacy_table_exists(con, "graph_edges"):
+        logger.info("graph_edges table absent — fresh install, no edges to migrate")
+        return
+
     rows = con.execute(
         "SELECT edge_id, source_node_id, target_node_id, scope, relationship, "
         "       weight, attributes_json, created_at "

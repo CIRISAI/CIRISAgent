@@ -29,11 +29,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.runtime.enums import SensitivityLevel
 from ciris_engine.schemas.secrets.core import (
     DetectedSecret,
     SecretRecord,
     SecretReference,
-    SensitivityLevel,
 )
 
 from .encryption import KeyStorageMode, SecretsEncryption

@@ -118,7 +118,6 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             scope=recall_query.scope,
             node_type=recall_query.type.value if recall_query.type else None,
             limit=100,  # Reasonable default limit for wildcard queries
-            db_path=self.db_path,
         )
         logger.debug(f"Wildcard query returned {len(nodes)} nodes")
 
@@ -785,13 +784,11 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                 node_type=node_type,
                 scope=scope if isinstance(scope, GraphScope) else GraphScope.LOCAL,
                 limit=limit,
-                db_path=self.db_path,
             )
         else:
             return get_all_graph_nodes(
                 scope=scope if isinstance(scope, GraphScope) else GraphScope.LOCAL,
                 limit=limit,
-                db_path=self.db_path,
             )
 
     async def _process_nodes_for_search(self, nodes: List[GraphNode]) -> List[GraphNode]:

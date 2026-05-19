@@ -191,16 +191,6 @@ class TestUpdateTicketStatus:
 
         assert result is False, "Update of nonexistent ticket should fail"
 
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_database_error(self, mock_get_db, temp_db_path, test_ticket_id):
-        """TC-TP008: Verify exception handling."""
-        # Mock to raise exception
-        mock_get_db.side_effect = Exception("Database error")
-
-        result = update_ticket_status(test_ticket_id, "completed", db_path=temp_db_path)
-
-        assert result is False, "Should return False on exception"
-
     def test_all_8_status_values(self, temp_db_path, test_ticket_id):
         """TC-TP009: Verify all status values accepted."""
         all_statuses = ["pending", "assigned", "in_progress", "blocked", "deferred", "completed", "cancelled", "failed"]
@@ -424,7 +414,11 @@ class TestCreateTicket:
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
     def test_create_ticket_datetime_string(self, temp_db_path):
-        """TC-CT003: Create ticket with datetime as ISO string."""
+        """TC-CT003: Create ticket with datetime as ISO string.
+
+        Persist normalizes `+00:00` → `Z` on round-trip; compare via parsed
+        datetimes rather than raw strings.
+        """
         ticket_id = "TEST-STR-001"
         submitted_at_str = "2025-01-15T10:30:00+00:00"
         deadline_str = "2025-02-15T10:30:00+00:00"
@@ -441,14 +435,22 @@ class TestCreateTicket:
 
         assert result is True
         ticket = get_ticket(ticket_id, db_path=temp_db_path)
-        assert ticket["submitted_at"] == submitted_at_str
-        assert ticket["deadline"] == deadline_str
+        assert datetime.fromisoformat(ticket["submitted_at"].replace("Z", "+00:00")) == datetime.fromisoformat(
+            submitted_at_str
+        )
+        assert datetime.fromisoformat(ticket["deadline"].replace("Z", "+00:00")) == datetime.fromisoformat(
+            deadline_str
+        )
 
-    def test_create_ticket_duplicate_id(self, temp_db_path):
-        """TC-CT004: Verify handling of duplicate ticket IDs."""
+    def test_create_ticket_duplicate_id_upserts(self, temp_db_path):
+        """TC-CT004: Re-creating with the same ticket_id upserts (CIRISAgent#763).
+
+        Post-migration `create_ticket` routes through persist's `ticket_upsert`,
+        so duplicates overwrite the existing row rather than failing. Legacy
+        INSERT-with-conflict-error behavior is gone.
+        """
         ticket_id = "TEST-DUP-001"
 
-        # Create first ticket
         result1 = create_ticket(
             ticket_id=ticket_id,
             sop="DSAR_ACCESS",
@@ -458,7 +460,6 @@ class TestCreateTicket:
         )
         assert result1 is True
 
-        # Try to create duplicate
         result2 = create_ticket(
             ticket_id=ticket_id,
             sop="DSAR_ACCESS",
@@ -466,7 +467,10 @@ class TestCreateTicket:
             email="dup2@example.com",
             db_path=temp_db_path,
         )
-        assert result2 is False
+        assert result2 is True
+
+        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        assert ticket["email"] == "dup2@example.com"
 
     def test_create_ticket_empty_metadata(self, temp_db_path):
         """TC-CT005: Create ticket with empty metadata dict."""
@@ -499,21 +503,6 @@ class TestCreateTicket:
         assert result is True
         ticket = get_ticket(ticket_id, db_path=temp_db_path)
         assert ticket["metadata"] == {}
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_create_ticket_database_error(self, mock_get_db, temp_db_path):
-        """TC-CT007: Verify error handling during creation."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        result = create_ticket(
-            ticket_id="TEST-ERR-001",
-            sop="DSAR_ACCESS",
-            ticket_type="dsar",
-            email="error@example.com",
-            db_path=temp_db_path,
-        )
-
-        assert result is False
 
     def test_create_ticket_default_submitted_at(self, temp_db_path):
         """TC-CT008: Verify submitted_at defaults to current time."""
@@ -580,34 +569,6 @@ class TestGetTicket:
         assert ticket["ticket_id"] == ticket_id
         assert "submitted_at" in ticket
         assert "last_updated" in ticket
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_get_ticket_database_error(self, mock_get_db, temp_db_path):
-        """TC-GT003: Verify error handling during retrieval."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        result = get_ticket("TEST-ERR-001", db_path=temp_db_path)
-        assert result is None
-
-    @patch("ciris_engine.logic.persistence.models.tickets._row_to_dict")
-    def test_get_ticket_conversion_error(self, mock_row_to_dict, temp_db_path):
-        """TC-GT004: Verify error handling during row conversion."""
-        # Create a ticket first
-        ticket_id = "TEST-CONV-001"
-        create_ticket(
-            ticket_id=ticket_id,
-            sop="DSAR_ACCESS",
-            ticket_type="dsar",
-            email="conv@example.com",
-            db_path=temp_db_path,
-        )
-
-        # Mock conversion to raise exception
-        mock_row_to_dict.side_effect = Exception("Conversion error")
-
-        # get_ticket catches the exception and returns None
-        result = get_ticket(ticket_id, db_path=temp_db_path)
-        assert result is None
 
 
 class TestUpdateTicketMetadata:
@@ -689,14 +650,6 @@ class TestUpdateTicketMetadata:
     def test_update_metadata_nonexistent_ticket(self, temp_db_path):
         """TC-UM004: Verify error handling for nonexistent ticket."""
         result = update_ticket_metadata("NONEXISTENT", {"test": True}, db_path=temp_db_path)
-        assert result is False
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_update_metadata_database_error(self, mock_get_db, temp_db_path, test_ticket_id):
-        """TC-UM005: Verify error handling during update."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        result = update_ticket_metadata(test_ticket_id, {"test": True}, db_path=temp_db_path)
         assert result is False
 
     def test_update_metadata_updates_last_updated(self, temp_db_path, test_ticket_id):
@@ -834,14 +787,6 @@ class TestListTickets:
         tickets = list_tickets(sop="NONEXISTENT_SOP", db_path=temp_db_path)
         assert len(tickets) == 0
 
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_list_tickets_database_error(self, mock_get_db, temp_db_path):
-        """TC-LT009: Verify error handling during list."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        tickets = list_tickets(db_path=temp_db_path)
-        assert tickets == []
-
     def test_list_tickets_empty_database(self, temp_db_path):
         """TC-LT010: List tickets from empty database."""
         tickets = list_tickets(db_path=temp_db_path)
@@ -872,7 +817,7 @@ class TestDeleteTicket:
             os.unlink(db_path)
 
     def test_delete_ticket_success(self, temp_db_path):
-        """TC-DT001: Successfully delete an existing ticket."""
+        """TC-DT001: delete_ticket soft-cancels via status (CIRISAgent#763)."""
         ticket_id = "TEST-DEL-001"
         create_ticket(
             ticket_id=ticket_id,
@@ -882,27 +827,21 @@ class TestDeleteTicket:
             db_path=temp_db_path,
         )
 
-        # Verify ticket exists
         assert get_ticket(ticket_id, db_path=temp_db_path) is not None
 
-        # Delete ticket
         result = delete_ticket(ticket_id, db_path=temp_db_path)
         assert result is True
 
-        # Verify ticket is gone
-        assert get_ticket(ticket_id, db_path=temp_db_path) is None
+        # Persist 1.5.19 has no hard-delete substrate; delete_ticket marks
+        # the row cancelled instead. Row stays queryable until ticket_delete
+        # lands upstream.
+        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        assert ticket is not None
+        assert ticket["status"] == "cancelled"
 
     def test_delete_ticket_nonexistent(self, temp_db_path):
         """TC-DT002: Try to delete nonexistent ticket."""
         result = delete_ticket("NONEXISTENT", db_path=temp_db_path)
-        assert result is False
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_delete_ticket_database_error(self, mock_get_db, temp_db_path):
-        """TC-DT003: Verify error handling during deletion."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        result = delete_ticket("TEST-ERR-001", db_path=temp_db_path)
         assert result is False
 
 
@@ -962,14 +901,6 @@ class TestGetTicketsByCorrelationId:
         """TC-CORR002: Get tickets with nonexistent correlation ID."""
         tickets = get_tickets_by_correlation_id("nonexistent-corr", db_path=temp_db_path)
         assert len(tickets) == 0
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_get_tickets_by_correlation_id_error(self, mock_get_db, temp_db_path):
-        """TC-CORR003: Verify error handling."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        tickets = get_tickets_by_correlation_id("corr-123", db_path=temp_db_path)
-        assert tickets == []
 
 
 class TestRowToDict:

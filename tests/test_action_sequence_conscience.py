@@ -60,36 +60,11 @@ class TestActionSequenceConscience:
         return ActionSequenceConscience(time_service=mock_time_service)
 
     @pytest.fixture
-    def patch_db_path(self, temp_db, monkeypatch):
-        """Patch database functions to use temp_db."""
-        from ciris_engine.logic import persistence as persistence_module
-        from ciris_engine.logic.persistence import db as db_module
-        from ciris_engine.logic.persistence.models import correlations as correlations_module
-        from ciris_engine.logic.persistence.models import tasks as tasks_module
-        from ciris_engine.logic.persistence.models import thoughts as thoughts_module
-
-        original_get_db_connection = db_module.get_db_connection
-        original_get_thoughts_by_task_id = thoughts_module.get_thoughts_by_task_id
-
-        def patched_get_db_connection(db_path=None):
-            return original_get_db_connection(db_path=temp_db)
-
-        def patched_get_thoughts_by_task_id(task_id, occurrence_id="default", db_path=None):
-            return original_get_thoughts_by_task_id(task_id, occurrence_id, db_path=temp_db)
-
-        # Patch get_db_connection at all import locations
-        monkeypatch.setattr(db_module, "get_db_connection", patched_get_db_connection)
-        monkeypatch.setattr(correlations_module, "get_db_connection", patched_get_db_connection)
-        monkeypatch.setattr(thoughts_module, "get_db_connection", patched_get_db_connection)
-        monkeypatch.setattr(tasks_module, "get_db_connection", patched_get_db_connection)
-
-        # Patch thoughts query function
-        monkeypatch.setattr(thoughts_module, "get_thoughts_by_task_id", patched_get_thoughts_by_task_id)
-        # Also patch at the action_sequence_conscience module level
-        from ciris_engine.logic.conscience import action_sequence_conscience as asc_module
-
-        monkeypatch.setattr(asc_module, "get_thoughts_by_task_id", patched_get_thoughts_by_task_id)
-
+    def patch_db_path(self, temp_db):
+        """Return temp_db. Persist's engine is already wired to temp_db by
+        the `temp_db` fixture's call to `initialize_database(temp_db)`, so
+        all reads/writes through the migrated persistence layer flow through
+        it without monkeypatching."""
         return temp_db
 
     @pytest.fixture
@@ -162,6 +137,8 @@ class TestActionSequenceConscience:
             raw_llm_response=None,
         )
 
+    _thought_counter = 0
+
     def _create_completed_thought(
         self,
         task_id: str,
@@ -169,14 +146,25 @@ class TestActionSequenceConscience:
         mock_time_service,
         temp_db: str,
     ) -> Thought:
-        """Helper to create and save a completed thought with a final action."""
+        """Helper to create and save a completed thought with a final action.
+
+        Each thought gets a unique advancing timestamp so persist's DESC sort
+        is deterministic by insertion order. Real time would do this; the
+        frozen mock clock would otherwise collide and order-by-timestamp
+        falls back to thought_id (a random UUID).
+        """
+        TestActionSequenceConscience._thought_counter += 1
+        from datetime import timedelta
+
+        base = mock_time_service.now.return_value
+        created_iso = (base + timedelta(microseconds=TestActionSequenceConscience._thought_counter)).isoformat()
         thought = Thought(
             thought_id=str(uuid.uuid4()),
             source_task_id=task_id,
             content=f"Completed thought with {action_type}",
             status=ThoughtStatus.COMPLETED,
-            created_at=mock_time_service.now_iso(),
-            updated_at=mock_time_service.now_iso(),
+            created_at=created_iso,
+            updated_at=created_iso,
             thought_depth=0,
             final_action=FinalAction(
                 action_type=action_type,

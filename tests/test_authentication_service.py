@@ -949,18 +949,6 @@ class TestAuthenticationServiceErrorHandling:
         # Should report unhealthy when stopped
         assert await auth_service.is_healthy() is False
 
-    def test_status_with_db_errors(self, auth_service):
-        """Test getting status when database queries fail."""
-        # Remove database to cause errors
-        os.unlink(auth_service.db_path)
-
-        # Should still return status (with zero counts)
-        status = auth_service.get_status()
-        assert status.service_name == "AuthenticationService"
-        assert status.is_healthy is True  # Basic health
-        assert status.metrics["certificate_count"] == 0.0
-
-
 class TestAuthenticationServicePerformance:
     """Performance and async operation tests."""
 

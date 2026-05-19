@@ -131,8 +131,6 @@ class ThoughtManager:
         This creates a new thought to process updated information (e.g., follow-up messages,
         documents) that came in after all existing thoughts completed/failed.
         """
-        from ciris_engine.logic.persistence.db import get_db_connection
-
         # Get the updated_info_content from the task
         updated_content = getattr(task, "updated_info_content", None) or ""
 

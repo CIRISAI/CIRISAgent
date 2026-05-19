@@ -623,32 +623,18 @@ async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[
     allowed_channel_ids.add(f"api_{user_id}")
 
     try:
-        # Use database abstraction layer to support both SQLite and PostgreSQL
-        from ciris_engine.logic.persistence.db.core import get_db_connection
+        # Post-A1 absorption (CIRISAgent#763): route OAuth identity lookup
+        # through persist's wa_cert substrate instead of raw SQL.
+        from ciris_engine.logic.persistence.stores import authentication_store
 
-        db_path = auth_service.db_path
-        query = """
-            SELECT oauth_provider, oauth_external_id
-            FROM wa_cert
-            WHERE wa_id = ? AND oauth_provider IS NOT NULL AND oauth_external_id IS NOT NULL AND active = 1
-        """
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, (user_id,))
-            rows = cursor.fetchall()
-            for row in rows:
-                # Handle both SQLite Row and PostgreSQL RealDictRow
-                if hasattr(row, "keys"):
-                    oauth_provider, oauth_external_id = row["oauth_provider"], row["oauth_external_id"]
-                else:
-                    oauth_provider, oauth_external_id = row
-                # Add OAuth channel ID formats
-                oauth_channel = f"{oauth_provider}:{oauth_external_id}"
-                allowed_channel_ids.add(oauth_channel)
-                allowed_channel_ids.add(oauth_external_id)
-                # BUGFIX: Also add API-prefixed versions for SSE filtering
-                allowed_channel_ids.add(f"api_{oauth_channel}")
-                allowed_channel_ids.add(f"api_{oauth_external_id}")
+        wa = authentication_store.get_wa_by_id(user_id)
+        if wa is not None and wa.oauth_provider and wa.oauth_external_id:
+            oauth_channel = f"{wa.oauth_provider}:{wa.oauth_external_id}"
+            allowed_channel_ids.add(oauth_channel)
+            allowed_channel_ids.add(wa.oauth_external_id)
+            # BUGFIX: Also add API-prefixed versions for SSE filtering
+            allowed_channel_ids.add(f"api_{oauth_channel}")
+            allowed_channel_ids.add(f"api_{wa.oauth_external_id}")
     except Exception as e:
         logger.error(f"Error fetching OAuth links for user {user_id}: {e}", exc_info=True)
 
@@ -662,34 +648,18 @@ async def _batch_fetch_task_channel_ids(task_ids: List[str]) -> Dict[str, str]:
         return task_channel_map
 
     try:
-        # Tasks are stored in the main database
-        # Use the proper database path helper which gets config from ServiceRegistry
-        from ciris_engine.logic.persistence import get_sqlite_db_full_path
-        from ciris_engine.logic.persistence.db.core import get_db_connection
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        # Post-A1 absorption (CIRISAgent#763): batch-fetch task channel_ids
+        # through persist's task_get substrate. Persist doesn't expose an
+        # IN-list query, so we do N point lookups; task_ids is typically
+        # small (one per active SSE subscription).
+        from ciris_engine.logic.persistence.models.tasks import get_task_by_id_any_occurrence
 
-        main_db_path = get_sqlite_db_full_path()  # Gets main DB path from config via registry
-        logger.debug(f"SSE Filter: Fetching from main_db_path={main_db_path}")
-
-        # Get database adapter for proper placeholder handling
-        adapter = get_adapter()
-        placeholder = "%s" if adapter.is_postgresql() else "?"
-        placeholders = ",".join([placeholder] * len(task_ids))
-        query = f"SELECT task_id, channel_id FROM tasks WHERE task_id IN ({placeholders})"
-
-        with get_db_connection(main_db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, task_ids)
-            rows = cursor.fetchall()
-            logger.debug(f"SSE Filter: Query returned {len(rows)} rows")
-            for row in rows:
-                # Handle both SQLite Row (tuple) and PostgreSQL RealDictRow (dict)
-                if hasattr(row, "keys"):
-                    tid, cid = row["task_id"], row["channel_id"]
-                else:
-                    tid, cid = row
-                task_channel_map[tid] = cid
-                logger.debug(f"SSE Filter: Found task_id={tid} -> channel_id={cid}")
+        for task_id in task_ids:
+            task = get_task_by_id_any_occurrence(task_id)
+            if task is not None and task.channel_id:
+                task_channel_map[task_id] = task.channel_id
+                logger.debug(f"SSE Filter: Found task_id={task_id} -> channel_id={task.channel_id}")
+        logger.debug(f"SSE Filter: Resolved {len(task_channel_map)}/{len(task_ids)} task channel_ids")
     except Exception as e:
         logger.error(f"Error batch fetching task channel_ids: {e}", exc_info=True)
 

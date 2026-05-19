@@ -676,32 +676,23 @@ class CIRISRuntime(ServicePropertyMixin):
             logger.warning("No config provided, using defaults")
 
     async def _verify_database_integrity(self) -> bool:
-        """Verify database integrity before proceeding."""
+        """Verify database integrity before proceeding.
+
+        Post-A1 absorption (CIRISAgent#763): persist owns the schema. If the
+        Engine is wired and a cheap probe succeeds, the schema is intact.
+        """
         try:
-            from ciris_engine.logic import persistence
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            import json
 
-            adapter = get_adapter()
-            db_path = None if adapter.is_postgresql() else str(self.essential_config.database.main_db)
-            conn = persistence.get_db_connection(db_path)
-            cursor = conn.cursor()
+            engine = get_persist_engine()
+            if engine is None:
+                raise RuntimeError("persist engine not wired — initialize_database must run first")
 
-            required_tables = ["tasks", "thoughts", "graph_nodes", "graph_edges"]
+            # Cheap sanity probe.
+            engine.task_list("{}", json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}), 1)
 
-            for table in required_tables:
-                if adapter.is_postgresql():
-                    cursor.execute(
-                        "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name=%s",
-                        (table,),
-                    )
-                else:
-                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
-
-                if not cursor.fetchone():
-                    raise RuntimeError(f"Required table '{table}' missing from database")
-
-            conn.close()
-            logger.info("Database integrity verified")
+            logger.info("Database integrity verified (persist engine healthy)")
             return True
         except Exception as e:
             logger.error(f"Database integrity check failed: {e}")

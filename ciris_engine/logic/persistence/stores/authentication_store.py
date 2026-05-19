@@ -293,8 +293,8 @@ def _active_or_none(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return row
 
 
-def get_wa_by_id(wa_id: str, db_path: str) -> Optional[WACertificate]:
-    """Get an active WA certificate by ID."""
+def get_wa_by_id(wa_id: str, db_path: Optional[str] = None) -> Optional[WACertificate]:
+    """Get an active WA certificate by ID. `db_path` is ignored (persist owns the connection)."""
     row = _active_or_none(_parse_persist_payload(_get_engine().wa_cert_get(wa_id)))
     return _row_to_wa(row) if row else None
 

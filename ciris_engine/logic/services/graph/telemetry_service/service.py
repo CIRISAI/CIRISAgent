@@ -718,35 +718,38 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
         all telemetry data points.
         """
         try:
-            if not self._memory_bus:
-                logger.debug("Memory bus not available, returning 0 metric count")
+            # Post-A1 absorption (CIRISAgent#763): count tsdb_data nodes via
+            # persist's graph substrate. Persist's `cirisgraph_query_nodes`
+            # doesn't expose a count-only aggregate yet (CIRISPersist#65), so
+            # we paginate and count locally. Bounded by the metric retention
+            # window — practical pagination terminates quickly.
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            import json
+
+            engine = get_persist_engine()
+            if engine is None:
+                logger.debug("persist engine not wired, returning 0 metric count")
                 return 0
 
-            # Query the database directly to count TSDB_DATA nodes
-            from ciris_engine.logic.persistence import get_db_connection
+            count = 0
+            cursor_json = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
+            filter_json = json.dumps({"node_type": "tsdb_data"})
+            while True:
+                raw = engine.cirisgraph_query_nodes(filter_json, cursor_json, 500)
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+                items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+                count += len(items)
+                if len(items) < 500:
+                    break
+                last = items[-1]
+                cursor_json = json.dumps({
+                    "version": "v1",
+                    "last_ts": str(last.get("updated_at", "")),
+                    "last_id": str(last.get("node_id", "")),
+                })
 
-            # Get the memory service to access its db_path
-            memory_service = await self._memory_bus.get_service(handler_name="telemetry_service")
-            if not memory_service:
-                logger.debug("Memory service not available, returning 0 metric count")
-                return 0
-
-            db_path = getattr(memory_service, "db_path", None)
-            with get_db_connection(db_path=db_path) as conn:
-                cursor = conn.cursor()
-                # Count all TSDB_DATA nodes
-                cursor.execute("SELECT COUNT(*) as cnt FROM graph_nodes WHERE node_type = 'tsdb_data'")
-                result = cursor.fetchone()
-                # Handle both dict (PostgreSQL RealDictCursor) and tuple (SQLite Row) formats
-                if result is None:
-                    count = 0
-                elif isinstance(result, dict):
-                    count = result.get("cnt", 0)
-                else:
-                    count = result[0]
-
-                logger.debug(f"Total metric count from graph nodes: {count}")
-                return count
+            logger.debug(f"Total metric count from graph nodes: {count}")
+            return count
 
         except Exception as e:
             logger.error(f"Failed to get metric count: {type(e).__name__}: {e}", exc_info=True)

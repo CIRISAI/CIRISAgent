@@ -65,6 +65,18 @@ Single-call-site swaps: `setup/location.py`, `utils/occurrence_utils.py`, `persi
 ### 3a. Audit chain
 `audit/{hash_chain, signature_manager, verifier, signing_protocol, key_migration}.py` plus `services/graph/audit_service/service.py` swap raw sqlite3 for persist's audit substrate: `audit_record_entry`, `audit_list_entries`, `audit_verify_chain`, `audit_canonicalize_for_hash`, `audit_canonicalize_for_signing`, `aggregate_audit_chain`, `maintenance_prune_audit_chain`.
 
+**Current state (Phase 1 investigation):**
+- Write hot path is already cut over. `_write_to_persist_chain` (audit_service.py:1325) routes every new entry through `audit_canonicalize_for_hash` → sign → `audit_record_entry`.
+- Read / verify path still walks raw sqlite3 in `audit/verifier.py` (`verify_complete_chain`, ~409 LOC) — this is the bulk of the remaining work.
+- `audit/hash_chain.py` table-init and `audit/signature_manager.py` boot-time `test_signing()` still run on startup but are effectively no-ops since persist owns the table and the write path doesn't consult them.
+- `audit/key_migration.py` is one-time legacy migration code; can be moved to `tools/ops/` or deleted once we confirm no production agent still needs it.
+
+**Path forward:**
+1. Replace `AuditVerifier.verify_complete_chain` with a thin wrapper around `engine.audit_verify_chain(tenant_id)`, preserving the existing return shape.
+2. Delete `hash_chain.initialize()` / `signature_manager.initialize()` from `audit_service._initialize_hash_chain` once verified safe; persist's bootstrap handles the table.
+3. Delete `audit/hash_chain.py`, `audit/signature_manager.py`, `audit/verifier.py` after the audit_service no longer references them.
+4. Move `audit/key_migration.py` to `tools/ops/audit_chain_bridge.py`'s neighborhood (one-time tooling, not runtime).
+
 Hash chain verifier needs careful migration — it walks rows in order and recomputes hashes. Persist's `audit_verify_chain` should produce identical output; verify against a real production audit log before deleting the Python verifier.
 
 **Exit gate:** audit module no longer imports sqlite3. Hash chain integrity verified end-to-end against pre/post-migration sample.

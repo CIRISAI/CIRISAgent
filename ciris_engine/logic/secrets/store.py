@@ -1,35 +1,122 @@
-"""
-Encrypted Secrets Storage System for CIRIS Agent.
+"""Encrypted secrets storage — routed through ciris-persist 1.6.0 substrate.
 
-Provides secure, encrypted storage for detected secrets with AES-256-GCM encryption
-and comprehensive access auditing.
+2.9.0 Phase 2a (CIRISAgent#763, CIRISPersist#66): every public method now
+delegates to persist's `secrets_*` substrate. The agent owns *detection*
+(language-aware patterns in `secrets.filter`); persist owns *crypto +
+storage + audit log*.
+
+Public API surface preserved: `SecretsStore.store_secret`,
+`retrieve_secret`, `delete_secret`, `list_secrets`, `list_all_secrets`,
+`encrypt_secret`, `decrypt_secret`, `rotate_master_key`, `test_encryption`,
+`get_access_logs`, `reencrypt_all`, `migrate_to_hardware_key`,
+`decrypt_secret_value`, `update_access_log`.
+
+`SecretRecord.encrypted_value` / `salt` / `nonce` / `encryption_key_ref`
+fields are kept on the dataclass for shape compatibility but populated as
+empty bytes / strings — no caller outside this file ever read them
+(grep-confirmed in PHASE0_GAP_AUDIT.md). Persist's `secrets_recall_secret`
+returns plaintext directly; we never reconstruct ciphertext.
 """
+
+from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import logging
-import secrets
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple
 
-from ciris_engine.logic.persistence.db import get_db_connection
-from ciris_engine.logic.persistence.db.dialect import get_adapter
-from ciris_engine.logic.persistence.db.types import ConflictResolution
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.secrets.core import DetectedSecret, SecretAccessLog, SecretRecord, SecretReference
+from ciris_engine.schemas.secrets.core import (
+    DetectedSecret,
+    SecretRecord,
+    SecretReference,
+    SensitivityLevel,
+)
 
 from .encryption import KeyStorageMode, SecretsEncryption
 
 logger = logging.getLogger(__name__)
 
+# Default per-sensitivity decapsulation rules (mirrors legacy semantics).
+_AUTO_DECAPSULATE_BY_SENSITIVITY: Dict[str, List[str]] = {
+    "low": ["speak", "memorize", "tool"],
+    "medium": ["speak", "tool"],
+    "high": ["tool"],
+    "critical": [],
+}
+
+
+def _get_engine() -> Any:
+    """Return the wired persist engine; raise if bootstrap hasn't run."""
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    engine = get_persist_engine()
+    if engine is None:
+        raise RuntimeError(
+            "persist engine not initialized — call initialize_database() "
+            "before any secrets operation"
+        )
+    return engine
+
+
+def _parse_iso(value: Optional[str]) -> Optional[datetime]:
+    """Tolerant ISO-8601 → datetime, returning None on bad input."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _ref_to_record(ref: Dict[str, Any]) -> SecretRecord:
+    """Build a SecretRecord from a persist `SecretReference` envelope.
+
+    Persist returns only metadata + handle; the agent's SecretRecord
+    schema still has crypto-byte fields (legacy contract). Those are
+    populated with empty bytes — they are never read off SecretRecord
+    by any caller; persist's recall path returns plaintext directly.
+    """
+    return SecretRecord(
+        secret_uuid=str(ref["uuid"]),
+        encrypted_value=b"",
+        encryption_key_ref="",
+        salt=b"",
+        nonce=b"",
+        description=str(ref.get("description") or ""),
+        sensitivity_level=SensitivityLevel(str(ref.get("sensitivity", "medium")).upper()),
+        detected_pattern=str(ref.get("detected_pattern") or "unknown"),
+        context_hint=str(ref.get("context_hint") or ""),
+        created_at=_parse_iso(ref.get("created_at")) or datetime.now(),
+        last_accessed=_parse_iso(ref.get("last_accessed")),
+        access_count=0,  # Persist tracks access via audit log; not surfaced here.
+        source_message_id=ref.get("source_message_id"),
+        auto_decapsulate_for_actions=list(ref.get("auto_decapsulate_actions") or []),
+        manual_access_only=bool(ref.get("manual_access_only", False)),
+    )
+
+
+def _ref_to_reference(ref: Dict[str, Any]) -> SecretReference:
+    """Build a SecretReference for the list endpoints."""
+    return SecretReference(
+        uuid=str(ref["uuid"]),
+        description=str(ref.get("description") or ""),
+        context_hint=str(ref.get("context_hint") or ""),
+        sensitivity=SensitivityLevel(str(ref.get("sensitivity", "medium")).upper()),
+        detected_pattern=str(ref.get("detected_pattern") or "unknown"),
+        auto_decapsulate_actions=list(ref.get("auto_decapsulate_actions") or []),
+        created_at=_parse_iso(ref.get("created_at")) or datetime.now(),
+        last_accessed=_parse_iso(ref.get("last_accessed")),
+    )
+
 
 class SecretsStore:
-    """
-    Encrypted storage for secrets with comprehensive access controls.
-
-    Stores secrets in SQLite database with AES-256-GCM encryption
-    and maintains full audit trail of all access.
-    """
+    """Encrypted storage for secrets — thin persist-substrate wrapper."""
 
     def __init__(
         self,
@@ -40,538 +127,278 @@ class SecretsStore:
         max_accesses_per_hour: int = 100,
         key_storage_mode: KeyStorageMode | str = "auto",
     ):
-        """
-        Initialize secrets store.
+        """Initialize secrets store.
 
-        Args:
-            time_service: Time service for consistent timestamps
-            db_path: Path to SQLite database file
-            master_key: Master encryption key (generated if None, software mode only)
-            max_accesses_per_minute: Rate limit for secret access
-            max_accesses_per_hour: Hourly access limit
-            key_storage_mode: Key storage mode - 'software', 'hardware', or 'auto'
+        `db_path` and `master_key` retained for signature compat — persist
+        owns the database (single Engine per process) and the master key
+        is initialized via `secrets_rotate_master_key` if absent. The
+        `SecretsEncryption` instance is kept for callers that import it
+        directly (deprecated; new code should call the store methods).
         """
         self.time_service = time_service
-        # For PostgreSQL, keep connection string as-is; for SQLite, ensure Path object
-        self.db_path: str | Path
-        if db_path.startswith(("postgresql://", "postgres://")):
-            self.db_path = db_path
-        else:
-            self.db_path = Path(db_path)
+        # Kept for signature compat; persist owns the underlying file.
+        self.db_path: str | Path = db_path if isinstance(db_path, str) else Path(db_path)
 
-        # Validate key_storage_mode and ensure it's a valid KeyStorageMode
         valid_modes: tuple[KeyStorageMode, ...] = ("software", "hardware", "auto")
         if key_storage_mode not in valid_modes:
-            logger.warning(f"Invalid key_storage_mode '{key_storage_mode}', defaulting to 'auto'")
+            logger.warning(
+                f"Invalid key_storage_mode '{key_storage_mode}', defaulting to 'auto'"
+            )
             validated_mode: KeyStorageMode = "auto"
         else:
-            # key_storage_mode is in valid_modes, so it's a valid KeyStorageMode
             validated_mode = key_storage_mode  # type: ignore[assignment]
 
+        # Legacy encryption instance — kept so external callers that
+        # import SecretsEncryption directly keep working. The store's own
+        # public methods route through persist.
         self.encryption = SecretsEncryption(master_key, key_storage_mode=validated_mode)
         self.max_accesses_per_minute = max_accesses_per_minute
         self.max_accesses_per_hour = max_accesses_per_hour
         self._access_counts: Dict[str, List[datetime]] = {}
         self._lock = asyncio.Lock()
 
-        self._init_database()
+        # Ensure persist has a master key. Idempotent — persist returns
+        # the existing handle if one is set.
+        self._ensure_master_key_ready()
 
-    def _secure_db_files(self, db_path: Path) -> None:
+    # ------------------------------------------------------------------
+    # Boot-time helpers
+    # ------------------------------------------------------------------
+
+    def _ensure_master_key_ready(self) -> None:
+        """Ensure persist has a master key initialized.
+
+        Persist's substrate raises a `crypto: no active master key` error
+        on the first encrypt call if `rotate_master_key` hasn't been run.
+        We probe via `secrets_test_encryption`; if it fails, rotate once.
         """
-        Secure database and related files (main DB, WAL, SHM).
-
-        Fixes H2: Ensures WAL and SHM files have 0o600 permissions.
-
-        Args:
-            db_path: Path to the main database file
-        """
-        import os
-        import stat
-
-        mode = stat.S_IRUSR | stat.S_IWUSR  # 0o600 - owner read/write only
-
-        for suffix in ["", "-wal", "-shm"]:
-            file_path = Path(str(db_path) + suffix)
-            if file_path.exists():
-                try:
-                    os.chmod(file_path, mode)
-                    logger.debug(f"Secured {file_path.name} with 0o600 permissions")
-                except OSError as e:
-                    logger.warning(f"Could not secure {file_path}: {type(e).__name__}")
-
-    def _get_auto_decapsulate_actions(self, sensitivity: str) -> List[str]:
-        """
-        Get default auto-decapsulation actions based on sensitivity.
-
-        Args:
-            sensitivity: Secret sensitivity level (LOW, MEDIUM, HIGH, CRITICAL)
-
-        Returns:
-            List of action types that can auto-decapsulate this secret
-        """
-        if sensitivity == "CRITICAL":
-            return []  # Require manual access for critical secrets
-        elif sensitivity == "HIGH":
-            return ["tool"]  # Only tool actions for high sensitivity
-        elif sensitivity == "MEDIUM":
-            return ["tool", "speak"]  # Tool and speak actions
-        else:  # LOW
-            return ["tool", "speak", "memorize"]  # Most actions allowed
-
-    def _init_database(self) -> None:
-        """Initialize database with required tables."""
-        import os
-        import stat
-
-        # Ensure directory exists (only for SQLite file paths)
-        if isinstance(self.db_path, Path):
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
-            # Secure parent directory permissions (0o700 - owner only)
-            try:
-                os.chmod(self.db_path.parent, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-            except OSError as e:
-                logger.warning(f"Failed to set secure permissions on secrets directory: {e}")
-
-        # Detect database type - PostgreSQL uses BYTEA instead of BLOB
-        db_path_str = str(self.db_path)
-        is_postgres = db_path_str.startswith(("postgresql://", "postgres://"))
-        blob_type = "BYTEA" if is_postgres else "BLOB"
-
-        # Fix H3: Set restrictive umask before creating database (prevents TOCTOU)
-        # This ensures any new files (including WAL/SHM) are created with secure permissions
-        old_umask = None
-        if isinstance(self.db_path, Path):
-            old_umask = os.umask(0o077)  # Only owner can read/write
-
         try:
-            with get_db_connection(str(self.db_path)) as conn:
-                # Secrets table
-                conn.execute(
-                    f"""
-                    CREATE TABLE IF NOT EXISTS secrets (
-                        secret_uuid TEXT PRIMARY KEY,
-                        encrypted_value {blob_type} NOT NULL,
-                        encryption_key_ref TEXT NOT NULL,
-                        salt {blob_type} NOT NULL,
-                        nonce {blob_type} NOT NULL,
-                        description TEXT NOT NULL,
-                        sensitivity_level TEXT NOT NULL,
-                        detected_pattern TEXT NOT NULL,
-                        context_hint TEXT NOT NULL,
-                        created_at TEXT NOT NULL,
-                        last_accessed TEXT,
-                        access_count INTEGER DEFAULT 0,
-                        source_message_id TEXT,
-                        auto_decapsulate_for_actions TEXT,
-                        manual_access_only INTEGER DEFAULT 0
-                    )
-                """
-                )
+            engine = _get_engine()
+        except RuntimeError:
+            # Engine not wired yet (early boot before initialize_database).
+            # The first real call will hit _get_engine and surface the issue
+            # with the same message.
+            return
+        try:
+            if engine.secrets_test_encryption():
+                return
+        except Exception:
+            # `secrets_test_encryption` raises if no master key exists.
+            pass
+        try:
+            engine.secrets_rotate_master_key(None, "system")
+            logger.info("Initialized persist secrets master key")
+        except Exception as e:
+            logger.warning(f"Failed to initialize persist master key: {type(e).__name__}: {e}")
 
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS secret_access_log (
-                        access_id TEXT PRIMARY KEY,
-                        secret_uuid TEXT NOT NULL,
-                        access_type TEXT NOT NULL,
-                        accessor TEXT NOT NULL,
-                        purpose TEXT NOT NULL,
-                        timestamp TEXT NOT NULL,
-                        source_ip TEXT,
-                        user_agent TEXT,
-                        action_context TEXT,
-                        success INTEGER DEFAULT 1,
-                        failure_reason TEXT,
-                        FOREIGN KEY (secret_uuid) REFERENCES secrets (secret_uuid)
-                    )
-                """
-                )
+    # ------------------------------------------------------------------
+    # Detected-secret CRUD
+    # ------------------------------------------------------------------
 
-                # Indexes for performance
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_pattern ON secrets(detected_pattern)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_sensitivity ON secrets(sensitivity_level)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_access_log_timestamp ON secret_access_log(timestamp)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_access_log_secret ON secret_access_log(secret_uuid)")
+    async def store_secret(
+        self, secret: DetectedSecret, source_id: Optional[str] = None
+    ) -> SecretRecord:
+        """Store a detected secret via persist's `secrets_store_detected_secret`.
 
-                conn.commit()
-
-        finally:
-            # Restore original umask
-            if old_umask is not None:
-                os.umask(old_umask)
-
-        # Fix H2: Secure all database files including WAL and SHM (not just main DB)
-        if isinstance(self.db_path, Path) and self.db_path.exists():
-            self._secure_db_files(self.db_path)
-            logger.info(f"Set secure permissions (0o600) on secrets database and related files: {self.db_path}")
-
-    async def store_secret(self, secret: DetectedSecret, source_id: Optional[str] = None) -> SecretRecord:
-        """
-        Store encrypted secret in database.
-
-        Args:
-            secret: The detected secret to store
-            source_id: Optional identifier for the source
-
-        Returns:
-            SecretRecord with storage metadata
+        Persist owns encryption, audit logging, and the access counter.
+        Returns a SecretRecord populated from persist's `SecretReference`
+        envelope; crypto-byte fields are empty (no caller reads them).
         """
         async with self._lock:
+            engine = _get_engine()
+            sensitivity = secret.sensitivity.value if hasattr(secret.sensitivity, "value") else str(secret.sensitivity)
+            payload = json.dumps(
+                {
+                    "secret_uuid": secret.secret_uuid,
+                    "value": secret.original_value,
+                    "description": secret.description,
+                    "sensitivity": sensitivity.lower(),
+                    "detected_pattern": secret.pattern_name,
+                    "context_hint": secret.context_hint,
+                    "source_message_id": source_id,
+                    "auto_decapsulate_for_actions": _AUTO_DECAPSULATE_BY_SENSITIVITY.get(
+                        sensitivity.lower(), []
+                    ),
+                    "manual_access_only": False,
+                }
+            )
             try:
-                # Encrypt the secret value
-                encrypted_value, salt, nonce = self.encryption.encrypt_secret(secret.original_value)
-
-                # Create secret record with encryption data
-                # Use actual encryption method to properly track hardware vs software encryption
-                secret_record = SecretRecord(
-                    secret_uuid=secret.secret_uuid,
-                    encrypted_value=encrypted_value,
-                    encryption_key_ref=self.encryption.get_encryption_key_ref(),
-                    salt=salt,
-                    nonce=nonce,
-                    description=secret.description,
-                    sensitivity_level=secret.sensitivity,
-                    detected_pattern=secret.pattern_name,
-                    context_hint=secret.context_hint,
-                    created_at=self.time_service.now(),
-                    last_accessed=None,
-                    access_count=0,
-                    source_message_id=source_id,
-                    auto_decapsulate_for_actions=self._get_auto_decapsulate_actions(secret.sensitivity.value),
-                    manual_access_only=False,
-                )
-
-                # Use dialect-aware query builder for UPSERT
-                adapter = get_adapter()
-                builder = adapter.get_query_builder()
-
-                query = builder.insert(
-                    table="secrets",
-                    columns=[
-                        "secret_uuid",
-                        "encrypted_value",
-                        "encryption_key_ref",
-                        "salt",
-                        "nonce",
-                        "description",
-                        "sensitivity_level",
-                        "detected_pattern",
-                        "context_hint",
-                        "created_at",
-                        "last_accessed",
-                        "access_count",
-                        "source_message_id",
-                        "auto_decapsulate_for_actions",
-                        "manual_access_only",
-                    ],
-                    conflict_resolution=ConflictResolution.REPLACE,
-                    conflict_columns=["secret_uuid"],
-                )
-                sql = query.to_sql(adapter)
-
-                with get_db_connection(str(self.db_path)) as conn:
-                    conn.execute(
-                        sql,
-                        (
-                            secret_record.secret_uuid,
-                            secret_record.encrypted_value,
-                            secret_record.encryption_key_ref,
-                            secret_record.salt,
-                            secret_record.nonce,
-                            secret_record.description,
-                            secret_record.sensitivity_level,
-                            secret_record.detected_pattern,
-                            secret_record.context_hint,
-                            secret_record.created_at.isoformat(),
-                            secret_record.last_accessed.isoformat() if secret_record.last_accessed else None,
-                            secret_record.access_count,
-                            secret_record.source_message_id,
-                            ",".join(secret_record.auto_decapsulate_for_actions),
-                            1 if secret_record.manual_access_only else 0,
-                        ),
+                raw = engine.secrets_store_detected_secret(payload, "system")
+                envelope = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+                ref = envelope.get("ref") if isinstance(envelope, dict) else None
+                if not isinstance(ref, dict):
+                    raise RuntimeError(
+                        f"secrets_store_detected_secret envelope missing ref: {envelope!r}"
                     )
-                    conn.commit()
-
-                await self._log_access(secret_record.secret_uuid, "STORE", "system", "Initial secret storage", True)
-
-                logger.info(f"Stored encrypted secret {secret_record.secret_uuid}")
-                return secret_record
-
-            except Exception as e:  # pragma: no cover - error path
-                logger.error(f"Failed to store secret {secret.secret_uuid}: {type(e).__name__}")
-                logger.debug(f"Secret storage error details: {e}")
-                await self._log_access(
-                    secret.secret_uuid,
-                    "STORE",
-                    "system",
-                    "Initial secret storage",
-                    False,
-                    f"{type(e).__name__} - see debug logs for details",
+                logger.info(f"Stored encrypted secret {ref['uuid']}")
+                return _ref_to_record(ref)
+            except Exception as e:
+                logger.error(
+                    f"Failed to store secret {secret.secret_uuid}: {type(e).__name__}"
                 )
+                logger.debug(f"Secret storage error details: {e}")
                 raise
 
-    async def retrieve_secret(self, secret_uuid: str, decrypt: bool = False) -> Optional[SecretRecord]:
-        """
-        Retrieve secret from storage.
+    async def retrieve_secret(
+        self, secret_uuid: str, decrypt: bool = False
+    ) -> Optional[SecretRecord]:
+        """Retrieve a secret via persist's recall path.
 
-        Args:
-            secret_uuid: UUID of secret to retrieve
-            decrypt: Whether to decrypt the secret value
-
-        Returns:
-            SecretRecord if found, None otherwise
+        Returns a SecretRecord. If `decrypt=True`, the plaintext is *not*
+        attached to the SecretRecord (no field for it on the dataclass);
+        callers wanting plaintext should call `decrypt_secret_value`
+        which is now a thin persist call.
         """
         async with self._lock:
             if not await self._check_rate_limits("system"):
-                await self._log_access(secret_uuid, "VIEW", "system", "retrieve", False, "Rate limit exceeded")
                 return None
-
             try:
-                with get_db_connection(str(self.db_path)) as conn:
-                    cursor = conn.execute(
-                        """
-                        SELECT * FROM secrets WHERE secret_uuid = ?
-                    """,
-                        (secret_uuid,),
-                    )
-
-                    row = cursor.fetchone()
-                    if not row:
-                        await self._log_access(secret_uuid, "VIEW", "system", "retrieve", False, "Secret not found")
-                        return None
-
-                    # Parse database row
-                    secret_record = SecretRecord(
-                        secret_uuid=row[0],
-                        encrypted_value=row[1],
-                        encryption_key_ref=row[2],
-                        salt=row[3],
-                        nonce=row[4],
-                        description=row[5],
-                        sensitivity_level=row[6],
-                        detected_pattern=row[7],
-                        context_hint=row[8],
-                        created_at=datetime.fromisoformat(row[9]),
-                        last_accessed=datetime.fromisoformat(row[10]) if row[10] else None,
-                        access_count=row[11],
-                        source_message_id=row[12],
-                        auto_decapsulate_for_actions=row[13].split(",") if row[13] else [],
-                        manual_access_only=bool(row[14]),
-                    )
-
-                    # Update access tracking
-                    secret_record.last_accessed = self.time_service.now()
-                    secret_record.access_count += 1
-
-                    conn.execute(
-                        """
-                        UPDATE secrets
-                        SET last_accessed = ?, access_count = ?
-                        WHERE secret_uuid = ?
-                    """,
-                        (secret_record.last_accessed.isoformat(), secret_record.access_count, secret_uuid),
-                    )
-                    conn.commit()
-
-                access_type = "DECRYPT" if decrypt else "VIEW"
-                await self._log_access(secret_uuid, access_type, "system", "retrieve", True)
-
-                return secret_record
-
-            except Exception as e:  # pragma: no cover - error path
-                logger.error(f"Failed to retrieve secret {secret_uuid}: {type(e).__name__}")
-                logger.debug(f"Secret retrieval error details: {e}")
-                await self._log_access(
-                    secret_uuid, "VIEW", "system", "retrieve", False, f"{type(e).__name__} - see debug logs for details"
+                engine = _get_engine()
+                # `recall` flags persist's access log either way; pass
+                # decrypt=False here — we only need the metadata. If a
+                # caller wants the plaintext they go through
+                # `decrypt_secret_value` below.
+                raw = engine.secrets_recall_secret(secret_uuid, "retrieve", "system", False)
+                if raw is None:
+                    return None
+                parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+                if not isinstance(parsed, dict) or not parsed.get("found"):
+                    return None
+                ref_payload = parsed.get("ref") or self._lookup_ref(engine, secret_uuid)
+                if not isinstance(ref_payload, dict):
+                    # Fall back to list-stored to find the metadata.
+                    ref_payload = self._lookup_ref(engine, secret_uuid) or {"uuid": secret_uuid}
+                return _ref_to_record(ref_payload)
+            except Exception as e:
+                logger.error(
+                    f"Failed to retrieve secret {secret_uuid}: {type(e).__name__}"
                 )
+                logger.debug(f"Secret retrieval error details: {e}")
                 return None
+
+    def _lookup_ref(self, engine: Any, secret_uuid: str) -> Optional[Dict[str, Any]]:
+        """Find a single SecretReference by uuid via list_stored."""
+        try:
+            raw = engine.secrets_list_stored(500, json.dumps({"uuid": secret_uuid}))
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            if not isinstance(parsed, list):
+                return None
+            for ref in parsed:
+                if isinstance(ref, dict) and str(ref.get("uuid")) == secret_uuid:
+                    return ref
+            return None
+        except Exception:
+            return None
 
     def decrypt_secret_value(self, secret_record: SecretRecord) -> Optional[str]:
-        """
-        Decrypt the actual secret value.
+        """Return the plaintext value for a stored secret.
 
-        Args:
-            secret_record: Secret record with encryption data
-
-        Returns:
-            Decrypted secret value or None if decryption fails
-
-        Raises:
-            RuntimeError: If secret was encrypted with v1.6.0+ native encryption
-                         but current CIRISVerify binary doesn't support it.
+        Routes through persist's `secrets_recall_secret(decrypt=True)`.
+        The legacy implementation accepted ciphertext bytes off the
+        SecretRecord; post-migration those bytes are empty placeholders
+        and persist re-decrypts internally from the stored ciphertext.
         """
         try:
-            return self.encryption.decrypt_secret(
-                secret_record.encrypted_value,
-                secret_record.salt,
-                secret_record.nonce,
-                encryption_key_ref=secret_record.encryption_key_ref,
+            engine = _get_engine()
+            raw = engine.secrets_recall_secret(
+                secret_record.secret_uuid, "decrypt_secret_value", "system", True
             )
-        except RuntimeError:
-            # Re-raise RuntimeError for encryption method mismatch
-            # This gives a clear error about CIRISVerify version incompatibility
-            raise
-        except Exception as e:  # pragma: no cover - error path
-            logger.error(f"Failed to decrypt secret {secret_record.secret_uuid}: {type(e).__name__}")
+            if raw is None:
+                return None
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            if not isinstance(parsed, dict) or not parsed.get("found"):
+                return None
+            value = parsed.get("value")
+            return str(value) if value is not None else None
+        except Exception as e:
+            logger.error(
+                f"Failed to decrypt secret {secret_record.secret_uuid}: {type(e).__name__}"
+            )
             return None
 
     async def delete_secret(self, secret_uuid: str) -> bool:
-        """
-        Delete secret from storage.
-
-        Args:
-            secret_uuid: UUID of secret to delete
-
-        Returns:
-            True if deleted successfully
-        """
+        """Delete a secret via persist's `secrets_forget_secret`."""
         async with self._lock:
             try:
-                with get_db_connection(str(self.db_path)) as conn:
-                    # Check if secret exists first
-                    cursor = conn.execute("SELECT secret_uuid FROM secrets WHERE secret_uuid = ?", (secret_uuid,))
-                    exists = cursor.fetchone() is not None
-
-                    if not exists:
-                        logger.warning(f"Secret {secret_uuid} does not exist")
-                        return False
-
-                    # Log deletion BEFORE deleting (so foreign key constraint is satisfied)
-                    await self._log_access(secret_uuid, "DELETE", "system", "Secret deletion", True)
-
-                    # Delete access log entries first to avoid foreign key constraint violation
-                    conn.execute("DELETE FROM secret_access_log WHERE secret_uuid = ?", (secret_uuid,))
-
-                    # Now delete the secret itself
-                    cursor = conn.execute("DELETE FROM secrets WHERE secret_uuid = ?", (secret_uuid,))
-                    deleted = cursor.rowcount > 0
-                    conn.commit()
-
-                if deleted:
+                engine = _get_engine()
+                result = engine.secrets_forget_secret(secret_uuid, "system")
+                if result:
                     logger.info(f"Deleted secret {secret_uuid}")
-                return deleted
-
-            except Exception as e:  # pragma: no cover - error path
+                return bool(result)
+            except Exception as e:
                 logger.error(f"Failed to delete secret {secret_uuid}: {type(e).__name__}")
-                # Don't try to log access here - secret may already be deleted
                 return False
 
+    # ------------------------------------------------------------------
+    # Listing
+    # ------------------------------------------------------------------
+
     async def list_secrets(
-        self, sensitivity_filter: Optional[str] = None, pattern_filter: Optional[str] = None
+        self,
+        sensitivity_filter: Optional[str] = None,
+        pattern_filter: Optional[str] = None,
     ) -> List[SecretReference]:
-        """
-        List stored secrets (metadata only).
+        """List stored secrets (metadata only).
 
-        Args:
-            sensitivity_filter: Filter by sensitivity level
-            pattern_filter: Filter by detected pattern name
-
-        Returns:
-            List of SecretReference objects
+        Filters are applied client-side over persist's `secrets_list_stored`
+        response — persist's filter_json doesn't yet expose
+        sensitivity/pattern predicates.
         """
         try:
-            query = "SELECT secret_uuid, description, context_hint, sensitivity_level, detected_pattern, auto_decapsulate_for_actions, created_at, last_accessed FROM secrets WHERE 1=1"
-            params = []
+            engine = _get_engine()
+            raw = engine.secrets_list_stored(500, "{}")
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            if not isinstance(parsed, list):
+                return []
 
-            if sensitivity_filter:
-                query += " AND sensitivity_level = ?"
-                params.append(sensitivity_filter)
-
-            if pattern_filter:
-                query += " AND detected_pattern = ?"
-                params.append(pattern_filter)
-
-            query += " ORDER BY created_at DESC"
-
-            with get_db_connection(str(self.db_path)) as conn:
-                cursor = conn.execute(query, params)
-                rows = cursor.fetchall()
-
-            secrets = []
-            for row in rows:
-                # Handle both tuple (SQLite) and dict (PostgreSQL) rows
-                if isinstance(row, dict):
-                    # PostgreSQL RealDictCursor returns dict-like rows
-                    uuid = row["secret_uuid"]
-                    description = row["description"]
-                    context_hint = row["context_hint"]
-                    sensitivity = row["sensitivity_level"]
-                    detected_pattern = row["detected_pattern"]
-                    auto_decapsulate_actions_str = row["auto_decapsulate_for_actions"]
-                    created_at_str = row["created_at"]
-                    last_accessed_str = row["last_accessed"]
-                else:
-                    # SQLite Row objects support index access
-                    uuid = row[0]
-                    description = row[1]
-                    context_hint = row[2]
-                    sensitivity = row[3]
-                    detected_pattern = row[4]
-                    auto_decapsulate_actions_str = row[5]
-                    created_at_str = row[6]
-                    last_accessed_str = row[7]
-
-                secret_ref = SecretReference(
-                    uuid=uuid,
-                    description=description,
-                    context_hint=context_hint,
-                    sensitivity=sensitivity,
-                    detected_pattern=detected_pattern,
-                    auto_decapsulate_actions=(
-                        auto_decapsulate_actions_str.split(",") if auto_decapsulate_actions_str else []
-                    ),
-                    created_at=(
-                        datetime.fromisoformat(created_at_str) if isinstance(created_at_str, str) else created_at_str
-                    ),
-                    last_accessed=(
-                        datetime.fromisoformat(last_accessed_str)
-                        if last_accessed_str and isinstance(last_accessed_str, str)
-                        else last_accessed_str
-                    ),
-                )
-                secrets.append(secret_ref)
-
-            return secrets
-
-        except Exception as e:  # pragma: no cover - error path
+            out: List[SecretReference] = []
+            for ref in parsed:
+                if not isinstance(ref, dict):
+                    continue
+                if sensitivity_filter and str(ref.get("sensitivity", "")).lower() != sensitivity_filter.lower():
+                    continue
+                if pattern_filter and str(ref.get("detected_pattern", "")) != pattern_filter:
+                    continue
+                out.append(_ref_to_reference(ref))
+            # Persist returns DESC by created_at; preserve that ordering.
+            return out
+        except Exception as e:
             logger.error(f"Failed to list secrets: {type(e).__name__}")
             return []
 
     async def list_all_secrets(self) -> List[SecretReference]:
-        """
-        List all stored secrets (no filters).
-
-        Returns:
-            List of SecretReference
-        """
+        """List all stored secrets (no filters)."""
         return await self.list_secrets()
 
+    # ------------------------------------------------------------------
+    # Rate limiting (in-memory; not persisted)
+    # ------------------------------------------------------------------
+
     async def _check_rate_limits(self, accessor: str) -> bool:  # pragma: no cover - simple
-        """Check if accessor is within rate limits."""
+        """In-memory rate limiter — protects against caller abuse, not a
+        security boundary. Persist's audit log records every actual access.
+        """
         now = self.time_service.now()
 
-        # Initialize tracking for new accessor
         if accessor not in self._access_counts:
             self._access_counts[accessor] = []
 
         access_times = self._access_counts[accessor]
+        from datetime import timedelta
 
-        # Remove old access times
-        minute_ago = now.timestamp() - 60
-        hour_ago = now.timestamp() - 3600
+        minute_ago = now - timedelta(minutes=1)
+        hour_ago = now - timedelta(hours=1)
 
-        access_times[:] = [access_time for access_time in access_times if access_time.timestamp() > hour_ago]
+        # Prune
+        self._access_counts[accessor] = [t for t in access_times if t > hour_ago]
+        access_times = self._access_counts[accessor]
 
-        # Check limits
-        recent_accesses = [access_time for access_time in access_times if access_time.timestamp() > minute_ago]
-
-        if len(recent_accesses) >= self.max_accesses_per_minute:  # pragma: no cover - rate limit
+        recent_minute = sum(1 for t in access_times if t > minute_ago)
+        if recent_minute >= self.max_accesses_per_minute:
+            return False
+        if len(access_times) >= self.max_accesses_per_hour:
             return False
 
-        if len(access_times) >= self.max_accesses_per_hour:  # pragma: no cover - rate limit
-            return False
-
-        # Record this access
         access_times.append(now)
         return True
 
@@ -584,378 +411,143 @@ class SecretsStore:
         success: bool,
         failure_reason: Optional[str] = None,
     ) -> None:
-        """Log secret access for audit trail."""
-        try:
-            access_log = SecretAccessLog(
-                access_id=f"access_{self.time_service.now().timestamp()}_{secret_uuid[:8]}",
-                secret_uuid=secret_uuid,
-                access_type=cast(Literal["VIEW", "DECRYPT", "UPDATE", "DELETE"], access_type),
-                accessor=accessor,
-                purpose=purpose,
-                timestamp=self.time_service.now(),
-                success=success,
-                failure_reason=failure_reason,
-            )
+        """Audit log entry — no-op shim.
 
-            with get_db_connection(str(self.db_path)) as conn:
-                conn.execute(
-                    """
-                    INSERT INTO secret_access_log (
-                        access_id, secret_uuid, access_type, accessor, purpose,
-                        timestamp, source_ip, user_agent, action_context,
-                        success, failure_reason
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        access_log.access_id,
-                        access_log.secret_uuid,
-                        access_log.access_type,
-                        access_log.accessor,
-                        access_log.purpose,
-                        access_log.timestamp.isoformat(),
-                        access_log.source_ip,
-                        access_log.user_agent,
-                        access_log.action_context,
-                        1 if access_log.success else 0,
-                        access_log.failure_reason,
-                    ),
-                )
-                conn.commit()
+        Persist's substrate emits its own audit row for every secrets_*
+        call. This shim is kept so legacy callers don't NoneType-crash.
+        """
+        return None
 
-        except Exception as e:  # pragma: no cover - error path
-            logger.error(f"Failed to log secret access: {type(e).__name__}")
+    # ------------------------------------------------------------------
+    # Direct crypto (used by SecretsService.encrypt / .decrypt)
+    # ------------------------------------------------------------------
 
-    # Implement missing SecretsEncryptionInterface methods by delegating to encryption instance
     def encrypt_secret(self, value: str) -> Tuple[bytes, bytes, bytes]:
-        """Delegate to encryption instance."""
-        return self.encryption.encrypt_secret(value)
+        """Encrypt a value via persist's `secrets_encrypt`.
+
+        Returns `(ciphertext_b64_bytes, b"", b"")` — the agent's legacy
+        3-tuple shape. The salt and nonce slots are empty because persist
+        bundles them into the single base64 envelope it returns. Callers
+        that concatenate `salt + nonce + encrypted` get the same envelope
+        back; the symmetric `decrypt_secret` below pulls the full bytes
+        out and hands them to persist verbatim.
+        """
+        try:
+            engine = _get_engine()
+            ct = engine.secrets_encrypt(value)
+            ct_bytes = ct.encode() if isinstance(ct, str) else bytes(ct)
+            return ct_bytes, b"", b""
+        except Exception as e:
+            logger.error(f"persist encrypt failed: {type(e).__name__}: {e}")
+            raise
 
     def decrypt_secret(self, encrypted_value: bytes, salt: bytes, nonce: bytes) -> str:
-        """Delegate to encryption instance."""
-        return self.encryption.decrypt_secret(encrypted_value, salt, nonce)
+        """Decrypt a value via persist's `secrets_decrypt`.
+
+        `salt` and `nonce` are accepted for legacy signature compat — persist
+        embeds them in the base64 envelope and only needs the ciphertext blob.
+        """
+        try:
+            engine = _get_engine()
+            blob = encrypted_value
+            # Some callers may have concatenated empty bytes + ciphertext; if
+            # salt/nonce were provided we treat the full concatenation as the
+            # blob (this also covers the legacy-encrypted-at-rest path during
+            # the one-shot reencrypt migration window).
+            if salt or nonce:
+                blob = salt + nonce + encrypted_value
+            ct_str = blob.decode() if isinstance(blob, (bytes, bytearray)) else str(blob)
+            pt = engine.secrets_decrypt(ct_str)
+            return str(pt)
+        except Exception as e:
+            logger.error(f"persist decrypt failed: {type(e).__name__}: {e}")
+            raise
 
     def rotate_master_key(self, new_master_key: Optional[bytes] = None) -> bytes:
-        """Delegate to encryption instance."""
-        return self.encryption.rotate_master_key(new_master_key)
+        """Rotate persist's master key. Returns a placeholder bytes value
+        for legacy signature compat — the actual key handle is persist-internal.
+        """
+        try:
+            engine = _get_engine()
+            arg: Optional[str] = None
+            if new_master_key:
+                arg = base64.b64encode(new_master_key).decode()
+            engine.secrets_rotate_master_key(arg, "system")
+            # Legacy API returned the new key bytes; persist abstracts the
+            # key away. Return an empty bytes placeholder for shape compat.
+            return b""
+        except Exception as e:
+            logger.error(f"rotate_master_key failed: {type(e).__name__}: {e}")
+            raise
 
     def test_encryption(self) -> bool:
-        """Test that encryption/decryption works correctly."""
+        """Verify encryption round-trips via persist."""
         try:
-            test_value = "test_secret_123"
-            encrypted_value, salt, nonce = self.encrypt_secret(test_value)
-            decrypted_value = self.decrypt_secret(encrypted_value, salt, nonce)
-            return decrypted_value == test_value
+            engine = _get_engine()
+            return bool(engine.secrets_test_encryption())
         except Exception:
             return False
 
-    async def get_access_logs(self, secret_uuid: Optional[str] = None, limit: int = 100) -> List[Any]:
-        """Get access logs for auditing."""
-        logs = []
-        try:
-            with get_db_connection(str(self.db_path)) as conn:
-                if secret_uuid:
-                    cursor = conn.execute(
-                        """
-                        SELECT * FROM secret_access_log
-                        WHERE secret_uuid = ?
-                        ORDER BY timestamp DESC
-                        LIMIT ?
-                    """,
-                        (secret_uuid, limit),
-                    )
-                else:
-                    cursor = conn.execute(
-                        """
-                        SELECT * FROM secret_access_log
-                        ORDER BY timestamp DESC
-                        LIMIT ?
-                    """,
-                        (limit,),
-                    )
-
-                for row in cursor.fetchall():
-                    logs.append(
-                        {
-                            "access_id": row[0],
-                            "secret_uuid": row[1],
-                            "access_type": row[2],
-                            "accessor": row[3],
-                            "purpose": row[4],
-                            "timestamp": row[5],
-                            "success": bool(row[9]),
-                        }
-                    )
-        except Exception as e:  # pragma: no cover - error path
-            logger.error(f"Failed to retrieve access logs: {type(e).__name__}")
-        return logs
-
     async def reencrypt_all(self, new_encryption_key: bytes) -> bool:
-        """Re-encrypt all stored secrets with a new key."""
+        """Rotate the master key and re-encrypt every stored secret.
+
+        Persist's `secrets_reencrypt_all` walks every row internally; this
+        wrapper combines the rotate + reencrypt steps so the legacy single-
+        call contract still works.
+        """
         try:
-            # Get all secrets
-            with get_db_connection(str(self.db_path)) as conn:
-                cursor = conn.execute("SELECT secret_uuid, encrypted_value, salt, nonce FROM secrets")
-                secrets = cursor.fetchall()
-
-            if not secrets:
-                logger.info("No secrets to re-encrypt")
-                return True
-
-            # Decrypt with old key and re-encrypt with new key
-            updated_secrets = []
-            for secret_uuid, encrypted_value, salt, nonce in secrets:
-                try:
-                    # Decrypt with current key
-                    decrypted_value = self.encryption.decrypt_secret(encrypted_value, salt, nonce)
-
-                    # Create new encryption instance with new key
-                    new_encryption = SecretsEncryption(new_encryption_key)
-
-                    # Re-encrypt with new key
-                    new_encrypted_value, new_salt, new_nonce = new_encryption.encrypt_secret(decrypted_value)
-
-                    updated_secrets.append((new_encrypted_value, new_salt, new_nonce, secret_uuid))
-
-                except Exception as decrypt_error:
-                    logger.error(f"Failed to re-encrypt secret {secret_uuid}: {type(decrypt_error).__name__}")
-                    return False
-
-            # Update all secrets in database
-            with get_db_connection(str(self.db_path)) as conn:
-                conn.executemany(
-                    """
-                    UPDATE secrets
-                    SET encrypted_value = ?, salt = ?, nonce = ?, encryption_key_ref = ?
-                    WHERE secret_uuid = ?
-                """,
-                    [(enc_val, salt, nonce, "master_key_v2", uuid) for enc_val, salt, nonce, uuid in updated_secrets],
-                )
-                conn.commit()
-
-            self.encryption = SecretsEncryption(new_encryption_key)
-
-            logger.info(f"Successfully re-encrypted {len(updated_secrets)} secrets")
+            engine = _get_engine()
+            arg = base64.b64encode(new_encryption_key).decode() if new_encryption_key else None
+            engine.secrets_rotate_master_key(arg, "system")
+            engine.secrets_reencrypt_all("system")
+            logger.info("persist secrets master key rotated + all rows re-encrypted")
             return True
-
         except Exception as e:
-            logger.error(f"Failed to re-encrypt secrets: {type(e).__name__}")
+            logger.error(f"reencrypt_all failed: {type(e).__name__}: {e}")
             return False
+
+    # ------------------------------------------------------------------
+    # Audit log
+    # ------------------------------------------------------------------
+
+    async def get_access_logs(
+        self, secret_uuid: Optional[str] = None, limit: int = 100
+    ) -> List[Any]:
+        """Pull access log entries via persist's substrate."""
+        try:
+            engine = _get_engine()
+            raw = engine.secrets_get_access_logs(secret_uuid, limit)
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            return list(parsed) if isinstance(parsed, list) else []
+        except Exception as e:
+            logger.error(f"Failed to retrieve access logs: {type(e).__name__}: {e}")
+            return []
 
     async def update_access_log(self, log_entry: Any) -> None:
-        """Record access to a secret in the audit log."""
-        await self._log_access(
-            log_entry.secret_uuid,
-            log_entry.access_type,
-            log_entry.accessor,
-            log_entry.purpose,
-            log_entry.success,
-            log_entry.failure_reason,
-        )
+        """No-op: persist's substrate records every access automatically."""
+        return None
 
-    async def _verify_hardware_key_works(self) -> bool:
-        """Verify hardware key can encrypt/decrypt before trusting it.
-
-        This is critical to prevent data loss from silent hardware failures.
-        C2 FIX: Round-trip canary verification before wiping software key.
-
-        Returns:
-            True if hardware key can successfully round-trip a canary value
-        """
-        # Use token_hex instead of token_bytes to ensure valid UTF-8 string
-        canary = "CIRIS_HARDWARE_KEY_CANARY_" + secrets.token_hex(16)
-        try:
-            encrypted_value, salt, nonce = self.encryption.encrypt_secret(canary)
-            decrypted = self.encryption.decrypt_secret(encrypted_value, salt, nonce)
-            success = decrypted == canary
-            if success:
-                logger.info("Hardware key canary verification PASSED")
-            else:
-                logger.error("Hardware key canary verification FAILED: decryption mismatch")
-            return success
-        except Exception as e:
-            logger.error(f"Hardware key canary verification FAILED: {type(e).__name__}: {e}")
-            return False
+    # ------------------------------------------------------------------
+    # Hardware key migration
+    # ------------------------------------------------------------------
 
     async def migrate_to_hardware_key(self) -> bool:
-        """Migrate secrets master key to hardware-backed storage via CIRISVerify.
+        """Migrate persist's master key to the CIRISVerify hardware path."""
+        try:
+            engine = _get_engine()
+            engine.secrets_migrate_to_hardware_key("system")
+            logger.info("persist secrets migrated to hardware-backed master key")
+            return True
+        except Exception as e:
+            logger.error(
+                f"Failed to migrate to hardware key: {type(e).__name__}: {e}"
+            )
+            return False
 
-        SECURITY FIXES:
-        - C1: Atomic transaction for re-encryption (no partial migration)
-        - C2: Canary round-trip verification before trusting hardware key
-        - C3: Hold self._lock for entire migration (no concurrent mode toggling)
+    async def _verify_hardware_key_works(self) -> bool:
+        """Canary round-trip to verify hardware-backed crypto.
 
-        This method:
-        1. Checks if hardware backend is available
-        2. Checks if we're currently in software mode with a file-based key
-        3. Stores the current master key in CIRISVerify hardware
-        4. Verifies hardware key works with canary test (C2)
-        5. Creates backup of existing secrets table (C1)
-        6. Re-encrypts all secrets with hardware-backed key derivation in atomic transaction (C1)
-        7. Updates encryption_key_ref to "hardware_v1"
-        8. Only switches mode after successful migration
-
-        Returns:
-            True if migration successful, False otherwise
+        Persist's `secrets_test_encryption` performs the round-trip; we
+        keep the legacy name for callers that probe via this method.
         """
-        # C3 FIX: Hold lock for entire migration to prevent concurrent mode toggling
-        async with self._lock:
-            try:
-                # Check if hardware is available
-                capabilities = self.encryption.get_hardware_capabilities()
-                if not capabilities["hardware_available"]:
-                    logger.info("Hardware key storage not available - skipping migration")
-                    return False
-
-                # Check if already using hardware
-                if self.encryption.key_storage_mode == "hardware":
-                    logger.info("Already using hardware key storage")
-                    return True
-
-                # Check if hardware key already exists
-                if self.encryption.has_hardware_key():
-                    logger.info("Hardware key already exists - switching to hardware mode")
-
-                    # C2 FIX: Verify hardware key works before switching mode
-                    # Temporarily switch to hardware mode for verification
-                    old_mode = self.encryption.key_storage_mode
-                    self.encryption.key_storage_mode = "hardware"
-
-                    if not await self._verify_hardware_key_works():
-                        logger.error("Hardware key exists but canary verification failed - NOT switching mode")
-                        self.encryption.key_storage_mode = old_mode
-                        return False
-
-                    # Canary passed - safe to stay in hardware mode
-                    logger.info("Hardware key verified - switching to hardware mode")
-                    return True
-
-                # Get current software master key
-                current_master_key = self.encryption.master_key
-                if not current_master_key or len(current_master_key) != 32:
-                    logger.error("Invalid master key - cannot migrate")
-                    return False
-
-                logger.info("Starting secrets master key migration to hardware")
-
-                # Store master key in hardware
-                if not self.encryption.store_key_in_hardware(current_master_key):
-                    logger.error("Failed to store key in hardware")
-                    return False
-
-                # C2 FIX: Verify hardware key works BEFORE re-encrypting anything
-                old_mode = self.encryption.key_storage_mode
-                self.encryption.key_storage_mode = "hardware"
-
-                if not await self._verify_hardware_key_works():
-                    logger.error("Hardware key stored but canary verification failed - aborting migration")
-                    self.encryption.key_storage_mode = old_mode
-                    return False
-
-                # Restore mode - will switch at the end after successful migration
-                self.encryption.key_storage_mode = old_mode
-                logger.info("Hardware key canary verification passed - proceeding with re-encryption")
-
-                # Get all secrets that need re-encryption
-                with get_db_connection(str(self.db_path)) as conn:
-                    cursor = conn.execute(
-                        "SELECT secret_uuid, encrypted_value, salt, nonce, encryption_key_ref FROM secrets"
-                    )
-                    secrets_rows = cursor.fetchall()
-
-                if not secrets_rows:
-                    logger.info("No secrets to re-encrypt - switching to hardware mode")
-                    self.encryption.key_storage_mode = "hardware"
-                    return True
-
-                logger.info(f"Re-encrypting {len(secrets_rows)} secrets with hardware-backed key")
-
-                # C1 FIX: Create backup table before migration
-                import time
-
-                backup_table = f"secrets_backup_{int(time.time())}"
-                with get_db_connection(str(self.db_path)) as conn:
-                    # CREATE TABLE ... AS SELECT works for both SQLite and PostgreSQL
-                    conn.execute(f"CREATE TABLE {backup_table} AS SELECT * FROM secrets")
-                    conn.commit()
-                logger.info(f"Created backup table: {backup_table}")
-
-                # Re-encrypt all secrets
-                updated_secrets = []
-                for row in secrets_rows:
-                    # Handle both tuple (SQLite) and dict (PostgreSQL) rows
-                    if isinstance(row, dict):
-                        secret_uuid = row["secret_uuid"]
-                        encrypted_value = row["encrypted_value"]
-                        salt = row["salt"]
-                        nonce = row["nonce"]
-                        current_key_ref = row["encryption_key_ref"]
-                    else:
-                        secret_uuid = row[0]
-                        encrypted_value = row[1]
-                        salt = row[2]
-                        nonce = row[3]
-                        current_key_ref = row[4]
-
-                    try:
-                        # Skip if already hardware-encrypted
-                        if current_key_ref == "hardware_v1":
-                            continue
-
-                        # Decrypt with current software key
-                        decrypted_value = self.encryption.decrypt_secret(encrypted_value, salt, nonce)
-
-                        # Switch to hardware mode for re-encryption
-                        self.encryption.key_storage_mode = "hardware"
-
-                        # Re-encrypt with hardware-backed key derivation
-                        new_encrypted_value, new_salt, new_nonce = self.encryption.encrypt_secret(decrypted_value)
-
-                        # Restore mode (will be set to hardware at the end)
-                        self.encryption.key_storage_mode = old_mode
-
-                        updated_secrets.append((new_encrypted_value, new_salt, new_nonce, "hardware_v1", secret_uuid))
-
-                    except Exception as decrypt_error:
-                        logger.error(f"Failed to re-encrypt secret {secret_uuid}: {decrypt_error}")
-                        # Restore mode before returning
-                        self.encryption.key_storage_mode = old_mode
-                        return False
-
-                # C1 FIX: Update all secrets in a SINGLE transaction (atomic)
-                if updated_secrets:
-                    with get_db_connection(str(self.db_path)) as conn:
-                        # Begin transaction explicitly
-                        conn.execute("BEGIN")
-                        try:
-                            conn.executemany(
-                                """
-                                UPDATE secrets
-                                SET encrypted_value = ?, salt = ?, nonce = ?, encryption_key_ref = ?
-                                WHERE secret_uuid = ?
-                            """,
-                                updated_secrets,
-                            )
-                            # Only commit if ALL updates succeeded
-                            conn.commit()
-                            logger.info(
-                                f"Successfully committed {len(updated_secrets)} re-encrypted secrets in atomic transaction"
-                            )
-                        except Exception as update_error:
-                            conn.rollback()
-                            logger.error(f"Re-encryption transaction failed, rolled back: {update_error}")
-                            # Restore mode before returning
-                            self.encryption.key_storage_mode = old_mode
-                            return False
-
-                # SUCCESS: Only switch to hardware mode after successful migration
-                self.encryption.key_storage_mode = "hardware"
-
-                logger.info(f"Successfully migrated {len(updated_secrets)} secrets to hardware-backed encryption")
-                return True
-
-            except Exception as e:
-                logger.error(f"Secrets master key migration failed: {e}")
-                # Ensure we're back in software mode if anything failed
-                if self.encryption.key_storage_mode == "hardware":
-                    self.encryption.key_storage_mode = "software"
-                return False
+        return self.test_encryption()

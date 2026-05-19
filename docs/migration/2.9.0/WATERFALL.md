@@ -22,14 +22,15 @@ Lock down what persist 1.5.19 exposes vs. what the agent still needs from raw SQ
 
 ## Phase 1 — Postgres handover to persist
 
-Single concentrated change to `persistence/db/core.py`:
+The original plan was "delete the psycopg2 wrappers + wire persist for Postgres". Reality: the wrappers are still load-bearing for raw-SQL callers (TSDB, audit, system_snapshot, secrets) that won't migrate until Phases 2-4. Deleting the wrappers in Phase 1 would break every Postgres deployment immediately. Scope adjusted accordingly.
 
-- Wire persist's Engine for Postgres DSNs (Engine supports both backends; agent currently only wires the SQLite case).
-- Delete `_PGConnectionWrapper`, `_PGCursorWrapper`, `_get_postgres_connection`, the dialect adapter shim, the psycopg2 retry wrappers.
-- Keep `get_db_connection()` as a SQLite-only shim for now — Phases 2-4 still depend on it.
-- Add CI matrix entry that runs the full QA suite against persist's Postgres backend.
+**Phase 1 actually delivers:**
 
-**Exit gate:** `psycopg2` no longer referenced in `core.py`. QA suite green on SQLite *and* Postgres.
+- Verify persist's Postgres path works end-to-end (`_bootstrap_persist_engine` already routes `postgres://` DSNs straight to `Engine(dsn, signing_key_id)`; persist's sqlx handles connection + schema). Confirmed working against `postgres:16-alpine` locally.
+- Add CI matrix entry `test-postgres` that spins up a real Postgres service container and runs the persistence-layer tests against persist-on-Postgres.
+- Document the deferred deletion: psycopg2 wrappers and `get_db_connection`'s Postgres branch stay until Phase 5, after Phases 2-4 retire every raw-SQL caller.
+
+**Exit gate:** persist's Postgres path verified in CI. The fact that `import psycopg2` still appears in `core.py` is an explicit Phase 5 deletion — tracked, not a regression.
 
 ---
 
@@ -94,6 +95,7 @@ Each call site swaps to the appropriate persist substrate. Any sites that slippe
 With nothing left calling `get_db_connection`:
 
 - Delete `get_db_connection`, `get_db_connection_with_retry`, the connection-wrapper classes, the dialect adapter from `persistence/db/`.
+- Delete `_PGConnectionWrapper`, `_PGCursorWrapper`, `_create_postgres_connection`, the psycopg2 import block (deferred from Phase 1 — the wrappers were load-bearing until Phase 4 finished migrating raw-SQL callers).
 - `migration_runner.py` becomes either a thin first-boot shim (upgrade pre-persist DBs once, noop forever after) or is deleted entirely if persist's own migration runner covers the upgrade path.
 - `setup.py`, `retry.py` deleted or reduced to empty re-exports (then deleted in 2.9.1).
 - `initialize_database()` shrinks to: resolve DSN → build persist Engine → wire `set_persist_engine()`.

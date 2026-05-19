@@ -147,6 +147,82 @@ jobs:
           path: test_durations_shard_${{ matrix.shard }}
           retention-days: 7
 
+  # Postgres backend verification — Phase 1 of 2.9.0 waterfall.
+  # Runs the persist-routed test suite against a real Postgres so the
+  # sqlx-bundled Postgres backend is verified before 2.9.0 ships. Scope is
+  # the persistence layer; full agent QA on Postgres comes later once
+  # Phases 2-4 finish migrating raw-SQL callers to persist substrate.
+  test-postgres:
+    name: Test (persist backend = postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ciris_test
+          POSTGRES_PASSWORD: ciris_test_password
+          POSTGRES_DB: ciris_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ciris_test -d ciris_test_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            pip install --upgrade pip
+            pip install typing_extensions>=4.0.0
+            pip install -r requirements.txt
+            pip install -r requirements-dev.txt
+
+      - name: Run persistence tests against Postgres-backed persist
+        env:
+          CI: true
+          CIRIS_DB_URL: postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db
+          # Mark this run so test fixtures that need to opt out of the
+          # Postgres backend (e.g. legacy SQLite-only schema tests) can
+          # skip themselves cleanly. Phases 2-4 will widen the scope.
+          CIRIS_TEST_BACKEND: postgres
+        run: |
+          # Phase 1 scope: persist-substrate roundtrip tests + the
+          # tests that drive ciris-persist directly. Excludes legacy
+          # raw-SQL tests pending Phase 2-4 migration.
+          timeout --signal=SIGTERM --kill-after=30 1200 \
+            pytest \
+              tests/ciris_engine/logic/persistence/ \
+              tests/test_persistence/ \
+              -n 4 \
+              --reruns=2 --reruns-delay=1 \
+              --timeout=120 \
+              -k "not sqlite_only" \
+              -m "not skip_postgres"
+
   # Staged QA — run the full QA suite against a venv installed from the
   # canonical staged tree (tools.dev.stage_runtime → wheel → venv).
   # Validates the SHIPPED wheel artifact, not just the source tree. Catches

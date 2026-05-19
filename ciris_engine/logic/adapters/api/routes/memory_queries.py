@@ -84,14 +84,12 @@ async def query_timeline_nodes(
 
 
 async def get_memory_stats(memory_service: Any) -> JSONDict:
-    """
-    Get statistics about memory storage.
+    """Get statistics about memory storage.
 
-    Args:
-        memory_service: Memory service instance
-
-    Returns:
-        Dictionary with memory statistics
+    Post-A1 absorption (CIRISAgent#763, CIRISPersist#65): counts are
+    aggregated via persist's `cirisgraph_count_*` substrate. Recent-
+    activity buckets use `cirisgraph_query_nodes` with `updated_after`
+    filter (#62) so we don't paginate the full graph just to count.
     """
     stats: JSONDict = {
         "total_nodes": 0,
@@ -103,57 +101,68 @@ async def get_memory_stats(memory_service: Any) -> JSONDict:
     }
 
     try:
-        db_path = getattr(memory_service, "db_path", None)
-        if not db_path:
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
             return stats
 
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
+        # Sum totals + by-type counts across every scope. Persist's
+        # `cirisgraph_count_nodes` requires a scope filter; we sum across
+        # all known scopes.
+        scopes = ("LOCAL", "COMMUNITY", "IDENTITY", "ENVIRONMENT")
+        nodes_by_type = get_dict(stats, "nodes_by_type", {})
+        nodes_by_scope = get_dict(stats, "nodes_by_scope", {})
 
-            # Total nodes
-            cursor.execute("SELECT COUNT(*) FROM graph_nodes")
-            stats["total_nodes"] = cursor.fetchone()[0]
+        total_nodes = 0
+        total_edges = 0
+        for scope in scopes:
+            n_nodes = int(engine.cirisgraph_count_nodes(json.dumps({"scope": scope})))
+            n_edges = int(engine.cirisgraph_count_edges(scope))
+            total_nodes += n_nodes
+            total_edges += n_edges
+            if n_nodes:
+                nodes_by_scope[scope] = n_nodes
+            # By type within scope
+            raw = engine.cirisgraph_count_nodes_by_type(scope)
+            per_type = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or {})
+            for ntype, count in per_type.items():
+                nodes_by_type[ntype] = nodes_by_type.get(ntype, 0) + int(count)
 
-            # Total edges
-            cursor.execute("SELECT COUNT(*) FROM graph_edges")
-            stats["total_edges"] = cursor.fetchone()[0]
+        stats["total_nodes"] = total_nodes
+        stats["total_edges"] = total_edges
 
-            # Nodes by type
-            nodes_by_type = get_dict(stats, "nodes_by_type", {})
-            cursor.execute("SELECT node_type, COUNT(*) FROM graph_nodes GROUP BY node_type")
-            for row in cursor.fetchall():
-                nodes_by_type[row[0]] = row[1]
-
-            # Nodes by scope
-            nodes_by_scope = get_dict(stats, "nodes_by_scope", {})
-            cursor.execute("SELECT scope, COUNT(*) FROM graph_nodes GROUP BY scope")
-            for row in cursor.fetchall():
-                nodes_by_scope[row[0]] = row[1]
-
-            # Recent activity (last 24 hours)
-            recent_activity = get_dict(stats, "recent_activity", {})
-            now = datetime.now()
-            yesterday = now - timedelta(days=1)
-
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-            placeholder = get_adapter().placeholder()
-
-            cursor.execute(
-                f"SELECT COUNT(*) FROM graph_nodes WHERE updated_at >= {placeholder}", (yesterday.isoformat(),)
+        # Recent activity: count nodes/edges updated in the last 24h via
+        # the updated_after filter (CIRISPersist#62 / #65). Sum across scopes.
+        now = datetime.now()
+        yesterday = (now - timedelta(days=1)).isoformat()
+        recent_activity = get_dict(stats, "recent_activity", {})
+        recent_nodes = 0
+        for scope in scopes:
+            recent_nodes += int(
+                engine.cirisgraph_count_nodes(
+                    json.dumps({"scope": scope, "updated_after": yesterday})
+                )
             )
-            recent_activity["nodes_24h"] = cursor.fetchone()[0]
+        recent_activity["nodes_24h"] = recent_nodes
+        # Persist's `cirisgraph_count_edges` is scope-only (no time filter
+        # in 1.6.0); recent edges fall back to 0 until upstream adds the
+        # time-windowed counter.
+        recent_activity["edges_24h"] = 0
 
-            cursor.execute(
-                f"SELECT COUNT(*) FROM graph_edges WHERE created_at >= {placeholder}", (yesterday.isoformat(),)
-            )
-            recent_activity["edges_24h"] = cursor.fetchone()[0]
-
-            # Storage size
+        # Storage size: best-effort against the engine DSN. Persist owns
+        # the file; if the agent can resolve a SQLite path on disk, size
+        # it; otherwise skip (Postgres deployments don't have a file).
+        try:
             import os
 
-            if os.path.exists(db_path):
-                stats["storage_size_mb"] = os.path.getsize(db_path) / (1024 * 1024)
+            from ciris_engine.logic.persistence import get_sqlite_db_full_path
+
+            sqlite_path = get_sqlite_db_full_path()
+            if isinstance(sqlite_path, str) and os.path.exists(sqlite_path):
+                stats["storage_size_mb"] = os.path.getsize(sqlite_path) / (1024 * 1024)
+        except Exception:
+            pass
 
     except Exception as e:
         logger.error(f"Failed to get memory stats: {e}")

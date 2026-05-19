@@ -286,12 +286,11 @@ class WorkProcessor(BaseProcessor):
         """Check if ticket should be skipped based on status."""
         return ticket_status in ["blocked", "deferred", "completed", "failed", "cancelled"]
 
-    def _attempt_claim_pending_ticket(self, ticket: Dict[str, Any], db_path: Optional[str]) -> bool:
+    def _attempt_claim_pending_ticket(self, ticket: Dict[str, Any]) -> bool:
         """Attempt to atomically claim a pending ticket.
 
         Args:
             ticket: Ticket dictionary
-            db_path: Database path
 
         Returns:
             True if claim succeeded, False otherwise
@@ -327,12 +326,11 @@ class WorkProcessor(BaseProcessor):
 
         return True
 
-    def _create_seed_task_for_ticket(self, ticket: Dict[str, Any], db_path: Optional[str]) -> bool:
+    def _create_seed_task_for_ticket(self, ticket: Dict[str, Any]) -> bool:
         """Create seed task for newly claimed ticket.
 
         Args:
             ticket: Ticket dictionary
-            db_path: Database path
 
         Returns:
             True if task creation succeeded, False otherwise
@@ -422,12 +420,11 @@ class WorkProcessor(BaseProcessor):
 
         return True
 
-    def _has_existing_task_for_ticket(self, ticket_id: str, db_path: Optional[str]) -> bool:
+    def _has_existing_task_for_ticket(self, ticket_id: str) -> bool:
         """Check if there's already a pending or active task for this ticket.
 
         Args:
             ticket_id: Ticket ID
-            db_path: Database path
 
         Returns:
             True if task exists, False otherwise
@@ -485,12 +482,11 @@ class WorkProcessor(BaseProcessor):
 
         return False
 
-    def _create_continuation_task_for_ticket(self, ticket: Dict[str, Any], db_path: Optional[str]) -> bool:
+    def _create_continuation_task_for_ticket(self, ticket: Dict[str, Any]) -> bool:
         """Create continuation task for active ticket.
 
         Args:
             ticket: Ticket dictionary
-            db_path: Database path
 
         Returns:
             True if task creation succeeded, False otherwise
@@ -569,14 +565,13 @@ class WorkProcessor(BaseProcessor):
         from ciris_engine.logic.persistence.models.tickets import list_tickets
 
         tasks_created = 0
-        db_path = getattr(self.config, "db_path", None)
 
         try:
             # Phase 1: Claim PENDING tickets with __shared__
-            tasks_created += await self._process_pending_tickets(db_path)
+            tasks_created += await self._process_pending_tickets()
 
             # Phase 2: Create continuation tasks for ASSIGNED/IN_PROGRESS tickets
-            tasks_created += await self._process_active_tickets(db_path)
+            tasks_created += await self._process_active_tickets()
 
             if tasks_created > 0:
                 logger.info(f"Ticket discovery: created {tasks_created} tasks (claimed + continued)")
@@ -586,11 +581,8 @@ class WorkProcessor(BaseProcessor):
 
         return tasks_created
 
-    async def _process_pending_tickets(self, db_path: Optional[str]) -> int:
+    async def _process_pending_tickets(self) -> int:
         """Process PENDING tickets and claim them atomically.
-
-        Args:
-            db_path: Database path
 
         Returns:
             Number of tasks created
@@ -602,11 +594,11 @@ class WorkProcessor(BaseProcessor):
 
         for ticket in pending_tickets:
             # Attempt to claim the ticket
-            if not self._attempt_claim_pending_ticket(ticket, db_path):
+            if not self._attempt_claim_pending_ticket(ticket):
                 continue
 
             # Create seed task for newly claimed ticket
-            if self._create_seed_task_for_ticket(ticket, db_path):
+            if self._create_seed_task_for_ticket(ticket):
                 tasks_created += 1
             else:
                 ticket_id = ticket.get("ticket_id", "unknown")
@@ -614,11 +606,8 @@ class WorkProcessor(BaseProcessor):
 
         return tasks_created
 
-    async def _process_active_tickets(self, db_path: Optional[str]) -> int:
+    async def _process_active_tickets(self) -> int:
         """Process ASSIGNED/IN_PROGRESS tickets and create continuation tasks.
-
-        Args:
-            db_path: Database path
 
         Returns:
             Number of tasks created
@@ -640,7 +629,7 @@ class WorkProcessor(BaseProcessor):
                 continue
 
             # Check for existing tasks
-            if self._has_existing_task_for_ticket(ticket_id, db_path):
+            if self._has_existing_task_for_ticket(ticket_id):
                 continue
 
             # Check for deferral
@@ -649,7 +638,7 @@ class WorkProcessor(BaseProcessor):
                 continue
 
             # Create continuation task
-            if self._create_continuation_task_for_ticket(ticket, db_path):
+            if self._create_continuation_task_for_ticket(ticket):
                 tasks_created += 1
             else:
                 logger.warning(f"Failed to create continuation task for ticket {ticket_id}")

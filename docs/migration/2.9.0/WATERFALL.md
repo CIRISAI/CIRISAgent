@@ -41,6 +41,13 @@ The original plan was "delete the psycopg2 wrappers + wire persist for Postgres"
 
 Drop the standalone `secrets.db` file path; persist owns that table.
 
+**Scope finding (Phase 1 investigation):** This is not a connection swap — it's a semantic API change. The agent's current `SecretRecord` exposes `encrypted_value`/`salt`/`nonce`/`encryption_key_ref` as fields and runs its own AES-GCM encryption before storing the ciphertext. Persist's `secrets_*` substrate owns the entire crypto + storage lifecycle and returns opaque handles. Migrating requires:
+1. Adapting `SecretRecord` to be a persist-handle wrapper, not a struct of crypto bytes.
+2. Re-encrypting existing stored secrets under persist's master key (one-shot boot-time migration).
+3. Verifying persist's `secrets_decapsulate` / `secrets_process_incoming_text` match the agent's pipeline semantics for detected-secret auto-decapsulation.
+
+Sequenced **after** 2c + 3a to let those establish the pattern. Treat 2a as its own design pass with a follow-up doc.
+
 ### 2b. Token revocations → persist substrate
 `auth_service.py` swaps `aiosqlite.connect(self._revocations_db_path)` for a persist substrate call (substrate decided in Phase 0 — either new `revocation_*` methods or fold into `wa_cert.active`).
 

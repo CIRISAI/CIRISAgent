@@ -564,6 +564,14 @@ Substrate that does NOT exist in persist 1.5.19 today.
 **Resolved approach:** file a single upstream issue covering: (a) optional exclusion-pattern arg on `cirisgraph_list_nodes`, (b) `cirisgraph_count_*_by_type` group-by counters. If persist already has them, this gap is closed without filings.
 
 
+### Exception — `setup/location.py` (cities.db)
+
+`adapters/api/routes/setup/location.py` is **NOT** a Phase 1-6 target. It opens `cities.db`, a static FTS5-indexed geo-reference database that ships as read-only application data. Persist is designed for agent state — runtime tasks, thoughts, audit, secrets — and is the wrong tool for static lookup files.
+
+This file's `import sqlite3` and its `_get_db_connection()` helper stay. They never call into `persistence/db/`'s `get_db_connection()`; they construct their own stdlib `sqlite3.connect()` against the data file. No persist substrate would replace FTS5 city search.
+
+This is the **only** documented stdlib-sqlite3 holdout after 2.9.0 lands. Future versions may move geo data behind an API or to a dedicated reference-data substrate, but that's out of scope for the persist absorption.
+
 ### Gap #4 — Postgres path verification
 **Scale:** `persistence/db/core.py` — entire `_PG*` wrapper layer (~250 LOC).
 

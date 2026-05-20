@@ -11,13 +11,8 @@ from .analytics import (
     thought_exists_for,
 )
 from .db import (
-    MIGRATIONS_BASE_DIR,
-    get_graph_edges_table_schema_sql,
-    get_graph_nodes_table_schema_sql,
-    get_service_correlations_table_schema_sql,
     get_sqlite_db_full_path,
     initialize_database,
-    run_migrations,
 )
 from .models import (
     QueueStatus,
@@ -71,8 +66,6 @@ __all__ = [
     "initialize_database",
     "get_tasks_older_than",
     "get_thoughts_older_than",
-    "run_migrations",
-    "MIGRATIONS_BASE_DIR",
     "get_sqlite_db_full_path",
     "update_task_status",
     "task_exists",
@@ -121,9 +114,6 @@ __all__ = [
     "pending_thoughts",
     "thought_exists_for",
     "count_thoughts_by_status",
-    "get_graph_nodes_table_schema_sql",
-    "get_graph_edges_table_schema_sql",
-    "get_service_correlations_table_schema_sql",
     "get_queue_status",
     "QueueStatus",
     # 2.9.0: persist Engine accessor (CIRISAgent#763 Lane A wiring)

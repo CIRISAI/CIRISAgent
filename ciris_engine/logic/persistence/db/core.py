@@ -41,11 +41,7 @@ def _get_ios_lock() -> threading.RLock:
     return _ios_sqlite_lock
 
 
-from ciris_engine.schemas.persistence.postgres import tables as postgres_tables
-from ciris_engine.schemas.persistence.sqlite import tables as sqlite_tables
-
 from .dialect import init_dialect
-from .migration_runner import run_migrations
 from .retry import DEFAULT_BASE_DELAY, DEFAULT_MAX_DELAY, DEFAULT_MAX_RETRIES, is_retryable_error
 
 logger = logging.getLogger(__name__)
@@ -693,64 +689,6 @@ def get_db_connection(
     return conn
 
 
-def get_safe_sqlite_connection(
-    db_path: str,
-    row_factory: Any = None,
-    read_only: bool = False,
-    timeout: float = 5.0,
-) -> Union["_IOSConnectionProxy", sqlite3.Connection]:
-    """Get a SQLite connection that is safe on all platforms including iOS.
-
-    This is the ONLY way to open a SQLite database in CIRIS. Do NOT use
-    sqlite3.connect() directly — iOS requires thread-local connection
-    proxies to prevent Apple's libRPAC SQLiteDatabaseTracking assertions.
-
-    Use this instead of sqlite3.connect() everywhere:
-        - Audit routes, key migration, auth service, occurrence utils, etc.
-        - Any one-off DB access outside the main persistence layer
-
-    Args:
-        db_path: Path to SQLite database file (or URI like file:path?mode=ro)
-        row_factory: Optional row factory (e.g., sqlite3.Row)
-        read_only: If True, open in read-only mode via URI
-        timeout: Connection timeout in seconds
-
-    Returns:
-        Connection (or iOS proxy) safe for the current platform.
-    """
-    is_ios = _check_ios_platform()
-
-    if read_only and not db_path.startswith("file:"):
-        db_path = f"file:{db_path}?mode=ro"
-
-    conn: Union[_IOSConnectionProxy, sqlite3.Connection]
-    if is_ios:
-        conn = _create_sqlite_connection_ios(db_path)
-    else:
-        uri = db_path.startswith("file:")
-        conn = sqlite3.connect(db_path, uri=uri, check_same_thread=False, timeout=timeout)
-
-    if row_factory is not None:
-        conn.row_factory = row_factory
-
-    return conn
-
-
-# Removed unused schema getter functions - only graph schemas are used
-
-
-def get_graph_nodes_table_schema_sql() -> str:
-    return sqlite_tables.GRAPH_NODES_TABLE_V1
-
-
-def get_graph_edges_table_schema_sql() -> str:
-    return sqlite_tables.GRAPH_EDGES_TABLE_V1
-
-
-def get_service_correlations_table_schema_sql() -> str:
-    return sqlite_tables.SERVICE_CORRELATIONS_TABLE_V1
-
-
 class ConnectionDiagnostics(TypedDict, total=False):
     """Typed structure for database connection diagnostic information."""
 
@@ -824,23 +762,16 @@ def get_connection_diagnostics(db_path: Optional[str] = None) -> ConnectionDiagn
 def initialize_database(db_path: Optional[str] = None) -> None:
     """Bootstrap the database for 2.9.0.
 
-    PostgreSQL deployments: persist's Engine owns the schema entirely.
-    `_bootstrap_persist_engine` runs sqlx migrations on first connect.
-
-    SQLite deployments: persist owns the active schema (`cirislens_*`)
-    via the same sqlx path. For 2.8.x → 2.9.0 upgrade compatibility we
-    still create the legacy tables (tasks, thoughts, graph_nodes, ...)
-    so that persist's A0a migration finds the existing rows to copy
-    forward; on fresh installs this is a one-time CREATE TABLE IF NOT
-    EXISTS sequence that produces empty tables.
+    Both SQLite and PostgreSQL deployments are owned end-to-end by
+    ciris-persist's Engine: `_bootstrap_persist_engine` constructs the
+    Engine (which runs persist's own sqlx migrations to create the
+    `cirislens.*` / `cirisgraph.*` schema), then runs the A0a legacy
+    graph migration once. There is no agent-side CREATE TABLE — persist's
+    `run_legacy_graph_migration` (v1.6.4, CIRISPersist#70) reads any
+    legacy 2.8.x `graph_nodes` / `graph_edges` over its own connection,
+    and no-ops gracefully when those tables are absent (fresh install).
     """
     import traceback
-
-    from ciris_engine.logic.persistence.db.execution_helpers import (
-        execute_sql_statements,
-        mask_password_in_url,
-        split_sql_statements,
-    )
 
     caller_info = "".join(traceback.format_stack()[-4:-1])
     logger.info(f"[DB_INIT] initialize_database called from:\n{caller_info}")
@@ -848,46 +779,7 @@ def initialize_database(db_path: Optional[str] = None) -> None:
     try:
         if db_path is None:
             db_path = get_sqlite_db_full_path()
-
-        adapter = init_dialect(db_path)
-
-        if adapter.is_postgresql():
-            # Postgres: persist's Engine owns all schema management. No
-            # legacy CREATE TABLE — the 2.8.x→2.9.0 upgrade for Postgres
-            # deployments runs A0a against rows persist already sees via
-            # sqlx's connection pool. Bootstrap directly.
-            safe_url = mask_password_in_url(adapter.db_url)
-            logger.info(f"Initializing PostgreSQL via persist Engine: {safe_url}")
-            _bootstrap_persist_engine(db_path)
-            return
-
-        # SQLite path: keep legacy schema init for upgrade compatibility.
-        logger.info(f"Initializing SQLite database: {db_path}")
-        tables_module = sqlite_tables
-
-        with get_db_connection(db_path) as conn:
-            base_tables = [
-                tables_module.TASKS_TABLE_V1,
-                tables_module.THOUGHTS_TABLE_V1,
-                tables_module.FEEDBACK_MAPPINGS_TABLE_V1,
-                tables_module.GRAPH_NODES_TABLE_V1,
-                tables_module.GRAPH_EDGES_TABLE_V1,
-                tables_module.SERVICE_CORRELATIONS_TABLE_V1,
-                tables_module.AUDIT_LOG_TABLE_V1,
-                tables_module.AUDIT_ROOTS_TABLE_V1,
-                tables_module.AUDIT_SIGNING_KEYS_TABLE_V1,
-                tables_module.WA_CERT_TABLE_V1,
-                tables_module.SCHEDULED_TASKS_TABLE_V1,
-            ]
-            for table_sql in base_tables:
-                statements = split_sql_statements(table_sql)
-                execute_sql_statements(conn, statements, adapter)
-            conn.commit()
-
-        run_migrations(db_path)
-        logger.info(f"Database initialized at {db_path}")
-
-        # Bootstrap persist Engine + run A0a graph migration if needed.
+        logger.info(f"Initializing database via persist Engine: {db_path}")
         _bootstrap_persist_engine(db_path)
     except Exception as e:
         logger.exception(f"Database error during initialization: {e}")
@@ -947,7 +839,10 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
 
     if db_path.startswith(("postgres://", "postgresql://")):
         dsn = db_path
-        sentinel_dir = None
+        # Postgres deployments have no db file; anchor the migration
+        # sentinels in the agent data dir instead.
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+        sentinel_dir = get_data_dir()
     else:
         abs_path = Path(db_path).resolve()
         # `sqlite:///{abs_path}` where abs_path begins with '/' yields
@@ -962,43 +857,47 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     except ImportError:
         logger.warning(
             "ciris-persist not importable; 2.9.0 absorption disabled. "
-            "Pin ciris-persist>=1.3.0 in requirements.txt."
+            "Pin ciris-persist>=1.6.4 in requirements.txt."
         )
         return
 
     engine = Engine(dsn, signing_key_id)
     logger.info("ciris-persist Engine constructed (dsn=%s)", dsn)
 
-    # Run A0a graph migration if sentinel absent.
+    # A0a graph migration + A0b audit bridge. Both run once, sentinel-gated.
     if sentinel_dir is not None:
+        # A0a: copy legacy graph_nodes/graph_edges → cirisgraph.* . Persist
+        # owns the whole operation since v1.6.4 (CIRISPersist#70) — it reads
+        # the legacy schema over its own connection (SQLite *and* Postgres),
+        # so the agent ships zero raw SQL for the upgrade path. Idempotent
+        # and tolerant of legacy-tables-absent on fresh installs.
         sentinel = sentinel_dir / ".persist_migrated"
         if not sentinel.exists():
             try:
-                from tools.ops.migrate_to_persist import run as run_migration
+                import json as _json
 
-                logger.info("A0a migration sentinel absent — running graph migration")
-                # Pass our constructed Engine so the migration doesn't
-                # build a second one. Persist is one-Engine-per-process;
-                # two instances on the same SQLite DB cause silent
-                # write-no-ops on the first.
-                stats = run_migration(
-                    engine_db=Path(db_path),
-                    signing_key_id=signing_key_id,
-                    dry_run=False,
-                    engine=engine,
-                )
-                if stats.errors == 0:
+                logger.info("A0a migration sentinel absent — running legacy graph migration")
+                raw = engine.run_legacy_graph_migration(_json.dumps({"dry_run": False}))
+                stats = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+                if stats.get("outcome") in ("ok", "partial") and stats.get("errors", 0) == 0:
                     sentinel.write_text(
-                        f'{{"nodes_written":{stats.nodes_written},'
-                        f'"edges_written":{stats.edges_written}}}'
+                        f'{{"nodes_written":{stats.get("nodes_written", 0)},'
+                        f'"edges_written":{stats.get("edges_written", 0)}}}'
                     )
                     logger.info(
-                        "A0a migration complete: %d nodes, %d edges",
-                        stats.nodes_written, stats.edges_written,
+                        "A0a migration complete: %d nodes, %d edges "
+                        "(skipped: %d already-present, %d too-large; "
+                        "%d dangling-FK edges)",
+                        stats.get("nodes_written", 0), stats.get("edges_written", 0),
+                        stats.get("nodes_skipped_already_present", 0),
+                        stats.get("nodes_skipped_too_large", 0),
+                        stats.get("edges_skipped_dangling_fk", 0),
                     )
                 else:
-                    logger.error("A0a migration had %d errors; sentinel NOT written",
-                                 stats.errors)
+                    logger.error(
+                        "A0a migration outcome=%s errors=%d; sentinel NOT written",
+                        stats.get("outcome"), stats.get("errors", 0),
+                    )
             except Exception:
                 logger.exception("A0a migration failed; persist engine wired anyway")
 

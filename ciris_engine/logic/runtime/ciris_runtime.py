@@ -667,8 +667,9 @@ class CIRISRuntime(ServicePropertyMixin):
             db_path = str(self.essential_config.database.main_db)
             logger.info(f"Using SQLite database: {db_path}")
 
+        # initialize_database bootstraps persist's Engine end-to-end (schema
+        # via persist's own sqlx migrations + A0a legacy graph migration).
         persistence.initialize_database(db_path)
-        persistence.run_migrations(db_path)
 
         if not self.essential_config:
             self.essential_config = EssentialConfig()

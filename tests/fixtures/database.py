@@ -54,20 +54,31 @@ def test_db():
 
 @pytest.fixture
 def clean_db(test_db):
-    """Ensure database is clean before each test."""
-    # Clear all tables
+    """Ensure database is clean before each test.
+
+    `test_db` already mkstemps a fresh file and bootstraps persist, so the
+    `cirislens.*` / `cirisgraph.*` tables start empty. This fixture clears
+    them defensively (best-effort) in case a prior fixture in the same
+    test wired the persist engine and wrote rows.
+    """
     from ciris_engine.logic.persistence.db.core import get_db_connection
 
+    _PERSIST_TABLES = [
+        "cirislens_service_correlations",
+        "cirislens_thoughts",
+        "cirislens_tasks",
+        "cirisgraph_edges",
+        "cirisgraph_nodes",
+        "cirislens_feedback_mappings",
+        "cirislens_audit_log",
+        "cirislens_tickets",
+    ]
     with get_db_connection(test_db) as conn:
-        # Clear tables in reverse dependency order
-        conn.execute("DELETE FROM service_correlations")
-        conn.execute("DELETE FROM thoughts")
-        conn.execute("DELETE FROM tasks")
-        conn.execute("DELETE FROM graph_edges")
-        conn.execute("DELETE FROM graph_nodes")
-        conn.execute("DELETE FROM feedback_mappings")
-        conn.execute("DELETE FROM audit_log")
-        conn.execute("DELETE FROM tickets")  # Renamed from dsar_tickets in migration 008
+        for table in _PERSIST_TABLES:
+            try:
+                conn.execute(f"DELETE FROM {table}")
+            except Exception:
+                pass  # table absent — nothing to clear
         conn.commit()
 
     return test_db

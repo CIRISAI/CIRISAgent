@@ -31,87 +31,25 @@ def time_service():
 
 @pytest.fixture
 def temp_db():
-    """Create a temporary database for testing.
+    """Provide a temporary DB path for testing.
 
-    Legacy tasks/thoughts tables are created up-front; the persist Engine
-    for the WA deferral path is wired separately by the
-    `wise_authority_service` fixture below — wiring it here would interact
-    with AuthenticationService.start() under pytest-asyncio and deadlock.
+    Post-2.9.0 the SQLite bootstrap layer is gone — `initialize_database`
+    just bootstraps persist's Engine, which creates the `cirislens.*` /
+    `cirisgraph.*` schema via its own sqlx migrations. The persist Engine
+    for the WA deferral path is wired by the `wise_authority_service`
+    fixture below; this fixture only hands out a path.
     """
-    import sqlite3
-
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
-
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tasks (
-            task_id TEXT PRIMARY KEY,
-            channel_id TEXT NOT NULL,
-            description TEXT NOT NULL,
-            status TEXT NOT NULL,
-            priority INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            parent_task_id TEXT,
-            context_json TEXT,
-            outcome TEXT,
-            outcome_json TEXT,
-            retry_count INTEGER DEFAULT 0,
-            signed_by TEXT,
-            signature TEXT,
-            signed_at TEXT,
-            agent_occurrence_id TEXT NOT NULL DEFAULT 'default'
-        )
-        """
-    )
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS thoughts (
-            thought_id TEXT PRIMARY KEY,
-            task_id TEXT,
-            thought_content TEXT,
-            thought_context TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            status TEXT DEFAULT 'pending',
-            channel_id TEXT,
-            user_id TEXT,
-            priority TEXT DEFAULT 'medium',
-            resolution_json TEXT,
-            defer_until TIMESTAMP,
-            metadata TEXT
-        )
-        """
-    )
-    # Pre-mark every legacy migration as applied so the AuthenticationService
-    # init path's `initialize_database(db_path)` call skips them — otherwise
-    # migration 004 ALTER TABLE tasks ADD COLUMN agent_occurrence_id fails
-    # because the column is baked into the CREATE TABLE above.
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS schema_migrations (
-            filename TEXT PRIMARY KEY,
-            applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    from pathlib import Path
-
-    migrations_dir = Path(__file__).resolve().parents[5] / "ciris_engine/logic/persistence/migrations/sqlite"
-    for sql_file in sorted(migrations_dir.glob("*.sql")):
-        cursor.execute(
-            "INSERT OR IGNORE INTO schema_migrations (filename) VALUES (?)",
-            (sql_file.name,),
-        )
-    conn.commit()
-    conn.close()
-
-    yield db_path
+    # Remove the empty file so persist's first connect creates it cleanly.
     if os.path.exists(db_path):
         os.unlink(db_path)
+
+    yield db_path
+    for ext in ("", "-wal", "-shm"):
+        p = db_path + ext
+        if os.path.exists(p):
+            os.unlink(p)
 
 
 @pytest_asyncio.fixture

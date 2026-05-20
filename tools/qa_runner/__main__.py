@@ -183,10 +183,15 @@ Available modules:
         help="PostgreSQL connection URL (default: postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db)",
     )
     parser.add_argument(
-        "--postgres-port",
+        "--postgres-api-port",
+        dest="postgres_api_port",
         type=int,
         default=8001,
-        help="Port for PostgreSQL backend server (default: 8001, SQLite uses --port)",
+        help="API-SERVER port for the postgres-backend test run (default: 8001). "
+        "NOT the PostgreSQL database port — the DB connection is in --postgres-url. "
+        "In --parallel-backends mode the SQLite run uses --port and the postgres "
+        "run uses this, so they must differ and neither may collide with the "
+        "actual Postgres port.",
     )
     parser.add_argument(
         "--parallel-backends",
@@ -604,7 +609,7 @@ def main():
         adapter=args.adapter,
         database_backends=args.database_backends,
         postgres_url=args.postgres_url,
-        postgres_port=args.postgres_port,
+        postgres_api_port=args.postgres_api_port,
         parallel_backends=args.parallel_backends,
         # Live LLM configuration
         live_api_key=live_api_key,

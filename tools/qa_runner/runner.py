@@ -113,7 +113,7 @@ class QARunner:
         # Create server managers for each backend
         self.server_managers: Dict[str, APIServerManager] = {}
         for backend in self.database_backends:
-            port = self.config.api_port if backend == "sqlite" else self.config.postgres_port
+            port = self.config.api_port if backend == "sqlite" else self.config.postgres_api_port
             # Create a copy of config with the right port
             backend_config = QAConfig(
                 base_url=f"http://localhost:{port}",
@@ -142,7 +142,7 @@ class QARunner:
                 adapter=self.config.adapter,
                 database_backends=None,  # Don't pass this recursively
                 postgres_url=self.config.postgres_url,
-                postgres_port=self.config.postgres_port,
+                postgres_api_port=self.config.postgres_api_port,
                 # Live LLM configuration
                 live_api_key=self.config.live_api_key,
                 live_model=self.config.live_model,

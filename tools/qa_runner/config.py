@@ -173,7 +173,7 @@ class QAConfig:
     # Database backend configuration (for parallel testing)
     database_backends: List[str] = None  # None = ["sqlite"], or ["sqlite", "postgres"] for parallel
     postgres_url: str = "postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db"
-    postgres_port: int = 8001  # Port for PostgreSQL backend server (SQLite uses api_port)
+    postgres_api_port: int = 8001  # API-server port for the postgres-backend run (NOT the PG DB port — see postgres_url)
     parallel_backends: bool = False  # Run backend tests in parallel instead of sequentially
 
     # Live LLM configuration (--live flag)

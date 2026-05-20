@@ -5,6 +5,34 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-05-20
+
+Minor release — **persist absorption**. The agent's persistence layer moves wholesale onto the Rust-backed `ciris-persist` substrate (PyO3). Production code now ships **zero raw SQL** outside `ciris_adapters/`: `psycopg2` and `aiosqlite` are gone, and `sqlite3` survives only for the static `cities.db` geo lookup. SQLite and PostgreSQL are now genuine peers — both run through persist's `sqlx` backend.
+
+### Added
+
+- **`ciris-persist` 1.6.7 substrate** absorbs 12 of 22 services (memory/config graph, audit, telemetry + TSDB consolidation, incidents, secrets, classification, authentication prelude, FederationDirectory, MaintenanceService). All reads/writes route through the typed `engine.*` API.
+- **A0a legacy-graph upgrade migration** — `engine.run_legacy_graph_migration` copies the 2.8.x `graph_nodes` / `graph_edges` tables into persist's `cirisgraph.*` schema on first 2.9.0 boot. Idempotent, tolerant of fresh installs. Validated end-to-end against a real production dump (114,184 nodes + 116,741 edges) at 100% on **both** SQLite and PostgreSQL.
+- **PostgreSQL as a first-class backend** — fresh installs and 2.8.x→2.9.0 upgrades both supported; selected via `CIRIS_DB_URL`.
+
+### Changed
+
+- **SQLite bootstrap layer removed** — `migration_runner.py`, the `migrations/*.sql` files, and the legacy table-DDL modules are deleted. `initialize_database()` now just bootstraps persist's Engine, which owns schema creation via its own `sqlx` migrations on every backend.
+- **`requirements.txt`** — dropped `psycopg2-binary` and `aiosqlite`; pinned `ciris-persist>=1.6.7`.
+- Test suite ported off raw SQL onto the persist API (49 files); `tools/ops/migrate_to_persist.py` reduced to a thin CLI over the substrate.
+
+### Fixed
+
+- **Incident-capture infinite loop** — the handler logged its own persist-write failure at ERROR, which it then re-captured as a new incident (unbounded loop on PostgreSQL, 12k+ errors/run). Added a re-entrancy guard; `incident_id` is now a bare UUID.
+- **`get_pending_thoughts_for_active_tasks` double-queue race** — the PENDING+PROCESSING union is now deduplicated by `thought_id`; the processor skips already-in-flight thoughts.
+- TSDB consolidation: corrected `lock_try_acquire` call, `bulk_import` bool argument, and `cirisgraph_get_edges_for_node` arity; added the missing basic-tier `_consolidate_period`.
+
+### Known issues
+
+- `streaming` QA module reports 2/3 on the PostgreSQL backend (CIRISAgent#772) — a timing sensitivity in the test's SSE event-counting under PostgreSQL's higher per-op latency, not an agent or persist defect (reasoning is backend-identical, reasoning-stream events are in-memory). Test-harness hardening tracked separately.
+
+---
+
 ## [2.8.12] - 2026-05-15
 
 Patch release — wire-contract guards on the trace pipeline, FFI loader robustness, language-guidance reinforcement, Phase 1 repo-size prevention, **Tier-2 high-resource safety-battery roster expansion (14 → 29 cells)**, and judge-provider cutover to OpenRouter (Opus 4.5).

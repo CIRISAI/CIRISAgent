@@ -65,11 +65,17 @@ class TestQueryTimelineNodes:
     """Test query_timeline_nodes function."""
 
     async def test_no_db_path(self):
-        """Test returns empty list when no db_path."""
+        """Test returns empty list when no persist engine wired."""
         memory_service = Mock()
         memory_service.db_path = None
 
-        result = await query_timeline_nodes(memory_service)
+        # Force persist engine to None so this test isn't sensitive to
+        # whichever prior test left an engine wired in the module global.
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=None,
+        ):
+            result = await query_timeline_nodes(memory_service)
         assert result == []
 
     async def test_successful_query(self, persist_engine):
@@ -147,11 +153,15 @@ class TestSearchNodes:
     """Test search_nodes function."""
 
     async def test_no_db_path(self):
-        """Test returns empty list when no db_path."""
+        """Test returns empty list when no persist engine wired."""
         memory_service = Mock()
         memory_service.db_path = None
 
-        result = await search_nodes(memory_service)
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=None,
+        ):
+            result = await search_nodes(memory_service)
         assert result == []
 
     async def test_text_search(self, persist_engine):
@@ -254,11 +264,15 @@ class TestGetMemoryStats:
     """Test get_memory_stats function."""
 
     async def test_no_db_path(self):
-        """Test returns default stats when no db_path."""
+        """Test returns default stats when no persist engine wired."""
         memory_service = Mock()
         memory_service.db_path = None
 
-        stats = await get_memory_stats(memory_service)
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=None,
+        ):
+            stats = await get_memory_stats(memory_service)
 
         assert stats["total_nodes"] == 0
         assert stats["total_edges"] == 0

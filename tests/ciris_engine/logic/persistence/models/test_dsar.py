@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ciris_engine.logic.persistence.db import get_db_connection, initialize_database
+from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.persistence.models.dsar import (
     create_dsar_ticket,
     get_dsar_ticket,

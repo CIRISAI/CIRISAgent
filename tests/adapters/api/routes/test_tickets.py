@@ -450,7 +450,7 @@ class TestGetTicketByID:
 
         assert result.ticket_id == "DSAR-20250108-ABC123"
         assert result.email == "user@example.com"
-        mock_get_ticket.assert_called_once_with("DSAR-20250108-ABC123", db_path=None)
+        mock_get_ticket.assert_called_once_with("DSAR-20250108-ABC123")
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.adapters.api.routes.tickets.get_ticket")
@@ -486,7 +486,6 @@ class TestListTickets:
             status=None,
             email=None,
             limit=None,
-            db_path=None,
         )
 
     @pytest.mark.asyncio
@@ -514,7 +513,6 @@ class TestListTickets:
             status="pending",
             email="user@example.com",
             limit=10,
-            db_path=None,
         )
 
     @pytest.mark.asyncio
@@ -762,7 +760,7 @@ class TestCancelTicket:
 
         assert result.success is True
         assert "cancelled/deleted successfully" in result.message
-        mock_delete_ticket.assert_called_once_with("DSAR-20250108-ABC123", db_path=None)
+        mock_delete_ticket.assert_called_once_with("DSAR-20250108-ABC123")
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.adapters.api.routes.tickets.get_ticket")

@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from ciris_engine.logic.audit.signature_manager import AuditSignatureManager
+from ciris_engine.logic.audit.signing_protocol import CIRISVerifySigner
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import TimeServiceProtocol, ToolService
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
@@ -83,10 +83,12 @@ class SQLToolService(BaseService, ToolService):
         self._schema_loader = PrivacySchemaLoader()
         self._privacy_schema_path = privacy_schema_path
 
-        # Signature manager for GDPR deletion verification (RSA-PSS signatures)
-        self._signature_manager: Optional[AuditSignatureManager] = None
-        self._signature_key_path = Path(os.environ.get("CIRIS_DATA_DIR", "data")) / "sql_deletion_keys"
-        self._signature_db_path = str(Path(os.environ.get("CIRIS_DATA_DIR", "data")) / "ciris.db")
+        # Signer for GDPR deletion verification. Post-2.9.0: routes through
+        # CIRISVerify (Ed25519, hardware-backed when available) — the same
+        # signing primitive persist's audit_record_entry uses. The legacy
+        # AuditSignatureManager (RSA-2048, stored in ciris.db) was retired
+        # in Phase 3a.
+        self._signer: Optional[CIRISVerifySigner] = None
 
         # Result tracking and tool metadata
         self._results: Dict[str, ToolExecutionResult] = {}
@@ -127,21 +129,16 @@ class SQLToolService(BaseService, ToolService):
         self._logger.info(f"SQLToolService has {len(self._tool_schemas)} tool schemas ready")
         self._logger.info(f"SQLToolService has {len(self._tool_info)} tool info objects ready")
 
-        # Initialize signature manager for GDPR deletion verification
-        if self._time_service:
-            try:
-                self._signature_manager = AuditSignatureManager(
-                    db_path=self._signature_db_path,
-                    time_service=self._time_service,
-                )
-                self._signature_manager.initialize()
-                logger.info(f"Initialized deletion signature manager with key ID: {self._signature_manager.key_id}")
-            except Exception as e:
-                logger.warning(f"Failed to initialize signature manager: {e}. Signatures will not be available.")
-                self._signature_manager = None
-        else:
-            logger.warning("Time service not available - deletion verification signatures unavailable")
-            self._signature_manager = None
+        # Initialize CIRISVerify-backed signer for GDPR deletion verification.
+        try:
+            self._signer = CIRISVerifySigner()
+            self._signer.initialize()
+            logger.info(
+                f"Initialized deletion signer via CIRISVerify (key: {(self._signer.key_id or '')[:8]}...)"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize deletion signer: {e}. Signatures will not be available.")
+            self._signer = None
 
         if self._config:
             # Initialize dialect
@@ -1029,28 +1026,31 @@ class SQLToolService(BaseService, ToolService):
             # Generate RSA-PSS signature for GDPR Article 17 deletion verification
             cryptographic_proof = None
             if sign and zero_data_confirmed:
-                if self._signature_manager:
+                if self._signer:
                     try:
                         # Create deterministic hash of verification data
                         verification_data = (
                             f"{user_identifier}|{timestamp}|{zero_data_confirmed}|{','.join(sorted(tables_scanned))}"
                         )
-                        data_hash = hashlib.sha256(verification_data.encode("utf-8")).hexdigest()
+                        data_hash = hashlib.sha256(verification_data.encode("utf-8")).digest()
 
-                        # Sign the hash using RSA-PSS
-                        signature = self._signature_manager.sign_entry(data_hash)
-                        key_id = self._signature_manager.key_id or "unknown"
-                        cryptographic_proof = f"rsa-pss:{key_id}:{signature}"
+                        # Sign the hash via CIRISVerify (Ed25519 or platform HSM)
+                        signature_bytes = self._signer.sign(data_hash)
+                        import base64 as _b64
+                        signature_b64 = _b64.b64encode(signature_bytes).decode("ascii")
+                        key_id = self._signer.key_id or "unknown"
+                        algo = self._signer.algorithm.value
+                        cryptographic_proof = f"{algo}:{key_id}:{signature_b64}"
 
                         logger.info(
                             f"Generated deletion verification signature for {user_identifier} "
-                            f"(key: {key_id[:8]}...)"
+                            f"({algo} key: {key_id[:8]}...)"
                         )
                     except Exception as e:
                         logger.error(f"Failed to generate deletion verification signature: {e}")
                         cryptographic_proof = None
                 else:
-                    logger.warning("Signature manager not available - deletion verification signature unavailable")
+                    logger.warning("Deletion signer not available - verification signature unavailable")
 
             verification_result = SQLVerificationResult(
                 success=True,

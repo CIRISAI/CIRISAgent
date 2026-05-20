@@ -17,42 +17,29 @@ from ciris_engine.schemas.runtime.models import Task, TaskContext
 
 
 @pytest.fixture
-def comprehensive_system_snapshot_mocks():
+def comprehensive_system_snapshot_mocks(persist_engine):
     """
     Comprehensive fixture that mocks ALL system snapshot dependencies.
 
     This addresses the architectural issue where helper functions
     directly access global persistence and services instead of
     receiving them as parameters.
+
+    2.9.0: persistence.models.tasks no longer imports get_db_connection
+    (A1 absorption — CIRISAgent#763); task operations route through the
+    persist Engine. The `persist_engine` fixture wires a fresh persist
+    Engine into `persistence.models.graph._engine`; the `mock_persistence`
+    patches below intercept the higher-level `persistence.*` calls
+    system_snapshot makes (recent/top tasks, queue status).
     """
-    # 2.9.0: persistence.models.tasks no longer imports get_db_connection
-    # (A1 absorption — CIRISAgent#763); task operations route through the
-    # persist Engine. The mock_persistence patches below intercept the
-    # `persistence.*` calls system_snapshot makes; tasks-model access is
-    # already covered by those.
     with patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence, patch(
         "ciris_engine.logic.context.system_snapshot.persistence"
     ) as mock_main_persistence, patch(
         "ciris_engine.logic.context.system_snapshot.build_secrets_snapshot"
-    ) as mock_secrets, patch(
-        "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path"
-    ) as mock_db_path:
-        # Mock database path to avoid config dependency
-        mock_db_path.return_value = "/tmp/test.db"
-
-        # Mock database connections
-        mock_conn = MagicMock()
-        mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = []
-        mock_cursor.fetchone.return_value = None
-        mock_conn.cursor.return_value = mock_cursor
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=None)
-
+    ) as mock_secrets:
         # Mock persistence functions
         mock_persistence.get_recent_completed_tasks.return_value = []
         mock_persistence.get_top_tasks.return_value = []
-        mock_persistence.get_db_connection.return_value = mock_conn
 
         # Mock queue status
         queue_status_mock = Mock()
@@ -71,9 +58,7 @@ def comprehensive_system_snapshot_mocks():
             "persistence": mock_persistence,
             "main_persistence": mock_main_persistence,
             "secrets": mock_secrets,
-            "db_path": mock_db_path,
-            "db_connection": mock_conn,
-            "cursor": mock_cursor,
+            "engine": persist_engine,
         }
 
 
@@ -188,17 +173,44 @@ class TestSystemSnapshotArchitectureFix:
         Test that correlation history extraction works when properly mocked,
         demonstrating the architectural issue was in dependency injection.
         """
-        # Configure the mock to return correlation data
-        comprehensive_system_snapshot_mocks["cursor"].fetchall.side_effect = [
-            # First call (correlation history) - return test users
-            [
-                {"user_id": "999888777"},
-                {"user_id": "123456789"},  # Duplicate (from task)
-            ],
-            # Other calls return empty
-            [],
-            [],
-        ]
+        # Seed a correlation with the expected user_id tag via the persist engine.
+        # Post-A1 absorption (CIRISAgent#763), `_extract_users_from_correlation_history`
+        # routes through `engine.correlation_query` with a correlation_id filter and
+        # reads `tags.user_id`. We use the high-level `add_correlation` helper so the
+        # payload shape matches what persist's `correlation_record` substrate expects.
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
+        now = datetime.now(timezone.utc)
+        seeded_correlation = ServiceCorrelation(
+            correlation_id="test_correlation_with_history",
+            service_type="communication",
+            handler_name="ObserveHandler",
+            action_type="observe",
+            request_data=ServiceRequestData(
+                service_type="communication",
+                method_name="observe",
+                channel_id="test_channel",
+                request_timestamp=now,
+            ),
+            response_data=ServiceResponseData(
+                success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+            ),
+            status=ServiceCorrelationStatus.COMPLETED,
+            correlation_type=CorrelationType.SERVICE_INTERACTION,
+            created_at=now.isoformat(),
+            updated_at=now.isoformat(),
+            timestamp=now,
+            tags={"user_id": "999888777"},
+            retention_policy="raw",
+        )
+        add_correlation(seeded_correlation)
 
         task = Task(
             task_id="test_task",

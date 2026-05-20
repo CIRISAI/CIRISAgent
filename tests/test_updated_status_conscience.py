@@ -5,7 +5,6 @@ Tests the 6th conscience check that detects when new observations
 arrive during task processing.
 """
 
-import sqlite3
 import tempfile
 import uuid
 from datetime import datetime, timezone

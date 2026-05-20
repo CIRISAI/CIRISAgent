@@ -2,17 +2,43 @@
 
 import json
 import os
-import sqlite3
 import tempfile
 from datetime import datetime, timezone
 
 import pytest
 
+from ciris_engine.logic.persistence.db import initialize_database
+from ciris_engine.logic.persistence.models.graph import get_persist_engine
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
+
+
+def _inject_malformed_node(node_id: str, attributes: dict, node_type: str = "config") -> None:
+    """Insert a node directly via persist's cirisgraph_upsert_node.
+
+    Used to simulate pre-migration legacy nodes that may lack required
+    ConfigNode fields ('key', 'value'). Persist's substrate accepts arbitrary
+    JSON in `attributes_json`; ConfigNode.from_graph_node() should still
+    reject the malformed shape on retrieval.
+    """
+    engine = get_persist_engine()
+    now = datetime.now(timezone.utc).isoformat() + "Z" if not datetime.now(timezone.utc).isoformat().endswith("Z") else datetime.now(timezone.utc).isoformat()
+    # Persist requires RFC 3339 timestamps with timezone marker.
+    now_z = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    payload = {
+        "node_id": node_id,
+        "scope": "LOCAL",
+        "node_type": node_type,
+        "attributes": attributes,
+        "version": 1,
+        "updated_by": "system",
+        "updated_at": now_z,
+        "created_at": now_z,
+    }
+    engine.cirisgraph_upsert_node(json.dumps(payload), 0)
 
 
 @pytest.fixture
@@ -23,10 +49,20 @@ def time_service():
 
 @pytest.fixture
 def temp_db():
-    """Create a temporary database for testing."""
+    """Create a temporary database for testing with persist wired."""
+    from ciris_engine.logic.persistence.models import graph as _graph_mod
+
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
+
+    prior_engine = _graph_mod._engine
+    prior_dsn = _graph_mod._engine_dsn
+    initialize_database(db_path)
+
     yield db_path
+
+    _graph_mod._engine = prior_engine
+    _graph_mod._engine_dsn = prior_dsn
     os.unlink(db_path)
 
 
@@ -37,27 +73,9 @@ async def test_filter_config_bug(temp_db, time_service):
     The error "Failed to convert node config/filter_config to ConfigNode: 'key'"
     suggests there's a node with id="config/filter_config" that has malformed attributes.
     """
-    # Initialize database
-    conn = sqlite3.connect(temp_db)
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS graph_nodes (
-            node_id TEXT NOT NULL,
-            scope TEXT NOT NULL,
-            node_type TEXT NOT NULL,
-            attributes_json TEXT,
-            version INTEGER DEFAULT 1,
-            updated_by TEXT,
-            updated_at TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (node_id, scope)
-        )
-    """
-    )
-
-    # Insert a malformed config node like what might exist from old code
-    # This simulates what happens when a node is created with just GraphNodeAttributes
-    # and no extra fields
+    # Inject a malformed config node like what might exist from old code.
+    # This simulates a node created with just GraphNodeAttributes and no
+    # extra fields (missing 'key' and 'value').
     malformed_attrs = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -65,21 +83,7 @@ async def test_filter_config_bug(temp_db, time_service):
         "tags": ["config:filter"],
         # NOTE: Missing 'key' and 'value' fields!
     }
-
-    conn.execute(
-        "INSERT INTO graph_nodes (node_id, scope, node_type, attributes_json, version, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (
-            "config/filter_config",  # This is the exact ID from the error
-            "LOCAL",
-            "config",  # lowercase enum value
-            json.dumps(malformed_attrs),
-            1,
-            "system",
-            datetime.now(timezone.utc).isoformat(),
-        ),
-    )
-    conn.commit()
-    conn.close()
+    _inject_malformed_node("config/filter_config", malformed_attrs)
 
     # Create services
     secrets_db = temp_db.replace(".db", "_secrets.db")
@@ -171,49 +175,22 @@ async def test_filter_config_bug(temp_db, time_service):
 @pytest.mark.asyncio
 async def test_old_node_format_compatibility(temp_db, time_service):
     """Test that we can handle nodes in old format gracefully."""
-    # Initialize database and insert various malformed nodes
-    conn = sqlite3.connect(temp_db)
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS graph_nodes (
-            node_id TEXT NOT NULL,
-            scope TEXT NOT NULL,
-            node_type TEXT NOT NULL,
-            attributes_json TEXT,
-            version INTEGER DEFAULT 1,
-            updated_by TEXT,
-            updated_at TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (node_id, scope)
-        )
-    """
-    )
+    # Inject various malformed nodes via persist's substrate so the memory
+    # service / config service has to deal with them on retrieval.
 
     # Case 1: Node with empty attributes
-    conn.execute(
-        "INSERT INTO graph_nodes (node_id, scope, node_type, attributes_json) VALUES (?, ?, ?, ?)",
-        ("config_empty", "LOCAL", "config", "{}"),
+    _inject_malformed_node("config_empty", {})
+
+    # Case 2: Node with only base attributes (no key/value)
+    _inject_malformed_node(
+        "config_base_only",
+        {"created_at": "2024-01-01T00:00:00", "created_by": "test"},
     )
 
-    # Case 2: Node with null attributes
-    conn.execute(
-        "INSERT INTO graph_nodes (node_id, scope, node_type, attributes_json) VALUES (?, ?, ?, ?)",
-        ("config_null", "LOCAL", "config", None),
-    )
-
-    # Case 3: Node with only base attributes (no key/value)
-    conn.execute(
-        "INSERT INTO graph_nodes (node_id, scope, node_type, attributes_json) VALUES (?, ?, ?, ?)",
-        (
-            "config_base_only",
-            "LOCAL",
-            "config",
-            json.dumps({"created_at": "2024-01-01T00:00:00", "created_by": "test"}),
-        ),
-    )
-
-    conn.commit()
-    conn.close()
+    # NOTE: The pre-persist "null attributes" case (raw NULL in
+    # attributes_json) is not directly representable through persist's typed
+    # API — `cirisgraph_upsert_node` requires a JSON object. Empty-dict
+    # covers the equivalent "no extra fields" semantic.
 
     # Create services
     secrets_db = temp_db.replace(".db", "_secrets.db")

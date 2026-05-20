@@ -6,12 +6,12 @@ fails to convert from GraphNode due to missing 'key' field.
 
 import json
 import os
-import sqlite3
 import tempfile
 
 import pytest
 import pytest_asyncio
 
+from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.graph.config_service import GraphConfigService
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
@@ -29,10 +29,20 @@ def time_service():
 
 @pytest.fixture
 def temp_db():
-    """Create a temporary database for testing."""
+    """Create a temporary database for testing with persist wired."""
+    from ciris_engine.logic.persistence.models import graph as _graph_mod
+
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
+
+    prior_engine = _graph_mod._engine
+    prior_dsn = _graph_mod._engine_dsn
+    initialize_database(db_path)
+
     yield db_path
+
+    _graph_mod._engine = prior_engine
+    _graph_mod._engine_dsn = prior_dsn
     os.unlink(db_path)
 
 
@@ -42,26 +52,6 @@ async def memory_service_factory(temp_db, time_service):
     created_services = []
 
     async def _create_service():
-        # Initialize the database if needed
-        conn = sqlite3.connect(temp_db)
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS graph_nodes (
-                node_id TEXT NOT NULL,
-                scope TEXT NOT NULL,
-                node_type TEXT NOT NULL,
-                attributes_json TEXT,
-                version INTEGER DEFAULT 1,
-                updated_by TEXT,
-                updated_at TEXT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (node_id, scope)
-            )
-        """
-        )
-        conn.commit()
-        conn.close()
-
         # Create a secrets service
         secrets_db = temp_db.replace(".db", "_secrets.db")
         secrets_service = SecretsService(db_path=secrets_db, time_service=time_service)
@@ -122,17 +112,27 @@ async def test_config_bootstrap_bug_reproduction(memory_service_factory, time_se
     config_service2 = GraphConfigService(graph_memory_service=memory_service2, time_service=time_service)
     await config_service2.start()
 
-    # This is where the bug manifests - let's check what's actually in the database
-    conn = sqlite3.connect(temp_db)
-    cursor = conn.execute("SELECT node_id, attributes_json FROM graph_nodes WHERE node_type = 'config'")
-    rows = cursor.fetchall()
-    conn.close()
+    # This is where the bug manifests - check what's actually in the database
+    # via persist instead of a sibling sqlite3 handle. `cirisgraph_query_nodes`
+    # filters by node_type and returns the persist `attributes` payload.
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    engine = get_persist_engine()
+    raw = engine.cirisgraph_query_nodes(
+        json.dumps({"node_type": "config", "scope": "LOCAL"}),
+        json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}),
+        500,
+    )
+    parsed = json.loads(raw) if isinstance(raw, str) else raw
+    rows = (parsed.get("items") if isinstance(parsed, dict) else None) or []
 
     print(f"\nFound {len(rows)} config nodes in database")
 
     # Let's see what's actually stored
-    for node_id, attrs_json in rows:
-        attrs = json.loads(attrs_json) if attrs_json else {}
+    for row in rows:
+        node_id = row.get("node_id")
+        attrs_raw = row.get("attributes_json") or row.get("attributes") or "{}"
+        attrs = json.loads(attrs_raw) if isinstance(attrs_raw, str) else attrs_raw
         print(f"\nNode ID: {node_id}")
         print(f"Has 'key' field: {'key' in attrs}")
         if "key" in attrs:
@@ -284,29 +284,10 @@ if __name__ == "__main__":
             temp_db = f.name
 
         try:
-            # Create factory closure
+            initialize_database(temp_db)
             services = []
 
             async def factory():
-                conn = sqlite3.connect(temp_db)
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS graph_nodes (
-                        node_id TEXT NOT NULL,
-                        scope TEXT NOT NULL,
-                        node_type TEXT NOT NULL,
-                        attributes_json TEXT,
-                        version INTEGER DEFAULT 1,
-                        updated_by TEXT,
-                        updated_at TEXT,
-                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        PRIMARY KEY (node_id, scope)
-                    )
-                """
-                )
-                conn.commit()
-                conn.close()
-
                 secrets_db = temp_db.replace(".db", "_secrets.db")
                 secrets_service = SecretsService(db_path=secrets_db, time_service=time_service)
                 await secrets_service.start()

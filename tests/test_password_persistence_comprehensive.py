@@ -10,7 +10,6 @@ Tests the critical password storage flow to ensure:
 """
 
 import os
-import sqlite3
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path

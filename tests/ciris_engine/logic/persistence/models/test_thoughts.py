@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ciris_engine.logic.persistence.db import get_db_connection, initialize_database
+from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.persistence.models.tasks import add_task
 from ciris_engine.logic.persistence.models.thoughts import (
     add_thought,
@@ -419,7 +419,7 @@ def test_get_thoughts_by_ids_partial_match(temp_db: str):
     thought = create_test_thought("t1", "occ1", db_path=temp_db)
     add_thought(thought)
 
-    result = get_thoughts_by_ids(["t1", "nonexistent"])
+    result = get_thoughts_by_ids(["t1", "nonexistent"], "occ1")
 
     assert len(result) == 1
     assert "t1" in result

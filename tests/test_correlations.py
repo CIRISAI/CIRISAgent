@@ -894,7 +894,8 @@ class TestGetActiveChannelsByAdapter:
 
     def test_get_active_channels_no_time_service(self, correlation_factory, persist_engine):
         correlation = correlation_factory("api_1", channel_id="api_no_time", action_type="speak")
-        add_correlation(correlation, time_service)
+        # Default-construct without time_service to exercise the Optional path.
+        add_correlation(correlation)
 
         channels = get_active_channels_by_adapter("api", since_days=1)
 

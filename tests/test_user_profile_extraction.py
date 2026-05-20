@@ -335,9 +335,23 @@ class TestUserProfileExtraction:
 
     @pytest.mark.asyncio
     async def test_extract_users_from_correlation_history(
-        self, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
+        self, persist_engine, mock_resource_monitor, mock_memory_service, setup_mocks, mock_time_service
     ):
-        """Test that user IDs are extracted from correlation history."""
+        """Test that user IDs are extracted from correlation history.
+
+        Post-A1 (CIRISAgent#763): correlation history routes through persist's
+        `engine.correlation_query({"correlation_id": ...})` and reads
+        `tags.user_id`. Seed a correlation tagged with the expected user.
+        """
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         task = Task(
             task_id="test_task",
             channel_id="test_channel",
@@ -348,22 +362,38 @@ class TestUserProfileExtraction:
             context=TaskContext(correlation_id="test_correlation_with_history", user_id="123456789"),
         )
 
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="test_correlation_with_history",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication",
+                    method_name="observe",
+                    channel_id="test_channel",
+                    request_timestamp=now,
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "999888777"},
+                retention_policy="raw",
+            )
+        )
+
         with patch("ciris_engine.logic.context.system_snapshot_helpers.logger") as mock_logger, patch(
             "ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}
-        ), patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
-
-            # Mock correlation history with additional users
-            mock_cursor = MagicMock()
-            mock_cursor.fetchall.side_effect = [
-                # For correlation history query
-                [
-                    {"user_id": "999888777"},  # User from correlation history
-                    {"user_id": "123456789"},  # Duplicate (already from task)
-                ],
-                # For other queries
-                [],
-            ]
-            mock_persistence.get_db_connection.return_value.__enter__.return_value.cursor.return_value = mock_cursor
+        ), patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence, patch(
+            "ciris_engine.logic.context.system_snapshot.persistence"
+        ) as mock_main_persistence:
+            # Higher-level persistence helpers still rely on the wrapper module
             mock_persistence.get_recent_completed_tasks.return_value = []
             mock_persistence.get_top_tasks.return_value = []
             queue_status_mock = MagicMock()
@@ -373,6 +403,9 @@ class TestUserProfileExtraction:
             queue_status_mock.deferred_tasks = 0
             queue_status_mock.paused = False
             mock_persistence.get_queue_status.return_value = queue_status_mock
+            mock_main_persistence.get_queue_status.return_value = queue_status_mock
+            mock_main_persistence.get_recent_completed_tasks.return_value = []
+            mock_main_persistence.get_top_tasks.return_value = []
 
             snapshot = await build_system_snapshot(
                 task=task,

@@ -198,144 +198,121 @@ class TestUserRoleHelpers:
         assert result == UserRole.OBSERVER
 
     @pytest.mark.asyncio
-    async def test_get_user_allowed_channel_ids_no_oauth(self):
-        """Test channel IDs with no OAuth links."""
-        import sqlite3
-        import tempfile
-        from unittest.mock import patch
+    async def test_get_user_allowed_channel_ids_no_oauth(self, persist_engine):
+        """Test channel IDs with no OAuth links.
 
-        # Create temp database
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        # Initialize database with wa_cert table
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            """
-            CREATE TABLE wa_cert (
-                wa_id TEXT,
-                oauth_provider TEXT,
-                oauth_external_id TEXT,
-                active INTEGER
-            )
+        Post-A1 (CIRISAgent#763): the legacy raw-SQL fixture is gone; OAuth
+        identities live in persist's wa_cert substrate. With an empty
+        substrate the helper still returns the base user_id + api_-prefixed
+        variant.
         """
-        )
-        conn.commit()
-        conn.close()
-
         auth_service = Mock()
-        auth_service.db_path = db_path
+        auth_service.db_path = ":memory:"
 
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
 
         # BUGFIX: Should include "api_" prefixed version even with no OAuth links
         assert result == {"user123", "api_user123"}
 
-        # Cleanup
-        import os
-
-        os.unlink(db_path)
-
     @pytest.mark.asyncio
-    async def test_get_user_allowed_channel_ids_with_oauth(self):
-        """Test channel IDs with OAuth links."""
-        import sqlite3
-        import tempfile
+    async def test_get_user_allowed_channel_ids_with_oauth(self, persist_engine):
+        """Test channel IDs with OAuth links.
 
-        # Create temp database
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        # Initialize database with wa_cert table and OAuth data
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            """
-            CREATE TABLE wa_cert (
-                wa_id TEXT,
-                oauth_provider TEXT,
-                oauth_external_id TEXT,
-                active INTEGER
-            )
+        Post-A1 (CIRISAgent#763): OAuth lookup routes through
+        `authentication_store.get_wa_by_id`. Persist's wa_cert substrate is
+        single-row-per-wa_id (upsert semantics); the legacy raw-SQL fixture
+        inserted two rows under the same wa_id (one per OAuth provider)
+        which the substrate cannot represent. Verify the primary provider
+        path here; secondary providers attach via `oauth_links` (covered in
+        authentication-store tests).
         """
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.persistence.stores import authentication_store
+        from ciris_engine.schemas.services.authority_core import WACertificate, WARole
+
+        wa_id = "wa-2026-05-19-USR123"
+        wa = WACertificate(
+            wa_id=wa_id,
+            name="Test User",
+            role=WARole.OBSERVER,
+            pubkey="test_pubkey",
+            jwt_kid="test_kid",
+            scopes_json="[]",
+            oauth_provider="discord",
+            oauth_external_id="discord123",
+            created_at=datetime.now(timezone.utc),
         )
-        conn.execute("INSERT INTO wa_cert VALUES (?, ?, ?, ?)", ("user123", "discord", "discord123", 1))
-        conn.execute("INSERT INTO wa_cert VALUES (?, ?, ?, ?)", ("user123", "google", "google456", 1))
-        conn.commit()
-        conn.close()
+        authentication_store.store_wa_certificate(wa, db_path=":memory:")
 
         auth_service = Mock()
-        auth_service.db_path = db_path
+        auth_service.db_path = ":memory:"
 
-        result = await _get_user_allowed_channel_ids(auth_service, "user123")
+        result = await _get_user_allowed_channel_ids(auth_service, wa_id)
 
-        # BUGFIX: Should include "api_" prefixed versions for SSE filtering
-        # See system_extensions.py:628-630 and agent.py:221
+        # Primary OAuth path: wa_id + api_wa_id + provider:external + external + api_-prefixed forms
         expected = {
-            "user123",
-            "api_user123",
+            wa_id,
+            f"api_{wa_id}",
             "discord:discord123",
             "api_discord:discord123",
             "discord123",
             "api_discord123",
-            "google:google456",
-            "api_google:google456",
-            "google456",
-            "api_google456",
         }
         assert result == expected
 
-        # Cleanup
-        import os
-
-        os.unlink(db_path)
-
     @pytest.mark.asyncio
-    async def test_get_user_allowed_channel_ids_exception(self):
-        """Test channel IDs handles exceptions gracefully."""
+    async def test_get_user_allowed_channel_ids_exception(self, persist_engine):
+        """Test channel IDs handles exceptions gracefully.
+
+        Post-A1 (CIRISAgent#763): force persist's wa_cert_get to raise via
+        patching the typed store. The helper should still return the base
+        user_id + api_-prefixed variant.
+        """
+        from unittest.mock import patch
+
         auth_service = Mock()
         auth_service.db_path = "/nonexistent/path.db"
 
-        result = await _get_user_allowed_channel_ids(auth_service, "user123")
+        with patch(
+            "ciris_engine.logic.persistence.stores.authentication_store.get_wa_by_id",
+            side_effect=Exception("DB error"),
+        ):
+            result = await _get_user_allowed_channel_ids(auth_service, "user123")
 
         # Should still return user_id + api_ version even on error
         assert result == {"user123", "api_user123"}
 
     @pytest.mark.asyncio
-    async def test_batch_fetch_task_channel_ids_success(self):
-        """Test batch fetching task channel IDs."""
-        import sqlite3
-        import tempfile
-        from unittest.mock import patch
+    async def test_batch_fetch_task_channel_ids_success(self, persist_engine):
+        """Test batch fetching task channel IDs.
 
-        # Create temp database with tasks table
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            """
-            CREATE TABLE tasks (
-                task_id TEXT,
-                channel_id TEXT
-            )
+        Post-A1 (CIRISAgent#763): the legacy raw-SQL fixture is gone; tasks
+        route through persist's `task_get` substrate via
+        `get_task_by_id_any_occurrence`. Seed tasks via `add_task`.
         """
-        )
-        conn.execute("INSERT INTO tasks VALUES (?, ?)", ("task1", "channel1"))
-        conn.execute("INSERT INTO tasks VALUES (?, ?)", ("task2", "channel2"))
-        conn.execute("INSERT INTO tasks VALUES (?, ?)", ("task3", "channel1"))
-        conn.commit()
-        conn.close()
+        from datetime import datetime, timezone
 
-        # Mock get_sqlite_db_full_path to return our temp database
-        with patch("ciris_engine.logic.persistence.get_sqlite_db_full_path", return_value=db_path):
-            result = await _batch_fetch_task_channel_ids(["task1", "task2", "task3"])
+        from ciris_engine.logic.persistence.models.tasks import add_task
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+        from ciris_engine.schemas.runtime.models import Task
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for tid, cid in [("task1", "channel1"), ("task2", "channel2"), ("task3", "channel1")]:
+            add_task(
+                Task(
+                    task_id=tid,
+                    channel_id=cid,
+                    description=f"task {tid}",
+                    status=TaskStatus.ACTIVE,
+                    created_at=now_iso,
+                    updated_at=now_iso,
+                )
+            )
+
+        result = await _batch_fetch_task_channel_ids(["task1", "task2", "task3"])
 
         assert result == {"task1": "channel1", "task2": "channel2", "task3": "channel1"}
-
-        # Cleanup
-        import os
-
-        os.unlink(db_path)
 
     @pytest.mark.asyncio
     async def test_batch_fetch_task_channel_ids_empty(self):
@@ -345,12 +322,18 @@ class TestUserRoleHelpers:
         assert result == {}
 
     @pytest.mark.asyncio
-    async def test_batch_fetch_task_channel_ids_exception(self):
-        """Test batch fetching handles exceptions."""
+    async def test_batch_fetch_task_channel_ids_exception(self, persist_engine):
+        """Test batch fetching handles exceptions.
+
+        Post-A1 (CIRISAgent#763): force `get_task_by_id_any_occurrence` to
+        raise; the helper should swallow and return {}.
+        """
         from unittest.mock import patch
 
-        # Mock get_sqlite_db_full_path to return nonexistent path
-        with patch("ciris_engine.logic.persistence.get_sqlite_db_full_path", return_value="/nonexistent/path.db"):
+        with patch(
+            "ciris_engine.logic.persistence.models.tasks.get_task_by_id_any_occurrence",
+            side_effect=Exception("DB error"),
+        ):
             result = await _batch_fetch_task_channel_ids(["task1"])
 
         assert result == {}
@@ -441,37 +424,14 @@ class TestEdgeCasesAndCoverage:
         assert len(result) == 0
 
     @pytest.mark.asyncio
-    async def test_batch_fetch_none_results(self):
-        """Test batch fetch when query returns empty results."""
-        import sqlite3
-        import tempfile
-        from unittest.mock import patch
+    async def test_batch_fetch_none_results(self, persist_engine):
+        """Test batch fetch when query returns empty results.
 
-        # Create temp database with empty tasks table
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            """
-            CREATE TABLE tasks (
-                task_id TEXT,
-                channel_id TEXT
-            )
+        Post-A1 (CIRISAgent#763): tasks route through persist; empty
+        substrate yields {} for any task lookup.
         """
-        )
-        conn.commit()
-        conn.close()
-
-        # Query with non-existent task should return empty dict
-        with patch("ciris_engine.logic.persistence.get_sqlite_db_full_path", return_value=db_path):
-            result = await _batch_fetch_task_channel_ids(["task1"])
+        result = await _batch_fetch_task_channel_ids(["task1"])
 
         # Function should handle empty results gracefully
         assert isinstance(result, dict)
         assert result == {}
-
-        # Cleanup
-        import os
-
-        os.unlink(db_path)

@@ -6,7 +6,6 @@ Tests all helper functions with 80%+ coverage to ensure safety before refactorin
 
 import json
 import logging
-import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, Mock, PropertyMock, patch
@@ -1000,39 +999,79 @@ class TestUserManagement:
         assert "thought_user_456" in result
         assert "Found user thought_user_456 from thought context" in caplog.text
 
-    @patch("ciris_engine.logic.context.system_snapshot_helpers.persistence.get_db_connection")
-    def test_extract_user_ids_from_correlation_history(self, mock_get_conn, caplog):
-        """Test extracting user IDs from correlation history."""
+    def test_extract_user_ids_from_correlation_history(self, persist_engine, caplog):
+        """Test extracting user IDs from correlation history.
+
+        Post-A1 (CIRISAgent#763): correlation history routes through persist's
+        `engine.correlation_query({"correlation_id": ...})` and reads
+        `tags.user_id`. Persist's substrate is keyed by correlation_id (one
+        row per id, upsert semantics), so we seed a single row carrying the
+        target user.
+        """
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         task = Mock()
         task.context = Mock()
         task.context.correlation_id = "corr_123"
-        task.context.user_id = None  # No task user_id to avoid picking it up
+        task.context.user_id = None
 
-        # Mock database connection and cursor
-        mock_conn = Mock()
-        mock_cursor = Mock()
-        mock_cursor.fetchall.return_value = [{"user_id": "corr_user_1"}, {"user_id": "corr_user_2"}]
-        mock_conn.cursor.return_value = mock_cursor
-        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="corr_123",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication", method_name="observe", channel_id="c", request_timestamp=now
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "corr_user_1"},
+                retention_policy="raw",
+            )
+        )
 
         result = _extract_user_ids_from_context(task, None)
 
         assert "corr_user_1" in result
-        assert "corr_user_2" in result
         assert "Found user corr_user_1 from correlation history" in caplog.text
-        assert "Found user corr_user_2 from correlation history" in caplog.text
 
-    @patch("ciris_engine.logic.context.system_snapshot_helpers.persistence.get_db_connection")
-    def test_extract_user_ids_from_correlation_with_exception(self, mock_get_conn, caplog):
-        """Test extracting user IDs from correlation with database exception."""
+    def test_extract_user_ids_from_correlation_with_exception(self, persist_engine, caplog):
+        """Test extracting user IDs from correlation with database exception.
+
+        Post-A1 (CIRISAgent#763): patch `get_persist_engine` to return a stub
+        whose `correlation_query` raises; the helper should swallow the
+        exception and leave user_ids empty.
+        """
+
+        class _RaisingEngine:
+            def correlation_query(self, *args, **kwargs):
+                raise Exception("DB error")
+
         task = Mock()
         task.context = Mock()
         task.context.correlation_id = "corr_error"
-        task.context.user_id = None  # No task user_id
+        task.context.user_id = None
 
-        mock_get_conn.side_effect = Exception("DB error")
-
-        result = _extract_user_ids_from_context(task, None)
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=_RaisingEngine(),
+        ):
+            result = _extract_user_ids_from_context(task, None)
 
         assert len(result) == 0  # Should be empty set
         assert "Failed to extract users from correlation history: DB error" in caplog.text
@@ -1096,8 +1135,13 @@ class TestUserManagement:
         assert existing_profile.timezone == "Europe/Paris"
 
     @pytest.mark.asyncio
-    async def test_enrich_user_profiles_with_new_user_valid_node(self, caplog):
-        """Test enriching user profiles with new user and valid node."""
+    async def test_enrich_user_profiles_with_new_user_valid_node(self, persist_engine, caplog):
+        """Test enriching user profiles with new user and valid node.
+
+        Post-A1 (CIRISAgent#763): cross-channel-message lookup routes through
+        persist's correlation substrate. Empty persist DB yields no extra
+        messages — the assertion focuses on the user profile creation path.
+        """
         memory_service = Mock()
 
         # Mock user node
@@ -1121,15 +1165,7 @@ class TestUserManagement:
         channel_id = "test_channel"
         existing_profiles = []
 
-        # Mock database for recent messages
-        with patch("ciris_engine.logic.context.system_snapshot_helpers.persistence.get_db_connection") as mock_get_conn:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = []
-            mock_conn.cursor.return_value = mock_cursor
-            mock_get_conn.return_value.__enter__.return_value = mock_conn
-
-            result = await _enrich_user_profiles(memory_service, user_ids, channel_id, existing_profiles)
+        result = await _enrich_user_profiles(memory_service, user_ids, channel_id, existing_profiles)
 
         assert len(result) == 1
         assert isinstance(result[0], UserProfile)
@@ -1139,8 +1175,12 @@ class TestUserManagement:
         assert "Added user profile for new_user_123" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_enrich_user_profiles_with_pydantic_attributes(self):
-        """Test enriching user profiles with Pydantic model attributes."""
+    async def test_enrich_user_profiles_with_pydantic_attributes(self, persist_engine):
+        """Test enriching user profiles with Pydantic model attributes.
+
+        Post-A1 (CIRISAgent#763): cross-channel-message lookup is short-
+        circuited here because `channel_id=None`, so no persist queries fire.
+        """
         memory_service = Mock()
 
         # Mock user node with Pydantic attributes
@@ -1156,21 +1196,18 @@ class TestUserManagement:
         user_ids = {"pydantic_user"}
         existing_profiles = []
 
-        with patch("ciris_engine.logic.context.system_snapshot_helpers.persistence.get_db_connection") as mock_get_conn:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = []
-            mock_conn.cursor.return_value = mock_cursor
-            mock_get_conn.return_value.__enter__.return_value = mock_conn
-
-            result = await _enrich_user_profiles(memory_service, user_ids, None, existing_profiles)
+        result = await _enrich_user_profiles(memory_service, user_ids, None, existing_profiles)
 
         assert len(result) == 1
         assert result[0].display_name == "pydantic_user"
 
     @pytest.mark.asyncio
-    async def test_enrich_user_profiles_with_corrupted_last_seen(self, caplog):
-        """Test enriching user profiles with corrupted last_seen data."""
+    async def test_enrich_user_profiles_with_corrupted_last_seen(self, persist_engine, caplog):
+        """Test enriching user profiles with corrupted last_seen data.
+
+        Post-A1 (CIRISAgent#763): cross-channel-message lookup is short-
+        circuited here (`channel_id=None`); persist is wired but unused.
+        """
         memory_service = Mock()
 
         # Mock user node with corrupted data
@@ -1188,14 +1225,7 @@ class TestUserManagement:
         user_ids = {"corrupted_user"}
         existing_profiles = []
 
-        with patch("ciris_engine.logic.context.system_snapshot_helpers.persistence.get_db_connection") as mock_get_conn:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = []
-            mock_conn.cursor.return_value = mock_cursor
-            mock_get_conn.return_value.__enter__.return_value = mock_conn
-
-            result = await _enrich_user_profiles(memory_service, user_ids, None, existing_profiles)
+        result = await _enrich_user_profiles(memory_service, user_ids, None, existing_profiles)
 
         assert len(result) == 1
         assert "FIELD_FAILED_VALIDATION: User corrupted_user has invalid last_seen" in caplog.text

@@ -38,17 +38,21 @@ class TestTelemetrySummary:
         # Set start time for uptime calculation
         setattr(service, "_start_time", datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc))
 
-        # Mock the database connection to avoid "unable to open database file" errors
-        from unittest.mock import MagicMock
+        # Post-Phase 3a, telemetry queries flow through persist's
+        # `cirisgraph_query_nodes` rather than `get_db_connection`. The legacy
+        # `get_db_connection` mock has been removed; query_metrics is stubbed
+        # directly in each test below.
+        #
+        # `get_average_thought_depth` now paginates persist's `thought_list`
+        # which requires a wired engine — stub the helper to a fixed value so
+        # tests don't need to spin up a persist engine just for this side path.
+        async def _mock_avg_thought_depth(memory_bus, window_start):
+            return 2.5
 
-        mock_conn = MagicMock()
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (2.5,)  # Average thought depth
-        mock_conn.cursor.return_value = mock_cursor
-        mock_conn.__enter__.return_value = mock_conn
-        mock_conn.__exit__.return_value = None
-
-        monkeypatch.setattr("ciris_engine.logic.persistence.get_db_connection", lambda **kwargs: mock_conn)
+        monkeypatch.setattr(
+            "ciris_engine.logic.services.graph.telemetry_service.service.get_average_thought_depth",
+            _mock_avg_thought_depth,
+        )
 
         # Mock runtime control bus for queue saturation
         mock_runtime_bus = Mock()

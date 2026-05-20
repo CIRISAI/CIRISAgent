@@ -1341,38 +1341,40 @@ class TestSigmaFromPositiveMoments:
         assert result == 0
 
     def test_count_recent_task_completes_reads_audit_db(self, tmp_path, monkeypatch):
-        """End-to-end count against a real SQLite file: insert N task_complete
-        rows within the window, verify the COUNT matches."""
-        import sqlite3
+        """End-to-end count via the persist substrate.
+
+        Post-Phase 3a `_count_recent_task_completes_sqlite` (despite the name)
+        no longer reads `ciris_audit.db` — it calls `engine.audit_list_entries`
+        with a filter on `action_type='task_complete'` and `recorded_after`.
+        We stub the engine to return a controlled batch and verify the count
+        loop's pagination contract matches the persist filter semantics.
+        """
+        import json as _json
         from ciris_engine.logic.adapters.api.routes import my_data as my_data_mod
 
-        monkeypatch.setattr(
-            "ciris_engine.logic.utils.path_resolution.get_data_dir",
-            lambda: tmp_path,
-        )
+        # The 3 inside + 1 outside + 1 wrong-type pattern from the legacy
+        # test is collapsed to "engine returns the 3 inside-window rows"
+        # because the filter is enforced inside persist, not by the helper.
+        # The helper just paginates and counts.
+        inside_rows = [
+            {"entry_id": "audit-1", "action_type": "task_complete"},
+            {"entry_id": "audit-2", "action_type": "task_complete"},
+            {"entry_id": "audit-3", "action_type": "task_complete"},
+        ]
 
-        db_path = tmp_path / "ciris_audit.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.execute(
-            "CREATE TABLE audit_log (event_type TEXT, event_timestamp TEXT)"
+        class _FakeEngine:
+            def audit_list_entries(self, filter_json, cursor_json, limit):
+                # Sanity-check the filter the helper sends: task_complete +
+                # recorded_after must both be present.
+                f = _json.loads(filter_json)
+                assert f.get("action_type") == "task_complete"
+                assert "recorded_after" in f
+                return _json.dumps({"items": inside_rows, "cursor": None})
+
+        monkeypatch.setattr(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            lambda: _FakeEngine(),
         )
-        # Three task_completes inside the 30-day window; one outside; one
-        # different event_type that must not match the filter.
-        now = datetime.now(timezone.utc)
-        inside = (now - timedelta(days=1)).isoformat()
-        outside = (now - timedelta(days=60)).isoformat()
-        conn.executemany(
-            "INSERT INTO audit_log VALUES (?, ?)",
-            [
-                ("task_complete", inside),
-                ("task_complete", inside),
-                ("task_complete", inside),
-                ("task_complete", outside),  # outside the window
-                ("speak", inside),  # wrong event_type
-            ],
-        )
-        conn.commit()
-        conn.close()
 
         result = my_data_mod._count_recent_task_completes_sqlite(days=30)
         assert result == 3

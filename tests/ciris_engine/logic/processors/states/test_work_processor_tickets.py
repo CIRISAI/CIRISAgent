@@ -11,7 +11,6 @@ Tests cover:
 """
 
 import os
-import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path

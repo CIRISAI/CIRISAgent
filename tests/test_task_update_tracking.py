@@ -5,7 +5,6 @@ Tests the TASK_UPDATED_INFO_AVAILABLE feature that detects when new observations
 arrive in a channel with an active task.
 """
 
-import sqlite3
 import tempfile
 import uuid
 from datetime import datetime, timezone

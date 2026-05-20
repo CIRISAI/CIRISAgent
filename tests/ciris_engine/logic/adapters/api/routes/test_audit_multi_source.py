@@ -1,15 +1,22 @@
 """
 Comprehensive unit tests for multi-source audit API functionality.
 
-Tests the enhanced audit API that queries graph memory, SQLite database, and JSONL files.
+Tests the enhanced audit API that queries graph memory, the persist
+audit chain (formerly SQLite `audit_log`, now `cirislens_audit_log`),
+and JSONL files.
+
+2.9.0 / CIRISAgent#763: `_query_sqlite_audit` is now a thin wrapper
+around `engine.audit_list_entries`. The tests stub the persist engine
+via the `set_persist_engine` shim so the wrapper sees canned rows
+without going through `audit_record_entry` (which requires hash-chain
+signing).
 """
 
 import json
-import sqlite3
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import Any, List
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -25,89 +32,146 @@ from ciris_engine.schemas.api.audit import AuditContext
 from ciris_engine.schemas.services.nodes import AuditEntry
 
 
+class _FakePersistAuditEngine:
+    """Minimal persist-engine stub that only implements `audit_list_entries`.
+
+    Used by tests that need to assert the legacy-shaped output of
+    `_query_sqlite_audit` (which now routes through
+    `engine.audit_list_entries`). The stub returns persist-shape rows
+    (recorded_at, action_type, actor_id, payload, prev_hash, etc.) and
+    honours the filter's recorded_after/recorded_before / tenant scoping,
+    plus the offset/limit pagination contract.
+    """
+
+    def __init__(self, rows: List[dict]) -> None:
+        # Sort newest-first like persist does.
+        self._rows = sorted(
+            rows, key=lambda r: r.get("recorded_at", ""), reverse=True
+        )
+
+    def audit_list_entries(
+        self, filter_json: str, cursor_json: Any, limit: int
+    ) -> str:
+        filt = json.loads(filter_json) if isinstance(filter_json, str) else (filter_json or {})
+        recorded_after = filt.get("recorded_after")
+        recorded_before = filt.get("recorded_before")
+        cursor = (
+            json.loads(cursor_json)
+            if isinstance(cursor_json, str)
+            else (cursor_json or {})
+        )
+        start = int(cursor.get("offset", 0)) if isinstance(cursor, dict) else 0
+
+        items: List[dict] = []
+        for row in self._rows:
+            ts = row.get("recorded_at", "")
+            if recorded_after and ts < recorded_after:
+                continue
+            if recorded_before and ts > recorded_before:
+                continue
+            items.append(row)
+
+        page = items[start : start + limit]
+        next_cursor = (
+            {"offset": start + limit} if start + limit < len(items) else None
+        )
+        return json.dumps({"items": page, "cursor": next_cursor})
+
+
+def _make_persist_audit_row(
+    *,
+    entry_id: str,
+    recorded_at: str,
+    action_type: str,
+    actor_id: str,
+    payload: str = "",
+    sequence_number: int = 1,
+    prev_hash: str = "",
+    entry_hash: str = "",
+    signature: str = "",
+    signing_key_id: str = "key_001",
+) -> dict:
+    """Construct a persist-shape `cirislens_audit_log` row."""
+    return {
+        "entry_id": entry_id,
+        "recorded_at": recorded_at,
+        "action_type": action_type,
+        "actor_id": actor_id,
+        "payload": payload,
+        "sequence_number": sequence_number,
+        "prev_hash": prev_hash,
+        "entry_hash": entry_hash,
+        "signature": signature,
+        "signing_key_id": signing_key_id,
+        "signature_verified": 1,
+    }
+
+
 @pytest.fixture
-def mock_sqlite_db():
-    """Create a temporary SQLite database with test audit data."""
+def mock_sqlite_db(monkeypatch):
+    """Wire a fake persist engine so `_query_sqlite_audit` sees test rows.
+
+    2.9.0: the legacy `audit_log` table is no longer the source of truth.
+    `_query_sqlite_audit(db_path)` reads from persist's `audit_list_entries`,
+    so we install a fake engine via `set_persist_engine` for the test and
+    yield the temp `db_path` string for signature compat with callers.
+    """
+    from ciris_engine.logic.persistence.models import graph as _graph_mod
+    from ciris_engine.logic.persistence.models.graph import set_persist_engine
+
+    rows = [
+        _make_persist_audit_row(
+            entry_id="evt-001",
+            recorded_at="2025-09-01T10:00:00+00:00",
+            action_type="HANDLER_ACTION_SPEAK",
+            actor_id="user_123",
+            payload='{"message": "test message 1"}',
+            sequence_number=1,
+            prev_hash="hash_000",
+            entry_hash="hash_001",
+            signature="sig_001",
+        ),
+        _make_persist_audit_row(
+            entry_id="evt-002",
+            recorded_at="2025-09-01T11:00:00+00:00",
+            action_type="HANDLER_ACTION_TASK_COMPLETE",
+            actor_id="user_124",
+            payload='{"task": "test task"}',
+            sequence_number=2,
+            prev_hash="hash_001",
+            entry_hash="hash_002",
+            signature="sig_002",
+        ),
+        _make_persist_audit_row(
+            entry_id="evt-003",
+            recorded_at="2025-08-31T09:00:00+00:00",
+            action_type="HANDLER_ACTION_SPEAK",
+            actor_id="user_125",
+            payload='{"message": "old message"}',
+            sequence_number=3,
+            prev_hash="hash_002",
+            entry_hash="hash_003",
+            signature="sig_003",
+        ),
+    ]
+
+    fake_engine = _FakePersistAuditEngine(rows)
+    prior_engine = _graph_mod._engine
+    prior_dsn = _graph_mod._engine_dsn
+    set_persist_engine(fake_engine, dsn="sqlite:///:memory:")
+
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
 
-    # Create database with audit schema
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE audit_log (
-                entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id TEXT NOT NULL UNIQUE,
-                event_timestamp TEXT NOT NULL,
-                event_type TEXT NOT NULL,
-                originator_id TEXT NOT NULL,
-                event_payload TEXT,
-                sequence_number INTEGER NOT NULL,
-                previous_hash TEXT NOT NULL,
-                entry_hash TEXT NOT NULL,
-                signature TEXT NOT NULL,
-                signing_key_id TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        """
-        )
-
-        # Insert test data
-        test_entries = [
-            (
-                "evt-001",
-                "2025-09-01T10:00:00+00:00",
-                "HANDLER_ACTION_SPEAK",
-                "user_123",
-                '{"message": "test message 1"}',
-                1,
-                "hash_000",
-                "hash_001",
-                "sig_001",
-                "key_001",
-            ),
-            (
-                "evt-002",
-                "2025-09-01T11:00:00+00:00",
-                "HANDLER_ACTION_TASK_COMPLETE",
-                "user_124",
-                '{"task": "test task"}',
-                2,
-                "hash_001",
-                "hash_002",
-                "sig_002",
-                "key_001",
-            ),
-            (
-                "evt-003",
-                "2025-08-31T09:00:00+00:00",
-                "HANDLER_ACTION_SPEAK",
-                "user_125",
-                '{"message": "old message"}',
-                3,
-                "hash_002",
-                "hash_003",
-                "sig_003",
-                "key_001",
-            ),
-        ]
-
-        for entry in test_entries:
-            cursor.execute(
-                """
-                INSERT INTO audit_log
-                (event_id, event_timestamp, event_type, originator_id, event_payload,
-                 sequence_number, previous_hash, entry_hash, signature, signing_key_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                entry,
-            )
-
-        conn.commit()
-
-    yield db_path
-    Path(db_path).unlink()
+    try:
+        yield db_path
+    finally:
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
+        try:
+            Path(db_path).unlink()
+        except OSError:
+            pass
 
 
 @pytest.fixture
@@ -219,9 +283,19 @@ class TestQuerySQLiteAudit:
 
     @pytest.mark.asyncio
     async def test_query_sqlite_nonexistent_db(self):
-        """Test SQLite querying with nonexistent database."""
-        entries = await _query_sqlite_audit("/nonexistent/path.db")
-        assert entries == []
+        """Test querying when no persist engine is wired returns []."""
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
+
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        _graph_mod._engine = None
+        _graph_mod._engine_dsn = None
+        try:
+            entries = await _query_sqlite_audit("/nonexistent/path.db")
+            assert entries == []
+        finally:
+            _graph_mod._engine = prior_engine
+            _graph_mod._engine_dsn = prior_dsn
 
 
 class TestQueryJSONLAudit:
@@ -434,20 +508,26 @@ class TestErrorHandling:
 
     @pytest.mark.asyncio
     async def test_sqlite_db_permission_error(self):
-        """Test SQLite querying handles permission errors."""
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            db_path = f.name
+        """Test SQLite querying returns [] when persist engine unavailable.
 
-        # Make file unreadable
-        Path(db_path).chmod(0o000)
+        2.9.0: `_query_sqlite_audit` no longer touches the legacy file
+        directly — it routes through `engine.audit_list_entries`. The
+        wrapper returns [] when the persist engine isn't wired, so the
+        permission-error scenario is now equivalent to the
+        "engine missing" scenario (both fail closed, returning []).
+        """
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        _graph_mod._engine = None
+        _graph_mod._engine_dsn = None
         try:
-            entries = await _query_sqlite_audit(db_path)
-            assert entries == []  # Should return empty list on error
+            entries = await _query_sqlite_audit("/nonexistent/path.db")
+            assert entries == []
         finally:
-            # Restore permissions and cleanup
-            Path(db_path).chmod(0o644)
-            Path(db_path).unlink()
+            _graph_mod._engine = prior_engine
+            _graph_mod._engine_dsn = prior_dsn
 
     @pytest.mark.asyncio
     async def test_jsonl_file_permission_error(self):

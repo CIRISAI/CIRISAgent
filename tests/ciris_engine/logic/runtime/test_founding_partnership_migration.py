@@ -15,7 +15,6 @@ import pytest
 from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence import initialize_database
 from ciris_engine.logic.persistence.db import core
-from ciris_engine.logic.persistence.db.core import get_db_connection
 
 
 @pytest.fixture

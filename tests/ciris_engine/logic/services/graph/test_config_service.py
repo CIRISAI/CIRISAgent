@@ -1,13 +1,13 @@
 """Unit tests for Config Service."""
 
 import os
-import sqlite3
 import tempfile
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
 
+from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.services.graph.config_service import GraphConfigService
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
 from ciris_engine.logic.services.lifecycle.time import TimeService
@@ -23,36 +23,26 @@ def time_service():
 
 @pytest.fixture
 def temp_db():
-    """Create a temporary database for testing."""
+    """Create a temporary database for testing with persist wired."""
+    from ciris_engine.logic.persistence.models import graph as _graph_mod
+
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
+
+    prior_engine = _graph_mod._engine
+    prior_dsn = _graph_mod._engine_dsn
+    initialize_database(db_path)
+
     yield db_path
+
+    _graph_mod._engine = prior_engine
+    _graph_mod._engine_dsn = prior_dsn
     os.unlink(db_path)
 
 
 @pytest_asyncio.fixture
 async def memory_service(temp_db, time_service):
     """Create a memory service for testing."""
-    # Initialize the database
-    conn = sqlite3.connect(temp_db)
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS graph_nodes (
-            node_id TEXT NOT NULL,
-            scope TEXT NOT NULL,
-            node_type TEXT NOT NULL,
-            attributes_json TEXT,
-            version INTEGER DEFAULT 1,
-            updated_by TEXT,
-            updated_at TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (node_id, scope)
-        )
-    """
-    )
-    conn.commit()
-    conn.close()
-
     # Create a secrets service for the memory service
     from ciris_engine.logic.secrets.service import SecretsService
 

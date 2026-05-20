@@ -118,6 +118,18 @@ class IncidentCaptureHandler(logging.Handler):
             if record.levelno < logging.WARNING:
                 return
 
+            # Re-entrancy guard: NEVER capture a log record emitted by this
+            # handler itself. `_save_incident_to_graph` logs its own
+            # persist-write failures; without this guard that failure log
+            # is re-captured as a new incident, whose save fails, which
+            # logs again — an unbounded loop. Observed on the Postgres
+            # backend (CIRISPersist incident substrate rejected the
+            # incident_id) flooding 12k+ records and starving the
+            # reasoning pipeline. The handler must be loop-safe regardless
+            # of any storage backend's behavior.
+            if record.name == __name__:
+                return
+
             # Add extra context for errors with exception info
             if record.levelno >= logging.ERROR and record.exc_info:
                 # Create a modified message with traceback
@@ -223,7 +235,12 @@ class IncidentCaptureHandler(logging.Handler):
             # with no args); fall back to a level+component synthetic title
             # so we never POST an empty string.
             title = (message[:200].strip() if message else "") or f"{record.levelname}: {record.name}"
-            incident_id = f"incident_{uuid.uuid4()}"
+            # Bare UUID — persist's incident substrate types incident_id
+            # as a UUID on the Postgres backend and parses it as such; a
+            # prefixed string ("incident_<uuid>") fails that parse. SQLite
+            # stored it as TEXT and accepted the prefix, so the mismatch
+            # was invisible until the Postgres backend exercised it.
+            incident_id = str(uuid.uuid4())
             exception_type = (
                 record.exc_info[0].__name__ if record.exc_info and record.exc_info[0] else None
             )

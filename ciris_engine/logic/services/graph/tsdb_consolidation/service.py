@@ -765,7 +765,7 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
             engine = get_persist_engine()
             if engine is not None:
                 try:
-                    raw = engine.cirisgraph_get_edges_for_node(summary_id, "LOCAL", "outbound")
+                    raw = engine.cirisgraph_get_edges_for_node(summary_id, "LOCAL", "outbound", None)
                     edges = _json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
                     summarizes_count = sum(
                         1 for e in edges if isinstance(e, dict) and e.get("relationship") == "SUMMARIZES"

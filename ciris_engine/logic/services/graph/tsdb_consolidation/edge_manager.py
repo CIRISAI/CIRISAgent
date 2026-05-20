@@ -82,7 +82,7 @@ class EdgeManager:
                 "updated_at": now_iso,
             }
             try:
-                engine.cirisgraph_upsert_edge(json.dumps(edge_payload), 0)
+                engine.cirisgraph_upsert_edge(json.dumps(edge_payload), False)
                 created += 1
             except Exception as e:
                 logger.warning(
@@ -185,7 +185,7 @@ class EdgeManager:
             "updated_at": now_iso,
         }
         try:
-            engine.cirisgraph_upsert_edge(json.dumps(payload), 0)
+            engine.cirisgraph_upsert_edge(json.dumps(payload), False)
             return 1
         except Exception as e:
             logger.warning(f"cirisgraph_upsert_edge({source_id} -> {target_id}) failed: {e}")

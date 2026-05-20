@@ -2096,11 +2096,20 @@ async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List
                         req_data = json.loads(req_data)
                     except Exception:
                         req_data = {}
+                # ServiceRequestData stores call args in `parameters` (typed
+                # Dict[str, str]). Pre-2.9.0 a few writers also stamped a
+                # top-level `content`/`message` key; honor those for
+                # backward compatibility but read from parameters first.
+                params = req_data.get("parameters") if isinstance(req_data, dict) else None
+                if not isinstance(params, dict):
+                    params = {}
                 msg_content = (
-                    req_data.get("content")
-                    or req_data.get("message")
+                    params.get("content")
+                    or params.get("message")
+                    or (req_data.get("content") if isinstance(req_data, dict) else None)
+                    or (req_data.get("message") if isinstance(req_data, dict) else None)
                     or f"Message in {msg_channel}"
-                ) if isinstance(req_data, dict) else f"Message in {msg_channel}"
+                )
 
                 created_at = row.get("created_at", "")
                 ts_str = (

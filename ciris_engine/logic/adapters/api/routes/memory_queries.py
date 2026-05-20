@@ -6,7 +6,7 @@ Extracted from memory.py to improve modularity and testability.
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic.utils.jsondict_helpers import get_dict
@@ -133,7 +133,10 @@ async def get_memory_stats(memory_service: Any) -> JSONDict:
 
         # Recent activity: count nodes/edges updated in the last 24h via
         # the updated_after filter (CIRISPersist#62 / #65). Sum across scopes.
-        now = datetime.now()
+        # Persist's NodeFilter decoder requires a timezone-aware ISO 8601
+        # string; naive `datetime.now().isoformat()` parses to "premature
+        # end of input at column 64" and the integration silently returns 0.
+        now = datetime.now(timezone.utc)
         yesterday = (now - timedelta(days=1)).isoformat()
         recent_activity = get_dict(stats, "recent_activity", {})
         recent_nodes = 0

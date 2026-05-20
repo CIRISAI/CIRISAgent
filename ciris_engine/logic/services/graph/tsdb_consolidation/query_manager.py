@@ -81,9 +81,9 @@ class QueryManager:
             logger.debug("persist engine not wired; lock %s skipped", lock_key)
             return False
         try:
-            raw = engine.lock_acquire(lock_key, self._instance_id, _LOCK_TTL_SECS)
+            raw = engine.lock_try_acquire(lock_key, self._instance_id, _LOCK_TTL_SECS)
         except Exception as e:
-            logger.warning("lock_acquire(%s) failed: %s", lock_key, e)
+            logger.warning("lock_try_acquire(%s) failed: %s", lock_key, e)
             return False
         parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
         if isinstance(parsed, dict):

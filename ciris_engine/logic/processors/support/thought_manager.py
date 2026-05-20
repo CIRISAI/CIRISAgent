@@ -247,10 +247,18 @@ class ThoughtManager:
             logger.info("Memory meta-thoughts detected; processing them exclusively")
 
         added_count = 0
+        # Defense in depth: never queue a thought_id already in flight.
+        # `get_pending_thoughts_for_active_tasks` dedups its own result,
+        # but the queue may still hold items from a prior round that
+        # haven't drained — re-appending one double-runs it through ASPDMA.
+        queued_ids = {item.thought_id for item in self.processing_queue}
         for thought in pending_thoughts:
+            if thought.thought_id in queued_ids:
+                continue
             if len(self.processing_queue) < self.max_active_thoughts:
                 queue_item = ProcessingQueueItem.from_thought(thought)
                 self.processing_queue.append(queue_item)
+                queued_ids.add(thought.thought_id)
                 added_count += 1
             else:
                 logger.warning(

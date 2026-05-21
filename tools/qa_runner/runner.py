@@ -746,9 +746,17 @@ class QARunner:
                 "RUNTIME SHUTDOWN",
                 "SYSTEM SHUTDOWN",
                 "GRACEFUL SHUTDOWN",
+                "[SIGNAL]",  # signal-handler lines (e.g. SIGTERM to stop the QA server)
                 "Edge already exists",
                 "duplicate edge",
                 "TSDB consolidation",
+                # The setup module deliberately validates bad LLM endpoints —
+                # the agent correctly logs the validation failure.
+                "[VALIDATE_LLM]",
+                # ciris_verify logs ERROR for an offline build-registry; in QA
+                # there is no registry and L4 file integrity is legitimately
+                # skipped — an environmental degradation, not a test failure.
+                "MANIFEST_CACHE MISS",
             ]
 
             with open(incidents_log, "r") as f:

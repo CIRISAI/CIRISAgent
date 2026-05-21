@@ -516,8 +516,12 @@ class SecretsStore:
             logger.info("persist secrets migrated to hardware-backed master key")
             return True
         except Exception as e:
-            logger.error(
-                f"Failed to migrate to hardware key: {type(e).__name__}: {e}"
+            # Not an error: persist's secrets-hw path is pending upstream
+            # (CIRISPersist#87). The store keeps its software-backed master
+            # key as a graceful fallback — logged at WARNING, not ERROR.
+            logger.warning(
+                f"Hardware-backed master key unavailable; using software-backed "
+                f"key: {type(e).__name__}: {e}"
             )
             return False
 

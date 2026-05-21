@@ -477,11 +477,14 @@ class Ed25519TraceSigner:
                 return True
             except Exception as e:
                 last_attempt = attempt >= _TRACE_SIGN_MAX_RETRIES - 1
-                if (
+                # The signing wrapper may re-raise CIRISVerify's
+                # AttestationInProgressError as a generic exception that only
+                # carries the message — so match the type OR the message.
+                is_attestation = (
                     attestation_in_progress is not None
                     and isinstance(e, attestation_in_progress)
-                    and not last_attempt
-                ):
+                ) or "attestation in progress" in str(e).lower()
+                if is_attestation and not last_attempt:
                     logger.debug(
                         "trace signing deferred (attestation in progress); "
                         "retry %d/%d in %.1fs",

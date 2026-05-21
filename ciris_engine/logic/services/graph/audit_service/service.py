@@ -1211,9 +1211,13 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                 except Exception as e:
                     last_attempt = attempt >= _AUDIT_SIGN_MAX_RETRIES - 1
                     msg = str(e)
-                    is_attestation = attestation_in_progress is not None and isinstance(
-                        e, attestation_in_progress
-                    )
+                    # The signing wrapper may re-raise CIRISVerify's
+                    # AttestationInProgressError as a generic exception that
+                    # only carries the message — match the type OR the message.
+                    is_attestation = (
+                        attestation_in_progress is not None
+                        and isinstance(e, attestation_in_progress)
+                    ) or "attestation in progress" in msg.lower()
                     # persist raises "chain integrity: sequence gap ..." when
                     # the cached _next_seq has drifted from the chain tail.
                     # Self-heal: drop the cache so the retry re-reads the head

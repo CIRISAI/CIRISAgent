@@ -99,7 +99,12 @@ import time  # noqa: E402
 
 # Import database fixtures and API fixtures - must be imported after os.environ setup
 from tests.fixtures.api import random_api_port  # noqa: E402
-from tests.fixtures.database import clean_db, test_db  # noqa: E402
+from tests.fixtures.database import (  # noqa: E402
+    _install_engine_tracker,
+    _release_persist_engine,
+    clean_db,
+    test_db,
+)
 from tests.fixtures.mocks import MockRuntime  # noqa: E402
 from tests.fixtures.persist_engine import persist_engine  # noqa: E402, F401
 from tests.fixtures.runtime_control import (  # noqa: E402
@@ -169,6 +174,24 @@ def _isolate_process_global_env(monkeypatch):
     """
     monkeypatch.setenv("CIRIS_PREFERRED_LANGUAGE", "en")
     monkeypatch.delenv("CIRIS_LLM_REPLICAS", raising=False)
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _release_persist_engine_between_tests():
+    """Release the process-wide persist Engine around every test.
+
+    ciris-persist v1.8.x's Engine is a process-singleton: a second
+    construction with a different DSN raises EngineConfigMismatch. Many
+    test fixtures wire an engine and on teardown only restore the module
+    global without closing the Rust engine — so the singleton leaks. The
+    engine tracker (installed here) captures every engine wired via
+    `set_persist_engine`; this autouse fixture closes them all around
+    each test so an engine pinned by one test never blocks the next.
+    """
+    _install_engine_tracker()
+    _release_persist_engine()
+    yield
+    _release_persist_engine()
 
 
 @pytest.fixture(autouse=True, scope="function")

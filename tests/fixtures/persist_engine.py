@@ -41,11 +41,14 @@ def persist_engine() -> Iterator[Engine]:
     """
     # Lazy import to avoid pulling persistence.models.graph during conftest
     # collection (some tests check module-level side effects).
-    import ciris_engine.logic.persistence.models.graph as _graph_mod
     from ciris_engine.logic.persistence.models.graph import set_persist_engine
 
-    prior_engine = _graph_mod._engine
-    prior_dsn = _graph_mod._engine_dsn
+    from tests.fixtures.database import _release_persist_engine
+
+    # v1.8.x persist Engine is a process-singleton — close any engine a
+    # prior test pinned before constructing this one, or Engine() raises
+    # EngineConfigMismatch.
+    _release_persist_engine()
 
     with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as pf:
         db_path = pf.name
@@ -56,8 +59,7 @@ def persist_engine() -> Iterator[Engine]:
     try:
         yield engine
     finally:
-        _graph_mod._engine = prior_engine
-        _graph_mod._engine_dsn = prior_dsn
+        _release_persist_engine()
         try:
             os.unlink(db_path)
         except OSError:

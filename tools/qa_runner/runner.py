@@ -350,19 +350,47 @@ class QARunner:
         if hasattr(self, "server_manager") and self.server_manager:
             dynamic_password = self.server_manager.get_admin_password()
 
+        # Keep SETUP tests separate from the rest. On a SETUP run the data
+        # dir is wiped (first-run), so authentication was skipped above —
+        # there is no admin user yet. SETUP runs the wizard which CREATES
+        # that user; only after it completes can the remaining HTTP + SDK
+        # modules authenticate. Running SETUP batched with other modules
+        # without this phasing leaves every later module tokenless (401).
+        setup_tests = []
         all_tests = []
         for module in http_modules:
             tests = self.config.get_module_tests(module, admin_password=dynamic_password)
-            all_tests.extend(tests)
+            if module == QAModule.SETUP:
+                setup_tests.extend(tests)
+            else:
+                all_tests.extend(tests)
 
-        # Run HTTP tests
         success = True
+
+        # Phase 1: SETUP wizard (first-run, no token) — creates the admin user.
+        if setup_tests:
+            self.console.print(f"\n📋 Running {len(setup_tests)} SETUP test cases...")
+            if self.config.parallel_tests:
+                success = self._run_parallel(setup_tests)
+            else:
+                success = self._run_sequential(setup_tests)
+            # The wizard has created the admin user — authenticate now so
+            # every subsequent HTTP + SDK module is wired with a token.
+            if not self.token and not getattr(self, "_skip_ciris_server", False):
+                self.console.print("[dim]Authenticating after SETUP wizard...[/dim]")
+                if not self._authenticate():
+                    self.console.print(
+                        "[yellow]⚠️  Post-SETUP authentication failed — "
+                        "remaining modules may report 401[/yellow]"
+                    )
+
+        # Phase 2: remaining HTTP test modules (now token-wired).
         if all_tests:
             self.console.print(f"\n📋 Running {len(all_tests)} HTTP test cases...")
             if self.config.parallel_tests:
-                success = self._run_parallel(all_tests)
+                success = self._run_parallel(all_tests) and success
             else:
-                success = self._run_sequential(all_tests)
+                success = self._run_sequential(all_tests) and success
 
         # Run TRUE multi-occurrence integration test if requested
         if QAModule.MULTI_OCCURRENCE in modules:

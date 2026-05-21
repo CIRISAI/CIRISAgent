@@ -74,35 +74,35 @@ class QARunner:
         else:
             self._skip_ciris_server = False
 
-        # Auto-configure adapter based on modules being tested
-        # This allows modular services to be loaded automatically
-        if modules and QAModule.REDDIT in modules:
-            # Reddit tests need both api and reddit adapters
-            if "reddit" not in self.config.adapter:
-                self.config.adapter = "api,reddit"
-                self.console.print("[dim]Auto-configured adapter: api,reddit for Reddit tests[/dim]")
-
-        if modules and QAModule.SQL_EXTERNAL_DATA in modules:
-            # SQL external data tests need both api and external_data_sql adapters
-            if "external_data_sql" not in self.config.adapter:
-                self.config.adapter = "api,external_data_sql"
-                self.console.print(
-                    "[dim]Auto-configured adapter: api,external_data_sql for SQL external data tests[/dim]"
-                )
-
-        if modules and QAModule.DSAR_MULTI_SOURCE in modules:
-            # DSAR multi-source tests need both api and external_data_sql adapters
-            if "external_data_sql" not in self.config.adapter:
-                self.config.adapter = "api,external_data_sql"
-                self.console.print(
-                    "[dim]Auto-configured adapter: api,external_data_sql for DSAR multi-source tests[/dim]"
-                )
-
-        # HE-300 benchmark needs A2A adapter
-        if modules and QAModule.HE300_BENCHMARK in modules:
-            if "a2a" not in self.config.adapter:
-                self.config.adapter = "api,a2a"
-                self.console.print("[dim]Auto-configured adapter: api,a2a for HE-300 benchmark tests[/dim]")
+        # Auto-configure adapters based on the modules being tested. Built
+        # ADDITIVELY so multiple adapter-needing modules in one batch compose:
+        # the old per-branch `self.config.adapter = "api,X"` clobbered the
+        # whole string, so e.g. a reddit + sql_external_data batch silently
+        # lost the reddit adapter and every reddit test failed.
+        if modules:
+            # QAModule -> the adapter it needs loaded at server startup.
+            _MODULE_STARTUP_ADAPTERS = {
+                QAModule.REDDIT: "reddit",
+                QAModule.SQL_EXTERNAL_DATA: "external_data_sql",
+                QAModule.DSAR_MULTI_SOURCE: "external_data_sql",
+                QAModule.HE300_BENCHMARK: "a2a",
+                # accord_metrics validates traces shipped by the agent; the
+                # adapter must be loaded from startup so messages processed
+                # before the module's own runtime adapter-loads still emit
+                # traces (see accord_metrics_tests.py — "default adapter
+                # loaded at startup").
+                QAModule.ACCORD_METRICS: "ciris_accord_metrics",
+            }
+            adapters = [a.strip() for a in self.config.adapter.split(",") if a.strip()]
+            if "api" not in adapters:
+                adapters.insert(0, "api")
+            for _mod, _adapter_name in _MODULE_STARTUP_ADAPTERS.items():
+                if _mod in modules and _adapter_name not in adapters:
+                    adapters.append(_adapter_name)
+            joined = ",".join(adapters)
+            if joined != self.config.adapter:
+                self.config.adapter = joined
+                self.console.print(f"[dim]Auto-configured adapters: {joined}[/dim]")
 
         # Determine database backends to test
         if self.config.database_backends is None:
@@ -212,9 +212,10 @@ class QARunner:
             )
         )
 
-        # Show initial incidents log status and record baseline
+        # Show initial incidents log status. The baseline position is
+        # recorded AFTER server start (below) so server-startup log content
+        # is excluded — only incidents raised during testing fail the run.
         self._show_incidents_status("STARTUP")
-        self._record_startup_incidents_position()
 
         # Setup OAuth test user and billing config BEFORE starting server if billing_integration is in modules
         # This ensures the auth service loads the user with password when it initializes
@@ -275,6 +276,11 @@ class QARunner:
             if not self.server_manager.start():
                 self.console.print("[red]❌ Failed to start API server[/red]")
                 return False
+
+        # Baseline the incidents log now that the server is up — only agent
+        # ERROR/CRITICAL incidents raised from here on (auth + every module)
+        # count toward failing the run.
+        self._record_startup_incidents_position()
 
         # Get authentication token (skip for SETUP module - first-run has no users,
         # and skip when no module needs a CIRIS server at all)
@@ -693,9 +699,24 @@ class QARunner:
 
         self.console.print()  # Extra spacing
 
+    def _incidents_log_path(self) -> Path:
+        """Path to the incidents log the running server actually writes to.
+
+        Backend runs write to ``logs/{backend}/incidents_latest.log`` — NOT
+        the stale top-level ``logs/incidents_latest.log``. Watching the wrong
+        file is why agent ERROR/CRITICAL incidents raised during testing went
+        undetected and runs reported "no incidents" when they should have
+        failed.
+        """
+        server_manager = getattr(self, "server_manager", None)
+        backend = getattr(server_manager, "database_backend", None) if server_manager else None
+        if backend:
+            return Path(f"logs/{backend}/incidents_latest.log")
+        return Path("logs/incidents_latest.log")
+
     def _record_startup_incidents_position(self):
         """Record the incidents log position at startup for comparison."""
-        incidents_log = Path("logs/incidents_latest.log")
+        incidents_log = self._incidents_log_path()
 
         if incidents_log.exists():
             try:
@@ -707,7 +728,7 @@ class QARunner:
 
     def _has_incidents_occurred(self) -> bool:
         """Check if any NEW incidents occurred during testing."""
-        incidents_log = Path("logs/incidents_latest.log")
+        incidents_log = self._incidents_log_path()
 
         if not incidents_log.exists():
             return False

@@ -107,6 +107,13 @@ from tests.fixtures.database import (  # noqa: E402
 )
 from tests.fixtures.mocks import MockRuntime  # noqa: E402
 from tests.fixtures.persist_engine import persist_engine  # noqa: E402, F401
+
+# Install the persist-engine tracker at conftest import time — BEFORE any
+# test module is collected. Test files that `from ...graph import
+# set_persist_engine` at module level bind the name at collection time, so
+# the wrap must already be in place or those engines escape tracking and
+# leak the process-singleton (EngineConfigMismatch on the next test).
+_install_engine_tracker()
 from tests.fixtures.runtime_control import (  # noqa: E402
     mock_api_runtime_control_service,
     mock_step_result_gather_context,
@@ -176,21 +183,29 @@ def _isolate_process_global_env(monkeypatch):
     monkeypatch.delenv("CIRIS_LLM_REPLICAS", raising=False)
 
 
-@pytest.fixture(autouse=True, scope="function")
-def _release_persist_engine_between_tests():
-    """Release the process-wide persist Engine around every test.
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):  # noqa: ARG001
+    """Release the process-wide persist Engine before every test.
 
     ciris-persist v1.8.x's Engine is a process-singleton: a second
     construction with a different DSN raises EngineConfigMismatch. Many
     test fixtures wire an engine and on teardown only restore the module
-    global without closing the Rust engine — so the singleton leaks. The
-    engine tracker (installed here) captures every engine wired via
-    `set_persist_engine`; this autouse fixture closes them all around
-    each test so an engine pinned by one test never blocks the next.
+    global without closing the Rust engine — so the singleton leaks.
+
+    This is a hook, not an autouse fixture, deliberately: a `tryfirst`
+    `pytest_runtest_setup` runs strictly BEFORE all fixture setup —
+    including class-level autouse fixtures that wire their own engine —
+    so no fixture-ordering race can leave a prior test's engine pinned.
+    The engine tracker (installed at conftest import) holds a reference
+    to every wired engine, so `_release_persist_engine` can close them
+    even after a fixture nulled `graph._engine` without closing it.
     """
-    _install_engine_tracker()
     _release_persist_engine()
-    yield
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_teardown(item):  # noqa: ARG001
+    """Release the persist Engine after every test (mirror of setup)."""
     _release_persist_engine()
 
 

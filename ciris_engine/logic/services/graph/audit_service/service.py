@@ -1209,12 +1209,29 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                 try:
                     return await asyncio.to_thread(self._write_to_persist_chain, entry)
                 except Exception as e:
-                    is_retryable = (
-                        attestation_in_progress is not None
-                        and isinstance(e, attestation_in_progress)
-                        and attempt < _AUDIT_SIGN_MAX_RETRIES - 1
+                    last_attempt = attempt >= _AUDIT_SIGN_MAX_RETRIES - 1
+                    msg = str(e)
+                    is_attestation = attestation_in_progress is not None and isinstance(
+                        e, attestation_in_progress
                     )
-                    if is_retryable:
+                    # persist raises "chain integrity: sequence gap ..." when
+                    # the cached _next_seq has drifted from the chain tail.
+                    # Self-heal: drop the cache so the retry re-reads the head
+                    # — otherwise one drift cascades into unbounded failures.
+                    is_chain_desync = "chain integrity" in msg or "sequence gap" in msg
+
+                    if last_attempt or not (is_attestation or is_chain_desync):
+                        logger.exception("Failed to add to persist audit chain")
+                        return None
+
+                    if is_chain_desync:
+                        logger.warning(
+                            "audit chain desync (%s) — re-syncing chain state from persist and retrying",
+                            msg,
+                        )
+                        self._next_seq = None
+                        self._last_entry_hash_b64 = None
+                    else:
                         logger.debug(
                             "persist audit chain write deferred (attestation in progress); "
                             "retry %d/%d in %.1fs",
@@ -1223,9 +1240,6 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                             _AUDIT_SIGN_RETRY_DELAY_S,
                         )
                         await asyncio.sleep(_AUDIT_SIGN_RETRY_DELAY_S)
-                        continue
-                    logger.exception("Failed to add to persist audit chain")
-                    return None
             return None
 
     def _write_to_persist_chain(self, entry: AuditRequest) -> JSONDict:
@@ -1324,7 +1338,12 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         cursor_json = json.dumps(
             {"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}
         )
-        raw = engine.audit_list_entries(filter_json, cursor_json, 1)
+        # Fetch a window, not just 1: audit_list_entries paginates DESC by
+        # recorded_at — NOT by sequence_number. On sub-millisecond writes
+        # (equal recorded_at) or any clock skew, items[0] is NOT the true
+        # chain tail, which would set _next_seq one short and every write
+        # would then fail "sequence gap" forever.
+        raw = engine.audit_list_entries(filter_json, cursor_json, 256)
 
         items: List[Any] = []
         if isinstance(raw, str):
@@ -1335,15 +1354,22 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             if isinstance(parsed, dict):
                 items = list(parsed.get("items") or [])
 
-        if not items:
+        # The chain's authoritative order is sequence_number — select the
+        # max-sequence entry as the true tail regardless of recorded_at order.
+        head = max(
+            (it for it in items if isinstance(it, dict)),
+            key=lambda it: int(it.get("sequence_number", 0)),
+            default=None,
+        )
+
+        if head is None:
             self._next_seq = 1
             self._last_entry_hash_b64 = base64.b64encode(b"\x00" * 32).decode()
             logger.info("audit chain state: fresh genesis (no prior entries in persist)")
             return
 
-        last = items[0]
-        last_seq = int(last.get("sequence_number", 0)) if isinstance(last, dict) else 0
-        last_hash = str(last.get("entry_hash", "")) if isinstance(last, dict) else ""
+        last_seq = int(head.get("sequence_number", 0))
+        last_hash = str(head.get("entry_hash", ""))
         self._next_seq = last_seq + 1
         self._last_entry_hash_b64 = last_hash
         logger.info(

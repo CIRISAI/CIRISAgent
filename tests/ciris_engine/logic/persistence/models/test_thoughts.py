@@ -127,7 +127,7 @@ def create_test_thought(
     if db_path is not None:
         task = create_test_task(task_id=task_id, occurrence_id=occurrence_id)
         try:
-            add_task(task, db_path=db_path)
+            add_task(task)
         except Exception:
             # Task might already exist, that's ok
             pass
@@ -793,7 +793,6 @@ def test_update_thought_status_success(temp_db: str):
         "upd-t1",
         ThoughtStatus.COMPLETED,
         "occ1",
-        db_path=temp_db,
     )
 
     assert result is True
@@ -809,7 +808,6 @@ def test_update_thought_status_not_found(temp_db: str):
         "nonexistent",
         ThoughtStatus.COMPLETED,
         "occ1",
-        db_path=temp_db,
     )
 
     assert result is False
@@ -825,7 +823,6 @@ def test_update_thought_status_wrong_occurrence(temp_db: str):
         "upd-t1",
         ThoughtStatus.COMPLETED,
         "occ2",
-        db_path=temp_db,
     )
 
     assert result is False
@@ -845,7 +842,6 @@ def test_update_thought_status_with_final_action(temp_db: str):
         "upd-t2",
         ThoughtStatus.COMPLETED,
         "occ1",
-        db_path=temp_db,
         final_action={"test": "data"},
     )
 

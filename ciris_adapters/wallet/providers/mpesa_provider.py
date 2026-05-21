@@ -62,7 +62,7 @@ class MPesaProvider(WalletProvider):
 
     SANDBOX_URL = "https://sandbox.safaricom.co.ke"
     PRODUCTION_URL = "https://api.safaricom.co.ke"
-    SUPPORTED_CURRENCIES = ["KES"]
+    CURRENCIES = ["KES"]
 
     def __init__(self, config: MPesaProviderConfig) -> None:
         self.config = config
@@ -89,7 +89,7 @@ class MPesaProvider(WalletProvider):
 
     @property
     def supported_currencies(self) -> List[str]:
-        return self.SUPPORTED_CURRENCIES
+        return self.CURRENCIES
 
     async def initialize(self) -> bool:
         """Initialize the provider and obtain access token."""

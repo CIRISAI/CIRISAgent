@@ -418,19 +418,19 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def get_wa(self, wa_id: str) -> Optional[WACertificate]:
         """Get WA certificate by ID."""
-        return authentication_store.get_wa_by_id(wa_id, self.db_path)
+        return authentication_store.get_wa_by_id(wa_id)
 
     async def _get_wa_by_kid(self, jwt_kid: str) -> Optional[WACertificate]:
         """Get WA certificate by JWT key ID."""
-        return authentication_store.get_wa_by_kid(jwt_kid, self.db_path)
+        return authentication_store.get_wa_by_kid(jwt_kid)
 
     async def get_wa_by_oauth(self, provider: str, external_id: str) -> Optional[WACertificate]:
         """Get WA certificate by OAuth identity."""
-        return authentication_store.get_wa_by_oauth(provider, external_id, self.db_path)
+        return authentication_store.get_wa_by_oauth(provider, external_id)
 
     async def _get_wa_by_adapter(self, adapter_id: str) -> Optional[WACertificate]:
         """Get WA certificate by adapter ID."""
-        return authentication_store.get_wa_by_adapter(adapter_id, self.db_path)
+        return authentication_store.get_wa_by_adapter(adapter_id)
 
     async def link_oauth_identity(
         self,
@@ -550,7 +550,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def _store_wa_certificate(self, wa: WACertificate) -> None:
         """Store a WA certificate in the database."""
-        authentication_store.store_wa_certificate(wa, self.db_path)
+        authentication_store.store_wa_certificate(wa)
 
     async def _create_adapter_observer(self, adapter_id: str, name: str) -> WACertificate:
         """Create or reactivate adapter observer WA."""
@@ -602,7 +602,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             return await self.get_wa(wa_id)
 
         # Update via store
-        authentication_store.update_wa_certificate(wa_id, kwargs, self.db_path)
+        authentication_store.update_wa_certificate(wa_id, kwargs)
 
         # Return updated WA
         return await self.get_wa(wa_id)
@@ -633,7 +633,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def _list_all_was(self, active_only: bool = True) -> List[WACertificate]:
         """List all WA certificates."""
-        return authentication_store.list_wa_certificates(active_only, self.db_path)
+        return authentication_store.list_wa_certificates(active_only)
 
     async def update_last_login(self, wa_id: str) -> None:
         """Update last login timestamp."""
@@ -1648,7 +1648,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Count certificates by type
         try:
-            counts = authentication_store.get_certificate_counts(self.db_path)
+            counts = authentication_store.get_certificate_counts()
             cert_count = counts.get("active", 0)
             revoked_count = counts.get("revoked", 0)
             # Extract by_role dict with type assertion
@@ -2031,7 +2031,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             return False
 
         # Check database connection via store
-        return authentication_store.check_database_health(self.db_path)
+        return authentication_store.check_database_health()
 
     # =========================================================================
     # CIRISVerify Singleton Management

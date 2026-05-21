@@ -327,7 +327,7 @@ class TestGetUserAllowedIds:
         mock_db.connection = Mock(return_value=mock_conn)
         auth_service.db_manager = mock_db
 
-        result = await get_user_allowed_ids(auth_service, "user123")
+        result = await get_user_allowed_ids("user123")
 
         assert "user123" in result
         assert len(result) == 1
@@ -363,12 +363,12 @@ class TestGetUserAllowedIds:
             oauth_external_id="discord_123",
             created_at=datetime.now(timezone.utc),
         )
-        authentication_store.store_wa_certificate(wa, db_path=":memory:")
+        authentication_store.store_wa_certificate(wa)
 
         auth_service = Mock()
         auth_service.db_path = ":memory:"
 
-        result = await get_user_allowed_ids(auth_service, wa_id)
+        result = await get_user_allowed_ids(wa_id)
 
         assert wa_id in result
         assert "discord:discord_123" in result
@@ -391,7 +391,7 @@ class TestGetUserAllowedIds:
             "ciris_engine.logic.persistence.stores.authentication_store.get_wa_by_id",
             side_effect=Exception("DB error"),
         ):
-            result = await get_user_allowed_ids(auth_service, "user123")
+            result = await get_user_allowed_ids("user123")
 
         # Should still include base user_id even when DB query fails
         assert "user123" in result

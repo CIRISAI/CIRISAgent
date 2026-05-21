@@ -55,7 +55,7 @@ def count_pending_thoughts_for_active_tasks(occurrence_id: str = "default") -> i
 
 def count_active_tasks(occurrence_id: str = "default") -> int:
     """Count tasks with ACTIVE status."""
-    return count_tasks(TaskStatus.ACTIVE)
+    return count_tasks(TaskStatus.ACTIVE, occurrence_id)
 
 
 def get_tasks_needing_seed_thought(occurrence_id: str = "default", limit: Optional[int] = None) -> List[Task]:

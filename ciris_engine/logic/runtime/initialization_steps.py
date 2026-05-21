@@ -44,7 +44,7 @@ def register_all_initialization_steps(
         phase=InitializationPhase.DATABASE,
         name="Initialize Database",
         handler=lambda: init_database(runtime),
-        verifier=lambda: verify_database_integrity(runtime),
+        verifier=lambda: verify_database_integrity(),
         critical=True,
     )
 
@@ -208,7 +208,7 @@ async def init_database(runtime: Any) -> None:
         logger.warning("No config provided, using defaults")
 
 
-async def verify_database_integrity(runtime: Any) -> bool:
+async def verify_database_integrity() -> bool:
     """Verify database integrity before proceeding.
 
     Post-A1 absorption (CIRISAgent#763): persist owns the schema for

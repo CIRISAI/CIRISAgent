@@ -116,7 +116,7 @@ async def get_user_filter_ids_for_observer(request: Request, auth: AuthContext) 
     if not user_id:
         raise HTTPException(status_code=401, detail=USER_ID_NOT_FOUND)
 
-    allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+    allowed_user_ids = await get_user_allowed_ids(user_id)
     return list(allowed_user_ids)
 
 
@@ -595,7 +595,7 @@ async def get_stats(
     """
     try:
         # Get stats from database
-        stats_data = await get_memory_stats(memory_service)
+        stats_data = await get_memory_stats()
 
         # Get date range
         oldest = None

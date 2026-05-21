@@ -657,14 +657,17 @@ class CIRISRuntime(ServicePropertyMixin):
     async def _init_database(self) -> None:
         """Initialize database and run migrations."""
         from ciris_engine.logic import persistence
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 
-        adapter = get_adapter()
-        if adapter.is_postgresql():
-            db_path = None
-            logger.info("Using PostgreSQL database from environment (CIRIS_DB_URL)")
+        # One canonical DB-path resolver — honors config.database.database_url
+        # (Postgres, including the CIRIS_DB_URL env var) and otherwise returns
+        # the SQLite main_db path. Every consumer (memory service, auth, etc.)
+        # resolves the same way; diverging here would construct the process
+        # persist Engine with a different DSN and trip EngineConfigMismatch.
+        db_path = get_sqlite_db_full_path(self.essential_config)
+        if db_path.startswith(("postgresql://", "postgres://")):
+            logger.info("Using PostgreSQL database")
         else:
-            db_path = str(self.essential_config.database.main_db)
             logger.info(f"Using SQLite database: {db_path}")
 
         # initialize_database bootstraps persist's Engine end-to-end (schema

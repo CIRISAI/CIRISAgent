@@ -9,7 +9,7 @@ Public API surface preserved: `SecretsStore.store_secret`,
 `retrieve_secret`, `delete_secret`, `list_secrets`, `list_all_secrets`,
 `encrypt_secret`, `decrypt_secret`, `rotate_master_key`, `test_encryption`,
 `get_access_logs`, `reencrypt_all`, `migrate_to_hardware_key`,
-`decrypt_secret_value`, `update_access_log`.
+`decrypt_secret_value`.
 
 `SecretRecord.encrypted_value` / `salt` / `nonce` / `encryption_key_ref`
 fields are kept on the dataclass for shape compatibility but populated as
@@ -239,15 +239,12 @@ class SecretsStore:
                 logger.debug(f"Secret storage error details: {e}")
                 raise
 
-    async def retrieve_secret(
-        self, secret_uuid: str, decrypt: bool = False
-    ) -> Optional[SecretRecord]:
+    async def retrieve_secret(self, secret_uuid: str) -> Optional[SecretRecord]:
         """Retrieve a secret via persist's recall path.
 
-        Returns a SecretRecord. If `decrypt=True`, the plaintext is *not*
-        attached to the SecretRecord (no field for it on the dataclass);
-        callers wanting plaintext should call `decrypt_secret_value`
-        which is now a thin persist call.
+        Returns a metadata-only SecretRecord — the plaintext is never
+        attached (no field for it on the dataclass). Callers wanting
+        plaintext call `decrypt_secret_value`, a thin persist call.
         """
         async with self._lock:
             if not await self._check_rate_limits("system"):
@@ -402,22 +399,6 @@ class SecretsStore:
         access_times.append(now)
         return True
 
-    async def _log_access(
-        self,
-        secret_uuid: str,
-        access_type: str,
-        accessor: str,
-        purpose: str,
-        success: bool,
-        failure_reason: Optional[str] = None,
-    ) -> None:
-        """Audit log entry — no-op shim.
-
-        Persist's substrate emits its own audit row for every secrets_*
-        call. This shim is kept so legacy callers don't NoneType-crash.
-        """
-        return None
-
     # ------------------------------------------------------------------
     # Direct crypto (used by SecretsService.encrypt / .decrypt)
     # ------------------------------------------------------------------
@@ -522,10 +503,6 @@ class SecretsStore:
         except Exception as e:
             logger.error(f"Failed to retrieve access logs: {type(e).__name__}: {e}")
             return []
-
-    async def update_access_log(self, log_entry: Any) -> None:
-        """No-op: persist's substrate records every access automatically."""
-        return None
 
     # ------------------------------------------------------------------
     # Hardware key migration

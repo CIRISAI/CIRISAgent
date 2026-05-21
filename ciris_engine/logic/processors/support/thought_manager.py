@@ -87,7 +87,7 @@ class ThoughtManager:
             # Delete the malicious task immediately
             try:
                 persistence.update_task_status(
-                    task.task_id, TaskStatus.FAILED, task.agent_occurrence_id, self.time_service
+                    task.task_id, TaskStatus.FAILED, task.agent_occurrence_id
                 )
                 logger.critical(f"SEED_THOUGHT: Marked malicious task {task.task_id} as FAILED")
             except Exception as e:

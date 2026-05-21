@@ -212,8 +212,6 @@ def _handle_partnership_accept(
         task_id=task.task_id,
         new_status=TaskStatus.COMPLETED,
         occurrence_id=str(uuid.uuid4()),
-        time_service=time_service,
-        db_path=None,
     )
 
     return StandardResponse(
@@ -269,8 +267,6 @@ def _handle_partnership_reject(
         task_id=task.task_id,
         new_status=TaskStatus.REJECTED,
         occurrence_id=str(uuid.uuid4()),
-        time_service=time_service,
-        db_path=None,
     )
 
     # Track rejection
@@ -341,8 +337,6 @@ def _handle_partnership_defer(
         task_id=task.task_id,
         new_status=TaskStatus.DEFERRED,
         occurrence_id=str(uuid.uuid4()),
-        time_service=time_service,
-        db_path=None,
     )
 
     # Track deferral

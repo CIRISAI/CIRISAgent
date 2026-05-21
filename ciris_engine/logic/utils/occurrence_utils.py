@@ -7,18 +7,15 @@ Provides occurrence discovery and metadata helpers for distributed runtime coord
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List
 
 logger = logging.getLogger(__name__)
 
 
-def get_occurrence_count(db_path: Optional[str] = None) -> int:
+def get_occurrence_count() -> int:
     """Get the total number of agent occurrences.
 
     Checks environment variables first, falls back to database discovery.
-
-    Args:
-        db_path: Optional database path for testing
 
     Returns:
         Number of occurrences (minimum 1)
@@ -36,7 +33,7 @@ def get_occurrence_count(db_path: Optional[str] = None) -> int:
 
     # Fallback strategy: Database discovery (count unique occurrence IDs with recent activity)
     try:
-        discovered = discover_active_occurrences(within_minutes=30, db_path=db_path)
+        discovered = discover_active_occurrences(within_minutes=30)
         count = len(discovered)
         if count > 0:
             logger.debug(f"Discovered {count} active occurrences from database activity")
@@ -49,17 +46,15 @@ def get_occurrence_count(db_path: Optional[str] = None) -> int:
     return 1
 
 
-def discover_active_occurrences(within_minutes: int = 10, db_path: Optional[str] = None) -> List[str]:
+def discover_active_occurrences(within_minutes: int = 10) -> List[str]:
     """Discover active occurrences based on recent database activity.
 
     Routes through persist's task substrate (`get_all_tasks`) instead of raw
-    SQL — persist owns the connection pool. The `db_path` argument is kept
-    for backward-compatible call sites but ignored; the persist Engine is
-    pinned by `initialize_database`.
+    SQL — persist owns the connection pool; the persist Engine is pinned by
+    `initialize_database`.
 
     Args:
         within_minutes: Only consider occurrences active within this window (default: 10)
-        db_path: legacy signature-compat — ignored
 
     Returns:
         List of unique occurrence IDs with recent activity, sorted alphabetically
@@ -136,23 +131,20 @@ def is_multi_occurrence_deployment() -> bool:
     return count > 1
 
 
-def get_occurrence_info(db_path: Optional[str] = None) -> dict[str, object]:
+def get_occurrence_info() -> dict[str, object]:
     """Get comprehensive occurrence information for diagnostics.
-
-    Args:
-        db_path: Optional database path for testing
 
     Returns:
         Dict with occurrence metadata
     """
     occurrence_id = get_current_occurrence_id()
-    occurrence_count = get_occurrence_count(db_path=db_path)
+    occurrence_count = get_occurrence_count()
     is_multi = is_multi_occurrence_deployment()
 
     # Try to get discovered occurrences for additional context
     discovered = []
     try:
-        discovered = discover_active_occurrences(within_minutes=30, db_path=db_path)
+        discovered = discover_active_occurrences(within_minutes=30)
     except Exception as e:
         logger.debug(f"Could not discover occurrences for info: {e}")
 

@@ -807,8 +807,6 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                             task.task_id,
                             TaskStatus.COMPLETED,
                             task.agent_occurrence_id,
-                            self.time_service,
-                            db_path=self.db_path,
                         )
                         # Create audit entry for auto-completion
                         await self._audit_task_auto_complete(task)

@@ -209,7 +209,7 @@ class TestUserRoleHelpers:
         auth_service = Mock()
         auth_service.db_path = ":memory:"
 
-        result = await _get_user_allowed_channel_ids(auth_service, "user123")
+        result = await _get_user_allowed_channel_ids("user123")
 
         # BUGFIX: Should include "api_" prefixed version even with no OAuth links
         assert result == {"user123", "api_user123"}
@@ -243,12 +243,12 @@ class TestUserRoleHelpers:
             oauth_external_id="discord123",
             created_at=datetime.now(timezone.utc),
         )
-        authentication_store.store_wa_certificate(wa, db_path=":memory:")
+        authentication_store.store_wa_certificate(wa)
 
         auth_service = Mock()
         auth_service.db_path = ":memory:"
 
-        result = await _get_user_allowed_channel_ids(auth_service, wa_id)
+        result = await _get_user_allowed_channel_ids(wa_id)
 
         # Primary OAuth path: wa_id + api_wa_id + provider:external + external + api_-prefixed forms
         expected = {
@@ -278,7 +278,7 @@ class TestUserRoleHelpers:
             "ciris_engine.logic.persistence.stores.authentication_store.get_wa_by_id",
             side_effect=Exception("DB error"),
         ):
-            result = await _get_user_allowed_channel_ids(auth_service, "user123")
+            result = await _get_user_allowed_channel_ids("user123")
 
         # Should still return user_id + api_ version even on error
         assert result == {"user123", "api_user123"}

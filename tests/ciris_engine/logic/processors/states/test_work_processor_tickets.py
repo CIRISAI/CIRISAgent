@@ -396,7 +396,7 @@ class TestWorkProcessorPhase2Continuation:
             created_at=now,
             updated_at=now,
         )
-        add_task(existing_task, db_path=temp_db_path)
+        add_task(existing_task)
 
         tasks_created = await work_processor._discover_incomplete_tickets()
 

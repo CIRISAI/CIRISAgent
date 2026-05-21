@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from ciris_engine.logic.config.db_paths import get_audit_db_full_path
+from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 from ciris_engine.logic.setup.wizard import create_env_file
 from ciris_engine.schemas.api.responses import SuccessResponse
 
@@ -351,7 +351,7 @@ async def _log_wa_list(auth_service: Any, phase: str) -> None:
 
 async def _create_setup_users(
     setup: SetupCompleteRequest,
-    auth_db_path: str,
+    main_db_path: str,
     ingress_user_id: Optional[str] = None,
     ingress_user_name: Optional[str] = None,
     ingress_user_email: Optional[str] = None,
@@ -370,7 +370,7 @@ async def _create_setup_users(
 
     Args:
         setup: Setup configuration with user details
-        auth_db_path: Path to the audit database (from running application)
+        main_db_path: Path to the main agent database (from running application)
         ingress_user_id: User ID of ingress auth user completing setup (e.g., "home_assistant:abc123")
         ingress_user_name: Display name of the ingress user (for WA creation)
         ingress_user_email: Email of the ingress user (for WA creation)
@@ -382,7 +382,7 @@ async def _create_setup_users(
     logger.info("=" * 70)
     logger.info("CIRIS_USER_CREATE: _create_setup_users() called")
     logger.info("=" * 70)
-    logger.info(f"CIRIS_USER_CREATE: auth_db_path = {auth_db_path}")
+    logger.info(f"CIRIS_USER_CREATE: main_db_path = {main_db_path}")
     logger.info(f"CIRIS_USER_CREATE: skip_user_creation = {setup.skip_user_creation}")
     # SECURITY: Log provider only, not full external_id (could be PII)
     ingress_provider = ingress_user_id.split(":")[0] if ingress_user_id and ":" in ingress_user_id else None
@@ -406,7 +406,7 @@ async def _create_setup_users(
         # Still need to ensure system WA exists for agent operations
         time_service = TimeService()
         await time_service.start()
-        auth_service = AuthenticationService(db_path=auth_db_path, time_service=time_service, key_dir=None)
+        auth_service = AuthenticationService(db_path=main_db_path, time_service=time_service, key_dir=None)
         await auth_service.start()
         try:
             await _ensure_system_wa(auth_service)
@@ -478,7 +478,7 @@ async def _create_setup_users(
     await time_service.start()
 
     auth_service = AuthenticationService(
-        db_path=auth_db_path, time_service=time_service, key_dir=None  # Use default ~/.ciris/
+        db_path=main_db_path, time_service=time_service, key_dir=None  # Use default ~/.ciris/
     )
     await auth_service.start()
 
@@ -1040,10 +1040,11 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
                 detail="Runtime not available - cannot complete setup",
             )
 
-        # Get audit database path using same resolution as AuthenticationService
-        # This handles both SQLite and PostgreSQL (adds _auth suffix to database name)
-        auth_db_path = get_audit_db_full_path(runtime.essential_config)
-        logger.info(f"Using runtime audit database: {auth_db_path}")
+        # 2.9.0: WA certs live in the one process-wide persist engine on the
+        # main DB. The auth service attaches to that engine — handing it any
+        # other path trips EngineConfigMismatch.
+        main_db_path = get_sqlite_db_full_path(runtime.essential_config)
+        logger.info(f"Using runtime main database: {main_db_path}")
 
         # Create users immediately (don't wait for restart)
         # For ingress auth, pass the detected user info for auto-mint
@@ -1052,7 +1053,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         try:
             await _create_setup_users(
                 setup,
-                auth_db_path,
+                main_db_path,
                 ingress_user_id=ingress_user_id,
                 ingress_user_name=ingress_user_name,
                 ingress_user_email=ingress_user_email,

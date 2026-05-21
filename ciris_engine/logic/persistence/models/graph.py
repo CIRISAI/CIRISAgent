@@ -578,7 +578,6 @@ def get_nodes_by_type(
     scope: Optional[GraphScope] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
-    db_path: Optional[str] = None,
 ) -> List[GraphNode]:
     """Return all nodes of a given type — thin wrapper over `get_all_graph_nodes`."""
     return get_all_graph_nodes(

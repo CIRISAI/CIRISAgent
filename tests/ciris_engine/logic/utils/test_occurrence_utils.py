@@ -61,7 +61,7 @@ def create_task_for_occurrence(occurrence_id: str, db_path: str, minutes_ago: in
             parent_task_id=None,
         ),
     )
-    add_task(task, db_path=db_path)
+    add_task(task)
 
 
 def test_get_occurrence_count_from_env():
@@ -86,7 +86,7 @@ def test_get_occurrence_count_from_database(temp_db: str):
 
     with patch.dict(os.environ, {}, clear=True):
         # Should discover 3 occurrences from database
-        count = get_occurrence_count(db_path=temp_db)
+        count = get_occurrence_count()
         assert count == 3
 
 
@@ -102,7 +102,7 @@ def test_discover_active_occurrences_multiple(temp_db: str):
     create_task_for_occurrence("occurrence-2", temp_db, minutes_ago=1)
     create_task_for_occurrence("default", temp_db, minutes_ago=0)
 
-    discovered = discover_active_occurrences(within_minutes=10, db_path=temp_db)
+    discovered = discover_active_occurrences(within_minutes=10)
 
     assert len(discovered) == 3
     assert "occurrence-1" in discovered
@@ -117,7 +117,7 @@ def test_discover_active_occurrences_excludes_shared(temp_db: str):
     create_task_for_occurrence("occurrence-1", temp_db, minutes_ago=1)
     create_task_for_occurrence("__shared__", temp_db, minutes_ago=0)
 
-    discovered = discover_active_occurrences(within_minutes=10, db_path=temp_db)
+    discovered = discover_active_occurrences(within_minutes=10)
 
     assert len(discovered) == 1
     assert "occurrence-1" in discovered
@@ -131,7 +131,7 @@ def test_discover_active_occurrences_time_window(temp_db: str):
     # Old activity (outside window)
     create_task_for_occurrence("occurrence-2", temp_db, minutes_ago=15)
 
-    discovered = discover_active_occurrences(within_minutes=10, db_path=temp_db)
+    discovered = discover_active_occurrences(within_minutes=10)
 
     assert len(discovered) == 1
     assert "occurrence-1" in discovered
@@ -140,7 +140,7 @@ def test_discover_active_occurrences_time_window(temp_db: str):
 
 def test_discover_active_occurrences_empty(temp_db: str):
     """Test discovering occurrences when database is empty."""
-    discovered = discover_active_occurrences(within_minutes=10, db_path=temp_db)
+    discovered = discover_active_occurrences(within_minutes=10)
     assert discovered == []
 
 
@@ -182,7 +182,7 @@ def test_get_occurrence_info_complete(temp_db: str):
     create_task_for_occurrence("occurrence-2", temp_db, minutes_ago=2)
 
     with patch.dict(os.environ, {"AGENT_OCCURRENCE_ID": "occurrence-1", "AGENT_OCCURRENCE_COUNT": "2"}):
-        info = get_occurrence_info(db_path=temp_db)
+        info = get_occurrence_info()
 
         assert info["occurrence_id"] == "occurrence-1"
         assert info["occurrence_count"] == 2

@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
@@ -116,50 +117,59 @@ def _row_from_persist(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _build_upsert_payload(
-    *,
-    ticket_id: str,
-    sop: str,
-    ticket_type: str,
-    status: str,
-    priority: int,
-    email: str,
-    user_identifier: Optional[str],
-    submitted_at_iso: str,
-    deadline_iso: Optional[str],
-    last_updated_iso: str,
-    completed_at_iso: Optional[str],
-    metadata: Dict[str, Any],
-    notes: Optional[str],
-    automated: bool,
-    correlation_id: Optional[str],
-    agent_occurrence_id: str,
-) -> Dict[str, Any]:
+@dataclass
+class TicketUpsertFields:
+    """Typed field bundle for a persist ticket_upsert payload.
+
+    Collapses the (formerly 16-positional) argument list of
+    `_build_upsert_payload` into a single typed object so call sites read
+    fields by name and Sonar's parameter-count rule stays satisfied.
+    """
+
+    ticket_id: str
+    sop: str
+    ticket_type: str
+    status: str
+    priority: int
+    email: str
+    user_identifier: Optional[str]
+    submitted_at_iso: str
+    deadline_iso: Optional[str]
+    last_updated_iso: str
+    completed_at_iso: Optional[str]
+    metadata: Dict[str, Any]
+    notes: Optional[str]
+    automated: bool
+    correlation_id: Optional[str]
+    agent_occurrence_id: str
+
+
+def _build_upsert_payload(fields: TicketUpsertFields) -> Dict[str, Any]:
     """Build a persist ticket_upsert payload (drops None where persist treats absence as null)."""
     payload: Dict[str, Any] = {
-        "ticket_id": ticket_id,
-        "sop": sop,
-        "ticket_type": ticket_type,
-        "status": status,
-        "priority": priority,
-        "email": email,
-        "submitted_at": submitted_at_iso,
-        "last_updated": last_updated_iso,
-        "created_at": submitted_at_iso,  # persist preserves created_at on conflict
-        "metadata": metadata,
-        "automated": automated,
-        "agent_occurrence_id": agent_occurrence_id,
+        "ticket_id": fields.ticket_id,
+        "sop": fields.sop,
+        "ticket_type": fields.ticket_type,
+        "status": fields.status,
+        "priority": fields.priority,
+        "email": fields.email,
+        "submitted_at": fields.submitted_at_iso,
+        "last_updated": fields.last_updated_iso,
+        "created_at": fields.submitted_at_iso,  # persist preserves created_at on conflict
+        "metadata": fields.metadata,
+        "automated": fields.automated,
+        "agent_occurrence_id": fields.agent_occurrence_id,
     }
-    if user_identifier is not None:
-        payload["user_identifier"] = user_identifier
-    if deadline_iso is not None:
-        payload["deadline"] = deadline_iso
-    if completed_at_iso is not None:
-        payload["completed_at"] = completed_at_iso
-    if notes is not None:
-        payload["notes"] = notes
-    if correlation_id is not None:
-        payload["correlation_id"] = correlation_id
+    if fields.user_identifier is not None:
+        payload["user_identifier"] = fields.user_identifier
+    if fields.deadline_iso is not None:
+        payload["deadline"] = fields.deadline_iso
+    if fields.completed_at_iso is not None:
+        payload["completed_at"] = fields.completed_at_iso
+    if fields.notes is not None:
+        payload["notes"] = fields.notes
+    if fields.correlation_id is not None:
+        payload["correlation_id"] = fields.correlation_id
     return payload
 
 
@@ -192,22 +202,24 @@ def create_ticket(
         agent_occurrence_id = "__shared__"
 
     payload = _build_upsert_payload(
-        ticket_id=ticket_id,
-        sop=sop,
-        ticket_type=ticket_type,
-        status=status,
-        priority=priority,
-        email=email,
-        user_identifier=user_identifier,
-        submitted_at_iso=submitted_at_str,
-        deadline_iso=deadline_str,
-        last_updated_iso=submitted_at_str,
-        completed_at_iso=None,
-        metadata=dict(metadata or {}),
-        notes=notes,
-        automated=automated,
-        correlation_id=correlation_id,
-        agent_occurrence_id=agent_occurrence_id,
+        TicketUpsertFields(
+            ticket_id=ticket_id,
+            sop=sop,
+            ticket_type=ticket_type,
+            status=status,
+            priority=priority,
+            email=email,
+            user_identifier=user_identifier,
+            submitted_at_iso=submitted_at_str,
+            deadline_iso=deadline_str,
+            last_updated_iso=submitted_at_str,
+            completed_at_iso=None,
+            metadata=dict(metadata or {}),
+            notes=notes,
+            automated=automated,
+            correlation_id=correlation_id,
+            agent_occurrence_id=agent_occurrence_id,
+        )
     )
 
     try:
@@ -293,22 +305,24 @@ def update_ticket_status(
                 else existing["agent_occurrence_id"]
             )
             payload = _build_upsert_payload(
-                ticket_id=ticket_id,
-                sop=existing["sop"],
-                ticket_type=existing["ticket_type"],
-                status=new_status,
-                priority=existing["priority"] if existing["priority"] is not None else 5,
-                email=existing["email"],
-                user_identifier=existing["user_identifier"],
-                submitted_at_iso=existing["submitted_at"] or now_iso,
-                deadline_iso=existing["deadline"],
-                last_updated_iso=now_iso,
-                completed_at_iso=completed_at_iso,
-                metadata=cast(Dict[str, Any], new_metadata),
-                notes=notes if notes is not None else existing["notes"],
-                automated=existing["automated"],
-                correlation_id=existing["correlation_id"],
-                agent_occurrence_id=target_occurrence_id or "__shared__",
+                TicketUpsertFields(
+                    ticket_id=ticket_id,
+                    sop=existing["sop"],
+                    ticket_type=existing["ticket_type"],
+                    status=new_status,
+                    priority=existing["priority"] if existing["priority"] is not None else 5,
+                    email=existing["email"],
+                    user_identifier=existing["user_identifier"],
+                    submitted_at_iso=existing["submitted_at"] or now_iso,
+                    deadline_iso=existing["deadline"],
+                    last_updated_iso=now_iso,
+                    completed_at_iso=completed_at_iso,
+                    metadata=cast(Dict[str, Any], new_metadata),
+                    notes=notes if notes is not None else existing["notes"],
+                    automated=existing["automated"],
+                    correlation_id=existing["correlation_id"],
+                    agent_occurrence_id=target_occurrence_id or "__shared__",
+                )
             )
             engine.ticket_upsert(json.dumps(payload))
             logger.info(
@@ -359,22 +373,24 @@ def update_ticket_metadata(
 
         now_iso = datetime.now(timezone.utc).isoformat()
         payload = _build_upsert_payload(
-            ticket_id=ticket_id,
-            sop=existing["sop"],
-            ticket_type=existing["ticket_type"],
-            status=existing["status"],
-            priority=existing["priority"] if existing["priority"] is not None else 5,
-            email=existing["email"],
-            user_identifier=existing["user_identifier"],
-            submitted_at_iso=existing["submitted_at"] or now_iso,
-            deadline_iso=existing["deadline"],
-            last_updated_iso=now_iso,
-            completed_at_iso=existing["completed_at"],
-            metadata=dict(metadata),
-            notes=existing["notes"],
-            automated=existing["automated"],
-            correlation_id=existing["correlation_id"],
-            agent_occurrence_id=existing["agent_occurrence_id"] or "__shared__",
+            TicketUpsertFields(
+                ticket_id=ticket_id,
+                sop=existing["sop"],
+                ticket_type=existing["ticket_type"],
+                status=existing["status"],
+                priority=existing["priority"] if existing["priority"] is not None else 5,
+                email=existing["email"],
+                user_identifier=existing["user_identifier"],
+                submitted_at_iso=existing["submitted_at"] or now_iso,
+                deadline_iso=existing["deadline"],
+                last_updated_iso=now_iso,
+                completed_at_iso=existing["completed_at"],
+                metadata=dict(metadata),
+                notes=existing["notes"],
+                automated=existing["automated"],
+                correlation_id=existing["correlation_id"],
+                agent_occurrence_id=existing["agent_occurrence_id"] or "__shared__",
+            )
         )
         engine.ticket_upsert(json.dumps(payload))
         return True

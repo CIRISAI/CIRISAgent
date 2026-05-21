@@ -435,7 +435,7 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
                 if not self._query_manager.check_period_consolidated(period_start):
                     # Try to acquire lock for this period - only one occurrence should consolidate
                     lock_key = f"missed:{period_start.isoformat()}"
-                    if self._query_manager._try_acquire_lock(lock_key, "missed", period_start.isoformat()):
+                    if self._query_manager._try_acquire_lock(lock_key):
                         logger.info(f"Acquired lock, consolidating missed period: {period_start} to {period_end}")
                         # Console output for mobile app
                         print(f"[CONSOLIDATOR] Processing period {periods_consolidated + 1}...", flush=True)

@@ -78,15 +78,12 @@ class QueueStatus:
         }
 
 
-def get_queue_status(db_path: Optional[str] = None) -> QueueStatus:
+def get_queue_status() -> QueueStatus:
     """
     Get current queue status with task and thought counts.
 
     This is the centralized function for getting queue counts,
     used by both the system context builder and the agent processor.
-
-    Args:
-        db_path: Optional database path override
 
     Returns:
         QueueStatus object with counts

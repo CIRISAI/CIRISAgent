@@ -440,11 +440,7 @@ def add_correlation(
     time_service: Optional[TimeServiceProtocol] = None
 
 ) -> str:
-    """Persist a ServiceCorrelation via the wired persist Engine.
-
-    `db_path` is accepted for backward compat with the legacy signature
-    but ignored — the wired Engine owns the DB.
-    """
+    """Persist a ServiceCorrelation via the wired persist Engine."""
     engine = _get_engine()
     payload = _correlation_to_persist_payload(corr, time_service)
     try:
@@ -460,7 +456,6 @@ def update_correlation(
     update_request_or_id: Union[CorrelationUpdateRequest, str],
     correlation_or_time_service: Union[ServiceCorrelation, TimeServiceProtocol],
     time_service: Optional[TimeServiceProtocol] = None,
-    db_path: Optional[str] = None,
 ) -> bool:
     """Update correlation — handles both old and new signatures for compatibility."""
     if isinstance(update_request_or_id, str) and isinstance(correlation_or_time_service, ServiceCorrelation):
@@ -501,13 +496,11 @@ def update_correlation(
     else:
         raise ValueError("Invalid arguments to update_correlation")
 
-    return _update_correlation_impl(update_request, actual_time_service)  # type: ignore[arg-type]
+    return _update_correlation_impl(update_request)
 
 
 def _update_correlation_impl(
     update_request: CorrelationUpdateRequest,
-    time_service: TimeServiceProtocol
-
 ) -> bool:
     """Apply a CorrelationUpdateRequest via persist.
 
@@ -965,8 +958,6 @@ def get_active_channels_by_adapter(
 
 def get_channel_last_activity(
     channel_id: str,
-    time_service: Optional[TimeServiceProtocol] = None
-
 ) -> Optional[datetime]:
     """Get the last activity timestamp for a specific channel.
 
@@ -1096,7 +1087,6 @@ async def add_correlation_with_telemetry(
     corr: ServiceCorrelation,
     time_service: Optional[TimeServiceProtocol] = None,
     telemetry_service: Optional["GraphTelemetryService"] = None,
-    db_path: Optional[str] = None,
 ) -> str:
     """Add correlation to persistence and optionally to the telemetry service.
 

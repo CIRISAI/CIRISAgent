@@ -160,7 +160,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         Returns:
             Secret information dict or None if not found/denied
         """
-        secret_record = await self.store.retrieve_secret(secret_uuid, decrypt)
+        secret_record = await self.store.retrieve_secret(secret_uuid)
 
         if not secret_record:
             return None
@@ -243,7 +243,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
             secret_uuid = match.group(1)
             description = match.group(2)
 
-            secret_record = await self.store.retrieve_secret(secret_uuid, decrypt=False)
+            secret_record = await self.store.retrieve_secret(secret_uuid)
 
             if not secret_record:
                 logger.warning(f"Secret {secret_uuid} not found for decapsulation")
@@ -436,7 +436,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
     async def retrieve_secret(self, key: str) -> Optional[str]:
         """Retrieve and decrypt a secret."""
         try:
-            secret_record = await self.store.retrieve_secret(key, decrypt=True)
+            secret_record = await self.store.retrieve_secret(key)
             if secret_record:
                 # Track secret access
                 self._secrets_retrieved += 1

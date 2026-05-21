@@ -20,14 +20,13 @@ from ciris_engine.schemas.types import JSONDict
 logger = logging.getLogger(__name__)
 
 
-async def get_user_allowed_ids(auth_service: Any, user_id: str) -> Set[str]:
+async def get_user_allowed_ids(user_id: str) -> Set[str]:
     """
     Get set of user IDs user is allowed to see (user_id + OAuth links).
 
     Matches the same logic as reasoning event stream filtering for consistency.
 
     Args:
-        auth_service: Authentication service instance
         user_id: Primary user ID
 
     Returns:

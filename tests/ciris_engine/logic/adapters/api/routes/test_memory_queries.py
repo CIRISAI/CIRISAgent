@@ -272,7 +272,7 @@ class TestGetMemoryStats:
             "ciris_engine.logic.persistence.models.graph.get_persist_engine",
             return_value=None,
         ):
-            stats = await get_memory_stats(memory_service)
+            stats = await get_memory_stats()
 
         assert stats["total_nodes"] == 0
         assert stats["total_edges"] == 0
@@ -316,7 +316,7 @@ class TestGetMemoryStats:
         memory_service = Mock()
         memory_service.db_path = "/test/db.sqlite"
 
-        stats = await get_memory_stats(memory_service)
+        stats = await get_memory_stats()
 
         # TODO(CIRISPersist): the production helper sends
         # `datetime.now().isoformat()` (naive) into persist's NodeFilter as
@@ -352,7 +352,7 @@ class TestGetMemoryStats:
             "ciris_engine.logic.persistence.models.graph.get_persist_engine",
             return_value=_RaisingEngine(),
         ):
-            stats = await get_memory_stats(memory_service)
+            stats = await get_memory_stats()
 
         # Should return default stats on error
         assert stats["total_nodes"] == 0

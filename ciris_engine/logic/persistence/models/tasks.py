@@ -354,7 +354,7 @@ def _handle_duplicate_task(task: Task) -> str:
     return task.task_id
 
 
-def add_task(task: Task, db_path: Optional[str] = None) -> str:
+def add_task(task: Task) -> str:
     """Insert a task. Returns the task_id. On correlation_id conflict, returns the existing id.
 
     Legacy DB had a UNIQUE INDEX on tasks.context_json.correlation_id (migration
@@ -412,8 +412,6 @@ def update_task_status(
     task_id: str,
     new_status: TaskStatus,
     occurrence_id: str,
-    time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None,
 ) -> bool:
     """Update the status of a task."""
     engine = _get_engine()
@@ -509,7 +507,6 @@ def update_task_context_and_signing(
     signed_by: Optional[str] = None,
     signature: Optional[str] = None,
     signed_at: Optional[str] = None,
-    db_path: Optional[str] = None,
 ) -> bool:
     """Update the context and signing metadata for an existing task."""
     engine = _get_engine()
@@ -552,7 +549,6 @@ def clear_task_images(
     task_id: str,
     occurrence_id: str,
     time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None,
 ) -> bool:
     """Clear images from a task (for privacy/storage cleanup on completion)."""
     engine = _get_engine()
@@ -573,14 +569,13 @@ def clear_task_images(
         return False
 
 
-def task_exists(task_id: str, db_path: Optional[str] = None) -> bool:
+def task_exists(task_id: str) -> bool:
     return get_task_by_id(task_id) is not None
 
 
 async def add_system_task(
     task: Task,
     auth_service: Optional["AuthenticationServiceProtocol"] = None,
-    db_path: Optional[str] = None,
 ) -> str:
     """Add a system task with automatic signing by the system WA."""
     if auth_service:
@@ -596,13 +591,12 @@ async def add_system_task(
                 logger.warning("No system WA available for signing task")
         except Exception as e:
             logger.error(f"Failed to sign system task: {e}")
-    return add_task(task, db_path=db_path)
+    return add_task(task)
 
 
 def get_recent_completed_tasks(
     occurrence_id: str = "default",
     limit: int = 10,
-    db_path: Optional[str] = None,
 ) -> List[Task]:
     tasks_list = get_all_tasks(occurrence_id)
     completed = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.COMPLETED]
@@ -613,7 +607,6 @@ def get_recent_completed_tasks(
 def get_top_tasks(
     occurrence_id: str = "default",
     limit: int = 10,
-    db_path: Optional[str] = None,
 ) -> List[Task]:
     """Get top pending tasks for occurrence ordered by priority (highest first) then by creation date."""
     tasks_list = get_all_tasks(occurrence_id)
@@ -627,7 +620,6 @@ def get_top_tasks(
 def get_pending_tasks_for_activation(
     occurrence_id: str = "default",
     limit: int = 10,
-    db_path: Optional[str] = None,
 ) -> List[Task]:
     """Get pending tasks for occurrence ordered by priority (highest first) then by creation date."""
     pending_tasks = get_tasks_by_status(TaskStatus.PENDING, occurrence_id)
@@ -765,7 +757,7 @@ def _is_committed_action(action_type: str) -> bool:
     return action_type != "PONDER" and action_type != HandlerActionType.PONDER.value
 
 
-def _task_has_committed_action(task_id: str, occurrence_id: str, db_path: Optional[str]) -> bool:
+def _task_has_committed_action(task_id: str, occurrence_id: str) -> bool:
     """Check if task has any completed thoughts with non-PONDER action."""
     from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_task_id
 
@@ -829,7 +821,7 @@ def set_task_updated_info_flag(
         )
         return False
 
-    if _task_has_committed_action(task_id, occurrence_id, db_path):
+    if _task_has_committed_action(task_id, occurrence_id):
         return False
 
     task.updated_info_available = True
@@ -859,7 +851,6 @@ def try_claim_shared_task(
     description: str,
     priority: int,
     time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None,
 ) -> tuple[Task, bool]:
     """Atomically create or retrieve a shared agent-level task.
 
@@ -938,7 +929,6 @@ def try_claim_shared_task(
 def get_shared_task_status(
     task_type: str,
     within_hours: int = 24,
-    db_path: Optional[str] = None,
 ) -> Optional[TaskStatus]:
     """Get the status of the most recent shared task of a given type."""
     latest = get_latest_shared_task(task_type, within_hours)
@@ -950,10 +940,9 @@ def get_shared_task_status(
 def is_shared_task_completed(
     task_type: str,
     within_hours: int = 24,
-    db_path: Optional[str] = None,
 ) -> bool:
     """Check if a shared task of the given type has been completed recently."""
-    status = get_shared_task_status(task_type, within_hours, db_path)
+    status = get_shared_task_status(task_type, within_hours)
     return status == TaskStatus.COMPLETED if status else False
 
 

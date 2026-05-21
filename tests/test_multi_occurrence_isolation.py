@@ -81,7 +81,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_task(task_a, db_path=clean_db)
+        add_task(task_a)
 
         # Create tasks for occurrence B
         task_b = Task(
@@ -101,7 +101,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_b,
             ),
         )
-        add_task(task_b, db_path=clean_db)
+        add_task(task_b)
 
         # Verify occurrence A only sees its task
         task_a_retrieved = get_task_by_id("task_a_001", occurrence_a)
@@ -142,7 +142,7 @@ class TestMultiOccurrenceIsolation:
                     agent_occurrence_id=occurrence_a,
                 ),
             )
-            add_task(task, db_path=clean_db)
+            add_task(task)
 
         # Create 2 tasks for occurrence B
         for i in range(2):
@@ -163,7 +163,7 @@ class TestMultiOccurrenceIsolation:
                     agent_occurrence_id=occurrence_b,
                 ),
             )
-            add_task(task, db_path=clean_db)
+            add_task(task)
 
         # Verify occurrence A sees only its 3 tasks
         tasks_a = get_all_tasks(occurrence_a)
@@ -197,7 +197,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_task(task_a, db_path=clean_db)
+        add_task(task_a)
 
         # Occurrence B creates task for same channel
         task_b = Task(
@@ -217,7 +217,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_b,
             ),
         )
-        add_task(task_b, db_path=clean_db)
+        add_task(task_b)
 
         # Occurrence A should only see its task
         active_task_a = get_active_task_for_channel(channel_id, occurrence_a)
@@ -251,7 +251,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_task(task_a, db_path=clean_db)
+        add_task(task_a)
 
         # Create thought for occurrence A
         thought_a = Thought(
@@ -299,7 +299,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_b,
             ),
         )
-        add_task(task_b, db_path=clean_db)
+        add_task(task_b)
 
         # Create thought for occurrence B
         thought_b = Thought(
@@ -367,7 +367,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_task(task_a, db_path=clean_db)
+        add_task(task_a)
 
         thought_a = Thought(
             thought_id="thought_a_pending",
@@ -414,7 +414,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_b,
             ),
         )
-        add_task(task_b, db_path=clean_db)
+        add_task(task_b)
 
         thought_b = Thought(
             thought_id="thought_b_pending",
@@ -476,7 +476,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_task(task_a1, db_path=clean_db)
+        add_task(task_a1)
 
         task_a2 = Task(
             task_id="task_a2_manager",
@@ -495,7 +495,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_task(task_a2, db_path=clean_db)
+        add_task(task_a2)
 
         task_b = Task(
             task_id="task_b_manager",
@@ -514,7 +514,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_b,
             ),
         )
-        add_task(task_b, db_path=clean_db)
+        add_task(task_b)
 
         # Verify tasks are properly isolated using get_all_tasks
         all_tasks_a = get_all_tasks(occurrence_a)
@@ -549,7 +549,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_a,
             ),
         )
-        add_task(task_a, db_path=clean_db)
+        add_task(task_a)
 
         thought_a1 = Thought(
             thought_id="thought_a1_tm",
@@ -622,7 +622,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id=occurrence_b,
             ),
         )
-        add_task(task_b, db_path=clean_db)
+        add_task(task_b)
 
         thought_b = Thought(
             thought_id="thought_b_tm",
@@ -688,7 +688,7 @@ class TestMultiOccurrenceIsolation:
                 agent_occurrence_id="default",
             ),
         )
-        add_task(task, db_path=clean_db)
+        add_task(task)
 
         # Should be retrievable with 'default'
         retrieved = get_task_by_id("task_default", "default")

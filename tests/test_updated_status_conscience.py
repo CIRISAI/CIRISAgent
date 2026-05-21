@@ -82,7 +82,7 @@ class TestUpdatedStatusConscience:
                 parent_task_id=None,
             ),
         )
-        add_task(task, db_path=temp_db)
+        add_task(task)
         return task
 
     @pytest.fixture

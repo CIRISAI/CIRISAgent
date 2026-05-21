@@ -62,13 +62,12 @@ class TestCreateDSARTicket:
             submitted_at=submitted_at,
             estimated_completion=estimated_completion,
             automated=False,
-            db_path=temp_db,
         )
 
         assert success is True
 
         # Verify ticket was created
-        ticket = get_dsar_ticket(ticket_id, db_path=temp_db)
+        ticket = get_dsar_ticket(ticket_id)
         assert ticket is not None
         assert ticket["ticket_id"] == ticket_id
         assert ticket["email"] == email
@@ -97,13 +96,12 @@ class TestCreateDSARTicket:
             urgent=True,
             access_package=access_package,
             export_package=export_package,
-            db_path=temp_db,
         )
 
         assert success is True
 
         # Verify all fields
-        ticket = get_dsar_ticket(ticket_id, db_path=temp_db)
+        ticket = get_dsar_ticket(ticket_id)
         assert ticket["user_identifier"] == "discord:123456789"
         assert ticket["details"] == "Urgent export request"
         assert ticket["urgent"] is True
@@ -129,7 +127,6 @@ class TestCreateDSARTicket:
             submitted_at=submitted_at,
             estimated_completion=estimated_completion,
             automated=False,
-            db_path=temp_db,
         )
         assert success is True
 
@@ -141,11 +138,10 @@ class TestCreateDSARTicket:
             submitted_at=submitted_at,
             estimated_completion=estimated_completion,
             automated=False,
-            db_path=temp_db,
         )
         assert success is True
 
-        ticket = get_dsar_ticket(ticket_id, db_path=temp_db)
+        ticket = get_dsar_ticket(ticket_id)
         assert ticket["email"] == "different@example.com"
 
 
@@ -166,10 +162,9 @@ class TestGetDSARTicket:
             submitted_at=submitted_at,
             estimated_completion=estimated_completion,
             automated=False,
-            db_path=temp_db,
         )
 
-        ticket = get_dsar_ticket(ticket_id, db_path=temp_db)
+        ticket = get_dsar_ticket(ticket_id)
         assert ticket is not None
         assert ticket["ticket_id"] == ticket_id
         assert ticket["request_type"] == "correct"
@@ -177,7 +172,7 @@ class TestGetDSARTicket:
 
     def test_get_nonexistent_ticket(self, temp_db):
         """Test retrieving a nonexistent ticket returns None."""
-        ticket = get_dsar_ticket("DSAR-NONEXISTENT", db_path=temp_db)
+        ticket = get_dsar_ticket("DSAR-NONEXISTENT")
         assert ticket is None
 
 
@@ -198,15 +193,14 @@ class TestUpdateDSARTicketStatus:
             submitted_at=submitted_at,
             estimated_completion=estimated_completion,
             automated=False,
-            db_path=temp_db,
         )
 
         # Update status
-        success = update_dsar_ticket_status(ticket_id, "in_progress", db_path=temp_db)
+        success = update_dsar_ticket_status(ticket_id, "in_progress")
         assert success is True
 
         # Verify update
-        ticket = get_dsar_ticket(ticket_id, db_path=temp_db)
+        ticket = get_dsar_ticket(ticket_id)
         assert ticket["status"] == "in_progress"
         assert ticket["notes"] is None  # Should remain None
 
@@ -224,22 +218,21 @@ class TestUpdateDSARTicketStatus:
             submitted_at=submitted_at,
             estimated_completion=estimated_completion,
             automated=False,
-            db_path=temp_db,
         )
 
         # Update with notes
         notes = "Completed data deletion process"
-        success = update_dsar_ticket_status(ticket_id, "completed", notes=notes, db_path=temp_db)
+        success = update_dsar_ticket_status(ticket_id, "completed", notes=notes)
         assert success is True
 
         # Verify notes were saved
-        ticket = get_dsar_ticket(ticket_id, db_path=temp_db)
+        ticket = get_dsar_ticket(ticket_id)
         assert ticket["status"] == "completed"
         assert ticket["notes"] == notes
 
     def test_update_nonexistent_ticket(self, temp_db):
         """Test updating a nonexistent ticket returns False."""
-        success = update_dsar_ticket_status("DSAR-NONEXISTENT", "completed", db_path=temp_db)
+        success = update_dsar_ticket_status("DSAR-NONEXISTENT", "completed")
         assert success is False
 
 
@@ -260,7 +253,6 @@ class TestListDSARTicketsByStatus:
             submitted_at=submitted_at,
             estimated_completion=estimated_completion,
             automated=False,
-            db_path=temp_db,
         )
 
         create_dsar_ticket(
@@ -271,7 +263,6 @@ class TestListDSARTicketsByStatus:
             submitted_at=submitted_at,
             estimated_completion=estimated_completion,
             automated=False,
-            db_path=temp_db,
         )
 
         create_dsar_ticket(
@@ -282,16 +273,15 @@ class TestListDSARTicketsByStatus:
             submitted_at=submitted_at,
             estimated_completion=estimated_completion,
             automated=False,
-            db_path=temp_db,
         )
 
         # List pending tickets
-        pending = list_dsar_tickets_by_status("pending_review", db_path=temp_db)
+        pending = list_dsar_tickets_by_status("pending_review")
         assert len(pending) == 2
         assert all(t["status"] == "pending_review" for t in pending)
 
         # List in_progress tickets
-        in_progress = list_dsar_tickets_by_status("in_progress", db_path=temp_db)
+        in_progress = list_dsar_tickets_by_status("in_progress")
         assert len(in_progress) == 1
         assert in_progress[0]["ticket_id"] == "DSAR-PROGRESS-001"
 
@@ -310,11 +300,10 @@ class TestListDSARTicketsByStatus:
                 submitted_at=submitted_at,
                 estimated_completion=estimated_completion,
                 automated=False,
-                db_path=temp_db,
-            )
+                )
 
         # List all tickets (no status filter)
-        all_tickets = list_dsar_tickets_by_status(None, db_path=temp_db)
+        all_tickets = list_dsar_tickets_by_status(None)
         assert len(all_tickets) >= 3  # May include tickets from other tests
 
 
@@ -337,8 +326,7 @@ class TestListDSARTicketsByEmail:
                 submitted_at=submitted_at,
                 estimated_completion=estimated_completion,
                 automated=False,
-                db_path=temp_db,
-            )
+                )
 
         # Create ticket for different email
         create_dsar_ticket(
@@ -349,17 +337,16 @@ class TestListDSARTicketsByEmail:
             submitted_at=submitted_at,
             estimated_completion=estimated_completion,
             automated=False,
-            db_path=temp_db,
         )
 
         # List tickets for target email
-        tickets = list_dsar_tickets_by_email(target_email, db_path=temp_db)
+        tickets = list_dsar_tickets_by_email(target_email)
         assert len(tickets) == 3
         assert all(t["email"] == target_email for t in tickets)
 
     def test_list_by_email_no_results(self, temp_db):
         """Test listing tickets for email with no requests."""
-        tickets = list_dsar_tickets_by_email("nonexistent@example.com", db_path=temp_db)
+        tickets = list_dsar_tickets_by_email("nonexistent@example.com")
         assert len(tickets) == 0
 
 
@@ -387,10 +374,9 @@ class TestGDPRCompliance:
             automated=False,
             user_identifier="user:12345",
             details="GDPR Article 15 access request",
-            db_path=temp_db,
         )
 
-        ticket = get_dsar_ticket(ticket_id, db_path=temp_db)
+        ticket = get_dsar_ticket(ticket_id)
         assert ticket is not None
         assert ticket["ticket_id"] == ticket_id
         assert ticket["email"] == "gdpr@example.com"

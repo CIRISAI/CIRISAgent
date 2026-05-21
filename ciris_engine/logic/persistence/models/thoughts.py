@@ -492,7 +492,6 @@ def update_thought_status(
     thought_id: str,
     status: ThoughtStatus,
     occurrence_id: str = "default",
-    db_path: Optional[str] = None,
     final_action: Optional[Any] = None,
 ) -> bool:
     """Update the status of a thought, and optionally final_action."""

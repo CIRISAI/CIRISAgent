@@ -78,7 +78,6 @@ def create_dsar_ticket(
     urgent: bool = False,
     access_package: Optional[Dict[str, Any]] = None,
     export_package: Optional[Dict[str, Any]] = None,
-    db_path: Optional[str] = None,
 ) -> bool:
     """Create a new DSAR ticket in the database.
 
@@ -97,7 +96,6 @@ def create_dsar_ticket(
         urgent: Whether this is an urgent request
         access_package: Optional DSARAccessPackage dict
         export_package: Optional DSARExportPackage dict
-        db_path: Optional database path override
 
     Returns:
         True if ticket was created successfully, False otherwise
@@ -133,14 +131,13 @@ def create_dsar_ticket(
     )
 
 
-def get_dsar_ticket(ticket_id: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_dsar_ticket(ticket_id: str) -> Optional[Dict[str, Any]]:
     """Retrieve a DSAR ticket by ID.
 
     Backwards-compatible wrapper that delegates to get_ticket().
 
     Args:
         ticket_id: Unique ticket identifier
-        db_path: Optional database path override
 
     Returns:
         Dict containing ticket data in old format, or None if not found
@@ -175,7 +172,6 @@ def update_dsar_ticket_status(
     ticket_id: str,
     new_status: str,
     notes: Optional[str] = None,
-    db_path: Optional[str] = None,
 ) -> bool:
     """Update the status and notes of a DSAR ticket.
 
@@ -185,7 +181,6 @@ def update_dsar_ticket_status(
         ticket_id: Unique ticket identifier
         new_status: New status (pending_review|in_progress|completed|rejected)
         notes: Optional notes about the status update
-        db_path: Optional database path override
 
     Returns:
         True if update was successful, False otherwise
@@ -200,7 +195,6 @@ def update_dsar_ticket_status(
 
 def list_dsar_tickets_by_status(
     status: Optional[str] = None,
-    db_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List DSAR tickets, optionally filtered by status.
 
@@ -208,7 +202,6 @@ def list_dsar_tickets_by_status(
 
     Args:
         status: Optional status filter (pending_review|in_progress|completed|rejected)
-        db_path: Optional database path override
 
     Returns:
         List of ticket dicts in old format, sorted by submission date (newest first)
@@ -228,7 +221,6 @@ def list_dsar_tickets_by_status(
 
 def list_dsar_tickets_by_email(
     email: str,
-    db_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List DSAR tickets for a specific email address.
 
@@ -236,7 +228,6 @@ def list_dsar_tickets_by_email(
 
     Args:
         email: Email address to search for
-        db_path: Optional database path override
 
     Returns:
         List of ticket dicts in old format, sorted by submission date (newest first)

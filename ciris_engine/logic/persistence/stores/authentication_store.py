@@ -245,10 +245,8 @@ def init_auth_database(db_path: str) -> None:
     initialize_database(db_path)
 
 
-def store_wa_certificate(wa: WACertificate, db_path: str) -> None:
+def store_wa_certificate(wa: WACertificate) -> None:
     """Store a WA certificate via persist `wa_cert_upsert`.
-
-    `db_path` retained for signature compat; persist is single-engine per process.
 
     INSERT-only semantics: persist's substrate is upsert, but every caller of
     this function is creating a brand-new WA (observer, system_wa, root_wa,
@@ -293,13 +291,13 @@ def _active_or_none(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return row
 
 
-def get_wa_by_id(wa_id: str, db_path: Optional[str] = None) -> Optional[WACertificate]:
-    """Get an active WA certificate by ID. `db_path` is ignored (persist owns the connection)."""
+def get_wa_by_id(wa_id: str) -> Optional[WACertificate]:
+    """Get an active WA certificate by ID."""
     row = _active_or_none(_parse_persist_payload(_get_engine().wa_cert_get(wa_id)))
     return _row_to_wa(row) if row else None
 
 
-def get_wa_by_kid(jwt_kid: str, db_path: str) -> Optional[WACertificate]:
+def get_wa_by_kid(jwt_kid: str) -> Optional[WACertificate]:
     """Get an active WA certificate by JWT key ID (hot path on every token verification)."""
     row = _active_or_none(_parse_persist_payload(_get_engine().wa_cert_get_by_kid(jwt_kid)))
     return _row_to_wa(row) if row else None
@@ -322,7 +320,7 @@ def _list_active_by_role(role: str, limit: int = 1000) -> List[Dict[str, Any]]:
     return [r for r in obj if isinstance(r, dict)]
 
 
-def get_wa_by_oauth(provider: str, external_id: str, db_path: str) -> Optional[WACertificate]:
+def get_wa_by_oauth(provider: str, external_id: str) -> Optional[WACertificate]:
     """Get an active WA certificate by OAuth identity (primary + linked fallback)."""
     engine = _get_engine()
     raw = engine.wa_cert_get_by_oauth(provider, external_id)
@@ -340,7 +338,7 @@ def get_wa_by_oauth(provider: str, external_id: str, db_path: str) -> Optional[W
     return None
 
 
-def get_wa_by_adapter(adapter_id: str, db_path: str) -> Optional[WACertificate]:
+def get_wa_by_adapter(adapter_id: str) -> Optional[WACertificate]:
     """Get an active WA certificate by adapter_id.
 
     Persist exposes no point-lookup-by-adapter. The set of adapter-tied WAs
@@ -366,7 +364,7 @@ def _coerce_bool_update_value(value: Any) -> bool:
     return bool(value)
 
 
-def update_wa_certificate(wa_id: str, updates: Dict[str, Any], db_path: str) -> None:
+def update_wa_certificate(wa_id: str, updates: Dict[str, Any]) -> None:
     """Update WA certificate fields via persist substrate.
 
     Handles common single-field updates through the focused substrates
@@ -461,7 +459,7 @@ def update_wa_certificate(wa_id: str, updates: Dict[str, Any], db_path: str) -> 
     engine.wa_cert_upsert(json.dumps(row))
 
 
-def list_wa_certificates(active_only: bool, db_path: str) -> List[WACertificate]:
+def list_wa_certificates(active_only: bool) -> List[WACertificate]:
     """List all WA certificates, optionally filtering for active=true.
 
     Persist exposes only `wa_cert_list_by_role`, which always restricts to
@@ -489,7 +487,7 @@ def list_wa_certificates(active_only: bool, db_path: str) -> List[WACertificate]
     return [_row_to_wa(r) for r in rows]
 
 
-def get_certificate_counts(db_path: str) -> Dict[str, int]:
+def get_certificate_counts() -> Dict[str, int]:
     """Get counts of certificates by status and role.
 
     Persist doesn't expose inactive listings; the `revoked` count is reported
@@ -513,7 +511,7 @@ def get_certificate_counts(db_path: str) -> Dict[str, int]:
     return counts
 
 
-def check_database_health(db_path: str) -> bool:
+def check_database_health() -> bool:
     """Check if the authentication database is accessible via persist.
 
     Performs a cheap `wa_cert_list_by_role('observer', 1)` round-trip; if

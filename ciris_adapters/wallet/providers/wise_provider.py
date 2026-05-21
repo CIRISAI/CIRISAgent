@@ -61,7 +61,7 @@ class WiseProvider(WalletProvider):
     PRODUCTION_URL = "https://api.wise.com"
 
     # Most commonly used currencies
-    SUPPORTED_CURRENCIES = [
+    CURRENCIES = [
         "USD",
         "EUR",
         "GBP",
@@ -107,7 +107,7 @@ class WiseProvider(WalletProvider):
 
     @property
     def supported_currencies(self) -> List[str]:
-        return self.SUPPORTED_CURRENCIES
+        return self.CURRENCIES
 
     def _get_auth_header(self) -> Dict[str, str]:
         """Get authorization headers."""
@@ -498,7 +498,7 @@ class WiseProvider(WalletProvider):
             metadata={
                 "profile_id": self.config.profile_id,
                 "environment": self.config.environment,
-                "supported_currencies": self.SUPPORTED_CURRENCIES[:10],
+                "supported_currencies": self.CURRENCIES[:10],
             },
         )
 

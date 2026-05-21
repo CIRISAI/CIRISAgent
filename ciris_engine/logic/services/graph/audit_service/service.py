@@ -70,6 +70,52 @@ AuditEntry = AuditEntryNode
 logger = logging.getLogger(__name__)
 
 
+def _resolve_action_type(event_type: str) -> str:
+    """Map an AuditRequest.event_type onto a valid AuditEventType value.
+
+    Persist's audit_log enforces a CHECK constraint (migrations V018/V020)
+    locking action_type to the 21 AuditEventType values; the SQLite arm has
+    no such CHECK. log_action passes a bare HandlerActionType value
+    ('speak'); log_event passes an arbitrary event name ('agent_configured').
+    Neither is directly a valid AuditEventType, so normalize both. The
+    precise event name is always preserved in the persist payload's
+    event_type field.
+    """
+    from ciris_engine.schemas.audit.core import AuditEventType
+
+    try:
+        return AuditEventType(event_type).value
+    except ValueError:
+        pass
+    try:
+        return AuditEventType(f"handler_action_{event_type}").value
+    except ValueError:
+        pass
+    return AuditEventType.SYSTEM_EVENT.value
+
+
+# CIRISVerify briefly blocks signing-key access while a tree attestation runs
+# (typically at startup). It surfaces a retryable AttestationInProgressError;
+# the signal itself suggests retrying after ~500ms.
+_AUDIT_SIGN_MAX_RETRIES = 10
+_AUDIT_SIGN_RETRY_DELAY_S = 0.5
+
+
+def _attestation_in_progress_error() -> Optional[type]:
+    """Return CIRISVerify's AttestationInProgressError type, if available.
+
+    ciris_verify is an optional adapter, so the type is resolved
+    dynamically — mirrors logic/audit/signing_protocol.py.
+    """
+    try:
+        import ciris_adapters.ciris_verify as ciris_verify
+
+        err = getattr(ciris_verify, "AttestationInProgressError", None)
+        return err if isinstance(err, type) else None
+    except ImportError:
+        return None
+
+
 class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareServiceProtocol):
     """
     Consolidated audit service that stores all audit entries in the graph.
@@ -1152,12 +1198,35 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         if not self.enable_hash_chain:
             return None
 
+        # The persist-chain write mutates no chain state (_next_seq /
+        # _last_entry_hash_b64) until its final audit_record_entry, and
+        # AttestationInProgressError is raised before that point — so the
+        # whole write is safe to retry while CIRISVerify finishes attesting.
+        attestation_in_progress = _attestation_in_progress_error()
+
         async with self._hash_chain_lock:
-            try:
-                return await asyncio.to_thread(self._write_to_persist_chain, entry)
-            except Exception:
-                logger.exception("Failed to add to persist audit chain")
-                return None
+            for attempt in range(_AUDIT_SIGN_MAX_RETRIES):
+                try:
+                    return await asyncio.to_thread(self._write_to_persist_chain, entry)
+                except Exception as e:
+                    is_retryable = (
+                        attestation_in_progress is not None
+                        and isinstance(e, attestation_in_progress)
+                        and attempt < _AUDIT_SIGN_MAX_RETRIES - 1
+                    )
+                    if is_retryable:
+                        logger.debug(
+                            "persist audit chain write deferred (attestation in progress); "
+                            "retry %d/%d in %.1fs",
+                            attempt + 1,
+                            _AUDIT_SIGN_MAX_RETRIES,
+                            _AUDIT_SIGN_RETRY_DELAY_S,
+                        )
+                        await asyncio.sleep(_AUDIT_SIGN_RETRY_DELAY_S)
+                        continue
+                    logger.exception("Failed to add to persist audit chain")
+                    return None
+            return None
 
     def _write_to_persist_chain(self, entry: AuditRequest) -> JSONDict:
         """Synchronous persist-routed write — assemble, hash, sign, record.
@@ -1193,16 +1262,14 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             "outcome": entry.outcome,
         }
 
-        # `audit_event` is the generic action_type for agent-emitted audit
-        # rows. Persist also accepts handler_action / task_event / etc. —
-        # future refinement can map AuditRequest.event_type to a tighter
-        # enum, but `audit_event` is unambiguously correct for now.
+        # action_type must be one of the 21 AuditEventType values — persist's
+        # audit_log CHECK constraint (V018/V020) enforces this on Postgres.
         persist_entry: JSONDict = {
             "entry_id": entry.entry_id,
             "sequence_number": self._next_seq,
             "tenant_id": tenant_id,
             "actor_id": actor_id_b64,
-            "action_type": "audit_event",
+            "action_type": _resolve_action_type(entry.event_type),
             "subject_kind": "agent_event",
             "subject_id": entry.entity_id,
             "payload": json.dumps(payload_obj, sort_keys=True, separators=(",", ":")),

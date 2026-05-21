@@ -65,7 +65,7 @@ def test_transfer_task_ownership_success(mock_audit_service):
         )
 
         # Create task in database
-        add_task(task, db_path=db_path)
+        add_task(task)
 
         # Verify task exists with __shared__ occurrence
         retrieved = get_task_by_id(task.task_id, "__shared__")
@@ -136,7 +136,7 @@ def test_transfer_task_ownership_enables_status_update(mock_audit_service):
             updated_at=time_service.now_iso(),
         )
 
-        add_task(task, db_path=db_path)
+        add_task(task)
 
         # Transfer ownership
         transfer_result = transfer_task_ownership(
@@ -153,8 +153,6 @@ def test_transfer_task_ownership_enables_status_update(mock_audit_service):
             task_id=task.task_id,
             new_status=TaskStatus.ACTIVE,
             occurrence_id="occurrence-456",
-            time_service=time_service,
-            db_path=db_path,
         )
 
         assert status_result is True, "Status update should succeed after ownership transfer"
@@ -201,7 +199,7 @@ def test_transfer_task_ownership_wrong_from_occurrence(mock_audit_service):
             updated_at=time_service.now_iso(),
         )
 
-        add_task(task, db_path=db_path)
+        add_task(task)
 
         # Try to transfer from wrong occurrence
         result = transfer_task_ownership(
@@ -286,7 +284,7 @@ def test_transfer_task_ownership_multiple_times(mock_audit_service):
             updated_at=time_service.now_iso(),
         )
 
-        add_task(task, db_path=db_path)
+        add_task(task)
 
         # First transfer: __shared__ -> occurrence-1
         result1 = transfer_task_ownership(
@@ -360,7 +358,7 @@ def test_transfer_preserves_all_task_data(mock_audit_service):
             updated_at=original_time,
         )
 
-        add_task(task, db_path=db_path)
+        add_task(task)
 
         # Transfer ownership
         transfer_task_ownership(

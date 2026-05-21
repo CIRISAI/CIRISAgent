@@ -80,7 +80,7 @@ class TestTaskUpdateTracking:
 
     def test_get_active_task_for_channel_with_active_task(self, temp_db, sample_task):
         """Test getting active task when one exists."""
-        add_task(sample_task, db_path=temp_db)
+        add_task(sample_task)
 
         result = get_active_task_for_channel("test-channel-123")
         assert result is not None
@@ -92,7 +92,7 @@ class TestTaskUpdateTracking:
         """Test that completed tasks are not returned."""
         # Add completed task
         sample_task.status = TaskStatus.COMPLETED
-        add_task(sample_task, db_path=temp_db)
+        add_task(sample_task)
 
         result = get_active_task_for_channel("test-channel-123")
         assert result is None
@@ -115,7 +115,7 @@ class TestTaskUpdateTracking:
                 parent_task_id=None,
             ),
         )
-        add_task(task1, db_path=temp_db)
+        add_task(task1)
 
         # Second task created later
         import time
@@ -138,7 +138,7 @@ class TestTaskUpdateTracking:
                 parent_task_id=None,
             ),
         )
-        add_task(task2, db_path=temp_db)
+        add_task(task2)
 
         result = get_active_task_for_channel("test-channel-123")
         assert result is not None
@@ -146,7 +146,7 @@ class TestTaskUpdateTracking:
 
     def test_set_task_updated_info_flag_no_thoughts(self, temp_db, sample_task, mock_time_service):
         """Test setting flag on task with no thoughts yet."""
-        add_task(sample_task, db_path=temp_db)
+        add_task(sample_task)
 
         success = set_task_updated_info_flag(
             sample_task.task_id, "New message: @user says hello", "default", mock_time_service, db_path=temp_db
@@ -162,7 +162,7 @@ class TestTaskUpdateTracking:
 
     def test_set_task_updated_info_flag_with_ponder_thought(self, temp_db, sample_task, mock_time_service):
         """Test setting flag on task that has completed PONDER thought."""
-        add_task(sample_task, db_path=temp_db)
+        add_task(sample_task)
 
         # Add a completed thought with PONDER action
         thought = Thought(
@@ -196,7 +196,7 @@ class TestTaskUpdateTracking:
 
     def test_set_task_updated_info_flag_with_speak_thought(self, temp_db, sample_task, mock_time_service):
         """Test setting flag on task that has completed SPEAK thought (should fail)."""
-        add_task(sample_task, db_path=temp_db)
+        add_task(sample_task)
 
         # Add a completed thought with SPEAK action
         thought = Thought(
@@ -235,7 +235,7 @@ class TestTaskUpdateTracking:
 
     def test_set_task_updated_info_flag_with_task_complete_thought(self, temp_db, sample_task, mock_time_service):
         """Test setting flag on task that has completed TASK_COMPLETE thought (should fail)."""
-        add_task(sample_task, db_path=temp_db)
+        add_task(sample_task)
 
         # Add a completed thought with TASK_COMPLETE action
         thought = Thought(
@@ -298,7 +298,7 @@ class TestTaskUpdateTracking:
         assert task.updated_info_content == "Test update content"
 
         # Save and retrieve
-        add_task(task, db_path=temp_db)
+        add_task(task)
         retrieved = get_task_by_id(task.task_id, "default")
 
         assert retrieved is not None

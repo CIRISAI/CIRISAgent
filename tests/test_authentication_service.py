@@ -239,7 +239,7 @@ class TestAuthenticationServiceUnit:
         """
         from ciris_engine.logic.persistence.stores import authentication_store
 
-        assert authentication_store.check_database_health(auth_service.db_path) is True
+        assert authentication_store.check_database_health() is True
 
     def test_password_hashing(self, auth_service):
         """Test password hashing with PBKDF2."""
@@ -1130,7 +1130,7 @@ class TestAuthenticationServiceSecurity:
             assert result is None
 
         # WA-cert substrate should still be healthy after the injection probes
-        assert authentication_store.check_database_health(auth_service.db_path) is True
+        assert authentication_store.check_database_health() is True
 
     @pytest.mark.asyncio
     async def test_timing_attack_resistance(self, auth_service):

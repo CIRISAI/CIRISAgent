@@ -19,15 +19,13 @@ from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, Node
 logger = logging.getLogger(__name__)
 
 
-def store_agent_identity(
-    identity: AgentIdentityRoot, time_service: TimeServiceProtocol, db_path: Optional[str] = None
-) -> bool:
+def store_agent_identity(identity: AgentIdentityRoot, time_service: TimeServiceProtocol) -> bool:
     """
     Store agent identity in the graph database.
 
     Args:
         identity: The agent identity to store
-        db_path: Optional database path override
+        time_service: Time service for timestamping the identity node
 
     Returns:
         True if successful, False otherwise
@@ -52,12 +50,9 @@ def store_agent_identity(
         return False
 
 
-def retrieve_agent_identity(db_path: Optional[str] = None) -> Optional[AgentIdentityRoot]:
+def retrieve_agent_identity() -> Optional[AgentIdentityRoot]:
     """
     Retrieve agent identity from the graph database.
-
-    Args:
-        db_path: Optional database path override
 
     Returns:
         AgentIdentityRoot if found, None otherwise
@@ -88,7 +83,7 @@ def retrieve_agent_identity(db_path: Optional[str] = None) -> Optional[AgentIden
 
 
 def update_agent_identity(
-    identity: AgentIdentityRoot, updated_by: str, time_service: TimeServiceProtocol, db_path: Optional[str] = None
+    identity: AgentIdentityRoot, updated_by: str, time_service: TimeServiceProtocol
 ) -> bool:
     """
     Update agent identity in the graph database.
@@ -99,7 +94,7 @@ def update_agent_identity(
     Args:
         identity: The updated agent identity
         updated_by: WA ID who approved the update
-        db_path: Optional database path override
+        time_service: Time service for timestamping the update
 
     Returns:
         True if successful, False otherwise
@@ -202,7 +197,7 @@ def store_creation_ceremony(
         return False
 
 
-def get_identity_for_context(db_path: Optional[str] = None) -> IdentityContext:
+def get_identity_for_context() -> IdentityContext:
     """
     Get identity information formatted for use in processing contexts.
 

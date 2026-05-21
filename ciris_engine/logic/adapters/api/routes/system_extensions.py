@@ -613,7 +613,7 @@ def _determine_user_role(current_user: JSONDict) -> Any:
     return user_role
 
 
-async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[str]:
+async def _get_user_allowed_channel_ids(user_id: str) -> set[str]:
     """Get set of channel IDs user is allowed to see (user_id + OAuth links + API-prefixed versions)."""
     allowed_channel_ids = {user_id}
     # BUGFIX: API adapter prefixes channel_id with "api_"
@@ -778,7 +778,7 @@ def _get_auth_service_for_stream(request: Request) -> Any:
     return auth_service
 
 
-async def _setup_stream_permissions(auth: Any, auth_service: Any) -> tuple[bool, set[str], set[str]]:
+async def _setup_stream_permissions(auth: Any) -> tuple[bool, set[str], set[str]]:
     """Set up permissions for SSE stream filtering.
 
     Returns:
@@ -796,7 +796,7 @@ async def _setup_stream_permissions(auth: Any, auth_service: Any) -> tuple[bool,
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
 
-    allowed_channel_ids = await _get_user_allowed_channel_ids(auth_service, user_id)
+    allowed_channel_ids = await _get_user_allowed_channel_ids(user_id)
     allowed_user_ids = {user_id}
 
     logger.info(f"SSE Filter: OBSERVER user_id={user_id}, allowed_channel_ids={allowed_channel_ids}")
@@ -934,10 +934,10 @@ async def reasoning_stream(request: Request, auth: AuthObserverDep) -> Any:
 
     # Validate services are available (raises 503 if not)
     _get_runtime_control_service(request)
-    auth_service = _get_auth_service_for_stream(request)
+    _get_auth_service_for_stream(request)
 
     # SECURITY: Set up permissions for this user
-    can_see_all, allowed_channel_ids, allowed_user_ids = await _setup_stream_permissions(auth, auth_service)
+    can_see_all, allowed_channel_ids, allowed_user_ids = await _setup_stream_permissions(auth)
     user_role = auth.role
     task_channel_cache: dict[str, str] = {}
 

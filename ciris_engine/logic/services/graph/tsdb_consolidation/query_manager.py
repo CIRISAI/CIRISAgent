@@ -70,7 +70,7 @@ class QueryManager:
     # Lock primitives — persist `lock_acquire` / `lock_release`
     # ------------------------------------------------------------------
 
-    def _try_acquire_lock(self, lock_key: str, consolidation_type: str, period_identifier: str) -> bool:
+    def _try_acquire_lock(self, lock_key: str) -> bool:
         """Attempt to acquire the named lock via persist's lock substrate.
 
         Returns True if this caller now owns the lock; False if another
@@ -94,7 +94,7 @@ class QueryManager:
                     return bool(parsed[key])
         return bool(parsed)
 
-    def _release_lock(self, lock_key: str, consolidation_type: str, period_identifier: str) -> None:
+    def _release_lock(self, lock_key: str) -> None:
         """Release a named lock if this caller still owns it."""
         engine = _engine()
         if engine is None:
@@ -107,22 +107,22 @@ class QueryManager:
     def acquire_consolidation_lock(self, consolidation_type: str, period_identifier: str) -> bool:
         """Acquire a typed consolidation lock (extensive/profound) for a period."""
         lock_key = f"tsdb:{consolidation_type}:{period_identifier}"
-        return self._try_acquire_lock(lock_key, consolidation_type, period_identifier)
+        return self._try_acquire_lock(lock_key)
 
     def release_consolidation_lock(self, consolidation_type: str, period_identifier: str) -> None:
         """Release a typed consolidation lock."""
         lock_key = f"tsdb:{consolidation_type}:{period_identifier}"
-        self._release_lock(lock_key, consolidation_type, period_identifier)
+        self._release_lock(lock_key)
 
     def acquire_period_lock(self, period_start: datetime) -> bool:
         """Acquire a per-6h-period lock for basic consolidation."""
         lock_key = f"tsdb:basic:{period_start.isoformat()}"
-        return self._try_acquire_lock(lock_key, "basic", period_start.isoformat())
+        return self._try_acquire_lock(lock_key)
 
     def release_period_lock(self, period_start: datetime) -> None:
         """Release a per-6h-period lock."""
         lock_key = f"tsdb:basic:{period_start.isoformat()}"
-        self._release_lock(lock_key, "basic", period_start.isoformat())
+        self._release_lock(lock_key)
 
     # ------------------------------------------------------------------
     # Period state probes

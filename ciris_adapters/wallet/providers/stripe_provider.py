@@ -64,7 +64,7 @@ class StripeProvider(WalletProvider):
     API_VERSION = "2026-02-25"
 
     # Major supported currencies
-    SUPPORTED_CURRENCIES = [
+    CURRENCIES = [
         "USD",
         "EUR",
         "GBP",
@@ -112,7 +112,7 @@ class StripeProvider(WalletProvider):
 
     @property
     def supported_currencies(self) -> List[str]:
-        return self.SUPPORTED_CURRENCIES
+        return self.CURRENCIES
 
     def _get_auth_header(self) -> Dict[str, str]:
         """Get authorization headers."""

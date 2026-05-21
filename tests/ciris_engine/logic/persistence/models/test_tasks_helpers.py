@@ -176,7 +176,7 @@ class TestHandleDuplicateTask:
                 agent_occurrence_id="default",
             ),
         )
-        add_task(original_task, db_path=temp_db)
+        add_task(original_task)
 
         # Create duplicate task
         duplicate_task = Task(
@@ -300,7 +300,7 @@ class TestAddTaskIntegration:
                 agent_occurrence_id="default",
             ),
         )
-        task1_id = add_task(task1, db_path=temp_db)
+        task1_id = add_task(task1)
         assert task1_id == task1.task_id
 
         # Try to add duplicate
@@ -320,7 +320,7 @@ class TestAddTaskIntegration:
                 agent_occurrence_id="default",
             ),
         )
-        task2_id = add_task(task2, db_path=temp_db)
+        task2_id = add_task(task2)
 
         # Should return original task_id
         assert task2_id == task1.task_id

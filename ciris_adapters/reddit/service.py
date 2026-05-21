@@ -175,10 +175,10 @@ class RedditAPIClient:
         )
         return truncated_text + truncation_marker + attribution
 
-    async def refresh_token(self, force: bool = False) -> bool:
+    async def refresh_token(self, force: bool = False) -> None:
         async with self._token_lock:
             if not force and self._token and not self._token.is_expired(self._now()):
-                return True
+                return
 
             auth = (self._credentials.client_id, self._credentials.client_secret)
             data = {
@@ -215,7 +215,6 @@ class RedditAPIClient:
             expires_at = self._now() + timedelta(seconds=expires_in)
             self._token = RedditToken(access_token=access_token, expires_at=expires_at)
             logger.info("Refreshed Reddit OAuth token; expires at %s", expires_at.isoformat())
-            return True
 
     async def _request(
         self,
@@ -707,7 +706,8 @@ class RedditServiceBase(BaseService, RedditOAuthProtocol):
 
     async def refresh_token(self, force: bool = False) -> bool:
         try:
-            return await self._client.refresh_token(force=force)
+            await self._client.refresh_token(force=force)
+            return True
         except Exception as exc:  # pragma: no cover - defensive logging
             self._track_error(exc)
             return False

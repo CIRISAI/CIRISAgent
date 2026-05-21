@@ -80,7 +80,7 @@ async def query_timeline_nodes(
     return GraphNodeBuilder.build_from_rows(rows)
 
 
-async def get_memory_stats(memory_service: Any) -> JSONDict:
+async def get_memory_stats() -> JSONDict:
     """Get statistics about memory storage.
 
     Post-A1 absorption (CIRISAgent#763, CIRISPersist#65): counts are

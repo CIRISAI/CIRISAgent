@@ -94,7 +94,6 @@ def test_try_claim_shared_task_first_claim(temp_db: str, time_service: TimeServi
         description="Test wakeup task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created is True
@@ -115,7 +114,6 @@ def test_try_claim_shared_task_already_exists(temp_db: str, time_service: TimeSe
         description="Test wakeup task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created1 is True
@@ -127,7 +125,6 @@ def test_try_claim_shared_task_already_exists(temp_db: str, time_service: TimeSe
         description="Test wakeup task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created2 is False
@@ -146,7 +143,6 @@ def test_try_claim_shared_task_race_condition(temp_db: str, time_service: TimeSe
             description=f"Claim from occurrence {occurrence_id}",
             priority=10,
             time_service=time_service,
-            db_path=temp_db,
         )
         return (task, created)
 
@@ -170,7 +166,7 @@ def test_try_claim_shared_task_race_condition(temp_db: str, time_service: TimeSe
 
 def test_get_shared_task_status_no_task(temp_db: str):
     """Test querying status when no shared task exists."""
-    status = get_shared_task_status("wakeup", within_hours=24, db_path=temp_db)
+    status = get_shared_task_status("wakeup", within_hours=24)
     assert status is None
 
 
@@ -183,18 +179,17 @@ def test_get_shared_task_status_existing_task(temp_db: str, time_service: TimeSe
         description="Test task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     # Query status
-    status = get_shared_task_status("wakeup", within_hours=24, db_path=temp_db)
+    status = get_shared_task_status("wakeup", within_hours=24)
     assert status == TaskStatus.PENDING
 
     # Update status to COMPLETED
-    update_task_status(task.task_id, TaskStatus.COMPLETED, "__shared__", time_service, db_path=temp_db)
+    update_task_status(task.task_id, TaskStatus.COMPLETED, "__shared__")
 
     # Query again
-    status = get_shared_task_status("wakeup", within_hours=24, db_path=temp_db)
+    status = get_shared_task_status("wakeup", within_hours=24)
     assert status == TaskStatus.COMPLETED
 
 
@@ -208,7 +203,6 @@ def test_get_shared_task_status_outside_window(temp_db: str, time_service: TimeS
         description="Old task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     # Manually update created_at to be 48 hours ago
@@ -216,11 +210,11 @@ def test_get_shared_task_status_outside_window(temp_db: str, time_service: TimeS
     _backdate_task_created_at(temp_db, task.task_id, old_time)
 
     # Query with 24-hour window - should return None
-    status = get_shared_task_status("wakeup", within_hours=24, db_path=temp_db)
+    status = get_shared_task_status("wakeup", within_hours=24)
     assert status is None
 
     # Query with 72-hour window - should return the task
-    status = get_shared_task_status("wakeup", within_hours=72, db_path=temp_db)
+    status = get_shared_task_status("wakeup", within_hours=72)
     assert status == TaskStatus.PENDING
 
 
@@ -233,10 +227,9 @@ def test_is_shared_task_completed_false(temp_db: str, time_service: TimeServiceP
         description="Pending task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
-    assert is_shared_task_completed("wakeup", within_hours=24, db_path=temp_db) is False
+    assert is_shared_task_completed("wakeup", within_hours=24) is False
 
 
 def test_is_shared_task_completed_true(temp_db: str, time_service: TimeServiceProtocol):
@@ -248,12 +241,11 @@ def test_is_shared_task_completed_true(temp_db: str, time_service: TimeServicePr
         description="Task to complete",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
-    update_task_status(task.task_id, TaskStatus.COMPLETED, "__shared__", time_service, db_path=temp_db)
+    update_task_status(task.task_id, TaskStatus.COMPLETED, "__shared__")
 
-    assert is_shared_task_completed("wakeup", within_hours=24, db_path=temp_db) is True
+    assert is_shared_task_completed("wakeup", within_hours=24) is True
 
 
 def test_get_latest_shared_task_not_found(temp_db: str):
@@ -271,7 +263,6 @@ def test_get_latest_shared_task_found(temp_db: str, time_service: TimeServicePro
         description="Latest task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     # Retrieve it
@@ -292,7 +283,6 @@ def test_different_task_types_isolated(temp_db: str, time_service: TimeServicePr
         description="Wakeup task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     # Create shutdown task
@@ -302,7 +292,6 @@ def test_different_task_types_isolated(temp_db: str, time_service: TimeServicePr
         description="Shutdown task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     # Verify they have different task IDs
@@ -311,11 +300,11 @@ def test_different_task_types_isolated(temp_db: str, time_service: TimeServicePr
     assert shutdown_task.task_id.startswith("SHUTDOWN_SHARED_")
 
     # Complete wakeup task
-    update_task_status(wakeup_task.task_id, TaskStatus.COMPLETED, "__shared__", time_service, db_path=temp_db)
+    update_task_status(wakeup_task.task_id, TaskStatus.COMPLETED, "__shared__")
 
     # Verify wakeup is completed but shutdown is still pending
-    assert is_shared_task_completed("wakeup", within_hours=24, db_path=temp_db) is True
-    assert is_shared_task_completed("shutdown", within_hours=24, db_path=temp_db) is False
+    assert is_shared_task_completed("wakeup", within_hours=24) is True
+    assert is_shared_task_completed("shutdown", within_hours=24) is False
 
 
 @pytest.mark.asyncio
@@ -333,7 +322,6 @@ async def test_concurrent_claims_stress_test(temp_db: str, time_service: TimeSer
             f"Claim from {occurrence_id}",
             10,
             time_service,
-            temp_db,
         )
         return (task.task_id, created)
 
@@ -357,7 +345,6 @@ def test_shared_task_deterministic_id_format(temp_db: str, time_service: TimeSer
         description="Test task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     # Verify format: {TYPE}_SHARED_{YYYYMMDD}
@@ -392,7 +379,7 @@ def test_get_task_by_correlation_id_found(temp_db: str, time_service: TimeServic
         ),
     )
 
-    add_task(task, db_path=temp_db)
+    add_task(task)
 
     # Retrieve by correlation_id
     retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="default")
@@ -458,11 +445,11 @@ def test_get_task_by_correlation_id_multiple_tasks_returns_latest(temp_db: str, 
     )
 
     # Add first task
-    task1_id = add_task(task1, db_path=temp_db)
+    task1_id = add_task(task1)
     assert task1_id == task1.task_id
 
     # Try to add second task - should return existing task1_id due to unique constraint
-    returned_task_id = add_task(task2, db_path=temp_db)
+    returned_task_id = add_task(task2)
     assert (
         returned_task_id == task1.task_id
     ), "add_task should return existing task_id when duplicate correlation_id is detected"
@@ -502,7 +489,7 @@ def test_get_task_by_correlation_id_different_occurrence(temp_db: str, time_serv
         ),
     )
 
-    add_task(task, db_path=temp_db)
+    add_task(task)
 
     # Try to retrieve with different occurrence_id
     retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="occurrence-2")
@@ -530,14 +517,13 @@ def test_try_claim_shared_task_reuses_fresh_active_task(temp_db: str, time_servi
         description="Fresh shutdown task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created1 is True
     assert task1.status == TaskStatus.PENDING
 
     # Update to ACTIVE (simulating processing started)
-    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__", time_service, db_path=temp_db)
+    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__")
 
     # Try to claim again - should reuse the fresh active task
     task2, was_created2 = try_claim_shared_task(
@@ -546,7 +532,6 @@ def test_try_claim_shared_task_reuses_fresh_active_task(temp_db: str, time_servi
         description="Fresh shutdown task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created2 is False, "Should reuse fresh ACTIVE task"
@@ -563,7 +548,6 @@ def test_try_claim_shared_task_reuses_fresh_pending_task(temp_db: str, time_serv
         description="Fresh wakeup task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created1 is True
@@ -576,7 +560,6 @@ def test_try_claim_shared_task_reuses_fresh_pending_task(temp_db: str, time_serv
         description="Fresh wakeup task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created2 is False, "Should reuse fresh PENDING task"
@@ -593,11 +576,10 @@ def test_try_claim_shared_task_deletes_completed_stale_task(temp_db: str, time_s
         description="Old shutdown task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created1 is True
-    update_task_status(task1.task_id, TaskStatus.COMPLETED, "__shared__", time_service, db_path=temp_db)
+    update_task_status(task1.task_id, TaskStatus.COMPLETED, "__shared__")
 
     # Try to claim again - should create NEW task (delete stale completed one)
     task2, was_created2 = try_claim_shared_task(
@@ -606,7 +588,6 @@ def test_try_claim_shared_task_deletes_completed_stale_task(temp_db: str, time_s
         description="New shutdown task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created2 is True, "Should create new task after deleting stale COMPLETED task"
@@ -623,11 +604,10 @@ def test_try_claim_shared_task_deletes_failed_stale_task(temp_db: str, time_serv
         description="Failed wakeup task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created1 is True
-    update_task_status(task1.task_id, TaskStatus.FAILED, "__shared__", time_service, db_path=temp_db)
+    update_task_status(task1.task_id, TaskStatus.FAILED, "__shared__")
 
     # Try to claim again - should create NEW task (delete stale failed one)
     task2, was_created2 = try_claim_shared_task(
@@ -636,7 +616,6 @@ def test_try_claim_shared_task_deletes_failed_stale_task(temp_db: str, time_serv
         description="New wakeup task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created2 is True, "Should create new task after deleting stale FAILED task"
@@ -654,11 +633,10 @@ def test_try_claim_shared_task_deletes_old_active_task(temp_db: str, time_servic
         description="Old active shutdown task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created1 is True
-    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__", time_service, db_path=temp_db)
+    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__")
 
     # Manually update created_at to be 15 minutes ago (stale)
     old_time = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
@@ -671,7 +649,6 @@ def test_try_claim_shared_task_deletes_old_active_task(temp_db: str, time_servic
         description="New shutdown task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created2 is True, "Should create new task after deleting stale ACTIVE task (>10 min)"
@@ -688,11 +665,10 @@ def test_try_claim_shared_task_boundary_10_minute_age(temp_db: str, time_service
         description="Boundary test task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created1 is True
-    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__", time_service, db_path=temp_db)
+    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__")
 
     # Manually update created_at to be exactly 9 minutes 59 seconds ago (should still be fresh)
     boundary_time = (datetime.now(timezone.utc) - timedelta(minutes=9, seconds=59)).isoformat()
@@ -705,7 +681,6 @@ def test_try_claim_shared_task_boundary_10_minute_age(temp_db: str, time_service
         description="Boundary test task",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created2 is False, "Should reuse task that's just under 10 minutes old"
@@ -722,11 +697,10 @@ def test_try_claim_shared_task_datum_bug_scenario(temp_db: str, time_service: Ti
         description="Datum first shutdown",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created1 is True
-    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__", time_service, db_path=temp_db)
+    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__")
 
     # Manually update created_at to be 20 hours ago (simulating Datum's stale task)
     old_time = (datetime.now(timezone.utc) - timedelta(hours=20)).isoformat()
@@ -739,7 +713,6 @@ def test_try_claim_shared_task_datum_bug_scenario(temp_db: str, time_service: Ti
         description="Datum second shutdown",
         priority=10,
         time_service=time_service,
-        db_path=temp_db,
     )
 
     assert was_created2 is True, "Should create new task after deleting 20-hour-old ACTIVE task"

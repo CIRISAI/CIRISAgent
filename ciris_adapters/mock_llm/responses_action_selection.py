@@ -292,13 +292,25 @@ def _parse_tool_params_string(params_str: str) -> Dict[str, Any]:
 
 
 def _parse_key_value_tokens(params_str: str) -> Dict[str, Any]:
-    """Parse simple key=value pairs while preserving quoted values."""
+    """Parse `key=value` pairs, JSON-coercing each value.
+
+    `shlex.split` preserves quoted values; each value is then JSON-decoded so
+    `metadata="{...}"` becomes a dict, `count=42` an int and `flag=true` a
+    bool — falling back to the raw string when the value is not valid JSON
+    (e.g. a bare id like `DSAR-20260521-AB`). Without coercion every value
+    stayed a string, so `$tool` calls with structured args (e.g.
+    `update_ticket metadata="{stages:...}"`) handed the tool JSON *text* it
+    could not apply.
+    """
     parsed: Dict[str, Any] = {}
     for token in shlex.split(params_str):
         if "=" not in token:
             continue
         key, value = token.split("=", 1)
-        parsed[key] = value
+        try:
+            parsed[key] = json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            parsed[key] = value
     return parsed
 
 # Union type for all action parameters - 100% schema compliant

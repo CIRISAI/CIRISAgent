@@ -1202,6 +1202,21 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 except Exception as e:
                     logger.debug(f"Could not get live config for {adapter_id}: {e}")
 
+            # The adapter's live config reflects current settings/state but does
+            # NOT carry the load-time `adapter_config` blob the operator passed
+            # at load. Surface that from the manager's stored AdapterConfig —
+            # otherwise adapter status silently drops it (the wholesale
+            # live-config swap above discards it).
+            if (
+                instance.config_params
+                and instance.config_params.adapter_config
+                and isinstance(config_to_use, AdapterConfig)
+                and not config_to_use.adapter_config
+            ):
+                config_to_use = config_to_use.model_copy(
+                    update={"adapter_config": instance.config_params.adapter_config}
+                )
+
             # Sanitize config params
             sanitized_config = self._sanitize_config_params(instance.adapter_type, config_to_use)
 

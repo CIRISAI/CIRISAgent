@@ -195,6 +195,18 @@ class QARunner:
 
     def run(self, modules: List[QAModule]) -> bool:
         """Run QA tests for specified modules."""
+        # Expand `all` into its explicit constituent modules so the HTTP/SDK
+        # routing split below runs SDK modules too — a bare QAModule.ALL is
+        # not in `sdk_modules`, so it routes HTTP-only and silently skips
+        # every SDK-based module. ALL_MODULE_SEQUENCE is the source of truth.
+        if QAModule.ALL in modules:
+            from .config import ALL_MODULE_SEQUENCE
+
+            modules = [m for m in modules if m != QAModule.ALL]
+            for m in ALL_MODULE_SEQUENCE:
+                if m not in modules:
+                    modules.append(m)
+
         # If testing multiple backends, always use parallel mode for proper state isolation
         # (Sequential mode doesn't properly isolate database/server state between backends)
         if len(self.database_backends) > 1:

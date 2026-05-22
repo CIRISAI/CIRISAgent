@@ -91,6 +91,65 @@ class QAModule(Enum):
     ALL = "all"
 
 
+# Canonical module sequence for `qa_runner all`. Both get_module_tests(ALL)
+# and QARunner.run() expand QAModule.ALL through this list — run() needs the
+# explicit members so its HTTP/SDK routing split runs SDK modules too (a bare
+# QAModule.ALL routes HTTP-only and silently skips every SDK module).
+# Order matters: STREAMING first (clean queue state), L4 attestation early.
+# Excludes credentialed / external-dep / live / destructive modules
+# (billing_integration, accord kill-switch, *_live, model_eval, setup, etc.).
+ALL_MODULE_SEQUENCE = [
+    # Streaming first — requires clean queue state
+    QAModule.STREAMING,
+    # L4 attestation contract — fail fast before downstream modules
+    QAModule.L4_ATTESTATION,
+    # Core API
+    QAModule.AUTH,
+    QAModule.TELEMETRY,
+    QAModule.AGENT,
+    QAModule.SYSTEM,
+    QAModule.MEMORY,
+    QAModule.AUDIT,
+    QAModule.TOOLS,
+    QAModule.GUIDANCE,
+    QAModule.CONSENT,
+    QAModule.DSAR,
+    QAModule.DSAR_MULTI_SOURCE,
+    QAModule.PARTNERSHIP,
+    QAModule.BILLING,
+    QAModule.REDDIT,
+    QAModule.SQL_EXTERNAL_DATA,
+    QAModule.MULTI_OCCURRENCE,
+    # Governance / observability
+    QAModule.ACCORD_METRICS,
+    QAModule.CONTEXT_ENRICHMENT,
+    QAModule.SYSTEM_MESSAGES,
+    QAModule.AIR,
+    QAModule.DEFERRAL,
+    QAModule.DEFERRAL_TAXONOMY,
+    QAModule.SECRETS_ENCRYPTION,
+    # Adapter modules
+    QAModule.ADAPTER_AUTOLOAD,
+    QAModule.ADAPTER_MANIFEST,
+    QAModule.ADAPTER_CONFIG,
+    QAModule.ADAPTER_AVAILABILITY,
+    QAModule.HOSTED_TOOLS,
+    QAModule.UTILITY_ADAPTERS,
+    # Cognitive / behavior
+    QAModule.STATE_TRANSITIONS,
+    QAModule.COGNITIVE_STATE_API,
+    QAModule.VISION,
+    # Handler + filter
+    QAModule.HANDLERS,
+    QAModule.FILTERS,
+    # SDK + extended
+    QAModule.SDK,
+    QAModule.EXTENDED_API,
+    QAModule.SINGLE_STEP_SIMPLE,
+    QAModule.SINGLE_STEP_COMPREHENSIVE,
+]
+
+
 @dataclass
 class QATestCase:
     """Definition of a QA test case."""
@@ -419,42 +478,10 @@ class QAConfig:
 
         elif module == QAModule.ALL:
             tests = []
-            # Run all modules in sequence - comprehensive test suite
-            for m in [
-                # Streaming tests FIRST (requires clean queue state)
-                QAModule.STREAMING,
-                # L4 attestation contract — runs early so failures surface
-                # before downstream modules waste cycles against a broken
-                # attestation cache.
-                QAModule.L4_ATTESTATION,
-                # Core API modules
-                QAModule.AUTH,
-                QAModule.TELEMETRY,
-                QAModule.AGENT,
-                QAModule.SYSTEM,
-                QAModule.MEMORY,
-                QAModule.AUDIT,
-                QAModule.TOOLS,
-                QAModule.GUIDANCE,
-                QAModule.CONSENT,
-                QAModule.DSAR,
-                QAModule.DSAR_MULTI_SOURCE,
-                QAModule.PARTNERSHIP,
-                QAModule.BILLING,
-                QAModule.REDDIT,
-                QAModule.SQL_EXTERNAL_DATA,
-                QAModule.MULTI_OCCURRENCE,
-                # Handler modules
-                QAModule.HANDLERS,
-                # Filter modules
-                QAModule.FILTERS,
-                # SDK modules
-                QAModule.SDK,
-                # Extended modules
-                QAModule.EXTENDED_API,
-                QAModule.SINGLE_STEP_SIMPLE,
-                QAModule.SINGLE_STEP_COMPREHENSIVE,
-            ]:
+            # Run all modules in sequence - comprehensive test suite.
+            # ALL_MODULE_SEQUENCE is the single source of truth (shared with
+            # QARunner.run()'s ALL→constituents expansion).
+            for m in ALL_MODULE_SEQUENCE:
                 tests.extend(self.get_module_tests(m))
             return tests
 

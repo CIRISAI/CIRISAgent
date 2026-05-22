@@ -233,7 +233,9 @@ jobs:
   staged-qa:
     name: Staged QA (canonical wheel parity)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Dual-backend (sqlite + postgres, parallel) over the full expanded
+    # module set runs ~3x the SQLite-only suite; 35m headroom.
+    timeout-minutes: 35
     permissions:
       contents: read
     steps:
@@ -320,7 +322,7 @@ jobs:
           fi
           echo "✓ Canonical staging == wheel install (byte-equal)"
 
-      - name: Run QA against staged venv
+      - name: Run QA against staged venv (dual backend — sqlite + postgres)
         env:
           # Force first-run state so the QA runner can drive the setup wizard.
           CIRIS_FORCE_FIRST_RUN: "1"
@@ -329,7 +331,13 @@ jobs:
           # in /tmp/ciris-staged-qa/venv (already prepared by the parity-check
           # step above; staged_env.prepare is idempotent and reuses it).
           # --no-mock-llm not set → uses mock LLM (no API keys needed in CI).
-          python3 -m tools.qa_runner --from-staged
+          #
+          # --database-backends sqlite postgres --parallel-backends: exercises
+          # the full QA suite against BOTH persistence backends simultaneously.
+          # qa_runner self-provisions the postgres backend via a docker
+          # container (ubuntu-latest ships Docker); no GH service block needed.
+          python3 -m tools.qa_runner --from-staged \
+            --database-backends sqlite postgres --parallel-backends
 
       - name: Capture upgrade-compat fixture (qa-full)
         # Snapshot the post-QA-sweep agent state as a "full-coverage"

@@ -9,65 +9,23 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence import initialize_database
 
 
-# Every persist Engine wired during a test, captured by wrapping
-# `set_persist_engine`. ciris-persist v1.8.x's Engine is a process-singleton:
-# a second construction with a different DSN raises EngineConfigMismatch. Many
-# test fixtures wire an engine and on teardown only restore the module global
-# (`graph._engine = prior`) WITHOUT closing the Rust engine — so the singleton
-# leaks invisibly. Tracking every engine here lets the autouse teardown close
-# them regardless of whether a fixture nulled the global.
-_wired_engines: list = []
-_tracker_installed = False
-
-
-def _install_engine_tracker() -> None:
-    """Wrap graph.set_persist_engine so every wired Engine is tracked.
-
-    Idempotent. All engine construction (initialize_database via
-    _bootstrap_persist_engine, and the persist_engine fixture) funnels
-    through set_persist_engine, so this captures every engine.
-    """
-    global _tracker_installed
-    if _tracker_installed:
-        return
-    from ciris_engine.logic.persistence.models import graph as graph_persistence
-
-    _original = graph_persistence.set_persist_engine
-
-    def _tracked(engine, dsn=None):  # type: ignore[no-untyped-def]
-        if engine is not None:
-            _wired_engines.append(engine)
-        return _original(engine, dsn)
-
-    graph_persistence.set_persist_engine = _tracked  # type: ignore[assignment]
-    _tracker_installed = True
-
-
 def _release_persist_engine() -> None:
-    """Close every persist Engine wired during the test and unwire the global.
+    """Reset the process-wide persist Engine between tests.
 
-    ciris-persist v1.8.x's Engine is a process-singleton — a leaked engine
-    blocks the next test's construction with EngineConfigMismatch. Closing
-    also frees the underlying tokio runtime + connection pool.
+    ciris-persist's Engine is a process-singleton; a second construction with
+    a different DSN raises EngineConfigMismatch. `reset_engine()` (ciris-persist
+    >=1.10.2, CIRISPersist#88) closes + un-pins the current engine handle-free
+    — recovering even the orphan case where a fixture nulled the module global
+    without closing the Rust engine.
     """
+    import ciris_persist
+
     from ciris_engine.logic.persistence.models import graph as graph_persistence
 
-    engines = list(_wired_engines)
-    current = graph_persistence.get_persist_engine()
-    if current is not None:
-        engines.append(current)
-
-    seen = set()
-    for engine in engines:
-        if id(engine) in seen:
-            continue
-        seen.add(id(engine))
-        try:
-            engine.close()
-        except Exception:
-            pass
-
-    _wired_engines.clear()
+    try:
+        ciris_persist.reset_engine()
+    except Exception:
+        pass
     graph_persistence._engine = None
     graph_persistence._engine_dsn = None
 

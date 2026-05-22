@@ -864,14 +864,18 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     # Test isolation only: under pytest, fixtures routinely bootstrap a
     # fresh per-test engine, and a single test may invoke more than one
     # engine-wiring fixture. ciris-persist's process-singleton rejects a
-    # second construction with a different config — so close the prior
-    # (already-config-mismatched, since the idempotent-skip above did not
-    # fire) engine first. Gated strictly on PYTEST_CURRENT_TEST: in
-    # production a second differing config is a real bug and persist's
-    # EngineConfigMismatch guardrail must still fire untouched.
-    if os.environ.get("PYTEST_CURRENT_TEST") and graph_persistence._engine is not None:
+    # second construction with a different config — so un-pin the current
+    # engine first via reset_engine() (handle-free; CIRISPersist#88). We
+    # only reach here when the idempotent-skip above did NOT fire, i.e. a
+    # genuinely different config is being bootstrapped. Gated strictly on
+    # PYTEST_CURRENT_TEST: in production a second differing config is a
+    # real bug and persist's EngineConfigMismatch guardrail must still
+    # fire untouched.
+    if os.environ.get("PYTEST_CURRENT_TEST"):
         try:
-            graph_persistence._engine.close()
+            import ciris_persist
+
+            ciris_persist.reset_engine()
         except Exception:  # noqa: BLE001 - best-effort test teardown
             pass
         graph_persistence._engine = None

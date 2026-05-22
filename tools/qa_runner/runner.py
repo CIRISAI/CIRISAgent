@@ -846,6 +846,14 @@ class QARunner:
                 #    mock lens does not implement /accord/wbd/deferrals, so the
                 #    adapter correctly logs the 404 it received. Mock gap.
                 "WBD deferral rejected: Status 404",
+                #  - CIRISVerify's attestation probe reaches for the registry
+                #    over the network; CI has no route to it, so it correctly
+                #    logs a timeout and falls back to software. Environmental.
+                "ciris_verify_run_attestation: TIMEOUT",
+                #  - accord_metrics trace-signing is briefly blocked while an
+                #    attestation is in progress; the adapter retries (~500ms).
+                #    A transient, self-recovering condition, not a fault.
+                "Attestation in progress - sign_ed25519 blocked",
                 #  - adapter_config test submits an empty config to verify
                 #    validation rejects it
                 "Config validation failed: Configuration is empty",

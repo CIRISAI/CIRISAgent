@@ -238,7 +238,11 @@ class ContextEnrichmentTests:
         4. Validates that system_snapshot contains context_enrichment_results
         """
         token = self._get_token()
-        timeout = 60  # seconds
+        # 120s, not 60s: the postgres backend is meaningfully slower than
+        # in-process SQLite, and under the --parallel-backends matrix two
+        # agent stacks share the runner — the snapshot_and_context SSE event
+        # legitimately takes >60s there. (sqlite passed, postgres timed out.)
+        timeout = 120  # seconds
 
         # Track captured data
         snapshot_captured: Dict[str, Any] = {}

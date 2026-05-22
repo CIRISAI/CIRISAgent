@@ -448,14 +448,26 @@ def get_prompt_loader(language: Optional[str] = None) -> DMAPromptLoader:
 
 
 def set_prompt_language(language: str) -> None:
-    """Compatibility shim — no-op now that loaders are per-language.
+    """Apply a language change by dropping the cached DMA prompt loaders.
 
-    Previously this mutated a global singleton; with per-language caching
-    each call site selects its own loader at request time. Kept as a no-op
-    so existing callers don't break, but issues a one-time warning to help
-    surface stale globals.
+    Loaders are cached per-language in _loader_cache and each loader caches
+    the templates it has parsed. When the deployment language changes —
+    sync_language_preference() after a user updates preferred_language —
+    those caches must be invalidated so the next get_prompt_loader() call
+    rebuilds against the new CIRIS_PREFERRED_LANGUAGE.
+
+    This used to be a no-op, which meant a mid-run language change never
+    reached DMA prompt building: prompts kept rendering in the language that
+    was current at first load.
     """
-    logger.warning(
-        f"set_prompt_language({_sanitize_for_log(language)}) called — "
-        "this is a no-op now; pass language to get_prompt_loader() per request"
+    _loader_cache.clear()
+    logger.info(
+        f"set_prompt_language({_sanitize_for_log(language)}): cleared DMA prompt "
+        "loader cache — prompts will rebuild for the new language"
     )
+    try:
+        from ciris_engine.logic.utils.localization import clear_language_cache
+
+        clear_language_cache()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(f"clear_language_cache unavailable: {exc}")

@@ -881,6 +881,42 @@ class QARunner:
 
         return False
 
+    def _assert_token_valid(self, after_label: str) -> bool:
+        """Diagnostic auth gate — confirm self.token still works after `after_label`.
+
+        A test that logs out, refreshes, revokes, or otherwise corrupts the
+        session token leaves EVERY later test 401-ing far from the real
+        culprit (the diffuse "Invalid API key" failures seen under
+        --parallel-backends). This gate runs one cheap check — GET
+        /v1/auth/me — right after each test/module: on a non-200 it fails
+        LOUDLY, naming the exact step that just ran, then re-authenticates so
+        the rest of the run still produces signal. The loud line makes the
+        culprit obvious instead of a mystery N modules downstream.
+
+        Returns True if the token was already valid, False if it had to be
+        restored (i.e. `after_label` is the suspect).
+        """
+        if not self.token:
+            return True
+        try:
+            resp = requests.get(
+                f"{self.config.base_url}/v1/auth/me",
+                headers={"Authorization": f"Bearer {self.token}"},
+                timeout=10,
+            )
+        except Exception as e:
+            self.console.print(f"[yellow]🔑 [AUTH GATE] could not validate token after '{after_label}': {e}[/yellow]")
+            return True
+        if resp.status_code == 200:
+            return True
+        self.console.print(
+            f"[bold red]🔑 [AUTH GATE] auth token INVALID (HTTP {resp.status_code}) "
+            f"immediately after '{after_label}' — that step corrupted the session "
+            f"token. Re-authenticating so the run continues.[/bold red]"
+        )
+        self._authenticate()
+        return False
+
     def _authenticate(self) -> bool:
         """Get authentication token."""
         try:
@@ -1385,6 +1421,19 @@ class QARunner:
                     # Run with admin token
                     module_passed = asyncio.run(run_module(module))
 
+                # Diagnostic auth gate — if this SDK module corrupted the
+                # session token (an auth/logout/refresh test, a revocation,
+                # etc.), log loudly here named to this module instead of
+                # leaving every later module with a mystery "Invalid API
+                # key" 401. The SDK phase has no equivalent of the HTTP
+                # loop's token_invalidating_tests re-auth, so this gate is
+                # ALSO the SDK phase's restore point: it re-authenticates,
+                # so downstream modules run clean and the leg isn't derailed
+                # by one token-mutating module. Not a leg failure — modules
+                # like `sdk`/`auth` invalidate the token by design; the loud
+                # line is the signal, the re-auth is the fix.
+                self._assert_token_valid(f"SDK module '{module.value}'")
+
                 # Check for task appending warnings after SDK module completes
                 task_warnings = self._check_task_appending_warnings(module.value)
                 if task_warnings:
@@ -1442,6 +1491,12 @@ class QARunner:
                             self.console.print(f"[red]❌ Failed to re-authenticate after {test.name}[/red]")
                             all_passed = False
                         break
+
+                # Diagnostic auth gate — if this test corrupted the session
+                # token in a way the known token_invalidating_tests patterns
+                # above did NOT catch, fail loudly here, named to this test,
+                # instead of a mystery 401 modules later.
+                self._assert_token_valid(f"HTTP test '{test.name}'")
 
                 # Check incidents log after each test for immediate feedback
                 incidents = self._check_incidents_for_test(test.name)

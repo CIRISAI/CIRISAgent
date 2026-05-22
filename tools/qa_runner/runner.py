@@ -833,6 +833,11 @@ class QARunner:
                 #  - adapter_manifest test unloads its scratch adapters, some
                 #    of which were never loaded
                 "qa_manifest_test_",
+                #  - adapter_manifest probes every ciris_adapters/* dir; the
+                #    shared MCP library `mcp_common` is not a loadable adapter
+                #    (no Adapter class — by design), and the loader correctly
+                #    says so. Expected probe noise, not an incident.
+                "ciris_adapters.mcp_common' has no attribute 'Adapter'",
                 #  - adapter_config test submits an empty config to verify
                 #    validation rejects it
                 "Config validation failed: Configuration is empty",

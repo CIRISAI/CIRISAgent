@@ -406,6 +406,16 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             success = await agent_processor.resume_processing()
             if success:
+                # Resuming normal processing must also exit single-step mode.
+                # single_step() enables it (step_decorators._single_step_mode)
+                # but nothing else cleared it — so once a client stepped even
+                # once, every @step_point kept pausing forever, even after
+                # resume(). That stranded the processor: subsequent work never
+                # ran and /v1/agent/interact callers hit their full timeout.
+                from ciris_engine.logic.processors.core.step_decorators import disable_single_step_mode
+
+                disable_single_step_mode()
+
                 old_status = self._processor_status
                 self._processor_status = ProcessorStatus.RUNNING
                 if old_status != ProcessorStatus.RUNNING:

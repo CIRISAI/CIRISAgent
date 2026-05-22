@@ -1305,9 +1305,11 @@ class QARunner:
                     # Diagnostic: which token identity this module's client
                     # carries — correlate with the server's validate_api_key
                     # [AUTH SERVICE DEBUG] line (matched on the …suffix).
+                    # Plain print() — rich markup would eat a "[TOKEN]" tag.
                     _tok_suffix = (token_to_use or "")[-12:]
-                    self.console.print(
-                        f"[dim][TOKEN] SDK module '{module.value}' client token …{_tok_suffix}[/dim]"
+                    print(
+                        f"QA_TOKEN_TRACE sdk_module={module.value} client_token_suffix=...{_tok_suffix}",
+                        flush=True,
                     )
                     yield _c
 

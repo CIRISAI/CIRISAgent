@@ -175,14 +175,27 @@ class AIRTests:
     # End-to-end wiring test (honest — fails loudly on a stalled endpoint)
     # ------------------------------------------------------------------ #
     async def test_air_wired_into_interact_api(self) -> None:
-        """AIR must be wired into /v1/agent/interact, and a first message must
-        NOT carry a reminder. A timeout ("Still processing") is a FAILURE — the
-        AIR wiring cannot be verified if the agent never delivers a response."""
+        """AIR must be wired into /v1/agent/interact, and a first message on a
+        FRESH channel must NOT carry a reminder. A timeout ("Still processing")
+        is a FAILURE — the AIR wiring cannot be verified if the agent never
+        delivers a response.
+
+        The interaction uses a unique per-run channel_id: AIR tracks message
+        counts per (user, channel) session, and the shared api_<user> channel
+        accumulates messages across QA modules in a batched run — so "first
+        message → no reminder" only holds on a channel AIR has not seen.
+        """
+        import uuid
+
+        fresh_channel = f"air_qa_smoke_{uuid.uuid4().hex[:8]}"
         async with httpx.AsyncClient(timeout=70.0) as client:
             response = await client.post(
                 f"{self.base_url}/v1/agent/interact",
                 headers={"Authorization": f"Bearer {self.token}"},
-                json={"message": "Hello — AIR wiring smoke test."},
+                json={
+                    "message": "Hello — AIR wiring smoke test.",
+                    "context": {"channel_id": fresh_channel},
+                },
             )
         assert response.status_code == 200, f"interact returned {response.status_code}: {response.text[:200]}"
         text = response.json().get("data", {}).get("response", "")
@@ -194,7 +207,8 @@ class AIRTests:
             "real failure and must not pass silently."
         )
         assert "Mindful Interaction Reminder" not in text and "Artificial Interaction" not in text, (
-            "an AIR reminder appeared on the FIRST message — threshold logic regressed"
+            "an AIR reminder appeared on the FIRST message of a fresh channel — "
+            "threshold logic regressed"
         )
 
     def _print_summary(self) -> None:

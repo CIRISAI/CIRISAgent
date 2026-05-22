@@ -86,9 +86,10 @@ class TestAuditRetentionCleanup:
             # Wire persist engine against the same temp file so the audit
             # service's reads + maintenance_prune_audit_chain land on the
             # same `cirislens_audit_log` we INSERT into.
-            from ciris_persist import Engine
+            from ciris_persist import Engine, reset_engine
             from ciris_engine.logic.persistence.models import graph as _gp
             prior_engine, prior_dsn = _gp._engine, _gp._engine_dsn
+            reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
             engine = Engine(f"sqlite:///{db_path}", "test-key")
             _gp.set_persist_engine(engine, dsn=f"sqlite:///{db_path}")
             with patch(

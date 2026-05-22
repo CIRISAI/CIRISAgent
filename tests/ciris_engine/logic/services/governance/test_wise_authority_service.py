@@ -80,13 +80,14 @@ async def wise_authority_service(auth_service, time_service, temp_db):
     `temp_db`) so the AuthenticationService start path runs without
     persist interference.
     """
-    from ciris_persist import Engine  # type: ignore[import-untyped]
+    from ciris_persist import Engine, reset_engine  # type: ignore[import-untyped]
 
     import ciris_engine.logic.persistence.models.graph as _graph_mod
     from ciris_engine.logic.persistence.models.graph import set_persist_engine
 
     prior_engine = _graph_mod._engine
     prior_dsn = _graph_mod._engine_dsn
+    reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
     persist_engine = Engine(f"sqlite:///{temp_db}", "test-key")
     set_persist_engine(persist_engine, dsn=f"sqlite:///{temp_db}")
 

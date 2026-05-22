@@ -39,7 +39,7 @@ def _wire_persist_engine():
     import os
     import tempfile
 
-    from ciris_persist import Engine  # type: ignore[import-untyped]
+    from ciris_persist import Engine, reset_engine  # type: ignore[import-untyped]
 
     import ciris_engine.logic.persistence.models.graph as _graph_mod
     from ciris_engine.logic.persistence.models.graph import set_persist_engine
@@ -49,6 +49,7 @@ def _wire_persist_engine():
 
     prior_engine = _graph_mod._engine
     prior_dsn = _graph_mod._engine_dsn
+    reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
     engine = Engine(f"sqlite:///{db_path}", "test-key")
     set_persist_engine(engine, dsn=f"sqlite:///{db_path}")
 

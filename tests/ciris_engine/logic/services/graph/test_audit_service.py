@@ -60,7 +60,7 @@ async def audit_service(memory_bus, temp_db, time_service):
     import base64
     from unittest.mock import MagicMock, patch
 
-    from ciris_persist import Engine  # type: ignore[import-untyped]
+    from ciris_persist import Engine, reset_engine  # type: ignore[import-untyped]
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ed25519
 
@@ -100,6 +100,7 @@ async def audit_service(memory_bus, temp_db, time_service):
     key_id = f"agent-{fingerprint}"
     with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as pf:
         persist_db_path = pf.name
+    reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
     persist_engine = Engine(f"sqlite:///{persist_db_path}", key_id)
     persist_engine.register_public_key(
         signature_key_id=key_id,

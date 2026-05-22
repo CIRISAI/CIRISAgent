@@ -76,7 +76,7 @@ class TestGraphAuditService:
         import hashlib
 
         import ciris_engine.logic.persistence.models.graph as _graph_mod
-        from ciris_persist import Engine  # type: ignore[import-untyped]
+        from ciris_persist import Engine, reset_engine  # type: ignore[import-untyped]
 
         from ciris_engine.logic.persistence.models.graph import set_persist_engine
 
@@ -86,6 +86,7 @@ class TestGraphAuditService:
         key_id = f"agent-{fingerprint}"
         with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as _pf:
             persist_db_path = _pf.name
+        reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
         persist_engine = Engine(f"sqlite:///{persist_db_path}", key_id)
         persist_engine.register_public_key(
             signature_key_id=key_id,

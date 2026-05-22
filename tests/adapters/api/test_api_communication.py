@@ -267,8 +267,8 @@ class TestAPICommunicationMetadata:
         # Start the service
         await communication_service.start()
 
-        # Set up message channel mapping
-        app_state.message_channel_map = {"api_127.0.0.1_8080": "msg-123"}
+        # Set up message channel mapping — per-channel FIFO queue of pending ids
+        app_state.message_channel_map = {"api_127.0.0.1_8080": ["msg-123"]}
 
         # Mock notify function
         with patch("ciris_engine.logic.adapters.api.routes.agent.store_message_response") as mock_notify:

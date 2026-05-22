@@ -676,12 +676,13 @@ def _cleanup_interaction_tracking(message_id: str, request: Optional[Request] = 
     _message_responses.pop(message_id, None)
     if request is not None:
         chan_map = getattr(request.app.state, "message_channel_map", {})
-        for queue in chan_map.values():
-            if isinstance(queue, list):
-                try:
-                    queue.remove(message_id)
-                except ValueError:
-                    pass
+        if isinstance(chan_map, dict):
+            for queue in chan_map.values():
+                if isinstance(queue, list):
+                    try:
+                        queue.remove(message_id)
+                    except ValueError:
+                        pass
 
 
 async def _inject_error_to_channel(request: Request, channel_id: str, content: str) -> None:

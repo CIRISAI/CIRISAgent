@@ -271,8 +271,10 @@ class TestAPIMessageHandling:
             handle_message = api_platform.app.state.on_message
             await handle_message(test_msg)
 
-            # Verify channel mapping was stored
-            assert api_platform.app.state.message_channel_map["api_127.0.0.1_8888"] == "msg-123"
+            # Verify channel mapping was stored — a per-channel FIFO queue of
+            # pending interact() message_ids (not a single-value slot, which
+            # clobbered concurrent messages on a shared channel)
+            assert api_platform.app.state.message_channel_map["api_127.0.0.1_8888"] == ["msg-123"]
 
 
 class TestAPIChannelManagement:

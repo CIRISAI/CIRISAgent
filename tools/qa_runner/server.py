@@ -806,6 +806,11 @@ class APIServerManager:
         # CIRIS_DISABLE_TASK_APPEND as exactly the per-task-throughput
         # benchmarking switch the qa_runner needs (never set in prod).
         env.setdefault("CIRIS_DISABLE_TASK_APPEND", "1")
+        # Emit the auth-service [AUTH SERVICE DEBUG] traces at INFO so a
+        # CI/QA INFO-level capture records which key_id validate_api_key
+        # sought and which key_ids _api_keys actually held — the decisive
+        # evidence for the --parallel-backends "Invalid API key" 401s.
+        env.setdefault("CIRIS_AUTH_DEBUG", "1")
 
         # Ensure CIRIS_MOCK_LLM matches our config (unset if not using mock)
         if not self.config.mock_llm:

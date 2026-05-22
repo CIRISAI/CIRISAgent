@@ -17,6 +17,12 @@ import bcrypt
 
 logger = logging.getLogger(__name__)
 
+# When CIRIS_AUTH_DEBUG=1, the [AUTH SERVICE DEBUG] traces (which key_id is
+# being validated, how many keys _api_keys holds, which key_ids are present)
+# are emitted at INFO so they survive an INFO-level capture (QA / CI). They
+# stay at DEBUG in normal operation — auth validation is a hot path.
+_authlog = logger.info if os.environ.get("CIRIS_AUTH_DEBUG") == "1" else logger.debug
+
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.api import APIRole
@@ -407,7 +413,7 @@ class APIAuthService:
         )
         # Store by key_id instead of hash (bcrypt hashes are unique per call)
         self._api_keys[key_id] = stored_key
-        logger.debug(
+        _authlog(
             f"[AUTH SERVICE DEBUG] store_api_key: Instance #{self._instance_id} - Stored key_id={key_id} for user={user_id}, role={role}. Total keys now: {len(self._api_keys)}, dict_id={id(self._api_keys)}"
         )
 
@@ -419,19 +425,16 @@ class APIAuthService:
 
         # DEBUG: Log validation attempt with minimal context (key_id only, no key content)
         all_key_ids = list(self._api_keys.keys())  # NOSONAR - key IDs are hashes, not secrets
-        logger.debug(
-            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - Validating key_id={key_id}"
-        )
-        logger.debug(
-            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - _api_keys has {len(self._api_keys)} keys, dict_id={id(self._api_keys)}"
-        )
-        logger.debug(
-            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - stored_key found: {stored_key is not None}"
+        _authlog(
+            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - "
+            f"seeking key_id={key_id}; _api_keys has {len(self._api_keys)} keys "
+            f"(dict_id={id(self._api_keys)}); present key_ids={all_key_ids}; "
+            f"stored_key found: {stored_key is not None}"
         )
 
         # Verify the key using bcrypt
         if not stored_key or not stored_key.is_active:
-            logger.debug(
+            _authlog(
                 f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - FAILED: key not found or inactive"
             )
             return None

@@ -838,6 +838,14 @@ class QARunner:
                 #    (no Adapter class — by design), and the loader correctly
                 #    says so. Expected probe noise, not an incident.
                 "ciris_adapters.mcp_common' has no attribute 'Adapter'",
+                #  - dsar_multi_source exercises the DSAR path for a test user
+                #    that has no consent record; the orchestrator correctly
+                #    reports the absence (the test asserts that behaviour).
+                "No consent found for user user_dsar",
+                #  - accord_metrics ships WBD deferrals to the lens; the QA
+                #    mock lens does not implement /accord/wbd/deferrals, so the
+                #    adapter correctly logs the 404 it received. Mock gap.
+                "WBD deferral rejected: Status 404",
                 #  - adapter_config test submits an empty config to verify
                 #    validation rejects it
                 "Config validation failed: Configuration is empty",

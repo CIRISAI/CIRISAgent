@@ -857,6 +857,7 @@ class TestResumeFromFirstRun:
         mock_config = Mock()
         mock_db_config = Mock()
         mock_db_config.audit_db = tmp_path / "audit.db"
+        mock_db_config.main_db = tmp_path / "ciris_engine.db"  # get_sqlite_db_full_path()
         mock_db_config.database_url = None  # SQLite mode
         mock_config.database = mock_db_config
         mock_runtime.essential_config = mock_config

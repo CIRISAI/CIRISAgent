@@ -2271,99 +2271,114 @@ class QARunner:
         return all_success
 
     def _run_parallel_backends(self, modules: List[QAModule]) -> bool:
-        """Run QA tests against multiple database backends in parallel."""
+        """Run QA tests against multiple database backends — each in its own
+        isolated SUBPROCESS, concurrently.
+
+        Each backend formerly ran as a thread inside this process. Two full
+        QA stacks sharing one Python interpreter cross-contaminate
+        process-global state: a sqlite leg was proven, via the
+        [AUTH SERVICE DEBUG] traces, to send the postgres leg's API key →
+        "Invalid API key" 401s on whichever leg lost the race. A separate
+        subprocess per backend has zero shared mutable state — the cross is
+        structurally impossible — while the backends still run fully in
+        parallel. Each child is a plain single-backend qa_runner invocation.
+        """
+        import subprocess
+        import sys
+
         start_time = time.time()
 
         self.console.print(
             Panel.fit(
-                "[bold cyan]CIRIS QA Test Runner - Parallel Backend Mode[/bold cyan]\n"
+                "[bold cyan]CIRIS QA Test Runner - Parallel Backend Mode (isolated subprocesses)[/bold cyan]\n"
                 f"Backends: {', '.join(self.database_backends)}\n"
                 f"Modules: {', '.join(m.value for m in modules)}",
                 title="🧪 Starting Parallel Backend QA Tests",
             )
         )
 
+        backend_port = {
+            b: (self.config.api_port if b == "sqlite" else self.config.postgres_api_port)
+            for b in self.database_backends
+        }
+
+        # Rebuild each child's argv from THIS process's argv — faithfully
+        # forwarding every flag — with the multi-backend / parallel flags
+        # rewritten to one isolated single-backend run on its own port.
+        parent_argv = sys.argv[1:]
+
+        def _child_argv(backend: str) -> List[str]:
+            out: List[str] = []
+            skip = 0
+            for idx, tok in enumerate(parent_argv):
+                if skip > 0:
+                    skip -= 1
+                    continue
+                if tok == "--parallel-backends":
+                    continue
+                if tok in ("--database-backends", "--port", "--report-dir"):
+                    nxt = idx + 1
+                    while nxt < len(parent_argv) and not parent_argv[nxt].startswith("-"):
+                        skip += 1
+                        nxt += 1
+                    continue
+                out.append(tok)
+            out += [
+                "--database-backends",
+                backend,
+                "--port",
+                str(backend_port[backend]),
+                "--report-dir",
+                f"qa_reports/{backend}",
+            ]
+            return out
+
+        procs = {}
+        for backend in self.database_backends:
+            child = [sys.executable, "-m", "tools.qa_runner", *_child_argv(backend)]
+            self.console.print(f"[cyan]🔄 Starting {backend.upper()} backend tests (isolated subprocess)...[/cyan]")
+            self.console.print(f"[dim]   $ {' '.join(child)}[/dim]")
+            procs[backend] = subprocess.Popen(child)
+
+        self.console.print("\n[cyan]⏳ Waiting for all backend subprocesses to complete...[/cyan]\n")
+
+        # config.timeout is a PER-TEST budget; a whole backend leg runs many
+        # modules (15-25 min). Give real headroom — the GH job's own
+        # timeout-minutes is the actual outer bound.
+        leg_timeout = max(self.config.timeout * 8, 2400)
         backend_results = {}
+        for backend, proc in procs.items():
+            try:
+                rc = proc.wait(timeout=leg_timeout)
+                backend_results[backend] = {"success": rc == 0, "detail": f"exit {rc}"}
+                icon = "✅" if rc == 0 else "❌"
+                self.console.print(f"{icon} {backend.upper()} backend subprocess finished (exit {rc})")
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                backend_results[backend] = {"success": False, "detail": f"timeout >{leg_timeout}s"}
+                self.console.print(f"[red]❌ {backend.upper()} backend subprocess timed out after {leg_timeout}s[/red]")
 
-        # Run tests for each backend in parallel using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=len(self.database_backends)) as executor:
-            futures = {}
-
-            for backend in self.database_backends:
-                self.console.print(f"[cyan]🔄 Starting {backend.upper()} backend tests...[/cyan]")
-
-                # Create a new runner instance for this backend with the correct server manager
-                backend_config = self.server_managers[backend].config
-                backend_runner = QARunner(backend_config, modules=modules)
-                backend_runner.database_backends = [backend]
-                backend_runner.server_manager = self.server_managers[backend]
-                backend_runner.server_managers = {backend: self.server_managers[backend]}
-
-                # Submit backend test execution to thread pool
-                future = executor.submit(backend_runner.run, modules)
-                futures[backend] = (future, backend_runner)
-
-            # Wait for all backends to complete
-            self.console.print("\n[cyan]⏳ Waiting for all backend tests to complete...[/cyan]\n")
-
-            for backend, (future, backend_runner) in futures.items():
-                try:
-                    # config.timeout is a PER-TEST budget (default 300s); a
-                    # whole backend leg of an `all_1`/`all_2` sweep runs many
-                    # modules and legitimately takes 15-25 min. timeout*2
-                    # (600s) gave up early and surfaced as an empty-message
-                    # "POSTGRES backend tests failed with error:" (a bare
-                    # concurrent.futures.TimeoutError). Give the leg real
-                    # headroom — the GH job's own timeout-minutes is the
-                    # actual outer bound.
-                    success = future.result(timeout=max(self.config.timeout * 8, 2400))
-                    backend_results[backend] = {
-                        "success": success,
-                        "results": backend_runner.results,
-                    }
-
-                    status_icon = "✅" if success else "❌"
-                    self.console.print(f"{status_icon} {backend.upper()} backend tests completed")
-
-                except Exception as e:
-                    self.console.print(f"[red]❌ {backend.upper()} backend tests failed with error: {e}[/red]")
-                    backend_results[backend] = {
-                        "success": False,
-                        "results": {},
-                        "error": str(e),
-                    }
-
-        # Determine overall success
         all_success = all(data["success"] for data in backend_results.values())
 
-        # Print combined summary
         elapsed = time.time() - start_time
         self.console.print(f"\n\n{'=' * 80}")
         self.console.print("[bold cyan]📊 PARALLEL BACKEND TEST SUMMARY[/bold cyan]")
         self.console.print(f"{'=' * 80}\n")
 
-        # Create comparison table
-        table = Table(title="Backend Comparison")
+        table = Table(title="Backend Comparison (isolated subprocesses)")
         table.add_column("Backend", style="cyan")
         table.add_column("Status", style="bold")
-        table.add_column("Passed", style="green")
-        table.add_column("Failed", style="red")
-        table.add_column("Total", style="white")
-
+        table.add_column("Result", style="white")
         for backend, data in backend_results.items():
-            results = data.get("results", {})
-            passed = sum(1 for r in results.values() if r.get("success", False))
-            failed = len(results) - passed
-            total = len(results)
-            status = "✅" if data["success"] else "❌"
-
-            table.add_row(backend.upper(), status, str(passed), str(failed), str(total))
-
+            status = "✅ PASS" if data["success"] else "❌ FAIL"
+            table.add_row(backend.upper(), status, data["detail"])
         self.console.print(table)
 
-        self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s (parallel execution)[/dim]")
+        self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s (parallel, isolated)[/dim]")
+        self.console.print(
+            "[dim]Per-backend test counts + incidents are in each subprocess's own summary above.[/dim]"
+        )
 
-        # Print log locations for each backend
         self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
         for backend in self.database_backends:
             self.console.print(f"[dim]   • {backend}: logs/{backend}/latest.log[/dim]")

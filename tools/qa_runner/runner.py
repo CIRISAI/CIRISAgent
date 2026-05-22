@@ -2325,18 +2325,26 @@ class QARunner:
                     continue
                 if tok == "--parallel-backends":
                     continue
-                if tok in ("--database-backends", "--port", "--report-dir"):
+                if tok in ("--database-backends", "--port", "--url", "--report-dir"):
                     nxt = idx + 1
                     while nxt < len(parent_argv) and not parent_argv[nxt].startswith("-"):
                         skip += 1
                         nxt += 1
                     continue
                 out.append(tok)
+            # --port sets api_port (the server's listen port); --url sets
+            # base_url (where the QA client SENDS requests). They are
+            # independent — passing only --port left base_url at the default
+            # :8080, so the postgres child's client targeted the sqlite
+            # child's server. Both MUST point at this backend's own port.
+            port = backend_port[backend]
             out += [
                 "--database-backends",
                 backend,
                 "--port",
-                str(backend_port[backend]),
+                str(port),
+                "--url",
+                f"http://localhost:{port}",
                 "--report-dir",
                 f"qa_reports/{backend}",
             ]

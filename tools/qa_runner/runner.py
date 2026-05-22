@@ -855,6 +855,16 @@ class QARunner:
                 #    DREAM seed thoughts should carry a synthetic channel.)
                 "No channel context found for thought thought_dream_",
                 "Failed to transition from AgentState.WORK to AgentState.WORK",
+                # High-frequency BENIGN warnings — routine per-thought / per-
+                # cache-gen chatter, not systemic malfunctions. Excluded so the
+                # WARNING-flood detector below isn't tripped by normal noise:
+                #  - the mock LLM's own diagnostic (QA fixture only — never
+                #    emitted in production, there is no mock LLM there)
+                "[MOCK_LLM] No user_input found in context",
+                #  - the tool-cache generator noting CIRISVerifyService is not
+                #    a tool-enumeration provider (true by design — it is a
+                #    verification service, not a tool service)
+                "[TOOL_CACHE] CIRISVerifyService: No get_all_tool_info",
             ]
 
             # A single WARNING is noise; the same WARNING repeated dozens of

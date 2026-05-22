@@ -5,9 +5,10 @@ import threading
 import time
 import types
 from datetime import datetime
-from typing import Any, Dict, Optional, TypedDict, Union, cast
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple, TypedDict, Union, cast
 
-from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
+from ciris_engine.logic.config.db_paths import get_audit_db_full_path, get_sqlite_db_full_path
 
 # iOS-specific: Global lock for SQLite operations to avoid iOS's SQLiteDatabaseTracking assertions
 # iOS's debug SQLite has stricter thread checking that triggers assertions with check_same_thread=False
@@ -786,6 +787,40 @@ def initialize_database(db_path: Optional[str] = None) -> None:
         raise
 
 
+def _persist_dsn_and_sentinel(db_path: str) -> Tuple[str, Optional[Path]]:
+    """Resolve a db_path / database_url to (persist DSN, sentinel directory).
+
+    Three supported forms — and crucially, a SQLite *URL* must never be run
+    through Path().resolve(): that mangles the URL into a bogus filesystem
+    path and silently bootstraps persist against the wrong (empty) database.
+
+      - Postgres URL            -> used verbatim; sentinels in the data dir
+      - SQLite URL (sqlite://)  -> used verbatim — the config schema
+                                   documents sqlite://... as a valid
+                                   database_url; sentinels anchored next to
+                                   the db file
+      - bare filesystem path    -> wrapped as sqlite:///<abs>; sentinels
+                                   anchored beside the file
+    """
+    if db_path.startswith(("postgres://", "postgresql://")):
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        return db_path, Path(get_data_dir())
+    if db_path.startswith("sqlite:"):
+        # SQLAlchemy form: sqlite:///rel/path (3 slashes -> relative) or
+        # sqlite:////abs/path (4 slashes -> absolute). Splitting on
+        # 'sqlite:///' keeps the right leading-slash count for Path().
+        path_part = db_path.split("sqlite:///", 1)[-1] if "sqlite:///" in db_path else ""
+        sentinel = (
+            Path(path_part).resolve().parent if path_part and path_part != ":memory:" else None
+        )
+        return db_path, sentinel
+    abs_path = Path(db_path).resolve()
+    # `sqlite:///{abs_path}` where abs_path begins with '/' yields
+    # 'sqlite:////absolute/path' — 4 slashes, absolute as required.
+    return f"sqlite:///{abs_path}", abs_path.parent
+
+
 def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     """Construct the ciris-persist Engine, run A0a migration if needed,
     and wire the engine into `persistence.models.graph` (2.9.0).
@@ -813,14 +848,11 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         _resolved_db_path = get_sqlite_db_full_path()
     else:
         _resolved_db_path = db_path
-    if isinstance(_resolved_db_path, str) and not _resolved_db_path.startswith(
-        ("postgres://", "postgresql://")
-    ):
-        from pathlib import Path
-        _abs = Path(_resolved_db_path).resolve()
-        _expected_dsn = f"sqlite:///{_abs}"
-    else:
-        _expected_dsn = _resolved_db_path
+    if not isinstance(_resolved_db_path, str):
+        _resolved_db_path = str(_resolved_db_path)
+    # Same resolution the bootstrap below uses — so a sqlite:// URL produces
+    # an _expected_dsn that actually matches and the idempotent-skip works.
+    _expected_dsn = _persist_dsn_and_sentinel(_resolved_db_path)[0]
 
     if (
         graph_persistence._engine is not None
@@ -837,18 +869,10 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     if not isinstance(db_path, str):
         db_path = str(db_path)
 
-    if db_path.startswith(("postgres://", "postgresql://")):
-        dsn = db_path
-        # Postgres deployments have no db file; anchor the migration
-        # sentinels in the agent data dir instead.
-        from ciris_engine.logic.utils.path_resolution import get_data_dir
-        sentinel_dir = get_data_dir()
-    else:
-        abs_path = Path(db_path).resolve()
-        # `sqlite:///{abs_path}` where abs_path begins with '/' yields
-        # 'sqlite:////absolute/path' — 4 slashes, absolute as required.
-        dsn = f"sqlite:///{abs_path}"
-        sentinel_dir = abs_path.parent
+    # Postgres URL verbatim, sqlite:// URL verbatim, bare path -> sqlite:///.
+    # See _persist_dsn_and_sentinel — a sqlite:// URL must not be resolved
+    # as a filesystem path.
+    dsn, sentinel_dir = _persist_dsn_and_sentinel(db_path)
 
     signing_key_id = os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
 
@@ -927,7 +951,13 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         # (early-boot ordering) or if the legacy audit DB is absent
         # (fresh deployment with no legacy chain), log + skip.
         audit_sentinel = sentinel_dir / ".audit_bridged"
-        legacy_audit_db = sentinel_dir / "ciris_audit.db"
+        # Resolve the legacy audit DB from config (database.audit_db) so a
+        # deployment that customised audit_db still bridges its chain —
+        # don't assume the default sentinel_dir/ciris_audit.db location.
+        try:
+            legacy_audit_db = Path(get_audit_db_full_path())
+        except Exception:  # pragma: no cover - defensive
+            legacy_audit_db = sentinel_dir / "ciris_audit.db"
         if not audit_sentinel.exists() and legacy_audit_db.exists():
             try:
                 from tools.ops.audit_chain_bridge import run as run_bridge

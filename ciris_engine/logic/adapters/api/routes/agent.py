@@ -682,6 +682,8 @@ def _cleanup_interaction_tracking(message_id: str, request: Optional[Request] = 
                     try:
                         queue.remove(message_id)
                     except ValueError:
+                        # message_id isn't in this channel's queue — expected,
+                        # since we sweep every channel but it lives in one.
                         pass
 
 

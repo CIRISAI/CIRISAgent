@@ -163,8 +163,10 @@ async def get_memory_stats() -> JSONDict:
             sqlite_path = get_sqlite_db_full_path()
             if isinstance(sqlite_path, str) and os.path.exists(sqlite_path):
                 stats["storage_size_mb"] = os.path.getsize(sqlite_path) / (1024 * 1024)
-        except Exception:
-            pass
+        except Exception as e:
+            # storage_size_mb is best-effort cosmetic stat — leave it at 0.0
+            # if the DB path can't be resolved/stat'd (e.g. Postgres).
+            logger.debug("storage size calculation skipped: %s", e)
 
     except Exception as e:
         logger.error(f"Failed to get memory stats: {e}")

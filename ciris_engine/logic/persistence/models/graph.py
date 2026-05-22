@@ -256,8 +256,11 @@ def add_graph_node(
                 v = time_service.now()
                 if hasattr(v, "isoformat"):
                     return str(v.isoformat())
-            except Exception:
-                pass
+            except Exception as exc:
+                # A misbehaving time_service (e.g. an AsyncMock whose .now()
+                # returns a coroutine) must never block a persist write —
+                # fall through to a fresh wall-clock now() below.
+                logger.debug("time_service.now() unusable, using wall clock: %s", exc)
         return datetime.now(timezone.utc).isoformat()
 
     new_attrs_dict: Any

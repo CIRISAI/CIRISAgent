@@ -44,7 +44,7 @@ def register_all_initialization_steps(
         phase=InitializationPhase.DATABASE,
         name="Initialize Database",
         handler=lambda: init_database(runtime),
-        verifier=lambda: verify_database_integrity(),
+        verifier=verify_database_integrity,
         critical=True,
     )
 

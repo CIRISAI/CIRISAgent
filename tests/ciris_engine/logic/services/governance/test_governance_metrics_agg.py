@@ -138,7 +138,6 @@ class TestWiseAuthorityServiceMetrics(BaseMetricsTest):
                     parent_task_id=None,
                 ),
             ),
-            db_path=temp_db,
         )
 
         # Create and send a deferral
@@ -394,7 +393,6 @@ class TestVisibilityServiceMetrics(BaseMetricsTest):
                     parent_task_id=None,
                 ),
             ),
-            db_path=temp_db_visibility,
         )
         add_thought(
             Thought(

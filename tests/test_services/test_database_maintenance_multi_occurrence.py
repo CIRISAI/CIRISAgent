@@ -41,7 +41,7 @@ class TestMultiOccurrenceWakeupCleanup:
         from ciris_engine.schemas.runtime.models import Task
 
         task = Task(**old_shutdown_task_data)
-        persistence.add_task(task, clean_db)
+        persistence.add_task(task)
 
         # Verify task exists before cleanup
         retrieved_before = persistence.get_task_by_id(
@@ -76,7 +76,7 @@ class TestMultiOccurrenceWakeupCleanup:
         from ciris_engine.schemas.runtime.models import Task
 
         task = Task(**fresh_wakeup_task_data)
-        persistence.add_task(task, clean_db)
+        persistence.add_task(task)
 
         # Run startup cleanup
         await database_maintenance_service.perform_startup_cleanup()
@@ -104,7 +104,7 @@ class TestMultiOccurrenceWakeupCleanup:
         from ciris_engine.schemas.runtime.models import Task
 
         task = Task(**old_wakeup_task_data)
-        persistence.add_task(task, clean_db)
+        persistence.add_task(task)
 
         # Run startup cleanup
         await database_maintenance_service.perform_startup_cleanup()
@@ -132,13 +132,13 @@ class TestMultiOccurrenceWakeupCleanup:
         from ciris_engine.schemas.runtime.models import Task
 
         parent_task = Task(**fresh_wakeup_task_data)
-        persistence.add_task(parent_task, clean_db)
+        persistence.add_task(parent_task)
 
         # Create occurrence-specific child task
         # Update parent_task_id to match fresh wakeup
         occurrence_specific_task_data["parent_task_id"] = fresh_wakeup_task_data["task_id"]
         child_task = Task(**occurrence_specific_task_data)
-        persistence.add_task(child_task, clean_db)
+        persistence.add_task(child_task)
 
         # Run startup cleanup
         await database_maintenance_service.perform_startup_cleanup()
@@ -171,7 +171,7 @@ class TestMultiOccurrenceThoughtCleanup:
         from ciris_engine.schemas.runtime.models import Task, Thought
 
         task = Task(**old_wakeup_task_data)
-        persistence.add_task(task, clean_db)
+        persistence.add_task(task)
 
         # Create stale thought for that task
         thought = Thought(**stale_thought_data)
@@ -208,7 +208,7 @@ class TestMultiOccurrenceThoughtCleanup:
         # Create all tasks
         for task_data in scenario["tasks"]:
             task = Task(**task_data)
-            persistence.add_task(task, clean_db)
+            persistence.add_task(task)
 
         # Create all thoughts
         for thought_data in scenario["thoughts"]:
@@ -280,7 +280,7 @@ class TestMultiOccurrenceOldActiveTaskCleanup:
             "channel_id": "api",
         }
         task = Task(**task_data)
-        persistence.add_task(task, clean_db)
+        persistence.add_task(task)
 
         # Run startup cleanup
         await database_maintenance_service.perform_startup_cleanup()
@@ -326,7 +326,7 @@ class TestSharedWakeupTaskIsolation:
             updated_at=(now - timedelta(days=1)).isoformat(),
             channel_id="api",
         )
-        persistence.add_task(old_wakeup, clean_db)
+        persistence.add_task(old_wakeup)
 
         # Create medium-old wakeup (should clean, >5min)
         medium_wakeup = Task(
@@ -339,7 +339,7 @@ class TestSharedWakeupTaskIsolation:
             updated_at=(now - timedelta(minutes=10)).isoformat(),
             channel_id="api",
         )
-        persistence.add_task(medium_wakeup, clean_db)
+        persistence.add_task(medium_wakeup)
 
         # Create fresh wakeup (should preserve, <5min)
         fresh_wakeup = Task(
@@ -352,7 +352,7 @@ class TestSharedWakeupTaskIsolation:
             updated_at=(now - timedelta(seconds=30)).isoformat(),
             channel_id="api",
         )
-        persistence.add_task(fresh_wakeup, clean_db)
+        persistence.add_task(fresh_wakeup)
 
         # Run startup cleanup
         await database_maintenance_service.perform_startup_cleanup()
@@ -613,7 +613,7 @@ class TestMultiOccurrenceRaceConditionProtection:
                 agent_occurrence_id="__shared__",
             ),
         )
-        persistence.add_task(parent_task, clean_db)
+        persistence.add_task(parent_task)
 
         # Create wakeup step tasks owned by occurrence "002" (child tasks)
         step_tasks = []
@@ -635,7 +635,7 @@ class TestMultiOccurrenceRaceConditionProtection:
                     agent_occurrence_id="002",
                 ),
             )
-            persistence.add_task(task, clean_db)
+            persistence.add_task(task)
             step_tasks.append(task)
 
         # Verify all tasks exist before cleanup
@@ -710,7 +710,7 @@ class TestMultiOccurrenceRaceConditionProtection:
                 agent_occurrence_id="default",
             ),
         )
-        persistence.add_task(orphaned_task, clean_db)
+        persistence.add_task(orphaned_task)
 
         # Verify task exists before cleanup
         assert persistence.get_task_by_id(orphaned_task.task_id, "default") is not None

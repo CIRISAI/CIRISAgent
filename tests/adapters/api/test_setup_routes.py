@@ -845,6 +845,9 @@ class TestResumeFromFirstRun:
         """Test that setup completion triggers runtime resume."""
         mock_first_run.return_value = True
         mock_config_path.return_value = tmp_path / ".env"
+        # _save_setup_config returns the written .env path; complete.py
+        # consumes it as a real path (os.fspath), so the mock must too.
+        mock_save.return_value = tmp_path / ".env"
         mock_create_users.return_value = None
 
         # Mock runtime with resume method and set it on app.state

@@ -733,7 +733,9 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
 
             count = 0
             cursor_json = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
-            filter_json = json.dumps({"node_type": "tsdb_data"})
+            # persist NodeFilter requires `scope` (AV-47); tsdb_data metric
+            # nodes are always written at GraphScope.LOCAL.
+            filter_json = json.dumps({"node_type": "tsdb_data", "scope": "LOCAL"})
             while True:
                 raw = engine.cirisgraph_query_nodes(filter_json, cursor_json, 500)
                 parsed = json.loads(raw) if isinstance(raw, str) else raw

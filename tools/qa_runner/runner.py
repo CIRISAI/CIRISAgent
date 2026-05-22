@@ -513,7 +513,7 @@ class QARunner:
 
         Returns list of critical incidents found.
         """
-        incidents_log = Path("logs/incidents_latest.log")
+        incidents_log = self._incidents_log_path()
 
         if not incidents_log.exists():
             return []
@@ -528,6 +528,14 @@ class QARunner:
             "Edge already exists",
             "duplicate edge",
             "TSDB consolidation",
+            "[SIGNAL]",
+            "[VALIDATE_LLM]",
+            "MANIFEST_CACHE MISS",
+            # QA/CI has no TPM / hardware key — CIRISVerify probes log ERROR
+            # and fall back to software; environmental, not a test failure.
+            "get_ed25519_public_key: no key loaded",
+            "Error when creating a TCTI context",
+            "TPM: failed to create context",
         ]
 
         critical_errors = []
@@ -613,7 +621,7 @@ class QARunner:
 
     def _show_incidents_status(self, phase: str):
         """ALWAYS show incidents log status - prominent and mandatory."""
-        incidents_log = Path("logs/incidents_latest.log")
+        incidents_log = self._incidents_log_path()
 
         self.console.print(f"\n[bold cyan]📋 INCIDENTS LOG STATUS ({phase}):[/bold cyan]")
 
@@ -640,6 +648,14 @@ class QARunner:
             "Edge already exists",
             "duplicate edge",
             "TSDB consolidation",
+            "[SIGNAL]",
+            "[VALIDATE_LLM]",
+            "MANIFEST_CACHE MISS",
+            # QA/CI has no TPM / hardware key — CIRISVerify probes log ERROR
+            # and fall back to software; environmental, not a test failure.
+            "get_ed25519_public_key: no key loaded",
+            "Error when creating a TCTI context",
+            "TPM: failed to create context",
         ]
 
         critical_errors = []
@@ -757,6 +773,12 @@ class QARunner:
                 # there is no registry and L4 file integrity is legitimately
                 # skipped — an environmental degradation, not a test failure.
                 "MANIFEST_CACHE MISS",
+                # QA/CI hosts have no TPM and no hardware Ed25519 key, so the
+                # CIRISVerify FFI key probe + TPM TCTI context creation log
+                # ERROR and fall back to software — expected, not a failure.
+                "get_ed25519_public_key: no key loaded",
+                "Error when creating a TCTI context",
+                "TPM: failed to create context",
             ]
 
             with open(incidents_log, "r") as f:

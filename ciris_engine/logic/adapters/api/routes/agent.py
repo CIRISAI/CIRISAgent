@@ -631,8 +631,10 @@ async def _check_processor_pause_status(
         # Processor is paused - route message and prepare response
         await _handle_paused_message(request, msg)
 
-        # Clean up response tracking since we're returning immediately
-        _response_events.pop(message_id, None)
+        # Clean up response tracking since we're returning immediately —
+        # full cleanup (incl. the channel FIFO queue) so a paused-path return
+        # doesn't leave a stale queue entry that drifts FIFO correlation.
+        _cleanup_interaction_tracking(message_id, request)
 
         # Calculate processing time and get state
         processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
@@ -663,10 +665,23 @@ def _get_current_cognitive_state(request: Request) -> str:
     return _get_cognitive_state(runtime)
 
 
-def _cleanup_interaction_tracking(message_id: str) -> None:
-    """Clean up interaction tracking for given message ID."""
+def _cleanup_interaction_tracking(message_id: str, request: Optional[Request] = None) -> None:
+    """Clean up interaction tracking for given message ID.
+
+    Also purges message_id from its channel's FIFO pending-response queue:
+    a timed-out interact() (no SPEAK arriving) must not leave a stale entry,
+    or FIFO correlation drifts by one for every later request on the channel.
+    """
     _response_events.pop(message_id, None)
     _message_responses.pop(message_id, None)
+    if request is not None:
+        chan_map = getattr(request.app.state, "message_channel_map", {})
+        for queue in chan_map.values():
+            if isinstance(queue, list):
+                try:
+                    queue.remove(message_id)
+                except ValueError:
+                    pass
 
 
 async def _inject_error_to_channel(request: Request, channel_id: str, content: str) -> None:
@@ -839,7 +854,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
             raise HTTPException(status_code=503, detail=ERROR_MESSAGE_HANDLER_NOT_CONFIGURED)
     except CreditDenied as exc:
         await _inject_error_to_channel(request, channel_id, f"Message blocked: {exc.reason}")
-        _cleanup_interaction_tracking(message_id)
+        _cleanup_interaction_tracking(message_id, request)
         raise HTTPException(
             status_code=402,
             detail={
@@ -852,11 +867,11 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
         await _inject_error_to_channel(
             request, channel_id, "Message blocked: Credit service temporarily unavailable. Please try again later."
         )
-        _cleanup_interaction_tracking(message_id)
+        _cleanup_interaction_tracking(message_id, request)
         raise HTTPException(status_code=503, detail="Credit provider unavailable") from exc
     except BillingServiceError as exc:
         await _inject_error_to_channel(request, channel_id, f"Service error: {exc.message}")
-        _cleanup_interaction_tracking(message_id)
+        _cleanup_interaction_tracking(message_id, request)
         raise HTTPException(
             status_code=402,
             detail={
@@ -893,7 +908,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
             response_content += "\n\n---\n" + air_reminder
 
         # Clean up and calculate timing
-        _cleanup_interaction_tracking(message_id)
+        _cleanup_interaction_tracking(message_id, request)
         processing_time_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
 
         # Build response
@@ -910,7 +925,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
         import os
 
         # Clean up
-        _cleanup_interaction_tracking(message_id)
+        _cleanup_interaction_tracking(message_id, request)
 
         # A timeout is a real degradation — the agent did not deliver a
         # response within the window. Under mock LLM (QA) this should never

@@ -220,12 +220,13 @@ async def store_message_response(message_id: str, response: str) -> None:
         logger.info(f"[STORE_RESPONSE] Event found for {message_id}, setting it")
         event.set()
     else:
-        # A real failure: the agent produced a response but no interact()
-        # waiter is registered for it — the request either already timed out
-        # or the channel→message_id correlation is stale. ERROR (not WARNING)
-        # so QA incident detection surfaces it instead of silently dropping
-        # a lost agent response.
-        logger.error(f"[STORE_RESPONSE] No event found for {message_id} — agent response not delivered to any waiter")
+        # No waiter for this message_id. This is EXPECTED for async
+        # submit_message() responses (the client polls history — no event is
+        # ever registered) and for a sync interact() that already timed out
+        # and cleaned up. So this stays WARNING, not ERROR — the unambiguous
+        # failure signal is the interact() timeout itself ([INTERACT_TIMEOUT],
+        # logged at ERROR), not this line.
+        logger.warning(f"[STORE_RESPONSE] No event found for {message_id} (async submission or already-timed-out interact)")
 
 
 # Endpoints

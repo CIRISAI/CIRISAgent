@@ -128,7 +128,11 @@ ALL_MODULE_SEQUENCE = [
     # multi_occurrence — run it standalone.
     QAModule.PARTNERSHIP,
     QAModule.BILLING,
-    QAModule.REDDIT,
+    # NOTE: reddit is intentionally excluded — it requires live Reddit API
+    # credentials (a secrets file CI does not have); its module raises
+    # "Reddit secrets not found" at construction, which _run_sdk_modules
+    # turns into a leg failure. Live-credential integration module — run it
+    # standalone where the secrets exist.
     # NOTE: sql_external_data AND multi_occurrence are intentionally
     # excluded — both are special-setup modules that don't compose with the
     # batched --parallel-backends matrix:

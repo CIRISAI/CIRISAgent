@@ -1455,8 +1455,13 @@ class QARunner:
                         "duration": 0.0,  # SDK tests don't track individual durations
                     }
 
-                # Check if all tests passed
-                return all(r["status"] == "✅ PASS" for r in results)
+                # Check if all tests passed. Use the SAME "passed" definition
+                # as the self.results bookkeeping above (`"PASS" in status`) —
+                # an exact `== "✅ PASS"` here diverged from it: a PASS-variant
+                # status counted as Passed in the Total/Passed/Failed summary
+                # yet made this return False, failing the whole leg with
+                # Failed=0 (the exit-1-on-green bug).
+                return all("PASS" in r["status"] for r in results)
 
         # Run all SDK modules sequentially (they use async internally)
         for module in modules:

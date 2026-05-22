@@ -37,9 +37,14 @@ class AdapterManifestTests:
         self.results: List[Dict[str, Any]] = []
 
         # Base URL for direct API calls
-        self._base_url = getattr(client, "_base_url", "http://localhost:8080")
-        if hasattr(client, "_transport") and hasattr(client._transport, "_base_url"):
-            self._base_url = client._transport._base_url
+        # CIRISClient exposes the base URL as `base_url` (and Transport.base_url)
+        # — NOT `_base_url`. getattr(client, "_base_url", …) always missed and
+        # fell back to a hardcoded :8080, so under --parallel-backends the
+        # postgres leg's raw adapter requests hit the sqlite server → 401.
+        self._base_url = getattr(client, "base_url", None) or "http://localhost:8080"
+        _tr = getattr(client, "_transport", None)
+        if _tr is not None and getattr(_tr, "base_url", None):
+            self._base_url = _tr.base_url
 
         # Adapters directory
         self.adapters_dir = Path(__file__).parent.parent.parent.parent / "ciris_adapters"

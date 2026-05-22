@@ -1302,6 +1302,13 @@ class QARunner:
                     # Pin the client-level attr too — adapter QA modules read
                     # the token back via client.api_key for raw requests().
                     _c.api_key = token_to_use
+                    # Diagnostic: which token identity this module's client
+                    # carries — correlate with the server's validate_api_key
+                    # [AUTH SERVICE DEBUG] line (matched on the …suffix).
+                    _tok_suffix = (token_to_use or "")[-12:]
+                    self.console.print(
+                        f"[dim][TOKEN] SDK module '{module.value}' client token …{_tok_suffix}[/dim]"
+                    )
                     yield _c
 
             async with _client_ctx() as client:

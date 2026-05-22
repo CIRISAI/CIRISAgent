@@ -427,7 +427,8 @@ class APIAuthService:
         all_key_ids = list(self._api_keys.keys())  # NOSONAR - key IDs are hashes, not secrets
         _authlog(
             f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - "
-            f"seeking key_id={key_id}; _api_keys has {len(self._api_keys)} keys "
+            f"seeking key_id={key_id} (token …{(api_key or '')[-12:]}); "
+            f"_api_keys has {len(self._api_keys)} keys "
             f"(dict_id={id(self._api_keys)}); present key_ids={all_key_ids}; "
             f"stored_key found: {stored_key is not None}"
         )

@@ -950,6 +950,13 @@ class AccordMetricsService:
                 type=NodeType.CONFIG,
                 scope=GraphScope.LOCAL,
                 attributes={
+                    # `key` is required for this NodeType.CONFIG node to be a
+                    # valid ConfigNode — config_service.search("type:config")
+                    # picks it up and ConfigNode.from_graph_node() does
+                    # attrs["key"]. Without it, every config scan logged
+                    # "Failed to convert node ... to ConfigNode: 'key'"
+                    # (×100+ — a WARNING flood).
+                    "key": "accord_metrics/events_total",
                     "events_sent_total": total,
                     "last_updated": datetime.now(timezone.utc).isoformat(),
                 },

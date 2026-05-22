@@ -825,6 +825,23 @@ class QARunner:
                 "get_ed25519_public_key: no key loaded",
                 "Error when creating a TCTI context",
                 "TPM: failed to create context",
+                # QA modules that DELIBERATELY exercise error / edge paths —
+                # the agent correctly logs the rejection; the ERROR line is
+                # the expected test outcome, not an incident (cf. VALIDATE_LLM):
+                #  - state_transitions test submits an invalid target state
+                "Invalid target state",
+                #  - adapter_manifest test unloads its scratch adapters, some
+                #    of which were never loaded
+                "qa_manifest_test_",
+                #  - adapter_config test submits an empty config to verify
+                #    validation rejects it
+                "Config validation failed: Configuration is empty",
+                #  - cognitive-state tests force unnatural WORK/DREAM
+                #    transitions; a force-transitioned DREAM seed thought has
+                #    no originating adapter channel. (Tracked as a follow-up:
+                #    DREAM seed thoughts should carry a synthetic channel.)
+                "No channel context found for thought thought_dream_",
+                "Failed to transition from AgentState.WORK to AgentState.WORK",
             ]
 
             # A single WARNING is noise; the same WARNING repeated dozens of

@@ -798,6 +798,14 @@ class APIServerManager:
         # sub-second windows and trip the 60-req/min cap (HTTP 429). The
         # adapter config comment explicitly endorses a test-time opt-out.
         env.setdefault("CIRIS_API_RATE_LIMIT_ENABLED", "false")
+        # Every QA message must get its OWN task. Without this, a message
+        # arriving on a channel that still has an active task is coalesced
+        # into it (updated_info_available) — so a later module's interact()
+        # merges into an earlier module's unfinished task, never gets its
+        # own SPEAK, and times out at 55s. base_observer documents
+        # CIRIS_DISABLE_TASK_APPEND as exactly the per-task-throughput
+        # benchmarking switch the qa_runner needs (never set in prod).
+        env.setdefault("CIRIS_DISABLE_TASK_APPEND", "1")
 
         # Ensure CIRIS_MOCK_LLM matches our config (unset if not using mock)
         if not self.config.mock_llm:

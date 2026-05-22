@@ -935,6 +935,16 @@ class QARunner:
             if response.status_code == 200:
                 self.token = response.json()["access_token"]
                 self.console.print("[green]✅ Authentication successful[/green]")
+                # Diagnostic: which URL this _authenticate() hit and the
+                # token suffix it yielded — to catch a base_url cross under
+                # --parallel-backends (a child authenticating against the
+                # other backend's server).
+                print(
+                    f"QA_AUTH_TRACE backend={self.database_backends} "
+                    f"login_url={self.config.base_url}/v1/auth/login "
+                    f"token_suffix=...{(self.token or '')[-12:]}",
+                    flush=True,
+                )
                 return True
             else:
                 self.console.print(f"[red]Authentication failed: {response.status_code}[/red]")

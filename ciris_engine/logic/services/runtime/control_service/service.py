@@ -830,7 +830,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
         assert self.adapter_manager is not None  # Guaranteed by _ensure_adapter_manager
         adapter_config = self._convert_to_adapter_config(adapter_type, config)
-        result = await self.adapter_manager.load_adapter(adapter_type, adapter_id or "", adapter_config)
+        result = await self.adapter_manager.load_adapter(
+            adapter_type, adapter_id or "", adapter_config, auto_start=auto_start
+        )
 
         return AdapterOperationResponse(
             success=result.success,

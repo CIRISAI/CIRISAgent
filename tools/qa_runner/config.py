@@ -122,12 +122,16 @@ ALL_MODULE_SEQUENCE = [
     QAModule.PARTNERSHIP,
     QAModule.BILLING,
     QAModule.REDDIT,
-    # NOTE: sql_external_data is intentionally excluded — its pre-server
-    # _setup_test_database() (QARunner.run() special-case) writes a SQLite
-    # fixture to a shared path that races under --parallel-backends
-    # ("disk I/O error / readonly database"). Special-setup module, same
-    # exclusion class as billing_integration. Run it standalone.
-    QAModule.MULTI_OCCURRENCE,
+    # NOTE: sql_external_data AND multi_occurrence are intentionally
+    # excluded — both are special-setup modules that don't compose with the
+    # batched --parallel-backends matrix:
+    #  - sql_external_data's pre-server _setup_test_database() writes a
+    #    SQLite fixture to a shared path that races ("disk I/O error").
+    #  - multi_occurrence spawns SEPARATE agent runtimes (its own
+    #    QARunner.run() special-case, run_true_multi_occurrence_integration_
+    #    test); "Failed to start occurrence_1" under the matrix. It needs a
+    #    dedicated server lifecycle.
+    # Same exclusion class as billing_integration. Run them standalone.
     # Governance / observability
     QAModule.ACCORD_METRICS,
     QAModule.CONTEXT_ENRICHMENT,

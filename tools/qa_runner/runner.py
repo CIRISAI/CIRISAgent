@@ -2238,7 +2238,15 @@ class QARunner:
 
             for backend, (future, backend_runner) in futures.items():
                 try:
-                    success = future.result(timeout=self.config.timeout * 2)  # Allow extra time for parallel execution
+                    # config.timeout is a PER-TEST budget (default 300s); a
+                    # whole backend leg of an `all_1`/`all_2` sweep runs many
+                    # modules and legitimately takes 15-25 min. timeout*2
+                    # (600s) gave up early and surfaced as an empty-message
+                    # "POSTGRES backend tests failed with error:" (a bare
+                    # concurrent.futures.TimeoutError). Give the leg real
+                    # headroom — the GH job's own timeout-minutes is the
+                    # actual outer bound.
+                    success = future.result(timeout=max(self.config.timeout * 8, 2400))
                     backend_results[backend] = {
                         "success": success,
                         "results": backend_runner.results,

@@ -208,10 +208,16 @@ def _sync_query_sqlite_audit(
             return []
 
         # Build the persist AuditFilter. Tenant scoping is required by
-        # AV-51; mirror the audit_service tenant resolution.
-        import os
+        # AV-51; resolve the tenant via the SAME source as the audit WRITE
+        # path (persist_signing.resolve_tenant_id, which prefers
+        # CIRIS_AGENT_ID). Reading CIRIS_AGENT_TENANT here diverged from the
+        # writer: with only CIRIS_AGENT_ID set (the common config) the reader
+        # queried "agent-default" while entries were tagged with the
+        # CIRIS_AGENT_ID tenant — so /v1/audit/entries returned an empty
+        # trail even though entries existed.
+        from ciris_engine.logic.audit.persist_signing import resolve_tenant_id
 
-        tenant_id = os.environ.get("CIRIS_AGENT_TENANT", "agent-default")
+        tenant_id = resolve_tenant_id()
         filter_payload: dict[str, Any] = {"tenant_id": tenant_id}
         if start_time:
             filter_payload["recorded_after"] = start_time.isoformat()

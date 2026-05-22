@@ -142,7 +142,14 @@ def run(
             a second instance — see migrate_to_persist.run() docstring
             for the one-Engine-per-process rationale).
     """
-    if not engine_db.exists():
+    # engine_db is only used to CONSTRUCT an Engine when the caller does not
+    # supply one (see below). When a wired `engine` is passed — as the
+    # ServiceInitializer / db.core bootstrap does — engine_db is unused, and
+    # on a PostgreSQL deployment it is a DSN ("postgresql://…"), not a file
+    # on disk. Requiring it to exist there wrongly skips A0b bridging on
+    # every Postgres upgrade. Only enforce existence when we must build the
+    # Engine ourselves.
+    if engine is None and not engine_db.exists():
         raise FileNotFoundError(f"engine DB not found: {engine_db}")
     if not audit_db.exists():
         raise FileNotFoundError(f"legacy audit DB not found: {audit_db}")

@@ -1285,8 +1285,23 @@ class QARunner:
                 if not _module_needs_server:
                     yield None
                     return
-                async with CIRISClient(base_url=self.config.base_url, timeout=sdk_timeout) as _c:
+                # use_auth_store=False is REQUIRED for --parallel-backends.
+                # The SDK's AuthStore is a shared filesystem cache
+                # (~/.ciris/auth.json); two backend legs running concurrently
+                # do read-modify-write on that one file and corrupt/cross
+                # each other's tokens → "Invalid API key" 401s on whichever
+                # leg loses the race (adapter_autoload/config/availability/
+                # context_enrichment). QA always sets the token explicitly,
+                # so the store is pure downside — disable it entirely.
+                async with CIRISClient(
+                    base_url=self.config.base_url,
+                    timeout=sdk_timeout,
+                    use_auth_store=False,
+                ) as _c:
                     _c._transport.set_api_key(token_to_use, persist=False)
+                    # Pin the client-level attr too — adapter QA modules read
+                    # the token back via client.api_key for raw requests().
+                    _c.api_key = token_to_use
                     yield _c
 
             async with _client_ctx() as client:

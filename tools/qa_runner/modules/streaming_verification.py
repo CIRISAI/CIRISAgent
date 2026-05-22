@@ -850,7 +850,18 @@ class StreamingVerificationModule:
                                                 )
 
                                 # Check for unexpected extra fields (exhaustive validation)
-                                expected_common_fields = {"event_type", "thought_id", "task_id", "timestamp"}
+                                # attempt_index is the recursive-pass attempt
+                                # counter — any reasoning event emitted during a
+                                # RECURSIVE_ASPDMA / RECURSIVE_CONSCIENCE re-run
+                                # carries it, so it's a common field. The schema
+                                # gained it; this allow-set hadn't been updated.
+                                expected_common_fields = {
+                                    "event_type",
+                                    "thought_id",
+                                    "task_id",
+                                    "timestamp",
+                                    "attempt_index",
+                                }
                                 event_type_specific_fields = {
                                     "thought_start": {
                                         "thought_type",

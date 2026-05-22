@@ -170,8 +170,14 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             # Check if service has get_capabilities method
             if hasattr(service, "get_capabilities"):
                 caps = service.get_capabilities()
-                logger.debug(f"Service {service.__class__.__name__} has capabilities: {caps.actions}")
-                if "send_deferral" not in caps.actions:
+                # get_capabilities() returns a ServiceCapabilities (with an
+                # `.actions` list) for most services, but some WA providers
+                # return a bare list of action strings. Accessing .actions
+                # on the latter raised "'list' object has no attribute
+                # 'actions'" and aborted every deferral. Handle both shapes.
+                cap_actions = caps if isinstance(caps, list) else getattr(caps, "actions", [])
+                logger.debug(f"Service {service.__class__.__name__} has capabilities: {cap_actions}")
+                if "send_deferral" not in cap_actions:
                     continue
 
                 # Check domain support if domain_hint is specified

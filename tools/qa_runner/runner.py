@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import time
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +29,36 @@ from .status_tracker import update_module_status
 logger = logging.getLogger(__name__)
 
 
+def _expand_module_aggregates(modules: List[QAModule]) -> List[QAModule]:
+    """Expand QAModule.ALL / ALL_1 / ALL_2 into their constituent modules.
+
+    A bare aggregate is not in `sdk_modules` and is not a startup-adapter
+    key, so leaving it unexpanded makes the HTTP/SDK routing split skip
+    every SDK module AND the adapter auto-config miss every adapter. All
+    per-module logic must see the expanded list. Idempotent; order- and
+    dedupe-preserving.
+    """
+    from .config import (
+        ALL_1_MODULE_SEQUENCE,
+        ALL_2_MODULE_SEQUENCE,
+        ALL_MODULE_SEQUENCE,
+    )
+
+    aggregates = {
+        QAModule.ALL: ALL_MODULE_SEQUENCE,
+        QAModule.ALL_1: ALL_1_MODULE_SEQUENCE,
+        QAModule.ALL_2: ALL_2_MODULE_SEQUENCE,
+    }
+    if not any(a in modules for a in aggregates):
+        return list(modules)
+    expanded: List[QAModule] = []
+    for m in modules:
+        for sm in aggregates.get(m, [m]):
+            if sm not in expanded:
+                expanded.append(sm)
+    return expanded
+
+
 class QARunner:
     """Main QA test runner."""
 
@@ -36,7 +67,16 @@ class QARunner:
         self.config = config or QAConfig()
         self.console = Console()
         self.token: Optional[str] = None
-        self.modules = modules or []  # Store modules for server manager
+        # Expand `all` / `all_1` / `all_2` up front so every per-module
+        # consumer (adapter auto-config below, the HTTP/SDK routing split,
+        # the requires-server check) sees real modules, not the aggregate.
+        self.modules = _expand_module_aggregates(modules or [])  # Store modules for server manager
+        # Real per-module wall time (seconds). SDK modules are timed directly
+        # around test_instance.run(); HTTP modules are summed from per-test
+        # durations in _update_status_tracker. Replaces the old fake
+        # even-split (total / module_count) that stamped every module
+        # identically — useless for balancing the CI matrix.
+        self._module_wall: Dict[str, float] = {}
 
         # Module-metadata driven: if any selected module declares
         # WIPE_DATA_ON_START=True (per CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md
@@ -79,7 +119,7 @@ class QARunner:
         # the old per-branch `self.config.adapter = "api,X"` clobbered the
         # whole string, so e.g. a reddit + sql_external_data batch silently
         # lost the reddit adapter and every reddit test failed.
-        if modules:
+        if self.modules:
             # QAModule -> the adapter it needs loaded at server startup.
             _MODULE_STARTUP_ADAPTERS = {
                 QAModule.REDDIT: "reddit",
@@ -97,7 +137,7 @@ class QARunner:
             if "api" not in adapters:
                 adapters.insert(0, "api")
             for _mod, _adapter_name in _MODULE_STARTUP_ADAPTERS.items():
-                if _mod in modules and _adapter_name not in adapters:
+                if _mod in self.modules and _adapter_name not in adapters:
                     adapters.append(_adapter_name)
             joined = ",".join(adapters)
             if joined != self.config.adapter:
@@ -195,17 +235,11 @@ class QARunner:
 
     def run(self, modules: List[QAModule]) -> bool:
         """Run QA tests for specified modules."""
-        # Expand `all` into its explicit constituent modules so the HTTP/SDK
-        # routing split below runs SDK modules too — a bare QAModule.ALL is
-        # not in `sdk_modules`, so it routes HTTP-only and silently skips
-        # every SDK-based module. ALL_MODULE_SEQUENCE is the source of truth.
-        if QAModule.ALL in modules:
-            from .config import ALL_MODULE_SEQUENCE
-
-            modules = [m for m in modules if m != QAModule.ALL]
-            for m in ALL_MODULE_SEQUENCE:
-                if m not in modules:
-                    modules.append(m)
+        # Expand `all` / `all_1` / `all_2` so the HTTP/SDK routing split
+        # below runs SDK modules too. Idempotent — __init__ already expanded
+        # self.modules, but run() may be called directly (and is, per-backend,
+        # by _run_parallel_backends).
+        modules = _expand_module_aggregates(modules)
 
         # If testing multiple backends, always use parallel mode for proper state isolation
         # (Sequential mode doesn't properly isolate database/server state between backends)
@@ -793,14 +827,37 @@ class QARunner:
                 "TPM: failed to create context",
             ]
 
+            # A single WARNING is noise; the same WARNING repeated dozens of
+            # times is a systemic malfunction (e.g. 352× "[STORE_RESPONSE] No
+            # event found" — every agent response failing to correlate). Flag
+            # a WARNING flood even though no line is ERROR-level.
+            warning_flood_threshold = 50
+            warning_counts: Dict[str, int] = {}
+
             with open(incidents_log, "r") as f:
                 f.seek(self._startup_incidents_position)  # Start from where we left off
 
                 for line in f:
-                    if ("ERROR" in line or "CRITICAL" in line) and not any(
-                        pattern in line for pattern in ignore_patterns
-                    ):
+                    if any(pattern in line for pattern in ignore_patterns):
+                        continue
+                    if "ERROR" in line or "CRITICAL" in line:
                         return True
+                    if "WARNING" in line:
+                        # Normalize away per-event variables (uuids, hex ids,
+                        # numbers) so identical warnings collapse to one key.
+                        sig = re.sub(r"[0-9a-fA-F]{8}-[0-9a-fA-F-]{8,}", "<id>", line)
+                        sig = re.sub(r"\b[0-9a-fA-F]{12,}\b", "<hex>", sig)
+                        sig = re.sub(r"\d+", "<n>", sig)
+                        sig = sig.split(" - ", 3)[-1].strip()[:160]
+                        warning_counts[sig] = warning_counts.get(sig, 0) + 1
+
+            for sig, count in warning_counts.items():
+                if count >= warning_flood_threshold:
+                    self.console.print(
+                        f"[bold red]🚨 WARNING flood: '{sig}' repeated {count}× "
+                        f"during testing — systemic malfunction[/bold red]"
+                    )
+                    return True
 
         except Exception:
             return False
@@ -1268,7 +1325,13 @@ class QARunner:
                 else:
                     test_instance = test_class(client, self.console)
 
+                _mod_t0 = time.time()
                 results = await test_instance.run()
+                # Real wall time for this SDK module (accumulate — a module
+                # can run twice across a re-auth retry).
+                self._module_wall[module.value] = self._module_wall.get(module.value, 0.0) + (
+                    time.time() - _mod_t0
+                )
 
                 # Store results in runner's results dict
                 for result in results:
@@ -2011,15 +2074,27 @@ class QARunner:
             else:
                 module_results[module_name]["failed"] += 1
 
-        # Update each module's status
+        # Update each module's status with REAL per-module wall time:
+        #   - SDK modules: timed directly around test_instance.run()
+        #   - HTTP modules: summed from their per-test durations
+        #   - fallback (neither available): even split of the total
         for module_name, stats in module_results.items():
+            wall = self._module_wall.get(module_name)
+            if wall is None:
+                wall = sum(
+                    (r.get("duration") or 0.0)
+                    for k, r in self.results.items()
+                    if k.split("::", 1)[0] == module_name
+                )
+            if not wall:
+                wall = duration_seconds / len(module_results) if module_results else duration_seconds
             try:
                 update_module_status(
                     module_name=module_name,
                     passed=stats["passed"],
                     failed=stats["failed"],
                     total=stats["total"],
-                    duration_seconds=duration_seconds / len(module_results) if module_results else duration_seconds,
+                    duration_seconds=wall,
                 )
             except Exception as e:
                 logger.warning(f"Failed to update status for module {module_name}: {e}")

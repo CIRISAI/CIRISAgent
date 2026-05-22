@@ -220,7 +220,12 @@ async def store_message_response(message_id: str, response: str) -> None:
         logger.info(f"[STORE_RESPONSE] Event found for {message_id}, setting it")
         event.set()
     else:
-        logger.warning(f"[STORE_RESPONSE] No event found for {message_id}!")
+        # A real failure: the agent produced a response but no interact()
+        # waiter is registered for it — the request either already timed out
+        # or the channel→message_id correlation is stale. ERROR (not WARNING)
+        # so QA incident detection surfaces it instead of silently dropping
+        # a lost agent response.
+        logger.error(f"[STORE_RESPONSE] No event found for {message_id} — agent response not delivered to any waiter")
 
 
 # Endpoints
@@ -901,8 +906,25 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
         return SuccessResponse(data=response)
 
     except asyncio.TimeoutError:
+        import os
+
         # Clean up
         _cleanup_interaction_tracking(message_id)
+
+        # A timeout is a real degradation — the agent did not deliver a
+        # response within the window. Under mock LLM (QA) this should never
+        # happen, so log at ERROR: QA incident detection must surface a
+        # systemic interact() stall instead of it masking as a benign 200.
+        mock_llm = bool(os.environ.get("CIRIS_MOCK_LLM"))
+        logger.error(
+            "[INTERACT_TIMEOUT] message_id=%s timed out after %.0fs without an "
+            "agent response%s",
+            message_id,
+            timeout,
+            " (mock LLM active — this indicates a processing stall, not slow inference)"
+            if mock_llm
+            else "",
+        )
 
         # Return a timeout response rather than error
         response = InteractResponse(

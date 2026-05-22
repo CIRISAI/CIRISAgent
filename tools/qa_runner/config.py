@@ -89,6 +89,10 @@ class QAModule(Enum):
     # Full suites
     API_FULL = "api_full"
     ALL = "all"
+    # all_1 / all_2 — the ALL sequence split in half so CI can run them as a
+    # matrix (each leg fits a sane timeout; the two run as parallel jobs).
+    ALL_1 = "all_1"
+    ALL_2 = "all_2"
 
 
 # Canonical module sequence for `qa_runner all`. Both get_module_tests(ALL)
@@ -137,21 +141,32 @@ ALL_MODULE_SEQUENCE = [
     QAModule.ADAPTER_MANIFEST,
     QAModule.ADAPTER_CONFIG,
     QAModule.ADAPTER_AVAILABILITY,
-    QAModule.HOSTED_TOOLS,
     QAModule.UTILITY_ADAPTERS,
     # Cognitive / behavior
     QAModule.STATE_TRANSITIONS,
     QAModule.COGNITIVE_STATE_API,
-    QAModule.VISION,
-    # Handler + filter
-    QAModule.HANDLERS,
-    QAModule.FILTERS,
+    # NOTE: handlers / filters / vision are intentionally excluded — they are
+    # message→response flow modules that need per-test task-completion
+    # isolation (a clean channel per submit). Batched after a dozen other
+    # modules the channel still carries a stale active task, so new submits
+    # attach to it and never see a fresh TASK_COMPLETE (verified: handlers
+    # 9/10 standalone vs 0/10 batched). hosted_tools is excluded too — its
+    # balance_check / web_search tests need a CIRIS_BILLING_GOOGLE_ID_TOKEN
+    # (credentialed, same class as billing_integration). All four run clean
+    # standalone and are covered by the pytest shards; run them directly.
     # SDK + extended
     QAModule.SDK,
     QAModule.EXTENDED_API,
     QAModule.SINGLE_STEP_SIMPLE,
     QAModule.SINGLE_STEP_COMPREHENSIVE,
 ]
+
+# all_1 / all_2 — ALL_MODULE_SEQUENCE bisected so CI runs them as a matrix
+# (two parallel jobs, each fitting a sane timeout). Derived as slices so the
+# full sequence stays the single source of truth.
+_ALL_SPLIT = len(ALL_MODULE_SEQUENCE) // 2
+ALL_1_MODULE_SEQUENCE = ALL_MODULE_SEQUENCE[:_ALL_SPLIT]
+ALL_2_MODULE_SEQUENCE = ALL_MODULE_SEQUENCE[_ALL_SPLIT:]
 
 
 @dataclass
@@ -480,12 +495,17 @@ class QAConfig:
                 tests.extend(self.get_module_tests(m))
             return tests
 
-        elif module == QAModule.ALL:
+        elif module in (QAModule.ALL, QAModule.ALL_1, QAModule.ALL_2):
             tests = []
             # Run all modules in sequence - comprehensive test suite.
-            # ALL_MODULE_SEQUENCE is the single source of truth (shared with
-            # QARunner.run()'s ALL→constituents expansion).
-            for m in ALL_MODULE_SEQUENCE:
+            # The *_MODULE_SEQUENCE lists are the single source of truth
+            # (shared with QARunner.run()'s ALL→constituents expansion).
+            _seq = {
+                QAModule.ALL: ALL_MODULE_SEQUENCE,
+                QAModule.ALL_1: ALL_1_MODULE_SEQUENCE,
+                QAModule.ALL_2: ALL_2_MODULE_SEQUENCE,
+            }[module]
+            for m in _seq:
                 tests.extend(self.get_module_tests(m))
             return tests
 

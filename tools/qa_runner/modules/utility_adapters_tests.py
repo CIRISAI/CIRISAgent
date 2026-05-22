@@ -163,8 +163,11 @@ class UtilityAdaptersTests:
             adapter_data = adapter_response.json().get("data", {})
             services = adapter_data.get("services_registered", [])
 
-            # Check for weather tool service registration
-            has_weather_service = any("WeatherToolService" in s for s in services)
+            # Check for weather tool service registration. The weather
+            # adapter registers tool-namespaced services (weather:current,
+            # weather:forecast, weather:alerts) plus a generic TOOL service —
+            # not a "WeatherToolService" class name.
+            has_weather_service = any("weather" in s.lower() for s in services)
 
             # Also check global tools list for weather tools
             tools_response = requests.get(
@@ -264,7 +267,9 @@ class UtilityAdaptersTests:
             services = adapter_data.get("services_registered", [])
 
             # Check for navigation tool service registration
-            has_nav_service = any("NavigationToolService" in s for s in services)
+            # navigation adapter registers navigation:* tool-namespaced
+            # services (geocode, reverse_geocode, ...), not a class name.
+            has_nav_service = any("navigation" in s.lower() for s in services)
 
             # Also check global tools list for navigation tools
             tools_response = requests.get(

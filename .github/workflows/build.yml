@@ -231,11 +231,17 @@ jobs:
   # conscience-prompts incident class). Fast (~3–4 min on cold cache) so
   # cheap to gate releases on.
   staged-qa:
-    name: Staged QA (canonical wheel parity)
+    name: Staged QA (${{ matrix.subset }})
     runs-on: ubuntu-latest
-    # Dual-backend (sqlite + postgres, parallel) over the full expanded
-    # module set runs ~3x the SQLite-only suite; 35m headroom.
-    timeout-minutes: 35
+    # Matrix-split: all_1 / all_2 run as parallel jobs, each dual-backend
+    # (sqlite + postgres, parallel). Half the expanded module set per leg
+    # keeps each within a sane timeout. fail-fast off so one leg's failure
+    # doesn't cancel the other.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        subset: [all_1, all_2]
     permissions:
       contents: read
     steps:
@@ -322,7 +328,7 @@ jobs:
           fi
           echo "✓ Canonical staging == wheel install (byte-equal)"
 
-      - name: Run QA against staged venv (dual backend — sqlite + postgres)
+      - name: Run QA against staged venv (${{ matrix.subset }}, dual backend)
         env:
           # Force first-run state so the QA runner can drive the setup wizard.
           CIRIS_FORCE_FIRST_RUN: "1"
@@ -336,7 +342,7 @@ jobs:
           # the full QA suite against BOTH persistence backends simultaneously.
           # qa_runner self-provisions the postgres backend via a docker
           # container (ubuntu-latest ships Docker); no GH service block needed.
-          python3 -m tools.qa_runner --from-staged \
+          python3 -m tools.qa_runner ${{ matrix.subset }} --from-staged \
             --database-backends sqlite postgres --parallel-backends
 
       - name: Capture upgrade-compat fixture (qa-full)
@@ -346,7 +352,9 @@ jobs:
         # state of the three host workflows. See tools/release/UPGRADE_FIXTURE.md.
         # qa_runner sets CIRIS_HOME=project_root, so DBs land at
         # $GITHUB_WORKSPACE/data — the action's default location.
-        if: success()
+        # Captured on the all_1 leg only — one fixture, no cross-leg
+        # artifact-name collision.
+        if: success() && matrix.subset == 'all_1'
         uses: ./.github/actions/capture-upgrade-fixture
         with:
           source-name: qa-full
@@ -355,7 +363,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: staged-qa-status
+          name: staged-qa-status-${{ matrix.subset }}
           path: qa_reports/qa_status.json
           retention-days: 14
 
@@ -363,7 +371,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: staged-qa-server-logs
+          name: staged-qa-server-logs-${{ matrix.subset }}
           path: |
             logs/
             /tmp/ciris-staged-qa/venv/lib/python3.12/site-packages/logs/

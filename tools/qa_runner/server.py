@@ -793,6 +793,11 @@ class APIServerManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["CIRIS_TESTING_MODE"] = "true"  # Enable testing mode for admin user creation
+        # Disable the API rate limiter for QA. A batched all_1/all_2 sweep is
+        # a bursty load-test workload — many modules fire 20+ requests in
+        # sub-second windows and trip the 60-req/min cap (HTTP 429). The
+        # adapter config comment explicitly endorses a test-time opt-out.
+        env.setdefault("CIRIS_API_RATE_LIMIT_ENABLED", "false")
 
         # Ensure CIRIS_MOCK_LLM matches our config (unset if not using mock)
         if not self.config.mock_llm:

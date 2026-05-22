@@ -195,7 +195,12 @@ class AdapterManifestTests:
     }
 
     # Packages that require system libraries and should be soft-checked
-    SYSTEM_DEP_PACKAGES = {"pyodbc", "ciris-verify"}
+    # Packages that are optional in a minimal QA env: declaring them in an
+    # adapter manifest is correct, but the QA / staged-wheel env does not
+    # install every optional adapter's heavy dep tree. Missing → WARN, not
+    # FAIL (the manifest is still valid). pyodbc/ciris-verify: system-level;
+    # opencv-python/numpy: home_assistant vision; mcp: the MCP adapters.
+    SYSTEM_DEP_PACKAGES = {"pyodbc", "ciris-verify", "opencv-python", "numpy", "mcp"}
 
     async def _test_dependencies(self, adapter_name: str, manifest: Dict) -> None:
         """Test that declared dependencies are available."""

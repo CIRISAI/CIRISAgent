@@ -118,7 +118,11 @@ ALL_MODULE_SEQUENCE = [
     QAModule.PARTNERSHIP,
     QAModule.BILLING,
     QAModule.REDDIT,
-    QAModule.SQL_EXTERNAL_DATA,
+    # NOTE: sql_external_data is intentionally excluded — its pre-server
+    # _setup_test_database() (QARunner.run() special-case) writes a SQLite
+    # fixture to a shared path that races under --parallel-backends
+    # ("disk I/O error / readonly database"). Special-setup module, same
+    # exclusion class as billing_integration. Run it standalone.
     QAModule.MULTI_OCCURRENCE,
     # Governance / observability
     QAModule.ACCORD_METRICS,

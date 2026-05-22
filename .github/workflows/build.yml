@@ -234,10 +234,17 @@ jobs:
     name: Staged QA (${{ matrix.subset }})
     runs-on: ubuntu-latest
     # Matrix-split: all_1 / all_2 run as parallel jobs, each dual-backend
-    # (sqlite + postgres, parallel). Half the expanded module set per leg
-    # keeps each within a sane timeout. fail-fast off so one leg's failure
+    # (sqlite + postgres, parallel). fail-fast off so one leg's failure
     # doesn't cancel the other.
-    timeout-minutes: 30
+    #
+    # timeout-minutes 30 was too short: each job runs sqlite + postgres as
+    # concurrent subprocesses, and the postgres leg is meaningfully slower
+    # (real PG vs in-process SQLite). It consistently overran the 30-min
+    # cap, so GH SIGTERM'd the job mid-run — the postgres agent then did a
+    # normal graceful shutdown and its remaining ~77 tests failed
+    # "connection refused", while the faster sqlite leg had already gone
+    # green. Raised to 55 so the slower leg finishes cleanly.
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:

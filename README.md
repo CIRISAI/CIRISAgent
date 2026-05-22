@@ -1,275 +1,94 @@
-[![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Stable](https://img.shields.io/badge/Status-STABLE-green.svg)](CHANGELOG.md)
-[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
-[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
+<div align="center">
 
+[![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-STABLE-green.svg)](CHANGELOG.md)
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-CIRIS_Codebase-blue?logo=readthedocs)](https://deepwiki.com/CIRISAI/CIRISAgent)
 [![CIRIS Architecture](https://img.shields.io/badge/Paper-CIRIS_Architecture-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18137161)
-[![Coherence Ratchet](https://img.shields.io/badge/Paper-Coherence_Ratchet_(CCA)-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18142668)
-[![Accord](https://img.shields.io/badge/Accord-v1.2--Beta-purple)](https://ciris.ai/ciris_accord.pdf)
+[![Coherence Ratchet](https://img.shields.io/badge/Paper-Coherence_Ratchet-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18142668)
+[![Accord](https://img.shields.io/badge/Ethical_Framework-The_Accord-purple)](https://ciris.ai/ciris_accord.pdf)
 
-# CIRIS Engine
+# CIRIS
 
-**Copyright © 2025 Eric Moore and CIRIS L3C** | **AGPL-3.0 License**
+### A safer, more ethical AI assistant — one you can actually check.
 
-**Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude**
+[![Download on the App Store](https://img.shields.io/badge/Download-App%20Store-0D96F6?style=for-the-badge&logo=apple&logoColor=white)](https://apps.apple.com/us/app/cirisagent/id6758524415)
+&nbsp;&nbsp;
+[![Get it on Google Play](https://img.shields.io/badge/Get%20it%20on-Google%20Play-48B563?style=for-the-badge&logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=ai.ciris.mobile)
 
-**A type-safe, auditable AI agent framework with built-in ethical reasoning**
+</div>
 
-**BETA RELEASE 2.9.0-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+CIRIS replaces apps like ChatGPT and Grok everywhere you need AI. It's the
+same chat you already expect — but it shows its reasoning, escalates to a
+human when it's unsure, keeps your data private, works in 29 languages, and
+runs on your own device. Open source, free, no ads, no growth-at-all-costs
+pressure.
 
-CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
+**Desktop & self-host:** `pip install ciris-agent` — see [Run it yourself](#run-it-yourself).
+Sign in with Google for the free hosted CIRIS model, or bring your own key
+(OpenAI, Anthropic, Groq, Together.ai, or a local model).
 
-## What It Actually Does
+## Why CIRIS
 
-CIRIS wraps LLM calls with:
-- **Multiple evaluation passes** - Every decision gets ethical, common-sense, domain, and epistemic diversity checks
-- **Intuition DMA (IDMA)** - Coherence Collapse Analysis for detecting fragile reasoning (k_eff < 2 = single-source dependence)
-- **Human escalation** - Uncertain decisions defer to designated "Wise Authorities"
-- **Complete audit trails** - Every decision is logged with reasoning
-- **Type safety** - Minimal `Dict[str, Any]` usage, none in critical paths
-- **Identity system** - Agents have persistent identity across restarts
-- **Privacy compliance** - Built-in DSAR/GDPR tools for data discovery, export, and deletion
-- **Commons Credits** - Track non-monetary contributions that strengthen community (not currency, not scorekeeping)
+- **It shows its work.** Every answer passes ethical, common-sense, domain,
+  and reasoning-fragility checks — and you can see *why* it said yes or no,
+  not just the answer.
+- **It defers to you.** When a decision is uncertain, CIRIS escalates to a
+  designated human ("Wise Authority") instead of guessing.
+- **Private by design.** Runs on your device. The hosted CIRIS proxy stores
+  nothing — your prompts are not logged and never train a model.
+- **Speaks your language.** The *entire* ethical-reasoning system — not just
+  the buttons — operates in 29 languages.
+- **Auditable and open.** AGPL-3.0, cryptographically signed decisions, a
+  tamper-evident audit trail, and a public ethical framework anyone can
+  review: [the Accord](https://ciris.ai/ciris_accord.pdf).
 
-**Philosophy**: "No Untyped Dicts, No Bypass Patterns, No Exceptions" - See [CLAUDE.md](CLAUDE.md#core-philosophy-type-safety-first)
+*Not a replacement for humans — a tool that knows its limits.*
 
-**For AI Assistants**: See [llms.txt](llms.txt) for quick context and [docs/OVERVIEW.md](docs/OVERVIEW.md) for architecture.
+## How it works
 
-**Engine Documentation**: [ciris_engine/README.md](ciris_engine/README.md) - Technical architecture and implementation details
+CIRIS wraps every AI response in a reasoning pipeline: multiple evaluation
+passes for ethics, common sense, domain knowledge, and reasoning fragility
+(it flags answers that lean on a single weak source). Uncertain calls defer
+to designated humans. Every decision is written to a hash-chained audit
+trail. Today CIRIS powers Discord community moderation in production at
+[agents.ciris.ai](https://agents.ciris.ai); the architecture is built to
+scale to settings like education and healthcare.
 
-**Ethical Reasoning Benchmarks**: [docs/BENCHMARKING.md](docs/BENCHMARKING.md) - How we measure drift via [EthicsEngine.org](https://ethicsengine.org) (CIRIS + Maverick: 82.1% ±2.4% on HE-300)
+The design is described in two papers — [CIRIS
+Architecture](https://doi.org/10.5281/zenodo.18137161) and the [Coherence
+Ratchet](https://doi.org/10.5281/zenodo.18142668).
 
-## Quick Start
-
-### One-Line Install (Agent + Web UI)
-
-Get CIRIS running in minutes without Docker:
+## Run it yourself
 
 ```bash
-curl -sSL https://ciris.ai/install.sh | bash
-```
-
-This installs both CIRISAgent and CIRISGUI with all dependencies, then opens the web interface at `http://localhost:3000`.
-
-**→ [Standalone Installation Guide](docs/STANDALONE_INSTALL.md)** - Full options, troubleshooting, and manual setup
-
-### Agent-Only Install (Python)
-
-**Via pip (Recommended):**
-```bash
-# Install from PyPI
 pip install ciris-agent
-
-# Start with API adapter and built-in web UI
-ciris-agent --adapter api --port 8000
-
-# Or use Discord adapter
-ciris-agent --adapter discord --guild-id YOUR_GUILD_ID
-
-# Load multiple adapters together
-ciris-agent --adapter api --adapter reddit
+ciris-agent                       # desktop app + local API server
+ciris-agent --adapter discord     # or run it as a Discord bot
 ```
 
-**From Source (Development):**
-```bash
-# 1. Clone and install
-git clone https://github.com/CIRISAI/CIRISAgent.git
-cd CIRISAgent
-pip install -r requirements.txt
-# For development: pip install -r requirements-dev.txt
+One-line server install (agent + web UI): `curl -sSL https://ciris.ai/install.sh | bash`
 
-# 2. Start with Discord adapter
-python main.py --adapter discord --guild-id YOUR_GUILD_ID
+## For developers
 
-# 3. Or start API mode
-python main.py --adapter api --port 8000
+Under the consumer app, CIRIS is a type-safe, auditable AI agent framework —
+22 core services on a 6-bus message architecture, 200+ API endpoints, 4 GB
+RAM target, 10,000+ tests. Extend it with adapters, run it headless, or
+embed it.
 
-# 4. Load multiple adapters together
-python main.py --adapter api --adapter reddit
-```
+- **[Documentation Hub](docs/README.md)** — everything, organized
+- **[Architecture](docs/ARCHITECTURE.md)** · **[API Reference](docs/API_SPEC.md)** · **[Quick Start](docs/QUICKSTART.md)**
+- **[Contributing](CONTRIBUTING.md)** · **[Security](SECURITY.md)** · **[For AI assistants](llms.txt)**
 
-**→ [Complete Installation Guide](docs/INSTALLATION.md)** - Detailed setup, configuration, and deployment
+## Honest read
 
-## Available Adapters
-
-CIRIS supports both built-in and modular adapters that can be loaded via `--adapter` flag or `CIRIS_ADAPTER` environment variable.
-
-### Built-in Adapters
-
-| Adapter | Type | Description | Usage |
-|---------|------|-------------|-------|
-| CLI | Communication | Interactive command-line interface | `--adapter cli` |
-| API | Communication | RESTful HTTP API server (FastAPI) | `--adapter api --port 8000` |
-| Discord | Communication | Discord bot integration | `--adapter discord --guild-id ID` |
-
-### Modular Service Adapters
-
-| Adapter | Type | Description | Required Configuration | Usage |
-|---------|------|-------------|------------------------|-------|
-| Reddit | Communication + Tools | Reddit integration for r/ciris monitoring and interaction. Supports posting, commenting, content removal, user lookups, and passive observation. | `CIRIS_REDDIT_CLIENT_ID`<br>`CIRIS_REDDIT_CLIENT_SECRET`<br>`CIRIS_REDDIT_USERNAME`<br>`CIRIS_REDDIT_PASSWORD` | `--adapter reddit` |
-| SQL External Data | Tools | DSAR/GDPR compliance tools for SQL databases. Supports data discovery, export, anonymization, and deletion across multiple database types (SQLite, PostgreSQL, MySQL, MSSQL). | Database connection config (see docs) | Loaded automatically via tool system |
-| Mock LLM | LLM Provider | Testing mock LLM service that simulates AI responses without external API calls. Not for production use. | None (optional delay/failure rate) | `--adapter mockllm` or `--mock-llm` |
-| Geo Wisdom | Wise Authority | Geographic navigation guidance using OpenStreetMap for routing and geocoding. | None (uses public OSM API) | Loaded automatically for navigation domains |
-| Weather Wisdom | Wise Authority | Weather forecasting and alerts using NOAA National Weather Service API. | None (uses public NOAA API) | Loaded automatically for weather domains |
-| Sensor Wisdom | Wise Authority | Home automation and IoT sensor integration via Home Assistant. Actively filters out medical sensors. | `CIRIS_HOMEASSISTANT_URL`<br>`CIRIS_HOMEASSISTANT_TOKEN` | Loaded automatically for sensor domains |
-
-### LLM Providers
-
-CIRIS uses an OpenAI-compatible API interface for LLM inference:
-
-| Provider | Endpoint | Authentication | Platform |
-|----------|----------|----------------|----------|
-| ciris.ai | `https://ciris.ai/v1` | Google Sign-In | Android, iOS |
-| OpenAI | `https://api.openai.com/v1` | API Key | All |
-| Groq | `https://api.groq.com/openai/v1` | API Key | All |
-| Together.ai | `https://api.together.ai/v1` | API Key | All |
-| Local LLMs | `http://localhost:8080/v1` | Optional | All |
-
-**ciris.ai Proxy** (Mobile): Available on Android and iOS via the unified KMP mobile app. Uses Google Sign-In for authentication with automatic token refresh. No logging - prompts and responses pass through without being stored. Backend providers are Groq and Together.ai.
-
-### Agent Templates
-
-CIRIS includes pre-configured agent templates in `ciris_engine/ciris_templates/`:
-
-| Template | Description |
-|----------|-------------|
-| **Ally** | Personal assistant focused on ethical partnership. Supports task management, scheduling, decision support, and wellbeing. Includes California SB 243 compliance, crisis response protocols, and GDPR DSAR automation. |
-| **Datum** | Community moderation agent for Discord. Production-deployed at agents.ciris.ai. |
-
-Templates define identity, permitted actions, guardrails, and standard operating procedures (SOPs) for DSAR compliance.
-
-### Loading Adapters
-
-**Via Command Line:**
-```bash
-# Single adapter
-python main.py --adapter api
-
-# Multiple adapters
-python main.py --adapter api --adapter reddit
-
-# With configuration
-export CIRIS_REDDIT_CLIENT_ID="your_client_id"
-export CIRIS_REDDIT_CLIENT_SECRET="your_secret"
-python main.py --adapter reddit
-```
-
-**Via Environment Variable:**
-```bash
-export CIRIS_ADAPTER="api,reddit"
-python main.py
-```
-
-**Priority and Behavior:**
-- Communication adapters can run simultaneously (e.g., API + Reddit + Discord)
-- Reddit adapter defaults to lower priority than API for message handling
-- Wise Authority adapters load automatically when their domain is needed
-- Mock LLM disables real LLM services when loaded (testing only)
-
-## Mobile Apps
-
-CIRIS provides native mobile apps for Android and iOS via **Kotlin Multiplatform (KMP)**:
-
-```
-mobile/                    # Unified KMP codebase
-├── shared/               # Shared Kotlin code (ViewModels, API, UI)
-├── androidApp/           # Android-specific code
-└── iosApp/               # iOS-specific code (SwiftUI shell)
-```
-
-**Key Features:**
-- **Unified Codebase**: Single Kotlin codebase for both platforms via Compose Multiplatform
-- **Setup Wizard**: 4-step guided setup with LLM configuration and optional features
-- **Accord Metrics Consent**: Explicit opt-in for AI alignment research (anonymous metrics only)
-- **Google Sign-In**: Free CIRIS AI proxy access with Google authentication
-- **BYOK Mode**: Bring Your Own Key for OpenAI, Anthropic, Groq, Together.ai, or local LLMs
-
-**Building:**
-```bash
-# Android
-cd mobile && ./gradlew :androidApp:assembleDebug
-
-# iOS (requires Xcode)
-cd mobile/iosApp && xcodebuild -scheme iosApp
-```
-
-**→ [Mobile Development Guide](mobile/README.md)** - Full build instructions and architecture
-
-## Localization
-
-CIRIS supports **29 languages** with full pipeline localization - the entire ethical reasoning system operates in the user's preferred language:
-
-**Supported Languages:** Amharic (am), Arabic (ar), Bengali (bn), Burmese (my), Chinese (zh), English (en), French (fr), German (de), Hausa (ha), Hindi (hi), Indonesian (id), Italian (it), Japanese (ja), Korean (ko), Marathi (mr), Persian (fa), Portuguese (pt), Punjabi (pa), Russian (ru), Spanish (es), Swahili (sw), Tamil (ta), Telugu (te), Thai (th), Turkish (tr), Ukrainian (uk), Urdu (ur), Vietnamese (vi), Yoruba (yo)
-
-**What's Localized:**
-- **ACCORD** - The complete ethical framework (~1150 lines per language)
-- **DMA Prompts** - All 6 Decision Making Algorithm prompts (PDMA, CSDMA, DSDMA, IDMA, ASPDMA, TSASPDMA)
-- **Comprehensive Guide** - Runtime instructions for the AI
-- **Conscience Strings** - Ponder questions and ethical reflection prompts
-- **Mobile UI** - Full UI localization via `localization/*.json`
-
-**Setting Language:**
-```bash
-# Environment variable
-export CIRIS_PREFERRED_LANGUAGE=am  # Amharic
-ciris-agent --adapter api
-
-# Or set during setup wizard (saved to .env)
-```
-
-**Files:**
-```
-localization/              # Mobile UI strings (JSON)
-ciris_engine/data/localized/
-├── accord_1.2b_{lang}.txt           # Localized ACCORD
-└── CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt
-ciris_engine/logic/dma/prompts/localized/{lang}/
-├── pdma_ethical.yml       # Ethical evaluation
-├── csdma_common_sense.yml # Common sense checks
-├── dsdma_base.yml         # Domain-specific
-├── idma.yml               # Intuition/coherence
-├── action_selection_pdma.yml
-└── tsaspdma.yml           # Tool selection
-```
-
-## Deployment Ready
-
-✅ **22 core services** with message bus architecture
-✅ **More than 200 API endpoints** verified
-✅ **4GB RAM target** for edge deployment
-✅ **More than 10,000 tests** with comprehensive coverage
-✅ **SonarCloud quality gates** passing
-✅ **Currently powering** Discord moderation at agents.ciris.ai
-✅ **Mobile apps** for Android and iOS via unified KMP codebase
-
-## Documentation
-
-**📚 [Complete Documentation Hub](docs/README.md)**
-
-**Quick Links:**
-- **[Quick Start Guide](docs/QUICKSTART.md)** - Get running in 5 minutes
-- **[Architecture Overview](docs/ARCHITECTURE.md)** - System design (22 services)
-- **[API Reference](docs/API_SPEC.md)** - REST API documentation
-- **[Benchmarking](docs/BENCHMARKING.md)** - Ethical reasoning metrics via [EthicsEngine.org](https://ethicsengine.org)
-- **[Developer Guide](docs/FOR_NERDS.md)** - Contributing and extending
-
-## Contributing
-
-1. Read the [Architecture Guide](docs/ARCHITECTURE.md) - Understand the three-legged stool
-2. Follow [Type Safety Rules](CLAUDE.md#type-safety) - Minimal `Dict[str, Any]` usage
-3. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/CIRISAI/CIRISAgent/issues)
-- **Security**: [SECURITY.md](SECURITY.md)
-- **Quality**: [![SonarCloud](https://sonarcloud.io/images/project_badges/sonarcloud-light.svg)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
+CIRIS is real and running in production, but young — version 2.x, under
+active development. It proves an AI is *accountable*, not that it is
+*correct*: the reasoning is made visible so you can judge it yourself. It
+does not give medical advice or substitute for professional care. It is not
+magic — it is an ordinary chat assistant, plus the accountability machinery
+that closed apps don't give you.
 
 ---
 
-**CIRIS: Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude**
-*Ethical AI with human oversight, complete transparency, and deployment reliability.*
-
-**Ready to build trustworthy AI?** → **[Get started →](docs/README.md)**
+**CIRIS** — Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude
+Copyright © 2025 Eric Moore and CIRIS L3C · AGPL-3.0 · [Release Notes](CHANGELOG.md) · [Issues](https://github.com/CIRISAI/CIRISAgent/issues)

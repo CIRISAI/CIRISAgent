@@ -4,6 +4,7 @@ Mobile Test Cases for CIRIS App
 Test cases for automated UI testing with ADB and UI Automator.
 """
 
+import os
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -38,10 +39,22 @@ class TestReport:
 
 
 class CIRISAppConfig:
-    """Configuration for CIRIS mobile app testing."""
+    """Configuration for CIRIS mobile app testing.
 
-    PACKAGE = "ai.ciris.mobile"
-    MAIN_ACTIVITY = "ai.ciris.mobile.MainActivity"
+    Targets the debug build by default — APK_PATH points to
+    androidApp/build/outputs/apk/debug/, which is signed with the debug
+    keystore and packaged under the `.debug` application id (per
+    androidApp/build.gradle's debug applicationIdSuffix). Previously
+    PACKAGE/MAIN_ACTIVITY pointed at the release id while APK_PATH
+    referenced the debug APK — the two disagreed and `pm clear` /
+    `am start` silently no-op'd against the wrong package on a fresh
+    emulator, failing every test at "Failed to launch app" within ~2s.
+    Override via CIRIS_MOBILE_PACKAGE if you need to point at the
+    release build instead.
+    """
+
+    PACKAGE = os.environ.get("CIRIS_MOBILE_PACKAGE", "ai.ciris.mobile.debug")
+    MAIN_ACTIVITY = f"{PACKAGE.replace('.debug', '')}.MainActivity"
     APK_PATH = "client/androidApp/build/outputs/apk/debug/androidApp-debug.apk"
 
     # UI Texts (for finding elements)

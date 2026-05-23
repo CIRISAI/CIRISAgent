@@ -230,6 +230,63 @@ class Engine:
         entry's `prev_hash` invalidates this entry's signature too.
         """
 
+    def audit_record_entry(self, entry_json: str) -> None:
+        """Record a verified audit entry into the hash chain.
+
+        The entry must carry a valid ``entry_hash`` (matching canonical
+        bytes) and ``signature`` (Ed25519 over canonical signing bytes).
+        Persist re-derives both and rejects on mismatch (AV-49).
+
+        Raises:
+            ValueError: hash / signature / chain integrity failure.
+            RuntimeError: backend error.
+        """
+
+    def audit_list_entries(
+        self,
+        filter_json: str,
+        cursor_json: str | None = None,
+        limit: int = 100,
+    ) -> str:
+        """List audit entries for one tenant (AV-51).
+
+        Returns a JSON ``AuditListPage``.
+
+        Raises:
+            ValueError: malformed filter.
+            RuntimeError: backend error.
+        """
+
+    def audit_verify_chain(
+        self,
+        tenant_id: str,
+        from_sequence: int,
+        to_sequence: int | None = None,
+    ) -> str:
+        """AV-50 chain-walk verify for one tenant.
+
+        Returns a JSON ``ChainVerification`` with typed break diagnostic
+        on first observed integrity violation. Independent of any
+        external registry — validates the local audit chain only.
+
+        Raises:
+            ValueError: invalid arguments.
+            RuntimeError: backend error.
+        """
+
+    def audit_verify_all_chains(self) -> str:
+        """v2.0.5 — verify ALL tenants' audit chains in one call.
+
+        Independent of any external registry — persist validates its
+        own chain integrity. Returns JSON summary::
+
+            {"tenants_checked": N, "total_entries_walked": N,
+             "all_ok": bool, "breaks": [...]}
+
+        Raises:
+            RuntimeError: backend error.
+        """
+
     def register_federation_key(
         self,
         identity_type: str,

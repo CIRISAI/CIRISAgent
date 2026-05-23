@@ -82,6 +82,8 @@ targets:
         embed: true
       - framework: Frameworks/CIRISVerify.xcframework
         embed: true
+      - framework: Frameworks/CIRISPersist.xcframework
+        embed: true
       - sdk: AuthenticationServices.framework
       - sdk: Security.framework
       - sdk: DeviceCheck.framework

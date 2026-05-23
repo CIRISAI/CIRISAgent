@@ -51,6 +51,9 @@ class IOSLib:
     dylib_filename: str          # e.g. "libciris_verify_ffi.dylib" or "libciris_persist.dylib"
     # Python bindings location
     bindings_package: str        # e.g. "ciris_verify"
+    # PyO3 modules load via Python import (app_packages_native + .fwork redirect)
+    # ctypes FFI libs load via xcframework embedding
+    is_pyo3: bool = False
     # Whether this lib has an adapter in ciris_adapters/
     has_adapter: bool = True
     adapter_name: Optional[str] = None  # defaults to bindings_package
@@ -77,12 +80,13 @@ LIBS: Dict[str, IOSLib] = {
         github_repo="CIRISAI/CIRISPersist",
         pypi_package="ciris-persist",
         framework_name="CIRISPersist",
-        ffi_lib_name="libciris_persist",
+        ffi_lib_name="ciris_persist",
         tarball_prefix="ciris-persist",
         device_dir="ios-device",
         simulator_dir="ios-simulator",
-        dylib_filename="libciris_persist.dylib",
+        dylib_filename="ciris_persist.abi3.so",  # PyO3 module, not ctypes FFI
         bindings_package="ciris_persist",
+        is_pyo3=True,  # Loads via Python import, not xcframework
         has_adapter=False,
     ),
     # Future:
@@ -232,6 +236,53 @@ def build_xcframework(lib: IOSLib, extract_dir: Path, version: str) -> bool:
     return True
 
 
+def bundle_pyo3_module(lib: IOSLib, extract_dir: Path, version: str) -> bool:
+    """Bundle a PyO3 extension module for iOS.
+
+    PyO3 modules load via Python's import mechanism, NOT xcframework.
+    The .abi3.so goes into app_packages_native/{name}/ and a .fwork
+    redirect in Resources/app_packages/{name}/ tells BeeWare's Python
+    where to find the framework-wrapped binary at runtime.
+
+    The embed_native_frameworks.sh build script converts the .so into
+    a signed .framework bundle during xcodebuild.
+    """
+    print(f"\n  Bundling PyO3 module for {lib.name}...")
+
+    device_so = extract_dir / lib.device_dir / lib.dylib_filename
+    if not device_so.exists():
+        print(f"  ERROR: {lib.dylib_filename} not found in {lib.device_dir}")
+        return False
+
+    size_mb = device_so.stat().st_size / 1024 / 1024
+    print(f"  Device .so: {size_mb:.1f}MB")
+
+    # 1. Copy to app_packages_native (embed script picks it up at build time)
+    native_dir = IOS_APP_DIR / "app_packages_native" / lib.bindings_package
+    native_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(device_so, native_dir / lib.dylib_filename)
+    print(f"  -> app_packages_native/{lib.bindings_package}/{lib.dylib_filename}")
+
+    # 2. Create .fwork redirect in Resources/app_packages
+    # The framework name follows BeeWare convention: {package}.{module}.framework
+    pkg_dir = IOS_RESOURCES_DIR / "app_packages" / lib.bindings_package
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remove any bare .so (must go through framework pipeline)
+    bare_so = pkg_dir / lib.dylib_filename
+    if bare_so.exists():
+        bare_so.unlink()
+
+    # .fwork content: path to the framework binary inside Frameworks/
+    fw_name = f"{lib.bindings_package}.{lib.bindings_package}"
+    fwork_content = f"Frameworks/{fw_name}.framework/{fw_name}"
+    fwork_file = pkg_dir / f"{lib.dylib_filename.replace('.so', '.fwork')}"
+    fwork_file.write_text(fwork_content)
+    print(f"  -> {fwork_file.name} → {fwork_content}")
+
+    return True
+
+
 def update_python_bindings(lib: IOSLib, version: str) -> bool:
     """Update Python bindings from PyPI wheel."""
     print(f"\n  Updating Python bindings from PyPI ({lib.pypi_package}=={version})...")
@@ -262,7 +313,7 @@ def update_python_bindings(lib: IOSLib, version: str) -> bool:
 
         with zipfile.ZipFile(wheel, "r") as zf:
             for name in zf.namelist():
-                if name.startswith(f"{lib.bindings_package}/") and name.endswith(".py"):
+                if name.startswith(f"{lib.bindings_package}/") and (name.endswith(".py") or name.endswith(".pyi")):
                     basename = Path(name).name
                     content = zf.read(name)
                     (pkg_dir / basename).write_bytes(content)
@@ -306,10 +357,13 @@ def rebuild_resources_zip() -> None:
 
 
 def verify_dylib_version(lib: IOSLib, version: str) -> bool:
-    """Verify the fallback dylib contains the expected version string."""
-    dylib = IOS_RESOURCES_DIR / "app_packages" / lib.bindings_package / lib.dylib_filename
+    """Verify the native library contains the expected version string."""
+    if lib.is_pyo3:
+        dylib = IOS_APP_DIR / "app_packages_native" / lib.bindings_package / lib.dylib_filename
+    else:
+        dylib = IOS_RESOURCES_DIR / "app_packages" / lib.bindings_package / lib.dylib_filename
     if not dylib.exists():
-        print(f"  ✗ Fallback dylib missing: {dylib.name}")
+        print(f"  ✗ Native library missing: {dylib.name}")
         return False
 
     result = subprocess.run(["strings", str(dylib)], capture_output=True, text=True)
@@ -343,9 +397,15 @@ def update_lib(lib: IOSLib, version: str) -> bool:
         extract_dir.mkdir()
         run_cmd(["tar", "-xzf", str(tarball), "-C", str(extract_dir)])
 
-        # Build XCFramework + fallback dylib
-        if not build_xcframework(lib, extract_dir, version):
-            return False
+        # Bundle native library
+        if lib.is_pyo3:
+            # PyO3: .abi3.so → app_packages_native + .fwork redirect
+            if not bundle_pyo3_module(lib, extract_dir, version):
+                return False
+        else:
+            # ctypes FFI: build xcframework + fallback dylib
+            if not build_xcframework(lib, extract_dir, version):
+                return False
 
     # Python bindings
     update_python_bindings(lib, version)

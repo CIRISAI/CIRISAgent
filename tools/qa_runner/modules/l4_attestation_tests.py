@@ -154,8 +154,14 @@ class L4AttestationModule:
         # Algorithm A floor was originally CIRISVerify v1.13.x (verify_tree()
         # runtime walker). v2.0 was the CanonicalBuild v2 wire bump on the
         # register side (CIRISVerify#8) — same verify_tree() contract on the
-        # client. So the floor on the agent side is now 1.13.x OR any 2.x.
-        if not (version.startswith("1.13.") or version.startswith("2.")):
+        # client. v3.0 ("Federation Ready") bumped the federation/canonical-
+        # hash surface paired with ciris-persist 2.0.x — Algorithm A walker
+        # contract still unchanged on the agent side. Floor: 1.13.x / 2.x / 3.x.
+        if not (
+            version.startswith("1.13.")
+            or version.startswith("2.")
+            or version.startswith("3.")
+        ):
             errors.append(
                 f"Expected ciris-verify version >=1.13.x (Algorithm A floor); got '{version}'."
             )

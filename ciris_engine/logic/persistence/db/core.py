@@ -905,7 +905,39 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         graph_persistence._engine = None
         graph_persistence._engine_dsn = None
 
-    engine = Engine(dsn, signing_key_id)
+    try:
+        engine = Engine(dsn, signing_key_id)
+    except Exception as e:
+        # iOS: flock() returns EPERM in the sandbox. Single-process mobile app
+        # has no multi-agent risk. Delete any stale lock file and retry once.
+        if "operation not permitted" in str(e).lower() or "lock" in str(e).lower():
+            is_ios = sys.platform == "ios" or (
+                sys.platform == "darwin"
+                and hasattr(sys, "implementation")
+                and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+            )
+            if is_ios:
+                logger.warning("iOS: Engine bootstrap lock failed (%s) — clearing stale locks and retrying", e)
+                # Remove any stale lock/WAL files that may be blocking
+                import glob
+                for pattern in [f"{db_path}*-lock", f"{db_path}-journal"]:
+                    for lock_file in glob.glob(pattern):
+                        try:
+                            Path(lock_file).unlink()
+                            logger.info("Removed stale lock: %s", lock_file)
+                        except OSError:
+                            pass
+                # Retry with fresh state
+                try:
+                    from ciris_persist import reset_engine
+                    reset_engine()
+                except Exception:
+                    pass
+                engine = Engine(dsn, signing_key_id)
+            else:
+                raise
+        else:
+            raise
     logger.info("ciris-persist Engine constructed (dsn=%s)", dsn)
 
     # A0a graph migration + A0b audit bridge. Both run once, sentinel-gated.

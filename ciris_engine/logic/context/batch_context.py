@@ -3,6 +3,7 @@ Batch context builder for optimizing system snapshot generation.
 Separates per-batch vs per-thought operations for performance.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
@@ -452,9 +453,7 @@ async def prefetch_batch_context(
         if disclosure:
             disclosure_text = disclosure.text
             disclosure_severity = (
-                disclosure.severity.value
-                if hasattr(disclosure.severity, "value")
-                else str(disclosure.severity)
+                disclosure.severity.value if hasattr(disclosure.severity, "value") else str(disclosure.severity)
             )
 
     # Pull the cached attestation result. AuthenticationService runs the
@@ -477,8 +476,7 @@ async def prefetch_batch_context(
 
     if not service_registry:
         raise RuntimeError(
-            "CRITICAL: service_registry is required to resolve "
-            "AuthenticationService for ciris_verify attestation."
+            "CRITICAL: service_registry is required to resolve " "AuthenticationService for ciris_verify attestation."
         )
 
     wa_services = service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
@@ -492,15 +490,19 @@ async def prefetch_batch_context(
             "await_attestation_ready(). Cannot resolve ciris_verify "
             "attestation — AuthenticationService is required."
         )
-    await auth_service.await_attestation_ready()
+    try:
+        await asyncio.wait_for(auth_service.await_attestation_ready(), timeout=5.0)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "[BATCH] Attestation not ready within 5s — proceeding with stale cache. "
+            "This is expected during startup or after --identity-update."
+        )
 
     attestation_result = None
     if hasattr(auth_service, "get_cached_attestation"):
         attestation_result = auth_service.get_cached_attestation(allow_stale=True)
         if attestation_result:
-            logger.debug(
-                f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}"
-            )
+            logger.debug(f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}")
 
     # Legacy adapter-side cache (kept as fallback for backward compat).
     if (

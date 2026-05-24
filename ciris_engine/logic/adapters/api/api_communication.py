@@ -123,11 +123,16 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
                 return
 
             message_channel_map = getattr(self._app_state, "message_channel_map", {})
-            message_id = message_channel_map.get(channel_id)
-            if not message_id:
+            queue = message_channel_map.get(channel_id)
+            if not queue:
                 # No waiter — not all SPEAKs are replies to interact() calls.
                 logger.debug(f"[API_INTERACTION] No pending interact waiter for channel {channel_id}")
                 return
+
+            # FIFO: this response answers the OLDEST pending request on the
+            # channel. pop(0) both retrieves and removes it — so the next
+            # response correlates to the next request, no clobbering.
+            message_id = queue.pop(0)
 
             logger.info(
                 f"[API_INTERACTION] Processing channel_id={channel_id}, content_len={len(content)}, "
@@ -139,8 +144,6 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             logger.info(f"[API_INTERACTION] About to store: message_id={message_id}, content='{content}'")
             await store_message_response(message_id, content)
             logger.info(f"Stored interact response for message {message_id} in channel {channel_id}")
-            # Clean up the mapping
-            del message_channel_map[channel_id]
         except Exception as e:
             logger.debug(f"Could not store interact response: {e}")
 

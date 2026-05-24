@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
-from ciris_engine.logic.persistence.db import get_db_connection, initialize_database
+from ciris_engine.logic.persistence.db import initialize_database
+from ciris_engine.logic.persistence.models.tasks import add_task
 from ciris_engine.logic.utils.occurrence_utils import (
     discover_active_occurrences,
     get_current_occurrence_id,
@@ -18,42 +19,49 @@ from ciris_engine.logic.utils.occurrence_utils import (
     is_multi_occurrence_deployment,
 )
 from ciris_engine.schemas.runtime.enums import TaskStatus
+from ciris_engine.schemas.runtime.models import Task, TaskContext
 
 
 @pytest.fixture
 def temp_db():
-    """Create a temporary database for testing."""
+    """Create a temporary database for testing with persist wired."""
+    from ciris_engine.logic.persistence.models import graph as _graph_mod
+
     fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
+
+    prior_engine = _graph_mod._engine
+    prior_dsn = _graph_mod._engine_dsn
     initialize_database(db_path)
+
     yield db_path
+
+    _graph_mod._engine = prior_engine
+    _graph_mod._engine_dsn = prior_dsn
     if os.path.exists(db_path):
         os.unlink(db_path)
 
 
 def create_task_for_occurrence(occurrence_id: str, db_path: str, minutes_ago: int = 0) -> None:
-    """Helper to create a task for a given occurrence."""
+    """Helper to create a task for a given occurrence via the persist API."""
     now = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
-    sql = """
-        INSERT INTO tasks
-        (task_id, channel_id, agent_occurrence_id, description, status, priority, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """
-    with get_db_connection(db_path) as conn:
-        conn.execute(
-            sql,
-            (
-                f"test_{occurrence_id}_{minutes_ago}",
-                "test_channel",
-                occurrence_id,
-                "Test task",
-                TaskStatus.PENDING.value,
-                5,
-                now.isoformat(),
-                now.isoformat(),
-            ),
-        )
-        conn.commit()
+    task = Task(
+        task_id=f"test_{occurrence_id}_{minutes_ago}",
+        channel_id="test_channel",
+        agent_occurrence_id=occurrence_id,
+        description="Test task",
+        status=TaskStatus.PENDING,
+        priority=5,
+        created_at=now.isoformat(),
+        updated_at=now.isoformat(),
+        context=TaskContext(
+            channel_id="test_channel",
+            user_id="test_user",
+            correlation_id=f"corr_{occurrence_id}_{minutes_ago}",
+            parent_task_id=None,
+        ),
+    )
+    add_task(task)
 
 
 def test_get_occurrence_count_from_env():
@@ -78,7 +86,7 @@ def test_get_occurrence_count_from_database(temp_db: str):
 
     with patch.dict(os.environ, {}, clear=True):
         # Should discover 3 occurrences from database
-        count = get_occurrence_count(db_path=temp_db)
+        count = get_occurrence_count()
         assert count == 3
 
 
@@ -94,7 +102,7 @@ def test_discover_active_occurrences_multiple(temp_db: str):
     create_task_for_occurrence("occurrence-2", temp_db, minutes_ago=1)
     create_task_for_occurrence("default", temp_db, minutes_ago=0)
 
-    discovered = discover_active_occurrences(within_minutes=10, db_path=temp_db)
+    discovered = discover_active_occurrences(within_minutes=10)
 
     assert len(discovered) == 3
     assert "occurrence-1" in discovered
@@ -109,7 +117,7 @@ def test_discover_active_occurrences_excludes_shared(temp_db: str):
     create_task_for_occurrence("occurrence-1", temp_db, minutes_ago=1)
     create_task_for_occurrence("__shared__", temp_db, minutes_ago=0)
 
-    discovered = discover_active_occurrences(within_minutes=10, db_path=temp_db)
+    discovered = discover_active_occurrences(within_minutes=10)
 
     assert len(discovered) == 1
     assert "occurrence-1" in discovered
@@ -123,7 +131,7 @@ def test_discover_active_occurrences_time_window(temp_db: str):
     # Old activity (outside window)
     create_task_for_occurrence("occurrence-2", temp_db, minutes_ago=15)
 
-    discovered = discover_active_occurrences(within_minutes=10, db_path=temp_db)
+    discovered = discover_active_occurrences(within_minutes=10)
 
     assert len(discovered) == 1
     assert "occurrence-1" in discovered
@@ -132,7 +140,7 @@ def test_discover_active_occurrences_time_window(temp_db: str):
 
 def test_discover_active_occurrences_empty(temp_db: str):
     """Test discovering occurrences when database is empty."""
-    discovered = discover_active_occurrences(within_minutes=10, db_path=temp_db)
+    discovered = discover_active_occurrences(within_minutes=10)
     assert discovered == []
 
 
@@ -174,7 +182,7 @@ def test_get_occurrence_info_complete(temp_db: str):
     create_task_for_occurrence("occurrence-2", temp_db, minutes_ago=2)
 
     with patch.dict(os.environ, {"AGENT_OCCURRENCE_ID": "occurrence-1", "AGENT_OCCURRENCE_COUNT": "2"}):
-        info = get_occurrence_info(db_path=temp_db)
+        info = get_occurrence_info()
 
         assert info["occurrence_id"] == "occurrence-1"
         assert info["occurrence_count"] == 2

@@ -37,9 +37,14 @@ class AdapterManifestTests:
         self.results: List[Dict[str, Any]] = []
 
         # Base URL for direct API calls
-        self._base_url = getattr(client, "_base_url", "http://localhost:8080")
-        if hasattr(client, "_transport") and hasattr(client._transport, "_base_url"):
-            self._base_url = client._transport._base_url
+        # CIRISClient exposes the base URL as `base_url` (and Transport.base_url)
+        # — NOT `_base_url`. getattr(client, "_base_url", …) always missed and
+        # fell back to a hardcoded :8080, so under --parallel-backends the
+        # postgres leg's raw adapter requests hit the sqlite server → 401.
+        self._base_url = getattr(client, "base_url", None) or "http://localhost:8080"
+        _tr = getattr(client, "_transport", None)
+        if _tr is not None and getattr(_tr, "base_url", None):
+            self._base_url = _tr.base_url
 
         # Adapters directory
         self.adapters_dir = Path(__file__).parent.parent.parent.parent / "ciris_adapters"
@@ -195,7 +200,12 @@ class AdapterManifestTests:
     }
 
     # Packages that require system libraries and should be soft-checked
-    SYSTEM_DEP_PACKAGES = {"pyodbc", "ciris-verify"}
+    # Packages that are optional in a minimal QA env: declaring them in an
+    # adapter manifest is correct, but the QA / staged-wheel env does not
+    # install every optional adapter's heavy dep tree. Missing → WARN, not
+    # FAIL (the manifest is still valid). pyodbc/ciris-verify: system-level;
+    # opencv-python/numpy: home_assistant vision; mcp: the MCP adapters.
+    SYSTEM_DEP_PACKAGES = {"pyodbc", "ciris-verify", "opencv-python", "numpy", "mcp"}
 
     async def _test_dependencies(self, adapter_name: str, manifest: Dict) -> None:
         """Test that declared dependencies are available."""

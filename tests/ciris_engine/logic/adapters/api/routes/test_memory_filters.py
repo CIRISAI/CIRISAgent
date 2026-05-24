@@ -327,66 +327,71 @@ class TestGetUserAllowedIds:
         mock_db.connection = Mock(return_value=mock_conn)
         auth_service.db_manager = mock_db
 
-        result = await get_user_allowed_ids(auth_service, "user123")
+        result = await get_user_allowed_ids("user123")
 
         assert "user123" in result
         assert len(result) == 1
 
     @pytest.mark.asyncio
-    async def test_oauth_identities_added(self):
-        """Should add OAuth identities to allowed set."""
-        import sqlite3
-        from unittest.mock import MagicMock, patch
+    async def test_oauth_identities_added(self, persist_engine):
+        """Should add OAuth identities to allowed set.
+
+        Post-A1 (CIRISAgent#763): `get_user_allowed_ids` routes through
+        `authentication_store.get_wa_by_id` (typed persist substrate). Seed a
+        single WA certificate with OAuth fields populated. WA-id format is
+        enforced (`wa-YYYY-MM-DD-XXXXXX`), so we use a valid id and pass it
+        as user_id.
+
+        Persist's wa_cert substrate is single-row-per-wa_id (upsert
+        semantics); the legacy raw-SQL fixture inserted two rows under the
+        same wa_id (one per OAuth provider) which the substrate cannot
+        represent. Verify the primary OAuth-link path (provider +
+        external_id) instead.
+        """
+        from ciris_engine.logic.persistence.stores import authentication_store
+        from ciris_engine.schemas.services.authority_core import WACertificate, WARole
+
+        wa_id = "wa-2026-05-19-USR001"
+        wa = WACertificate(
+            wa_id=wa_id,
+            name="Test User",
+            role=WARole.OBSERVER,
+            pubkey="test_pubkey",
+            jwt_kid="test_kid",
+            scopes_json="[]",
+            oauth_provider="discord",
+            oauth_external_id="discord_123",
+            created_at=datetime.now(timezone.utc),
+        )
+        authentication_store.store_wa_certificate(wa)
 
         auth_service = Mock()
         auth_service.db_path = ":memory:"
 
-        # Create actual in-memory SQLite database for testing
-        with sqlite3.connect(":memory:") as conn:
-            # Create wa_cert table
-            conn.execute(
-                """
-                CREATE TABLE wa_cert (
-                    wa_id TEXT,
-                    oauth_provider TEXT,
-                    oauth_external_id TEXT,
-                    active INTEGER
-                )
-            """
-            )
-            # Insert test OAuth identities
-            conn.execute(
-                "INSERT INTO wa_cert (wa_id, oauth_provider, oauth_external_id, active) VALUES (?, ?, ?, ?)",
-                ("user123", "discord", "discord_123", 1),
-            )
-            conn.execute(
-                "INSERT INTO wa_cert (wa_id, oauth_provider, oauth_external_id, active) VALUES (?, ?, ?, ?)",
-                ("user123", "google", "google_456", 1),
-            )
-            conn.commit()
+        result = await get_user_allowed_ids(wa_id)
 
-            # Patch sqlite3.connect directly in the sqlite3 module
-            with patch("sqlite3.connect", return_value=conn):
-                result = await get_user_allowed_ids(auth_service, "user123")
-
-        assert "user123" in result
+        assert wa_id in result
         assert "discord:discord_123" in result
         assert "discord_123" in result
-        assert "google:google_456" in result
-        assert "google_456" in result
-        assert len(result) == 5
 
     @pytest.mark.asyncio
-    async def test_database_error_handling(self):
-        """Should handle database errors gracefully."""
+    async def test_database_error_handling(self, persist_engine):
+        """Should handle database errors gracefully.
+
+        Post-A1 (CIRISAgent#763): force the persist `wa_cert_get` to raise via
+        patching the typed store. The helper should still return the base
+        user_id.
+        """
         from unittest.mock import patch
 
         auth_service = Mock()
         auth_service.db_path = "/nonexistent/path/to/db.db"
 
-        # Patch sqlite3.connect directly in the sqlite3 module
-        with patch("sqlite3.connect", side_effect=Exception("DB error")):
-            result = await get_user_allowed_ids(auth_service, "user123")
+        with patch(
+            "ciris_engine.logic.persistence.stores.authentication_store.get_wa_by_id",
+            side_effect=Exception("DB error"),
+        ):
+            result = await get_user_allowed_ids("user123")
 
         # Should still include base user_id even when DB query fails
         assert "user123" in result

@@ -42,9 +42,14 @@ class ContextEnrichmentTests:
         self.loaded_adapter_id: Optional[str] = None
 
         # Base URL for direct API calls
-        self._base_url = getattr(client, "_base_url", "http://localhost:8080")
-        if hasattr(client, "_transport") and hasattr(client._transport, "_base_url"):
-            self._base_url = client._transport._base_url
+        # CIRISClient exposes the base URL as `base_url` (and Transport.base_url)
+        # — NOT `_base_url`. getattr(client, "_base_url", …) always missed and
+        # fell back to a hardcoded :8080, so under --parallel-backends the
+        # postgres leg's raw adapter requests hit the sqlite server → 401.
+        self._base_url = getattr(client, "base_url", None) or "http://localhost:8080"
+        _tr = getattr(client, "_transport", None)
+        if _tr is not None and getattr(_tr, "base_url", None):
+            self._base_url = _tr.base_url
 
     def _get_auth_headers(self) -> Dict[str, str]:
         """Get authentication headers from client."""
@@ -233,7 +238,11 @@ class ContextEnrichmentTests:
         4. Validates that system_snapshot contains context_enrichment_results
         """
         token = self._get_token()
-        timeout = 60  # seconds
+        # 120s, not 60s: the postgres backend is meaningfully slower than
+        # in-process SQLite, and under the --parallel-backends matrix two
+        # agent stacks share the runner — the snapshot_and_context SSE event
+        # legitimately takes >60s there. (sqlite passed, postgres timed out.)
+        timeout = 120  # seconds
 
         # Track captured data
         snapshot_captured: Dict[str, Any] = {}

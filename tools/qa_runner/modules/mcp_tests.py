@@ -46,9 +46,11 @@ class MCPTests:
         self._mcp_server_id = "qa-test-server"
 
         # Base URL for direct API calls (some operations need raw requests)
-        self._base_url = getattr(client, "_base_url", "http://localhost:8080")
-        if hasattr(client, "_transport") and hasattr(client._transport, "_base_url"):
-            self._base_url = client._transport._base_url
+        # CIRISClient exposes the base URL as `base_url`, NOT `_base_url`.
+        self._base_url = getattr(client, "base_url", None) or "http://localhost:8080"
+        _tr = getattr(client, "_transport", None)
+        if _tr is not None and getattr(_tr, "base_url", None):
+            self._base_url = _tr.base_url
 
     def _get_auth_headers(self) -> Dict[str, str]:
         """Get authentication headers from client."""

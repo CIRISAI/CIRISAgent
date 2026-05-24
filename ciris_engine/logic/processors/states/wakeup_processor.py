@@ -540,7 +540,7 @@ class WakeupProcessor(BaseProcessor):
 
         # CRITICAL: Keep shared wakeup task in "__shared__" namespace for multi-occurrence coordination
         # All occurrences need to be able to query this task to monitor completion
-        persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "__shared__", self.time_service)
+        persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "__shared__")
         self.wakeup_tasks = [root_task]
 
         # Create step tasks as child tasks of the shared root
@@ -755,7 +755,7 @@ class WakeupProcessor(BaseProcessor):
 
     def _mark_task_failed(self, task_id: str, reason: str, occurrence_id: str = "default") -> None:
         """Mark a task as failed."""
-        persistence.update_task_status(task_id, TaskStatus.FAILED, occurrence_id, self.time_service)
+        persistence.update_task_status(task_id, TaskStatus.FAILED, occurrence_id)
         logger.error(f"Task {task_id} marked as FAILED: {reason}")
 
     def _mark_root_task_complete(self) -> None:
@@ -763,7 +763,7 @@ class WakeupProcessor(BaseProcessor):
         if self.wakeup_tasks:
             root_task = self.wakeup_tasks[0]
             occurrence_id = root_task.agent_occurrence_id
-            persistence.update_task_status(root_task.task_id, TaskStatus.COMPLETED, occurrence_id, self.time_service)
+            persistence.update_task_status(root_task.task_id, TaskStatus.COMPLETED, occurrence_id)
             logger.info(f"Marked shared wakeup task {root_task.task_id} as COMPLETED")
 
     def _mark_root_task_failed(self) -> None:
@@ -771,7 +771,7 @@ class WakeupProcessor(BaseProcessor):
         if self.wakeup_tasks:
             root_task = self.wakeup_tasks[0]
             occurrence_id = root_task.agent_occurrence_id
-            persistence.update_task_status(root_task.task_id, TaskStatus.FAILED, occurrence_id, self.time_service)
+            persistence.update_task_status(root_task.task_id, TaskStatus.FAILED, occurrence_id)
             logger.error(f"Marked shared wakeup task {root_task.task_id} as FAILED")
 
     def is_wakeup_complete(self) -> bool:

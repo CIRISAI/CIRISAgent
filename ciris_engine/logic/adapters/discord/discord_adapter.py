@@ -270,7 +270,6 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                     updated_at=end_time,
                     timestamp=start_time,
                 ),
-                time_service,
             )
 
             # Increment message processed counter for sent messages too
@@ -447,7 +446,6 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                     updated_at=end_time,
                     timestamp=start_time,
                 ),
-                time_service,
             )
             # Note: Guidance requests are already audited via defer handler action
 
@@ -1067,7 +1065,6 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                     updated_at=end_time,
                     timestamp=start_time,
                 ),
-                time_service,
             )
 
             # Increment commands handled counter for deferral requests

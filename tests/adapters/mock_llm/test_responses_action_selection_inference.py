@@ -70,7 +70,8 @@ def test_parse_tool_params_string_accepts_shell_style_pairs() -> None:
     assert _parse_tool_params_string('path="/tmp/test file.txt" mode=read retries=2') == {
         "path": "/tmp/test file.txt",
         "mode": "read",
-        "retries": "2",
+        # retries JSON-coerces to int — $tool args are now typed (2.9.0)
+        "retries": 2,
     }
 
 

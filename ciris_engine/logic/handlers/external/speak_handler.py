@@ -255,7 +255,6 @@ class SpeakHandler(BaseActionHandler):
                     thought.source_task_id,
                     TaskStatus.COMPLETED,
                     thought.agent_occurrence_id,
-                    self.time_service,
                 )
 
             self._update_trace_correlation(True, f"[BENCHMARK] Message sent to {channel_id}, task auto-completed")

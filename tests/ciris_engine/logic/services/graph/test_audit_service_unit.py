@@ -67,6 +67,36 @@ class TestGraphAuditService:
 
         mock_verifier.sign_ed25519_sync.side_effect = mock_sign
 
+        # A3 cutover: wire a real persist engine pointed at a temp DB so
+        # the audit service's audit_record_entry calls land in
+        # cirislens_audit_log. Same pattern as test_audit_service.py —
+        # capture+restore module-globals on teardown so cross-test
+        # isolation is preserved.
+        import base64
+        import hashlib
+
+        import ciris_engine.logic.persistence.models.graph as _graph_mod
+        from ciris_persist import Engine, reset_engine  # type: ignore[import-untyped]
+
+        from ciris_engine.logic.persistence.models.graph import set_persist_engine
+
+        _prior_engine = _graph_mod._engine
+        _prior_dsn = _graph_mod._engine_dsn
+        fingerprint = hashlib.sha256(pub_bytes).hexdigest()[:12]
+        key_id = f"agent-{fingerprint}"
+        with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as _pf:
+            persist_db_path = _pf.name
+        reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
+        persist_engine = Engine(f"sqlite:///{persist_db_path}", key_id)
+        persist_engine.register_public_key(
+            signature_key_id=key_id,
+            public_key_b64=base64.b64encode(pub_bytes).decode(),
+            algorithm="ed25519",
+            description="test fixture audit key",
+            added_by="test",
+        )
+        set_persist_engine(persist_engine, dsn=f"sqlite:///{persist_db_path}")
+
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch(
                 "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
@@ -92,6 +122,15 @@ class TestGraphAuditService:
                     service._started = False
             except Exception:
                 pass  # Ignore errors during cleanup
+        # Restore prior persist engine state (cross-test isolation)
+        _graph_mod._engine = _prior_engine
+        _graph_mod._engine_dsn = _prior_dsn
+        try:
+            import os as _os
+
+            _os.unlink(persist_db_path)
+        except OSError:
+            pass
 
     @pytest.mark.asyncio
     async def test_start_stop(self, audit_service: GraphAuditService) -> None:

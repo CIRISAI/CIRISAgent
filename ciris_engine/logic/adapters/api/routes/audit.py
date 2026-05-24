@@ -7,7 +7,6 @@ Simplified to 3 core endpoints: query, get specific entry, and export.
 
 import asyncio
 import json
-import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +18,6 @@ from fastapi import Query, Request
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
-from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from ciris_engine.logic.utils.jsondict_helpers import get_str, get_str_optional
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.schemas.api.audit import AuditContext, EntryVerification
@@ -160,86 +158,29 @@ def _get_audit_service(request: Request) -> AuditServiceProtocol:
     return audit_service  # type: ignore[no-any-return]
 
 
-def _verify_entries_chain_integrity(
-    entries: list[dict[str, object]],
-    conn: sqlite3.Connection,
-) -> list[str]:
-    """Verify hash chain integrity for a set of entries.
+def _persist_audit_row_to_legacy(row: dict[str, Any]) -> dict[str, object]:
+    """Map a persist `cirislens_audit_log` row to the legacy `audit_log` row shape.
 
-    Checks:
-    1. Entry hashes match computed values
-    2. Previous hash links are valid (within returned entries or to prior entry)
-
-    Returns list of integrity warnings (empty = all valid).
+    Callers in this route assume the legacy column names. Persist uses
+    slightly different field names + adds tenant_id / actor_id / etc.
+    We project the persist row onto the legacy shape; integrity flag rides
+    on the new key `_signature_verified` so the chain-integrity warning UI
+    keeps working without recomputing hashes client-side.
     """
-    import hashlib
-
-    warnings: list[str] = []
-    if not entries:
-        return warnings
-
-    # Sort by sequence_number for chain verification
-    def get_seq(e: dict[str, object]) -> int:
-        val = e.get("sequence_number", 0)
-        if isinstance(val, int):
-            return val
-        if isinstance(val, str) and val.isdigit():
-            return int(val)
-        return 0
-
-    sorted_entries = sorted(entries, key=get_seq)
-
-    # Get the entry before our first one (for chain link verification)
-    first_seq = get_seq(sorted_entries[0])
-    prior_hash: Optional[str] = None
-    if first_seq > 1:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT entry_hash FROM audit_log WHERE sequence_number = ?",
-            (first_seq - 1,),
-        )
-        row = cursor.fetchone()
-        if row:
-            prior_hash = row[0]
-
-    for entry in sorted_entries:
-        seq_num = entry.get("sequence_number", 0)
-        stored_hash = get_str_optional(entry, "entry_hash")
-        stored_prev = get_str_optional(entry, "previous_hash")
-
-        # Compute expected hash
-        canonical = {
-            "event_id": entry.get("event_id", ""),
-            "event_timestamp": entry.get("event_timestamp", ""),
-            "event_type": entry.get("event_type", ""),
-            "originator_id": entry.get("originator_id", ""),
-            "event_payload": entry.get("event_payload", ""),
-            "sequence_number": seq_num,
-            "previous_hash": entry.get("previous_hash", ""),
-        }
-        canonical_json = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
-        computed_hash = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
-
-        # Check 1: Entry hash matches
-        if stored_hash and computed_hash != stored_hash:
-            warnings.append(f"TAMPER_DETECTED: Entry {seq_num} hash mismatch")
-            _audit_logger.error(f"AUDIT CHAIN INTEGRITY: Entry {seq_num} hash mismatch - possible tampering")
-
-        # Check 2: Previous hash link is valid
-        if seq_num == 1:
-            if stored_prev != "genesis":
-                warnings.append(f"CHAIN_BREAK: Entry 1 should have 'genesis' as previous_hash")
-        elif prior_hash and stored_prev != prior_hash:
-            warnings.append(f"CHAIN_BREAK: Entry {seq_num} previous_hash mismatch")
-            _audit_logger.error(f"AUDIT CHAIN INTEGRITY: Entry {seq_num} chain link broken")
-
-        # Update prior_hash for next iteration
-        prior_hash = stored_hash
-
-    if warnings:
-        _audit_logger.warning(f"AUDIT CHAIN INTEGRITY: {len(warnings)} issues found during routine read")
-
-    return warnings
+    payload_str = row.get("payload", "")
+    return {
+        "event_id": row.get("entry_id", ""),
+        "event_timestamp": row.get("recorded_at", ""),
+        "event_type": row.get("action_type", "audit_event"),
+        "originator_id": row.get("actor_id", ""),
+        "event_payload": payload_str,
+        "sequence_number": row.get("sequence_number", 0),
+        "previous_hash": row.get("prev_hash", ""),
+        "entry_hash": row.get("entry_hash", ""),
+        "signature": row.get("signature", ""),
+        "signing_key_id": row.get("signing_key_id", ""),
+        "_signature_verified": bool(row.get("signature_verified", 0)),
+    }
 
 
 def _sync_query_sqlite_audit(
@@ -248,47 +189,72 @@ def _sync_query_sqlite_audit(
     end_time: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
-) -> list[dict[str, object]]:  # SERIALIZATION BOUNDARY - SQLite row_factory returns dicts
-    """Query SQLite audit database directly (synchronous version).
+) -> list[dict[str, object]]:
+    """Query the audit chain via persist's `audit_list_entries` substrate.
 
-    Includes chain integrity verification during routine reads.
+    Post-A3 cutover (CIRISAgent#763 / 2.9.0 Phase 3a): the legacy
+    `audit_log` table is empty on every 2.9.0 deployment because the
+    write path routes through `cirislens_audit_log`. We read from
+    persist's substrate so the API exposes the actual current chain.
+
+    `db_path` is preserved in the signature for backward compatibility;
+    persist owns the underlying file.
     """
-    if not Path(db_path).exists():
-        return []
-
     try:
-        with get_safe_sqlite_connection(db_path, row_factory=sqlite3.Row) as conn:
-            cursor = conn.cursor()
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-            # Build query with time filters
-            query = "SELECT * FROM audit_log WHERE 1=1"
-            params: list[str] = []
+        engine = get_persist_engine()
+        if engine is None:
+            return []
 
-            if start_time:
-                query += " AND event_timestamp >= ?"
-                params.append(start_time.isoformat())
+        # Build the persist AuditFilter. Tenant scoping is required by
+        # AV-51; resolve the tenant via the SAME source as the audit WRITE
+        # path (persist_signing.resolve_tenant_id, which prefers
+        # CIRIS_AGENT_ID). Reading CIRIS_AGENT_TENANT here diverged from the
+        # writer: with only CIRIS_AGENT_ID set (the common config) the reader
+        # queried "agent-default" while entries were tagged with the
+        # CIRIS_AGENT_ID tenant — so /v1/audit/entries returned an empty
+        # trail even though entries existed.
+        from ciris_engine.logic.audit.persist_signing import resolve_tenant_id
 
-            if end_time:
-                query += " AND event_timestamp <= ?"
-                params.append(end_time.isoformat())
+        tenant_id = resolve_tenant_id()
+        filter_payload: dict[str, Any] = {"tenant_id": tenant_id}
+        if start_time:
+            filter_payload["recorded_after"] = start_time.isoformat()
+        if end_time:
+            filter_payload["recorded_before"] = end_time.isoformat()
 
-            query += " ORDER BY event_timestamp DESC LIMIT ? OFFSET ?"
-            params.extend([str(limit), str(offset)])
-
-            cursor.execute(query, params)
-            entries = [dict(row) for row in cursor.fetchall()]
-
-            # Verify chain integrity during routine reads
-            if entries:
-                # conn may be iOS proxy, but is API-compatible with Connection
-                integrity_warnings = _verify_entries_chain_integrity(entries, conn)  # type: ignore[arg-type]
-                # Attach warnings to entries for API response visibility
-                if integrity_warnings:
-                    for entry in entries:
-                        entry["_integrity_warnings"] = integrity_warnings
-
-            return entries
-    except Exception:
+        # Paginate forward; persist returns newest-first.
+        legacy_rows: list[dict[str, object]] = []
+        cursor_json: Optional[str] = None
+        skipped = 0
+        while len(legacy_rows) < limit:
+            page_size = min(500, limit + offset)
+            raw = engine.audit_list_entries(
+                json.dumps(filter_payload), cursor_json, page_size
+            )
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            items = parsed.get("items", []) if isinstance(parsed, dict) else []
+            if not items:
+                break
+            for row in items:
+                if not isinstance(row, dict):
+                    continue
+                if skipped < offset:
+                    skipped += 1
+                    continue
+                legacy_rows.append(_persist_audit_row_to_legacy(row))
+                if len(legacy_rows) >= limit:
+                    break
+            next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None
+            if not next_cursor or len(items) < page_size:
+                break
+            cursor_json = next_cursor if isinstance(next_cursor, str) else json.dumps(next_cursor)
+        return legacy_rows
+    except Exception as e:
+        _audit_logger.warning(
+            "Failed to query persist audit chain via audit_list_entries: %s", e
+        )
         return []
 
 

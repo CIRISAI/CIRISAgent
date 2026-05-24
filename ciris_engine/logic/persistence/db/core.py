@@ -5,9 +5,10 @@ import threading
 import time
 import types
 from datetime import datetime
-from typing import Any, Dict, Optional, TypedDict, Union, cast
+from pathlib import Path
+from typing import Any, Optional, Tuple, TypedDict, Union, cast
 
-from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
+from ciris_engine.logic.config.db_paths import get_audit_db_full_path, get_sqlite_db_full_path
 
 # iOS-specific: Global lock for SQLite operations to avoid iOS's SQLiteDatabaseTracking assertions
 # iOS's debug SQLite has stricter thread checking that triggers assertions with check_same_thread=False
@@ -41,24 +42,11 @@ def _get_ios_lock() -> threading.RLock:
     return _ios_sqlite_lock
 
 
-from ciris_engine.schemas.persistence.postgres import tables as postgres_tables
-from ciris_engine.schemas.persistence.sqlite import tables as sqlite_tables
-
 from .dialect import init_dialect
-from .migration_runner import run_migrations
 from .retry import DEFAULT_BASE_DELAY, DEFAULT_MAX_DELAY, DEFAULT_MAX_RETRIES, is_retryable_error
 
 logger = logging.getLogger(__name__)
 
-# Try to import psycopg2 for PostgreSQL support
-try:
-    import psycopg2
-    import psycopg2.extras
-
-    POSTGRES_AVAILABLE = True
-except ImportError:
-    POSTGRES_AVAILABLE = False
-    logger.debug("psycopg2 not available - PostgreSQL support disabled")
 
 
 # Test database path override - set by test fixtures
@@ -88,168 +76,6 @@ def _ensure_adapters_registered() -> None:
         sqlite3.register_converter("timestamp", convert_datetime)
         _adapters_registered = True
 
-
-class PostgreSQLCursorWrapper:
-    """Wrapper for PostgreSQL cursor to translate SQL placeholders.
-
-    This wrapper ensures that ? placeholders are translated to %s
-    even when code directly uses cursor.execute().
-    """
-
-    def __init__(self, cursor: Any):
-        """Initialize wrapper with psycopg2 cursor."""
-        self._cursor = cursor
-
-    def execute(self, sql: str, parameters: Any = None) -> Any:
-        """Execute SQL with placeholder translation.
-
-        Translates:
-        - ? -> %s (for positional parameters with tuple/list)
-        - :name -> %(name)s (for named parameters with dict)
-        """
-        import re
-
-        # If using named parameters (dict), convert :name to %(name)s
-        if parameters and isinstance(parameters, dict):
-            # Replace :param_name with %(param_name)s
-            translated_sql = re.sub(r":(\w+)", r"%(\1)s", sql)
-        else:
-            # Using positional parameters, convert ? to %s
-            translated_sql = sql.replace("?", "%s")
-
-        if parameters:
-            return self._cursor.execute(translated_sql, parameters)
-        else:
-            return self._cursor.execute(translated_sql)
-
-    def executemany(self, sql: str, seq_of_parameters: Any) -> Any:
-        """Execute many SQL statements with placeholder translation."""
-        translated_sql = sql.replace("?", "%s")
-        return self._cursor.executemany(translated_sql, seq_of_parameters)
-
-    def fetchone(self) -> Any:
-        """Fetch one row."""
-        return self._cursor.fetchone()
-
-    def fetchall(self) -> Any:
-        """Fetch all rows."""
-        return self._cursor.fetchall()
-
-    def fetchmany(self, size: Optional[int] = None) -> Any:
-        """Fetch many rows."""
-        if size is None:
-            return self._cursor.fetchmany()
-        return self._cursor.fetchmany(size)
-
-    def close(self) -> None:
-        """Close cursor."""
-        self._cursor.close()
-
-    @property
-    def rowcount(self) -> Any:
-        """Get row count."""
-        return self._cursor.rowcount
-
-    @property
-    def description(self) -> Any:
-        """Get description."""
-        return self._cursor.description
-
-    def __getattr__(self, name: str) -> Any:
-        """Delegate all other attributes to the underlying cursor."""
-        return getattr(self._cursor, name)
-
-    def __iter__(self) -> Any:
-        """Make cursor iterable."""
-        return iter(self._cursor)
-
-
-class PostgreSQLConnectionWrapper:
-    """Wrapper for PostgreSQL connection to provide SQLite-like interface.
-
-    This wrapper allows code written for SQLite (which supports conn.execute())
-    to work with PostgreSQL (which requires cursor.execute()).
-    """
-
-    def __init__(self, conn: Any):
-        """Initialize wrapper with psycopg2 connection."""
-        self._conn = conn
-
-    def execute(self, sql: str, parameters: Any = None) -> Any:
-        """Execute SQL statement using a cursor.
-
-        CRITICAL: Translates SQL placeholders for PostgreSQL compatibility:
-        - ? -> %s (for positional parameters)
-        - :name -> %(name)s (for named parameters)
-        """
-        import re
-
-        # Translate placeholders based on parameter type
-        if parameters and isinstance(parameters, dict):
-            # Named parameters: :name -> %(name)s
-            translated_sql = re.sub(r":(\w+)", r"%(\1)s", sql)
-        else:
-            # Positional parameters: ? -> %s
-            translated_sql = sql.replace("?", "%s")
-
-        cursor = self._conn.cursor()
-        logger.debug("PostgreSQLConnectionWrapper.execute: Placeholder translation")
-        logger.debug(f"  original: {sql[:150]}...")
-        logger.debug(f"  translated: {translated_sql[:150]}...")
-        logger.debug(f"  param type: {type(parameters).__name__}, value: {parameters}")
-
-        if parameters:
-            cursor.execute(translated_sql, parameters)
-        else:
-            cursor.execute(translated_sql)
-
-        logger.debug(f"PostgreSQLConnectionWrapper.execute: SUCCESS, rowcount={cursor.rowcount}")
-        return cursor
-
-    def executemany(self, sql: str, seq_of_parameters: Any) -> Any:
-        """Execute SQL statement multiple times.
-
-        CRITICAL: Translates ? placeholders to %s for PostgreSQL compatibility.
-        """
-        # CRITICAL: Translate placeholders for PostgreSQL
-        translated_sql = sql.replace("?", "%s")
-
-        cursor = self._conn.cursor()
-        cursor.executemany(translated_sql, seq_of_parameters)
-        return cursor
-
-    def cursor(self) -> Any:
-        """Create and return a new cursor wrapped for PostgreSQL compatibility."""
-        # Return a wrapped cursor that translates placeholders
-        return PostgreSQLCursorWrapper(self._conn.cursor())
-
-    def commit(self) -> None:
-        """Commit the current transaction."""
-        self._conn.commit()
-
-    def rollback(self) -> None:
-        """Rollback the current transaction."""
-        self._conn.rollback()
-
-    def close(self) -> None:
-        """Close the connection."""
-        self._conn.close()
-
-    def __getattr__(self, name: str) -> Any:
-        """Delegate all other attributes to the underlying connection."""
-        return getattr(self._conn, name)
-
-    def __enter__(self) -> "PostgreSQLConnectionWrapper":
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Context manager exit - commit if no exception, rollback otherwise."""
-        if exc_type is None:
-            self._conn.commit()
-        else:
-            self._conn.rollback()
-        self._conn.close()
 
 
 class IOSDictRow(dict[str, Any]):
@@ -630,17 +456,6 @@ def _resolve_db_path(db_path: Optional[str]) -> str:
     return resolved
 
 
-def _create_postgres_connection(adapter: Any) -> Any:
-    """Create a PostgreSQL connection."""
-    if not POSTGRES_AVAILABLE:
-        raise RuntimeError(
-            "PostgreSQL connection requested but psycopg2 not installed. Install with: pip install psycopg2-binary"
-        )
-    conn = psycopg2.connect(adapter.db_url)
-    conn.cursor_factory = psycopg2.extras.RealDictCursor
-    return PostgreSQLConnectionWrapper(conn)
-
-
 class _IOSCursorProxy:
     """Proxy that prevents sqlite3_finalize() from running on the wrong thread.
 
@@ -837,128 +652,42 @@ def _execute_pragmas(conn: Any, adapter: Any, pragma_statements: list[str]) -> N
 def get_db_connection(
     db_path: Optional[str] = None, busy_timeout: Optional[int] = None, enable_retry: bool = True
 ) -> Union[sqlite3.Connection, RetryConnection, Any]:
-    """Establishes a connection to the database (SQLite or PostgreSQL).
+    """Open a stdlib sqlite3 connection for the bootstrap-layer schema init.
 
-    Supports both SQLite and PostgreSQL backends via connection string detection.
-    Connection string format:
-    - SQLite: "sqlite://path/to/db.db" or just "path/to/db.db"
-    - PostgreSQL: "postgresql://user:pass@host:port/dbname"
-
-    Args:
-        db_path: Optional database connection string (defaults to SQLite data/ciris.db)
-        busy_timeout: Optional busy timeout in milliseconds (SQLite only)
-        enable_retry: Enable automatic retry for write operations (SQLite only)
-
-    Returns:
-        Database connection:
-        - SQLite: RetryConnection wrapper (if enable_retry=True) or raw Connection
-        - PostgreSQL: psycopg2 connection with dict cursor factory
+    Post-2.9.0 absorption: this function is consumed only by the bootstrap
+    layer (initialize_database, run_migrations, retry.get_db_connection_with_retry,
+    db.operations). PostgreSQL deployments route schema management through
+    persist's Engine — this function rejects postgres:// DSNs.
     """
-    import traceback
-
-    caller_info = "".join(traceback.format_stack()[-4:-1])
-    logger.debug(f"[DB_CONNECT] get_db_connection called from:\n{caller_info}")
-
     db_path = _resolve_db_path(db_path)
     adapter = init_dialect(db_path)
 
-    # PostgreSQL connection
+    # PostgreSQL no longer wires through psycopg2 — persist's sqlx backend
+    # owns the connection pool. The bootstrap layer's legacy schema is a
+    # SQLite-only concern (a 2.8.x upgrade-path concept); fresh Postgres
+    # deployments skip legacy CREATE TABLE entirely (see initialize_database).
     if adapter.is_postgresql():
-        return _create_postgres_connection(adapter)
+        raise RuntimeError(
+            "get_db_connection() does not support PostgreSQL after 2.9.0. "
+            "Route through persist's Engine substrate instead."
+        )
 
-    # SQLite connection (default)
-    logger.debug(f"[DB_CONNECT] Creating SQLite connection to: {db_path}")
     _ensure_adapters_registered()
-
     is_ios = _check_ios_platform()
-    logger.debug(f"[DB_CONNECT] Platform detection: is_ios={is_ios}")
-
-    # Create connection based on platform
-    # Use union type since conn can be either proxy or raw connection
     conn: Union[_IOSConnectionProxy, sqlite3.Connection]
     if is_ios:
         conn = _create_sqlite_connection_ios(db_path)
     else:
         conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
 
-    logger.debug("[DB_CONNECT] Setting row_factory...")
     conn.row_factory = sqlite3.Row
-
-    # iOS: thread-local connections mean each thread owns its handle.
-    # No need for IOSSerializedConnection wrapper — it was needed when connections
-    # were shared across threads, but thread-local caching fixes the root cause.
-    # The wrapper's global lock actually makes things worse by serializing independent
-    # threads and can cause the main thread to block on DB operations from other threads.
 
     pragma_statements = _get_pragma_statements(is_ios, busy_timeout)
     _execute_pragmas(conn, adapter, pragma_statements)
 
-    # Return wrapped connection with retry logic by default
     if enable_retry and not is_ios:
-        logger.debug("[DB_CONNECT] Returning RetryConnection wrapper")
-        # At this point we know is_ios=False so conn is sqlite3.Connection
         return RetryConnection(cast(sqlite3.Connection, conn))
-
-    logger.debug(f"[DB_CONNECT] Returning connection: {type(conn).__name__}")
     return conn
-
-
-def get_safe_sqlite_connection(
-    db_path: str,
-    row_factory: Any = None,
-    read_only: bool = False,
-    timeout: float = 5.0,
-) -> Union["_IOSConnectionProxy", sqlite3.Connection]:
-    """Get a SQLite connection that is safe on all platforms including iOS.
-
-    This is the ONLY way to open a SQLite database in CIRIS. Do NOT use
-    sqlite3.connect() directly — iOS requires thread-local connection
-    proxies to prevent Apple's libRPAC SQLiteDatabaseTracking assertions.
-
-    Use this instead of sqlite3.connect() everywhere:
-        - Audit routes, key migration, auth service, occurrence utils, etc.
-        - Any one-off DB access outside the main persistence layer
-
-    Args:
-        db_path: Path to SQLite database file (or URI like file:path?mode=ro)
-        row_factory: Optional row factory (e.g., sqlite3.Row)
-        read_only: If True, open in read-only mode via URI
-        timeout: Connection timeout in seconds
-
-    Returns:
-        Connection (or iOS proxy) safe for the current platform.
-    """
-    is_ios = _check_ios_platform()
-
-    if read_only and not db_path.startswith("file:"):
-        db_path = f"file:{db_path}?mode=ro"
-
-    conn: Union[_IOSConnectionProxy, sqlite3.Connection]
-    if is_ios:
-        conn = _create_sqlite_connection_ios(db_path)
-    else:
-        uri = db_path.startswith("file:")
-        conn = sqlite3.connect(db_path, uri=uri, check_same_thread=False, timeout=timeout)
-
-    if row_factory is not None:
-        conn.row_factory = row_factory
-
-    return conn
-
-
-# Removed unused schema getter functions - only graph schemas are used
-
-
-def get_graph_nodes_table_schema_sql() -> str:
-    return sqlite_tables.GRAPH_NODES_TABLE_V1
-
-
-def get_graph_edges_table_schema_sql() -> str:
-    return sqlite_tables.GRAPH_EDGES_TABLE_V1
-
-
-def get_service_correlations_table_schema_sql() -> str:
-    return sqlite_tables.SERVICE_CORRELATIONS_TABLE_V1
 
 
 class ConnectionDiagnostics(TypedDict, total=False):
@@ -1032,63 +761,239 @@ def get_connection_diagnostics(db_path: Optional[str] = None) -> ConnectionDiagn
 
 
 def initialize_database(db_path: Optional[str] = None) -> None:
-    """Initialize the database with base schema and apply migrations.
+    """Bootstrap the database for 2.9.0.
 
-    Note: Each deployment uses either SQLite or PostgreSQL exclusively.
-    No migration between database backends is supported.
+    Both SQLite and PostgreSQL deployments are owned end-to-end by
+    ciris-persist's Engine: `_bootstrap_persist_engine` constructs the
+    Engine (which runs persist's own sqlx migrations to create the
+    `cirislens.*` / `cirisgraph.*` schema), then runs the A0a legacy
+    graph migration once. There is no agent-side CREATE TABLE — persist's
+    `run_legacy_graph_migration` (v1.6.4, CIRISPersist#70) reads any
+    legacy 2.8.x `graph_nodes` / `graph_edges` over its own connection,
+    and no-ops gracefully when those tables are absent (fresh install).
     """
     import traceback
 
     caller_info = "".join(traceback.format_stack()[-4:-1])
     logger.info(f"[DB_INIT] initialize_database called from:\n{caller_info}")
 
-    from ciris_engine.logic.persistence.db.execution_helpers import (
-        execute_sql_statements,
-        mask_password_in_url,
-        split_sql_statements,
-    )
-
     try:
-        # Determine if we're using PostgreSQL or SQLite
         if db_path is None:
             db_path = get_sqlite_db_full_path()
-
-        adapter = init_dialect(db_path)
-
-        # Log which database type we're initializing
-        tables_module: types.ModuleType
-        if adapter.is_postgresql():
-            safe_url = mask_password_in_url(adapter.db_url)
-            logger.info(f"Initializing PostgreSQL database: {safe_url}")
-            tables_module = postgres_tables
-        else:
-            logger.info(f"Initializing SQLite database: {db_path}")
-            tables_module = sqlite_tables
-
-        with get_db_connection(db_path) as conn:
-            base_tables = [
-                tables_module.TASKS_TABLE_V1,
-                tables_module.THOUGHTS_TABLE_V1,
-                tables_module.FEEDBACK_MAPPINGS_TABLE_V1,
-                tables_module.GRAPH_NODES_TABLE_V1,
-                tables_module.GRAPH_EDGES_TABLE_V1,
-                tables_module.SERVICE_CORRELATIONS_TABLE_V1,
-                tables_module.AUDIT_LOG_TABLE_V1,
-                tables_module.AUDIT_ROOTS_TABLE_V1,
-                tables_module.AUDIT_SIGNING_KEYS_TABLE_V1,
-                tables_module.WA_CERT_TABLE_V1,
-                tables_module.SCHEDULED_TASKS_TABLE_V1,
-            ]
-
-            for table_sql in base_tables:
-                statements = split_sql_statements(table_sql)
-                execute_sql_statements(conn, statements, adapter)
-
-            conn.commit()
-
-        run_migrations(db_path)
-
-        logger.info(f"Database initialized at {db_path or get_sqlite_db_full_path()}")
+        logger.info(f"Initializing database via persist Engine: {db_path}")
+        _bootstrap_persist_engine(db_path)
     except Exception as e:
         logger.exception(f"Database error during initialization: {e}")
         raise
+
+
+def _persist_dsn_and_sentinel(db_path: str) -> Tuple[str, Optional[Path]]:
+    """Resolve a db_path / database_url to (persist DSN, sentinel directory).
+
+    Three supported forms — and crucially, a SQLite *URL* must never be run
+    through Path().resolve(): that mangles the URL into a bogus filesystem
+    path and silently bootstraps persist against the wrong (empty) database.
+
+      - Postgres URL            -> used verbatim; sentinels in the data dir
+      - SQLite URL (sqlite://)  -> used verbatim — the config schema
+                                   documents sqlite://... as a valid
+                                   database_url; sentinels anchored next to
+                                   the db file
+      - bare filesystem path    -> wrapped as sqlite:///<abs>; sentinels
+                                   anchored beside the file
+    """
+    if db_path.startswith(("postgres://", "postgresql://")):
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        return db_path, Path(get_data_dir())
+    if db_path.startswith("sqlite:"):
+        # SQLAlchemy form: sqlite:///rel/path (3 slashes -> relative) or
+        # sqlite:////abs/path (4 slashes -> absolute). Splitting on
+        # 'sqlite:///' keeps the right leading-slash count for Path().
+        path_part = db_path.split("sqlite:///", 1)[-1] if "sqlite:///" in db_path else ""
+        sentinel = (
+            Path(path_part).resolve().parent if path_part and path_part != ":memory:" else None
+        )
+        return db_path, sentinel
+    abs_path = Path(db_path).resolve()
+    # `sqlite:///{abs_path}` where abs_path begins with '/' yields
+    # 'sqlite:////absolute/path' — 4 slashes, absolute as required.
+    return f"sqlite:///{abs_path}", abs_path.parent
+
+
+def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
+    """Construct the ciris-persist Engine, run A0a migration if needed,
+    and wire the engine into `persistence.models.graph` (2.9.0).
+
+    Idempotent per-process: if an Engine is already wired, this is a
+    no-op. Persist's Engine holds the tokio runtime + connection pool
+    and is designed for one instance per process — tests that need
+    multiple isolated DBs must explicitly call set_persist_engine()
+    with their own Engine instance.
+
+    Tolerant: if persist is unavailable or migration fails, logs the
+    error but does not block startup. The agent will then hit the
+    "engine not initialized" RuntimeError on the first persistence call,
+    surfacing the problem loud rather than silently.
+    """
+    import os
+    from pathlib import Path
+
+    # Compute the expected DSN up front so we can decide whether to
+    # re-wire. Production calls initialize_database() once per process
+    # with the same db_path — second/third calls are no-ops. Tests
+    # call it with a fresh temp_db each time — those re-wire.
+    from ciris_engine.logic.persistence.models import graph as graph_persistence
+    if db_path is None:
+        _resolved_db_path = get_sqlite_db_full_path()
+    else:
+        _resolved_db_path = db_path
+    if not isinstance(_resolved_db_path, str):
+        _resolved_db_path = str(_resolved_db_path)
+    # Same resolution the bootstrap below uses — so a sqlite:// URL produces
+    # an _expected_dsn that actually matches and the idempotent-skip works.
+    _expected_dsn = _persist_dsn_and_sentinel(_resolved_db_path)[0]
+
+    if (
+        graph_persistence._engine is not None
+        and graph_persistence._engine_dsn == _expected_dsn
+    ):
+        logger.debug("persist engine already wired to %s, skipping re-bootstrap", _expected_dsn)
+        return
+
+    # Resolve the DSN. Postgres takes its own URL; SQLite uses
+    # SQLAlchemy-style sqlite:// + (3 or 4 slashes).
+    if db_path is None:
+        db_path = get_sqlite_db_full_path()
+
+    if not isinstance(db_path, str):
+        db_path = str(db_path)
+
+    # Postgres URL verbatim, sqlite:// URL verbatim, bare path -> sqlite:///.
+    # See _persist_dsn_and_sentinel — a sqlite:// URL must not be resolved
+    # as a filesystem path.
+    dsn, sentinel_dir = _persist_dsn_and_sentinel(db_path)
+
+    signing_key_id = os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
+
+    try:
+        from ciris_persist import Engine  # type: ignore[import-untyped]
+    except ImportError:
+        logger.warning(
+            "ciris-persist not importable; 2.9.0 absorption disabled. "
+            "Pin ciris-persist>=1.6.4 in requirements.txt."
+        )
+        return
+
+    # Test isolation only: under pytest, fixtures routinely bootstrap a
+    # fresh per-test engine, and a single test may invoke more than one
+    # engine-wiring fixture. ciris-persist's process-singleton rejects a
+    # second construction with a different config — so un-pin the current
+    # engine first via reset_engine() (handle-free; CIRISPersist#88). We
+    # only reach here when the idempotent-skip above did NOT fire, i.e. a
+    # genuinely different config is being bootstrapped. Gated strictly on
+    # PYTEST_CURRENT_TEST: in production a second differing config is a
+    # real bug and persist's EngineConfigMismatch guardrail must still
+    # fire untouched.
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        try:
+            from ciris_persist import reset_engine
+
+            reset_engine()
+        except Exception:  # noqa: BLE001 - best-effort test teardown
+            pass
+        graph_persistence._engine = None
+        graph_persistence._engine_dsn = None
+
+    engine = Engine(dsn, signing_key_id)
+    logger.info("ciris-persist Engine constructed (dsn=%s)", dsn)
+
+    # A0a graph migration + A0b audit bridge. Both run once, sentinel-gated.
+    if sentinel_dir is not None:
+        # A0a: copy legacy graph_nodes/graph_edges → cirisgraph.* . Persist
+        # owns the whole operation since v1.6.4 (CIRISPersist#70) — it reads
+        # the legacy schema over its own connection (SQLite *and* Postgres),
+        # so the agent ships zero raw SQL for the upgrade path. Idempotent
+        # and tolerant of legacy-tables-absent on fresh installs.
+        sentinel = sentinel_dir / ".persist_migrated"
+        if not sentinel.exists():
+            try:
+                import json as _json
+
+                logger.info("A0a migration sentinel absent — running legacy graph migration")
+                raw = engine.run_legacy_graph_migration(_json.dumps({"dry_run": False}))
+                stats = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+                if stats.get("outcome") in ("ok", "partial") and stats.get("errors", 0) == 0:
+                    sentinel.write_text(
+                        f'{{"nodes_written":{stats.get("nodes_written", 0)},'
+                        f'"edges_written":{stats.get("edges_written", 0)}}}'
+                    )
+                    logger.info(
+                        "A0a migration complete: %d nodes, %d edges "
+                        "(skipped: %d already-present, %d too-large; "
+                        "%d dangling-FK edges)",
+                        stats.get("nodes_written", 0), stats.get("edges_written", 0),
+                        stats.get("nodes_skipped_already_present", 0),
+                        stats.get("nodes_skipped_too_large", 0),
+                        stats.get("edges_skipped_dangling_fk", 0),
+                    )
+                else:
+                    logger.error(
+                        "A0a migration outcome=%s errors=%d; sentinel NOT written",
+                        stats.get("outcome"), stats.get("errors", 0),
+                    )
+            except Exception:
+                logger.exception("A0a migration failed; persist engine wired anyway")
+
+        # 2.9.0 A0b: bridge the legacy audit chain into persist's
+        # cirislens_audit_log. Sentinel-gated like A0a; runs once on
+        # first 2.9.0 boot. Tolerant: if CIRISVerify isn't ready yet
+        # (early-boot ordering) or if the legacy audit DB is absent
+        # (fresh deployment with no legacy chain), log + skip.
+        audit_sentinel = sentinel_dir / ".audit_bridged"
+        # Resolve the legacy audit DB from config (database.audit_db) so a
+        # deployment that customised audit_db still bridges its chain —
+        # don't assume the default sentinel_dir/ciris_audit.db location.
+        try:
+            legacy_audit_db = Path(get_audit_db_full_path())
+        except Exception:  # pragma: no cover - defensive
+            legacy_audit_db = sentinel_dir / "ciris_audit.db"
+        if not audit_sentinel.exists() and legacy_audit_db.exists():
+            try:
+                # Bundled under ciris_engine/ so the in-place upgrade path is
+                # reachable from Chaquopy on Android too — tools/ isn't in
+                # the mobile extractPackages list (CIRISAgent#780).
+                from ciris_engine.logic.audit.chain_bridge import run as run_bridge
+
+                logger.info("A0b audit-bridge sentinel absent — running chain bridge")
+                result = run_bridge(
+                    engine_db=Path(db_path),
+                    audit_db=legacy_audit_db,
+                    dry_run=False,
+                    engine=engine,
+                )
+                audit_sentinel.write_text(
+                    f'{{"bridge_id":"{result.bridge_id}",'
+                    f'"legacy_terminal_seq":{result.legacy_terminal_seq},'
+                    f'"legacy_db_sha256":"{result.legacy_db_sha256}"}}'
+                )
+                logger.info(
+                    "A0b audit bridge complete: legacy_seq=%d bridge_id=%s",
+                    result.legacy_terminal_seq, result.bridge_id,
+                )
+            except Exception:
+                # CIRISVerify availability + signing-key access are
+                # ordering-sensitive at boot; we don't block startup on
+                # bridge failure. Next boot retries (sentinel absent).
+                logger.exception(
+                    "A0b audit bridge failed; persist engine wired anyway"
+                )
+        elif not legacy_audit_db.exists():
+            logger.debug(
+                "no legacy audit DB at %s — fresh deployment, no chain to bridge",
+                legacy_audit_db,
+            )
+
+    # Wire the engine into persistence.models.graph.
+    from ciris_engine.logic.persistence.models import graph as graph_persistence
+    graph_persistence.set_persist_engine(engine, dsn)

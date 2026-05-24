@@ -453,8 +453,25 @@ class TestUserProfileEnrichment:
         assert user_555555.display_name == "ContextUser"
 
     @pytest.mark.asyncio
-    async def test_user_profile_with_cross_channel_messages(self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry):
-        """Test enriching user profiles with messages from other channels."""
+    async def test_user_profile_with_cross_channel_messages(
+        self, persist_engine, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
+        """Test enriching user profiles with messages from other channels.
+
+        Post-A1 (CIRISAgent#763): `_collect_cross_channel_messages` paginates
+        persist's correlation substrate filtered by service_type='communication',
+        then checks tags.user_id + tags.channel_id client-side. Seed an
+        ObserveHandler correlation in `other_channel` for the target user.
+        """
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         mock_memory = AsyncMock()
 
         mock_thought = MagicMock()
@@ -470,6 +487,7 @@ class TestUserProfileEnrichment:
         mock_task = MagicMock()
         mock_task.context = MagicMock()
         mock_task.context.user_id = None  # Explicitly set to None
+        mock_task.context.correlation_id = None  # Avoid correlation history path
         mock_task.context.system_snapshot = MagicMock()
         mock_task.context.system_snapshot.channel_id = "current_channel"
         mock_task.context.system_snapshot.channel_context = None  # Avoid MagicMock validation issues
@@ -486,39 +504,51 @@ class TestUserProfileEnrichment:
             ]
         )
 
-        # Mock database connection for cross-channel messages
-        with patch("ciris_engine.logic.persistence.get_db_connection") as mock_db_conn:
-            mock_conn = MagicMock()
-            mock_cursor = MagicMock()
+        # Seed a cross-channel communication correlation via persist.
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="cross_channel_msg_1",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication",
+                    method_name="observe",
+                    channel_id="other_channel",
+                    request_timestamp=now,
+                    parameters={"content": "Hello from other channel"},
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "999888", "channel_id": "other_channel"},
+                retention_policy="raw",
+            )
+        )
 
-            # Mock fetchall to return messages from other channels
-            mock_cursor.fetchall.return_value = [
-                {
-                    "tags": json.dumps({"user_id": "999888", "channel_id": "other_channel"}),
-                    "request_data": json.dumps({"content": "Hello from other channel"}),
-                    "created_at": datetime.now(timezone.utc),
-                }
-            ]
+        with patch("ciris_engine.logic.persistence.models.graph.get_edges_for_node") as mock_edges:
+            mock_edges.return_value = []
 
-            mock_conn.cursor.return_value = mock_cursor
-            mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-            mock_conn.__exit__ = MagicMock(return_value=None)
-            mock_db_conn.return_value = mock_conn
+            snapshot = await build_system_snapshot(
+                task=mock_task,
+                thought=mock_thought,
+                resource_monitor=mock_resource_monitor,
+                memory_service=mock_memory,
+                time_service=mock_time_service,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
+            )
 
-            with patch("ciris_engine.logic.persistence.models.graph.get_edges_for_node") as mock_edges:
-                mock_edges.return_value = []
-
-                snapshot = await build_system_snapshot(
-                    task=mock_task,
-                    thought=mock_thought,
-                    resource_monitor=mock_resource_monitor,
-                    memory_service=mock_memory,
-                    time_service=mock_time_service,
-                    runtime=mock_runtime,
-                    service_registry=mock_service_registry,
-                )
-
-        # Verify user profile was enriched with cross-channel messages
+        # Verify user profile was enriched with the cross-channel message.
+        # Post-A1 (CIRISAgent#763), the cross-channel reader pulls
+        # `req_data["parameters"]["content"]` from each row's request_data
+        # (ServiceRequestData stores call args in `parameters: Dict[str,str]`).
         assert len(snapshot.user_profiles) == 1
         user_profile = snapshot.user_profiles[0]
         assert "other_channel" in user_profile.notes

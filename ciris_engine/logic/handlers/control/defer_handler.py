@@ -228,7 +228,7 @@ class DeferHandler(BaseActionHandler):
         intentionally NOT surfaced to the user (it's for WA review only).
         """
         parent_task_id = thought.source_task_id
-        persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, "default", self.time_service)
+        persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, "default")
         self.logger.info(f"Marked parent task {parent_task_id} as DEFERRED due to child thought deferral.")
 
         task = persistence.get_task_by_id(parent_task_id)

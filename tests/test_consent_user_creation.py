@@ -47,11 +47,11 @@ class TestConsentUserCreation:
         )
 
         # Add the user node
-        add_graph_node(user_node, time_service=time_service, db_path=temp_db)
+        add_graph_node(user_node, time_service=time_service)
 
         # Check if consent node was created
         consent_id = f"consent_{user_id}"
-        consent_node = get_graph_node(consent_id, GraphScope.LOCAL, db_path=temp_db)
+        consent_node = get_graph_node(consent_id, GraphScope.LOCAL)
 
         # Verify consent was created
         assert consent_node is not None, "Consent node should be created automatically"
@@ -76,20 +76,20 @@ class TestConsentUserCreation:
         )
 
         # Add the user node (should create consent)
-        add_graph_node(user_node, time_service=time_service, db_path=temp_db)
+        add_graph_node(user_node, time_service=time_service)
 
         # Get the initial consent
         consent_id = f"consent_{user_id}"
-        initial_consent = get_graph_node(consent_id, GraphScope.LOCAL, db_path=temp_db)
+        initial_consent = get_graph_node(consent_id, GraphScope.LOCAL)
         assert initial_consent is not None
         initial_granted_at = initial_consent.attributes.get("granted_at")
 
         # Update the user node
         user_node.attributes["updated"] = "true"
-        add_graph_node(user_node, time_service=time_service, db_path=temp_db)
+        add_graph_node(user_node, time_service=time_service)
 
         # Verify consent still exists and wasn't recreated
-        updated_consent = get_graph_node(consent_id, GraphScope.LOCAL, db_path=temp_db)
+        updated_consent = get_graph_node(consent_id, GraphScope.LOCAL)
         assert updated_consent is not None
         assert (
             updated_consent.attributes.get("granted_at") == initial_granted_at
@@ -108,11 +108,11 @@ class TestConsentUserCreation:
         )
 
         # Add the concept node
-        add_graph_node(concept_node, time_service=time_service, db_path=temp_db)
+        add_graph_node(concept_node, time_service=time_service)
 
         # Check that no consent was created
         consent_id = f"consent_test_concept_789"
-        consent_node = get_graph_node(consent_id, GraphScope.LOCAL, db_path=temp_db)
+        consent_node = get_graph_node(consent_id, GraphScope.LOCAL)
 
         assert consent_node is None, "Consent should not be created for non-USER nodes"
 
@@ -130,11 +130,11 @@ class TestConsentUserCreation:
         )
 
         # Add the user node
-        add_graph_node(user_node, time_service=time_service, db_path=temp_db)
+        add_graph_node(user_node, time_service=time_service)
 
         # Check consent expiry
         consent_id = f"consent_{user_id}"
-        consent_node = get_graph_node(consent_id, GraphScope.LOCAL, db_path=temp_db)
+        consent_node = get_graph_node(consent_id, GraphScope.LOCAL)
 
         assert consent_node is not None
 

@@ -244,9 +244,10 @@ class TestDeferHandler:
             thought_id=thought.thought_id, status=ThoughtStatus.DEFERRED, final_action=result
         )
 
-        # Verify task status updated
+        # Verify task status updated (update_task_status no longer takes
+        # time_service — dropped in the 2.9.0 Sonar unused-param sweep)
         mock_persistence.update_task_status.assert_called_once_with(
-            thought.source_task_id, TaskStatus.DEFERRED, "default", defer_handler.time_service
+            thought.source_task_id, TaskStatus.DEFERRED, "default"
         )
 
     @pytest.mark.asyncio
@@ -444,7 +445,7 @@ class TestDeferHandler:
 
         # Task status SHOULD be updated for system tasks too (no kings principle)
         mock_persistence.update_task_status.assert_called_once_with(
-            "SYSTEM_TASK", TaskStatus.DEFERRED, "default", defer_handler.time_service
+            "SYSTEM_TASK", TaskStatus.DEFERRED, "default"
         )
 
     @pytest.mark.asyncio

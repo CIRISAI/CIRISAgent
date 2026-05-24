@@ -116,7 +116,7 @@ async def get_user_filter_ids_for_observer(request: Request, auth: AuthContext) 
     if not user_id:
         raise HTTPException(status_code=401, detail=USER_ID_NOT_FOUND)
 
-    allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+    allowed_user_ids = await get_user_allowed_ids(user_id)
     return list(allowed_user_ids)
 
 
@@ -556,7 +556,7 @@ async def get_timeline(
             node_ids = [n.id for n in nodes]
             # Parse scope for edge query (None = all scopes)
             edge_scope = GraphScope(scope) if scope else None
-            edges = get_edges_for_nodes_batch(node_ids=node_ids, scope=edge_scope, db_path=memory_service.db_path)
+            edges = get_edges_for_nodes_batch(node_ids=node_ids, scope=edge_scope)
             edge_ms = (time_module.time() - edge_start) * 1000
             logger.info(f"[TIMELINE] Batch edge fetch: {len(edges)} edges in {edge_ms:.1f}ms")
 
@@ -595,7 +595,7 @@ async def get_stats(
     """
     try:
         # Get stats from database
-        stats_data = await get_memory_stats(memory_service)
+        stats_data = await get_memory_stats()
 
         # Get date range
         oldest = None

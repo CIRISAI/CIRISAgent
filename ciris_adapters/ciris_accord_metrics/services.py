@@ -39,6 +39,7 @@ import json
 import logging
 import os
 import ssl
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -299,6 +300,27 @@ class CompleteTrace:
         return hashlib.sha256(json_str.encode()).hexdigest()
 
 
+# CIRISVerify briefly blocks signing while a tree attestation runs (typically
+# at startup); it raises a retryable AttestationInProgressError whose message
+# advises retrying after ~500ms. Without a retry, the trace is dropped.
+_TRACE_SIGN_MAX_RETRIES = 10
+_TRACE_SIGN_RETRY_DELAY_S = 0.5
+
+
+def _attestation_in_progress_error() -> Optional[type]:
+    """Return CIRISVerify's AttestationInProgressError type, if importable.
+
+    ciris_verify is an optional adapter, so the type is resolved dynamically.
+    """
+    try:
+        import ciris_adapters.ciris_verify as ciris_verify
+
+        err = getattr(ciris_verify, "AttestationInProgressError", None)
+        return err if isinstance(err, type) else None
+    except ImportError:
+        return None
+
+
 class Ed25519TraceSigner:
     """Sign traces using the unified Ed25519 signing key.
 
@@ -440,20 +462,41 @@ class Ed25519TraceSigner:
             logger.warning("No unified signing key available for trace signing")
             return False
 
-        try:
-            message = self._build_canonical_message(trace)
-            message_hash = hashlib.sha256(message).hexdigest()
-            logger.info(
-                f"[SIGN_TRACE] trace={trace.trace_id} level={trace.trace_level} "
-                f"len={len(message)} hash={message_hash[:16]} canonical=9-field"
-            )
-            trace.signature = self._unified_key.sign_base64(message)
-            trace.signature_key_id = self._key_id
-            logger.debug(f"Signed trace {trace.trace_id} with unified key {self._key_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to sign trace: {e}")
-            return False
+        attestation_in_progress = _attestation_in_progress_error()
+        for attempt in range(_TRACE_SIGN_MAX_RETRIES):
+            try:
+                message = self._build_canonical_message(trace)
+                message_hash = hashlib.sha256(message).hexdigest()
+                logger.info(
+                    f"[SIGN_TRACE] trace={trace.trace_id} level={trace.trace_level} "
+                    f"len={len(message)} hash={message_hash[:16]} canonical=9-field"
+                )
+                trace.signature = self._unified_key.sign_base64(message)
+                trace.signature_key_id = self._key_id
+                logger.debug(f"Signed trace {trace.trace_id} with unified key {self._key_id}")
+                return True
+            except Exception as e:
+                last_attempt = attempt >= _TRACE_SIGN_MAX_RETRIES - 1
+                # The signing wrapper may re-raise CIRISVerify's
+                # AttestationInProgressError as a generic exception that only
+                # carries the message — so match the type OR the message.
+                is_attestation = (
+                    attestation_in_progress is not None
+                    and isinstance(e, attestation_in_progress)
+                ) or "attestation in progress" in str(e).lower()
+                if is_attestation and not last_attempt:
+                    logger.debug(
+                        "trace signing deferred (attestation in progress); "
+                        "retry %d/%d in %.1fs",
+                        attempt + 1,
+                        _TRACE_SIGN_MAX_RETRIES,
+                        _TRACE_SIGN_RETRY_DELAY_S,
+                    )
+                    time.sleep(_TRACE_SIGN_RETRY_DELAY_S)
+                    continue
+                logger.error(f"Failed to sign trace: {e}")
+                return False
+        return False
 
     def verify_trace(self, trace: CompleteTrace) -> bool:
         """Verify a trace signature using the root public key.
@@ -907,6 +950,13 @@ class AccordMetricsService:
                 type=NodeType.CONFIG,
                 scope=GraphScope.LOCAL,
                 attributes={
+                    # `key` is required for this NodeType.CONFIG node to be a
+                    # valid ConfigNode — config_service.search("type:config")
+                    # picks it up and ConfigNode.from_graph_node() does
+                    # attrs["key"]. Without it, every config scan logged
+                    # "Failed to convert node ... to ConfigNode: 'key'"
+                    # (×100+ — a WARNING flood).
+                    "key": "accord_metrics/events_total",
                     "events_sent_total": total,
                     "last_updated": datetime.now(timezone.utc).isoformat(),
                 },
@@ -914,7 +964,7 @@ class AccordMetricsService:
                 updated_at=datetime.now(timezone.utc),
             )
             time_service = TimeService()
-            add_graph_node(node, time_service, None)
+            add_graph_node(node, time_service)
         except Exception as e:
             logger.debug(f"Could not persist events total: {e}")
 

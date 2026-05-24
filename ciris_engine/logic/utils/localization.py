@@ -128,6 +128,19 @@ def _get_language_data(lang_code: str) -> Dict[str, Any]:
     return _language_cache.get(lang_code, {})
 
 
+def clear_language_cache() -> None:
+    """Drop the cached per-language string tables.
+
+    Called on a preferred-language change (set_prompt_language, invoked by
+    sync_language_preference) so the next localized-string lookup reloads
+    fresh for the new language rather than serving a stale cached table.
+    """
+    global _cache_initialized
+    _language_cache.clear()
+    _cache_initialized = False
+    logger.info("Localization language cache cleared (language change)")
+
+
 def _resolve_key(data: Dict[str, Any], key: str) -> Optional[str]:
     """Resolve a dot-notation key from nested dict.
 

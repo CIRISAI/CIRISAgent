@@ -1254,7 +1254,7 @@ class TestWakeupProcessorTaskMarking:
         wakeup_processor._mark_task_failed("task_123", "Test failure", "occurrence_1")
 
         mock_persistence.update_task_status.assert_called_once_with(
-            "task_123", TaskStatus.FAILED, "occurrence_1", wakeup_processor.time_service
+            "task_123", TaskStatus.FAILED, "occurrence_1"
         )
 
     @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
@@ -1267,7 +1267,7 @@ class TestWakeupProcessorTaskMarking:
 
         root_task = wakeup_task_sequence[0]
         mock_persistence.update_task_status.assert_called_once_with(
-            root_task.task_id, TaskStatus.COMPLETED, root_task.agent_occurrence_id, wakeup_processor.time_service
+            root_task.task_id, TaskStatus.COMPLETED, root_task.agent_occurrence_id
         )
 
     @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
@@ -1280,7 +1280,7 @@ class TestWakeupProcessorTaskMarking:
 
         root_task = wakeup_task_sequence[0]
         mock_persistence.update_task_status.assert_called_once_with(
-            root_task.task_id, TaskStatus.FAILED, root_task.agent_occurrence_id, wakeup_processor.time_service
+            root_task.task_id, TaskStatus.FAILED, root_task.agent_occurrence_id
         )
 
 

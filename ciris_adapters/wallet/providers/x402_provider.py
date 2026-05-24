@@ -158,7 +158,7 @@ class X402Provider(WalletProvider):
     - ~400ms finality on Base L2
     """
 
-    SUPPORTED_CURRENCIES = ["USDC", "ETH"]
+    CURRENCIES = ["USDC", "ETH"]
 
     def __init__(
         self,
@@ -334,7 +334,7 @@ class X402Provider(WalletProvider):
 
     @property
     def supported_currencies(self) -> List[str]:
-        return self.SUPPORTED_CURRENCIES
+        return self.CURRENCIES
 
     @property
     def evm_address(self) -> str:
@@ -533,14 +533,14 @@ class X402Provider(WalletProvider):
             TransactionResult with transaction hash and confirmation.
         """
         currency = currency.upper()
-        if currency not in self.SUPPORTED_CURRENCIES:
+        if currency not in self.CURRENCIES:
             return TransactionResult(
                 success=False,
                 provider=self.provider_id,
                 amount=amount,
                 currency=currency,
                 recipient=recipient,
-                error=f"Unsupported currency: {currency}. Supported: {self.SUPPORTED_CURRENCIES}",
+                error=f"Unsupported currency: {currency}. Supported: {self.CURRENCIES}",
             )
 
         # Check signing capability

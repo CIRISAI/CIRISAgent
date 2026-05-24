@@ -488,48 +488,6 @@ class TestTaskCompleteParamsWithPersistImages:
         assert data["persist_images"] is True
 
 
-class TestClearTaskImages:
-    """Tests for clear_task_images persistence function."""
-
-    def test_clear_task_images_success(self):
-        """Test clearing task images."""
-        from unittest.mock import MagicMock
-
-        from ciris_engine.logic.persistence.models.tasks import clear_task_images
-
-        mock_time = MagicMock()
-        mock_time.now_iso.return_value = "2025-01-01T00:00:00Z"
-
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_db:
-            mock_conn = MagicMock()
-            mock_cursor = MagicMock()
-            mock_cursor.rowcount = 1
-            mock_conn.execute.return_value = mock_cursor
-            mock_db.return_value.__enter__.return_value = mock_conn
-
-            result = clear_task_images("task-123", "default", mock_time)
-            assert result is True
-
-    def test_clear_task_images_not_found(self):
-        """Test clearing images for non-existent task."""
-        from unittest.mock import MagicMock
-
-        from ciris_engine.logic.persistence.models.tasks import clear_task_images
-
-        mock_time = MagicMock()
-        mock_time.now_iso.return_value = "2025-01-01T00:00:00Z"
-
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_db:
-            mock_conn = MagicMock()
-            mock_cursor = MagicMock()
-            mock_cursor.rowcount = 0
-            mock_conn.execute.return_value = mock_cursor
-            mock_db.return_value.__enter__.return_value = mock_conn
-
-            result = clear_task_images("nonexistent", "default", mock_time)
-            assert result is False
-
-
 class TestSSRFProtection:
     """Tests for SSRF protection in document downloads."""
 

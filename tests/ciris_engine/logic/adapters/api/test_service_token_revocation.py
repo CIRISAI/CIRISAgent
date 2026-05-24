@@ -110,10 +110,15 @@ class TestServiceTokenRevocation:
         assert user is None
 
     @pytest.mark.asyncio
-    async def test_revocation_persistence_across_instances(self, mock_service_token, tmp_path, monkeypatch):
-        """Test that revocations persist across service instances (multi-occurrence support)."""
-        # Set up a temporary database path
-        db_path = str(tmp_path / "test_revocations.db")
+    async def test_revocation_persistence_across_instances(
+        self, mock_service_token, tmp_path, monkeypatch, persist_engine
+    ):
+        """Test that revocations persist across service instances (multi-occurrence support).
+
+        `persist_engine` wires a fresh persist Engine so revocations land in
+        `cirislens_revoked_service_tokens` (not the in-memory fallback) and
+        `_load_revoked_tokens` can read them back in the second instance.
+        """
         monkeypatch.setenv("CIRIS_DATA_DIR", str(tmp_path))
 
         # Create first instance and revoke a token

@@ -1,22 +1,24 @@
 """Audit subsystem for CIRIS Engine.
 
-Provides cryptographic hash chain and digital signature capabilities for audit trails.
+Post-2.9.0 Phase 3a (CIRISAgent#763): the audit chain is owned by
+persist's `cirislens_audit_log` substrate. The agent supplies the signing
+material (via CIRISVerify) and reads/writes through persist.
 
-Key components:
-- AuditHashChain: Maintains hash chain integrity
-- AuditSignatureManager: Uses CIRISVerify for all signing (via unified signing key)
-- AuditVerifier: Verifies signatures (supports RSA legacy and Ed25519)
-- UnifiedSigningKey: Ed25519 signing key management via CIRISVerify
-- AuditKeyMigration: Migrate existing RSA audit chains to Ed25519
+Key components remaining at the agent layer:
+- AuditVerifier: thin wrapper around `engine.audit_verify_chain`. Walks
+  the chain end-to-end and reports outcome + tampered-sequence.
+- UnifiedSigningKey + CIRISVerifySigner: Ed25519 signing key management
+  via CIRISVerify (hardware-backed with software fallback).
+- persist_signing helpers: actor_id / tenant_id / signing_key_id resolution
+  for the persist-routed write path.
 
-Note: CIRISVerify is the ONLY source of signing keys. It handles hardware-backed
-storage (TPM, Keystore, Keychain) with software fallback. RSA-2048 verification
-is maintained for backward compatibility with existing audit chains.
+Removed in 2.9.0:
+- AuditHashChain: persist owns the chain state + integrity.
+- AuditSignatureManager: persist owns signing-key registration + verification.
+- AuditKeyMigration: one-shot RSA→Ed25519 migration tooling; if it needs
+  to run again, ship as `tools/ops/audit_key_migration.py`.
 """
 
-from .hash_chain import AuditHashChain
-from .key_migration import AuditKeyMigration, MigrationResult, migrate_audit_key_to_ed25519
-from .signature_manager import AuditSignatureManager
 from .signing_protocol import (
     CIRISVerifySigner,
     SignerProtocol,
@@ -28,8 +30,6 @@ from .signing_protocol import (
 from .verifier import AuditVerifier
 
 __all__ = [
-    "AuditHashChain",
-    "AuditSignatureManager",
     "AuditVerifier",
     # Unified signing via CIRISVerify
     "SigningAlgorithm",
@@ -38,8 +38,4 @@ __all__ = [
     "UnifiedSigningKey",
     "get_unified_signing_key",
     "reset_unified_signing_key",
-    # Migration
-    "AuditKeyMigration",
-    "MigrationResult",
-    "migrate_audit_key_to_ed25519",
 ]

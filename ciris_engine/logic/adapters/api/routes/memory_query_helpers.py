@@ -1,5 +1,10 @@
-"""
-Memory query helpers - modular functions for database queries.
+"""Memory query helpers — persist-substrate routed for 2.9.0 Phase 4.
+
+Phase 4 (CIRISAgent#763, CIRISPersist#65/67): every public query helper
+builds a persist `NodeFilter` dict and runs it through
+`cirisgraph_query_nodes`. The OBSERVER user filter uses persist's new
+`attribute_match` predicate (CIRISPersist#67, v1.6.1) instead of raw
+JSON-path SQL.
 
 Following CIRIS principles:
 - Single Responsibility: Each class handles one aspect
@@ -9,103 +14,84 @@ Following CIRIS principles:
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from ciris_engine.logic.persistence.db.core import get_db_connection
-from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
 
+# Substrate constants
+_DEFAULT_SCOPE = "LOCAL"
+_PAGE_SIZE = 500
+
+
 class QueryBuilder:
-    """Builds SQL queries following single responsibility principle."""
+    """Builds persist NodeFilter dicts (no SQL).
 
-    # SQL constants
-    SQL_SELECT_NODES = "SELECT node_id, scope, node_type, attributes_json, version, updated_by, updated_at, created_at"
-    SQL_FROM_NODES = "FROM graph_nodes"
-    SQL_WHERE_TIME_RANGE = "WHERE updated_at >= ? AND updated_at < ?"
-    SQL_EXCLUDE_METRICS = "AND NOT (node_type = 'tsdb_data' AND node_id LIKE 'metric_%%')"
-    SQL_WHERE_SCOPE = "AND scope = ?"
-    SQL_WHERE_NODE_TYPE = "AND node_type = ?"
-    SQL_ORDER_BY = "ORDER BY updated_at DESC"
-    SQL_LIMIT = "LIMIT ?"
-
-    @staticmethod
-    def _get_attr_like_clause() -> str:
-        """Get the appropriate LIKE clause for attributes based on dialect."""
-        adapter = get_adapter()
-        if adapter.is_postgresql():
-            # PostgreSQL: Cast JSONB to TEXT for LIKE queries
-            return "attributes_json::text LIKE ?"
-        else:
-            # SQLite: Direct LIKE on JSON text
-            return "attributes_json LIKE ?"
+    Each `build_*_query` returns:
+      (primary_filter, post_query_options)
+    where:
+      - `primary_filter` is the NodeFilter dict for cirisgraph_query_nodes
+      - `post_query_options` carries client-side filters that persist's
+        substrate doesn't yet express (free-text `query` string, secondary
+        user-filter paths).
+    """
 
     @staticmethod
-    def _get_json_extract_clause(json_path: str) -> str:
-        """Get the appropriate JSON extraction clause based on dialect.
-
-        Args:
-            json_path: JSON path like '$.created_by' or '$.user_list'
-        """
-        adapter = get_adapter()
-        if adapter.is_postgresql():
-            # PostgreSQL: Use JSONB operators
-            # Convert $.created_by to ->> 'created_by'
-            field = json_path.replace("$.", "")
-            return f"attributes_json->>'{field}'"
-        else:
-            # SQLite: Use json_extract function
-            return f"json_extract(attributes_json, '{json_path}')"
+    def _scope_value(scope: Optional[Any]) -> str:
+        """Normalize scope input to persist's uppercase enum string."""
+        if scope is None:
+            return _DEFAULT_SCOPE
+        if hasattr(scope, "value"):
+            return str(scope.value).upper()
+        return str(scope).upper()
 
     @staticmethod
     def build_timeline_query(
         start_time: datetime,
         end_time: datetime,
-        scope: Optional[str] = None,
-        node_type: Optional[str] = None,
+        scope: Optional[Any] = None,
+        node_type: Optional[Any] = None,
         exclude_metrics: bool = True,
         limit: int = 100,
         user_filter_ids: Optional[List[str]] = None,
-    ) -> Tuple[str, List[Any]]:
-        """
-        Build a timeline query with filters.
-
-        Args:
-            start_time: Start of time range
-            end_time: End of time range
-            scope: Optional scope filter
-            node_type: Optional node type filter
-            exclude_metrics: Whether to exclude metric nodes
-            limit: Maximum results
-            user_filter_ids: Optional list of user IDs for OBSERVER filtering (SQL Layer 1)
-        """
-        query_parts = [QueryBuilder.SQL_SELECT_NODES, QueryBuilder.SQL_FROM_NODES, QueryBuilder.SQL_WHERE_TIME_RANGE]
-        params: List[Any] = [start_time.isoformat(), end_time.isoformat()]
-
-        if exclude_metrics:
-            query_parts.append(QueryBuilder.SQL_EXCLUDE_METRICS)
-
-        if scope:
-            query_parts.append(QueryBuilder.SQL_WHERE_SCOPE)
-            params.append(scope.value if hasattr(scope, "value") else str(scope))
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Build a timeline query — time-windowed listing with optional filters."""
+        node_filter: Dict[str, Any] = {
+            "scope": QueryBuilder._scope_value(scope),
+            "updated_after": start_time.isoformat(),
+            "updated_before": end_time.isoformat(),
+        }
 
         if node_type:
-            query_parts.append(QueryBuilder.SQL_WHERE_NODE_TYPE)
-            params.append(node_type.value if hasattr(node_type, "value") else str(node_type))
+            node_filter["node_type"] = (
+                node_type.value if hasattr(node_type, "value") else str(node_type)
+            )
 
-        # SECURITY LAYER 1: SQL-level user filtering
+        if exclude_metrics:
+            # CIRISPersist#65: exclude tsdb_data + metric_% pattern
+            node_filter["exclude"] = {
+                "node_type": "tsdb_data",
+                "node_id_pattern": "metric_%",
+            }
+
+        post: Dict[str, Any] = {"limit": limit}
         if user_filter_ids:
-            QueryBuilder._add_user_filter(query_parts, params, user_filter_ids)
+            post["user_filter_ids"] = list(user_filter_ids)
 
-        query_parts.append(QueryBuilder.SQL_ORDER_BY)
-        query_parts.append(QueryBuilder.SQL_LIMIT)
-        params.append(limit)
+        # If a single-path user filter applies, attach it directly so persist
+        # does the filtering. Multi-path OR (created_by + user_list + ...) is
+        # applied client-side below.
+        if user_filter_ids:
+            node_filter["attribute_match"] = {
+                "path": "created_by",
+                "equals_any": list(user_filter_ids),
+            }
 
-        return " ".join(query_parts), params
+        return node_filter, post
 
     @staticmethod
     def build_search_query(
@@ -118,128 +104,51 @@ class QueryBuilder:
         limit: int = 20,
         offset: int = 0,
         user_filter_ids: Optional[List[str]] = None,
-    ) -> Tuple[str, List[Any]]:
-        """
-        Build a search query with multiple filters.
-
-        Args:
-            query: Text search query
-            node_type: Filter by node type
-            scope: Filter by scope
-            since: Filter by minimum timestamp
-            until: Filter by maximum timestamp
-            tags: Filter by tags
-            limit: Maximum results
-            offset: Pagination offset
-            user_filter_ids: Optional list of user IDs for OBSERVER filtering (SQL Layer 1)
-        """
-        query_parts = [QueryBuilder.SQL_SELECT_NODES, QueryBuilder.SQL_FROM_NODES, "WHERE 1=1"]
-        params: List[Any] = []
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Build a search query with multiple filters."""
+        node_filter: Dict[str, Any] = {"scope": QueryBuilder._scope_value(scope)}
 
         if node_type:
-            query_parts.append("AND node_type = ?")
-            params.append(node_type.value if hasattr(node_type, "value") else str(node_type))
-
-        if scope:
-            query_parts.append("AND scope = ?")
-            params.append(scope.value if hasattr(scope, "value") else str(scope))
-
+            node_filter["node_type"] = (
+                node_type.value if hasattr(node_type, "value") else str(node_type)
+            )
         if since:
-            query_parts.append("AND updated_at >= ?")
-            params.append(since.isoformat())
-
+            node_filter["updated_after"] = since.isoformat()
         if until:
-            query_parts.append("AND updated_at <= ?")
-            params.append(until.isoformat())
-
-        if query:
-            query_parts.append(f"AND {QueryBuilder._get_attr_like_clause()}")
-            params.append(f"%{query}%")
-
-        if tags:
-            for tag in tags:
-                query_parts.append(f"AND {QueryBuilder._get_attr_like_clause()}")
-                params.append(f'%"{tag}"%')
-
-        # SECURITY LAYER 1: SQL-level user filtering
+            node_filter["updated_before"] = until.isoformat()
         if user_filter_ids:
-            QueryBuilder._add_user_filter(query_parts, params, user_filter_ids)
+            node_filter["attribute_match"] = {
+                "path": "created_by",
+                "equals_any": list(user_filter_ids),
+            }
 
-        query_parts.append(QueryBuilder.SQL_ORDER_BY)
-        query_parts.append("LIMIT ? OFFSET ?")
-        params.extend([limit, offset])
+        post: Dict[str, Any] = {"limit": limit, "offset": offset}
+        if query:
+            post["query_substring"] = query
+        if tags:
+            post["tags"] = list(tags)
+        if user_filter_ids:
+            post["user_filter_ids"] = list(user_filter_ids)
 
-        return " ".join(query_parts), params
-
-    @staticmethod
-    def _add_user_filter(query_parts: List[str], params: List[Any], user_filter_ids: List[str]) -> None:
-        """
-        Add SQL-level user filtering to query (SECURITY LAYER 1).
-
-        Filters nodes by checking if ANY of the user_filter_ids appear in:
-        - attributes_json->>'created_by' (PostgreSQL) or json_extract(attributes_json, '$.created_by') (SQLite)
-        - attributes_json LIKE patterns for user_list, task_summaries, and conversations
-
-        This is a comprehensive OR-based filter that matches the Layer 2 logic.
-        """
-        if not user_filter_ids:
-            return
-
-        # Build OR conditions for user attribution
-        or_conditions = []
-
-        # 1. Direct creator: created_by field IN (...)
-        placeholders_created_by = ",".join("?" * len(user_filter_ids))
-        created_by_clause = QueryBuilder._get_json_extract_clause("$.created_by")
-        or_conditions.append(f"{created_by_clause} IN ({placeholders_created_by})")
-        params.extend(user_filter_ids)
-
-        # Get the LIKE clause for the current dialect
-        attr_like_clause = QueryBuilder._get_attr_like_clause()
-
-        # 2. User list participants: Check if user_id appears in user_list JSON array
-        # For each user_id, check if attributes_json contains it in user_list
-        for user_id in user_filter_ids:
-            # Using LIKE to check JSON array membership
-            or_conditions.append(attr_like_clause)
-            params.append(f'%"user_list"%{user_id}%')
-
-        # 3. Task summaries: Check if user_id appears in task_summaries
-        for user_id in user_filter_ids:
-            or_conditions.append(attr_like_clause)
-            params.append(f'%"task_summaries"%"user_id"%{user_id}%')
-
-        # 4. Conversations: Check if user_id appears as author_id in conversations
-        for user_id in user_filter_ids:
-            or_conditions.append(attr_like_clause)
-            params.append(f'%"author_id"%{user_id}%')
-
-        # Combine all conditions with OR
-        combined_condition = f"AND ({' OR '.join(or_conditions)})"
-        query_parts.append(combined_condition)
+        return node_filter, post
 
 
 class AttributeParser:
-    """Parses JSON attributes from database rows."""
+    """Parses attribute payloads from persist rows.
+
+    Persist returns `attributes` as either a dict (auto-decoded) or a
+    JSON string (passthrough). This helper normalizes to a dict.
+    """
 
     @staticmethod
-    def parse_attributes(attributes_json: Any, node_id: str) -> JSONDict:
-        """Parse JSON attributes with error handling.
-
-        Args:
-            attributes_json: Either a dict (PostgreSQL JSONB) or string (SQLite JSON text)
-            node_id: Node ID for error reporting
-        """
-        if not attributes_json:
+    def parse_attributes(attributes: Any, node_id: str) -> JSONDict:
+        if not attributes:
             return {}
-
-        # PostgreSQL returns dict, SQLite returns string
-        if isinstance(attributes_json, dict):
-            return attributes_json
-
+        if isinstance(attributes, dict):
+            return attributes
         try:
-            result: JSONDict = json.loads(attributes_json)
-            return result
+            result = json.loads(attributes) if isinstance(attributes, (bytes, str)) else {}
+            return result if isinstance(result, dict) else {}
         except (json.JSONDecodeError, TypeError):
             logger.warning(f"Failed to parse attributes for node {node_id}")
             return {}
@@ -250,76 +159,51 @@ class DateTimeParser:
 
     @staticmethod
     def parse_datetime(value: Any) -> Optional[datetime]:
-        """Parse datetime from various formats."""
         if not value:
             return None
-
         if isinstance(value, datetime):
             return value
-
         if isinstance(value, str):
-            # Try ISO format with timezone
             try:
                 return datetime.fromisoformat(value.replace("Z", "+00:00"))
             except ValueError:
                 pass
-
-            # Try without timezone
             try:
                 return datetime.fromisoformat(value.split("+")[0])
             except ValueError:
                 pass
-
         return None
 
 
 class GraphNodeBuilder:
-    """Builds GraphNode objects from database rows."""
+    """Build GraphNode objects from persist `cirisgraph_query_nodes` rows."""
 
     @staticmethod
     def build_from_row(row: Any) -> Optional[GraphNode]:
-        """Build a GraphNode from a database row.
-
-        Args:
-            row: Database row - either tuple (SQLite) or dict-like (PostgreSQL RealDictCursor)
-        """
+        """Build a GraphNode from a persist row (always a dict in 1.6.x)."""
         try:
-            # Handle both tuple (SQLite) and dict-like (PostgreSQL) rows
-            # Access by index for tuples, by key for dicts
-            if isinstance(row, dict):
-                # PostgreSQL RealDictCursor returns dict-like rows
-                node_id = row["node_id"]
-                scope = row["scope"]
-                node_type = row["node_type"]
-                attributes_json = row["attributes_json"]
-                version = row["version"]
-                updated_by = row["updated_by"]
-                updated_at_raw = row["updated_at"]
-                created_at_raw = row.get("created_at")
-            else:
-                # SQLite Row objects support index access
-                node_id = row[0]
-                scope = row[1]
-                node_type = row[2]
-                attributes_json = row[3]
-                version = row[4]
-                updated_by = row[5]
-                updated_at_raw = row[6]
-                created_at_raw = row[7] if len(row) > 7 else None
+            if not isinstance(row, dict):
+                return None
 
-            # Parse attributes JSON
-            attributes_dict = AttributeParser.parse_attributes(attributes_json, node_id)
+            node_id = row["node_id"]
+            scope = row.get("scope", _DEFAULT_SCOPE)
+            # Persist returns scope uppercase; the agent's GraphScope enum
+            # uses lowercase values.
+            scope_lower = str(scope).lower()
+            node_type = row.get("node_type", "")
+            attributes_blob = row.get("attributes")
+            version = row.get("version", 1)
+            updated_by = row.get("updated_by") or "system"
+            updated_at_raw = row.get("updated_at")
+            created_at_raw = row.get("created_at")
 
-            # Parse timestamps
+            attributes_dict = AttributeParser.parse_attributes(attributes_blob, node_id)
             updated_at = DateTimeParser.parse_datetime(updated_at_raw)
-            created_at = DateTimeParser.parse_datetime(created_at_raw) if created_at_raw else None
+            created_at = DateTimeParser.parse_datetime(created_at_raw)
 
-            # Create typed GraphNodeAttributes
-            # Extract known fields and pass the rest as tags if present
             tags = attributes_dict.pop("tags", [])
-            created_by = attributes_dict.pop("created_by", updated_by if updated_by else "system")
+            created_by = attributes_dict.pop("created_by", updated_by)
 
-            # Build proper GraphNodeAttributes
             typed_attributes = GraphNodeAttributes(
                 created_at=created_at or updated_at or datetime.now(),
                 updated_at=updated_at or datetime.now(),
@@ -327,53 +211,197 @@ class GraphNodeBuilder:
                 tags=tags if isinstance(tags, list) else [],
             )
 
-            # Create GraphNode with typed attributes
             return GraphNode(
                 id=node_id,
-                scope=scope,
+                scope=scope_lower,
                 type=node_type,
                 attributes=typed_attributes,
-                version=version if version else 1,
-                updated_by=updated_by if updated_by else "system",
+                version=int(version) if version else 1,
+                updated_by=updated_by,
                 updated_at=updated_at,
             )
         except Exception as e:
-            logger.error(f"Failed to create GraphNode from row: {e}")
+            logger.error(f"Failed to build GraphNode from persist row: {e}")
             return None
 
     @staticmethod
     def build_from_rows(rows: List[Any]) -> List[GraphNode]:
-        """Build multiple GraphNodes from database rows."""
-        nodes = []
-        for row in rows:
-            node = GraphNodeBuilder.build_from_row(row)
-            if node:
-                nodes.append(node)
-        return nodes
+        """Build multiple GraphNodes from persist rows."""
+        return [n for n in (GraphNodeBuilder.build_from_row(r) for r in rows) if n is not None]
 
 
 class DatabaseExecutor:
-    """Executes database queries with proper error handling."""
+    """Executes node queries through persist's `cirisgraph_query_nodes`."""
 
     @staticmethod
-    def execute_query(db_path: str, query: str, params: List[Any]) -> List[Tuple[Any, ...]]:
-        """Execute a query and return results."""
+    def execute_query(
+        db_path: Optional[str],
+        node_filter: Dict[str, Any],
+        post_options: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Paginate persist nodes matching `node_filter` and apply client-side post-filters.
+
+        The legacy signature (db_path, query, params) is replaced. The
+        `db_path` argument is retained for signature compatibility (persist
+        owns the connection).
+
+        Client-side post-filters applied after pagination:
+        - `query_substring`: free-text LIKE over the JSON-encoded attributes
+        - `tags`: each tag must appear in `attributes.tags`
+        - `user_filter_ids` (OBSERVER Layer 1, multi-path OR): combined
+          via additional persist queries against `user_list` array containment
+          + client-side check of nested `author_id` / `task_summaries.user_id`
+        """
         try:
-            with get_db_connection(db_path=db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(query, params)
-                return cursor.fetchall()
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            engine = get_persist_engine()
+            if engine is None:
+                return []
+
+            limit = int(post_options.get("limit", 100))
+            offset = int(post_options.get("offset", 0))
+            query_substring = post_options.get("query_substring")
+            tags = post_options.get("tags") or []
+            user_filter_ids = post_options.get("user_filter_ids") or []
+            user_filter_set = set(user_filter_ids) if user_filter_ids else None
+
+            # Build the client-side predicate the substrate can't push down
+            # yet (free-text + tag-array + nested user-attribution paths).
+            # Applied INSIDE _paginate_nodes so a selective filter keeps
+            # paging until it has enough matches instead of under-returning
+            # from a fixed prefetch window (codex P1).
+            def _row_passes(row: Dict[str, Any]) -> bool:
+                attrs_blob = row.get("attributes")
+                if isinstance(attrs_blob, (dict, list)):
+                    attrs_text = json.dumps(attrs_blob)
+                else:
+                    attrs_text = str(attrs_blob or "")
+                if query_substring and query_substring not in attrs_text:
+                    return False
+                if tags and not all(f'"{t}"' in attrs_text for t in tags):
+                    return False
+                if user_filter_set and not _row_matches_user_layer1(row, user_filter_set):
+                    return False
+                return True
+
+            target = limit + offset
+            primary_rows = _paginate_nodes(engine, node_filter, target, predicate=_row_passes)
+
+            # OBSERVER multi-path OR: when a user filter is set, also pull
+            # rows where `user_list` contains any allowed id, then union by
+            # node_id with the primary `created_by` set. The same predicate
+            # applies inside this pagination too.
+            if user_filter_ids:
+                filter_user_list = dict(node_filter)
+                filter_user_list["attribute_match"] = {
+                    "path": "user_list",
+                    "array_contains_any": list(user_filter_ids),
+                }
+                seen_ids = {str(r.get("node_id")) for r in primary_rows}
+                secondary_rows = _paginate_nodes(
+                    engine, filter_user_list, target, predicate=_row_passes
+                )
+                for r in secondary_rows:
+                    rid = str(r.get("node_id"))
+                    if rid not in seen_ids:
+                        primary_rows.append(r)
+                        seen_ids.add(rid)
+
+            return primary_rows[offset : offset + limit]
         except Exception as e:
-            logger.error(f"Database query failed: {e}")
+            logger.error(f"Persist node query failed: {e}")
             return []
 
     @staticmethod
     def get_db_path(memory_service: Any) -> Optional[str]:
-        """Extract database path from memory service."""
-        db_path = getattr(memory_service, "db_path", None)
-        if not db_path:
-            logger.warning("Memory service has no db_path")
-        return db_path
+        """Legacy helper retained for caller signature compat."""
+        return getattr(memory_service, "db_path", None)
+
+
+def _paginate_nodes(
+    engine: Any,
+    node_filter: Dict[str, Any],
+    target: int,
+    predicate: Optional[Any] = None,
+    scan_cap: int = 5000,
+) -> List[Dict[str, Any]]:
+    """Paginate cirisgraph_query_nodes until ``target`` predicate-passing rows.
+
+    Without ``predicate`` this returns the first ``target`` rows. With one,
+    rows that don't pass are still consumed (so ``scan_cap`` bounds how many
+    raw rows we'll scan looking for matches under a selective filter — e.g.
+    a rare ``query_substring`` shouldn't make us paginate the whole graph).
+
+    Applying the filter *inside* the loop is the fix for codex P1: the old
+    callers prefetched a fixed window and then post-filtered, so selective
+    filters silently under-returned for large datasets.
+    """
+    out: List[Dict[str, Any]] = []
+    cursor = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
+    scanned = 0
+    while len(out) < target and scanned < scan_cap:
+        raw = engine.cirisgraph_query_nodes(json.dumps(node_filter), cursor, _PAGE_SIZE)
+        parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+        items = parsed.get("items", []) if isinstance(parsed, dict) else []
+        if not items:
+            break
+        for r in items:
+            if not isinstance(r, dict):
+                continue
+            scanned += 1
+            if predicate is None or predicate(r):
+                out.append(r)
+                if len(out) >= target:
+                    break
+        if len(items) < _PAGE_SIZE:
+            break
+        next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None
+        if not next_cursor:
+            break
+        cursor = next_cursor if isinstance(next_cursor, str) else json.dumps(next_cursor)
+    return out
+
+
+def _row_matches_user_layer1(row: Dict[str, Any], allowed_user_ids: set[str]) -> bool:
+    """Client-side check for OBSERVER user-filter paths persist doesn't predicate on.
+
+    Persist's `attribute_match` covers the primary paths (created_by + user_list)
+    via two queries that we union. This helper covers the deeper-nested paths:
+    `task_summaries[].user_id` and `conversations[*].author_id`.
+    """
+    attrs = row.get("attributes") or {}
+    if not isinstance(attrs, dict):
+        try:
+            attrs = json.loads(str(attrs))
+        except Exception:
+            return True  # Tolerate unparseable rows — fail open per legacy parity
+        if not isinstance(attrs, dict):
+            return True
+
+    # Primary paths already covered by persist filter — accept if present.
+    if str(attrs.get("created_by", "")) in allowed_user_ids:
+        return True
+    user_list = attrs.get("user_list")
+    if isinstance(user_list, list) and any(str(u) in allowed_user_ids for u in user_list):
+        return True
+
+    # Nested paths persist doesn't yet predicate.
+    task_summaries = attrs.get("task_summaries")
+    if isinstance(task_summaries, list):
+        for ts in task_summaries:
+            if isinstance(ts, dict) and str(ts.get("user_id", "")) in allowed_user_ids:
+                return True
+
+    conversations = attrs.get("conversations")
+    if isinstance(conversations, dict):
+        for thread in conversations.values():
+            if isinstance(thread, list):
+                for msg in thread:
+                    if isinstance(msg, dict) and str(msg.get("author_id", "")) in allowed_user_ids:
+                        return True
+
+    return False
 
 
 class TimeRangeCalculator:
@@ -381,24 +409,14 @@ class TimeRangeCalculator:
 
     @staticmethod
     def calculate_range(hours: int) -> Tuple[datetime, datetime]:
-        """Calculate start and end time from hours.
-
-        Uses UTC timezone to match database timestamps which are stored in UTC.
-        """
-        from datetime import timezone
-
+        """Calculate start and end time from hours (UTC)."""
         now = datetime.now(timezone.utc)
         start_time = now - timedelta(hours=hours)
         return start_time, now
 
     @staticmethod
     def calculate_range_from_days(days: int) -> Tuple[datetime, datetime]:
-        """Calculate start and end time from days.
-
-        Uses UTC timezone to match database timestamps which are stored in UTC.
-        """
-        from datetime import timezone
-
+        """Calculate start and end time from days (UTC)."""
         now = datetime.now(timezone.utc)
         start_time = now - timedelta(days=days)
         return start_time, now

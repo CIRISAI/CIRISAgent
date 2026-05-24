@@ -9,10 +9,35 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence import initialize_database
 
 
+def _release_persist_engine() -> None:
+    """Reset the process-wide persist Engine between tests.
+
+    ciris-persist's Engine is a process-singleton; a second construction with
+    a different DSN raises EngineConfigMismatch. `reset_engine()` (ciris-persist
+    >=1.10.2, CIRISPersist#88) closes + un-pins the current engine handle-free
+    — recovering even the orphan case where a fixture nulled the module global
+    without closing the Rust engine.
+    """
+    import ciris_persist
+
+    from ciris_engine.logic.persistence.models import graph as graph_persistence
+
+    try:
+        ciris_persist.reset_engine()
+    except Exception:
+        pass
+    graph_persistence._engine = None
+    graph_persistence._engine_dsn = None
+
+
 @pytest.fixture
 def test_db():
     """Create a temporary test database for each test."""
     from ciris_engine.logic.persistence.db import core
+
+    # v1.8.x persist Engine is a process-singleton: release any engine a
+    # prior test pinned before bootstrapping this test's own temp DB.
+    _release_persist_engine()
 
     # Create a temporary database file
     fd, db_path = tempfile.mkstemp(suffix=".db")
@@ -38,7 +63,8 @@ def test_db():
 
     yield db_path
 
-    # Cleanup
+    # Cleanup — close this test's engine so the next test starts clean.
+    _release_persist_engine()
     try:
         os.unlink(db_path)
     except:
@@ -54,20 +80,31 @@ def test_db():
 
 @pytest.fixture
 def clean_db(test_db):
-    """Ensure database is clean before each test."""
-    # Clear all tables
+    """Ensure database is clean before each test.
+
+    `test_db` already mkstemps a fresh file and bootstraps persist, so the
+    `cirislens.*` / `cirisgraph.*` tables start empty. This fixture clears
+    them defensively (best-effort) in case a prior fixture in the same
+    test wired the persist engine and wrote rows.
+    """
     from ciris_engine.logic.persistence.db.core import get_db_connection
 
+    _PERSIST_TABLES = [
+        "cirislens_service_correlations",
+        "cirislens_thoughts",
+        "cirislens_tasks",
+        "cirisgraph_edges",
+        "cirisgraph_nodes",
+        "cirislens_feedback_mappings",
+        "cirislens_audit_log",
+        "cirislens_tickets",
+    ]
     with get_db_connection(test_db) as conn:
-        # Clear tables in reverse dependency order
-        conn.execute("DELETE FROM service_correlations")
-        conn.execute("DELETE FROM thoughts")
-        conn.execute("DELETE FROM tasks")
-        conn.execute("DELETE FROM graph_edges")
-        conn.execute("DELETE FROM graph_nodes")
-        conn.execute("DELETE FROM feedback_mappings")
-        conn.execute("DELETE FROM audit_log")
-        conn.execute("DELETE FROM tickets")  # Renamed from dsar_tickets in migration 008
+        for table in _PERSIST_TABLES:
+            try:
+                conn.execute(f"DELETE FROM {table}")
+            except Exception:
+                pass  # table absent — nothing to clear
         conn.commit()
 
     return test_db

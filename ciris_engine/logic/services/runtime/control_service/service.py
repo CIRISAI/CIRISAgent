@@ -404,6 +404,19 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             if agent_processor is None:
                 return self._processor_not_available_response("resume")
 
+            # Resuming normal processing must ALWAYS exit single-step mode —
+            # unconditionally, before the resume call, regardless of whether
+            # the processor resume itself succeeds. single_step() enables it
+            # (step_decorators._single_step_mode) but nothing else cleared it,
+            # so once a client stepped even once, every @step_point kept
+            # pausing forever even after resume(): the processor was stranded,
+            # subsequent work never ran, and /v1/agent/interact callers hit
+            # their full timeout. `resume` is the explicit return to
+            # free-running; single-step mode is part of what it must clear.
+            from ciris_engine.logic.processors.core.step_decorators import disable_single_step_mode
+
+            disable_single_step_mode()
+
             success = await agent_processor.resume_processing()
             if success:
                 old_status = self._processor_status
@@ -817,7 +830,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
         assert self.adapter_manager is not None  # Guaranteed by _ensure_adapter_manager
         adapter_config = self._convert_to_adapter_config(adapter_type, config)
-        result = await self.adapter_manager.load_adapter(adapter_type, adapter_id or "", adapter_config)
+        result = await self.adapter_manager.load_adapter(
+            adapter_type, adapter_id or "", adapter_config, auto_start=auto_start
+        )
 
         return AdapterOperationResponse(
             success=result.success,

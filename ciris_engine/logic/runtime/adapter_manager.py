@@ -151,14 +151,23 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         self._register_config_listener()
 
     async def load_adapter(
-        self, adapter_type: str, adapter_id: str, config_params: Optional[AdapterConfig] = None
+        self,
+        adapter_type: str,
+        adapter_id: str,
+        config_params: Optional[AdapterConfig] = None,
+        auto_start: bool = True,
     ) -> AdapterOperationResult:
-        """Load and start a new adapter instance
+        """Load a new adapter instance, starting it unless auto_start is False.
 
         Args:
             adapter_type: Adapter type (cli, discord, api, etc.)
             adapter_id: Unique ID for the adapter
             config_params: Optional configuration parameters
+            auto_start: If True (default) start the adapter immediately. If
+                False, register it without calling adapter.start() — used by
+                the /v1/system/adapters API and the adapter_manifest QA probe,
+                which must NOT bind network ports (e.g. the a2a adapter's
+                uvicorn server) just to verify a manifest loads.
 
         Returns:
             Dict with success status and details
@@ -229,25 +238,28 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 loaded_at=self.time_service.now(),
             )
 
-            await adapter.start()
+            if auto_start:
+                await adapter.start()
 
-            # For Discord adapters, we need to run the lifecycle to establish connection
-            if adapter_type == "discord" and hasattr(adapter, "run_lifecycle"):
-                logger.info(f"Starting lifecycle for Discord adapter {adapter_id}")
-                # Create a task that the Discord adapter will wait on
-                # This mimics the behavior when running from main.py
-                agent_task = asyncio.create_task(asyncio.Event().wait())
-                instance.lifecycle_task = agent_task
+                # For Discord adapters, we need to run the lifecycle to establish connection
+                if adapter_type == "discord" and hasattr(adapter, "run_lifecycle"):
+                    logger.info(f"Starting lifecycle for Discord adapter {adapter_id}")
+                    # Create a task that the Discord adapter will wait on
+                    # This mimics the behavior when running from main.py
+                    agent_task = asyncio.create_task(asyncio.Event().wait())
+                    instance.lifecycle_task = agent_task
 
-                # Store the lifecycle runner task
-                instance.lifecycle_runner = asyncio.create_task(
-                    adapter.run_lifecycle(agent_task), name=f"discord_lifecycle_{adapter_id}"
-                )
+                    # Store the lifecycle runner task
+                    instance.lifecycle_runner = asyncio.create_task(
+                        adapter.run_lifecycle(agent_task), name=f"discord_lifecycle_{adapter_id}"
+                    )
 
-                # Don't wait here - let it run in the background
-                logger.info(f"Discord adapter {adapter_id} lifecycle started in background")
+                    # Don't wait here - let it run in the background
+                    logger.info(f"Discord adapter {adapter_id} lifecycle started in background")
+            else:
+                logger.info(f"Adapter {adapter_id} loaded with auto_start=False — not started")
 
-            instance.is_running = True
+            instance.is_running = auto_start
 
             self._register_adapter_services(instance)
 
@@ -271,7 +283,10 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             # self.runtime.adapters.append(adapter)
             self.loaded_adapters[adapter_id] = instance
 
-            logger.info(f"Successfully loaded and started adapter {adapter_id} (adapter_manager id: {id(self)})")
+            logger.info(
+                f"Successfully loaded{' and started' if auto_start else ''} adapter {adapter_id} "
+                f"(adapter_manager id: {id(self)})"
+            )
             return AdapterOperationResult(
                 success=True,
                 adapter_id=adapter_id,
@@ -1201,6 +1216,21 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         config_to_use = live_config
                 except Exception as e:
                     logger.debug(f"Could not get live config for {adapter_id}: {e}")
+
+            # The adapter's live config reflects current settings/state but does
+            # NOT carry the load-time `adapter_config` blob the operator passed
+            # at load. Surface that from the manager's stored AdapterConfig —
+            # otherwise adapter status silently drops it (the wholesale
+            # live-config swap above discards it).
+            if (
+                instance.config_params
+                and instance.config_params.adapter_config
+                and isinstance(config_to_use, AdapterConfig)
+                and not config_to_use.adapter_config
+            ):
+                config_to_use = config_to_use.model_copy(
+                    update={"adapter_config": instance.config_params.adapter_config}
+                )
 
             # Sanitize config params
             sanitized_config = self._sanitize_config_params(instance.adapter_type, config_to_use)

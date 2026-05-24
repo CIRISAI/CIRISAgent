@@ -118,6 +118,18 @@ class IncidentCaptureHandler(logging.Handler):
             if record.levelno < logging.WARNING:
                 return
 
+            # Re-entrancy guard: NEVER capture a log record emitted by this
+            # handler itself. `_save_incident_to_graph` logs its own
+            # persist-write failures; without this guard that failure log
+            # is re-captured as a new incident, whose save fails, which
+            # logs again — an unbounded loop. Observed on the Postgres
+            # backend (CIRISPersist incident substrate rejected the
+            # incident_id) flooding 12k+ records and starving the
+            # reasoning pipeline. The handler must be loop-safe regardless
+            # of any storage backend's behavior.
+            if record.name == __name__:
+                return
+
             # Add extra context for errors with exception info
             if record.levelno >= logging.ERROR and record.exc_info:
                 # Create a modified message with traceback
@@ -147,74 +159,134 @@ class IncidentCaptureHandler(logging.Handler):
                 except Exception:
                     pass
 
-            # The IncidentManagementService will read from the incidents log file during dream cycles
+            # D1-full: schedule the persist write if an event loop is running.
+            # ITIL-aligned filter: only ERROR+CRITICAL get persisted as
+            # incidents. WARNING-level log records are operational noise
+            # (startup chatter, deprecation warnings, missing-optional-
+            # services, etc.) — they go to the rotating file only.
+            #
+            # The WARNING filter is also load-bearing for concurrency
+            # safety: agent startup emits ~50+ warning records in a few
+            # seconds; firing engine.incident_record for each one piles
+            # up concurrent persist writes while raw sqlite3 connections
+            # from other services hold the same ciris_engine.db open,
+            # which empirically corrupts the WAL on CI runners.
+            if record.levelno >= logging.ERROR:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self._save_incident_to_graph(record))
+                except RuntimeError:
+                    pass  # no running loop; rotating file is the only record
 
         except Exception:
             # Failsafe - if we can't capture incident, don't crash
             self.handleError(record)
 
     async def _save_incident_to_graph(self, record: logging.LogRecord) -> None:
-        """Save log record as incident in graph."""
-        try:
-            # Map log level to incident severity
-            severity = self._map_log_level_to_severity(record.levelno)
+        """Save log record as a persist incident.
 
-            # Extract correlation data from extra fields if available
+        D1-full cutover (CIRISAgent#763): incidents no longer live as
+        AUDIT_ENTRY graph nodes. They land in persist's
+        cirislens_incident_records substrate (the 11-field forensic schema
+        added in CIRISPersist#56 / v1.5.5). Method name is kept for
+        back-compat with existing callers; the underlying transport is
+        engine.incident_record.
+        """
+        try:
+            from ciris_engine.logic.audit.persist_signing import resolve_tenant_id
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            engine = get_persist_engine()
+            if engine is None:
+                # Pre-bootstrap log records can't reach persist yet.
+                # Drop silently — the rotating file handler still has them,
+                # so no forensic data is lost.
+                return
+
+            severity = self._map_log_level_to_severity(record.levelno).value.lower()
+            # persist accepts severity strings: critical/error/warning/info/debug.
+            # IncidentSeverity.HIGH/MEDIUM/LOW don't match; map them.
+            severity = {
+                "critical": "critical",
+                "high": "error",
+                "medium": "warning",
+                "low": "info",
+            }.get(severity, "warning")
+
+            # Build correlation_keys list from optional log-record extras.
+            correlation_keys: list[str] = []
             correlation_id = getattr(record, "correlation_id", None)
             task_id = getattr(record, "task_id", None)
             thought_id = getattr(record, "thought_id", None)
             handler_name = getattr(record, "handler_name", None)
+            if correlation_id:
+                correlation_keys.append(f"corr:{correlation_id}")
+            if task_id:
+                correlation_keys.append(f"task:{task_id}")
+            if thought_id:
+                correlation_keys.append(f"thought:{thought_id}")
+            if handler_name:
+                correlation_keys.append(f"handler:{handler_name}")
 
-            # Create incident node
-            incident = IncidentNode(
-                id=f"incident_{uuid.uuid4()}",
-                type=NodeType.AUDIT_ENTRY,
-                scope=GraphScope.LOCAL,
-                attributes={},  # Required field for TypedGraphNode
-                incident_type=record.levelname,
-                severity=severity,
-                status=IncidentStatus.OPEN,
-                description=record.getMessage(),
-                source_component=record.name,
-                detected_at=self._time_service.now(),
-                # Correlation data
-                correlation_id=correlation_id,
-                task_id=task_id,
-                thought_id=thought_id,
-                handler_name=handler_name,
-                # Technical details
-                filename=record.filename,
-                line_number=record.lineno,
-                function_name=record.funcName,
-                # Exception data if present
-                exception_type=record.exc_info[0].__name__ if record.exc_info and record.exc_info[0] else None,
-                stack_trace="".join(traceback.format_exception(*record.exc_info)) if record.exc_info else None,
-                # Impact assessment (to be enhanced by analysis)
-                impact="TBD",
-                urgency=self._calculate_urgency(severity),
-                # Required base fields
-                updated_by="incident_capture_handler",
-                updated_at=self._time_service.now(),
+            now_iso = self._time_service.now().isoformat().replace("+00:00", "Z")
+            message = record.getMessage()
+            # persist's incident schema requires `title` to be non-empty.
+            # Some log records have an empty message (e.g. record.msg=""
+            # with no args); fall back to a level+component synthetic title
+            # so we never POST an empty string.
+            title = (message[:200].strip() if message else "") or f"{record.levelname}: {record.name}"
+            # Bare UUID — persist's incident substrate types incident_id
+            # as a UUID on the Postgres backend and parses it as such; a
+            # prefixed string ("incident_<uuid>") fails that parse. SQLite
+            # stored it as TEXT and accepted the prefix, so the mismatch
+            # was invisible until the Postgres backend exercised it.
+            incident_id = str(uuid.uuid4())
+            exception_type = (
+                record.exc_info[0].__name__ if record.exc_info and record.exc_info[0] else None
+            )
+            stack_trace = (
+                "".join(traceback.format_exception(*record.exc_info))
+                if record.exc_info
+                else None
             )
 
-            # Store incident node directly in graph via memory bus
-            # The graph audit service has a memory_bus we can use
-            if hasattr(self._graph_audit_service, "_memory_bus") and self._graph_audit_service._memory_bus:
-                from ciris_engine.schemas.services.operations import MemoryOpStatus
+            payload: dict[str, Any] = {
+                "incident_id": incident_id,
+                "tenant_id": resolve_tenant_id(),
+                "severity": severity,
+                "category": "log_warning" if severity in ("warning", "info") else "log_error",
+                "title": title,
+                "description": message if message else title,
+                "correlation_keys": correlation_keys,
+                "state": "open",
+                "first_seen_at": now_iso,
+                "last_seen_at": now_iso,
+                "occurrences": 1,
+                "source_component": record.name,
+                "filename": record.filename,
+                "line_number": record.lineno,
+                "function_name": record.funcName,
+            }
+            if handler_name:
+                payload["handler_name"] = handler_name
+            if exception_type:
+                payload["exception_type"] = exception_type
+            if stack_trace:
+                payload["stack_trace"] = stack_trace
 
-                result = await self._graph_audit_service._memory_bus.memorize(
-                    node=incident.to_graph_node(),
-                    handler_name="incident_capture_handler",
-                    metadata={"source": "logging", "captured_from": record.name, "auto_captured": True},
-                )
-                if result.status != MemoryOpStatus.OK:
-                    logging.getLogger(__name__).error(f"Failed to store incident in graph: {result.error}")
-            else:
-                logging.getLogger(__name__).error("Graph audit service does not have memory bus available")
+            import json as _json
+
+            # Run persist's sync incident_record off the event loop —
+            # mirrors the pattern A3 uses for engine.audit_record_entry.
+            # Calling it inline would block the loop while persist's
+            # tokio runtime services the call, starving other coroutines
+            # and (under load) racing with raw sqlite3 connections that
+            # other services hold on ciris_engine.db.
+            await asyncio.to_thread(engine.incident_record, _json.dumps(payload))
 
         except Exception as e:
-            # Log error but don't crash - incident capture should never break the system
-            logging.getLogger(__name__).error(f"Failed to save incident to graph: {e}")
+            # Incident capture must never break the system — log + swallow.
+            logging.getLogger(__name__).error(f"Failed to save incident to persist: {e}")
 
     def _map_log_level_to_severity(self, levelno: int) -> IncidentSeverity:
         """Map Python log level to incident severity."""

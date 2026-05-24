@@ -136,7 +136,7 @@ class TaskCompleteHandler(BaseActionHandler):
         self.logger.debug(f"Marking task {task_id} as COMPLETED with occurrence_id={task_occurrence_id}")
 
         task_updated = persistence.update_task_status(
-            task_id, TaskStatus.COMPLETED, task_occurrence_id, self.time_service
+            task_id, TaskStatus.COMPLETED, task_occurrence_id
         )
 
         if not task_updated:

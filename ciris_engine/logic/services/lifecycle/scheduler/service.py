@@ -14,7 +14,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from ciris_engine.logic.persistence import add_thought, get_db_connection
+from ciris_engine.logic.persistence import add_thought
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.protocols.services import ServiceProtocol as TaskSchedulerServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -114,17 +114,15 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         await super()._on_stop()
 
     async def _load_active_tasks(self) -> None:
-        """Load all active tasks from the database."""
-        try:
-            if not self.conn:
-                self.conn = get_db_connection(self.db_path)  # type: ignore[assignment]
+        """Load all active tasks.
 
-            # For now, we'll use the existing thought/task tables
-            # In the future, this could be a dedicated scheduled_tasks table
-            logger.info("Loading active scheduled tasks")
-
-        except Exception as e:
-            logger.error(f"Failed to load active tasks: {e}")
+        Scheduled tasks are currently held in-memory in `self._active_tasks`.
+        Persistence through ciris-persist's `scheduled_task_*` substrate
+        is wired separately (CIRISAgent#763 / 2.9.0 absorption); legacy
+        raw-sqlite3 path is removed to avoid a second libsqlite writer
+        on `ciris_engine.db`.
+        """
+        logger.info("Loading active scheduled tasks (in-memory state)")
 
     def _create_scheduled_task(
         self,
@@ -240,7 +238,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 from ciris_engine.schemas.runtime.enums import TaskStatus
 
                 if self._time_service:
-                    update_task_status(deferred_task_id, TaskStatus.PENDING, "default", self._time_service)
+                    update_task_status(deferred_task_id, TaskStatus.PENDING, "default")
                 else:
                     # If no time service available, skip updating the task
                     logger.warning(f"Cannot update task {safe_deferred_id} status: no time service available")
@@ -248,34 +246,47 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 logger.info(f"Task {safe_deferred_id} reactivated and marked as pending")
 
             else:
-                # Create a new thought for regular scheduled tasks
-                thought = Thought(
-                    thought_id=f"thought_{(self._time_service.now() if self._time_service else datetime.now(timezone.utc)).timestamp()}",
-                    content=task.trigger_prompt,
-                    status=ThoughtStatus.PENDING,
-                    thought_type=ThoughtType.SCHEDULED,
-                    source_task_id=task.task_id,
-                    agent_occurrence_id="default",  # Scheduled tasks run on default occurrence
-                    created_at=(
-                        self._time_service.now() if self._time_service else datetime.now(timezone.utc)
-                    ).isoformat(),
-                    updated_at=(
-                        self._time_service.now() if self._time_service else datetime.now(timezone.utc)
-                    ).isoformat(),
-                    final_action=FinalAction(
-                        action_type="SCHEDULED_TASK",
-                        action_params={
-                            "scheduled_task_id": task.task_id,
-                            "scheduled_task_name": task.name,
-                            "goal_description": task.goal_description,
-                            "trigger_type": "scheduled",
-                        },
-                        reasoning=f"Scheduled task '{task.name}' triggered",
-                    ),
-                )
+                # Create a new thought for regular scheduled tasks — but only
+                # if the source task row still exists. A ScheduledTask can
+                # outlive its task (cleanup, data wipe, a one-time defer whose
+                # task already completed); creating a thought with a dangling
+                # source_task_id violates the thoughts→tasks foreign key
+                # ("upsert_thought insert: FOREIGN KEY constraint failed").
+                from ciris_engine.logic.persistence import get_task_by_id
 
-                # Add thought to database
-                add_thought(thought, db_path=self.db_path)
+                if get_task_by_id(task.task_id, "default") is None:
+                    logger.warning(
+                        f"Scheduled task {safe_task_id}: source task no longer exists — "
+                        "skipping thought creation (nothing to trigger)"
+                    )
+                else:
+                    thought = Thought(
+                        thought_id=f"thought_{(self._time_service.now() if self._time_service else datetime.now(timezone.utc)).timestamp()}",
+                        content=task.trigger_prompt,
+                        status=ThoughtStatus.PENDING,
+                        thought_type=ThoughtType.SCHEDULED,
+                        source_task_id=task.task_id,
+                        agent_occurrence_id="default",  # Scheduled tasks run on default occurrence
+                        created_at=(
+                            self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+                        ).isoformat(),
+                        updated_at=(
+                            self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+                        ).isoformat(),
+                        final_action=FinalAction(
+                            action_type="SCHEDULED_TASK",
+                            action_params={
+                                "scheduled_task_id": task.task_id,
+                                "scheduled_task_name": task.name,
+                                "goal_description": task.goal_description,
+                                "trigger_type": "scheduled",
+                            },
+                            reasoning=f"Scheduled task '{task.name}' triggered",
+                        ),
+                    )
+
+                    # Add thought to database
+                    add_thought(thought)
 
             # Update scheduled task status
             await self._update_task_triggered(task)

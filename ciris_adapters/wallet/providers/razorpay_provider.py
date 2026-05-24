@@ -60,7 +60,7 @@ class RazorpayProvider(WalletProvider):
     """
 
     API_URL = "https://api.razorpay.com/v1"
-    SUPPORTED_CURRENCIES = ["INR"]
+    CURRENCIES = ["INR"]
 
     def __init__(self, config: RazorpayProviderConfig) -> None:
         self.config = config
@@ -83,7 +83,7 @@ class RazorpayProvider(WalletProvider):
 
     @property
     def supported_currencies(self) -> List[str]:
-        return self.SUPPORTED_CURRENCIES
+        return self.CURRENCIES
 
     def _get_auth_header(self) -> str:
         """Get Basic Auth header."""

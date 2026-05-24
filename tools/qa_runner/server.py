@@ -793,6 +793,24 @@ class APIServerManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["CIRIS_TESTING_MODE"] = "true"  # Enable testing mode for admin user creation
+        # Disable the API rate limiter for QA. A batched all_1/all_2 sweep is
+        # a bursty load-test workload — many modules fire 20+ requests in
+        # sub-second windows and trip the 60-req/min cap (HTTP 429). The
+        # adapter config comment explicitly endorses a test-time opt-out.
+        env.setdefault("CIRIS_API_RATE_LIMIT_ENABLED", "false")
+        # Every QA message must get its OWN task. Without this, a message
+        # arriving on a channel that still has an active task is coalesced
+        # into it (updated_info_available) — so a later module's interact()
+        # merges into an earlier module's unfinished task, never gets its
+        # own SPEAK, and times out at 55s. base_observer documents
+        # CIRIS_DISABLE_TASK_APPEND as exactly the per-task-throughput
+        # benchmarking switch the qa_runner needs (never set in prod).
+        env.setdefault("CIRIS_DISABLE_TASK_APPEND", "1")
+        # Emit the auth-service [AUTH SERVICE DEBUG] traces at INFO so a
+        # CI/QA INFO-level capture records which key_id validate_api_key
+        # sought and which key_ids _api_keys actually held — the decisive
+        # evidence for the --parallel-backends "Invalid API key" 401s.
+        env.setdefault("CIRIS_AUTH_DEBUG", "1")
 
         # Ensure CIRIS_MOCK_LLM matches our config (unset if not using mock)
         if not self.config.mock_llm:

@@ -20,7 +20,6 @@ Tests cover:
 
 import json
 import os
-import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -49,31 +48,27 @@ class TestUpdateTicketStatus:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired.
+
+        CIRISAgent#763: ticket persistence routes through ciris-persist's
+        `ticket_*` substrate, so we bootstrap the persist Engine onto the
+        temp DB via `initialize_database` (which also runs all SQLite
+        migrations) and restore the previous engine on teardown.
+        """
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        # Apply migrations to create schema
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):  # Apply migrations 001-009
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug: fix active_scheduled_tasks view
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -93,20 +88,19 @@ class TestUpdateTicketStatus:
             deadline=None,
             metadata={"test": True},
             notes="Test ticket",
-            automated=False,
-            db_path=temp_db_path,
+            automated=False
         )
         return ticket_id
 
     def test_update_status_only(self, temp_db_path, test_ticket_id):
         """TC-TP001: Verify updating status alone."""
         # Update status
-        result = update_ticket_status(test_ticket_id, "in_progress", db_path=temp_db_path)
+        result = update_ticket_status(test_ticket_id, "in_progress")
 
         assert result is True, "Update should succeed"
 
         # Verify update
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "in_progress"
         assert ticket["completed_at"] is None, "Non-terminal status should not set completed_at"
 
@@ -116,24 +110,22 @@ class TestUpdateTicketStatus:
     def test_update_status_with_notes(self, temp_db_path, test_ticket_id):
         """TC-TP002: Verify status update with notes."""
         result = update_ticket_status(
-            test_ticket_id, "blocked", notes="Waiting for legal approval", db_path=temp_db_path
-        )
+            test_ticket_id, "blocked", notes="Waiting for legal approval")
 
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "blocked"
         assert ticket["notes"] == "Waiting for legal approval"
 
     def test_update_status_with_agent_occurrence_id(self, temp_db_path, test_ticket_id):
         """TC-TP003: Verify updating agent_occurrence_id during status change."""
         result = update_ticket_status(
-            test_ticket_id, "assigned", agent_occurrence_id="occurrence-1", db_path=temp_db_path
-        )
+            test_ticket_id, "assigned", agent_occurrence_id="occurrence-1")
 
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "assigned"
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
@@ -144,12 +136,11 @@ class TestUpdateTicketStatus:
             "assigned",
             notes="Claimed by occurrence",
             agent_occurrence_id="occurrence-2",
-            db_path=temp_db_path,
         )
 
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "assigned"
         assert ticket["notes"] == "Claimed by occurrence"
         assert ticket["agent_occurrence_id"] == "occurrence-2"
@@ -166,18 +157,17 @@ class TestUpdateTicketStatus:
                 ticket_type="dsar",
                 status="in_progress",  # Start non-terminal
                 email="test@example.com",
-                submitted_at=datetime.now(timezone.utc).isoformat(),
-                db_path=temp_db_path,
+                submitted_at=datetime.now(timezone.utc).isoformat()
             )
             ticket_ids.append((ticket_id, status))
 
         # Update to terminal statuses
         for ticket_id, terminal_status in ticket_ids:
-            update_ticket_status(ticket_id, terminal_status, db_path=temp_db_path)
+            update_ticket_status(ticket_id, terminal_status)
 
         # Verify all have completed_at
         for ticket_id, _ in ticket_ids:
-            ticket = get_ticket(ticket_id, db_path=temp_db_path)
+            ticket = get_ticket(ticket_id)
             assert ticket["completed_at"] is not None, f"Ticket {ticket_id} should have completed_at"
 
     def test_non_terminal_leaves_completed_at_null(self, temp_db_path, test_ticket_id):
@@ -185,35 +175,25 @@ class TestUpdateTicketStatus:
         non_terminal_statuses = ["pending", "assigned", "in_progress", "blocked", "deferred"]
 
         for status in non_terminal_statuses:
-            update_ticket_status(test_ticket_id, status, db_path=temp_db_path)
-            ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+            update_ticket_status(test_ticket_id, status)
+            ticket = get_ticket(test_ticket_id)
             assert ticket["completed_at"] is None, f"Status {status} should not set completed_at"
 
     def test_nonexistent_ticket(self, temp_db_path):
         """TC-TP007: Verify error handling for missing ticket."""
-        result = update_ticket_status("NONEXISTENT", "completed", db_path=temp_db_path)
+        result = update_ticket_status("NONEXISTENT", "completed")
 
         assert result is False, "Update of nonexistent ticket should fail"
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_database_error(self, mock_get_db, temp_db_path, test_ticket_id):
-        """TC-TP008: Verify exception handling."""
-        # Mock to raise exception
-        mock_get_db.side_effect = Exception("Database error")
-
-        result = update_ticket_status(test_ticket_id, "completed", db_path=temp_db_path)
-
-        assert result is False, "Should return False on exception"
 
     def test_all_8_status_values(self, temp_db_path, test_ticket_id):
         """TC-TP009: Verify all status values accepted."""
         all_statuses = ["pending", "assigned", "in_progress", "blocked", "deferred", "completed", "cancelled", "failed"]
 
         for status in all_statuses:
-            result = update_ticket_status(test_ticket_id, status, db_path=temp_db_path)
+            result = update_ticket_status(test_ticket_id, status)
             assert result is True, f"Status {status} should be accepted"
 
-            ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+            ticket = get_ticket(test_ticket_id)
             assert ticket["status"] == status
 
     def test_dynamic_sql_construction(self, temp_db_path, test_ticket_id):
@@ -235,11 +215,10 @@ class TestUpdateTicketStatus:
         for status, notes, agent_occurrence_id, expected_fields in test_cases:
             # Update with specific parameters
             update_ticket_status(
-                test_ticket_id, status, notes=notes, agent_occurrence_id=agent_occurrence_id, db_path=temp_db_path
-            )
+                test_ticket_id, status, notes=notes, agent_occurrence_id=agent_occurrence_id)
 
             # Verify update succeeded
-            ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+            ticket = get_ticket(test_ticket_id)
             assert ticket["status"] == status
 
             if notes:
@@ -253,30 +232,21 @@ class TestTicketStatusTransitions:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug in migration 001
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -290,8 +260,7 @@ class TestTicketStatusTransitions:
             ticket_type="dsar",
             status="pending",
             email="workflow@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Typical workflow: PENDING → ASSIGNED → IN_PROGRESS → COMPLETED
@@ -302,10 +271,10 @@ class TestTicketStatusTransitions:
         ]
 
         for status, occurrence_id in transitions:
-            result = update_ticket_status(ticket_id, status, agent_occurrence_id=occurrence_id, db_path=temp_db_path)
+            result = update_ticket_status(ticket_id, status, agent_occurrence_id=occurrence_id)
             assert result is True, f"Transition to {status} should succeed"
 
-            ticket = get_ticket(ticket_id, db_path=temp_db_path)
+            ticket = get_ticket(ticket_id)
             assert ticket["status"] == status
             assert ticket["agent_occurrence_id"] == occurrence_id
 
@@ -318,8 +287,7 @@ class TestTicketStatusTransitions:
             ticket_type="dsar",
             status="in_progress",
             email="blocked@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # IN_PROGRESS → BLOCKED → IN_PROGRESS → COMPLETED
@@ -330,7 +298,7 @@ class TestTicketStatusTransitions:
         ]
 
         for status, note in transitions:
-            result = update_ticket_status(ticket_id, status, notes=note, db_path=temp_db_path)
+            result = update_ticket_status(ticket_id, status, notes=note)
             assert result is True
 
     def test_deferred_workflow(self, temp_db_path):
@@ -342,15 +310,14 @@ class TestTicketStatusTransitions:
             ticket_type="dsar",
             status="in_progress",
             email="deferred@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # IN_PROGRESS → DEFERRED → IN_PROGRESS → COMPLETED
-        result = update_ticket_status(ticket_id, "deferred", notes="Awaiting data", db_path=temp_db_path)
+        result = update_ticket_status(ticket_id, "deferred", notes="Awaiting data")
         assert result is True
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["status"] == "deferred"
 
 
@@ -359,29 +326,21 @@ class TestCreateTicket:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -393,11 +352,10 @@ class TestCreateTicket:
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="test@example.com",
-            db_path=temp_db_path,
         )
 
         assert result is True
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket is not None
         assert ticket["ticket_id"] == ticket_id
         assert ticket["sop"] == "DSAR_ACCESS"
@@ -430,11 +388,10 @@ class TestCreateTicket:
             automated=True,
             correlation_id="corr-123",
             agent_occurrence_id="occurrence-1",
-            db_path=temp_db_path,
         )
 
         assert result is True
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["status"] == "assigned"
         assert ticket["priority"] == 8
         assert ticket["user_identifier"] == "user456"
@@ -445,7 +402,11 @@ class TestCreateTicket:
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
     def test_create_ticket_datetime_string(self, temp_db_path):
-        """TC-CT003: Create ticket with datetime as ISO string."""
+        """TC-CT003: Create ticket with datetime as ISO string.
+
+        Persist normalizes `+00:00` → `Z` on round-trip; compare via parsed
+        datetimes rather than raw strings.
+        """
         ticket_id = "TEST-STR-001"
         submitted_at_str = "2025-01-15T10:30:00+00:00"
         deadline_str = "2025-02-15T10:30:00+00:00"
@@ -457,37 +418,44 @@ class TestCreateTicket:
             email="str@example.com",
             submitted_at=submitted_at_str,
             deadline=deadline_str,
-            db_path=temp_db_path,
         )
 
         assert result is True
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
-        assert ticket["submitted_at"] == submitted_at_str
-        assert ticket["deadline"] == deadline_str
+        ticket = get_ticket(ticket_id)
+        assert datetime.fromisoformat(ticket["submitted_at"].replace("Z", "+00:00")) == datetime.fromisoformat(
+            submitted_at_str
+        )
+        assert datetime.fromisoformat(ticket["deadline"].replace("Z", "+00:00")) == datetime.fromisoformat(
+            deadline_str
+        )
 
-    def test_create_ticket_duplicate_id(self, temp_db_path):
-        """TC-CT004: Verify handling of duplicate ticket IDs."""
+    def test_create_ticket_duplicate_id_upserts(self, temp_db_path):
+        """TC-CT004: Re-creating with the same ticket_id upserts (CIRISAgent#763).
+
+        Post-migration `create_ticket` routes through persist's `ticket_upsert`,
+        so duplicates overwrite the existing row rather than failing. Legacy
+        INSERT-with-conflict-error behavior is gone.
+        """
         ticket_id = "TEST-DUP-001"
 
-        # Create first ticket
         result1 = create_ticket(
             ticket_id=ticket_id,
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="dup@example.com",
-            db_path=temp_db_path,
         )
         assert result1 is True
 
-        # Try to create duplicate
         result2 = create_ticket(
             ticket_id=ticket_id,
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="dup2@example.com",
-            db_path=temp_db_path,
         )
-        assert result2 is False
+        assert result2 is True
+
+        ticket = get_ticket(ticket_id)
+        assert ticket["email"] == "dup2@example.com"
 
     def test_create_ticket_empty_metadata(self, temp_db_path):
         """TC-CT005: Create ticket with empty metadata dict."""
@@ -498,11 +466,10 @@ class TestCreateTicket:
             ticket_type="dsar",
             email="empty@example.com",
             metadata={},
-            db_path=temp_db_path,
         )
 
         assert result is True
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["metadata"] == {}
 
     def test_create_ticket_none_metadata(self, temp_db_path):
@@ -514,27 +481,11 @@ class TestCreateTicket:
             ticket_type="dsar",
             email="none@example.com",
             metadata=None,
-            db_path=temp_db_path,
         )
 
         assert result is True
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["metadata"] == {}
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_create_ticket_database_error(self, mock_get_db, temp_db_path):
-        """TC-CT007: Verify error handling during creation."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        result = create_ticket(
-            ticket_id="TEST-ERR-001",
-            sop="DSAR_ACCESS",
-            ticket_type="dsar",
-            email="error@example.com",
-            db_path=temp_db_path,
-        )
-
-        assert result is False
 
     def test_create_ticket_default_submitted_at(self, temp_db_path):
         """TC-CT008: Verify submitted_at defaults to current time."""
@@ -546,13 +497,12 @@ class TestCreateTicket:
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="default@example.com",
-            db_path=temp_db_path,
         )
 
         after = datetime.now(timezone.utc)
         assert result is True
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         submitted_at = datetime.fromisoformat(ticket["submitted_at"])
         assert before <= submitted_at <= after
 
@@ -562,35 +512,27 @@ class TestGetTicket:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
     def test_get_ticket_nonexistent(self, temp_db_path):
         """TC-GT001: Verify get_ticket returns None for nonexistent ticket."""
-        result = get_ticket("NONEXISTENT-001", db_path=temp_db_path)
+        result = get_ticket("NONEXISTENT-001")
         assert result is None
 
     def test_get_ticket_existing(self, temp_db_path):
@@ -601,42 +543,13 @@ class TestGetTicket:
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="get@example.com",
-            db_path=temp_db_path,
         )
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket is not None
         assert ticket["ticket_id"] == ticket_id
         assert "submitted_at" in ticket
         assert "last_updated" in ticket
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_get_ticket_database_error(self, mock_get_db, temp_db_path):
-        """TC-GT003: Verify error handling during retrieval."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        result = get_ticket("TEST-ERR-001", db_path=temp_db_path)
-        assert result is None
-
-    @patch("ciris_engine.logic.persistence.models.tickets._row_to_dict")
-    def test_get_ticket_conversion_error(self, mock_row_to_dict, temp_db_path):
-        """TC-GT004: Verify error handling during row conversion."""
-        # Create a ticket first
-        ticket_id = "TEST-CONV-001"
-        create_ticket(
-            ticket_id=ticket_id,
-            sop="DSAR_ACCESS",
-            ticket_type="dsar",
-            email="conv@example.com",
-            db_path=temp_db_path,
-        )
-
-        # Mock conversion to raise exception
-        mock_row_to_dict.side_effect = Exception("Conversion error")
-
-        # get_ticket catches the exception and returns None
-        result = get_ticket(ticket_id, db_path=temp_db_path)
-        assert result is None
 
 
 class TestUpdateTicketMetadata:
@@ -644,29 +557,21 @@ class TestUpdateTicketMetadata:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -680,7 +585,6 @@ class TestUpdateTicketMetadata:
             ticket_type="dsar",
             email="meta@example.com",
             metadata={"stage": 1, "progress": 0.0},
-            db_path=temp_db_path,
         )
         return ticket_id
 
@@ -688,10 +592,10 @@ class TestUpdateTicketMetadata:
         """TC-UM001: Update metadata with simple dict."""
         new_metadata = {"stage": 2, "progress": 0.5, "notes": "Updated"}
 
-        result = update_ticket_metadata(test_ticket_id, new_metadata, db_path=temp_db_path)
+        result = update_ticket_metadata(test_ticket_id, new_metadata)
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["metadata"]["stage"] == 2
         assert ticket["metadata"]["progress"] == 0.5
         assert ticket["metadata"]["notes"] == "Updated"
@@ -707,38 +611,30 @@ class TestUpdateTicketMetadata:
             "data": {"records_found": 42, "files": ["doc1.pdf", "doc2.pdf"]},
         }
 
-        result = update_ticket_metadata(test_ticket_id, new_metadata, db_path=temp_db_path)
+        result = update_ticket_metadata(test_ticket_id, new_metadata)
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["metadata"]["stage"] == 3
         assert len(ticket["metadata"]["stages"]) == 2
         assert ticket["metadata"]["data"]["records_found"] == 42
 
     def test_update_metadata_empty_dict(self, temp_db_path, test_ticket_id):
         """TC-UM003: Update metadata to empty dict (clears metadata)."""
-        result = update_ticket_metadata(test_ticket_id, {}, db_path=temp_db_path)
+        result = update_ticket_metadata(test_ticket_id, {})
         assert result is True
 
-        ticket = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["metadata"] == {}
 
     def test_update_metadata_nonexistent_ticket(self, temp_db_path):
         """TC-UM004: Verify error handling for nonexistent ticket."""
-        result = update_ticket_metadata("NONEXISTENT", {"test": True}, db_path=temp_db_path)
-        assert result is False
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_update_metadata_database_error(self, mock_get_db, temp_db_path, test_ticket_id):
-        """TC-UM005: Verify error handling during update."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        result = update_ticket_metadata(test_ticket_id, {"test": True}, db_path=temp_db_path)
+        result = update_ticket_metadata("NONEXISTENT", {"test": True})
         assert result is False
 
     def test_update_metadata_updates_last_updated(self, temp_db_path, test_ticket_id):
         """TC-UM006: Verify last_updated timestamp is updated."""
-        ticket_before = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket_before = get_ticket(test_ticket_id)
         last_updated_before = ticket_before["last_updated"]
 
         # Small delay to ensure timestamp difference
@@ -746,10 +642,10 @@ class TestUpdateTicketMetadata:
 
         time.sleep(0.1)
 
-        result = update_ticket_metadata(test_ticket_id, {"updated": True}, db_path=temp_db_path)
+        result = update_ticket_metadata(test_ticket_id, {"updated": True})
         assert result is True
 
-        ticket_after = get_ticket(test_ticket_id, db_path=temp_db_path)
+        ticket_after = get_ticket(test_ticket_id)
         last_updated_after = ticket_after["last_updated"]
 
         assert last_updated_after > last_updated_before
@@ -760,29 +656,21 @@ class TestListTickets:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -828,68 +716,60 @@ class TestListTickets:
         ]
 
         for ticket in tickets:
-            create_ticket(db_path=temp_db_path, **ticket)
+            create_ticket(**ticket)
 
         return tickets
 
     def test_list_tickets_no_filters(self, temp_db_path, sample_tickets):
         """TC-LT001: List all tickets without filters."""
-        tickets = list_tickets(db_path=temp_db_path)
+        tickets = list_tickets()
         assert len(tickets) == 5
         # Verify sorted by submitted_at DESC
         assert tickets[0]["ticket_id"] == "INC-001"  # Last created
 
     def test_list_tickets_filter_by_sop(self, temp_db_path, sample_tickets):
         """TC-LT002: Filter tickets by SOP."""
-        tickets = list_tickets(sop="DSAR_ACCESS", db_path=temp_db_path)
+        tickets = list_tickets(sop="DSAR_ACCESS")
         assert len(tickets) == 1
         assert tickets[0]["ticket_id"] == "DSAR-001"
 
     def test_list_tickets_filter_by_type(self, temp_db_path, sample_tickets):
         """TC-LT003: Filter tickets by ticket_type."""
-        tickets = list_tickets(ticket_type="dsar", db_path=temp_db_path)
+        tickets = list_tickets(ticket_type="dsar")
         assert len(tickets) == 2
         assert all(t["ticket_type"] == "dsar" for t in tickets)
 
     def test_list_tickets_filter_by_status(self, temp_db_path, sample_tickets):
         """TC-LT004: Filter tickets by status."""
-        tickets = list_tickets(status="pending", db_path=temp_db_path)
+        tickets = list_tickets(status="pending")
         assert len(tickets) == 2
         assert all(t["status"] == "pending" for t in tickets)
 
     def test_list_tickets_filter_by_email(self, temp_db_path, sample_tickets):
         """TC-LT005: Filter tickets by email."""
-        tickets = list_tickets(email="user1@example.com", db_path=temp_db_path)
+        tickets = list_tickets(email="user1@example.com")
         assert len(tickets) == 2
         assert all(t["email"] == "user1@example.com" for t in tickets)
 
     def test_list_tickets_multiple_filters(self, temp_db_path, sample_tickets):
         """TC-LT006: Combine multiple filters."""
-        tickets = list_tickets(ticket_type="dsar", status="pending", email="user1@example.com", db_path=temp_db_path)
+        tickets = list_tickets(ticket_type="dsar", status="pending", email="user1@example.com")
         assert len(tickets) == 1
         assert tickets[0]["ticket_id"] == "DSAR-001"
 
     def test_list_tickets_with_limit(self, temp_db_path, sample_tickets):
         """TC-LT007: Limit number of results."""
-        tickets = list_tickets(limit=3, db_path=temp_db_path)
+        tickets = list_tickets(limit=3)
         assert len(tickets) == 3
 
     def test_list_tickets_no_matches(self, temp_db_path, sample_tickets):
         """TC-LT008: Filter with no matching results."""
-        tickets = list_tickets(sop="NONEXISTENT_SOP", db_path=temp_db_path)
+        tickets = list_tickets(sop="NONEXISTENT_SOP")
         assert len(tickets) == 0
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_list_tickets_database_error(self, mock_get_db, temp_db_path):
-        """TC-LT009: Verify error handling during list."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        tickets = list_tickets(db_path=temp_db_path)
-        assert tickets == []
 
     def test_list_tickets_empty_database(self, temp_db_path):
         """TC-LT010: List tickets from empty database."""
-        tickets = list_tickets(db_path=temp_db_path)
+        tickets = list_tickets()
         assert len(tickets) == 0
 
 
@@ -898,64 +778,49 @@ class TestDeleteTicket:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
     def test_delete_ticket_success(self, temp_db_path):
-        """TC-DT001: Successfully delete an existing ticket."""
+        """TC-DT001: delete_ticket soft-cancels via status (CIRISAgent#763)."""
         ticket_id = "TEST-DEL-001"
         create_ticket(
             ticket_id=ticket_id,
             sop="DSAR_ACCESS",
             ticket_type="dsar",
             email="delete@example.com",
-            db_path=temp_db_path,
         )
 
-        # Verify ticket exists
-        assert get_ticket(ticket_id, db_path=temp_db_path) is not None
+        assert get_ticket(ticket_id) is not None
 
-        # Delete ticket
-        result = delete_ticket(ticket_id, db_path=temp_db_path)
+        result = delete_ticket(ticket_id)
         assert result is True
 
-        # Verify ticket is gone
-        assert get_ticket(ticket_id, db_path=temp_db_path) is None
+        # Persist 1.5.19 has no hard-delete substrate; delete_ticket marks
+        # the row cancelled instead. Row stays queryable until ticket_delete
+        # lands upstream.
+        ticket = get_ticket(ticket_id)
+        assert ticket is not None
+        assert ticket["status"] == "cancelled"
 
     def test_delete_ticket_nonexistent(self, temp_db_path):
         """TC-DT002: Try to delete nonexistent ticket."""
-        result = delete_ticket("NONEXISTENT", db_path=temp_db_path)
-        assert result is False
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_delete_ticket_database_error(self, mock_get_db, temp_db_path):
-        """TC-DT003: Verify error handling during deletion."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        result = delete_ticket("TEST-ERR-001", db_path=temp_db_path)
+        result = delete_ticket("NONEXISTENT")
         assert result is False
 
 
@@ -964,29 +829,21 @@ class TestGetTicketsByCorrelationId:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -1002,7 +859,6 @@ class TestGetTicketsByCorrelationId:
                 ticket_type="dsar",
                 email=f"corr{i}@example.com",
                 correlation_id=correlation_id,
-                db_path=temp_db_path,
             )
 
         # Create ticket with different correlation ID
@@ -1012,25 +868,16 @@ class TestGetTicketsByCorrelationId:
             ticket_type="dsar",
             email="other@example.com",
             correlation_id="other-corr",
-            db_path=temp_db_path,
         )
 
-        tickets = get_tickets_by_correlation_id(correlation_id, db_path=temp_db_path)
+        tickets = get_tickets_by_correlation_id(correlation_id)
         assert len(tickets) == 3
         assert all(t["correlation_id"] == correlation_id for t in tickets)
 
     def test_get_tickets_by_correlation_id_none_found(self, temp_db_path):
         """TC-CORR002: Get tickets with nonexistent correlation ID."""
-        tickets = get_tickets_by_correlation_id("nonexistent-corr", db_path=temp_db_path)
+        tickets = get_tickets_by_correlation_id("nonexistent-corr")
         assert len(tickets) == 0
-
-    @patch("ciris_engine.logic.persistence.models.tickets.get_db_connection")
-    def test_get_tickets_by_correlation_id_error(self, mock_get_db, temp_db_path):
-        """TC-CORR003: Verify error handling."""
-        mock_get_db.side_effect = Exception("Database error")
-
-        tickets = get_tickets_by_correlation_id("corr-123", db_path=temp_db_path)
-        assert tickets == []
 
 
 class TestRowToDict:
@@ -1177,29 +1024,21 @@ class TestUpdateTicketStatusAdvanced:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired (CIRISAgent#763)."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.db.core import initialize_database
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -1212,7 +1051,6 @@ class TestUpdateTicketStatusAdvanced:
             ticket_type="dsar",
             email="claim@example.com",
             agent_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
 
         # Claim ticket from __shared__ to occurrence-1
@@ -1221,12 +1059,11 @@ class TestUpdateTicketStatusAdvanced:
             "assigned",
             agent_occurrence_id="occurrence-1",
             require_current_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
 
         assert result is True
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["status"] == "assigned"
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
@@ -1239,8 +1076,7 @@ class TestUpdateTicketStatusAdvanced:
             ticket_type="dsar",
             email="claim@example.com",
             agent_occurrence_id="occurrence-1",  # Already claimed
-            db_path=temp_db_path,
-        )
+            )
 
         # Try to claim from __shared__ (but it's actually occurrence-1)
         result = update_ticket_status(
@@ -1248,12 +1084,11 @@ class TestUpdateTicketStatusAdvanced:
             "assigned",
             agent_occurrence_id="occurrence-2",
             require_current_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
 
         assert result is False  # Should fail because occurrence_id doesn't match
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["agent_occurrence_id"] == "occurrence-1"  # Unchanged
 
     def test_atomic_claim_race_condition_simulation(self, temp_db_path):
@@ -1265,7 +1100,6 @@ class TestUpdateTicketStatusAdvanced:
             ticket_type="dsar",
             email="race@example.com",
             agent_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
 
         # First occurrence claims
@@ -1274,7 +1108,6 @@ class TestUpdateTicketStatusAdvanced:
             "assigned",
             agent_occurrence_id="occurrence-1",
             require_current_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
         assert result1 is True
 
@@ -1284,11 +1117,10 @@ class TestUpdateTicketStatusAdvanced:
             "assigned",
             agent_occurrence_id="occurrence-2",
             require_current_occurrence_id="__shared__",
-            db_path=temp_db_path,
         )
         assert result2 is False
 
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
 

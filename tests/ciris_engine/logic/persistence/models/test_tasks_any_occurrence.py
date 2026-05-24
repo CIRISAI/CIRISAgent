@@ -1,329 +1,119 @@
-"""Unit tests for get_task_by_id_any_occurrence and get_task_occurrence_id_for_update."""
+"""Unit tests for `get_task_by_id_any_occurrence` and `get_task_occurrence_id_for_update`.
 
-from unittest.mock import Mock, patch
+Post-2.9.0 absorption these functions route through ciris-persist's substrate
+API rather than raw sqlite3. Tests use the shared `persist_engine` fixture to
+wire a real Engine and exercise the public functions end-to-end.
+"""
+
+from __future__ import annotations
 
 import pytest
 
-from ciris_engine.logic.persistence.models.tasks import get_task_by_id_any_occurrence, get_task_occurrence_id_for_update
+from ciris_engine.logic.persistence.models.tasks import (
+    add_task,
+    get_task_by_id_any_occurrence,
+    get_task_occurrence_id_for_update,
+)
 from ciris_engine.schemas.runtime.enums import TaskStatus
-from ciris_engine.schemas.runtime.models import Task
+from ciris_engine.schemas.runtime.models import Task, TaskContext
+
+
+# Pull in the shared `persist_engine` fixture so the engine is wired
+# before each test (and unwired on teardown for test ordering safety).
+from tests.fixtures.persist_engine import persist_engine  # noqa: F401
+
+
+def _make_task(task_id: str, occurrence_id: str = "default") -> Task:
+    return Task(
+        task_id=task_id,
+        agent_occurrence_id=occurrence_id,
+        channel_id="ch",
+        description=f"task {task_id}",
+        status=TaskStatus.PENDING,
+        priority=0,
+        created_at="2025-10-31T00:00:00+00:00",
+        updated_at="2025-10-31T00:00:00+00:00",
+        context=TaskContext(channel_id="ch", correlation_id=f"corr-{task_id}"),
+    )
 
 
 class TestGetTaskByIdAnyOccurrence:
-    """Tests for get_task_by_id_any_occurrence function."""
+    def test_returns_task_with_default_occurrence(self, persist_engine):
+        add_task(_make_task("task_123", "default"))
+        result = get_task_by_id_any_occurrence("task_123")
+        assert result is not None
+        assert isinstance(result, Task)
+        assert result.task_id == "task_123"
+        assert result.agent_occurrence_id == "default"
 
-    def test_returns_task_with_default_occurrence(self):
-        """Should return task with default occurrence_id."""
-        mock_task = Task(
-            task_id="task_123",
-            agent_occurrence_id="default",
-            channel_id="test_channel",
-            description="Test task",
-            status=TaskStatus.PENDING,
-            created_at="2025-10-31T00:00:00+00:00",
-            updated_at="2025-10-31T00:00:00+00:00",
-        )
+    def test_returns_task_with_shared_occurrence(self, persist_engine):
+        add_task(_make_task("SHUTDOWN_SHARED_20251031", "__shared__"))
+        result = get_task_by_id_any_occurrence("SHUTDOWN_SHARED_20251031")
+        assert result is not None
+        assert result.agent_occurrence_id == "__shared__"
 
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn, patch(
-            "ciris_engine.logic.persistence.models.tasks.map_row_to_task", return_value=mock_task
-        ):
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = {"task_id": "task_123"}  # Minimal row
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
+    def test_returns_task_with_transferred_occurrence(self, persist_engine):
+        add_task(_make_task("WAKEUP_SHARED_20251031", "occurrence-a"))
+        result = get_task_by_id_any_occurrence("WAKEUP_SHARED_20251031")
+        assert result is not None
+        assert result.agent_occurrence_id == "occurrence-a"
 
-            result = get_task_by_id_any_occurrence("task_123")
+    def test_returns_none_when_task_not_found(self, persist_engine):
+        assert get_task_by_id_any_occurrence("missing-task") is None
 
-            # Verify SQL doesn't filter by occurrence_id
-            sql = mock_cursor.execute.call_args[0][0]
-            assert "WHERE task_id = ?" in sql
-            assert "agent_occurrence_id" not in sql
-            assert "LIMIT 1" in sql
+    def test_handles_database_exception(self, persist_engine):
+        """Should swallow persist errors and return None."""
+        from unittest.mock import patch
 
-            # Verify params only include task_id
-            params = mock_cursor.execute.call_args[0][1]
-            assert params == ("task_123",)
+        with patch(
+            "ciris_engine.logic.persistence.models.tasks._get_engine"
+        ) as mock_engine:
+            mock_engine.return_value.task_get.side_effect = RuntimeError("simulated")
+            assert get_task_by_id_any_occurrence("anything") is None
 
-            # Verify returns task
-            assert result is not None
-            assert isinstance(result, Task)
-            assert result.agent_occurrence_id == "default"
-
-    def test_returns_task_with_shared_occurrence(self):
-        """Should return task with __shared__ occurrence_id."""
-        mock_task = Task(
-            task_id="SHUTDOWN_SHARED_20251031",
-            agent_occurrence_id="__shared__",
-            channel_id="system",
-            description="Shared shutdown task",
-            status=TaskStatus.ACTIVE,
-            created_at="2025-10-31T00:00:00+00:00",
-            updated_at="2025-10-31T00:00:00+00:00",
-        )
-
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn, patch(
-            "ciris_engine.logic.persistence.models.tasks.map_row_to_task", return_value=mock_task
-        ):
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = {"task_id": "SHUTDOWN_SHARED_20251031"}
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            result = get_task_by_id_any_occurrence("SHUTDOWN_SHARED_20251031")
-
-            assert result is not None
-            assert result.agent_occurrence_id == "__shared__"
-
-    def test_returns_task_with_transferred_occurrence(self):
-        """Should return task that was transferred to specific occurrence (e.g., occurrence-a)."""
-        mock_task = Task(
-            task_id="WAKEUP_SHARED_20251031",
-            agent_occurrence_id="occurrence-a",
-            channel_id="system",
-            description="Claimed wakeup task",
-            status=TaskStatus.ACTIVE,
-            created_at="2025-10-31T00:00:00+00:00",
-            updated_at="2025-10-31T00:00:00+00:00",
-        )
-
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn, patch(
-            "ciris_engine.logic.persistence.models.tasks.map_row_to_task", return_value=mock_task
-        ):
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = {"task_id": "WAKEUP_SHARED_20251031"}
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            result = get_task_by_id_any_occurrence("WAKEUP_SHARED_20251031")
-
-            assert result is not None
-            assert result.agent_occurrence_id == "occurrence-a"
-
-    def test_returns_none_when_task_not_found(self):
-        """Should return None when task doesn't exist."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = None  # No task found
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            result = get_task_by_id_any_occurrence("nonexistent_task")
-
-            assert result is None
-
-    def test_handles_database_exception(self):
-        """Should handle database exceptions gracefully and return None."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_conn.side_effect = Exception("Database connection failed")
-
-            result = get_task_by_id_any_occurrence("task_123")
-
-            assert result is None
-
-    def test_accepts_custom_db_path(self):
-        """Should accept and use custom database path."""
-        mock_task = Task(
-            task_id="task_123",
-            agent_occurrence_id="default",
-            channel_id="test_channel",
-            description="Test",
-            status=TaskStatus.PENDING,
-            created_at="2025-10-31T00:00:00+00:00",
-            updated_at="2025-10-31T00:00:00+00:00",
-        )
-
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn, patch(
-            "ciris_engine.logic.persistence.models.tasks.map_row_to_task", return_value=mock_task
-        ):
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = {"task_id": "task_123"}
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            result = get_task_by_id_any_occurrence("task_123", db_path="/custom/path/db.sqlite")
-
-            # Verify custom db_path was passed
-            mock_conn.assert_called_once_with("/custom/path/db.sqlite")
-            assert result is not None
-
-    def test_sql_query_structure(self):
-        """Should generate correct SQL query structure."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = None
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            get_task_by_id_any_occurrence("test_task")
-
-            sql = mock_cursor.execute.call_args[0][0]
-
-            # Verify SQL structure
-            assert "SELECT * FROM tasks" in sql
-            assert "WHERE task_id = ?" in sql
-            assert "LIMIT 1" in sql
-            # Should NOT filter by occurrence_id
-            assert "agent_occurrence_id = ?" not in sql
+    def test_accepts_custom_db_path(self, persist_engine):
+        """db_path is preserved for back-compat but unused; should still work."""
+        add_task(_make_task("task_x", "default"))
+        result = get_task_by_id_any_occurrence("task_x")
+        assert result is not None
+        assert result.task_id == "task_x"
 
 
 class TestGetTaskOccurrenceIdForUpdate:
-    """Tests for get_task_occurrence_id_for_update function."""
+    def test_returns_default_occurrence_id(self, persist_engine):
+        add_task(_make_task("task_123", "default"))
+        assert get_task_occurrence_id_for_update("task_123") == "default"
 
-    def test_returns_default_occurrence_id(self):
-        """Should return 'default' occurrence_id for single-occurrence task."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = ("default",)  # Row with occurrence_id
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
+    def test_returns_shared_occurrence_id(self, persist_engine):
+        add_task(_make_task("SHUTDOWN_SHARED_20251031", "__shared__"))
+        assert get_task_occurrence_id_for_update("SHUTDOWN_SHARED_20251031") == "__shared__"
 
-            result = get_task_occurrence_id_for_update("task_123")
+    def test_returns_transferred_occurrence_id(self, persist_engine):
+        add_task(_make_task("WAKEUP_SHARED_20251031", "occurrence-a"))
+        assert get_task_occurrence_id_for_update("WAKEUP_SHARED_20251031") == "occurrence-a"
 
-            # Verify SQL queries only agent_occurrence_id
-            sql = mock_cursor.execute.call_args[0][0]
-            assert "SELECT agent_occurrence_id FROM tasks" in sql
-            assert "WHERE task_id = ?" in sql
-            assert "LIMIT 1" in sql
+    def test_returns_none_when_task_not_found(self, persist_engine):
+        assert get_task_occurrence_id_for_update("missing") is None
 
-            # Verify params
-            params = mock_cursor.execute.call_args[0][1]
-            assert params == ("task_123",)
+    def test_handles_database_exception(self, persist_engine):
+        from unittest.mock import patch
 
-            # Verify result
-            assert result == "default"
+        with patch(
+            "ciris_engine.logic.persistence.models.tasks._get_engine"
+        ) as mock_engine:
+            mock_engine.return_value.task_get.side_effect = RuntimeError("simulated")
+            assert get_task_occurrence_id_for_update("any") is None
 
-    def test_returns_shared_occurrence_id(self):
-        """Should return '__shared__' occurrence_id for unclaimed shared task."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = ("__shared__",)
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
+    def test_accepts_custom_db_path(self, persist_engine):
+        add_task(_make_task("task_y", "default"))
+        assert get_task_occurrence_id_for_update("task_y") == "default"
 
-            result = get_task_occurrence_id_for_update("SHUTDOWN_SHARED_20251031")
-
-            assert result == "__shared__"
-
-    def test_returns_transferred_occurrence_id(self):
-        """Should return specific occurrence_id for transferred/claimed task."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = ("occurrence-b",)  # After transfer
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            result = get_task_occurrence_id_for_update("WAKEUP_SHARED_20251031")
-
-            assert result == "occurrence-b"
-
-    def test_returns_none_when_task_not_found(self):
-        """Should return None when task doesn't exist."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = None  # No task found
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            result = get_task_occurrence_id_for_update("nonexistent_task")
-
-            assert result is None
-
-    def test_handles_database_exception(self):
-        """Should handle database exceptions gracefully and return None."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_conn.side_effect = Exception("Database error")
-
-            result = get_task_occurrence_id_for_update("task_123")
-
-            assert result is None
-
-    def test_accepts_custom_db_path(self):
-        """Should accept and use custom database path."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = ("default",)
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            result = get_task_occurrence_id_for_update("task_123", db_path="/custom/db.sqlite")
-
-            # Verify custom db_path was passed
-            mock_conn.assert_called_once_with("/custom/db.sqlite")
-            assert result == "default"
-
-    def test_returns_str_type(self):
-        """Should return string type for mypy type safety (no Any return)."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = ("occurrence-xyz",)
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            result = get_task_occurrence_id_for_update("task_123")
-
-            # Verify explicit string type (not Any)
-            assert isinstance(result, str)
-            assert result == "occurrence-xyz"
-
-    def test_sql_only_selects_occurrence_id(self):
-        """Should select only agent_occurrence_id column for efficiency."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = ("default",)
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            get_task_occurrence_id_for_update("task_123")
-
-            sql = mock_cursor.execute.call_args[0][0]
-
-            # Should select only occurrence_id column, not SELECT *
-            assert "SELECT agent_occurrence_id FROM tasks" in sql
-            assert "SELECT *" not in sql
+    def test_returns_str_type(self, persist_engine):
+        add_task(_make_task("task_z", "default"))
+        assert isinstance(get_task_occurrence_id_for_update("task_z"), str)
 
 
 class TestMultiOccurrenceScenarios:
-    """Integration-style tests covering all multi-occurrence scenarios."""
-
     @pytest.mark.parametrize(
         "task_id,occurrence_id,description",
         [
@@ -333,34 +123,14 @@ class TestMultiOccurrenceScenarios:
             ("api_task_456", "occurrence-c", "Multi-occurrence claimed task"),
         ],
     )
-    def test_get_task_by_id_any_occurrence_handles_all_scenarios(self, task_id, occurrence_id, description):
-        """Should handle all occurrence scenarios without filtering."""
-        mock_task = Task(
-            task_id=task_id,
-            agent_occurrence_id=occurrence_id,
-            channel_id="system",
-            description=description,
-            status=TaskStatus.ACTIVE,
-            created_at="2025-10-31T00:00:00+00:00",
-            updated_at="2025-10-31T00:00:00+00:00",
-        )
-
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn, patch(
-            "ciris_engine.logic.persistence.models.tasks.map_row_to_task", return_value=mock_task
-        ):
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = {"task_id": task_id}
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            result = get_task_by_id_any_occurrence(task_id)
-
-            assert result is not None
-            assert result.task_id == task_id
-            assert result.agent_occurrence_id == occurrence_id
+    def test_get_task_by_id_any_occurrence_handles_all_scenarios(
+        self, persist_engine, task_id, occurrence_id, description
+    ):
+        add_task(_make_task(task_id, occurrence_id))
+        result = get_task_by_id_any_occurrence(task_id)
+        assert result is not None
+        assert result.task_id == task_id
+        assert result.agent_occurrence_id == occurrence_id
 
     @pytest.mark.parametrize(
         "task_id,occurrence_id",
@@ -370,17 +140,8 @@ class TestMultiOccurrenceScenarios:
             ("WAKEUP_SHARED_20251031", "occurrence-a"),
         ],
     )
-    def test_get_task_occurrence_id_for_update_handles_all_scenarios(self, task_id, occurrence_id):
-        """Should return correct occurrence_id for all scenarios."""
-        with patch("ciris_engine.logic.persistence.models.tasks.get_db_connection") as mock_conn:
-            mock_cursor = Mock()
-            mock_cursor.fetchone.return_value = (occurrence_id,)
-            mock_context = Mock()
-            mock_context.__enter__ = Mock(return_value=mock_context)
-            mock_context.__exit__ = Mock(return_value=False)
-            mock_context.cursor.return_value = mock_cursor
-            mock_conn.return_value = mock_context
-
-            result = get_task_occurrence_id_for_update(task_id)
-
-            assert result == occurrence_id
+    def test_get_task_occurrence_id_for_update_handles_all_scenarios(
+        self, persist_engine, task_id, occurrence_id
+    ):
+        add_task(_make_task(task_id, occurrence_id))
+        assert get_task_occurrence_id_for_update(task_id) == occurrence_id

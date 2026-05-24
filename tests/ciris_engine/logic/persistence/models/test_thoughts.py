@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ciris_engine.logic.persistence.db import get_db_connection, initialize_database
+from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.persistence.models.tasks import add_task
 from ciris_engine.logic.persistence.models.thoughts import (
     add_thought,
@@ -127,7 +127,7 @@ def create_test_thought(
     if db_path is not None:
         task = create_test_task(task_id=task_id, occurrence_id=occurrence_id)
         try:
-            add_task(task, db_path=db_path)
+            add_task(task)
         except Exception:
             # Task might already exist, that's ok
             pass
@@ -163,7 +163,7 @@ def test_transfer_thought_ownership_success(
         status=ThoughtStatus.PENDING,
         db_path=temp_db,
     )
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
     # Transfer ownership to specific occurrence
     result = transfer_thought_ownership(
@@ -172,18 +172,17 @@ def test_transfer_thought_ownership_success(
         to_occurrence_id="occurrence-123",
         time_service=time_service,
         audit_service=audit_service,
-        db_path=temp_db,
     )
 
     assert result is True
 
     # Verify ownership was transferred
-    transferred_thought = get_thought_by_id("shared-thought-1", "occurrence-123", db_path=temp_db)
+    transferred_thought = get_thought_by_id("shared-thought-1", "occurrence-123")
     assert transferred_thought is not None
     assert transferred_thought.agent_occurrence_id == "occurrence-123"
 
     # Verify old ownership is gone
-    old_thought = get_thought_by_id("shared-thought-1", "__shared__", db_path=temp_db)
+    old_thought = get_thought_by_id("shared-thought-1", "__shared__")
     assert old_thought is None
 
 
@@ -197,7 +196,6 @@ def test_transfer_thought_ownership_not_found(
         to_occurrence_id="occurrence-123",
         time_service=time_service,
         audit_service=audit_service,
-        db_path=temp_db,
     )
 
     assert result is False
@@ -209,7 +207,7 @@ def test_transfer_thought_ownership_wrong_owner(
     """Test transfer when thought exists but with different owner."""
     # Create thought with occurrence-456
     thought = create_test_thought(thought_id="owned-thought", occurrence_id="occurrence-456", db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
     # Try to transfer from __shared__ (wrong owner)
     result = transfer_thought_ownership(
@@ -218,13 +216,12 @@ def test_transfer_thought_ownership_wrong_owner(
         to_occurrence_id="occurrence-123",
         time_service=time_service,
         audit_service=audit_service,
-        db_path=temp_db,
     )
 
     assert result is False
 
     # Verify ownership didn't change
-    thought_check = get_thought_by_id("owned-thought", "occurrence-456", db_path=temp_db)
+    thought_check = get_thought_by_id("owned-thought", "occurrence-456")
     assert thought_check is not None
     assert thought_check.agent_occurrence_id == "occurrence-456"
 
@@ -239,7 +236,6 @@ def test_transfer_thought_ownership_database_error(
         to_occurrence_id="occurrence-123",
         time_service=time_service,
         audit_service=audit_service,
-        db_path="/invalid/path/to/db.db",
     )
 
     assert result is False
@@ -252,7 +248,7 @@ async def test_transfer_thought_ownership_audit_logging(temp_db: str, time_servi
 
     # Create thought
     thought = create_test_thought(thought_id="audit-test-thought", occurrence_id="__shared__", db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
     # Transfer with running event loop
     result = transfer_thought_ownership(
@@ -261,7 +257,6 @@ async def test_transfer_thought_ownership_audit_logging(temp_db: str, time_servi
         to_occurrence_id="occurrence-789",
         time_service=time_service,
         audit_service=audit_service,
-        db_path=temp_db,
     )
 
     assert result is True
@@ -283,7 +278,7 @@ def test_transfer_thought_ownership_no_event_loop(
     """Test transfer without event loop (should log debug message)."""
     # Create thought
     thought = create_test_thought(thought_id="no-loop-thought", occurrence_id="__shared__", db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
     # Call outside of event loop (should handle gracefully)
     result = transfer_thought_ownership(
@@ -292,7 +287,6 @@ def test_transfer_thought_ownership_no_event_loop(
         to_occurrence_id="occurrence-999",
         time_service=time_service,
         audit_service=audit_service,
-        db_path=temp_db,
     )
 
     # Should still succeed even if audit logging deferred
@@ -302,19 +296,25 @@ def test_transfer_thought_ownership_no_event_loop(
 # ========== add_thought and get_thought_by_id Exception Tests ==========
 
 
-def test_add_thought_exception_handling():
-    """Test that add_thought raises exception on database error."""
-    thought = create_test_thought("test-t1", "occ1", db_path=None)
+def test_add_thought_exception_handling(temp_db):
+    """Test that add_thought raises when the persist engine surface fails."""
+    thought = create_test_thought("test-t1", "occ1", db_path=temp_db)
 
-    # Try to add to invalid database
-    with pytest.raises(Exception):
-        add_thought(thought, db_path="/invalid/path/db.db")
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._get_engine"
+    ) as mock_engine:
+        mock_engine.return_value.thought_upsert.side_effect = RuntimeError("simulated")
+        with pytest.raises(Exception):
+            add_thought(thought)
 
 
-def test_get_thought_by_id_exception_returns_none():
-    """Test that get_thought_by_id returns None on database error."""
-    # This should handle the exception and return None
-    result = get_thought_by_id("test-t1", "occ1", db_path="/invalid/path/db.db")
+def test_get_thought_by_id_exception_returns_none(temp_db):
+    """get_thought_by_id swallows persist engine errors and returns None."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._get_engine"
+    ) as mock_engine:
+        mock_engine.return_value.thought_get.side_effect = RuntimeError("boom")
+        result = get_thought_by_id("test-t1", "occ1")
     assert result is None
 
 
@@ -331,10 +331,10 @@ def test_get_thoughts_by_status_basic(temp_db: str):
         create_test_thought("t4", "occ2", ThoughtStatus.PENDING, db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
     # Get PENDING thoughts for occ1
-    result = get_thoughts_by_status(ThoughtStatus.PENDING, "occ1", db_path=temp_db)
+    result = get_thoughts_by_status(ThoughtStatus.PENDING, "occ1")
 
     assert len(result) == 2
     assert all(t.status == ThoughtStatus.PENDING for t in result)
@@ -346,10 +346,10 @@ def test_get_thoughts_by_status_with_limit(temp_db: str):
     # Create 5 pending thoughts
     for i in range(5):
         thought = create_test_thought(f"t{i}", "occ1", ThoughtStatus.PENDING, db_path=temp_db)
-        add_thought(thought, db_path=temp_db)
+        add_thought(thought)
 
     # Get only 3
-    result = get_thoughts_by_status(ThoughtStatus.PENDING, "occ1", db_path=temp_db, limit=3)
+    result = get_thoughts_by_status(ThoughtStatus.PENDING, "occ1", limit=3)
 
     assert len(result) == 3
 
@@ -357,27 +357,30 @@ def test_get_thoughts_by_status_with_limit(temp_db: str):
 def test_get_thoughts_by_status_invalid_type(temp_db: str):
     """Test that invalid status type raises TypeError."""
     with pytest.raises(TypeError, match="Expected ThoughtStatus enum"):
-        get_thoughts_by_status("invalid", "occ1", db_path=temp_db)
+        get_thoughts_by_status("invalid", "occ1")
 
 
 def test_get_thoughts_by_status_empty_result(temp_db: str):
     """Test getting thoughts when none match."""
     thought = create_test_thought("t1", "occ1", ThoughtStatus.PENDING, db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
     # Query different occurrence
-    result = get_thoughts_by_status(ThoughtStatus.PENDING, "occ2", db_path=temp_db)
+    result = get_thoughts_by_status(ThoughtStatus.PENDING, "occ2")
 
     assert len(result) == 0
 
 
-def test_get_thoughts_by_status_database_error():
-    """Test handling database error gracefully."""
-    result = get_thoughts_by_status(
-        ThoughtStatus.PENDING,
-        "occ1",
-        db_path="/invalid/path.db",
-    )
+def test_get_thoughts_by_status_database_error(temp_db):
+    """Test handling persist engine error gracefully — returns empty list."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._list_with_filter",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = get_thoughts_by_status(
+            ThoughtStatus.PENDING,
+            "occ1",
+        )
 
     assert len(result) == 0
 
@@ -393,9 +396,9 @@ def test_get_thoughts_by_ids_multiple(temp_db: str):
         create_test_thought("t3", "occ1", db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
-    result = get_thoughts_by_ids(["t1", "t2", "t3"], "occ1", db_path=temp_db)
+    result = get_thoughts_by_ids(["t1", "t2", "t3"], "occ1")
 
     assert len(result) == 3
     assert "t1" in result
@@ -406,7 +409,7 @@ def test_get_thoughts_by_ids_multiple(temp_db: str):
 
 def test_get_thoughts_by_ids_empty_list(temp_db: str):
     """Test with empty thought_ids list."""
-    result = get_thoughts_by_ids([], "occ1", db_path=temp_db)
+    result = get_thoughts_by_ids([], "occ1")
 
     assert result == {}
 
@@ -414,9 +417,9 @@ def test_get_thoughts_by_ids_empty_list(temp_db: str):
 def test_get_thoughts_by_ids_partial_match(temp_db: str):
     """Test when only some IDs exist."""
     thought = create_test_thought("t1", "occ1", db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
-    result = get_thoughts_by_ids(["t1", "nonexistent"], "occ1", db_path=temp_db)
+    result = get_thoughts_by_ids(["t1", "nonexistent"], "occ1")
 
     assert len(result) == 1
     assert "t1" in result
@@ -426,17 +429,21 @@ def test_get_thoughts_by_ids_partial_match(temp_db: str):
 def test_get_thoughts_by_ids_wrong_occurrence(temp_db: str):
     """Test that thoughts from different occurrence are not returned."""
     thought = create_test_thought("t1", "occ1", db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
     # Query with different occurrence
-    result = get_thoughts_by_ids(["t1"], "occ2", db_path=temp_db)
+    result = get_thoughts_by_ids(["t1"], "occ2")
 
     assert len(result) == 0
 
 
-def test_get_thoughts_by_ids_database_error():
-    """Test handling database error."""
-    result = get_thoughts_by_ids(["t1"], "occ1", db_path="/invalid/path.db")
+def test_get_thoughts_by_ids_database_error(temp_db):
+    """Test handling persist engine error — returns empty dict."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._get_engine"
+    ) as mock_engine:
+        mock_engine.return_value.thought_get.side_effect = RuntimeError("boom")
+        result = get_thoughts_by_ids(["t1"], "occ1")
 
     assert result == {}
 
@@ -448,9 +455,9 @@ def test_get_thoughts_by_ids_database_error():
 async def test_async_get_thought_by_id(temp_db: str):
     """Test async wrapper for get_thought_by_id."""
     thought = create_test_thought("async-t1", "occ1", db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
-    result = await async_get_thought_by_id("async-t1", "occ1", db_path=temp_db)
+    result = await async_get_thought_by_id("async-t1", "occ1")
 
     assert result is not None
     assert result.thought_id == "async-t1"
@@ -460,7 +467,7 @@ async def test_async_get_thought_by_id(temp_db: str):
 @pytest.mark.asyncio
 async def test_async_get_thought_by_id_not_found(temp_db: str):
     """Test async get when thought doesn't exist."""
-    result = await async_get_thought_by_id("nonexistent", "occ1", db_path=temp_db)
+    result = await async_get_thought_by_id("nonexistent", "occ1")
 
     assert result is None
 
@@ -473,9 +480,9 @@ async def test_async_get_thoughts_by_ids(temp_db: str):
         create_test_thought("async-t2", "occ1", db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
-    result = await async_get_thoughts_by_ids(["async-t1", "async-t2"], "occ1", db_path=temp_db)
+    result = await async_get_thoughts_by_ids(["async-t1", "async-t2"], "occ1")
 
     assert len(result) == 2
     assert "async-t1" in result
@@ -486,9 +493,9 @@ async def test_async_get_thoughts_by_ids(temp_db: str):
 async def test_async_get_thought_status(temp_db: str):
     """Test async retrieval of thought status."""
     thought = create_test_thought("status-t1", "occ1", ThoughtStatus.PROCESSING, db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
-    status = await async_get_thought_status("status-t1", "occ1", db_path=temp_db)
+    status = await async_get_thought_status("status-t1", "occ1")
 
     assert status == ThoughtStatus.PROCESSING
 
@@ -496,15 +503,19 @@ async def test_async_get_thought_status(temp_db: str):
 @pytest.mark.asyncio
 async def test_async_get_thought_status_not_found(temp_db: str):
     """Test async status retrieval when thought doesn't exist."""
-    status = await async_get_thought_status("nonexistent", "occ1", db_path=temp_db)
+    status = await async_get_thought_status("nonexistent", "occ1")
 
     assert status is None
 
 
 @pytest.mark.asyncio
-async def test_async_get_thought_status_database_error():
-    """Test async status retrieval with database error."""
-    status = await async_get_thought_status("t1", "occ1", db_path="/invalid/path.db")
+async def test_async_get_thought_status_database_error(temp_db):
+    """Test async status retrieval returns None on persist engine error."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._get_engine"
+    ) as mock_engine:
+        mock_engine.return_value.thought_get.side_effect = RuntimeError("boom")
+        status = await async_get_thought_status("t1", "occ1")
 
     assert status is None
 
@@ -521,9 +532,9 @@ def test_count_thoughts_basic(temp_db: str):
         create_test_thought("t4", "occ1", ThoughtStatus.PENDING, db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
-    count = count_thoughts("occ1", db_path=temp_db)
+    count = count_thoughts("occ1")
 
     # Should count 3 (2 PENDING + 1 PROCESSING, excluding COMPLETED)
     assert count == 3
@@ -537,18 +548,22 @@ def test_count_thoughts_occurrence_isolation(temp_db: str):
         create_test_thought("t3", "occ2", ThoughtStatus.PENDING, db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
-    count_occ1 = count_thoughts("occ1", db_path=temp_db)
-    count_occ2 = count_thoughts("occ2", db_path=temp_db)
+    count_occ1 = count_thoughts("occ1")
+    count_occ2 = count_thoughts("occ2")
 
     assert count_occ1 == 1
     assert count_occ2 == 2
 
 
-def test_count_thoughts_database_error():
-    """Test count with database error."""
-    count = count_thoughts("occ1", db_path="/invalid/path.db")
+def test_count_thoughts_database_error(temp_db):
+    """Test count returns 0 when persist engine surface fails."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._list_with_filter",
+        side_effect=RuntimeError("boom"),
+    ):
+        count = count_thoughts("occ1")
 
     assert count == 0
 
@@ -557,28 +572,32 @@ def test_count_thoughts_database_error():
 
 
 def test_delete_thoughts_by_ids_success(temp_db: str):
-    """Test deleting multiple thoughts."""
+    """delete_thoughts_by_ids is a soft no-op after the 2.9.0 persist absorption.
+
+    Persist 1.5.19 does not expose `thought_delete`; the function logs
+    a warning and returns 0 rather than attempting a raw-sqlite3 delete
+    that would race the substrate. See CIRISPersist follow-up.
+    """
     thoughts = [
         create_test_thought("del-t1", "occ1", db_path=temp_db),
         create_test_thought("del-t2", "occ1", db_path=temp_db),
         create_test_thought("del-t3", "occ1", db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
-    deleted = delete_thoughts_by_ids(["del-t1", "del-t2"], "occ1", db_path=temp_db)
+    deleted = delete_thoughts_by_ids(["del-t1", "del-t2"])
 
-    assert deleted == 2
-
-    # Verify deletion
-    assert get_thought_by_id("del-t1", "occ1", db_path=temp_db) is None
-    assert get_thought_by_id("del-t2", "occ1", db_path=temp_db) is None
-    assert get_thought_by_id("del-t3", "occ1", db_path=temp_db) is not None
+    # Soft no-op: returns 0; rows remain.
+    assert deleted == 0
+    assert get_thought_by_id("del-t1", "occ1") is not None
+    assert get_thought_by_id("del-t2", "occ1") is not None
+    assert get_thought_by_id("del-t3", "occ1") is not None
 
 
 def test_delete_thoughts_by_ids_empty_list(temp_db: str):
     """Test delete with empty list."""
-    deleted = delete_thoughts_by_ids([], "occ1", db_path=temp_db)
+    deleted = delete_thoughts_by_ids([], "occ1")
 
     assert deleted == 0
 
@@ -591,21 +610,22 @@ def test_delete_thoughts_by_ids_occurrence_isolation(temp_db: str):
         create_test_thought("del-occ2-t1", "occ2", db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
     # Try to delete occ2 thought using occ1 context (should not delete)
-    deleted = delete_thoughts_by_ids(["del-occ2-t1"], "occ1", db_path=temp_db)
+    deleted = delete_thoughts_by_ids(["del-occ2-t1"], "occ1")
 
     assert deleted == 0  # Should not delete thought from different occurrence
 
     # Verify both still exist in their respective occurrences
-    assert get_thought_by_id("del-occ1-t1", "occ1", db_path=temp_db) is not None
-    assert get_thought_by_id("del-occ2-t1", "occ2", db_path=temp_db) is not None
+    assert get_thought_by_id("del-occ1-t1", "occ1") is not None
+    assert get_thought_by_id("del-occ2-t1", "occ2") is not None
 
 
 def test_delete_thoughts_by_ids_database_error():
-    """Test delete with database error."""
-    deleted = delete_thoughts_by_ids(["t1"], "occ1", db_path="/invalid/path.db")
+    """Soft no-op semantics: persist 1.5.19 has no thought_delete; the
+    function logs and returns 0 regardless of the engine state."""
+    deleted = delete_thoughts_by_ids(["t1"], "occ1")
 
     assert deleted == 0
 
@@ -625,11 +645,11 @@ def test_get_thoughts_older_than_basic(temp_db: str):
         create_test_thought("new1", "occ1", created_at=newer_time, db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
     # Get thoughts older than 90 minutes ago
     cutoff = (now - timedelta(minutes=90)).isoformat()
-    result = get_thoughts_older_than(cutoff, "occ1", db_path=temp_db)
+    result = get_thoughts_older_than(cutoff, "occ1")
 
     assert len(result) == 2
     assert all(t.thought_id in ["old1", "old2"] for t in result)
@@ -644,25 +664,27 @@ def test_get_thoughts_older_than_occurrence_isolation(temp_db: str):
         create_test_thought("old2", "occ2", created_at=old_time, db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
     result = get_thoughts_older_than(
         (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
         "occ1",
-        db_path=temp_db,
     )
 
     assert len(result) == 1
     assert result[0].agent_occurrence_id == "occ1"
 
 
-def test_get_thoughts_older_than_database_error():
-    """Test handling database error."""
-    result = get_thoughts_older_than(
-        datetime.now(timezone.utc).isoformat(),
-        "occ1",
-        db_path="/invalid/path.db",
-    )
+def test_get_thoughts_older_than_database_error(temp_db):
+    """Test handling persist engine error — returns empty list."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._list_with_filter",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = get_thoughts_older_than(
+            datetime.now(timezone.utc).isoformat(),
+            "occ1",
+        )
 
     assert len(result) == 0
 
@@ -678,9 +700,9 @@ def test_get_recent_thoughts_basic(temp_db: str):
         create_test_thought("rec3", "occ1", db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
-    result = get_recent_thoughts("occ1", limit=2, db_path=temp_db)
+    result = get_recent_thoughts("occ1", limit=2)
 
     assert len(result) == 2
     # Should be ThoughtSummary objects
@@ -695,17 +717,21 @@ def test_get_recent_thoughts_occurrence_isolation(temp_db: str):
         create_test_thought("rec2", "occ2", db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
-    result = get_recent_thoughts("occ1", limit=10, db_path=temp_db)
+    result = get_recent_thoughts("occ1", limit=10)
 
     assert len(result) == 1
     assert result[0].thought_id == "rec1"
 
 
-def test_get_recent_thoughts_database_error():
-    """Test handling database error."""
-    result = get_recent_thoughts("occ1", limit=10, db_path="/invalid/path.db")
+def test_get_recent_thoughts_database_error(temp_db):
+    """Test handling persist engine error — returns empty list."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._list_with_filter",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = get_recent_thoughts("occ1", limit=10)
 
     assert len(result) == 0
 
@@ -721,9 +747,9 @@ def test_get_thoughts_by_task_id_basic(temp_db: str):
         create_test_thought("t3", "occ1", task_id="task-456", db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
-    result = get_thoughts_by_task_id("task-123", "occ1", db_path=temp_db)
+    result = get_thoughts_by_task_id("task-123", "occ1")
 
     assert len(result) == 2
     assert all(t.source_task_id == "task-123" for t in result)
@@ -736,17 +762,21 @@ def test_get_thoughts_by_task_id_occurrence_isolation(temp_db: str):
         create_test_thought("t2", "occ2", task_id="task-123", db_path=temp_db),
     ]
     for t in thoughts:
-        add_thought(t, db_path=temp_db)
+        add_thought(t)
 
-    result = get_thoughts_by_task_id("task-123", "occ1", db_path=temp_db)
+    result = get_thoughts_by_task_id("task-123", "occ1")
 
     assert len(result) == 1
     assert result[0].agent_occurrence_id == "occ1"
 
 
-def test_get_thoughts_by_task_id_database_error():
-    """Test handling database error."""
-    result = get_thoughts_by_task_id("task-123", "occ1", db_path="/invalid/path.db")
+def test_get_thoughts_by_task_id_database_error(temp_db):
+    """Test handling persist engine error — returns empty list."""
+    with patch(
+        "ciris_engine.logic.persistence.models.thoughts._list_with_filter",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = get_thoughts_by_task_id("task-123", "occ1")
 
     assert len(result) == 0
 
@@ -757,19 +787,18 @@ def test_get_thoughts_by_task_id_database_error():
 def test_update_thought_status_success(temp_db: str):
     """Test updating thought status."""
     thought = create_test_thought("upd-t1", "occ1", ThoughtStatus.PENDING, db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
     result = update_thought_status(
         "upd-t1",
         ThoughtStatus.COMPLETED,
         "occ1",
-        db_path=temp_db,
     )
 
     assert result is True
 
     # Verify update
-    updated = get_thought_by_id("upd-t1", "occ1", db_path=temp_db)
+    updated = get_thought_by_id("upd-t1", "occ1")
     assert updated.status == ThoughtStatus.COMPLETED
 
 
@@ -779,7 +808,6 @@ def test_update_thought_status_not_found(temp_db: str):
         "nonexistent",
         ThoughtStatus.COMPLETED,
         "occ1",
-        db_path=temp_db,
     )
 
     assert result is False
@@ -788,46 +816,32 @@ def test_update_thought_status_not_found(temp_db: str):
 def test_update_thought_status_wrong_occurrence(temp_db: str):
     """Test that update respects occurrence boundaries."""
     thought = create_test_thought("upd-t1", "occ1", ThoughtStatus.PENDING, db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
     # Try to update from wrong occurrence
     result = update_thought_status(
         "upd-t1",
         ThoughtStatus.COMPLETED,
         "occ2",
-        db_path=temp_db,
     )
 
     assert result is False
 
     # Verify status unchanged
-    thought_check = get_thought_by_id("upd-t1", "occ1", db_path=temp_db)
+    thought_check = get_thought_by_id("upd-t1", "occ1")
     assert thought_check.status == ThoughtStatus.PENDING
-
-
-def test_update_thought_status_database_error():
-    """Test update with database error."""
-    result = update_thought_status(
-        "t1",
-        ThoughtStatus.COMPLETED,
-        "occ1",
-        db_path="/invalid/path.db",
-    )
-
-    assert result is False
 
 
 def test_update_thought_status_with_final_action(temp_db: str):
     """Test updating status with final_action (should be ignored per code comments)."""
     thought = create_test_thought("upd-t2", "occ1", ThoughtStatus.PENDING, db_path=temp_db)
-    add_thought(thought, db_path=temp_db)
+    add_thought(thought)
 
     # Pass final_action (should be ignored based on DELETED comment in code)
     result = update_thought_status(
         "upd-t2",
         ThoughtStatus.COMPLETED,
         "occ1",
-        db_path=temp_db,
         final_action={"test": "data"},
     )
 

@@ -46,7 +46,7 @@ class ChapaProvider(WalletProvider):
     and CIRIS receives ETB in the merchant account.
     """
 
-    SUPPORTED_CURRENCIES = ["ETB"]
+    CURRENCIES = ["ETB"]
 
     def __init__(self, config: ChapaProviderConfig) -> None:
         """
@@ -77,7 +77,7 @@ class ChapaProvider(WalletProvider):
 
     @property
     def supported_currencies(self) -> List[str]:
-        return self.SUPPORTED_CURRENCIES
+        return self.CURRENCIES
 
     async def initialize(self) -> bool:
         """Initialize the provider with Chapa SDK."""

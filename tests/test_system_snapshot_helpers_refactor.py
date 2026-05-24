@@ -996,35 +996,61 @@ class TestUserExtractionHelperFunctions:
         _extract_user_from_thought_context(mock_thought, user_ids)
         assert user_ids == set()
 
-    def test_extract_users_from_correlation_history_success(self):
-        """Test extracting users from correlation history."""
+    def test_extract_users_from_correlation_history_success(self, persist_engine):
+        """Test extracting users from correlation history.
+
+        Post-A1 (CIRISAgent#763): `_extract_users_from_correlation_history` routes
+        through `engine.correlation_query({"correlation_id": ...})` and reads
+        `tags.user_id` from rows. Persist's correlation_query filter is exact-
+        match on correlation_id (one row per id), so we seed one correlation
+        carrying the user_id tag and verify the helper extracts it.
+        """
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         # Mock task with correlation ID
         mock_task = Mock()
         mock_task.context = Mock()
         mock_task.context.correlation_id = "corr_123"
 
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="corr_123",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication",
+                    method_name="observe",
+                    channel_id="c1",
+                    request_timestamp=now,
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "user_123"},
+                retention_policy="raw",
+            )
+        )
+
         user_ids = set()
+        _extract_users_from_correlation_history(mock_task, user_ids)
 
-        # Mock the database connection and cursor
-        import unittest.mock
-
-        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = [
-                {"user_id": "user_123"},
-                {"user_id": "user_456"},
-                {"user_id": "user_123"},  # Duplicate
-            ]
-            mock_conn.cursor.return_value = mock_cursor
-            mock_conn.__enter__ = Mock(return_value=mock_conn)
-            mock_conn.__exit__ = Mock(return_value=None)
-            mock_persistence.get_db_connection.return_value = mock_conn
-
-            _extract_users_from_correlation_history(mock_task, user_ids)
-
-        # Should have extracted unique user IDs
-        assert user_ids == {"user_123", "user_456"}
+        assert user_ids == {"user_123"}
 
     def test_extract_users_from_correlation_history_no_correlation_id(self):
         """Test extracting users from correlation history without correlation_id."""
@@ -1036,20 +1062,30 @@ class TestUserExtractionHelperFunctions:
         _extract_users_from_correlation_history(mock_task, user_ids)
         assert user_ids == set()
 
-    def test_extract_users_from_correlation_history_exception(self):
-        """Test extracting users from correlation history when exception occurs."""
+    def test_extract_users_from_correlation_history_exception(self, persist_engine):
+        """Test extracting users from correlation history when exception occurs.
+
+        Post-A1 (CIRISAgent#763): the helper wraps the persist `correlation_query`
+        call in try/except; force an exception by patching `get_persist_engine`
+        to return a stub whose `correlation_query` raises. The helper should
+        swallow the exception and leave user_ids unchanged.
+        """
+        from unittest.mock import patch as _patch
+
+        class _RaisingEngine:
+            def correlation_query(self, *args, **kwargs):
+                raise Exception("Database error")
+
         mock_task = Mock()
         mock_task.context = Mock()
         mock_task.context.correlation_id = "corr_123"
 
         user_ids = set()
 
-        # Mock database connection to raise exception
-        import unittest.mock
-
-        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
-            mock_persistence.get_db_connection.side_effect = Exception("Database error")
-
+        with _patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=_RaisingEngine(),
+        ):
             _extract_users_from_correlation_history(mock_task, user_ids)
 
         # Should handle exception gracefully
@@ -1109,8 +1145,23 @@ class TestUserExtractionHelperFunctions:
         _extract_users_from_thought_content(mock_thought, user_ids)
         assert user_ids == set()
 
-    def test_extract_user_ids_from_context_combined(self):
-        """Test extracting user IDs from combined context sources."""
+    def test_extract_user_ids_from_context_combined(self, persist_engine):
+        """Test extracting user IDs from combined context sources.
+
+        Post-A1 (CIRISAgent#763): seed a correlation via persist for the
+        correlation-history branch; other branches stay pure-Python.
+        """
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         # Mock task with user and correlation ID
         mock_task = Mock()
         mock_task.context = Mock()
@@ -1123,19 +1174,33 @@ class TestUserExtractionHelperFunctions:
         mock_thought.context.user_id = "user_from_thought"
         mock_thought.content = "Hello <@999888777>, check this out. ID: 111222333"
 
-        # Mock database for correlation history
-        import unittest.mock
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="corr_123",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication",
+                    method_name="observe",
+                    channel_id="c1",
+                    request_timestamp=now,
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "user_from_correlation"},
+                retention_policy="raw",
+            )
+        )
 
-        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = [{"user_id": "user_from_correlation"}]
-            mock_conn.cursor.return_value = mock_cursor
-            mock_conn.__enter__ = Mock(return_value=mock_conn)
-            mock_conn.__exit__ = Mock(return_value=None)
-            mock_persistence.get_db_connection.return_value = mock_conn
-
-            result = _extract_user_ids_from_context(mock_task, mock_thought)
+        result = _extract_user_ids_from_context(mock_task, mock_thought)
 
         # Should return all unique user IDs from all sources
         expected_users = {"user_from_task", "user_from_thought", "999888777", "111222333", "user_from_correlation"}
@@ -1154,8 +1219,24 @@ class TestUserExtractionHelperFunctions:
         result = _extract_user_ids_from_context(mock_task, mock_thought)
         assert result == set()
 
-    def test_extract_user_ids_from_context_duplicate_removal(self):
-        """Test that duplicate user IDs are removed."""
+    def test_extract_user_ids_from_context_duplicate_removal(self, persist_engine):
+        """Test that duplicate user IDs are removed.
+
+        Post-A1 (CIRISAgent#763): correlation history routes through persist.
+        Seed a single correlation tagged with the same user as task/thought to
+        verify the union dedupes.
+        """
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         # Mock task with user ID
         mock_task = Mock()
         mock_task.context = Mock()
@@ -1168,19 +1249,33 @@ class TestUserExtractionHelperFunctions:
         mock_thought.context.user_id = "duplicate_user"
         mock_thought.content = "Hello <@duplicate_user>, self-mention."
 
-        # Mock database for correlation history with same user
-        import unittest.mock
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="corr_123",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication",
+                    method_name="observe",
+                    channel_id="c1",
+                    request_timestamp=now,
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "duplicate_user"},
+                retention_policy="raw",
+            )
+        )
 
-        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = [{"user_id": "duplicate_user"}]
-            mock_conn.cursor.return_value = mock_cursor
-            mock_conn.__enter__ = Mock(return_value=mock_conn)
-            mock_conn.__exit__ = Mock(return_value=None)
-            mock_persistence.get_db_connection.return_value = mock_conn
-
-            result = _extract_user_ids_from_context(mock_task, mock_thought)
+        result = _extract_user_ids_from_context(mock_task, mock_thought)
 
         # Should only appear once despite being in all sources
         assert result == {"duplicate_user"}

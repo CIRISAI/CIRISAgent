@@ -538,13 +538,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Get main database path for WiseAuthority (needs access to tasks table)
         main_db_path = get_sqlite_db_full_path(self.essential_config)
 
-        # Use the proper helper function to get auth database path
-        # This handles PostgreSQL URL query parameter preservation correctly
-        from ciris_engine.logic.config import get_audit_db_full_path
-
-        auth_db_path = get_audit_db_full_path(self.essential_config)
+        # 2.9.0: WA certificates live in the one process-wide persist engine
+        # (wa_cert substrate on the main DB) — there is no separate auth DB.
+        # A process hosts exactly one persist engine; handing the auth service
+        # a different path trips EngineConfigMismatch on bootstrap.
         self.auth_service = AuthenticationService(
-            db_path=auth_db_path, time_service=self.time_service, key_dir=None  # Will use default ~/.ciris/
+            db_path=main_db_path, time_service=self.time_service, key_dir=None  # Will use default ~/.ciris/
         )
         await self.auth_service.start()
         self._services_started_count += 1
@@ -1595,8 +1594,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         """Check if auto-discovery is enabled by template and config."""
         from ciris_engine.logic.persistence.models.identity import retrieve_agent_identity
 
-        db_path = get_sqlite_db_full_path(self.essential_config)
-        identity = retrieve_agent_identity(db_path=db_path)
+        identity = retrieve_agent_identity()
 
         if not identity or not hasattr(identity.core_profile, "auto_load_adapters"):
             logger.info("[SKILL-ADAPTERS] Auto-discovery not enabled by current agent template")

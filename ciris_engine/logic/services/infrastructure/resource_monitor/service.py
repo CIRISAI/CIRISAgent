@@ -10,7 +10,6 @@ from typing import Callable, Deque, Dict, List, Optional, Tuple
 
 import psutil
 
-from ciris_engine.logic.persistence import get_db_connection
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
@@ -345,13 +344,15 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             raise
 
     def _count_active_thoughts(self) -> int:
+        """Count thoughts in pending/processing status via persist substrate."""
         try:
-            conn = get_db_connection(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM thoughts WHERE status IN ('pending', 'processing')")
-            row = cursor.fetchone()
-            return row[0] if row else 0
-        except Exception:  # pragma: no cover - DB errors unlikely in tests
+            from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_status
+            from ciris_engine.schemas.runtime.enums import ThoughtStatus
+
+            pending = len(get_thoughts_by_status(ThoughtStatus.PENDING))
+            processing = len(get_thoughts_by_status(ThoughtStatus.PROCESSING))
+            return pending + processing
+        except Exception:  # pragma: no cover - persist errors unlikely in tests
             return 0
 
     def _collect_custom_metrics(self) -> Dict[str, float]:

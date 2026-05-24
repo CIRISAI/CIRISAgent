@@ -657,18 +657,22 @@ class CIRISRuntime(ServicePropertyMixin):
     async def _init_database(self) -> None:
         """Initialize database and run migrations."""
         from ciris_engine.logic import persistence
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 
-        adapter = get_adapter()
-        if adapter.is_postgresql():
-            db_path = None
-            logger.info("Using PostgreSQL database from environment (CIRIS_DB_URL)")
+        # One canonical DB-path resolver — honors config.database.database_url
+        # (Postgres, including the CIRIS_DB_URL env var) and otherwise returns
+        # the SQLite main_db path. Every consumer (memory service, auth, etc.)
+        # resolves the same way; diverging here would construct the process
+        # persist Engine with a different DSN and trip EngineConfigMismatch.
+        db_path = get_sqlite_db_full_path(self.essential_config)
+        if db_path.startswith(("postgresql://", "postgres://")):
+            logger.info("Using PostgreSQL database")
         else:
-            db_path = str(self.essential_config.database.main_db)
             logger.info(f"Using SQLite database: {db_path}")
 
+        # initialize_database bootstraps persist's Engine end-to-end (schema
+        # via persist's own sqlx migrations + A0a legacy graph migration).
         persistence.initialize_database(db_path)
-        persistence.run_migrations(db_path)
 
         if not self.essential_config:
             self.essential_config = EssentialConfig()
@@ -676,32 +680,23 @@ class CIRISRuntime(ServicePropertyMixin):
             logger.warning("No config provided, using defaults")
 
     async def _verify_database_integrity(self) -> bool:
-        """Verify database integrity before proceeding."""
+        """Verify database integrity before proceeding.
+
+        Post-A1 absorption (CIRISAgent#763): persist owns the schema. If the
+        Engine is wired and a cheap probe succeeds, the schema is intact.
+        """
         try:
-            from ciris_engine.logic import persistence
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            import json
 
-            adapter = get_adapter()
-            db_path = None if adapter.is_postgresql() else str(self.essential_config.database.main_db)
-            conn = persistence.get_db_connection(db_path)
-            cursor = conn.cursor()
+            engine = get_persist_engine()
+            if engine is None:
+                raise RuntimeError("persist engine not wired — initialize_database must run first")
 
-            required_tables = ["tasks", "thoughts", "graph_nodes", "graph_edges"]
+            # Cheap sanity probe.
+            engine.task_list("{}", json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}), 1)
 
-            for table in required_tables:
-                if adapter.is_postgresql():
-                    cursor.execute(
-                        "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name=%s",
-                        (table,),
-                    )
-                else:
-                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
-
-                if not cursor.fetchone():
-                    raise RuntimeError(f"Required table '{table}' missing from database")
-
-            conn.close()
-            logger.info("Database integrity verified")
+            logger.info("Database integrity verified (persist engine healthy)")
             return True
         except Exception as e:
             logger.error(f"Database integrity check failed: {e}")

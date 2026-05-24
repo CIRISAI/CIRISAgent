@@ -29,7 +29,7 @@
     "protocols": [],
     "schemas": [],
     "external": {
-      "ciris-verify": ">=0.1.0"
+      "ciris-verify": ">=3.0.1"
     }
   },
   "exports": {

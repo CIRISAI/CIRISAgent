@@ -194,3 +194,6 @@ nohup.out
 startup_python_hashes.json
 mobile/
 mobile_qa_reports/
+
+# Downloaded CI fixture artifacts (DBs from CI runs, regenerable)
+local_fixtures/

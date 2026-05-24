@@ -83,46 +83,31 @@ class TestDiscordAdapterCore:
 
     @pytest.fixture
     def setup_test_db(self):
-        """Set up a temporary test database for each test."""
-        # Create a temporary database file
+        """Set up a temporary test database for each test.
+
+        Post-Phase 3a `initialize_database` wires the persist Engine into
+        `persistence.models.graph`; all migrated callers route through that
+        single engine, so the legacy three-way `get_db_connection` patch is
+        no longer needed.
+        """
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
+
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp_file:
             test_db_path = tmp_file.name
 
-        # Initialize the database with all required tables
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
         initialize_database(test_db_path)
 
-        # Patch get_db_connection at both import locations to use our test database
-        # Need to patch it in multiple places where it's imported
-        with patch("ciris_engine.logic.persistence.get_db_connection") as mock_get_conn, patch(
-            "ciris_engine.logic.persistence.models.correlations.get_db_connection"
-        ) as mock_get_conn2, patch("ciris_engine.logic.persistence.db.core.get_db_connection") as mock_get_conn3:
-            import sqlite3
-
-            # Return a context manager that yields a connection
-            from contextlib import contextmanager
-
-            @contextmanager
-            def get_test_connection(db_path=None):
-                # Use the test db_path from outer scope, ignore the argument
-                conn = sqlite3.connect(test_db_path)
-                conn.row_factory = sqlite3.Row
-                conn.execute("PRAGMA foreign_keys = ON;")
-                try:
-                    yield conn
-                finally:
-                    conn.close()
-
-            mock_get_conn.side_effect = get_test_connection
-            mock_get_conn2.side_effect = get_test_connection
-            mock_get_conn3.side_effect = get_test_connection
-
-            yield test_db_path
-
-        # Clean up
         try:
-            os.unlink(test_db_path)
-        except:
-            pass
+            yield test_db_path
+        finally:
+            _graph_mod._engine = prior_engine
+            _graph_mod._engine_dsn = prior_dsn
+            try:
+                os.unlink(test_db_path)
+            except OSError:
+                pass
 
     @pytest.mark.asyncio
     async def test_adapter_initialization(self, discord_adapter):
@@ -485,46 +470,29 @@ class TestDiscordAuditLogging:
 
     @pytest.fixture
     def setup_test_db(self):
-        """Set up a temporary test database for each test."""
-        # Create a temporary database file
+        """Set up a temporary test database for each test.
+
+        See `TestDiscordAdapterCore.setup_test_db` for the rationale; the
+        legacy `get_db_connection` three-way patch is no longer needed.
+        """
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
+
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp_file:
             test_db_path = tmp_file.name
 
-        # Initialize the database with all required tables
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
         initialize_database(test_db_path)
 
-        # Patch get_db_connection at both import locations to use our test database
-        # Need to patch it in multiple places where it's imported
-        with patch("ciris_engine.logic.persistence.get_db_connection") as mock_get_conn, patch(
-            "ciris_engine.logic.persistence.models.correlations.get_db_connection"
-        ) as mock_get_conn2, patch("ciris_engine.logic.persistence.db.core.get_db_connection") as mock_get_conn3:
-            import sqlite3
-
-            # Return a context manager that yields a connection
-            from contextlib import contextmanager
-
-            @contextmanager
-            def get_test_connection(db_path=None):
-                # Use the test db_path from outer scope, ignore the argument
-                conn = sqlite3.connect(test_db_path)
-                conn.row_factory = sqlite3.Row
-                conn.execute("PRAGMA foreign_keys = ON;")
-                try:
-                    yield conn
-                finally:
-                    conn.close()
-
-            mock_get_conn.side_effect = get_test_connection
-            mock_get_conn2.side_effect = get_test_connection
-            mock_get_conn3.side_effect = get_test_connection
-
-            yield test_db_path
-
-        # Clean up
         try:
-            os.unlink(test_db_path)
-        except:
-            pass
+            yield test_db_path
+        finally:
+            _graph_mod._engine = prior_engine
+            _graph_mod._engine_dsn = prior_dsn
+            try:
+                os.unlink(test_db_path)
+            except OSError:
+                pass
 
     @pytest.mark.asyncio
     async def test_audit_log_message_operations(self, discord_adapter, setup_test_db):

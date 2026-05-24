@@ -19,12 +19,12 @@ from .dsar import (
 from .graph import (
     add_graph_edge,
     add_graph_node,
-    delete_graph_edge,
     delete_graph_node,
     get_all_graph_nodes,
     get_edges_for_node,
     get_graph_node,
     get_nodes_by_type,
+    get_persist_engine,
 )
 from .identity import (
     get_identity_for_context,
@@ -111,7 +111,6 @@ __all__ = [
     "get_nodes_by_type",
     "delete_graph_node",
     "add_graph_edge",
-    "delete_graph_edge",
     "get_edges_for_node",
     "add_correlation",
     "add_correlation_with_telemetry",
@@ -140,4 +139,6 @@ __all__ = [
     "update_dsar_ticket_status",
     "list_dsar_tickets_by_status",
     "list_dsar_tickets_by_email",
+    # 2.9.0: persist Engine accessor (CIRISAgent#763 Lane A wiring)
+    "get_persist_engine",
 ]

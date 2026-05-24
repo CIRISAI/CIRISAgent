@@ -176,7 +176,7 @@ class TestHandleDuplicateTask:
                 agent_occurrence_id="default",
             ),
         )
-        add_task(original_task, db_path=temp_db)
+        add_task(original_task)
 
         # Create duplicate task
         duplicate_task = Task(
@@ -197,7 +197,7 @@ class TestHandleDuplicateTask:
         )
 
         # Handle duplicate should return original task_id
-        returned_id = _handle_duplicate_task(duplicate_task, temp_db)
+        returned_id = _handle_duplicate_task(duplicate_task)
         assert returned_id == original_task.task_id
 
     def test_handle_duplicate_with_empty_correlation_id(self, temp_db):
@@ -220,7 +220,7 @@ class TestHandleDuplicateTask:
         )
 
         # Should return the attempted task_id when correlation_id is empty
-        returned_id = _handle_duplicate_task(task, temp_db)
+        returned_id = _handle_duplicate_task(task)
         assert returned_id == task.task_id
 
     def test_handle_duplicate_without_context(self, temp_db):
@@ -237,7 +237,7 @@ class TestHandleDuplicateTask:
         )
 
         # Should return the attempted task_id
-        returned_id = _handle_duplicate_task(task, temp_db)
+        returned_id = _handle_duplicate_task(task)
         assert returned_id == task.task_id
 
     def test_handle_duplicate_no_existing_task_found(self, temp_db):
@@ -260,7 +260,7 @@ class TestHandleDuplicateTask:
         )
 
         # Should return the attempted task_id since no existing task found
-        returned_id = _handle_duplicate_task(task, temp_db)
+        returned_id = _handle_duplicate_task(task)
         assert returned_id == task.task_id
 
 
@@ -300,7 +300,7 @@ class TestAddTaskIntegration:
                 agent_occurrence_id="default",
             ),
         )
-        task1_id = add_task(task1, db_path=temp_db)
+        task1_id = add_task(task1)
         assert task1_id == task1.task_id
 
         # Try to add duplicate
@@ -320,7 +320,7 @@ class TestAddTaskIntegration:
                 agent_occurrence_id="default",
             ),
         )
-        task2_id = add_task(task2, db_path=temp_db)
+        task2_id = add_task(task2)
 
         # Should return original task_id
         assert task2_id == task1.task_id

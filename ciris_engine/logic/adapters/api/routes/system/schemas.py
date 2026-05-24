@@ -182,6 +182,13 @@ class AdapterActionRequest(BaseModel):
 
     config: Optional[Any] = Field(None, description="Adapter configuration")
     force: bool = Field(False, description="Force the operation")
+    auto_start: bool = Field(
+        True,
+        description="Whether to start the adapter immediately after loading. "
+        "When False the adapter is registered but adapter.start() is NOT "
+        "called — it binds no network ports and opens no connections. Used "
+        "to verify a manifest loads without side effects.",
+    )
     persist: bool = Field(
         False,
         description="Whether to persist this adapter config for auto-load on restart. "

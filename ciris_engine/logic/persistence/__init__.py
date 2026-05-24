@@ -11,14 +11,8 @@ from .analytics import (
     thought_exists_for,
 )
 from .db import (
-    MIGRATIONS_BASE_DIR,
-    get_db_connection,
-    get_graph_edges_table_schema_sql,
-    get_graph_nodes_table_schema_sql,
-    get_service_correlations_table_schema_sql,
     get_sqlite_db_full_path,
     initialize_database,
-    run_migrations,
 )
 from .models import (
     QueueStatus,
@@ -34,13 +28,13 @@ from .models import (
     clear_task_images,
     count_tasks,
     count_thoughts,
-    delete_graph_edge,
     delete_graph_node,
     delete_tasks_by_ids,
     delete_thoughts_by_ids,
     get_all_graph_nodes,
     get_all_tasks,
     get_correlation,
+    get_persist_engine,
     get_correlations_by_channel,
     get_correlations_by_task_and_action,
     get_deferral_report_context,
@@ -69,12 +63,9 @@ from .models import (
 )
 
 __all__ = [
-    "get_db_connection",
     "initialize_database",
     "get_tasks_older_than",
     "get_thoughts_older_than",
-    "run_migrations",
-    "MIGRATIONS_BASE_DIR",
     "get_sqlite_db_full_path",
     "update_task_status",
     "task_exists",
@@ -107,7 +98,6 @@ __all__ = [
     "get_graph_node",
     "delete_graph_node",
     "add_graph_edge",
-    "delete_graph_edge",
     "get_edges_for_node",
     "get_all_graph_nodes",
     "get_nodes_by_type",
@@ -124,9 +114,8 @@ __all__ = [
     "pending_thoughts",
     "thought_exists_for",
     "count_thoughts_by_status",
-    "get_graph_nodes_table_schema_sql",
-    "get_graph_edges_table_schema_sql",
-    "get_service_correlations_table_schema_sql",
     "get_queue_status",
     "QueueStatus",
+    # 2.9.0: persist Engine accessor (CIRISAgent#763 Lane A wiring)
+    "get_persist_engine",
 ]

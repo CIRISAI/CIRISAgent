@@ -147,6 +147,82 @@ jobs:
           path: test_durations_shard_${{ matrix.shard }}
           retention-days: 7
 
+  # Postgres backend verification — Phase 1 of 2.9.0 waterfall.
+  # Runs the persist-routed test suite against a real Postgres so the
+  # sqlx-bundled Postgres backend is verified before 2.9.0 ships. Scope is
+  # the persistence layer; full agent QA on Postgres comes later once
+  # Phases 2-4 finish migrating raw-SQL callers to persist substrate.
+  test-postgres:
+    name: Test (persist backend = postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ciris_test
+          POSTGRES_PASSWORD: ciris_test_password
+          POSTGRES_DB: ciris_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ciris_test -d ciris_test_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            pip install --upgrade pip
+            pip install typing_extensions>=4.0.0
+            pip install -r requirements.txt
+            pip install -r requirements-dev.txt
+
+      - name: Run persistence tests against Postgres-backed persist
+        env:
+          CI: true
+          CIRIS_DB_URL: postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db
+          # Mark this run so test fixtures that need to opt out of the
+          # Postgres backend (e.g. legacy SQLite-only schema tests) can
+          # skip themselves cleanly. Phases 2-4 will widen the scope.
+          CIRIS_TEST_BACKEND: postgres
+        run: |
+          # Phase 1 scope: persist-substrate roundtrip tests + the
+          # tests that drive ciris-persist directly. Excludes legacy
+          # raw-SQL tests pending Phase 2-4 migration.
+          timeout --signal=SIGTERM --kill-after=30 1200 \
+            pytest \
+              tests/ciris_engine/logic/persistence/ \
+              tests/test_persistence/ \
+              -n 4 \
+              --reruns=2 --reruns-delay=1 \
+              --timeout=120 \
+              -k "not sqlite_only" \
+              -m "not skip_postgres"
+
   # Staged QA — run the full QA suite against a venv installed from the
   # canonical staged tree (tools.dev.stage_runtime → wheel → venv).
   # Validates the SHIPPED wheel artifact, not just the source tree. Catches
@@ -155,9 +231,24 @@ jobs:
   # conscience-prompts incident class). Fast (~3–4 min on cold cache) so
   # cheap to gate releases on.
   staged-qa:
-    name: Staged QA (canonical wheel parity)
+    name: Staged QA (${{ matrix.subset }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Matrix-split: all_1 / all_2 run as parallel jobs, each dual-backend
+    # (sqlite + postgres, parallel). fail-fast off so one leg's failure
+    # doesn't cancel the other.
+    #
+    # timeout-minutes 30 was too short: each job runs sqlite + postgres as
+    # concurrent subprocesses, and the postgres leg is meaningfully slower
+    # (real PG vs in-process SQLite). It consistently overran the 30-min
+    # cap, so GH SIGTERM'd the job mid-run — the postgres agent then did a
+    # normal graceful shutdown and its remaining ~77 tests failed
+    # "connection refused", while the faster sqlite leg had already gone
+    # green. Raised to 55 so the slower leg finishes cleanly.
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        subset: [all_1, all_2]
     permissions:
       contents: read
     steps:
@@ -244,7 +335,7 @@ jobs:
           fi
           echo "✓ Canonical staging == wheel install (byte-equal)"
 
-      - name: Run QA against staged venv
+      - name: Run QA against staged venv (${{ matrix.subset }}, dual backend)
         env:
           # Force first-run state so the QA runner can drive the setup wizard.
           CIRIS_FORCE_FIRST_RUN: "1"
@@ -253,7 +344,13 @@ jobs:
           # in /tmp/ciris-staged-qa/venv (already prepared by the parity-check
           # step above; staged_env.prepare is idempotent and reuses it).
           # --no-mock-llm not set → uses mock LLM (no API keys needed in CI).
-          python3 -m tools.qa_runner --from-staged
+          #
+          # --database-backends sqlite postgres --parallel-backends: exercises
+          # the full QA suite against BOTH persistence backends simultaneously.
+          # qa_runner self-provisions the postgres backend via a docker
+          # container (ubuntu-latest ships Docker); no GH service block needed.
+          python3 -m tools.qa_runner ${{ matrix.subset }} --from-staged \
+            --database-backends sqlite postgres --parallel-backends
 
       - name: Capture upgrade-compat fixture (qa-full)
         # Snapshot the post-QA-sweep agent state as a "full-coverage"
@@ -262,7 +359,9 @@ jobs:
         # state of the three host workflows. See tools/release/UPGRADE_FIXTURE.md.
         # qa_runner sets CIRIS_HOME=project_root, so DBs land at
         # $GITHUB_WORKSPACE/data — the action's default location.
-        if: success()
+        # Captured on the all_1 leg only — one fixture, no cross-leg
+        # artifact-name collision.
+        if: success() && matrix.subset == 'all_1'
         uses: ./.github/actions/capture-upgrade-fixture
         with:
           source-name: qa-full
@@ -271,7 +370,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: staged-qa-status
+          name: staged-qa-status-${{ matrix.subset }}
           path: qa_reports/qa_status.json
           retention-days: 14
 
@@ -279,7 +378,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: staged-qa-server-logs
+          name: staged-qa-server-logs-${{ matrix.subset }}
           path: |
             logs/
             /tmp/ciris-staged-qa/venv/lib/python3.12/site-packages/logs/
@@ -899,7 +998,7 @@ jobs:
         # rows (#727). Also cuts over from gRPC RegisterBuild → HTTP POST
         # /v1/builds; drops REGISTRY_JWT_SECRET requirement.
         run: |
-          pip install --upgrade "ciris-verify>=2.0.5"
+          pip install --upgrade "ciris-verify>=3.0.1"
           which ciris-build-sign && ciris-build-sign --version
 
       - name: Emit build-secrets hash file

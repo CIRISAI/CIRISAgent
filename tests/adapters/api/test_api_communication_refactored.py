@@ -122,13 +122,14 @@ class TestHandleApiInteractionResponse:
     @patch("ciris_engine.logic.adapters.api.routes.agent.store_message_response")
     async def test_handle_api_interaction_response_success(self, mock_store, api_communication_service, mock_app_state):
         """Test successful API interaction response handling."""
-        # Setup message channel mapping
-        mock_app_state.message_channel_map = {"api_test": "msg-123"}
+        # Setup message channel mapping — per-channel FIFO queue of pending ids
+        mock_app_state.message_channel_map = {"api_test": ["msg-123"]}
 
         await api_communication_service._handle_api_interaction_response("api_test", "Response content")
 
         mock_store.assert_called_once_with("msg-123", "Response content")
-        assert "api_test" not in mock_app_state.message_channel_map  # Should be cleaned up
+        # FIFO pop(0) consumes the id; the channel key remains with an empty queue
+        assert mock_app_state.message_channel_map["api_test"] == []
 
     @pytest.mark.asyncio
     async def test_handle_api_interaction_response_not_api_channel(self, api_communication_service):
@@ -158,7 +159,7 @@ class TestHandleApiInteractionResponse:
         self, mock_store, api_communication_service, mock_app_state
     ):
         """Test handles store_message_response errors gracefully."""
-        mock_app_state.message_channel_map = {"api_test": "msg-123"}
+        mock_app_state.message_channel_map = {"api_test": ["msg-123"]}
 
         # Should not raise exception
         await api_communication_service._handle_api_interaction_response("api_test", "Message")

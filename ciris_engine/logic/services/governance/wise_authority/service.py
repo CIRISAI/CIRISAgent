@@ -16,7 +16,6 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
 
 from ciris_engine.logic.config import get_sqlite_db_full_path
-from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.logic.services.infrastructure.authentication import AuthenticationService
@@ -389,57 +388,59 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
             import json
 
-            conn = get_db_connection(db_path=self.db_path)
-            cursor = conn.cursor()
-
-            # Get existing task to preserve context
-            placeholder = self._get_placeholder()
-            cursor.execute(
-                f"""
-                SELECT context_json, priority FROM tasks
-                WHERE task_id = {placeholder}
-            """,
-                (deferral.task_id,),
+            # Routed through persist substrate (CIRISAgent#763).
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.persistence.models.tasks import (
+                _persist_row_to_task,
+                _task_to_persist_payload,
             )
 
-            row = cursor.fetchone()
-            if not row:
+            engine = get_persist_engine()
+            if engine is None:
+                raise RuntimeError("persist engine not initialized — cannot send deferral")
+
+            raw = engine.task_get(deferral.task_id)
+            if raw is None:
                 logger.error(f"Task {deferral.task_id} not found for deferral")
-                conn.close()
                 raise ValueError(f"Task {deferral.task_id} not found")
 
-            existing_context = {}
-            if row[0]:
-                try:
-                    existing_context = json.loads(row[0])
-                except json.JSONDecodeError:
-                    pass
+            row = json.loads(raw) if isinstance(raw, str) else raw
+            if not isinstance(row, dict):
+                logger.error(f"Task {deferral.task_id} returned non-dict row")
+                raise ValueError(f"Task {deferral.task_id} not found")
 
-            # Add deferral information to context
+            existing_task = _persist_row_to_task(row)
+            existing_context: Dict[str, object] = {}
+            ctx = row.get("context")
+            if isinstance(ctx, str):
+                try:
+                    parsed_ctx = json.loads(ctx)
+                    if isinstance(parsed_ctx, dict):
+                        existing_context = parsed_ctx
+                except json.JSONDecodeError:
+                    existing_context = {}
+            elif isinstance(ctx, dict):
+                existing_context = dict(ctx)
+
             existing_context["deferral"] = {
                 "deferral_id": deferral_id,
                 "thought_id": deferral.thought_id,
                 "reason": deferral.reason,
                 "defer_until": deferral.defer_until.isoformat() if deferral.defer_until else None,
-                "requires_wa_approval": True,  # Always true when sent to WA
+                "requires_wa_approval": True,
                 "context": deferral.context or {},
                 "created_at": self._now().isoformat(),
             }
 
-            # Update task status to deferred
-            cursor.execute(
-                f"""
-                UPDATE tasks
-                SET status = 'deferred',
-                    context_json = {placeholder},
-                    updated_at = {placeholder}
-                WHERE task_id = {placeholder}
-            """,
-                (json.dumps(existing_context), self._now().isoformat(), deferral.task_id),
-            )
-
-            conn.commit()
-            conn.close()
+            # Build an upsert payload preserving every field while flipping
+            # status + replacing context. We can't use task_update_status
+            # because that wouldn't carry the deferral metadata into
+            # context_json.
+            payload = _task_to_persist_payload(existing_task)
+            payload["status"] = TaskStatus.DEFERRED.value
+            payload["context"] = existing_context
+            payload["updated_at"] = self._now().isoformat()
+            engine.task_upsert(json.dumps(payload))
 
             logger.info(f"Task {deferral.task_id} marked as deferred - visible via /v1/wa/deferrals API")
 
@@ -449,50 +450,76 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             raise
 
     async def get_pending_deferrals(self, wa_id: Optional[str] = None) -> List[PendingDeferral]:
-        """Get pending deferrals from the tasks table."""
+        """Get pending deferrals from the tasks table.
+
+        Routed through persist substrate (CIRISAgent#763); paginates
+        DEFERRED tasks across all occurrences via task_list, since
+        deferrals can originate from any occurrence and WAs review
+        them globally.
+        """
         result: List[PendingDeferral] = []
 
         try:
-            conn = get_db_connection(db_path=self.db_path)
-            cursor = conn.cursor()
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.persistence.models.tasks import _list_with_filter
 
-            cursor.execute(
-                """
-                SELECT task_id, channel_id, description, priority, created_at, updated_at, context_json
-                FROM tasks
-                WHERE status = 'deferred'
-                ORDER BY updated_at DESC
-            """
-            )
+            engine = get_persist_engine()
+            if engine is None:
+                logger.error("persist engine not initialized — cannot get pending deferrals")
+                return []
 
-            for row in cursor.fetchall():
-                # Handle both dict (PostgreSQL RealDictCursor) and tuple (SQLite) row formats
-                if isinstance(row, dict):
-                    task_id = row["task_id"]
-                    channel_id = row["channel_id"]
-                    description = row["description"]
-                    priority = row["priority"]
-                    updated_at = row["updated_at"]
-                    context_json = row["context_json"]
-                else:
-                    task_id, channel_id, description, priority, _, updated_at, context_json = row
+            # Persist's task_list filter is equality on agent_occurrence_id,
+            # which would force one query per occurrence. Iterate the known
+            # set: "default", "__shared__", and any other occurrence_ids we
+            # discover. For now, fetch from both the default and shared
+            # namespaces (production has at most a handful of occurrences;
+            # WA tooling lists deferrals from all of them by design).
+            seen_task_ids: set[str] = set()
+            deferred_tasks = []
+            for occurrence_id in ("default", "__shared__"):
+                try:
+                    deferred_tasks.extend(
+                        _list_with_filter(
+                            {"status": TaskStatus.DEFERRED.value, "agent_occurrence_id": occurrence_id}
+                        )
+                    )
+                except Exception as inner_e:
+                    logger.warning(f"Failed to list deferred tasks for occurrence {occurrence_id}: {inner_e}")
+
+            # Sort by updated_at DESC to match legacy ordering.
+            deferred_tasks.sort(key=lambda t: getattr(t, "updated_at", ""), reverse=True)
+
+            for task in deferred_tasks:
+                if task.task_id in seen_task_ids:
+                    continue
+                seen_task_ids.add(task.task_id)
+
+                # Re-extract context_json shape that _parse_deferral_context expects.
+                # _persist_row_to_task collapses context onto the TaskContext model
+                # which drops the deferral metadata; reconstruct a dict from the
+                # raw persist row for parsing.
+                raw = engine.task_get(task.task_id)
+                if raw is None:
+                    continue
+                row = json.loads(raw) if isinstance(raw, str) else raw
+                if not isinstance(row, dict):
+                    continue
+                context_json = row.get("context")
 
                 _, deferral_info = self._parse_deferral_context(context_json)
-                priority_str = self._priority_to_string(priority)
-                ui_context = self._build_ui_context(description, deferral_info)
+                priority_str = self._priority_to_string(task.priority)
+                ui_context = self._build_ui_context(task.description, deferral_info)
 
                 deferral = self._create_pending_deferral(
-                    task_id=task_id,
-                    channel_id=channel_id,
-                    updated_at=updated_at,
+                    task_id=task.task_id,
+                    channel_id=task.channel_id,
+                    updated_at=task.updated_at,
                     deferral_info=deferral_info,
                     priority_str=priority_str,
                     ui_context=ui_context,
-                    description=description,
+                    description=task.description,
                 )
                 result.append(deferral)
-
-            conn.close()
 
         except Exception as e:
             logger.error(f"Failed to get pending deferrals from database: {e}")
@@ -517,100 +544,97 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         try:
             from ciris_engine.logic.utils.task_thought_factory import create_task
 
-            conn = get_db_connection(db_path=self.db_path)
-            cursor = conn.cursor()
+            # Routed through persist substrate (CIRISAgent#763).
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.persistence.models.tasks import (
+                _list_with_filter,
+                _persist_row_to_task,
+                _task_to_persist_payload,
+            )
+
+            engine = get_persist_engine()
+            if engine is None:
+                logger.error("persist engine not initialized — cannot resolve deferral")
+                return False
 
             # Extract task_id from deferral_id
             # Format can be either defer_{task_id} or defer_{task_id}_{timestamp}
+            task_id: Optional[str] = None
             if deferral_id.startswith("defer_"):
-                parts = deferral_id.split("_", 2)  # Split into at most 3 parts
+                parts = deferral_id.split("_", 2)
                 if len(parts) == 2:
-                    # Simple format: defer_{task_id}
                     task_id = parts[1]
                 elif len(parts) >= 3:
-                    # Timestamp format: defer_{task_id}_{timestamp}
-                    # The task_id might contain underscores, so we need to handle that
-                    # Remove 'defer_' prefix and find the last underscore for timestamp
-                    without_prefix = deferral_id[6:]  # Remove 'defer_'
+                    without_prefix = deferral_id[6:]
                     last_underscore = without_prefix.rfind("_")
                     if last_underscore > 0:
-                        # Check if the part after last underscore looks like a timestamp
                         potential_timestamp = without_prefix[last_underscore + 1 :]
                         try:
-                            float(potential_timestamp)  # Timestamps are floats
+                            float(potential_timestamp)
                             task_id = without_prefix[:last_underscore]
                         except ValueError:
-                            # Not a timestamp, so the whole thing is the task_id
                             task_id = without_prefix
                     else:
                         task_id = without_prefix
                 else:
-                    # Shouldn't happen, but handle it
-                    task_id = deferral_id[6:]  # Remove 'defer_' prefix
+                    task_id = deferral_id[6:]
             else:
-                # Try to find by deferral_id in context
-                like_clause = self._get_context_json_like_clause()
-                cursor.execute(
-                    f"""
-                    SELECT task_id, context_json
-                    FROM tasks
-                    WHERE status = 'deferred'
-                    AND {like_clause}
-                """,
-                    (f'%"deferral_id":"{deferral_id}"%',),
-                )
-
-                row = cursor.fetchone()
-                if row:
-                    task_id = row[0]
-                else:
+                # Fall back to scanning deferred tasks for deferral_id in context.
+                matched: Optional[str] = None
+                for occ in ("default", "__shared__"):
+                    candidates = _list_with_filter(
+                        {"status": TaskStatus.DEFERRED.value, "agent_occurrence_id": occ}
+                    )
+                    for cand in candidates:
+                        raw = engine.task_get(cand.task_id)
+                        if raw is None:
+                            continue
+                        row = json.loads(raw) if isinstance(raw, str) else raw
+                        ctx_raw = row.get("context") if isinstance(row, dict) else None
+                        ctx_str = json.dumps(ctx_raw) if isinstance(ctx_raw, dict) else (ctx_raw or "")
+                        if f'"deferral_id":"{deferral_id}"' in ctx_str:
+                            matched = cand.task_id
+                            break
+                    if matched:
+                        break
+                if not matched:
                     logger.error(f"Deferral {deferral_id} not found")
-                    conn.close()
                     return False
+                task_id = matched
 
-            # Get existing task details
-            placeholder = self._get_placeholder()
-            cursor.execute(
-                f"""
-                SELECT task_id, channel_id, description, priority, context_json, agent_occurrence_id
-                FROM tasks
-                WHERE task_id = {placeholder} AND status = 'deferred'
-            """,
-                (task_id,),
-            )
-
-            row = cursor.fetchone()
-            if not row:
+            # Load the deferred task via persist.
+            raw = engine.task_get(task_id)
+            if raw is None:
                 logger.error(f"Task {task_id} not found or not deferred")
-                conn.close()
+                return False
+            row = json.loads(raw) if isinstance(raw, str) else raw
+            if not isinstance(row, dict) or row.get("status") != TaskStatus.DEFERRED.value:
+                logger.error(f"Task {task_id} not found or not deferred")
                 return False
 
-            # Handle both dict (PostgreSQL) and tuple (SQLite) row formats
-            if isinstance(row, dict):
-                original_task_id = row["task_id"]
-                channel_id = row["channel_id"]
-                original_description = row["description"]
-                priority = row["priority"]
-                context_json = row["context_json"]
-                agent_occurrence_id = row["agent_occurrence_id"]
-            else:
-                original_task_id, channel_id, original_description, priority, context_json, agent_occurrence_id = row
+            existing_task = _persist_row_to_task(row)
+            original_task_id = existing_task.task_id
+            channel_id = existing_task.channel_id
+            original_description = existing_task.description
+            priority = existing_task.priority
+            agent_occurrence_id = existing_task.agent_occurrence_id
 
-            # Parse existing context
-            context = {}
-            if context_json:
+            context: Dict[str, object] = {}
+            ctx_raw = row.get("context")
+            if isinstance(ctx_raw, dict):
+                context = dict(ctx_raw)
+            elif isinstance(ctx_raw, str) and ctx_raw:
                 try:
-                    # Handle both string JSON and pre-parsed dict (PostgreSQL jsonb)
-                    if isinstance(context_json, dict):
-                        context = context_json
-                    else:
-                        context = json.loads(context_json)
+                    parsed = json.loads(ctx_raw)
+                    if isinstance(parsed, dict):
+                        context = parsed
                 except json.JSONDecodeError:
                     pass
 
             # Add resolution to deferral info in the original task
-            if "deferral" in context:
-                context["deferral"]["resolution"] = {
+            deferral_info = context.get("deferral")
+            if isinstance(deferral_info, dict):
+                deferral_info["resolution"] = {
                     "approved": response.approved,
                     "reason": response.reason,
                     "resolved_by": response.wa_id,
@@ -636,22 +660,17 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     "errors": [f"Rejection reason: {response.reason}"],
                 }
 
-            outcome_json = json.dumps(outcome_data)
-            cursor.execute(
-                f"""
-                UPDATE tasks
-                SET status = 'completed',
-                    context_json = {placeholder},
-                    outcome_json = {placeholder},
-                    updated_at = {placeholder}
-                WHERE task_id = {placeholder}
-            """,
-                (json.dumps(context), outcome_json, self._now().isoformat(), task_id),
-            )
-
-            if cursor.rowcount == 0:
-                logger.error(f"Failed to update original task {task_id}")
-                conn.close()
+            # Update the deferred task → completed, with outcome + updated context.
+            now_iso = self._now().isoformat()
+            update_payload = _task_to_persist_payload(existing_task)
+            update_payload["status"] = TaskStatus.COMPLETED.value
+            update_payload["context"] = context
+            update_payload["outcome"] = outcome_data
+            update_payload["updated_at"] = now_iso
+            try:
+                engine.task_upsert(json.dumps(update_payload))
+            except Exception:
+                logger.exception("Failed to update original task %s", task_id)
                 return False
 
             logger.info(f"Marked original deferred task {task_id} as COMPLETED with outcome")
@@ -719,9 +738,11 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 )
 
                 # Build TaskContext from the guidance context dict
+                ctx_user_id = context.get("user_id")
+                ctx_user_id_str: Optional[str] = str(ctx_user_id) if ctx_user_id else None
                 task_context = TaskContext(
                     channel_id=channel_id,
-                    user_id=context.get("user_id"),
+                    user_id=ctx_user_id_str,
                     correlation_id=correlation_id,
                     parent_task_id=original_task_id,
                     agent_occurrence_id=agent_occurrence_id,
@@ -740,14 +761,13 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     time_service=self._time_service,
                     status=TaskStatus.PENDING,
                     priority=priority if priority is not None else 5,
-                    user_id=context.get("user_id"),
+                    user_id=ctx_user_id_str,
                     parent_task_id=original_task_id,
                     context=task_context,
                 )
 
-                # Add the guidance task to database
-                # We need to manually insert since we're already in a transaction
-                task_json = {
+                # Persist the new guidance task via the substrate.
+                guidance_payload = {
                     "task_id": guidance_task.task_id,
                     "channel_id": guidance_task.channel_id,
                     "agent_occurrence_id": guidance_task.agent_occurrence_id,
@@ -757,37 +777,11 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     "created_at": guidance_task.created_at,
                     "updated_at": guidance_task.updated_at,
                     "parent_task_id": guidance_task.parent_task_id,
-                    "context_json": json.dumps(guidance_context_dict),
+                    "context": guidance_context_dict,
                 }
-
-                cursor.execute(
-                    f"""
-                    INSERT INTO tasks (
-                        task_id, channel_id, agent_occurrence_id, description,
-                        status, priority, created_at, updated_at, parent_task_id, context_json
-                    ) VALUES (
-                        {placeholder}, {placeholder}, {placeholder}, {placeholder},
-                        {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}
-                    )
-                    """,
-                    (
-                        task_json["task_id"],
-                        task_json["channel_id"],
-                        task_json["agent_occurrence_id"],
-                        task_json["description"],
-                        task_json["status"],
-                        task_json["priority"],
-                        task_json["created_at"],
-                        task_json["updated_at"],
-                        task_json["parent_task_id"],
-                        task_json["context_json"],
-                    ),
-                )
+                engine.task_upsert(json.dumps(guidance_payload))
 
                 logger.info(f"Created new guidance task {guidance_task.task_id} for resolved deferral {deferral_id}")
-
-            conn.commit()
-            conn.close()
 
             logger.info(
                 f"Deferral {deferral_id} {'approved' if response.approved else 'rejected'} by {response.wa_id}, "
@@ -899,35 +893,37 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
     def get_status(self) -> ServiceStatus:
         """Get current service status."""
-        # Get counts from database
+        # Get counts via the persist substrate (CIRISAgent#763).
         pending_deferrals_count = 0
         resolved_deferrals_count = 0
 
         try:
-            conn = get_db_connection(db_path=self.db_path)
-            cursor = conn.cursor()
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.persistence.models.tasks import _list_with_filter
 
-            # Count pending deferrals (deferred tasks)
-            cursor.execute(
-                """
-                SELECT COUNT(*) FROM tasks
-                WHERE status = 'deferred'
-            """
-            )
-            pending_deferrals_count = cursor.fetchone()[0]
-
-            # Count resolved deferrals (tasks with resolution in context)
-            like_clause = self._get_context_json_like_clause()
-            cursor.execute(
-                f"""
-                SELECT COUNT(*) FROM tasks
-                WHERE {like_clause}
-            """,
-                ('%"resolution":%',),
-            )
-            resolved_deferrals_count = cursor.fetchone()[0]
-
-            conn.close()
+            engine = get_persist_engine()
+            if engine is not None:
+                # Pending = currently DEFERRED across known occurrences.
+                for occ in ("default", "__shared__"):
+                    pending_deferrals_count += len(
+                        _list_with_filter(
+                            {"status": TaskStatus.DEFERRED.value, "agent_occurrence_id": occ}
+                        )
+                    )
+                # Resolved = task whose context_json contains "resolution".
+                # No SQL JSON predicate via persist; scan each occurrence's
+                # tasks once and Python-filter. Bounded by total occurrence
+                # task volume; acceptable for status-page cardinality.
+                for occ in ("default", "__shared__"):
+                    for task in _list_with_filter({"agent_occurrence_id": occ}):
+                        raw = engine.task_get(task.task_id)
+                        if raw is None:
+                            continue
+                        row = json.loads(raw) if isinstance(raw, str) else raw
+                        ctx = row.get("context") if isinstance(row, dict) else None
+                        ctx_str = json.dumps(ctx) if isinstance(ctx, dict) else (ctx or "")
+                        if '"resolution":' in ctx_str:
+                            resolved_deferrals_count += 1
         except Exception as e:
             logger.error(f"Error getting deferral counts: {e}")
 
@@ -962,37 +958,28 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect service-specific metrics for v1.4.3 API."""
-        # Get deferral counts from database
+        # Get deferral counts via the persist substrate (CIRISAgent#763).
         total_deferrals_count = 0
         resolved_deferrals_count = 0
 
         try:
-            conn = get_db_connection(db_path=self.db_path)
-            cursor = conn.cursor()
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.persistence.models.tasks import _list_with_filter
 
-            like_clause = self._get_context_json_like_clause()
-
-            # Count total deferrals - tasks that have or had deferral context
-            cursor.execute(
-                f"""
-                SELECT COUNT(*) FROM tasks
-                WHERE {like_clause}
-            """,
-                ('%"deferral":%',),
-            )
-            total_deferrals_count = cursor.fetchone()[0]
-
-            # Count resolved deferrals (tasks with resolution in context)
-            cursor.execute(
-                f"""
-                SELECT COUNT(*) FROM tasks
-                WHERE {like_clause}
-            """,
-                ('%"resolution":%',),
-            )
-            resolved_deferrals_count = cursor.fetchone()[0]
-
-            conn.close()
+            engine = get_persist_engine()
+            if engine is not None:
+                for occ in ("default", "__shared__"):
+                    for task in _list_with_filter({"agent_occurrence_id": occ}):
+                        raw = engine.task_get(task.task_id)
+                        if raw is None:
+                            continue
+                        row = json.loads(raw) if isinstance(raw, str) else raw
+                        ctx = row.get("context") if isinstance(row, dict) else None
+                        ctx_str = json.dumps(ctx) if isinstance(ctx, dict) else (ctx or "")
+                        if '"deferral":' in ctx_str:
+                            total_deferrals_count += 1
+                        if '"resolution":' in ctx_str:
+                            resolved_deferrals_count += 1
         except Exception as e:
             logger.error(f"Error getting deferral counts: {e}")
 

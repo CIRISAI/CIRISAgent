@@ -6,9 +6,11 @@ and generates insights for agent self-improvement. It's integrated with the drea
 for continuous learning from operational issues.
 """
 
+import asyncio
+import json
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import aiofiles
@@ -140,14 +142,147 @@ class IncidentManagementService(BaseGraphService):
             logger.error("Failed to process incidents: %s", e, exc_info=True)
             raise
 
+    def _query_persist_incidents(self, cutoff_time: datetime) -> List[IncidentNode]:
+        """Sync persist incident query — runs in a worker thread.
+
+        Paginates through cirislens_incident_records DESC by recorded_at
+        until cutoff_time, materializes each row as an IncidentNode so the
+        downstream pattern-detection code (_detect_patterns, _identify_problems)
+        keeps working unchanged.
+        """
+        from ciris_engine.logic.audit.persist_signing import resolve_tenant_id
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            # Signal "persist unavailable" distinctly from "persist returned
+            # empty" so the caller falls through to the memory-bus / file
+            # fallback path. Production agents always have engine wired
+            # post-bootstrap, so this branch is test/early-startup only.
+            raise RuntimeError("persist engine not wired")
+
+        filter_json = json.dumps({"tenant_id": resolve_tenant_id()})
+        # Start cursor at "now" — get the newest items first; stop when we
+        # cross cutoff_time. last_id stays empty to anchor at the head.
+        last_ts = "9999-12-31T23:59:59Z"
+        last_id = ""
+        incidents: List[IncidentNode] = []
+        page_limit = 200
+        max_pages = 50  # safety cap; 50 * 200 = 10000 incidents
+
+        for _ in range(max_pages):
+            cursor_json = json.dumps(
+                {"version": "v1", "last_ts": last_ts, "last_id": last_id}
+            )
+            raw = engine.incident_list(filter_json, cursor_json, page_limit)
+            try:
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+            except json.JSONDecodeError:
+                parsed = None
+            items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+            if not items:
+                break
+
+            crossed_cutoff = False
+            for row in items:
+                if not isinstance(row, dict):
+                    continue
+                last_seen_str = str(row.get("last_seen_at", ""))
+                try:
+                    last_seen_dt = datetime.fromisoformat(last_seen_str.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                if last_seen_dt < cutoff_time:
+                    crossed_cutoff = True
+                    break
+                incidents.append(self._persist_row_to_incident_node(row, last_seen_dt))
+                last_ts = last_seen_str
+                last_id = str(row.get("incident_id", ""))
+
+            if crossed_cutoff or len(items) < page_limit:
+                break
+
+        logger.info(f"persist incident query returned {len(incidents)} incidents since {cutoff_time}")
+        return incidents
+
+    @staticmethod
+    def _persist_row_to_incident_node(row: Dict[str, Any], detected_at: datetime) -> IncidentNode:
+        """Convert a persist cirislens_incident_records row to an IncidentNode.
+
+        The pattern-detection code downstream operates on IncidentNode
+        objects (severity, source_component, description, etc.). The
+        forensic fields persist returns map cleanly to IncidentNode's
+        existing schema.
+        """
+        sev_str = str(row.get("severity", "warning")).lower()
+        severity_map = {
+            "critical": IncidentSeverity.CRITICAL,
+            "error": IncidentSeverity.HIGH,
+            "warning": IncidentSeverity.MEDIUM,
+            "info": IncidentSeverity.LOW,
+        }
+        severity = severity_map.get(sev_str, IncidentSeverity.MEDIUM)
+        return IncidentNode(
+            id=str(row.get("incident_id", "")),
+            type=NodeType.AUDIT_ENTRY,
+            scope=GraphScope.LOCAL,
+            attributes={},
+            incident_type=str(row.get("category", "log_warning")).upper(),
+            severity=severity,
+            status=IncidentStatus.OPEN,
+            description=str(row.get("description", row.get("title", ""))),
+            source_component=str(row.get("source_component", "unknown")),
+            detected_at=detected_at,
+            correlation_id=None,  # encoded in correlation_keys; not separately surfaced
+            task_id=None,
+            thought_id=None,
+            handler_name=row.get("handler_name") or None,
+            filename=str(row.get("filename", "")) or None,
+            line_number=int(row.get("line_number", 0)) if row.get("line_number") is not None else None,
+            function_name=row.get("function_name") or None,
+            exception_type=row.get("exception_type") or None,
+            stack_trace=row.get("stack_trace") or None,
+            impact="TBD",
+            urgency="MEDIUM" if severity == IncidentSeverity.MEDIUM else "HIGH",
+            updated_by="incident_service",
+            updated_at=detected_at,
+        )
+
     async def _get_recent_incidents(self, cutoff_time: datetime) -> List[IncidentNode]:
-        """Get recent incidents from memory service."""
+        """Get recent incidents from persist's cirislens_incident_records.
+
+        D1-full cutover (CIRISAgent#763): incidents no longer live as graph
+        nodes — they're in persist's incident substrate (CIRISPersist#56,
+        v1.5.5). Memory-bus search is kept as a back-compat path for tests
+        that mock the memory_service; production agents go through persist.
+        File-based fallback below still works as a last-resort forensic
+        path when persist hasn't seen any incidents (e.g. fresh boot).
+
+        Resolution priority:
+          1. persist returns >0 incidents → use those (production happy path)
+          2. persist raises (engine not wired) → fall through to memory bus
+          3. persist returns 0 incidents → also check memory bus, because
+             tests routinely mock memory_service.search to return incidents
+             while leaving persist empty (the engine may be wired by an
+             earlier test's initialize_database side effect)
+        """
+        try:
+            persist_incidents = await asyncio.to_thread(self._query_persist_incidents, cutoff_time)
+            if persist_incidents:
+                return persist_incidents
+            # Persist returned empty — fall through to memory-bus + file
+            # paths below in case a test mock has results.
+        except Exception as e:
+            logger.warning(f"persist incident query failed, falling back to legacy path: {e}")
+
         if not self._memory_bus:
             logger.error("Memory bus not available")
             return []
 
         try:
-            # First try to get from memory service (for tests)
+            # Back-compat: tests still mock memory_service.search to return
+            # IncidentNode-shaped GraphNode objects. Keep this branch so
+            # mocked test fixtures don't have to set up a persist engine.
             memory_services = (
                 self._memory_bus.service_registry.get_services_by_type("memory")
                 if hasattr(self._memory_bus, "service_registry")
@@ -156,7 +291,6 @@ class IncidentManagementService(BaseGraphService):
             memory_service = memory_services[0] if memory_services else None
 
             if memory_service and hasattr(memory_service, "search"):
-                # Use the mocked search method in tests
                 nodes = await memory_service.search(NodeType.AUDIT_ENTRY, cutoff_time)
                 incidents = []
                 for node in nodes:
@@ -168,32 +302,9 @@ class IncidentManagementService(BaseGraphService):
                         continue
                 return incidents
 
-            # Otherwise query memory bus normally
-            from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
-
-            # Create search filter for audit entries created after cutoff time
-            search_filter = MemorySearchFilter(
-                node_type=NodeType.AUDIT_ENTRY.value, created_after=cutoff_time, limit=1000
-            )
-
-            # Use search method to find audit entries
-            nodes = await self._memory_bus.search(
-                query="",  # Empty query to get all matching nodes
-                filters=search_filter,
-                handler_name="incident_service",
-            )
-
-            # Convert GraphNodes to IncidentNodes
-            incidents = []
-            for node in nodes:
-                try:
-                    incident = IncidentNode.from_graph_node(node)
-                    incidents.append(incident)
-                except Exception as e:
-                    logger.warning(f"Failed to parse incident node: {e}")
-                    continue
-
-            return incidents
+            # Fall through to file-based fallback (preserved as the
+            # absolute-last-resort forensic surface).
+            raise RuntimeError("memory_service.search unavailable")
 
         except Exception as e:
             logger.warning(f"Failed to get incidents from memory service: {e}")

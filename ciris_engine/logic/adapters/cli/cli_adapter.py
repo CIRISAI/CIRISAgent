@@ -206,7 +206,6 @@ class CLIAdapter(Service, CommunicationService, ToolService):
                     ttl_seconds=None,
                     parent_correlation_id=None,
                 ),
-                self._get_time_service(),
             )
             return True
         except Exception as e:
@@ -381,7 +380,6 @@ class CLIAdapter(Service, CommunicationService, ToolService):
                     ttl_seconds=None,
                     parent_correlation_id=None,
                 ),
-                self._get_time_service(),
             )
 
             return ToolExecutionResult(

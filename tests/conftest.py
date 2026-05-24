@@ -99,8 +99,13 @@ import time  # noqa: E402
 
 # Import database fixtures and API fixtures - must be imported after os.environ setup
 from tests.fixtures.api import random_api_port  # noqa: E402
-from tests.fixtures.database import clean_db, test_db  # noqa: E402
+from tests.fixtures.database import (  # noqa: E402
+    _release_persist_engine,
+    clean_db,
+    test_db,
+)
 from tests.fixtures.mocks import MockRuntime  # noqa: E402
+from tests.fixtures.persist_engine import persist_engine  # noqa: E402, F401
 from tests.fixtures.runtime_control import (  # noqa: E402
     mock_api_runtime_control_service,
     mock_step_result_gather_context,
@@ -168,6 +173,31 @@ def _isolate_process_global_env(monkeypatch):
     """
     monkeypatch.setenv("CIRIS_PREFERRED_LANGUAGE", "en")
     monkeypatch.delenv("CIRIS_LLM_REPLICAS", raising=False)
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):  # noqa: ARG001
+    """Reset the process-wide persist Engine before every test.
+
+    ciris-persist's Engine is a process-singleton: a second construction
+    with a different DSN raises EngineConfigMismatch, and the test suite
+    has ~20+ fixtures that each bootstrap a per-test engine.
+
+    This is a hook, not an autouse fixture, deliberately: a `tryfirst`
+    `pytest_runtest_setup` runs strictly BEFORE all fixture setup —
+    including class-level autouse fixtures that wire their own engine —
+    so no fixture-ordering race can leave a prior test's engine pinned.
+    `_release_persist_engine` calls ciris-persist's `reset_engine()`
+    (CIRISPersist#88), which un-pins the singleton handle-free — so even
+    an orphan engine (global nulled without close) is recovered.
+    """
+    _release_persist_engine()
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_teardown(item):  # noqa: ARG001
+    """Release the persist Engine after every test (mirror of setup)."""
+    _release_persist_engine()
 
 
 @pytest.fixture(autouse=True, scope="function")

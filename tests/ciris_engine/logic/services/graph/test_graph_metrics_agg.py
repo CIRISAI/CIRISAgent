@@ -280,8 +280,15 @@ class TestAuditServiceMetrics(BaseMetricsTest):
     @pytest_asyncio.fixture
     async def audit_service(self, mock_memory_bus, time_service):
         """Create audit service."""
+        import base64
+        import hashlib
+
+        from ciris_persist import Engine, reset_engine  # type: ignore[import-untyped]
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import ed25519
+
+        import ciris_engine.logic.persistence.models.graph as _graph_mod
+        from ciris_engine.logic.persistence.models.graph import set_persist_engine
 
         # Generate real Ed25519 keypair for testing
         private_key = ed25519.Ed25519PrivateKey.generate()
@@ -297,19 +304,43 @@ class TestAuditServiceMetrics(BaseMetricsTest):
         mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
         mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
 
+        # A3 cutover: the audit hash-chain write goes through the persist
+        # engine — wire a real one (pointed at a temp DB) or log_event raises
+        # "persist engine not wired". Restored in the finally for isolation.
+        _prior_engine = _graph_mod._engine
+        _prior_dsn = _graph_mod._engine_dsn
+        fingerprint = hashlib.sha256(pub_bytes).hexdigest()[:12]
+        key_id = f"agent-{fingerprint}"
+
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch(
-                "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
-                return_value=mock_verifier,
-            ):
-                service = GraphAuditService(
-                    memory_bus=mock_memory_bus,
-                    time_service=time_service,
-                    db_path=os.path.join(temp_dir, "audit.db"),
-                )
-                await service.start()
-                yield service
-                await service.stop()
+            persist_db_path = os.path.join(temp_dir, "audit.db")
+            reset_engine()  # un-pin any engine a prior fixture wired
+            persist_engine = Engine(f"sqlite:///{persist_db_path}", key_id)
+            persist_engine.register_public_key(
+                signature_key_id=key_id,
+                public_key_b64=base64.b64encode(pub_bytes).decode(),
+                algorithm="ed25519",
+                description="test fixture audit key",
+                added_by="test",
+            )
+            set_persist_engine(persist_engine, dsn=f"sqlite:///{persist_db_path}")
+            try:
+                with patch(
+                    "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+                    return_value=mock_verifier,
+                ):
+                    service = GraphAuditService(
+                        memory_bus=mock_memory_bus,
+                        time_service=time_service,
+                        db_path=persist_db_path,
+                        enable_hash_chain=True,
+                    )
+                    await service.start()
+                    yield service
+                    await service.stop()
+            finally:
+                _graph_mod._engine = _prior_engine
+                _graph_mod._engine_dsn = _prior_dsn
 
     @pytest.mark.asyncio
     async def test_audit_service_base_metrics(self, audit_service):

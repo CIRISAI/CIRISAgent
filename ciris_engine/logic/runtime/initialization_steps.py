@@ -44,7 +44,7 @@ def register_all_initialization_steps(
         phase=InitializationPhase.DATABASE,
         name="Initialize Database",
         handler=lambda: init_database(runtime),
-        verifier=lambda: verify_database_integrity(runtime),
+        verifier=verify_database_integrity,
         critical=True,
     )
 
@@ -198,8 +198,9 @@ async def init_database(runtime: Any) -> None:
         db_path = str(runtime.essential_config.database.main_db)
         logger.info(f"Using SQLite database: {db_path}")
 
+    # initialize_database bootstraps persist's Engine end-to-end (schema
+    # via persist's own sqlx migrations + A0a legacy graph migration).
     persistence.initialize_database(db_path)
-    persistence.run_migrations(db_path)
 
     if not runtime.essential_config:
         runtime.essential_config = EssentialConfig()
@@ -207,33 +208,28 @@ async def init_database(runtime: Any) -> None:
         logger.warning("No config provided, using defaults")
 
 
-async def verify_database_integrity(runtime: Any) -> bool:
-    """Verify database integrity before proceeding."""
+async def verify_database_integrity() -> bool:
+    """Verify database integrity before proceeding.
+
+    Post-A1 absorption (CIRISAgent#763): persist owns the schema for
+    cirislens_tasks / cirislens_thoughts / cirisgraph_nodes / cirisgraph_edges.
+    If `_bootstrap_persist_engine` constructed the Engine successfully, the
+    schema is intact — persist's sqlx migrations are atomic and idempotent.
+    We probe with a cheap `task_list` call to confirm the engine is healthy.
+    """
     try:
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        import json
 
-        adapter = get_adapter()
-        db_path = None if adapter.is_postgresql() else str(runtime.essential_config.database.main_db)
-        conn = persistence.get_db_connection(db_path)
-        cursor = conn.cursor()
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError("persist engine not wired — initialize_database must run first")
 
-        adapter = get_adapter()
-        required_tables = ["tasks", "thoughts", "graph_nodes", "graph_edges"]
+        # Cheap sanity probe: paginate one empty page of tasks. Verifies
+        # connectivity + schema in one call. A bad schema would raise.
+        engine.task_list("{}", json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}), 1)
 
-        for table in required_tables:
-            if adapter.is_postgresql():
-                cursor.execute(
-                    "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name=%s",
-                    (table,),
-                )
-            else:
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
-
-            if not cursor.fetchone():
-                raise RuntimeError(f"Required table '{table}' missing from database")
-
-        conn.close()
-        logger.info("Database integrity verified")
+        logger.info("Database integrity verified (persist engine healthy)")
         return True
     except Exception as e:
         logger.error(f"Database integrity check failed: {e}")

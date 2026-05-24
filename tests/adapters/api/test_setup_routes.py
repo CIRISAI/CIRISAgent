@@ -845,6 +845,9 @@ class TestResumeFromFirstRun:
         """Test that setup completion triggers runtime resume."""
         mock_first_run.return_value = True
         mock_config_path.return_value = tmp_path / ".env"
+        # _save_setup_config returns the written .env path; complete.py
+        # consumes it as a real path (os.fspath), so the mock must too.
+        mock_save.return_value = tmp_path / ".env"
         mock_create_users.return_value = None
 
         # Mock runtime with resume method and set it on app.state
@@ -854,6 +857,7 @@ class TestResumeFromFirstRun:
         mock_config = Mock()
         mock_db_config = Mock()
         mock_db_config.audit_db = tmp_path / "audit.db"
+        mock_db_config.main_db = tmp_path / "ciris_engine.db"  # get_sqlite_db_full_path()
         mock_db_config.database_url = None  # SQLite mode
         mock_config.database = mock_db_config
         mock_runtime.essential_config = mock_config

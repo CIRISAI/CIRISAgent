@@ -257,48 +257,53 @@ async def get_average_thought_depth(
         raise MemoryBusUnavailableError("Memory bus is not available")
 
     try:
-        from ciris_engine.logic.persistence import get_db_connection
+        # Post-A1 absorption (CIRISAgent#763): paginate thoughts via persist
+        # and compute the average client-side. The substrate's `thought_list`
+        # is DESC by created_at and supports an updated_at filter implicitly;
+        # we walk pages until we cross `window_start`. The window is 24h so
+        # the pagination is bounded.
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        import json
 
-        # Get the memory service to access its db_path
-        memory_service = await memory_bus.get_service(handler_name="telemetry_service")
-        if not memory_service:
-            raise MemoryBusUnavailableError("Memory service not found on memory bus")
+        engine = get_persist_engine()
+        if engine is None:
+            raise ThoughtDepthQueryError("persist engine not wired")
 
-        db_path = getattr(memory_service, "db_path", None)
-        if not db_path:
-            raise ThoughtDepthQueryError("Memory service has no db_path attribute")
+        cutoff = window_start.isoformat()
+        total = 0.0
+        count = 0
+        last_ts = "9999-12-31T23:59:59Z"
+        last_id = ""
+        while True:
+            cur = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
+            raw = engine.thought_list("{}", cur, 500)
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+            items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+            if not items:
+                break
+            stop = False
+            for row in items:
+                if not isinstance(row, dict):
+                    continue
+                created = str(row.get("created_at", ""))
+                if created < cutoff:
+                    stop = True
+                    break
+                depth = row.get("thought_depth")
+                if depth is not None:
+                    try:
+                        total += float(depth)
+                        count += 1
+                    except (TypeError, ValueError):
+                        pass
+                last_ts = created
+                last_id = str(row.get("thought_id", ""))
+            if stop or len(items) < 500:
+                break
 
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-        adapter = get_adapter()
-
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            # Use window_start parameter for consistent timing with other telemetry calculations
-            # Use dialect-appropriate placeholder
-            sql = f"""
-                SELECT AVG(thought_depth) as avg_depth
-                FROM thoughts
-                WHERE created_at >= {adapter.placeholder()}
-            """
-            cursor.execute(sql, (window_start.isoformat(),))
-            result = cursor.fetchone()
-
-            # Handle both dict (PostgreSQL RealDictCursor/SQLite Row) and tuple results
-            if result:
-                if isinstance(result, dict):
-                    avg_depth = result.get("avg_depth")
-                elif hasattr(result, "keys"):
-                    # SQLite Row or dict-like object
-                    avg_depth = result["avg_depth"]
-                else:
-                    # Tuple result - first column is avg_depth
-                    avg_depth = result[0] if result else None
-
-                if avg_depth is not None:
-                    return float(avg_depth)
-
+        if count == 0:
             raise NoThoughtDataError("No thought data available in the last 24 hours")
+        return total / count
 
     except NoThoughtDataError:
         raise  # Re-raise as-is

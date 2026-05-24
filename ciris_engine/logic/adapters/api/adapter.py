@@ -405,8 +405,17 @@ class ApiPlatform(Service):
             try:
                 logger.info(f"handle_message_via_observer called for message {msg.message_id}")
                 if self.message_observer:
-                    # Store the message ID to channel mapping
-                    self.app.state.message_channel_map[msg.channel_id] = msg.message_id
+                    # Append to the channel's FIFO queue of pending interact()
+                    # message_ids. A channel (e.g. api_<user>) carries many
+                    # messages; a single-value slot clobbered all but the
+                    # latest, so the SPEAK→interact correlation in
+                    # _handle_api_interaction_response lost responses and the
+                    # waiting interact() hit its 55s timeout. Cap the queue so
+                    # a channel that never drains can't grow unbounded.
+                    _chan_queue = self.app.state.message_channel_map.setdefault(msg.channel_id, [])
+                    _chan_queue.append(msg.message_id)
+                    if len(_chan_queue) > 100:
+                        del _chan_queue[:-100]
 
                     # Create correlation
                     await self._create_message_correlation(msg)

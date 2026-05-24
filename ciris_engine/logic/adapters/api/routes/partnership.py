@@ -205,15 +205,13 @@ def _handle_partnership_accept(
     )
 
     time_service = TimeService()
-    add_graph_node(node, time_service, None)
+    add_graph_node(node, time_service)
 
     # Update task status to COMPLETED
     update_task_status(
         task_id=task.task_id,
         new_status=TaskStatus.COMPLETED,
         occurrence_id=str(uuid.uuid4()),
-        time_service=time_service,
-        db_path=None,
     )
 
     return StandardResponse(
@@ -269,8 +267,6 @@ def _handle_partnership_reject(
         task_id=task.task_id,
         new_status=TaskStatus.REJECTED,
         occurrence_id=str(uuid.uuid4()),
-        time_service=time_service,
-        db_path=None,
     )
 
     # Track rejection
@@ -341,8 +337,6 @@ def _handle_partnership_defer(
         task_id=task.task_id,
         new_status=TaskStatus.DEFERRED,
         occurrence_id=str(uuid.uuid4()),
-        time_service=time_service,
-        db_path=None,
     )
 
     # Track deferral

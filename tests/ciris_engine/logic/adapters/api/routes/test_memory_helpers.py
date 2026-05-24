@@ -71,7 +71,7 @@ class TestGetUserFilterIdsForObserver:
         assert "google:google_456" in result
 
         # Verify get_user_allowed_ids was called correctly
-        mock_get_allowed_ids.assert_called_once_with(mock_auth_service, "user123")
+        mock_get_allowed_ids.assert_called_once_with("user123")
 
     @pytest.mark.asyncio
     async def test_observer_auth_service_not_available(self):

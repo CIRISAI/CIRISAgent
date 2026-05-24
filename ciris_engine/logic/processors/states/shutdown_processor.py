@@ -139,7 +139,7 @@ class ShutdownProcessor(BaseProcessor):
         # If task is pending, activate it
         if current_task.status == TaskStatus.PENDING:
             persistence.update_task_status(
-                self.shutdown_task.task_id, TaskStatus.ACTIVE, self.shutdown_task.agent_occurrence_id, self.time_service
+                self.shutdown_task.task_id, TaskStatus.ACTIVE, self.shutdown_task.agent_occurrence_id
             )
             logger.info("Activated shutdown task")
 
@@ -502,7 +502,7 @@ class ShutdownProcessor(BaseProcessor):
         )
 
         # Update task status in __shared__ namespace
-        persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__", self._time_service)
+        persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__")
         logger.info(
             f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id} "
             f"(claimed by {self.agent_occurrence_id})"

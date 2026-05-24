@@ -5,6 +5,47 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-05-23
+
+Minor release — **persist absorption** + **federation-ready substrate**. The agent's persistence layer moves wholesale onto the Rust-backed `ciris-persist` substrate (PyO3, paired with `ciris-verify 3.0.1`). Production code ships **zero raw SQL** outside `ciris_adapters/` — `psycopg2` and `aiosqlite` are gone; `sqlite3` survives only for the static `cities.db` lookup. SQLite and PostgreSQL are first-class peers via persist's `sqlx` backend, with a dual-backend CI matrix gating the release.
+
+### Added
+
+- **`ciris-persist 2.0.7` substrate** absorbs 12 of 22 services (memory/config graph, audit, telemetry + TSDB consolidation, incidents, secrets, classification, authentication prelude, FederationDirectory, MaintenanceService). All reads/writes route through the typed `engine.*` API. v2.0.x is the "Federation Ready" line — federation surface stable, every substrate concurrency-hardened with the advisory-lock pattern, V045 schema adds `UNIQUE(tenant_id, chain_event_id)` for `lookup_grant_id_by_chain_event`.
+- **`ciris-verify 3.0.1`** — paired federation-surface bump; agent + substrate crates held on the same major.minor.
+- **A0a legacy-graph upgrade migration** — `engine.run_legacy_graph_migration` copies 2.8.x `graph_nodes` / `graph_edges` into `cirisgraph.*` on first 2.9.0 boot. Idempotent (`.persist_migrated` sentinel), tolerant of fresh installs. Validated against a production dump (114,184 nodes + 116,741 edges) at 100% on both backends, and via in-place 2.8.13→2.9.0 upgrade on an Android emulator (46 legacy nodes migrated cleanly).
+- **A0b audit-chain bridge** at `ciris_engine.logic.audit.chain_bridge` — bridges the legacy `ciris_audit.db` chain into persist's audit log with a CIRISVerify-signed genesis-bridge entry. Sentinel-gated (`.audit_bridged`).
+- **PostgreSQL as a first-class backend** — fresh installs and 2.8.x→2.9.0 upgrades both supported; selected via `CIRIS_DB_URL`.
+- **Dual-backend QA matrix in CI** — `qa_runner` runs `all_1` / `all_2` matrix legs against sqlite + postgres concurrently in isolated subprocesses (separate ports). The whole Build and Deploy workflow is green on this matrix.
+- **`tools/update_android_libs.py`** — Android counterpart to `tools/update_ios_libs.py`. Pulls per-ABI `.so` files into `client/androidApp/src/main/jniLibs/{abi}/` from the GitHub Release tarball, and Chaquopy-shaped wheels into `client/androidApp/wheels/` from the new `*-android-wheels.tar.gz` asset (for PyO3 libs the agent has to `import` from Python).
+
+### Changed
+
+- **SQLite bootstrap layer removed** — `migration_runner.py`, `migrations/*.sql`, and legacy table-DDL modules deleted. `initialize_database()` now just bootstraps persist's Engine, which owns schema creation via `sqlx` migrations on every backend.
+- **`requirements.txt`** — dropped `psycopg2-binary` and `aiosqlite`; pinned `ciris-persist>=2.0.7,<3.0.0`, `ciris-verify>=3.0.1,<4.0.0`.
+- **Mobile**: Android JNI binaries (arm64-v8a, armeabi-v7a, x86_64) refreshed to verify 3.0.1 + persist 2.0.7 via the new script; Chaquopy pip block + `extractPackages` wired for `ciris_persist`. iOS framework + dylib refreshed by the macOS team via `tools/update_ios_libs.py`.
+- Test suite ported off raw SQL onto the persist API (49 files); `tools/ops/audit_chain_bridge` is now a compatibility shim re-exporting from `ciris_engine.logic.audit.chain_bridge` (closes #780 — bundled path lets A0b run on Chaquopy).
+- `staged-qa` GH-job `timeout-minutes` raised 30 → 55 to accommodate the slower postgres leg.
+
+### Fixed
+
+- **Adapter `auto_start: false` ignored on load** — `adapter_manager.load_adapter` always called `adapter.start()`, so the `/v1/system/adapters` API's documented `auto_start` flag was silently dropped end-to-end. The `a2a` adapter therefore bound its hardcoded `:8100` during `adapter_manifest` probes, colliding under `--parallel-backends` and `SystemExit`-crashing the loser. `auto_start` now threaded request → manager.
+- **Adapter QA modules' base-URL mis-resolution** — `getattr(client, "_base_url", "http://localhost:8080")` always missed (the attribute is `base_url`); fell back to the hardcoded port. Under `--parallel-backends` the postgres leg's adapter requests hit the sqlite server → cascading `Invalid API key` 401s. Now reads `client.base_url`.
+- **Language change never invalidated prompt caches** — `set_prompt_language` / `set_conscience_prompt_language` were no-op shims; a `preferred_language` update changed the env var but left per-language prompt-loader caches stale. Caches are now cleared end-to-end.
+- **`run_module` exit-1 on a green leg** — the SDK-test pass check used `r["status"] == "✅ PASS"` (exact match) while the summary's `passed` count used `"PASS" in status`; PASS-variant statuses counted as passed in the summary but failed the leg. Made consistent.
+- **`_bootstrap_persist_engine` preserves `sqlite://` URLs** (codex P1) — used to run `Path().resolve()` on any non-Postgres `db_path`, mangling SQLAlchemy-style `sqlite:///…` URLs into a bogus filesystem path and bootstrapping against the wrong DB. New `_persist_dsn_and_sentinel` helper handles all three forms.
+- **Incident-capture infinite loop** — the handler logged its own persist-write failure at ERROR, which it then re-captured as a new incident (12k+ errors/run on PostgreSQL). Added a re-entrancy guard; `incident_id` is a bare UUID.
+- **`l4_attestation` floor accepts `ciris-verify 3.x`** — Algorithm A walker contract unchanged across the 3.0 federation bump; allow-list extended.
+- **Streaming verification accepts `attempt_index`** — common field added at the runtime layer for recursive-pass tracking; the verifier's allow-set was stale.
+- Single-step mode reset on `resume`; `wise_bus` tolerates list-shaped service capabilities; scheduler dangling-task FK guard; FIFO `message_channel_map` for concurrent `/interact` calls; ConfigNode flood + secrets-master-key path; ~20 other follow-ups surfaced by the dual-backend matrix.
+
+### Known issues
+
+- `streaming::Postgres ASPDMA-twice` (CIRISAgent#772) — postgres backend's higher per-op latency surfaces a thought re-processing path that runs ASPDMA twice on follow-up thoughts; reasoning is backend-identical, just an over-count. Tracked separately.
+- Crisis-response missing locale-specific hotline numbers on non-English `mental_health` safety cells (CIRISAgent#779) — agent's acute-pathway response is safe (routes to ER + emergency services) but doesn't surface a named hotline. Tracked separately.
+
+---
+
 ## [2.8.12] - 2026-05-15
 
 Patch release — wire-contract guards on the trace pipeline, FFI loader robustness, language-guidance reinforcement, Phase 1 repo-size prevention, **Tier-2 high-resource safety-battery roster expansion (14 → 29 cells)**, and judge-provider cutover to OpenRouter (Opus 4.5).

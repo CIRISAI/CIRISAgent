@@ -117,14 +117,28 @@ class UpdatedStatusConscience(ConscienceInterface):
         )
         channel_id = getattr(task, "channel_id", "this channel")
 
-        # Clear the flag so this only triggers once
-        from ciris_engine.logic.persistence.db import get_db_connection
-
+        # Clear the flag so this only triggers once. Route through persist
+        # so we don't reintroduce a second libsqlite writer on the DB
+        # (CIRISAgent#763 / CIRISPersist#58).
         try:
-            with get_db_connection() as conn:
-                conn.execute("UPDATE tasks SET updated_info_available = 0 WHERE task_id = ?", (task_id,))
-                conn.commit()
-                logger.info(f"Cleared updated_info_available flag for task {task_id}")
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.persistence.models.tasks import (
+                _persist_row_to_task,
+                _task_to_persist_payload,
+            )
+
+            engine = get_persist_engine()
+            if engine is not None:
+                raw = engine.task_get(task_id)
+                if raw is not None:
+                    import json as _json
+
+                    row = _json.loads(raw) if isinstance(raw, str) else raw
+                    if isinstance(row, dict):
+                        existing_task = _persist_row_to_task(row)
+                        existing_task.updated_info_available = False
+                        engine.task_upsert(_json.dumps(_task_to_persist_payload(existing_task)))
+                        logger.info(f"Cleared updated_info_available flag for task {task_id}")
         except Exception as e:
             logger.error(f"Failed to clear updated_info_available flag for task {task_id}: {e}")
 

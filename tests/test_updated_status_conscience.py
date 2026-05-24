@@ -5,7 +5,6 @@ Tests the 6th conscience check that detects when new observations
 arrive during task processing.
 """
 
-import sqlite3
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -60,23 +59,9 @@ class TestUpdatedStatusConscience:
         return UpdatedStatusConscience(time_service=mock_time_service)
 
     @pytest.fixture
-    def patch_db_path(self, temp_db, monkeypatch):
-        """Patch database functions to use temp_db."""
-        from ciris_engine.logic.persistence import db as db_module
-        from ciris_engine.logic.persistence.models import tasks as tasks_module
-
-        original_get_task = tasks_module.get_task_by_id
-        original_get_db_connection = db_module.get_db_connection
-
-        def patched_get_task(task_id, occurrence_id="default", db_path=None):
-            return original_get_task(task_id, occurrence_id, db_path=temp_db)
-
-        def patched_get_db_connection(db_path=None):
-            return original_get_db_connection(db_path=temp_db)
-
-        monkeypatch.setattr(tasks_module, "get_task_by_id", patched_get_task)
-        monkeypatch.setattr(db_module, "get_db_connection", patched_get_db_connection)
-
+    def patch_db_path(self, temp_db):
+        """Return temp_db. Persist's engine is already wired to temp_db by
+        the `temp_db` fixture's call to `initialize_database(temp_db)`."""
         return temp_db
 
     @pytest.fixture
@@ -97,7 +82,7 @@ class TestUpdatedStatusConscience:
                 parent_task_id=None,
             ),
         )
-        add_task(task, db_path=temp_db)
+        add_task(task)
         return task
 
     @pytest.fixture
@@ -181,7 +166,7 @@ class TestUpdatedStatusConscience:
         assert result.updated_status_detected is True
 
         # Verify flag is cleared in database
-        updated_task = get_task_by_id(sample_task.task_id, db_path=patch_db_path)
+        updated_task = get_task_by_id(sample_task.task_id)
         assert updated_task.updated_info_available is False
 
         # Second check should pass

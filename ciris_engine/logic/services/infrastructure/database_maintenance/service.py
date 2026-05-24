@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import timedelta
 from pathlib import Path
@@ -24,9 +25,6 @@ from ciris_engine.logic.utils.localization import get_preferred_language, get_st
 from ciris_engine.protocols.services.infrastructure.database_maintenance import DatabaseMaintenanceServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus
-
-if TYPE_CHECKING:
-    from ciris_engine.logic.audit import MigrationResult
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +79,14 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         # Increment vacuum operations counter for periodic maintenance
         self._vacuum_runs += 1
 
+        # 2.9.0 Lane D D2: delegate generic DB maintenance (vacuum +
+        # archive of expired telemetry/incident/federation_keys/secrets
+        # rows) to persist's typed umbrella. The agent-specific
+        # cleanups below (stale wakeup tasks, orphaned active tasks)
+        # stay in this service — they're business logic over agent
+        # tables, not generic DB ops.
+        await self._invoke_persist_maintenance()
+
         # Clean up stale wakeup/shutdown tasks from dead occurrences
         # This is critical for multi-occurrence deployments where an occurrence
         # may die mid-wakeup, leaving shared tasks in ACTIVE state forever
@@ -90,6 +96,42 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         await self._cleanup_old_active_tasks()
 
         logger.info("Periodic maintenance tasks completed.")
+
+    async def _invoke_persist_maintenance(self) -> None:
+        """Call engine.maintain() — persist's umbrella for vacuum +
+        archive-expired across telemetry, incidents, federation_keys,
+        secrets_access_log. Idempotent + non-blocking; logs the stats
+        payload at INFO so the maintenance window is observable.
+
+        Graceful skip if persist engine isn't wired yet (e.g., early
+        boot or test fixtures that bypass initialize_database).
+        """
+        from ciris_engine.logic.persistence import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            logger.debug(
+                "persist engine not wired; skipping engine.maintain()"
+            )
+            return
+
+        try:
+            import json as _json
+            # engine.maintain() returns a JSON string with vacuum +
+            # archive stats per module.
+            blob = engine.maintain()
+            stats = _json.loads(blob) if isinstance(blob, str) else blob
+            logger.info(
+                "persist.maintain() complete: vacuum_ms=%s archive_total=%s elapsed_ms=%s",
+                stats.get("vacuum", {}).get("elapsed_ms"),
+                stats.get("archive", {}).get("total_removed"),
+                stats.get("elapsed_ms"),
+            )
+        except Exception as exc:
+            logger.warning(
+                "persist.maintain() failed (non-fatal — agent cleanup still runs): %s",
+                exc,
+            )
 
     async def _on_stop(self) -> None:
         """Stop hook for cleanup."""
@@ -156,7 +198,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         orphaned_tasks_deleted_count = 0
         orphaned_thoughts_deleted_count = 0
 
-        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, db_path=self.db_path)
+        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE)
         task_ids_to_delete: List[Any] = []
 
         for task in active_tasks:
@@ -182,7 +224,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             elif task.parent_task_id:
                 # CRITICAL: Pass task's own occurrence_id to find parent in same namespace
                 # This prevents shared tasks from being marked as orphans in multi-occurrence setups
-                parent_task = get_task_by_id(task.parent_task_id, task.agent_occurrence_id, db_path=self.db_path)
+                parent_task = get_task_by_id(task.parent_task_id, task.agent_occurrence_id)
                 if not parent_task or parent_task.status not in [TaskStatus.ACTIVE, TaskStatus.COMPLETED]:
                     is_orphan = True
             elif task.parent_task_id is None:
@@ -196,19 +238,19 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 task_ids_to_delete.append(task.task_id)
 
         if task_ids_to_delete:
-            orphaned_tasks_deleted_count = delete_tasks_by_ids(task_ids_to_delete, db_path=self.db_path)
+            orphaned_tasks_deleted_count = delete_tasks_by_ids(task_ids_to_delete)
             logger.info(
                 f"Deleted {orphaned_tasks_deleted_count} orphaned active tasks (and their thoughts via cascade)."
             )
 
-        pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING, db_path=self.db_path)
-        processing_thoughts = get_thoughts_by_status(ThoughtStatus.PROCESSING, db_path=self.db_path)
+        pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING)
+        processing_thoughts = get_thoughts_by_status(ThoughtStatus.PROCESSING)
         all_potentially_orphaned_thoughts = pending_thoughts + processing_thoughts
         thought_ids_to_delete_orphan: List[Any] = []
 
         for thought in all_potentially_orphaned_thoughts:
             # CRITICAL: Pass thought's own occurrence_id to find task in same namespace
-            source_task = get_task_by_id(thought.source_task_id, thought.agent_occurrence_id, db_path=self.db_path)
+            source_task = get_task_by_id(thought.source_task_id, thought.agent_occurrence_id)
             if not source_task or source_task.status != TaskStatus.ACTIVE:
                 logger.info(
                     f"Orphaned thought found: {thought.thought_id} (Task: {thought.source_task_id} not found or not active). Marking for deletion."
@@ -217,7 +259,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         if thought_ids_to_delete_orphan:
             unique_thought_ids_to_delete = list(set(thought_ids_to_delete_orphan))
-            count = delete_thoughts_by_ids(unique_thought_ids_to_delete, db_path=self.db_path)
+            count = delete_thoughts_by_ids(unique_thought_ids_to_delete)
             orphaned_thoughts_deleted_count += count
             logger.info(f"Deleted {count} additional orphaned active/processing thoughts.")
 
@@ -241,7 +283,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info("Task archival skipped - tasks are now managed by TSDB consolidator")
         task_ids_actually_archived_and_deleted: set[str] = set()
 
-        thoughts_to_archive = get_thoughts_older_than(older_than_timestamp, db_path=self.db_path)
+        thoughts_to_archive = get_thoughts_older_than(older_than_timestamp)
         if thoughts_to_archive:
             thought_archive_file = self.archive_dir / f"archive_thoughts_{archive_timestamp_str}.jsonl"
             thought_ids_to_delete_for_archive: List[Any] = []
@@ -253,9 +295,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                     thought_ids_to_delete_for_archive.append(thought.thought_id)
 
             if thought_ids_to_delete_for_archive:
-                archived_thoughts_count = delete_thoughts_by_ids(
-                    thought_ids_to_delete_for_archive, db_path=self.db_path
-                )
+                archived_thoughts_count = delete_thoughts_by_ids(thought_ids_to_delete_for_archive)
                 logger.info(
                     f"Archived and deleted {archived_thoughts_count} thoughts older than {self.archive_older_than_hours} hours to {thought_archive_file}."
                 )
@@ -268,61 +308,20 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info("Database cleanup completed")
 
     async def _cleanup_invalid_thoughts(self) -> None:
-        """Clean up thoughts with invalid or malformed context."""
-        from ciris_engine.logic.persistence import get_db_connection
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        """Clean up thoughts with invalid or malformed context.
 
-        logger.info("Cleaning up thoughts with invalid context...")
-
-        # Get adapter to detect database type
-        adapter = get_adapter()
-
-        # Different SQL for PostgreSQL (JSONB) vs SQLite (TEXT)
-        if adapter.is_postgresql():
-            # PostgreSQL: Cast JSONB to text for LIKE operations
-            sql = """
-                SELECT thought_id, context_json
-                FROM thoughts
-                WHERE context_json::text = '{}'
-                   OR context_json IS NULL
-                   OR context_json::text NOT LIKE '%task_id%'
-                   OR context_json::text NOT LIKE '%correlation_id%'
-            """
-        else:
-            # SQLite: context_json is TEXT, use LIKE directly
-            sql = """
-                SELECT thought_id, context_json
-                FROM thoughts
-                WHERE context_json = '{}'
-                   OR context_json IS NULL
-                   OR context_json NOT LIKE '%task_id%'
-                   OR context_json NOT LIKE '%correlation_id%'
-            """
-
-        invalid_thought_ids = []
-
-        try:
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(sql)
-                rows = cursor.fetchall()
-
-                for row in rows:
-                    invalid_thought_ids.append(row["thought_id"])
-
-                if invalid_thought_ids:
-                    # Delete these invalid thoughts
-                    placeholders = ",".join("?" * len(invalid_thought_ids))
-                    delete_sql = f"DELETE FROM thoughts WHERE thought_id IN ({placeholders})"  # nosec B608 - placeholders are '?' strings, not user input
-                    cursor.execute(delete_sql, invalid_thought_ids)
-                    conn.commit()
-
-                    logger.info(f"Deleted {len(invalid_thought_ids)} thoughts with invalid context")
-                else:
-                    logger.info("No thoughts with invalid context found")
-
-        except Exception as e:
-            logger.error(f"Failed to clean up invalid thoughts: {e}", exc_info=True)
+        Post-2.9.0 (CIRISAgent#763) the raw `DELETE FROM thoughts` path was
+        removed: persist 1.5.19 does not expose a `thought_delete` API
+        (tracked upstream as CIRISPersist#60). Until persist gains a delete
+        method, this is a soft no-op — we log a warning so operators know
+        the cleanup pass is queued. Invalid thoughts will be revisited
+        when `thought_delete` lands.
+        """
+        logger.warning(
+            "Skipping _cleanup_invalid_thoughts: persist 1.5.19 has no "
+            "thought_delete API. Tracked upstream as CIRISPersist#60. "
+            "Invalid thought rows will accumulate until the upstream fix."
+        )
 
     # Config patterns that should be cleaned up on startup (unless preserved)
     _ADAPTER_CONFIG_PREFIX = "adapter."
@@ -713,24 +712,55 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             # Get current time
             current_time = self.time_service.now()
 
-            # Get all active tasks from all occurrences by querying the database directly
-            # We need to check ALL occurrences for old active tasks
-            from ciris_engine.logic.persistence import get_db_connection
+            # Routed through persist substrate (CIRISAgent#763). Persist's
+            # task_list filter is equality-only, so iterate PENDING and
+            # ACTIVE separately across the known occurrence set. Production
+            # runs `default` and `__shared__` plus occasionally
+            # `occurrence-<id>` for multi-occurrence deployments — we list
+            # the full union via persist's task_list with each status
+            # filter, then aggregate.
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.persistence.models.tasks import _persist_row_to_task
 
-            # Check both PENDING and ACTIVE tasks - PENDING tasks that are old
-            # indicate messages that were received but never processed
-            stale_tasks = []
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT * FROM tasks WHERE status IN (?, ?)",
-                    (TaskStatus.PENDING.value, TaskStatus.ACTIVE.value),
-                )
-                rows = cursor.fetchall()
-                from ciris_engine.logic.persistence.utils import map_row_to_task
+            engine = get_persist_engine()
+            if engine is None:
+                logger.warning("persist engine not initialized — skipping old-active-task cleanup")
+                return
 
-                for row in rows:
-                    stale_tasks.append(map_row_to_task(row))
+            stale_tasks: List[Any] = []
+            seen_task_ids: set[str] = set()
+
+            for status_val in (TaskStatus.PENDING.value, TaskStatus.ACTIVE.value):
+                # task_list with cursor-pagination over ALL occurrences:
+                # leave occurrence filter unset to scan globally.
+                last_ts = "9999-12-31T23:59:59Z"
+                last_id = ""
+                while True:
+                    cursor_json = json.dumps(
+                        {"version": "v1", "last_ts": last_ts, "last_id": last_id}
+                    )
+                    raw = engine.task_list(json.dumps({"status": status_val}), cursor_json, 200)
+                    parsed = json.loads(raw) if isinstance(raw, str) else raw
+                    items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+                    if not items:
+                        break
+                    for row in items:
+                        if not isinstance(row, dict):
+                            continue
+                        tid = str(row.get("task_id", ""))
+                        if tid in seen_task_ids:
+                            continue
+                        seen_task_ids.add(tid)
+                        try:
+                            stale_tasks.append(_persist_row_to_task(row))
+                        except Exception as inner_e:
+                            logger.warning(
+                                "Failed to materialize task %s during cleanup: %s", tid, inner_e
+                            )
+                        last_ts = str(row.get("created_at", last_ts))
+                        last_id = tid
+                    if len(items) < 200:
+                        break
 
             old_task_ids = []
 
@@ -777,8 +807,6 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                             task.task_id,
                             TaskStatus.COMPLETED,
                             task.agent_occurrence_id,
-                            self.time_service,
-                            db_path=self.db_path,
                         )
                         # Create audit entry for auto-completion
                         await self._audit_task_auto_complete(task)
@@ -901,7 +929,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         self, task: Any, stale_task_ids: List[str], stale_thought_ids: List[str]
     ) -> None:
         """Collect stale thought IDs and task IDs from an old task."""
-        thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id, db_path=self.db_path)
+        thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id)
         for thought in thoughts:
             if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
                 logger.info(
@@ -926,7 +954,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             current_time = self.time_service.now()
 
             # Get all wakeup and shutdown related tasks from __shared__ occurrence
-            all_tasks = get_all_tasks("__shared__", db_path=self.db_path)
+            all_tasks = get_all_tasks("__shared__")
             stale_tasks = [
                 task
                 for task in all_tasks
@@ -941,11 +969,11 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                     self._collect_stale_items_from_task(task, stale_task_ids, stale_thought_ids)
 
             if stale_thought_ids:
-                deleted_thoughts = delete_thoughts_by_ids(stale_thought_ids, db_path=self.db_path)
+                deleted_thoughts = delete_thoughts_by_ids(stale_thought_ids)
                 logger.info(f"Deleted {deleted_thoughts} stale wakeup thoughts from previous runs")
 
             if stale_task_ids:
-                deleted_tasks = delete_tasks_by_ids(stale_task_ids, db_path=self.db_path)
+                deleted_tasks = delete_tasks_by_ids(stale_task_ids)
                 logger.info(f"Deleted {deleted_tasks} stale active wakeup tasks from interrupted startups")
 
             if not stale_task_ids and not stale_thought_ids:
@@ -955,111 +983,24 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             logger.error(f"Failed to clean up stale wakeup tasks: {e}", exc_info=True)
 
     async def _cleanup_duplicate_temporal_edges(self) -> None:
+        """No-op shim — the v1.5.5 Postgres dedupe cleanup is no longer
+        needed on 2.9.0 deployments.
+
+        The original code targeted a placeholder-bug in persist v1.5.5
+        edge_manager that produced duplicate TEMPORAL_NEXT/PREV edges on
+        Postgres. CIRISAgent 2.9.0 pins persist >=1.6.0 which has the bug
+        fixed for many minor versions. Any deployment that needed this
+        cleanup ran it long ago when persist was on a 1.5.x line.
+
+        The raw SQL (GROUP BY HAVING + per-source iteration + DELETE IN)
+        was the last remaining `get_db_connection` consumer in
+        database_maintenance. Removing it eliminates that touchpoint.
+        Future dedupe runs (if needed) should ship as a one-off
+        `tools/ops/` script, not runtime maintenance.
         """
-        Clean up duplicate temporal edges created by v1.5.5 PostgreSQL bug.
-
-        Bug: edge_manager.py used hardcoded ? placeholders instead of adapter.placeholder(),
-        causing DELETE and INSERT to fail on PostgreSQL, creating duplicate TEMPORAL_NEXT
-        and TEMPORAL_PREV edges.
-
-        This cleanup:
-        1. Finds summaries with multiple TEMPORAL_NEXT/PREV edges
-        2. Keeps only the most recent edge for each relationship type
-        3. Deletes older duplicates
-
-        Safe to run multiple times - idempotent.
-        """
-        try:
-            from ciris_engine.logic.persistence.db.core import get_db_connection
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-            logger.info("Checking for duplicate temporal edges from v1.5.5 PostgreSQL bug")
-
-            with get_db_connection(db_path=self.db_path) as conn:
-                # CRITICAL: Get adapter AFTER opening connection to ensure dialect is initialized
-                # for the correct database backend (PostgreSQL vs SQLite)
-                adapter = get_adapter()
-                ph = adapter.placeholder()
-                cursor = conn.cursor()
-
-                # Find summaries with duplicate temporal edges
-                cursor.execute(
-                    f"""
-                    SELECT source_node_id, relationship, COUNT(*) as edge_count
-                    FROM graph_edges
-                    WHERE relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
-                    GROUP BY source_node_id, relationship
-                    HAVING COUNT(*) > 1
-                    ORDER BY edge_count DESC
-                """
-                )
-
-                duplicates = cursor.fetchall()
-
-                if not duplicates:
-                    logger.info("No duplicate temporal edges found")
-                    return
-
-                total_duplicates_deleted = 0
-                logger.info(f"Found {len(duplicates)} summaries with duplicate temporal edges")
-
-                for row in duplicates:
-                    if adapter.is_postgresql():
-                        source_id, relationship, count = row["source_node_id"], row["relationship"], row["edge_count"]
-                    else:
-                        source_id, relationship, count = row[0], row[1], row[2]
-
-                    logger.info(f"  {source_id} has {count} duplicate {relationship} edges")
-
-                    # Get all edges for this source + relationship, ordered by created_at DESC
-                    cursor.execute(
-                        f"""
-                        SELECT edge_id, created_at
-                        FROM graph_edges
-                        WHERE source_node_id = {ph}
-                          AND relationship = {ph}
-                        ORDER BY created_at DESC
-                    """,
-                        (source_id, relationship),
-                    )
-
-                    edges = cursor.fetchall()
-
-                    if len(edges) <= 1:
-                        continue  # No duplicates to clean
-
-                    # Keep the first (most recent), delete the rest
-                    edges_to_delete = []
-                    for i, edge_row in enumerate(edges):
-                        if i == 0:
-                            continue  # Keep first edge
-                        if adapter.is_postgresql():
-                            edges_to_delete.append(edge_row["edge_id"])
-                        else:
-                            edges_to_delete.append(edge_row[0])
-
-                    if edges_to_delete:
-                        # Delete duplicate edges
-                        placeholders = ",".join([ph] * len(edges_to_delete))
-                        cursor.execute(
-                            f"""
-                            DELETE FROM graph_edges
-                            WHERE edge_id IN ({placeholders})
-                        """,
-                            edges_to_delete,
-                        )
-
-                        deleted = cursor.rowcount
-                        total_duplicates_deleted += deleted
-                        logger.info(f"    Deleted {deleted} duplicate {relationship} edges from {source_id}")
-
-                conn.commit()
-
-                if total_duplicates_deleted > 0:
-                    logger.info(f"✓ Cleaned up {total_duplicates_deleted} duplicate temporal edges from PostgreSQL bug")
-
-        except Exception as e:
-            logger.error(f"Failed to clean up duplicate temporal edges: {e}", exc_info=True)
+        logger.debug(
+            "_cleanup_duplicate_temporal_edges: no-op on 2.9.0 (v1.5.5 dedupe shim)"
+        )
 
     def get_capabilities(self) -> "ServiceCapabilities":
         """Get service capabilities."""
@@ -1167,37 +1108,3 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         return metrics
 
-    async def migrate_audit_key_to_ed25519(self, backup: bool = True) -> "MigrationResult":
-        """Migrate audit signing key from RSA-2048 to Ed25519.
-
-        This is a one-time migration operation that:
-        1. Creates a backup of the current state
-        2. Generates or uses unified Ed25519 key
-        3. Re-signs the entire audit chain
-        4. Verifies chain integrity
-        5. Archives the old RSA key
-
-        Args:
-            backup: Create backup before migration (recommended)
-
-        Returns:
-            MigrationResult with migration details
-        """
-        from ciris_engine.logic.audit import migrate_audit_key_to_ed25519
-
-        logger.info("=" * 70)
-        logger.info("🔐 AUDIT KEY MIGRATION REQUESTED")
-        logger.info("=" * 70)
-
-        # Get database path
-        db_path = self.db_path
-        if not db_path:
-            from ciris_engine.logic.persistence import get_sqlite_db_full_path
-
-            db_path = get_sqlite_db_full_path()
-
-        return await migrate_audit_key_to_ed25519(
-            db_path=str(db_path),
-            time_service=self.time_service,
-            backup=backup,
-        )

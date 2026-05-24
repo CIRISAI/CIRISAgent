@@ -413,7 +413,7 @@ class TestMemoryStats:
             "date_range": {"oldest": "2025-01-01T00:00:00+00:00", "newest": "2025-08-12T22:00:00+00:00"},
         }
 
-        async def mock_get_memory_stats(memory_service):
+        async def mock_get_memory_stats():
             return mock_stats
 
         # Also mock query_timeline_nodes which is called to get the newest node

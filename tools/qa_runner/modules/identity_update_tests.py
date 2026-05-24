@@ -46,9 +46,11 @@ class IdentityUpdateTests:
         self.results: List[Dict[str, Any]] = []
 
         # Base URL for direct API calls
-        self._base_url = getattr(client, "_base_url", "http://localhost:8080")
-        if hasattr(client, "_transport") and hasattr(client._transport, "_base_url"):
-            self._base_url = client._transport._base_url
+        # CIRISClient exposes the base URL as `base_url`, NOT `_base_url`.
+        self._base_url = getattr(client, "base_url", None) or "http://localhost:8080"
+        _tr = getattr(client, "_transport", None)
+        if _tr is not None and getattr(_tr, "base_url", None):
+            self._base_url = _tr.base_url
 
         # Extract port from base URL
         self._port = 8080
@@ -338,16 +340,26 @@ class IdentityUpdateTests:
         self.console.print("     [dim]Server started with --identity-update[/dim]")
 
     async def test_authenticate_after_restart(self) -> None:
-        """Get new auth token after server restart."""
-        # Login to get new token
-        response = requests.post(
-            f"{self._base_url}/v1/auth/login",
-            json={"username": "admin", "password": "qa_test_password_12345"},
-            timeout=30,
-        )
+        """Get new auth token after server restart.
 
-        if response.status_code != 200:
-            raise ValueError(f"Login failed: HTTP {response.status_code}")
+        The restarted agent reports /v1/system/health=200 before its
+        AuthenticationService has finished initializing, so a login fired
+        immediately can 401. Retry briefly until auth is ready.
+        """
+        response = None
+        for _ in range(15):
+            response = requests.post(
+                f"{self._base_url}/v1/auth/login",
+                json={"username": "admin", "password": "qa_test_password_12345"},
+                timeout=30,
+            )
+            if response.status_code == 200:
+                break
+            time.sleep(2)
+
+        if response is None or response.status_code != 200:
+            code = response.status_code if response is not None else "no response"
+            raise ValueError(f"Login failed after restart (auth not ready): HTTP {code}")
 
         data = response.json()
         token = data.get("data", {}).get("access_token") or data.get("access_token")

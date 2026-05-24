@@ -235,14 +235,16 @@ def get_conscience_prompt_loader(language: Optional[str] = None) -> ConsciencePr
 
 
 def set_conscience_prompt_language(language: str) -> None:
-    """Compatibility shim — no-op now that loaders are per-language.
+    """Apply a language change by dropping the cached conscience prompt loaders.
 
-    Previously this mutated a global singleton; with per-language caching
-    each call site selects its own loader at request time. Kept as a no-op
-    so existing callers don't break, but issues a one-time warning to help
-    surface stale globals.
+    Loaders are cached per-language in _loader_cache and each caches the
+    ConsciencePrompts it has parsed. On a deployment language change
+    (sync_language_preference) those caches must be invalidated so the next
+    get_conscience_prompt_loader() rebuilds for the new language. Previously
+    a no-op — a mid-run language change never reached conscience prompts.
     """
-    logger.warning(
-        f"set_conscience_prompt_language({_sanitize_for_log(language)}) called — "
-        "this is a no-op now; pass language to get_conscience_prompt_loader() per request"
+    _loader_cache.clear()
+    logger.info(
+        f"set_conscience_prompt_language({_sanitize_for_log(language)}): cleared "
+        "conscience prompt loader cache — prompts will rebuild for the new language"
     )

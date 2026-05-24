@@ -120,6 +120,19 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
 
     except Exception as e:
         msg = str(e).lower()
+
+        # iOS/mobile: single-process app — lock failures are always stale locks
+        # from a previous crashed run, not competing agents. Skip the probe.
+        if sys.platform == "ios" or (
+            sys.platform == "darwin"
+            and hasattr(sys, "implementation")
+            and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+        ):
+            if "lock" in msg or "operation not permitted" in msg:
+                print(f"⚠ iOS: database lock probe failed (stale lock from previous run) — proceeding")
+                print(f"  Underlying: {e}")
+                return  # Skip — single-process mobile, no multi-agent risk
+
         if "lock" in msg or "busy" in msg or "in use" in msg:
             error_msg = (
                 f"CANNOT ACCESS DATABASE {db_path} - ANOTHER AGENT MAY BE RUNNING"

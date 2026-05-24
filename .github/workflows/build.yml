@@ -1130,8 +1130,8 @@ jobs:
             --primitive agent \
             --tree client/iosApp/Resources/app \
             --tree-include ciris_engine ciris_adapters ciris_ios ciris_sdk \
-            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git \
-            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 \
+            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git tests examples gui_static desktop_app \
+            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 md pyi deleted \
             --tree-extra-hashes-file build-secrets.json \
             --binary-version "$VERSION" \
             --build-id "$GIT_SHA-mobile" \

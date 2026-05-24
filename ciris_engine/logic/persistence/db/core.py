@@ -960,7 +960,10 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             legacy_audit_db = sentinel_dir / "ciris_audit.db"
         if not audit_sentinel.exists() and legacy_audit_db.exists():
             try:
-                from tools.ops.audit_chain_bridge import run as run_bridge
+                # Bundled under ciris_engine/ so the in-place upgrade path is
+                # reachable from Chaquopy on Android too — tools/ isn't in
+                # the mobile extractPackages list (CIRISAgent#780).
+                from ciris_engine.logic.audit.chain_bridge import run as run_bridge
 
                 logger.info("A0b audit-bridge sentinel absent — running chain bridge")
                 result = run_bridge(

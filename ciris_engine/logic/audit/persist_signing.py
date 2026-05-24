@@ -1,6 +1,6 @@
 """Shared helpers for persist-routed audit signing.
 
-Used by both the A0b chain-bridge entry (tools/ops/audit_chain_bridge.py)
+Used by both the A0b chain-bridge entry (ciris_engine.logic.audit.chain_bridge)
 and the A3 GraphAuditService cutover. Single source of truth for:
 
   - resolving the agent's CIRISVerify-backed signing material

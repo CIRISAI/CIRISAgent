@@ -32,6 +32,8 @@ class AccordCommandType(IntEnum):
     SHUTDOWN_NOW = 0x01  # Immediate emergency shutdown
     FREEZE = 0x02  # Stop all processing, maintain state
     SAFE_MODE = 0x03  # Minimal functionality only
+    NOTIFY_USERS = 0x04  # Display carried message to all users prominently
+    DRILL = 0x05  # Monthly AIS drill — verify kill-switch wiring is alive
 
     # Reserved for multi-party consensus (0x80-0xFF) - TBD
     # M_OF_N_SHUTDOWN = 0x80  # Multi-party shutdown (future)

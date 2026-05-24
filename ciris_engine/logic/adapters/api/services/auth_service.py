@@ -166,9 +166,16 @@ class APIAuthService:
 
             engine = get_persist_engine()
             if engine is None:
-                logger.warning("[AUTH] persist engine not wired — skipping revocation load")
+                # Persist may genuinely not be wired yet — early-boot auth
+                # paths can race the engine bootstrap. Leave
+                # _revoked_tokens_loaded False so the NEXT auth call retries
+                # this load. Flipping it True here would permanently suppress
+                # the reload and accept revoked service tokens until process
+                # restart (codex P1).
+                logger.warning(
+                    "[AUTH] persist engine not wired yet — revocation load will retry on next auth call"
+                )
                 self._revoked_service_tokens = set()
-                self._revoked_tokens_loaded = True
                 return
 
             raw = engine.service_token_revocation_list()

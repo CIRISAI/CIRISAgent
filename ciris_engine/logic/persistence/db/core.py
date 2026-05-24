@@ -6,7 +6,7 @@ import time
 import types
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, TypedDict, Union, cast
+from typing import Any, Optional, Tuple, TypedDict, Union, cast
 
 from ciris_engine.logic.config.db_paths import get_audit_db_full_path, get_sqlite_db_full_path
 
@@ -897,9 +897,9 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     # fire untouched.
     if os.environ.get("PYTEST_CURRENT_TEST"):
         try:
-            import ciris_persist
+            from ciris_persist import reset_engine
 
-            ciris_persist.reset_engine()
+            reset_engine()
         except Exception:  # noqa: BLE001 - best-effort test teardown
             pass
         graph_persistence._engine = None

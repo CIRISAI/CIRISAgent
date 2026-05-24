@@ -264,50 +264,51 @@ class DatabaseExecutor:
             query_substring = post_options.get("query_substring")
             tags = post_options.get("tags") or []
             user_filter_ids = post_options.get("user_filter_ids") or []
+            user_filter_set = set(user_filter_ids) if user_filter_ids else None
 
-            primary_rows = _paginate_nodes(engine, node_filter, limit + offset + len(tags) * 10)
-
-            # OBSERVER multi-path OR: when a user filter is set, also pull
-            # rows where `user_list` contains any allowed id, then union by
-            # node_id with the primary `created_by` set.
-            if user_filter_ids:
-                filter_user_list = dict(node_filter)
-                filter_user_list["attribute_match"] = {
-                    "path": "user_list",
-                    "array_contains_any": list(user_filter_ids),
-                }
-                secondary_rows = _paginate_nodes(engine, filter_user_list, limit + offset + 100)
-                seen_ids = {str(r.get("node_id")) for r in primary_rows}
-                for r in secondary_rows:
-                    if str(r.get("node_id")) not in seen_ids:
-                        primary_rows.append(r)
-                        seen_ids.add(str(r.get("node_id")))
-
-            # Client-side substring + tag filter (persist substrate doesn't
-            # expose free-text yet).
-            filtered = []
-            for row in primary_rows:
+            # Build the client-side predicate the substrate can't push down
+            # yet (free-text + tag-array + nested user-attribution paths).
+            # Applied INSIDE _paginate_nodes so a selective filter keeps
+            # paging until it has enough matches instead of under-returning
+            # from a fixed prefetch window (codex P1).
+            def _row_passes(row: Dict[str, Any]) -> bool:
                 attrs_blob = row.get("attributes")
                 if isinstance(attrs_blob, (dict, list)):
                     attrs_text = json.dumps(attrs_blob)
                 else:
                     attrs_text = str(attrs_blob or "")
                 if query_substring and query_substring not in attrs_text:
-                    continue
+                    return False
                 if tags and not all(f'"{t}"' in attrs_text for t in tags):
-                    continue
-                filtered.append(row)
+                    return False
+                if user_filter_set and not _row_matches_user_layer1(row, user_filter_set):
+                    return False
+                return True
 
+            target = limit + offset
+            primary_rows = _paginate_nodes(engine, node_filter, target, predicate=_row_passes)
+
+            # OBSERVER multi-path OR: when a user filter is set, also pull
+            # rows where `user_list` contains any allowed id, then union by
+            # node_id with the primary `created_by` set. The same predicate
+            # applies inside this pagination too.
             if user_filter_ids:
-                # Client-side check for nested user attribution paths persist
-                # doesn't yet predicate on (task_summaries[].user_id, author_id).
-                filtered = [
-                    row
-                    for row in filtered
-                    if _row_matches_user_layer1(row, set(user_filter_ids))
-                ]
+                filter_user_list = dict(node_filter)
+                filter_user_list["attribute_match"] = {
+                    "path": "user_list",
+                    "array_contains_any": list(user_filter_ids),
+                }
+                seen_ids = {str(r.get("node_id")) for r in primary_rows}
+                secondary_rows = _paginate_nodes(
+                    engine, filter_user_list, target, predicate=_row_passes
+                )
+                for r in secondary_rows:
+                    rid = str(r.get("node_id"))
+                    if rid not in seen_ids:
+                        primary_rows.append(r)
+                        seen_ids.add(rid)
 
-            return filtered[offset : offset + limit]
+            return primary_rows[offset : offset + limit]
         except Exception as e:
             logger.error(f"Persist node query failed: {e}")
             return []
@@ -318,17 +319,41 @@ class DatabaseExecutor:
         return getattr(memory_service, "db_path", None)
 
 
-def _paginate_nodes(engine: Any, node_filter: Dict[str, Any], target: int) -> List[Dict[str, Any]]:
-    """Paginate cirisgraph_query_nodes until we have at least `target` rows."""
+def _paginate_nodes(
+    engine: Any,
+    node_filter: Dict[str, Any],
+    target: int,
+    predicate: Optional[Any] = None,
+    scan_cap: int = 5000,
+) -> List[Dict[str, Any]]:
+    """Paginate cirisgraph_query_nodes until ``target`` predicate-passing rows.
+
+    Without ``predicate`` this returns the first ``target`` rows. With one,
+    rows that don't pass are still consumed (so ``scan_cap`` bounds how many
+    raw rows we'll scan looking for matches under a selective filter — e.g.
+    a rare ``query_substring`` shouldn't make us paginate the whole graph).
+
+    Applying the filter *inside* the loop is the fix for codex P1: the old
+    callers prefetched a fixed window and then post-filtered, so selective
+    filters silently under-returned for large datasets.
+    """
     out: List[Dict[str, Any]] = []
     cursor = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
-    while len(out) < target:
+    scanned = 0
+    while len(out) < target and scanned < scan_cap:
         raw = engine.cirisgraph_query_nodes(json.dumps(node_filter), cursor, _PAGE_SIZE)
         parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
         items = parsed.get("items", []) if isinstance(parsed, dict) else []
         if not items:
             break
-        out.extend(r for r in items if isinstance(r, dict))
+        for r in items:
+            if not isinstance(r, dict):
+                continue
+            scanned += 1
+            if predicate is None or predicate(r):
+                out.append(r)
+                if len(out) >= target:
+                    break
         if len(items) < _PAGE_SIZE:
             break
         next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None

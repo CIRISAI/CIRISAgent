@@ -17,7 +17,14 @@ def _release_persist_engine() -> None:
     >=1.10.2, CIRISPersist#88) closes + un-pins the current engine handle-free
     — recovering even the orphan case where a fixture nulled the module global
     without closing the Rust engine.
+
+    The GC pass + short settle after reset lets the Rust tokio runtime fully
+    wind down before the next test constructs a new Engine — prevents SIGBUS
+    when pending async I/O races the teardown (CI shard 3/8 Bus error).
     """
+    import gc
+    import time
+
     import ciris_persist
 
     from ciris_engine.logic.persistence.models import graph as graph_persistence
@@ -28,6 +35,8 @@ def _release_persist_engine() -> None:
         pass
     graph_persistence._engine = None
     graph_persistence._engine_dsn = None
+    gc.collect()
+    time.sleep(0.05)  # 50ms settle for Rust tokio teardown
 
 
 @pytest.fixture

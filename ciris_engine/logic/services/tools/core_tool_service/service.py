@@ -241,15 +241,11 @@ class CoreToolService(BaseService, ToolService):
             rel_source = "ciris_engine/data/agent_experience.txt"
 
             if not experience_path.exists():
-                return ToolResult(
-                    success=False, error=f"Agent experience document not found at {rel_source}"
-                )
+                return ToolResult(success=False, error=f"Agent experience document not found at {rel_source}")
 
             content = experience_path.read_text()
 
-            return ToolResult(
-                success=True, data={"content": content, "source": rel_source, "length": len(content)}
-            )
+            return ToolResult(success=True, data={"content": content, "source": rel_source, "length": len(content)})
 
         except Exception as e:
             logger.error(f"Error reading experience document: {e}")
@@ -354,7 +350,7 @@ class CoreToolService(BaseService, ToolService):
         merged_metadata: dict[str, Any] = {**current_metadata, **metadata_updates}
 
         # Deep merge for 'stages' key only
-        if "stages" not in metadata_updates or "stages" not in current_metadata:
+        if "stages" not in metadata_updates:
             return merged_metadata
 
         merged_stages: dict[str, Any] = {**current_metadata.get("stages", {})}
@@ -602,8 +598,7 @@ class CoreToolService(BaseService, ToolService):
                 return ToolResult(success=False, error="Must provide defer_until, defer_hours, or await_human=true")
 
             # Update ticket status to 'deferred' (prevents task generation)
-            status_success = update_ticket_status(
-                ticket_id, "deferred", notes=f"Deferred: {reason}")
+            status_success = update_ticket_status(ticket_id, "deferred", notes=f"Deferred: {reason}")
             if not status_success:
                 return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} status to deferred")
 

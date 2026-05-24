@@ -96,8 +96,13 @@ def _resolve_action_type(event_type: str) -> str:
 
 # CIRISVerify briefly blocks signing-key access while a tree attestation runs
 # (typically at startup). It surfaces a retryable AttestationInProgressError;
-# the signal itself suggests retrying after ~500ms.
-_AUDIT_SIGN_MAX_RETRIES = 10
+# the signal itself suggests retrying after ~500ms. The agent_configured
+# audit event fires during startup, sometimes BEFORE CIRISVerify finishes
+# attestation; under the postgres backend's per-op latency on a shared CI
+# runner that initial window can stretch past ten retries × 500ms = 5s.
+# Budget bumped to 30 × 500ms = 15s, which comfortably covers observed
+# attestation completion on the dual-backend matrix.
+_AUDIT_SIGN_MAX_RETRIES = 30
 _AUDIT_SIGN_RETRY_DELAY_S = 0.5
 
 

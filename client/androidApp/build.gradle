@@ -29,10 +29,19 @@ android {
             buildPython "/usr/bin/python3.10"
             // Extract packages to real filesystem so they can be scanned for code integrity
             // ciris_engine MUST be included for startup hash verification to work!
-            extractPackages "pydantic_core", "ciris_engine", "ciris_adapters"
+            extractPackages "pydantic_core", "ciris_persist", "ciris_engine", "ciris_adapters"
 
             pip {
                 options "--find-links", "wheels"  // Local wheels directory
+
+                // 2.9.0 persist substrate — Chaquopy-shaped wheels live in
+                // wheels/ (dropped by tools/update_android_libs.py from the
+                // *-android-wheels.tar.gz release asset). Required because
+                // ciris_engine.logic.persistence.models.graph imports
+                // `from ciris_persist import Engine, NotFound` at module
+                // load; without this line the Python runtime fails with
+                // ModuleNotFoundError before A0a/A0b migrations can run.
+                install "ciris-persist==2.0.7"
 
                 // Core dependencies (same as original android/app/build.gradle)
                 install "pydantic-core==2.23.4"

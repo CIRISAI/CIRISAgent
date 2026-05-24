@@ -41,6 +41,7 @@ REPO_ROOT = Path(__file__).parent.parent
 CLIENT_ROOT = REPO_ROOT / "client"
 ANDROID_APP_DIR = CLIENT_ROOT / "androidApp"
 JNI_LIBS_DIR = ANDROID_APP_DIR / "src" / "main" / "jniLibs"
+WHEELS_DIR = ANDROID_APP_DIR / "wheels"
 
 
 @dataclass
@@ -69,6 +70,15 @@ class AndroidLib:
     # ciris_adapters/{adapter_name}/ffi_bindings/ and __version__ is bumped.
     has_adapter: bool = True
     adapter_name: Optional[str] = None  # defaults to bindings_package
+    # Whether the GitHub release publishes a Chaquopy-shaped Android wheels
+    # tarball (`{prefix}-v{version}-android-wheels.tar.gz`) containing one
+    # `*-cp310-cp310-android_24_{abi}.whl` per supported ABI. When True the
+    # tarball is downloaded and its wheels are dropped into
+    # client/androidApp/wheels/ so Chaquopy's `--find-links wheels` resolves
+    # them at gradle build time. Required for PyO3 libs whose Python module
+    # has to be `import`-able from the agent (persist) — vs. ctypes-FFI libs
+    # whose .so is loaded directly via JNI (verify), which don't need this.
+    has_android_wheels: bool = False
 
 
 # Library definitions — add new libs here.
@@ -91,12 +101,16 @@ LIBS: Dict[str, AndroidLib] = {
         tarball_prefix="ciris-persist",
         so_filename="libciris_persist.so",
         bindings_package="ciris_persist",
-        # CIRISPersist's Android tarball ships arm64-v8a + x86_64 only —
-        # PyO3 wheels typically skip 32-bit ARM. armeabi-v7a is intentionally
-        # absent from the upstream release artifact.
-        abis=["arm64-v8a", "x86_64"],
+        # CIRISPersist ships all 3 ABIs as of v2.0.6 (CIRISPersist#97 —
+        # armeabi-v7a wheel added; v2.0.5 was arm64-v8a + x86_64 only).
+        abis=["arm64-v8a", "x86_64", "armeabi-v7a"],
         is_pyo3=True,
         has_adapter=False,
+        # Persist's PyO3 module must be `import ciris_persist`-able from the
+        # agent (the entire 2.9.0 persist substrate lives behind this import).
+        # The release publishes `ciris-persist-v{ver}-android-wheels.tar.gz`
+        # containing the Chaquopy-shaped wheels for that purpose.
+        has_android_wheels=True,
     ),
     # Future:
     # "edge": AndroidLib(...),
@@ -189,6 +203,64 @@ def install_jni_libs(lib: AndroidLib, extract_dir: Path) -> bool:
     if not any_installed:
         print(f"  ERROR: No JNI libs installed for {lib.name}")
         return False
+    return True
+
+
+def install_android_wheels(lib: AndroidLib, version: str) -> bool:
+    """Download `*-android-wheels.tar.gz` and drop wheels into wheels dir.
+
+    Each wheel inside the tarball is Chaquopy-shaped — `cp310-cp310-
+    android_24_{abi}` — and includes both `__init__.py` and the per-ABI
+    `*.so` so `pip install` via Chaquopy's `--find-links wheels` resolves
+    cleanly. Wheels for older versions of the same lib are pruned so
+    Chaquopy doesn't try to satisfy a new pin from a stale candidate.
+    """
+    if not lib.has_android_wheels:
+        return True
+    print(f"\n  Installing Android wheels for {lib.name}...")
+    tag = f"v{version}"
+    pattern = f"{lib.tarball_prefix}-v{version}-android-wheels.tar.gz"
+    with tempfile.TemporaryDirectory() as dl_dir:
+        dl_dir = Path(dl_dir)
+        run_cmd(
+            [
+                "gh", "release", "download", tag,
+                "--repo", lib.github_repo,
+                "--pattern", pattern,
+                "--dir", str(dl_dir),
+            ],
+            check=False,
+        )
+        tarball = next((p for p in dl_dir.iterdir() if p.name == pattern), None)
+        if not tarball:
+            print(f"  WARNING: no {pattern} on the release; skipping wheels install")
+            return False
+
+        extract_dir = dl_dir / "extracted"
+        extract_dir.mkdir()
+        run_cmd(["tar", "-xzf", str(tarball), "-C", str(extract_dir)])
+
+        WHEELS_DIR.mkdir(parents=True, exist_ok=True)
+        # Prune older wheels for this package so Chaquopy doesn't see two
+        # candidates. Wheel naming convention is `{pkg}-{version}-…whl`,
+        # where {pkg} is the wheel-distribution name (underscored, e.g.
+        # `ciris_persist` for `ciris-persist`).
+        wheel_prefix = lib.pypi_package.replace("-", "_") + "-"
+        for stale in WHEELS_DIR.glob(f"{wheel_prefix}*.whl"):
+            if version not in stale.name:
+                stale.unlink()
+                print(f"  pruned stale wheel: {stale.name}")
+
+        installed = 0
+        for src in extract_dir.rglob("*.whl"):
+            dest = WHEELS_DIR / src.name
+            shutil.copy2(src, dest)
+            size_mb = dest.stat().st_size / 1024 / 1024
+            print(f"  {dest.relative_to(REPO_ROOT)} ({size_mb:.1f}MB)")
+            installed += 1
+        if installed == 0:
+            print(f"  WARNING: tarball had no wheels inside")
+            return False
     return True
 
 
@@ -328,6 +400,14 @@ def update_lib(lib: AndroidLib, version: str, skip_bindings: bool = False) -> bo
 
         if not install_jni_libs(lib, extract_dir):
             return False
+
+    # Chaquopy-shaped Android wheels go into client/androidApp/wheels/ for
+    # PyO3 libs the agent has to `import` from Python (separate release
+    # asset). Failure here is non-fatal so a transient gh / network blip
+    # doesn't trash the run, but logged loudly.
+    if lib.has_android_wheels and not install_android_wheels(lib, version):
+        print(f"  WARNING: android wheels NOT installed for {lib.name}; "
+              f"Chaquopy import path will be broken until this lands")
 
     if not skip_bindings:
         update_python_bindings(lib, version)

@@ -235,10 +235,20 @@ async def execute_notify_users(wa_id: str, reason: str, message_obj: AccordMessa
             )
 
         # Broadcast via communication bus if available
-        if runtime and hasattr(runtime, "communication_bus"):
+        if runtime and hasattr(runtime, "bus_manager") and runtime.bus_manager:
             notification_text = f"[ACCORD NOTIFICATION from {wa_id}]: {reason}"
             try:
-                await runtime.communication_bus.broadcast_notification(notification_text)
+                comm_bus = runtime.bus_manager.communication
+                # Send to all registered communication channels
+                for handler_name in comm_bus._handlers:
+                    try:
+                        await comm_bus.send_message(
+                            channel_id="",
+                            content=notification_text,
+                            handler_name=handler_name,
+                        )
+                    except Exception as ch_err:
+                        logger.warning(f"NOTIFY_USERS: failed to send via {handler_name}: {ch_err}")
             except Exception as e:
                 logger.warning(f"Could not broadcast notification via comm bus: {e}")
 

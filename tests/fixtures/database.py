@@ -36,7 +36,7 @@ def _release_persist_engine() -> None:
     graph_persistence._engine = None
     graph_persistence._engine_dsn = None
     gc.collect()
-    time.sleep(0.05)  # 50ms settle for Rust tokio teardown
+    time.sleep(0.2)  # 200ms settle for Rust tokio teardown
 
 
 @pytest.fixture

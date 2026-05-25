@@ -2271,18 +2271,38 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "can request the attestation context."
             )
 
-        # Fast path: task already done. Awaiting re-raises any exception
-        # that fired inside it, which is the behavior we want.
+        # Capture the started-at timestamp once — both branches need it.
+        # getattr fallback keeps older test fixtures (bare services) working
+        # without setup.
+        started_at = getattr(self, "_attestation_started_at", None)
+
+        # Fast path: task already done. The contract is "the verifier
+        # completes within 15s", measured by its OWN wall-clock — not by
+        # elapsed-since-caller-arrival, which would inflate with caller
+        # lateness. Use the recorded total from stage_timings (set by
+        # run_startup_attestation on completion) so a 20s+ run still
+        # raises here even if the gate-side wait was a no-op.
         if self._attestation_task.done():
+            total = getattr(self, "_attestation_stage_timings", {}).get(
+                "run_attestation_total_seconds"
+            )
+            if isinstance(total, (int, float)) and total > budget_seconds:
+                raise RuntimeError(
+                    f"Startup attestation completed but exceeded the "
+                    f"{budget_seconds:.0f}s budget (total={total:.1f}s). "
+                    f"This is a bug — the verifier should complete within "
+                    f"the contract window on a clean run. Investigate the "
+                    f"verifier (slow filesystem walk? blocking I/O? network "
+                    f"probe?) rather than raising the budget."
+                )
+            # Awaiting a completed task is a no-op except that exceptions
+            # raised inside the task are re-raised here.
             await self._attestation_task
             return
 
         # Compute remaining budget from task-creation time. If for any
         # reason the timestamp wasn't recorded (shouldn't happen — set
-        # alongside task creation; getattr fallback also keeps older test
-        # fixtures that build bare services from working without setup),
-        # fall back to the full budget.
-        started_at = getattr(self, "_attestation_started_at", None)
+        # alongside task creation), fall back to the full budget.
         if started_at is not None:
             elapsed = asyncio.get_event_loop().time() - started_at
             remaining = max(0.0, budget_seconds - elapsed)

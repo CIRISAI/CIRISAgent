@@ -14,8 +14,6 @@ budget breach so the failure becomes a fileable ciris_verify issue
 instead of a flake-of-the-week.
 """
 
-import asyncio
-import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

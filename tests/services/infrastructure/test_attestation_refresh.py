@@ -604,6 +604,76 @@ class TestStartupAttestationBudget:
         assert svc._attestation_task.done()
 
     @pytest.mark.asyncio
+    async def test_fast_path_raises_when_completed_run_exceeded_budget(self):
+        """Codex P1: a caller arriving AFTER the task already finished
+        must still see the budget breach. Without this check, a 20s
+        attestation that completed before the gate ran would silently
+        pass — defeating the contract for any caller that observed it.
+
+        The check uses `_attestation_stage_timings["run_attestation_
+        total_seconds"]` (recorded by run_startup_attestation on
+        completion) rather than elapsed-since-task-start, because the
+        latter inflates with caller arrival time and would
+        false-positive on a fast run with a late observer.
+        """
+        svc = self._make_bare_service()
+
+        async def already_done() -> None:
+            return None
+
+        svc._attestation_task = asyncio.create_task(already_done())
+        await svc._attestation_task  # drive to completion
+        # Simulate the receipts that run_startup_attestation would have
+        # recorded for a 20s run — well past the 15s budget.
+        svc._attestation_stage_timings = {
+            "run_attestation_total_seconds": 20.0,
+            "binary_ok": True,
+            "function_integrity": "verified",
+        }
+
+        with pytest.raises(RuntimeError, match="completed but exceeded"):
+            await svc.await_attestation_ready(budget_seconds=15.0)
+
+    @pytest.mark.asyncio
+    async def test_fast_path_passes_when_completed_run_within_budget(self):
+        """The fast-path budget check must only fire on overshoot — a
+        clean 10s run with the cache populated should still pass through
+        cleanly even though stage_timings has a real number."""
+        svc = self._make_bare_service()
+
+        async def already_done() -> None:
+            return None
+
+        svc._attestation_task = asyncio.create_task(already_done())
+        await svc._attestation_task
+        svc._attestation_stage_timings = {
+            "run_attestation_total_seconds": 10.0,
+            "binary_ok": True,
+        }
+
+        # Should not raise.
+        await svc.await_attestation_ready(budget_seconds=15.0)
+
+    @pytest.mark.asyncio
+    async def test_fast_path_passes_when_stage_timings_unrecorded(self):
+        """Bare-service fixtures don't populate stage_timings. The
+        fast-path budget check must degrade gracefully (no raise) when
+        the recorded total is absent — otherwise legitimate test setups
+        would false-positive without ever having observed a real run.
+        """
+        svc = self._make_bare_service()
+
+        async def already_done() -> None:
+            return None
+
+        svc._attestation_task = asyncio.create_task(already_done())
+        await svc._attestation_task
+        # No stage_timings set — bare service.
+
+        # Should not raise.
+        await svc.await_attestation_ready(budget_seconds=15.0)
+
+    @pytest.mark.asyncio
     async def test_raises_runtime_error_on_budget_breach(self):
         """A task that exceeds the budget raises RuntimeError with the
         contract message — not a TimeoutError or a silent stall."""
@@ -626,7 +696,9 @@ class TestStartupAttestationBudget:
         svc._attestation_task.cancel()
         try:
             await svc._attestation_task
-        except (asyncio.CancelledError, BaseException):
+        except asyncio.CancelledError:
+            # Expected after task.cancel(); drain so pytest doesn't warn
+            # about an un-awaited cancelled task at teardown.
             pass
 
     @pytest.mark.asyncio
@@ -657,7 +729,9 @@ class TestStartupAttestationBudget:
         svc._attestation_task.cancel()
         try:
             await svc._attestation_task
-        except BaseException:
+        except asyncio.CancelledError:
+            # Expected after task.cancel(); drain so pytest doesn't warn
+            # about an un-awaited cancelled task at teardown.
             pass
 
     @pytest.mark.asyncio
@@ -690,7 +764,9 @@ class TestStartupAttestationBudget:
         svc._attestation_task.cancel()
         try:
             await svc._attestation_task
-        except BaseException:
+        except asyncio.CancelledError:
+            # Expected after task.cancel(); drain so pytest doesn't warn
+            # about an un-awaited cancelled task at teardown.
             pass
 
     @pytest.mark.asyncio
@@ -714,7 +790,9 @@ class TestStartupAttestationBudget:
         svc._attestation_task.cancel()
         try:
             await svc._attestation_task
-        except BaseException:
+        except asyncio.CancelledError:
+            # Expected after task.cancel(); drain so pytest doesn't warn
+            # about an un-awaited cancelled task at teardown.
             pass
 
     @pytest.mark.asyncio
@@ -745,7 +823,9 @@ class TestStartupAttestationBudget:
         svc._attestation_task.cancel()
         try:
             await svc._attestation_task
-        except BaseException:
+        except asyncio.CancelledError:
+            # Expected after task.cancel(); drain so pytest doesn't warn
+            # about an un-awaited cancelled task at teardown.
             pass
 
 

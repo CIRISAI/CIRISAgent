@@ -234,9 +234,12 @@ async def execute_notify_users(wa_id: str, reason: str, message_obj: AccordMessa
                 },
             )
 
-        # Broadcast via communication bus if available
+        # Broadcast via communication bus if available.
+        # Per FSD §4.5.7 NOTIFY_USERS surfaces the carried message text (the
+        # operator-authored notice in source_text) — reason is the categorical
+        # label and would render as boilerplate.
         if runtime and hasattr(runtime, "bus_manager") and runtime.bus_manager:
-            notification_text = f"[ACCORD NOTIFICATION from {wa_id}]: {reason}"
+            notification_text = f"[ACCORD NOTIFICATION from {wa_id}]: {message_obj.source_text}"
             try:
                 comm_bus = runtime.bus_manager.communication
                 # Send to all registered communication channels
@@ -317,8 +320,12 @@ async def execute_drill(wa_id: str, reason: str, message_obj: AccordMessage) -> 
 
         anomalies = [k for k, v in pipeline_stages.items() if not v]
 
+        # DRILL exists to verify end-to-end kill-switch wiring. If any pipeline
+        # stage (most importantly AuditChainAnchored) did not occur, the drill
+        # failed — reporting success would mask a broken stage to operators
+        # and metrics.
         return AccordExecutionResult(
-            success=True,
+            success=not anomalies,
             command=AccordCommandType.DRILL,
             wa_id=wa_id,
             message=f"Drill complete. Stages: {pipeline_stages}. Anomalies: {anomalies or 'none'}",

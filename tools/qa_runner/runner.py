@@ -2396,12 +2396,20 @@ class QARunner:
             ]
             return out
 
+        # Signal parallel-backend mode to children via env var. Two full agent
+        # stacks sharing one CI runner halve effective throughput; tests with
+        # hardcoded response/SSE timeouts (air, context_enrichment) need to
+        # scale up under this contention. Sequential / single-backend runs
+        # don't pay the penalty because the env var is unset there.
+        child_env = os.environ.copy()
+        child_env["CIRIS_QA_PARALLEL_BACKENDS"] = "1"
+
         procs = {}
         for backend in self.database_backends:
             child = [sys.executable, "-m", "tools.qa_runner", *_child_argv(backend)]
             self.console.print(f"[cyan]🔄 Starting {backend.upper()} backend tests (isolated subprocess)...[/cyan]")
             self.console.print(f"[dim]   $ {' '.join(child)}[/dim]")
-            procs[backend] = subprocess.Popen(child)
+            procs[backend] = subprocess.Popen(child, env=child_env)
 
         self.console.print("\n[cyan]⏳ Waiting for all backend subprocesses to complete...[/cyan]\n")
 

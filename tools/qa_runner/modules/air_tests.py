@@ -185,10 +185,17 @@ class AIRTests:
         accumulates messages across QA modules in a batched run — so "first
         message → no reminder" only holds on a channel AIR has not seen.
         """
+        import os
         import uuid
 
         fresh_channel = f"air_qa_smoke_{uuid.uuid4().hex[:8]}"
-        async with httpx.AsyncClient(timeout=70.0) as client:
+        # 70s baseline matches the server's interact response-correlation
+        # window. Under the --parallel-backends QA matrix two agent stacks
+        # share one CI runner, halving effective throughput, so we double
+        # the budget when the parent qa_runner signals parallel mode (see
+        # runner.py:_run_parallel_backends).
+        interact_timeout = 140.0 if os.environ.get("CIRIS_QA_PARALLEL_BACKENDS") == "1" else 70.0
+        async with httpx.AsyncClient(timeout=interact_timeout) as client:
             response = await client.post(
                 f"{self.base_url}/v1/agent/interact",
                 headers={"Authorization": f"Bearer {self.token}"},

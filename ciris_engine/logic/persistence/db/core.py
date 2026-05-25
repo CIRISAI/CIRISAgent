@@ -48,7 +48,6 @@ from .retry import DEFAULT_BASE_DELAY, DEFAULT_MAX_DELAY, DEFAULT_MAX_RETRIES, i
 logger = logging.getLogger(__name__)
 
 
-
 # Test database path override - set by test fixtures
 _test_db_path: Optional[str] = None
 
@@ -75,7 +74,6 @@ def _ensure_adapters_registered() -> None:
         sqlite3.register_adapter(datetime, adapt_datetime)
         sqlite3.register_converter("timestamp", convert_datetime)
         _adapters_registered = True
-
 
 
 class IOSDictRow(dict[str, Any]):
@@ -466,10 +464,10 @@ class _IOSCursorProxy:
     itself is finalized (which only happens on the owning thread via thread-local).
     """
 
-    __slots__ = ('_cursor',)
+    __slots__ = ("_cursor",)
 
     def __init__(self, cursor: sqlite3.Cursor):
-        object.__setattr__(self, '_cursor', cursor)
+        object.__setattr__(self, "_cursor", cursor)
 
     def close(self) -> None:
         pass  # Suppress — let connection cleanup handle it
@@ -478,45 +476,45 @@ class _IOSCursorProxy:
         pass  # Suppress — prevents cross-thread sqlite3_finalize
 
     def __iter__(self) -> Any:
-        return iter(object.__getattribute__(self, '_cursor'))
+        return iter(object.__getattribute__(self, "_cursor"))
 
     def __next__(self) -> Any:
-        return next(object.__getattribute__(self, '_cursor'))
+        return next(object.__getattribute__(self, "_cursor"))
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(object.__getattribute__(self, '_cursor'), name)
+        return getattr(object.__getattribute__(self, "_cursor"), name)
 
     def execute(self, *args: Any, **kwargs: Any) -> "_IOSCursorProxy":
-        object.__getattribute__(self, '_cursor').execute(*args, **kwargs)
+        object.__getattribute__(self, "_cursor").execute(*args, **kwargs)
         return self
 
     def executemany(self, *args: Any, **kwargs: Any) -> "_IOSCursorProxy":
-        object.__getattribute__(self, '_cursor').executemany(*args, **kwargs)
+        object.__getattribute__(self, "_cursor").executemany(*args, **kwargs)
         return self
 
     def fetchone(self) -> Any:
-        return object.__getattribute__(self, '_cursor').fetchone()
+        return object.__getattribute__(self, "_cursor").fetchone()
 
     def fetchall(self) -> list[Any]:
-        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, '_cursor'))
+        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, "_cursor"))
         return cursor.fetchall()
 
     def fetchmany(self, size: int = -1) -> list[Any]:
-        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, '_cursor'))
+        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, "_cursor"))
         return cursor.fetchmany(size)
 
     @property
     def description(self) -> Any:
-        return object.__getattribute__(self, '_cursor').description
+        return object.__getattribute__(self, "_cursor").description
 
     @property
     def rowcount(self) -> int:
-        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, '_cursor'))
+        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, "_cursor"))
         return cursor.rowcount
 
     @property
     def lastrowid(self) -> Any:
-        return object.__getattribute__(self, '_cursor').lastrowid
+        return object.__getattribute__(self, "_cursor").lastrowid
 
 
 class _IOSConnectionProxy:
@@ -533,7 +531,7 @@ class _IOSConnectionProxy:
     """
 
     def __init__(self, conn: sqlite3.Connection):
-        object.__setattr__(self, '_conn', conn)
+        object.__setattr__(self, "_conn", conn)
 
     def close(self) -> None:
         pass
@@ -548,37 +546,37 @@ class _IOSConnectionProxy:
         pass
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(object.__getattribute__(self, '_conn'), name)
+        return getattr(object.__getattribute__(self, "_conn"), name)
 
     def execute(self, *args: Any, **kwargs: Any) -> _IOSCursorProxy:
-        conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
+        conn = cast(sqlite3.Connection, object.__getattribute__(self, "_conn"))
         return _IOSCursorProxy(conn.execute(*args, **kwargs))
 
     def executemany(self, *args: Any, **kwargs: Any) -> _IOSCursorProxy:
-        conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
+        conn = cast(sqlite3.Connection, object.__getattribute__(self, "_conn"))
         return _IOSCursorProxy(conn.executemany(*args, **kwargs))
 
     def executescript(self, *args: Any, **kwargs: Any) -> _IOSCursorProxy:
-        conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
+        conn = cast(sqlite3.Connection, object.__getattribute__(self, "_conn"))
         return _IOSCursorProxy(conn.executescript(*args, **kwargs))
 
     def cursor(self) -> _IOSCursorProxy:
-        conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
+        conn = cast(sqlite3.Connection, object.__getattribute__(self, "_conn"))
         return _IOSCursorProxy(conn.cursor())
 
     def commit(self) -> None:
-        object.__getattribute__(self, '_conn').commit()
+        object.__getattribute__(self, "_conn").commit()
 
     def rollback(self) -> None:
-        object.__getattribute__(self, '_conn').rollback()
+        object.__getattribute__(self, "_conn").rollback()
 
     @property
     def row_factory(self) -> Any:
-        return object.__getattribute__(self, '_conn').row_factory
+        return object.__getattribute__(self, "_conn").row_factory
 
     @row_factory.setter
     def row_factory(self, value: Any) -> None:
-        object.__getattribute__(self, '_conn').row_factory = value
+        object.__getattribute__(self, "_conn").row_factory = value
 
 
 def _create_sqlite_connection_ios(db_path: str) -> "_IOSConnectionProxy":
@@ -811,9 +809,7 @@ def _persist_dsn_and_sentinel(db_path: str) -> Tuple[str, Optional[Path]]:
         # sqlite:////abs/path (4 slashes -> absolute). Splitting on
         # 'sqlite:///' keeps the right leading-slash count for Path().
         path_part = db_path.split("sqlite:///", 1)[-1] if "sqlite:///" in db_path else ""
-        sentinel = (
-            Path(path_part).resolve().parent if path_part and path_part != ":memory:" else None
-        )
+        sentinel = Path(path_part).resolve().parent if path_part and path_part != ":memory:" else None
         return db_path, sentinel
     abs_path = Path(db_path).resolve()
     # `sqlite:///{abs_path}` where abs_path begins with '/' yields
@@ -844,6 +840,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     # with the same db_path — second/third calls are no-ops. Tests
     # call it with a fresh temp_db each time — those re-wire.
     from ciris_engine.logic.persistence.models import graph as graph_persistence
+
     if db_path is None:
         _resolved_db_path = get_sqlite_db_full_path()
     else:
@@ -854,10 +851,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     # an _expected_dsn that actually matches and the idempotent-skip works.
     _expected_dsn = _persist_dsn_and_sentinel(_resolved_db_path)[0]
 
-    if (
-        graph_persistence._engine is not None
-        and graph_persistence._engine_dsn == _expected_dsn
-    ):
+    if graph_persistence._engine is not None and graph_persistence._engine_dsn == _expected_dsn:
         logger.debug("persist engine already wired to %s, skipping re-bootstrap", _expected_dsn)
         return
 
@@ -880,8 +874,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         from ciris_persist import Engine  # type: ignore[import-untyped]
     except ImportError:
         logger.warning(
-            "ciris-persist not importable; 2.9.0 absorption disabled. "
-            "Pin ciris-persist>=1.6.4 in requirements.txt."
+            "ciris-persist not importable; 2.9.0 absorption disabled. Pin ciris-persist>=1.6.4 in requirements.txt."
         )
         return
 
@@ -905,7 +898,41 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         graph_persistence._engine = None
         graph_persistence._engine_dsn = None
 
-    engine = Engine(dsn, signing_key_id)
+    try:
+        engine = Engine(dsn, signing_key_id)
+    except Exception as e:
+        # iOS: flock() returns EPERM in the sandbox. Single-process mobile app
+        # has no multi-agent risk. Delete any stale lock file and retry once.
+        if "operation not permitted" in str(e).lower() or "lock" in str(e).lower():
+            is_ios = sys.platform == "ios" or (
+                sys.platform == "darwin"
+                and hasattr(sys, "implementation")
+                and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+            )
+            if is_ios:
+                logger.warning("iOS: Engine bootstrap lock failed (%s) — clearing stale locks and retrying", e)
+                # Remove any stale lock/WAL files that may be blocking
+                import glob
+
+                for pattern in [f"{db_path}*-lock", f"{db_path}-journal"]:
+                    for lock_file in glob.glob(pattern):
+                        try:
+                            Path(lock_file).unlink()
+                            logger.info("Removed stale lock: %s", lock_file)
+                        except OSError as unlink_err:
+                            logger.debug("Could not remove stale lock %s: %s", lock_file, unlink_err)
+                # Retry with fresh state
+                try:
+                    from ciris_persist import reset_engine
+
+                    reset_engine()
+                except Exception as reset_err:
+                    logger.debug("reset_engine() before retry failed (non-fatal): %s", reset_err)
+                engine = Engine(dsn, signing_key_id)
+            else:
+                raise
+        else:
+            raise
     logger.info("ciris-persist Engine constructed (dsn=%s)", dsn)
 
     # A0a graph migration + A0b audit bridge. Both run once, sentinel-gated.
@@ -932,7 +959,8 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
                         "A0a migration complete: %d nodes, %d edges "
                         "(skipped: %d already-present, %d too-large; "
                         "%d dangling-FK edges)",
-                        stats.get("nodes_written", 0), stats.get("edges_written", 0),
+                        stats.get("nodes_written", 0),
+                        stats.get("edges_written", 0),
                         stats.get("nodes_skipped_already_present", 0),
                         stats.get("nodes_skipped_too_large", 0),
                         stats.get("edges_skipped_dangling_fk", 0),
@@ -940,7 +968,8 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
                 else:
                     logger.error(
                         "A0a migration outcome=%s errors=%d; sentinel NOT written",
-                        stats.get("outcome"), stats.get("errors", 0),
+                        stats.get("outcome"),
+                        stats.get("errors", 0),
                     )
             except Exception:
                 logger.exception("A0a migration failed; persist engine wired anyway")
@@ -979,15 +1008,14 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
                 )
                 logger.info(
                     "A0b audit bridge complete: legacy_seq=%d bridge_id=%s",
-                    result.legacy_terminal_seq, result.bridge_id,
+                    result.legacy_terminal_seq,
+                    result.bridge_id,
                 )
             except Exception:
                 # CIRISVerify availability + signing-key access are
                 # ordering-sensitive at boot; we don't block startup on
                 # bridge failure. Next boot retries (sentinel absent).
-                logger.exception(
-                    "A0b audit bridge failed; persist engine wired anyway"
-                )
+                logger.exception("A0b audit bridge failed; persist engine wired anyway")
         elif not legacy_audit_db.exists():
             logger.debug(
                 "no legacy audit DB at %s — fresh deployment, no chain to bridge",
@@ -996,4 +1024,5 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
 
     # Wire the engine into persistence.models.graph.
     from ciris_engine.logic.persistence.models import graph as graph_persistence
+
     graph_persistence.set_persist_engine(engine, dsn)

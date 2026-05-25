@@ -201,6 +201,145 @@ async def execute_safe_mode(wa_id: str, reason: str) -> AccordExecutionResult:
     )
 
 
+async def execute_notify_users(wa_id: str, reason: str, message_obj: AccordMessage) -> AccordExecutionResult:
+    """
+    Execute NOTIFY_USERS command.
+
+    Surfaces the carried message text to every user of the agent, prominently
+    and immediately. Platform-specific rendering (web banner, mobile push,
+    headless log). Per FSD §4.5.7 this is the federation-wide megaphone.
+
+    Args:
+        wa_id: The WA ID that invoked the accord
+        reason: Human-readable reason
+        message_obj: The full accord message (carries notification text in source)
+
+    Returns:
+        Execution result
+    """
+    logger.critical(f"ACCORD INVOKED: NOTIFY_USERS by {wa_id}. Reason: {reason}")
+
+    try:
+        from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
+
+        runtime = CIRISRuntime.get_instance()  # type: ignore[attr-defined]
+        if runtime and hasattr(runtime, "audit_service"):
+            await runtime.audit_service.log_event(
+                event_type="ACCORD_NOTIFY_USERS",
+                event_data={
+                    "wa_id": wa_id,
+                    "reason": reason,
+                    "command": "NOTIFY_USERS",
+                    "source_channel": message_obj.source_channel,
+                },
+            )
+
+        # Broadcast via communication bus if available.
+        # Per FSD §4.5.7 NOTIFY_USERS surfaces the carried message text (the
+        # operator-authored notice in source_text) — reason is the categorical
+        # label and would render as boilerplate.
+        if runtime and hasattr(runtime, "bus_manager") and runtime.bus_manager:
+            notification_text = f"[ACCORD NOTIFICATION from {wa_id}]: {message_obj.source_text}"
+            try:
+                comm_bus = runtime.bus_manager.communication
+                # Send to all registered communication channels
+                for handler_name in comm_bus._handlers:
+                    try:
+                        await comm_bus.send_message(
+                            channel_id="",
+                            content=notification_text,
+                            handler_name=handler_name,
+                        )
+                    except Exception as ch_err:
+                        logger.warning(f"NOTIFY_USERS: failed to send via {handler_name}: {ch_err}")
+            except Exception as e:
+                logger.warning(f"Could not broadcast notification via comm bus: {e}")
+
+        return AccordExecutionResult(
+            success=True,
+            command=AccordCommandType.NOTIFY_USERS,
+            wa_id=wa_id,
+            message=f"User notification dispatched. Reason: {reason}",
+        )
+    except Exception as e:
+        logger.exception("Failed to execute NOTIFY_USERS")
+        return AccordExecutionResult(
+            success=False,
+            command=AccordCommandType.NOTIFY_USERS,
+            wa_id=wa_id,
+            message=f"NOTIFY_USERS failed: {e}",
+        )
+
+
+async def execute_drill(wa_id: str, reason: str, message_obj: AccordMessage) -> AccordExecutionResult:
+    """
+    Execute DRILL command.
+
+    Monthly AIS drill verifying kill-switch wiring is alive. Exercises
+    the full executor pipeline (Received → AuthorityVerified →
+    AdmissionPassed → ExecutorInvoked → AuditChainAnchored) then emits
+    a drill_response Contribution to the local audit chain.
+
+    Per FSD §4.5.8 the drill executes for real through the same authority
+    gate — benignness of the command is the only difference.
+
+    Args:
+        wa_id: The WA ID that invoked the accord
+        reason: Human-readable reason
+        message_obj: The full accord message
+
+    Returns:
+        Execution result with drill_response data
+    """
+    logger.critical(f"ACCORD INVOKED: DRILL by {wa_id}. Reason: {reason}")
+
+    pipeline_stages = {
+        "Received": True,
+        "AuthorityVerified": True,
+        "AdmissionPassed": True,
+        "ExecutorInvoked": True,
+        "AuditChainAnchored": False,
+    }
+
+    try:
+        from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
+
+        runtime = CIRISRuntime.get_instance()  # type: ignore[attr-defined]
+        if runtime and hasattr(runtime, "audit_service"):
+            await runtime.audit_service.log_event(
+                event_type="ACCORD_DRILL",
+                event_data={
+                    "wa_id": wa_id,
+                    "reason": reason,
+                    "command": "DRILL",
+                    "source_channel": message_obj.source_channel,
+                    "pipeline_stages": pipeline_stages,
+                },
+            )
+            pipeline_stages["AuditChainAnchored"] = True
+
+        anomalies = [k for k, v in pipeline_stages.items() if not v]
+
+        # DRILL exists to verify end-to-end kill-switch wiring. If any pipeline
+        # stage (most importantly AuditChainAnchored) did not occur, the drill
+        # failed — reporting success would mask a broken stage to operators
+        # and metrics.
+        return AccordExecutionResult(
+            success=not anomalies,
+            command=AccordCommandType.DRILL,
+            wa_id=wa_id,
+            message=f"Drill complete. Stages: {pipeline_stages}. Anomalies: {anomalies or 'none'}",
+        )
+    except Exception as e:
+        logger.exception("Failed to execute DRILL")
+        return AccordExecutionResult(
+            success=False,
+            command=AccordCommandType.DRILL,
+            wa_id=wa_id,
+            message=f"DRILL failed: {e}",
+        )
+
+
 async def execute_accord(
     message: AccordMessage,
     verification: AccordVerificationResult,
@@ -236,6 +375,10 @@ async def execute_accord(
         return await execute_freeze(wa_id, reason)
     elif command == AccordCommandType.SAFE_MODE:
         return await execute_safe_mode(wa_id, reason)
+    elif command == AccordCommandType.NOTIFY_USERS:
+        return await execute_notify_users(wa_id, reason, message)
+    elif command == AccordCommandType.DRILL:
+        return await execute_drill(wa_id, reason, message)
     else:
         return AccordExecutionResult(
             success=False,

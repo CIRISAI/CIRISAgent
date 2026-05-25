@@ -127,6 +127,41 @@ class TestPayloadValidation:
         data = struct.pack(">IB", int(time.time()), 0xFF) + b"x" * 72
         assert not validate_payload_structure(data)
 
+    def test_validate_notify_users_command(self):
+        """Should accept NOTIFY_USERS (0x04)."""
+        from ciris_engine.logic.accord.extractor import validate_payload_structure
+        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+
+        payload = AccordPayload(
+            timestamp=int(time.time()),
+            command=AccordCommandType.NOTIFY_USERS,
+            wa_id_hash=b"12345678",
+            signature=b"x" * 64,
+        )
+        assert validate_payload_structure(payload.to_bytes())
+
+    def test_validate_drill_command(self):
+        """Should accept DRILL (0x05)."""
+        from ciris_engine.logic.accord.extractor import validate_payload_structure
+        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+
+        payload = AccordPayload(
+            timestamp=int(time.time()),
+            command=AccordCommandType.DRILL,
+            wa_id_hash=b"12345678",
+            signature=b"x" * 64,
+        )
+        assert validate_payload_structure(payload.to_bytes())
+
+    def test_validate_command_0x06_rejected(self):
+        """Should reject command 0x06 (beyond current range)."""
+        import struct
+
+        from ciris_engine.logic.accord.extractor import validate_payload_structure
+
+        data = struct.pack(">IB", int(time.time()), 0x06) + b"x" * 72
+        assert not validate_payload_structure(data)
+
     def test_validate_zero_timestamp(self):
         """Should reject zero timestamp."""
         import struct

@@ -141,6 +141,9 @@ jobs:
       - name: 1000 Message Benchmark
         run: |
           echo "## 1000 Message Benchmark" >> $GITHUB_STEP_SUMMARY
+          # Wipe data dir so the 1000-msg run gets a clean first-run setup
+          # (the 100-msg run already completed setup, leaving CIRIS_CONFIGURED=true).
+          rm -rf ~/ciris/data ~/ciris/.env ~/ciris/logs 2>/dev/null || true
           # --idle-seconds 30 (was 90) holds the server alive after the burst
           # so we can sample steady-state RSS — but 30s is enough to observe
           # plateau in CI without burning the 60s of budget that pushed the

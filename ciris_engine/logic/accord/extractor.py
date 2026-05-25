@@ -187,8 +187,8 @@ def validate_payload_structure(data: bytes) -> bool:
     except struct.error:
         return False
 
-    # Check command is valid (0x01-0x03 for v1)
-    if command < 0x01 or command > 0x03:
+    # Check command is valid (0x01-0x05)
+    if command < 0x01 or command > 0x05:
         return False
 
     # Check timestamp is reasonable (not 0, not max)

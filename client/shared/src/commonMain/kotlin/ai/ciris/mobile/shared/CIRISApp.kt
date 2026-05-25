@@ -1430,6 +1430,10 @@ fun CIRISApp(
                             onHelpClick = { currentScreen = Screen.Help },
                             onLogoutClick = {
                                 PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout from nav bar")
+                                // Cancel InteractViewModel polling first — otherwise it keeps polling
+                                // against the about-to-be-revoked token, fires a 401, and
+                                // TokenManager.on401Error races the user's next Sign-In tap → bounce.
+                                interactViewModel.resetState()
                                 settingsViewModel.logout {
                                     PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Login")
                                     currentAccessToken = null
@@ -1454,6 +1458,9 @@ fun CIRISApp(
                         onSessionExpired = {
                             // Navigate to login screen when session expires
                             platformLog(TAG, "[INFO] Session expired - navigating to login")
+                            // Cancel polling before clearing token so a stale 401 doesn't
+                            // re-enter via TokenManager and race the next sign-in attempt.
+                            interactViewModel.resetState()
                             currentAccessToken = null
                             // Clear stored tokens asynchronously
                             coroutineScope.launch {
@@ -1508,6 +1515,9 @@ fun CIRISApp(
                     onNavigateBack = { currentScreen = Screen.Interact },
                     onLogout = {
                         PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout")
+                        // Cancel InteractViewModel polling before token revocation — see
+                        // matching guard in nav-bar onLogoutClick for rationale.
+                        interactViewModel.resetState()
                         settingsViewModel.logout {
                             PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Login")
                             currentAccessToken = null

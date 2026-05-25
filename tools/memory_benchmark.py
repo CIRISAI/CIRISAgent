@@ -109,19 +109,23 @@ async def get_auth_token(base_url: str, retries: int = 30) -> str:
     """Get auth token from API with retries."""
     import httpx
 
+    last_status = 0
     async with httpx.AsyncClient(timeout=10.0) as client:
-        for _ in range(retries):
+        for attempt in range(retries):
             try:
                 for username in ["admin", "owner"]:
                     response = await client.post(
                         f"{base_url}/v1/auth/login",
                         json={"username": username, "password": "qa_test_password_12345"},
                     )
+                    last_status = response.status_code
                     if response.status_code == 200:
                         return response.json().get("access_token", "")
             except Exception:
                 pass
             await asyncio.sleep(0.5)
+    if last_status:
+        print(f"  Login failed after {retries} attempts (last status: {last_status})")
     return ""
 
 

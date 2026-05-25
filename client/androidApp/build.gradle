@@ -14,8 +14,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 137
-        versionName "2.9.0"
+        versionCode 138
+        versionName "2.9.1"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -331,13 +331,53 @@ task syncBackendLocalization(type: Copy) {
 // Make syncBackendLocalization run after syncPythonSources
 syncBackendLocalization.dependsOn syncPythonSources
 
+// Chaquopy's extractPackages only extracts directories that contain __init__.py.
+// Resource-only dirs (localized accord/guide .txt, polyglot block .txt, per-language
+// DMA prompt .yml) lack __init__.py upstream because they're not Python packages —
+// they're data dirs that prompt_loader.py reaches via Path(__file__).parent / ...
+// At runtime that resolves to a path under Chaquopy's AssetFinder dir. Without
+// __init__.py the dirs sit inside app.imy but never get extracted, so the path
+// lookup raises FileNotFoundError (e.g. POLYGLOT_PDMA_FRAMING missing). iOS is
+// unaffected because Resources.zip ignores package structure.
+//
+// Fix: inject empty __init__.py markers into the resource-only roots and every
+// subdir beneath them. Affects only the Android staged tree, not upstream source.
+task injectChaquopyPackageMarkers {
+    description = "Inject __init__.py markers so Chaquopy extracts resource-only dirs at runtime"
+    dependsOn syncBackendLocalization
+
+    doLast {
+        def marker = "# Chaquopy extractPackages marker — required to extract non-Python resources at runtime.\n"
+        def roots = [
+            "${buildDir}/python-src/ciris_engine/data/localized",
+            "${buildDir}/python-src/ciris_engine/logic/dma/prompts/localized",
+        ]
+        roots.each { rootPath ->
+            def root = file(rootPath)
+            if (!root.exists()) {
+                return
+            }
+            def rootInit = new File(root, "__init__.py")
+            if (!rootInit.exists()) {
+                rootInit.text = marker
+            }
+            root.eachDirRecurse { dir ->
+                def init = new File(dir, "__init__.py")
+                if (!init.exists()) {
+                    init.text = marker
+                }
+            }
+        }
+    }
+}
+
 // Generate secrets after Python sources are synced
 generatePythonSecrets.dependsOn syncPythonSources
 
 // Make Python tasks depend on sync and secrets generation
 tasks.whenTaskAdded { task ->
-    if (task.name.contains("Python") && !task.name.contains("sync") && !task.name.contains("Secrets")) {
-        task.dependsOn syncBackendLocalization
+    if (task.name.contains("Python") && !task.name.contains("sync") && !task.name.contains("Secrets") && !task.name.contains("inject")) {
+        task.dependsOn injectChaquopyPackageMarkers
         task.dependsOn generatePythonSecrets
     }
 }

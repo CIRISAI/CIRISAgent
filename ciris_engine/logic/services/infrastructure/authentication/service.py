@@ -1919,19 +1919,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Kick off startup attestation in the BACKGROUND — but capture the
         # task so any code that *needs* the attestation result can await it.
-        # The previous pattern was create-task-and-forget plus a test-mode
-        # skip, which let thoughts start processing before attestation was
-        # done and emitted null verify_attestation fields to Lens. The new
-        # contract:
-        #   - start() returns fast (no FFI latency on the critical path)
-        #   - any consumer that requires the attestation result calls
-        #     `await_attestation_ready()` first; that awaits this task,
-        #     re-raising on failure. Failure is fatal — there is no path
-        #     that runs without verified attestation.
-        #   - test-mode env vars (CIRIS_IMPORT_MODE / CIRIS_MOCK_LLM) no
-        #     longer bypass this. ciris_verify is a hard requirement; if
-        #     the FFI can't load, the await raises and the requesting
-        #     thought fails loudly.
+        # Attestation MUST run fresh on every startup to verify the current
+        # binary/environment. Caching across restarts would defeat L1/L4
+        # integrity guarantees (replay/poisoning risk).
         self._attestation_task = asyncio.create_task(self.run_startup_attestation())
         self._background_tasks.add(self._attestation_task)
         self._attestation_task.add_done_callback(self._background_tasks.discard)

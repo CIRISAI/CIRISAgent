@@ -1009,6 +1009,12 @@ jobs:
         run: |
           python tools/ops/build_agent_extras.py > build-secrets.json
           cat build-secrets.json
+          # Desktop staged tree does NOT contain _build_secrets.py (it is
+          # generated at deployment time). Mobile Resources/app DOES contain
+          # it (generated at iOS build time). Split so each sign step uses
+          # the correct extra-hashes file.  See CIRISAgent#743.
+          echo '{}' > build-secrets-desktop.json
+          cp build-secrets.json build-secrets-mobile.json
 
       - name: Stage canonical runtime tree
         # Produce the SAME tree CIRISVerify walks at runtime. Single source of
@@ -1086,7 +1092,7 @@ jobs:
             --tree-include ciris_engine ciris_adapters ciris_sdk \
             --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git tests examples gui_static desktop_app \
             --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 md pyi deleted \
-            --tree-extra-hashes-file build-secrets.json \
+            --tree-extra-hashes-file build-secrets-desktop.json \
             --binary-version "$VERSION" \
             --build-id "$GIT_SHA" \
             --target python-source-tree \
@@ -1130,9 +1136,9 @@ jobs:
             --primitive agent \
             --tree client/iosApp/Resources/app \
             --tree-include ciris_engine ciris_adapters ciris_ios ciris_sdk \
-            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git \
-            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 \
-            --tree-extra-hashes-file build-secrets.json \
+            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git tests examples gui_static desktop_app \
+            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 md pyi deleted \
+            --tree-extra-hashes-file build-secrets-mobile.json \
             --binary-version "$VERSION" \
             --build-id "$GIT_SHA-mobile" \
             --target ios-mobile-bundle \

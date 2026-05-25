@@ -975,17 +975,29 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 cfg = adapter.config
                 if hasattr(cfg, "model_dump"):
                     config_dict = cfg.model_dump()
-                    # Filter out None values and internal fields
                     settings = {
                         k: str(v)
                         for k, v in config_dict.items()
                         if v is not None
                         and k not in ["adapter_type", "enabled", "persist", "settings", "adapter_config"]
                     }
-                    config_params = AdapterConfig(adapter_type=adapter_type, enabled=True, settings=settings)
                 elif isinstance(cfg, dict):
                     settings = {k: str(v) for k, v in cfg.items() if v is not None}
-                    config_params = AdapterConfig(adapter_type=adapter_type, enabled=True, settings=settings)
+                else:
+                    settings = {}
+                # Carry over adapter_config and persist from the stored AdapterConfig
+                stored = (
+                    self.runtime.adapter_configs.get(adapter_type)
+                    if self.runtime and hasattr(self.runtime, "adapter_configs")
+                    else None
+                )
+                config_params = AdapterConfig(
+                    adapter_type=adapter_type,
+                    enabled=True,
+                    settings=settings,
+                    adapter_config=stored.adapter_config if stored else None,
+                    persist=stored.persist if stored else False,
+                )
             except Exception as e:
                 logger.warning(f"[BOOTSTRAP_INFO] Could not extract config from {adapter_type}: {e}")
 

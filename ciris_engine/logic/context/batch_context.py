@@ -452,9 +452,7 @@ async def prefetch_batch_context(
         if disclosure:
             disclosure_text = disclosure.text
             disclosure_severity = (
-                disclosure.severity.value
-                if hasattr(disclosure.severity, "value")
-                else str(disclosure.severity)
+                disclosure.severity.value if hasattr(disclosure.severity, "value") else str(disclosure.severity)
             )
 
     # Pull the cached attestation result. AuthenticationService runs the
@@ -477,8 +475,7 @@ async def prefetch_batch_context(
 
     if not service_registry:
         raise RuntimeError(
-            "CRITICAL: service_registry is required to resolve "
-            "AuthenticationService for ciris_verify attestation."
+            "CRITICAL: service_registry is required to resolve AuthenticationService for ciris_verify attestation."
         )
 
     wa_services = service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
@@ -498,9 +495,7 @@ async def prefetch_batch_context(
     if hasattr(auth_service, "get_cached_attestation"):
         attestation_result = auth_service.get_cached_attestation(allow_stale=True)
         if attestation_result:
-            logger.debug(
-                f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}"
-            )
+            logger.debug(f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}")
 
     # Legacy adapter-side cache (kept as fallback for backward compat).
     if (

@@ -5,6 +5,25 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-05-24
+
+Patch release — iOS unblock, accord expansion, CI hardening, P0 Android login fix.
+
+### Added
+
+- **AccordCommandType**: `NOTIFY_USERS` (0x04) and `DRILL` (0x05) per FSD §4.5.7/§4.5.8. Full executor handlers with bus_manager.communication dispatch, and tests. (#782)
+
+### Fixed
+
+- **P0 Android Google login**: token exchange error now surfaces the actual server error detail instead of an opaque deserialization failure. (#784)
+- **iOS persist bootstrap lock**: updated `ciris-persist` to v2.1.1 — EPERM fallback now covers both advisory and bootstrap lock paths. iOS 2.9.x is unblocked. (CIRISPersist#100)
+- **Adapter status**: `GET /v1/system/adapters/{id}` now surfaces `adapter_config` and `persist` from the stored config instead of always returning null. (#774)
+- **DSAR ticket stages**: `_merge_stage_metadata()` no longer short-circuits on first update when `current_metadata` has no existing stages key. (#776)
+- **iOS manifest exempt rules**: CI sign step now mirrors the python-source-tree exempt list (`md`, `pyi`, `deleted` extensions; `tests`, `examples`, `gui_static`, `desktop_app` dirs). (#748)
+- **CI build-secrets split**: desktop sign step uses empty extra-hashes (no `_build_secrets.py` in staged tree); mobile keeps the real hash file. Prevents L4 cross-target manifest mismatch. (#743)
+- **CI test stability**: `clean_db` fixture no longer opens a second sqlite3 connection to the persist Engine's active database, eliminating SIGBUS under xdist parallelism. (#783)
+- **CI benchmark auth**: wipe data dir between 100-msg and 1000-msg benchmark runs so each gets a clean first-run setup. Log login failure status codes.
+
 ## [2.9.0] - 2026-05-23
 
 Minor release — **persist absorption** + **federation-ready substrate**. The agent's persistence layer moves wholesale onto the Rust-backed `ciris-persist` substrate (PyO3, paired with `ciris-verify 3.0.1`). Production code ships **zero raw SQL** outside `ciris_adapters/` — `psycopg2` and `aiosqlite` are gone; `sqlite3` survives only for the static `cities.db` lookup. SQLite and PostgreSQL are first-class peers via persist's `sqlx` backend, with a dual-backend CI matrix gating the release.

@@ -17,7 +17,14 @@ def _release_persist_engine() -> None:
     >=1.10.2, CIRISPersist#88) closes + un-pins the current engine handle-free
     — recovering even the orphan case where a fixture nulled the module global
     without closing the Rust engine.
+
+    The GC pass + short settle after reset lets the Rust tokio runtime fully
+    wind down before the next test constructs a new Engine — prevents SIGBUS
+    when pending async I/O races the teardown (CI shard 3/8 Bus error).
     """
+    import gc
+    import time
+
     import ciris_persist
 
     from ciris_engine.logic.persistence.models import graph as graph_persistence
@@ -28,6 +35,8 @@ def _release_persist_engine() -> None:
         pass
     graph_persistence._engine = None
     graph_persistence._engine_dsn = None
+    gc.collect()
+    time.sleep(0.2)  # 200ms settle for Rust tokio teardown
 
 
 @pytest.fixture
@@ -83,28 +92,11 @@ def clean_db(test_db):
     """Ensure database is clean before each test.
 
     `test_db` already mkstemps a fresh file and bootstraps persist, so the
-    `cirislens.*` / `cirisgraph.*` tables start empty. This fixture clears
-    them defensively (best-effort) in case a prior fixture in the same
-    test wired the persist engine and wrote rows.
+    `cirislens.*` / `cirisgraph.*` tables start empty — no cleanup needed.
+
+    Opening a second sqlite3 connection to the same file while the persist
+    Engine holds it open via sqlx mmap causes SIGBUS under xdist parallelism
+    (CI shard 3/4 Bus error). Removing the defensive DELETE entirely avoids
+    the conflict — the fresh temp file guarantees empty tables.
     """
-    from ciris_engine.logic.persistence.db.core import get_db_connection
-
-    _PERSIST_TABLES = [
-        "cirislens_service_correlations",
-        "cirislens_thoughts",
-        "cirislens_tasks",
-        "cirisgraph_edges",
-        "cirisgraph_nodes",
-        "cirislens_feedback_mappings",
-        "cirislens_audit_log",
-        "cirislens_tickets",
-    ]
-    with get_db_connection(test_db) as conn:
-        for table in _PERSIST_TABLES:
-            try:
-                conn.execute(f"DELETE FROM {table}")
-            except Exception:
-                pass  # table absent — nothing to clear
-        conn.commit()
-
     return test_db

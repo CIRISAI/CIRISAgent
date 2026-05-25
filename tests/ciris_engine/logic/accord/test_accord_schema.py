@@ -32,6 +32,18 @@ class TestAccordCommandType:
 
         assert AccordCommandType.SAFE_MODE == 0x03
 
+    def test_notify_users_value(self):
+        """NOTIFY_USERS should be 0x04."""
+        from ciris_engine.schemas.accord import AccordCommandType
+
+        assert AccordCommandType.NOTIFY_USERS == 0x04
+
+    def test_drill_value(self):
+        """DRILL should be 0x05."""
+        from ciris_engine.schemas.accord import AccordCommandType
+
+        assert AccordCommandType.DRILL == 0x05
+
 
 class TestAccordPayload:
     """Tests for AccordPayload."""
@@ -88,7 +100,13 @@ class TestAccordPayload:
         """Serialize and deserialize should be identity."""
         from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
 
-        for cmd in [AccordCommandType.SHUTDOWN_NOW, AccordCommandType.FREEZE, AccordCommandType.SAFE_MODE]:
+        for cmd in [
+            AccordCommandType.SHUTDOWN_NOW,
+            AccordCommandType.FREEZE,
+            AccordCommandType.SAFE_MODE,
+            AccordCommandType.NOTIFY_USERS,
+            AccordCommandType.DRILL,
+        ]:
             original = AccordPayload(
                 timestamp=int(time.time()),
                 command=cmd,

@@ -80,6 +80,18 @@ class DatabaseAccessError(DirectorySetupError):
     pass
 
 
+def _is_ios_runtime() -> bool:
+    """True when running on iOS — single-process by design, so lock-probe
+    failures are always stale locks from a previous run rather than competing
+    agents. iOS reports sys.platform=='ios' under 3.13+, or 'darwin' with an
+    iphoneos multiarch under the Toga/BeeWare bridge that ships our build."""
+    if sys.platform == "ios":
+        return True
+    if sys.platform == "darwin" and hasattr(sys, "implementation"):
+        return "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+    return False
+
+
 def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> None:
     """Ensure only one agent process can hold the database.
 
@@ -120,10 +132,16 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
 
     except Exception as e:
         msg = str(e).lower()
-        if "lock" in msg or "busy" in msg or "in use" in msg:
-            error_msg = (
-                f"CANNOT ACCESS DATABASE {db_path} - ANOTHER AGENT MAY BE RUNNING"
-            )
+        is_lock_error = "lock" in msg or "busy" in msg or "in use" in msg
+
+        # iOS: stale lock from previous crash, not a competing agent.
+        if _is_ios_runtime() and (is_lock_error or "operation not permitted" in msg):
+            print("⚠ iOS: database lock probe failed (stale lock from previous run) — proceeding")
+            print(f"  Underlying: {e}")
+            return
+
+        if is_lock_error:
+            error_msg = f"CANNOT ACCESS DATABASE {db_path} - ANOTHER AGENT MAY BE RUNNING"
             print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
             print(f"  Underlying error: {e}", file=sys.stderr)
             print("  Only one CIRIS agent can run per database file", file=sys.stderr)

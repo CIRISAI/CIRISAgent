@@ -544,3 +544,341 @@ class TestAwaitAttestationReady:
             "background task on self._attestation_task so "
             "await_attestation_ready() can gate on it."
         )
+
+
+# ---------------------------------------------------------------------------
+# Startup attestation budget (15s end-to-end contract)
+# ---------------------------------------------------------------------------
+#
+# The auth service exposes STARTUP_ATTESTATION_BUDGET_SECONDS = 15.0 as the
+# contract for end-to-end startup attestation. await_attestation_ready()
+# enforces it by measuring from task creation, not from when the caller
+# started awaiting — so a caller arriving 14s late only gets 1s of budget.
+#
+# Budget breach is not a tuning knob; it is a defect that must be filed
+# against ciris_verify with receipts attached. The tests below pin every
+# observable surface of that contract.
+
+
+class TestStartupAttestationBudget:
+    """Pin the 15s end-to-end attestation budget enforcement."""
+
+    def _make_bare_service(self):
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService.__init__",
+            lambda self_inner, *a, **kw: None,
+        ):
+            from ciris_engine.logic.services.infrastructure.authentication.service import (
+                AuthenticationService,
+            )
+
+            svc = AuthenticationService.__new__(AuthenticationService)
+            svc._attestation_task = None
+            svc._attestation_started_at = None
+            svc._attestation_stage_timings = {}
+            return svc
+
+    def test_budget_constant_value(self):
+        """The contract value must be 15.0s — flipping this without thought
+        weakens the gate that prevents 60-120s first-thought stalls.
+        """
+        from ciris_engine.logic.services.infrastructure.authentication.service import (
+            STARTUP_ATTESTATION_BUDGET_SECONDS,
+        )
+
+        assert STARTUP_ATTESTATION_BUDGET_SECONDS == 15.0
+
+    @pytest.mark.asyncio
+    async def test_returns_immediately_within_budget(self):
+        """Fast attestation (well under budget) returns clean."""
+        svc = self._make_bare_service()
+
+        async def fast_attestation() -> None:
+            await asyncio.sleep(0.01)
+
+        loop = asyncio.get_event_loop()
+        svc._attestation_started_at = loop.time()
+        svc._attestation_task = asyncio.create_task(fast_attestation())
+
+        await svc.await_attestation_ready(budget_seconds=15.0)
+        assert svc._attestation_task.done()
+
+    @pytest.mark.asyncio
+    async def test_raises_runtime_error_on_budget_breach(self):
+        """A task that exceeds the budget raises RuntimeError with the
+        contract message — not a TimeoutError or a silent stall."""
+        svc = self._make_bare_service()
+
+        async def slow_attestation() -> None:
+            # Longer than test budget; we cancel out via the gate.
+            await asyncio.sleep(5)
+
+        loop = asyncio.get_event_loop()
+        svc._attestation_started_at = loop.time()
+        svc._attestation_task = asyncio.create_task(slow_attestation())
+
+        # Use a tiny budget so the test stays fast. The behavior under 15s
+        # and 0.1s is identical — both surface a RuntimeError on overshoot.
+        with pytest.raises(RuntimeError, match=r"exceeded the .* budget"):
+            await svc.await_attestation_ready(budget_seconds=0.1)
+
+        # Clean up the lingering task to keep the test loop tidy.
+        svc._attestation_task.cancel()
+        try:
+            await svc._attestation_task
+        except (asyncio.CancelledError, BaseException):
+            pass
+
+    @pytest.mark.asyncio
+    async def test_budget_message_names_verifier_as_owner(self):
+        """The error message must point at the verifier as the thing to
+        fix, not at the budget itself. This is the "do not raise the
+        budget" load-bearing assertion."""
+        svc = self._make_bare_service()
+
+        async def slow_attestation() -> None:
+            await asyncio.sleep(5)
+
+        loop = asyncio.get_event_loop()
+        svc._attestation_started_at = loop.time()
+        svc._attestation_task = asyncio.create_task(slow_attestation())
+
+        try:
+            await svc.await_attestation_ready(budget_seconds=0.05)
+        except RuntimeError as exc:
+            msg = str(exc)
+            assert "verifier" in msg.lower(), msg
+            assert "budget" in msg.lower(), msg
+            # No "increase the timeout" framing.
+            assert "raise the budget" in msg.lower() or "investigate" in msg.lower(), msg
+        else:  # pragma: no cover
+            pytest.fail("await_attestation_ready did not raise on overshoot")
+
+        svc._attestation_task.cancel()
+        try:
+            await svc._attestation_task
+        except BaseException:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_budget_measured_from_task_start_not_call_time(self):
+        """A caller arriving 0.4s after start with a 0.5s budget has only
+        0.1s of remaining budget, not 0.5s. This guards against callers
+        accidentally being granted a full budget by reaching the gate
+        late."""
+        svc = self._make_bare_service()
+
+        async def slow_attestation() -> None:
+            await asyncio.sleep(5)
+
+        loop = asyncio.get_event_loop()
+        # Pretend the task started 0.4s ago.
+        svc._attestation_started_at = loop.time() - 0.4
+        svc._attestation_task = asyncio.create_task(slow_attestation())
+
+        gate_start = loop.time()
+        with pytest.raises(RuntimeError, match="budget"):
+            await svc.await_attestation_ready(budget_seconds=0.5)
+        gate_elapsed = loop.time() - gate_start
+        # Only ~0.1s remained when the gate ran. Generous upper bound for
+        # CI jitter, but well below the 0.5s caller-time budget.
+        assert gate_elapsed < 0.4, (
+            f"Gate waited {gate_elapsed:.3f}s — should have honored remaining "
+            f"budget after task-start offset, not the full caller budget."
+        )
+
+        svc._attestation_task.cancel()
+        try:
+            await svc._attestation_task
+        except BaseException:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_late_caller_times_out_immediately(self):
+        """A caller that arrives AFTER the budget has already elapsed
+        gets zero remaining time and surfaces the breach right away.
+        This is the "first thought arrives 20s after start" scenario."""
+        svc = self._make_bare_service()
+
+        async def slow_attestation() -> None:
+            await asyncio.sleep(5)
+
+        loop = asyncio.get_event_loop()
+        # Pretend the task started 1.0s ago — already past a 0.1s budget.
+        svc._attestation_started_at = loop.time() - 1.0
+        svc._attestation_task = asyncio.create_task(slow_attestation())
+
+        with pytest.raises(RuntimeError, match="budget"):
+            await svc.await_attestation_ready(budget_seconds=0.1)
+
+        svc._attestation_task.cancel()
+        try:
+            await svc._attestation_task
+        except BaseException:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_budget_overshoot_does_not_cancel_task(self):
+        """When the budget is breached, we surface the breach but let the
+        task continue running so refresh/audit paths can still benefit
+        from an eventual result. Cancelling would forfeit attestation
+        data already in flight."""
+        svc = self._make_bare_service()
+
+        async def slow_attestation() -> None:
+            await asyncio.sleep(5)
+
+        loop = asyncio.get_event_loop()
+        svc._attestation_started_at = loop.time()
+        svc._attestation_task = asyncio.create_task(slow_attestation())
+
+        try:
+            await svc.await_attestation_ready(budget_seconds=0.05)
+        except RuntimeError:
+            pass
+
+        assert not svc._attestation_task.done(), (
+            "Gate must not cancel the in-flight attestation task on a budget "
+            "breach — the refresh loop still benefits from its eventual result."
+        )
+
+        svc._attestation_task.cancel()
+        try:
+            await svc._attestation_task
+        except BaseException:
+            pass
+
+
+class TestStartupAttestationReceipts:
+    """The processor gate's failure logger expects stage_timings populated
+    by run_startup_attestation. Verify the receipts pipeline produces
+    actionable data for ciris_verify bug reports."""
+
+    def _make_bare_service(self):
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService.__init__",
+            lambda self_inner, *a, **kw: None,
+        ):
+            from ciris_engine.logic.services.infrastructure.authentication.service import (
+                AuthenticationService,
+            )
+
+            svc = AuthenticationService.__new__(AuthenticationService)
+            svc._attestation_cache = None
+            svc._baseline_attestation = None
+            svc._attestation_stage_timings = {}
+            return svc
+
+    @pytest.mark.asyncio
+    async def test_success_path_records_total_and_per_bool(self):
+        """A clean run populates total wall-clock + every per-bool stage
+        outcome. These are the fields the gate's logger reads when
+        building a ciris_verify issue body."""
+        svc = self._make_bare_service()
+        result = _make_result()
+
+        async def mock_run_attestation(**kw):
+            await asyncio.sleep(0.01)
+            return result
+
+        svc.run_attestation = mock_run_attestation
+        await svc.run_startup_attestation()
+
+        st = svc._attestation_stage_timings
+        # Total wall-clock recorded
+        assert "run_attestation_total_seconds" in st
+        assert isinstance(st["run_attestation_total_seconds"], (int, float))
+        assert st["run_attestation_total_seconds"] >= 0.0
+        # Per-stage booleans recorded
+        assert "binary_ok" in st
+        assert "function_integrity" in st
+        assert "python_integrity_ok" in st
+        assert "registry_ok" in st
+        assert "audit_ok" in st
+        assert "max_level" in st
+        assert "level_pending" in st
+
+    @pytest.mark.asyncio
+    async def test_overshoot_logs_warning_and_records_total(self, caplog):
+        """When the verifier takes >15s, the service logs a warning naming
+        the budget and the actual elapsed time so the failure is grep-able
+        in incidents_latest.log even before the gate's receipts dump."""
+        svc = self._make_bare_service()
+        result = _make_result()
+
+        async def slow_run_attestation(**kw):
+            # Simulate a 0.02s slow verifier using a 0.01s test budget by
+            # patching the constant down inside the test.
+            await asyncio.sleep(0.02)
+            return result
+
+        svc.run_attestation = slow_run_attestation
+
+        from ciris_engine.logic.services.infrastructure.authentication import service as svc_mod
+
+        with caplog.at_level("WARNING"):
+            with patch.object(svc_mod, "STARTUP_ATTESTATION_BUDGET_SECONDS", 0.01):
+                await svc.run_startup_attestation()
+
+        # Warning fires, names the budget, names the elapsed time
+        warnings_msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any("exceeded" in m and "budget" in m for m in warnings_msgs), warnings_msgs
+        # Per-stage timings still populated
+        assert svc._attestation_stage_timings["run_attestation_total_seconds"] > 0.01
+
+    @pytest.mark.asyncio
+    async def test_failure_path_records_exception_receipts(self):
+        """When run_attestation raises, stage_timings still gets populated
+        with the exception type/message so the gate's failure logger has
+        receipts to file. Best-effort: a raise here must never be swallowed
+        by the receipt-capture code."""
+        svc = self._make_bare_service()
+
+        class FakeVerifierError(RuntimeError):
+            pass
+
+        async def failing_run_attestation(**kw):
+            await asyncio.sleep(0.005)
+            raise FakeVerifierError("libtss2 unloadable")
+
+        svc.run_attestation = failing_run_attestation
+        # run_startup_attestation catches and logs, doesn't re-raise.
+        await svc.run_startup_attestation()
+
+        st = svc._attestation_stage_timings
+        assert st.get("raised") is True
+        assert st.get("exception_type") == "FakeVerifierError"
+        assert "libtss2 unloadable" in st.get("exception_message", "")
+        assert st["run_attestation_total_seconds"] > 0.0
+
+    @pytest.mark.asyncio
+    async def test_start_records_attestation_started_at_timestamp(self):
+        """The end-to-end budget is meaningless without a task-creation
+        timestamp. Confirm the source of start() pins
+        _attestation_started_at adjacent to task creation so the two
+        always move together.
+        """
+        import inspect
+
+        from ciris_engine.logic.services.infrastructure.authentication.service import (
+            AuthenticationService,
+        )
+
+        src = inspect.getsource(AuthenticationService.start)
+        # Both lines present
+        assert "self._attestation_started_at = asyncio.get_event_loop().time()" in src, (
+            "start() must record _attestation_started_at adjacent to task "
+            "creation so await_attestation_ready can enforce the budget "
+            "from a real baseline."
+        )
+        assert "self._attestation_task = asyncio.create_task(self.run_startup_attestation())" in src
+        # And the timestamp line comes BEFORE the task creation, not after
+        idx_ts = src.index("self._attestation_started_at = asyncio.get_event_loop().time()")
+        idx_task = src.index(
+            "self._attestation_task = asyncio.create_task(self.run_startup_attestation())"
+        )
+        assert idx_ts < idx_task, (
+            "_attestation_started_at must be set BEFORE the task is "
+            "scheduled — otherwise a fast verifier could finish before the "
+            "timestamp is recorded and budget arithmetic would underflow."
+        )

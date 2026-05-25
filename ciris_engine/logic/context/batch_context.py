@@ -3,7 +3,6 @@ Batch context builder for optimizing system snapshot generation.
 Separates per-batch vs per-thought operations for performance.
 """
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
@@ -490,13 +489,7 @@ async def prefetch_batch_context(
             "await_attestation_ready(). Cannot resolve ciris_verify "
             "attestation — AuthenticationService is required."
         )
-    try:
-        await asyncio.wait_for(auth_service.await_attestation_ready(), timeout=5.0)
-    except asyncio.TimeoutError:
-        logger.warning(
-            "[BATCH] Attestation not ready within 5s — proceeding with stale cache. "
-            "This is expected during startup or after --identity-update."
-        )
+    await auth_service.await_attestation_ready()
 
     attestation_result = None
     if hasattr(auth_service, "get_cached_attestation"):

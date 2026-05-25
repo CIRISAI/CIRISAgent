@@ -874,7 +874,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         from ciris_persist import Engine  # type: ignore[import-untyped]
     except ImportError:
         logger.warning(
-            "ciris-persist not importable; 2.9.0 absorption disabled. " "Pin ciris-persist>=1.6.4 in requirements.txt."
+            "ciris-persist not importable; 2.9.0 absorption disabled. Pin ciris-persist>=1.6.4 in requirements.txt."
         )
         return
 

@@ -475,7 +475,7 @@ async def prefetch_batch_context(
 
     if not service_registry:
         raise RuntimeError(
-            "CRITICAL: service_registry is required to resolve " "AuthenticationService for ciris_verify attestation."
+            "CRITICAL: service_registry is required to resolve AuthenticationService for ciris_verify attestation."
         )
 
     wa_services = service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)

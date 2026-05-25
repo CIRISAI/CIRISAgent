@@ -262,7 +262,7 @@ async def execute_notify_users(wa_id: str, reason: str, message_obj: AccordMessa
             message=f"User notification dispatched. Reason: {reason}",
         )
     except Exception as e:
-        logger.error(f"Failed to execute NOTIFY_USERS: {e}")
+        logger.exception("Failed to execute NOTIFY_USERS")
         return AccordExecutionResult(
             success=False,
             command=AccordCommandType.NOTIFY_USERS,
@@ -331,7 +331,7 @@ async def execute_drill(wa_id: str, reason: str, message_obj: AccordMessage) -> 
             message=f"Drill complete. Stages: {pipeline_stages}. Anomalies: {anomalies or 'none'}",
         )
     except Exception as e:
-        logger.error(f"Failed to execute DRILL: {e}")
+        logger.exception("Failed to execute DRILL")
         return AccordExecutionResult(
             success=False,
             command=AccordCommandType.DRILL,

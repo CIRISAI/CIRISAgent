@@ -325,14 +325,32 @@ class TestReasoningModeDisabling:
         assert extra_body["chat_template_kwargs"] == {"enable_thinking": False}
         assert extra_body["reasoning"] == {"enabled": False}
 
-    def test_openrouter_carries_reasoning_effort_minimal(self):
-        # OpenRouter rejects reasoning.enabled=false for reasoning-mandatory
-        # models like openai/gpt-5 (400 "Reasoning is mandatory…"). The safe
-        # universal key is reasoning.effort=minimal — honoured by reasoning-
-        # mandatory models (0 reasoning tokens emitted), treated as lowest
-        # setting by reasoning-capable models, silently ignored otherwise.
+    def test_openrouter_default_carries_reasoning_enabled_false(self):
+        # Default reasoning-OFF contract on OpenRouter: send `enabled=false`
+        # so reasoning-capable models (claude, gpt-5-chat, deepseek, …) emit
+        # zero reasoning tokens. `effort=minimal` is *not* a disable on those
+        # models, so we only use it for the narrow reasoning-mandatory case
+        # below.
         extra_body = self._build_for("https://openrouter.ai/api/v1", "kimi/k2-0130-preview")["extra_body"]
-        assert extra_body["reasoning"] == {"effort": "minimal"}
+        assert extra_body["reasoning"] == {"enabled": False}
+
+    def test_openrouter_gpt5_uses_effort_minimal(self):
+        # OpenRouter rejects reasoning.enabled=false for the gpt-5 reasoning
+        # family with 400 "Reasoning is mandatory for this endpoint and cannot
+        # be disabled." (verified 2026-05-16 against openai/gpt-5). For that
+        # narrow case we fall back to effort=minimal, which gpt-5 honours by
+        # emitting 0 reasoning tokens.
+        for model in ("openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano"):
+            extra_body = self._build_for("https://openrouter.ai/api/v1", model)["extra_body"]
+            assert extra_body["reasoning"] == {"effort": "minimal"}, model
+
+    def test_openrouter_gpt5_chat_stays_on_enabled_false(self):
+        # gpt-5-chat is the chat-tuned (reasoning-capable, not mandatory)
+        # variant and honours reasoning.enabled=false. It must stay on the
+        # universal disable path so it doesn't accidentally re-enable
+        # reasoning at lowest-effort under our reasoning-OFF contract.
+        extra_body = self._build_for("https://openrouter.ai/api/v1", "openai/gpt-5-chat")["extra_body"]
+        assert extra_body["reasoning"] == {"enabled": False}
 
     def test_local_endpoint_carries_vllm_key(self):
         extra_body = self._build_for("http://localhost:8080/v1", "llama")["extra_body"]
@@ -458,11 +476,11 @@ class TestReasoningModeDisabling:
             retry_state=RetryState(),
         )
 
-        # Verify reasoning is suppressed via effort=minimal
-        # (universal OpenRouter key — accepted by reasoning-mandatory models
-        # like openai/gpt-5 which reject `enabled=false` with 400).
+        # gpt-4o is reasoning-capable, not reasoning-mandatory — it honours
+        # `enabled=false`. Reasoning-mandatory gpt-5 models would take the
+        # `effort=minimal` fallback instead (covered separately above).
         assert "extra_body" in extra_kwargs
         extra_body = extra_kwargs["extra_body"]
         # Provider config may or may not be present depending on env
         assert "reasoning" in extra_body
-        assert extra_body["reasoning"] == {"effort": "minimal"}
+        assert extra_body["reasoning"] == {"enabled": False}

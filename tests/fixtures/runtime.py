@@ -75,6 +75,21 @@ async def runtime_with_mocked_agent_processor(real_runtime_with_mock):
     return runtime
 
 
+def _attach_mock_auth_service(mock_service_initializer: MagicMock) -> None:
+    """Wire an awaitable auth_service onto a mock service_initializer.
+
+    CIRISRuntime._await_attestation_ready (added in the 2.9.1 attestation
+    gate) sniffs `hasattr(auth_service, "await_attestation_ready")` and
+    awaits it. A plain MagicMock satisfies hasattr() but returns a
+    non-awaitable MagicMock — TypeError under `await`. Wire an AsyncMock
+    that resolves immediately so any fixture-based test driving the
+    processor path passes through the gate cleanly.
+    """
+    mock_auth_service = MagicMock()
+    mock_auth_service.await_attestation_ready = AsyncMock(return_value=None)
+    mock_service_initializer.auth_service = mock_auth_service
+
+
 @pytest_asyncio.fixture
 async def runtime_with_mocked_bus_manager(runtime_with_mocked_agent_processor):
     """Provide a runtime with mocked bus manager for agent processor testing."""
@@ -85,6 +100,7 @@ async def runtime_with_mocked_bus_manager(runtime_with_mocked_agent_processor):
     mock_bus_manager = MagicMock()
     mock_bus_manager.start = AsyncMock()
     mock_service_initializer.bus_manager = mock_bus_manager
+    _attach_mock_auth_service(mock_service_initializer)
     runtime.service_initializer = mock_service_initializer
 
     return runtime
@@ -98,6 +114,7 @@ async def runtime_without_bus_manager(runtime_with_mocked_agent_processor):
     # Mock service initializer with no bus manager
     mock_service_initializer = MagicMock()
     mock_service_initializer.bus_manager = None
+    _attach_mock_auth_service(mock_service_initializer)
     runtime.service_initializer = mock_service_initializer
 
     return runtime
@@ -158,6 +175,7 @@ async def runtime_with_full_initialization_mocks(real_runtime_with_mock):
     mock_service_registry.get_service = AsyncMock(return_value=MagicMock())
     mock_service_initializer.service_registry = mock_service_registry
     mock_service_initializer.bus_manager = None  # Default to no bus manager
+    _attach_mock_auth_service(mock_service_initializer)
     runtime.service_initializer = mock_service_initializer
 
     # Mock critical methods used during initialization

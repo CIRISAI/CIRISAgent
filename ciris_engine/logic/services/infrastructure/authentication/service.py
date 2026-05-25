@@ -1917,16 +1917,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 f"skipped (non-fatal): {e}"
             )
 
-        # Try to load a disk-cached attestation result from a previous run.
-        # This lets await_attestation_ready() return immediately on restart
-        # (including --identity-update) while the background task refreshes.
-        # Fixes #775: auth unavailable for 30s+ after restart.
-        self._load_attestation_from_disk()
-
         # Kick off startup attestation in the BACKGROUND — but capture the
         # task so any code that *needs* the attestation result can await it.
-        # If we loaded a valid disk cache above, await_attestation_ready()
-        # returns instantly; otherwise it blocks until this task completes.
+        # Attestation MUST run fresh on every startup to verify the current
+        # binary/environment. Caching across restarts would defeat L1/L4
+        # integrity guarantees (replay/poisoning risk).
         self._attestation_task = asyncio.create_task(self.run_startup_attestation())
         self._background_tasks.add(self._attestation_task)
         self._attestation_task.add_done_callback(self._background_tasks.discard)
@@ -2162,8 +2157,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 self._attestation_cache = result
                 # Also save as last known (for stale-while-revalidate)
                 self._last_known_attestation = result
-                # Persist to disk so restarts can use the cached result
-                self._save_attestation_to_disk(result)
                 logger.info(
                     f"[attestation] Cached result: level={result.max_level}, instance={hex(id(self))}, binary={'OK' if result.binary_ok else 'FAIL'}"
                 )
@@ -2208,15 +2201,16 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         return result
 
     async def await_attestation_ready(self) -> None:
-        """Block until attestation data is available.
+        """Block until the startup attestation task has completed.
 
-        Returns immediately if a disk-cached attestation was loaded at
-        startup (stale-while-revalidate). Otherwise blocks until the
-        background attestation task completes.
+        ciris_verify is a hard runtime dependency — there is no path that
+        runs without verified attestation. Startup attestation is launched
+        as a background task in `start()` so the service can return quickly
+        and other init can run in parallel; any consumer that requires the
+        populated cache (e.g., batch_context building a thought context)
+        calls this method first.
 
         Behavior:
-          - If the cache is already populated (disk load or prior run),
-            returns immediately — the background task refreshes it later.
           - If the task hasn't been kicked off (start() never ran), raises
             RuntimeError immediately.
           - If the task is still running, awaits its completion.
@@ -2224,10 +2218,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
           - If the task raised, the exception is re-raised here so the
             caller fails loudly. We do not swallow attestation failures.
         """
-        # Fast path: cache already populated (from disk or a previous call)
-        if self._attestation_cache is not None:
-            return
-
         if self._attestation_task is None:
             raise RuntimeError(
                 "AuthenticationService.start() has not been called — "
@@ -2238,61 +2228,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # awaiting a completed task is a no-op except that exceptions
         # raised inside the task are re-raised here.
         await self._attestation_task
-
-    def _get_attestation_cache_path(self) -> Optional[Path]:
-        """Return the path for the on-disk attestation cache file."""
-        try:
-            from ciris_engine.logic.utils.path_resolution import get_data_dir
-
-            return Path(get_data_dir()) / ".attestation_cache.json"
-        except Exception:
-            return None
-
-    def _save_attestation_to_disk(self, result: AttestationResult) -> None:
-        """Persist attestation result to disk for fast restarts."""
-        cache_path = self._get_attestation_cache_path()
-        if cache_path is None:
-            return
-        try:
-            import json
-
-            data = result.model_dump(mode="json")
-            cache_path.write_text(json.dumps(data))
-            logger.debug(f"[attestation] Saved cache to disk: {cache_path}")
-        except Exception as e:
-            logger.debug(f"[attestation] Could not save cache to disk: {e}")
-
-    def _load_attestation_from_disk(self) -> None:
-        """Load a previously cached attestation result from disk.
-
-        Only used if the in-memory cache is empty (fresh start). The result
-        is loaded as stale data — valid enough for await_attestation_ready()
-        to return immediately, but the background task will refresh it.
-        """
-        if self._attestation_cache is not None:
-            return
-        cache_path = self._get_attestation_cache_path()
-        if cache_path is None or not cache_path.exists():
-            return
-        try:
-            import json
-
-            data = json.loads(cache_path.read_text())
-            result = AttestationResult(**data)
-            # Check staleness — only use if within the stale TTL (2 hours)
-            if result.cached_at:
-                age = (self._get_current_time() - result.cached_at).total_seconds()
-                if age > self._attestation_stale_ttl:
-                    logger.info(f"[attestation] Disk cache too stale ({age:.0f}s > {self._attestation_stale_ttl}s)")
-                    return
-            self._attestation_cache = result
-            self._last_known_attestation = result
-            logger.info(
-                f"[attestation] Loaded disk cache: level={result.max_level}, "
-                f"age={age:.0f}s — await_attestation_ready() will return immediately"
-            )
-        except Exception as e:
-            logger.debug(f"[attestation] Could not load disk cache: {e}")
 
     def get_cached_attestation(self, allow_stale: bool = False) -> Optional[AttestationResult]:
         """Get the cached attestation result if available.

@@ -95,8 +95,13 @@ def clean_db(test_db):
     `cirislens.*` / `cirisgraph.*` tables start empty. This fixture clears
     them defensively (best-effort) in case a prior fixture in the same
     test wired the persist engine and wrote rows.
+
+    Uses a bare sqlite3.connect() instead of get_db_connection() to avoid
+    PRAGMA mmap_size / journal_mode conflicts with the persist Engine's
+    active sqlx pool on the same file — those can cause SIGBUS under
+    xdist parallelism (CI shard 3/4 Bus error).
     """
-    from ciris_engine.logic.persistence.db.core import get_db_connection
+    import sqlite3 as _sqlite3
 
     _PERSIST_TABLES = [
         "cirislens_service_correlations",
@@ -108,12 +113,16 @@ def clean_db(test_db):
         "cirislens_audit_log",
         "cirislens_tickets",
     ]
-    with get_db_connection(test_db) as conn:
+    try:
+        conn = _sqlite3.connect(test_db, check_same_thread=False)
         for table in _PERSIST_TABLES:
             try:
                 conn.execute(f"DELETE FROM {table}")
             except Exception:
                 pass  # table absent — nothing to clear
         conn.commit()
+        conn.close()
+    except Exception:
+        pass  # best-effort cleanup
 
     return test_db

@@ -756,6 +756,14 @@ class CIRISApiClient(
             val response = authApi.nativeGoogleTokenExchangeV1AuthNativeGooglePost(request)
             logDebug(method, "Response: status=${response.status}")
 
+            if (!response.success) {
+                val errorBody = try {
+                    response.response.bodyAsText()
+                } catch (_: Exception) { "Unknown error" }
+                logError(method, "Server returned ${response.status}: $errorBody")
+                throw Exception("Token exchange failed (${response.status}): $errorBody")
+            }
+
             val body = response.body()
             logInfo(method, "Google auth successful: userId=${body.userId}, role=${body.role}")
 

@@ -19,7 +19,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -1489,12 +1489,110 @@ class CIRISRuntime(ServicePropertyMixin):
             _sink_task = asyncio.create_task(self.bus_manager.start())
             logger.info("Started multi-service sink as background task")
 
+        # Hard gate: nothing — not WAKEUP, not WORK, not a single thought —
+        # runs until startup attestation has finished. ciris_verify is a
+        # mandatory runtime dependency, and per-thought batch_context already
+        # blocks on await_attestation_ready(). Without this gate the *first*
+        # thought after startup absorbs the full attestation latency and
+        # downstream timing assertions (SSE snapshot waits, /v1/agent/interact
+        # response window) blow their budgets. Gating here ensures the
+        # processor only starts once the attestation cache is populated and
+        # every subsequent thought sees a no-op await.
+        #
+        # Auth service enforces a 15s end-to-end budget; if blown, the gate
+        # raises (with a verifier-debugging receipts dump — see _await_
+        # attestation_ready) and startup fails loudly. Silently absorbing
+        # 60-120s would mask a verifier regression.
+        await self._await_attestation_ready()
+
         effective_num_rounds = DEFAULT_NUM_ROUNDS
         logger.info(
             f"Starting agent processor (num_rounds={effective_num_rounds if effective_num_rounds != -1 else 'infinite'})..."
         )
 
         await self.agent_processor.start_processing(effective_num_rounds)
+
+    async def _await_attestation_ready(self) -> None:
+        """Block on the AuthenticationService's 15s attestation budget.
+
+        Looks up the service by capability (await_attestation_ready) rather
+        than registry type, mirroring batch_context's lookup so the two gate
+        sites stay aligned. The 15s budget is enforced by the auth service
+        itself; budget breach raises here and aborts processor start.
+
+        On budget breach we dump receipts (per-stage timings, cache state,
+        baseline_attestation, the active verifier mode) at ERROR level so
+        the failure becomes a fileable ciris_verify issue rather than a
+        flake-of-the-week.
+        """
+        auth_service = self.service_initializer.auth_service if self.service_initializer else None
+        if auth_service is None or not hasattr(auth_service, "await_attestation_ready"):
+            logger.warning(
+                "AuthenticationService unavailable for attestation gate — "
+                "processor will start without a startup attestation barrier. "
+                "Per-thought batch_context will still block on attestation, "
+                "so first-thought latency may be elevated until cache fills."
+            )
+            return
+
+        logger.info("Awaiting startup attestation (15s budget) before processor start...")
+        try:
+            await auth_service.await_attestation_ready()
+            logger.info("Startup attestation complete — processor cleared to start.")
+        except Exception as e:
+            self._log_attestation_failure_receipts(auth_service, e)
+            raise
+
+    def _log_attestation_failure_receipts(self, auth_service: Any, exc: BaseException) -> None:
+        """Dump everything an upstream ciris_verify maintainer would need to
+        reproduce a budget breach: per-stage timings, cache state, baseline,
+        active mode, and the exception chain. Called from the gate's except
+        branch so the receipts land in incidents_latest.log adjacent to the
+        failure, alongside the raised RuntimeError."""
+        import platform
+        import sys
+        import traceback
+
+        def _safe(getter: Callable[[], Any]) -> Any:
+            try:
+                return getter()
+            except Exception as e:  # pragma: no cover — defensive
+                return f"<error reading: {e}>"
+
+        receipts = {
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc),
+            "attestation_started_at": _safe(lambda: getattr(auth_service, "_attestation_started_at", None)),
+            "attestation_task_done": _safe(
+                lambda: bool(getattr(auth_service, "_attestation_task", None) and auth_service._attestation_task.done())
+            ),
+            "attestation_cache_populated": _safe(
+                lambda: getattr(auth_service, "_attestation_cache", None) is not None
+            ),
+            "baseline_attestation_populated": _safe(
+                lambda: getattr(auth_service, "_baseline_attestation", None) is not None
+            ),
+            "attestation_in_progress": _safe(
+                lambda: bool(getattr(auth_service, "_attestation_in_progress", False))
+            ),
+            "stage_timings_seconds": _safe(
+                lambda: getattr(auth_service, "_attestation_stage_timings", None)
+            ),
+            "platform": f"{platform.system()} {platform.release()}",
+            "python": sys.version.split()[0],
+            "running_tasks_count": _safe(lambda: len(asyncio.all_tasks())),
+        }
+
+        logger.error("=" * 70)
+        logger.error("ATTESTATION GATE BUDGET BREACH — receipts for ciris_verify issue:")
+        for key, value in receipts.items():
+            logger.error("  %s: %s", key, value)
+        logger.error("Exception chain:")
+        for line in traceback.format_exception(type(exc), exc, exc.__traceback__):
+            for sub_line in line.rstrip("\n").splitlines():
+                logger.error("  %s", sub_line)
+        logger.error("=" * 70)
+        logger.error("File this at https://github.com/CIRISAI/CIRISVerify/issues with the block above.")
 
     def _register_core_services(self) -> None:
         """Register core services in the service registry."""

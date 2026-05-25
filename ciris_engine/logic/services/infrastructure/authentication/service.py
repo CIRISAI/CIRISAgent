@@ -61,6 +61,17 @@ F = TypeVar("F", bound=Callable[..., Any])
 # Key file names
 SYSTEM_WA_KEY_FILENAME = "system_wa.key"
 
+# End-to-end budget for startup attestation, measured from when the
+# AuthenticationService's background `_attestation_task` is scheduled until
+# the cache is populated. The agent processor is gated on this completing,
+# so a slow attestation directly delays the first thought. 15s is the
+# contract: longer is a bug, not a tuning knob. If the verification logic
+# starts blowing the budget on a clean run, fix the verifier — do not raise
+# the ceiling. (Per-worker safety net is ATTESTATION_TIMEOUT=90 in
+# verifier_runner.py; that exists to prevent infinite hangs, not to license
+# a slow happy path.)
+STARTUP_ATTESTATION_BUDGET_SECONDS = 15.0
+
 
 class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProtocol):
     """Infrastructure service for WA authentication and identity management."""
@@ -123,6 +134,21 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # The startup attestation task — kicked off in start(), awaited by
         # any consumer that needs the populated cache. None until start().
         self._attestation_task: Optional[asyncio.Task[None]] = None
+        # Wall-clock timestamp (asyncio loop monotonic) when the startup
+        # task was scheduled. Lets await_attestation_ready() enforce the
+        # 15s end-to-end budget regardless of how late in startup the
+        # caller arrives — the budget is measured from task creation, not
+        # from when each caller starts awaiting.
+        self._attestation_started_at: Optional[float] = None
+        # Receipts for budget-breach diagnostics. Populated by
+        # run_startup_attestation as stages complete; consumed by the
+        # processor gate's failure logger when it files a ciris_verify
+        # issue. Keys mirror AttestationResult booleans plus a
+        # "run_attestation_total" entry so reviewers can spot which stage
+        # ate the budget. Heterogeneous on purpose — floats for timings,
+        # bools/strs/ints for stage outcomes, plus exception receipts on
+        # the failure branch.
+        self._attestation_stage_timings: Dict[str, Any] = {}
         self._baseline_attestation: Optional[AttestationResult] = (
             None  # First successful result for degradation detection
         )
@@ -1922,6 +1948,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Attestation MUST run fresh on every startup to verify the current
         # binary/environment. Caching across restarts would defeat L1/L4
         # integrity guarantees (replay/poisoning risk).
+        # Record the start timestamp so await_attestation_ready() can
+        # enforce the 15s end-to-end budget from this moment, not from
+        # when each caller arrives.
+        self._attestation_started_at = asyncio.get_event_loop().time()
         self._attestation_task = asyncio.create_task(self.run_startup_attestation())
         self._background_tasks.add(self._attestation_task)
         self._attestation_task.add_done_callback(self._background_tasks.discard)
@@ -2200,23 +2230,38 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         result = build_attestation_result(verify_result, attestation_mode)
         return result
 
-    async def await_attestation_ready(self) -> None:
+    async def await_attestation_ready(
+        self,
+        budget_seconds: float = STARTUP_ATTESTATION_BUDGET_SECONDS,
+    ) -> None:
         """Block until the startup attestation task has completed.
 
         ciris_verify is a hard runtime dependency — there is no path that
         runs without verified attestation. Startup attestation is launched
         as a background task in `start()` so the service can return quickly
         and other init can run in parallel; any consumer that requires the
-        populated cache (e.g., batch_context building a thought context)
-        calls this method first.
+        populated cache (e.g., batch_context building a thought context,
+        or the runtime processor gate) calls this method first.
+
+        Budget semantics:
+          The budget is measured from when the task was scheduled in
+          `start()`, NOT from when this method begins awaiting. That
+          captures the end-to-end promise: 15s from service start to
+          cache-populated, no matter how late in startup the caller
+          shows up. A caller that arrives 14s after start() only has
+          ~1s of remaining budget; a caller after 15s is already late
+          and times out immediately.
 
         Behavior:
-          - If the task hasn't been kicked off (start() never ran), raises
-            RuntimeError immediately.
-          - If the task is still running, awaits its completion.
-          - If the task already finished, returns immediately.
-          - If the task raised, the exception is re-raised here so the
-            caller fails loudly. We do not swallow attestation failures.
+          - If start() never ran: RuntimeError (no task to await).
+          - If task is still running and budget remains: await up to
+            the remaining budget. On timeout: raise RuntimeError with
+            the "attestation exceeded budget — this is a bug" message,
+            because per the contract any run that takes >15s should be
+            investigated as a verifier regression, not waited out.
+          - If task already finished: returns immediately.
+          - If task raised: the exception is re-raised so the caller
+            fails loudly. We do not swallow attestation failures.
         """
         if self._attestation_task is None:
             raise RuntimeError(
@@ -2225,9 +2270,68 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "mandatory; the service must be started before consumers "
                 "can request the attestation context."
             )
-        # awaiting a completed task is a no-op except that exceptions
-        # raised inside the task are re-raised here.
-        await self._attestation_task
+
+        # Capture the started-at timestamp once — both branches need it.
+        # getattr fallback keeps older test fixtures (bare services) working
+        # without setup.
+        started_at = getattr(self, "_attestation_started_at", None)
+
+        # Fast path: task already done. The contract is "the verifier
+        # completes within 15s", measured by its OWN wall-clock — not by
+        # elapsed-since-caller-arrival, which would inflate with caller
+        # lateness. Use the recorded total from stage_timings (set by
+        # run_startup_attestation on completion) so a 20s+ run still
+        # raises here even if the gate-side wait was a no-op.
+        if self._attestation_task.done():
+            total = getattr(self, "_attestation_stage_timings", {}).get(
+                "run_attestation_total_seconds"
+            )
+            if isinstance(total, (int, float)) and total > budget_seconds:
+                raise RuntimeError(
+                    f"Startup attestation completed but exceeded the "
+                    f"{budget_seconds:.0f}s budget (total={total:.1f}s). "
+                    f"This is a bug — the verifier should complete within "
+                    f"the contract window on a clean run. Investigate the "
+                    f"verifier (slow filesystem walk? blocking I/O? network "
+                    f"probe?) rather than raising the budget."
+                )
+            # Awaiting a completed task is a no-op except that exceptions
+            # raised inside the task are re-raised here.
+            await self._attestation_task
+            return
+
+        # Compute remaining budget from task-creation time. If for any
+        # reason the timestamp wasn't recorded (shouldn't happen — set
+        # alongside task creation), fall back to the full budget.
+        if started_at is not None:
+            elapsed = asyncio.get_event_loop().time() - started_at
+            remaining = max(0.0, budget_seconds - elapsed)
+        else:
+            remaining = budget_seconds
+
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(self._attestation_task),
+                timeout=remaining,
+            )
+        except asyncio.TimeoutError as exc:
+            # Don't cancel the task — let it keep running so refresh/audit
+            # paths still benefit from an eventual result. But surface the
+            # contract violation immediately so the caller (processor gate)
+            # aborts startup rather than absorbing the latency silently.
+            elapsed_total = (
+                asyncio.get_event_loop().time() - started_at
+                if started_at is not None
+                else None
+            )
+            elapsed_str = f"{elapsed_total:.1f}s" if elapsed_total is not None else "unknown"
+            raise RuntimeError(
+                f"Startup attestation exceeded the {budget_seconds:.0f}s budget "
+                f"(elapsed={elapsed_str}). This is a bug — the verifier should "
+                f"complete within the contract window on a clean run. Investigate "
+                f"the verifier (slow filesystem walk? blocking I/O? network probe?) "
+                f"rather than raising the budget."
+            ) from exc
 
     def get_cached_attestation(self, allow_stale: bool = False) -> Optional[AttestationResult]:
         """Get the cached attestation result if available.
@@ -2338,14 +2442,49 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         This is called during service startup to pre-populate the cache.
         It runs in parallel with other startup tasks and logs progress.
+
+        Timing receipts: total wall-clock and per-bool stage outcomes are
+        recorded in `self._attestation_stage_timings` so the processor
+        gate's failure logger can attach them to a ciris_verify bug report
+        when the 15s budget is blown.
         """
         logger.info(f"[attestation] Starting background attestation check on instance={hex(id(self))}...")
+        attestation_start = asyncio.get_event_loop().time()
         try:
             result = await self.run_attestation(mode="full")
+            elapsed = asyncio.get_event_loop().time() - attestation_start
             # Store as baseline for degradation detection
             self._baseline_attestation = result
+            # Capture per-bool stage outcomes (the verifier doesn't expose
+            # per-stage durations today, so we record at least which stages
+            # passed/failed alongside total wall-clock — enough signal to
+            # file a useful ciris_verify issue if total > 15s).
+            self._attestation_stage_timings = {
+                "run_attestation_total_seconds": round(elapsed, 3),
+                "binary_ok": result.binary_ok,
+                "function_integrity": result.function_integrity,
+                "python_integrity_ok": result.python_integrity_ok,
+                "registry_ok": result.registry_ok,
+                "audit_ok": result.audit_ok,
+                "max_level": result.max_level,
+                "level_pending": result.level_pending,
+            }
+            if elapsed > STARTUP_ATTESTATION_BUDGET_SECONDS:
+                logger.warning(
+                    "[attestation] Startup attestation exceeded the %.0fs budget: "
+                    "took %.2fs. Per-bool: binary=%s functions=%s python=%s "
+                    "registry=%s audit=%s. Investigate the verifier — do not "
+                    "raise the budget.",
+                    STARTUP_ATTESTATION_BUDGET_SECONDS,
+                    elapsed,
+                    result.binary_ok,
+                    result.function_integrity,
+                    result.python_integrity_ok,
+                    result.registry_ok,
+                    result.audit_ok,
+                )
             logger.info(
-                f"[attestation] Startup attestation completed: "
+                f"[attestation] Startup attestation completed in {elapsed:.2f}s: "
                 f"level={result.max_level}/5, "
                 f"binary={'OK' if result.binary_ok else 'FAIL'}, "
                 f"functions={'OK' if result.function_integrity == 'verified' else 'FAIL'}, "
@@ -2373,7 +2512,21 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             sys.stdout.write(f"{msg}\n")
             sys.stdout.flush()
         except Exception as e:
-            logger.error(f"[attestation] Startup attestation failed on instance={hex(id(self))}: {e}")
+            elapsed = asyncio.get_event_loop().time() - attestation_start
+            # Capture the failure receipts so the gate's logger has something
+            # to attach even if run_attestation raised before any stage
+            # finished. Best-effort: never re-raise from receipt capture.
+            self._attestation_stage_timings = {
+                "run_attestation_total_seconds": round(elapsed, 3),
+                "raised": True,
+                "exception_type": type(e).__name__,
+                "exception_message": str(e),
+            }
+            logger.exception(
+                "[attestation] Startup attestation failed after %.2fs on instance=%s",
+                elapsed,
+                hex(id(self)),
+            )
 
     async def _attestation_refresh_loop(self) -> None:
         """Periodically refresh attestation before cache TTL expires.

@@ -2502,9 +2502,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "exception_type": type(e).__name__,
                 "exception_message": str(e),
             }
-            logger.error(
-                f"[attestation] Startup attestation failed after {elapsed:.2f}s on "
-                f"instance={hex(id(self))}: {e}"
+            logger.exception(
+                "[attestation] Startup attestation failed after %.2fs on instance=%s",
+                elapsed,
+                hex(id(self)),
             )
 
     async def _attestation_refresh_loop(self) -> None:

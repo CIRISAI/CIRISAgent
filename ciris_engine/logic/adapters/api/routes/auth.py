@@ -341,6 +341,40 @@ async def get_current_user(auth: AuthDep, auth_service: AuthServiceDep) -> UserI
     )
 
 
+@router.get("/auth/owner-hint")
+async def get_owner_hint(
+    auth_service: AuthServiceDep,
+) -> Dict[str, Any]:
+    """Return a masked identity hint for the founding owner.
+
+    Used by the Login screen on personal-install clients (Android / iOS
+    today; desktop slated for 2.9.2 follow-up) so the user sees who
+    they need to sign in as before they pick the wrong Google account
+    and trip the 403 personal-install block.
+
+    Privacy guarantees:
+      * Only fires on personal installs (mobile detection). Multi-tenant
+        servers respond 404 — they never expose owner identity to
+        unauthenticated callers.
+      * Email is always masked (`e***@gmail.com`, GDPR Art. 32
+        pseudonymisation). First name only; no surname. No avatar URL.
+      * Returns `{"owner_hint": null}` rather than 404 when setup hasn't
+        completed yet so the client can render an empty state without
+        treating "no setup" as an error.
+
+    No authentication required — the client calls this before sign-in.
+    """
+    from ciris_engine.logic.utils.path_resolution import is_android, is_ios
+
+    if not (is_android() or is_ios()):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="owner-hint is only exposed on personal-install clients",
+        )
+
+    return {"owner_hint": _get_founding_owner_hint(auth_service)}
+
+
 @router.post("/auth/refresh")
 async def refresh_token(
     request: TokenRefreshRequest,
@@ -992,7 +1026,90 @@ def _determine_user_role(
     return UserRole.OBSERVER
 
 
-def _reject_observer_on_personal_install(user_role: UserRole, email: Optional[str]) -> None:
+def _mask_email(email: Optional[str]) -> Optional[str]:
+    """Mask an email for safe display on personal-install Login screens.
+
+    Pattern: `<first1-3>***@<domain>`. Returns None if email is empty or
+    not parseable. Matches the masking used elsewhere in this module
+    (e.g. the rejection log line) so the hint shown in UI and the line
+    written to incidents look identical.
+    """
+    if not email or "@" not in email:
+        return None
+    prefix, domain = email.split("@", 1)
+    keep = max(1, min(3, max(1, len(prefix) - 1)))
+    return f"{prefix[:keep]}***@{domain}"
+
+
+def _get_founding_owner_hint(auth_service: Optional["APIAuthService"]) -> Optional[Dict[str, Any]]:
+    """Build an owner-hint payload for personal-install recovery UX.
+
+    Returns a dict the client can render directly: masked email plus a
+    first-name only (GDPR Art. 32 pseudonymisation — never the full
+    email or surname). Used in two places:
+      * The 403 body when `_reject_observer_on_personal_install` fires —
+        so a user who picked the wrong Google account immediately sees
+        who they should sign in as.
+      * The pre-login `GET /v1/auth/owner-hint` endpoint — so the Login
+        screen can prefill the hint before any sign-in attempt.
+
+    Founding owner = the earliest-created SYSTEM_ADMIN user. On a
+    personal install there is exactly one. `_users` aliases the same
+    User under multiple keys (wa_id, primary key, OAuth link key) so we
+    dedupe by `wa_id` before picking the earliest.
+
+    Returns None when no SYSTEM_ADMIN exists yet (pre-setup) or when
+    the auth service is unavailable. Callers must treat None as "no
+    hint to show" rather than an error.
+    """
+    if auth_service is None:
+        return None
+    try:
+        users = getattr(auth_service, "_users", None)
+        if not users:
+            return None
+
+        seen_wa_ids: set[str] = set()
+        admins: List[Any] = []
+        for user in users.values():
+            wa_id = getattr(user, "wa_id", None)
+            if not wa_id or wa_id in seen_wa_ids:
+                continue
+            seen_wa_ids.add(wa_id)
+            if getattr(user, "api_role", None) == APIRole.SYSTEM_ADMIN:
+                admins.append(user)
+        if not admins:
+            return None
+
+        admins.sort(key=lambda u: getattr(u, "created_at", None) or datetime.min)
+        owner = admins[0]
+
+        email = getattr(owner, "oauth_email", None)
+        name = getattr(owner, "oauth_name", None) or getattr(owner, "name", None) or ""
+        # First name only — surname is unnecessary signal and is the
+        # pseudonymisation principle in practice.
+        first_name = name.split()[0] if name else None
+
+        masked_email = _mask_email(email)
+        if not masked_email and not first_name:
+            return None
+
+        return {
+            "masked_email": masked_email,
+            "first_name": first_name,
+            "auth_type": getattr(owner, "auth_type", None),
+            "oauth_provider": getattr(owner, "oauth_provider", None),
+        }
+    except Exception as e:  # pragma: no cover — defensive
+        logger.debug("[AUTH] Owner-hint lookup failed: %s", e)
+        return None
+
+
+def _reject_observer_on_personal_install(
+    user_role: UserRole,
+    email: Optional[str],
+    auth_service: Optional["APIAuthService"] = None,
+) -> None:
     """Reject OBSERVER role OAuth logins on mobile (Android/iOS) installs.
 
     Mobile installs are single-user partnership deployments on personal devices.
@@ -1003,6 +1120,12 @@ def _reject_observer_on_personal_install(user_role: UserRole, email: Optional[st
     Note: This only applies to mobile platforms where we can reliably detect
     "personal install". Desktop and standalone servers allow OBSERVER logins.
 
+    When `auth_service` is provided the 403 detail also carries an
+    `owner_hint` payload so the client can render a recovery screen
+    pointing at the right Google account. The hint is masked
+    (`e***@gmail.com` + first name) and only ever emitted on the
+    personal-install code path — multi-tenant servers never reach here.
+
     Raises:
         HTTPException: If OBSERVER login attempted on mobile platform
     """
@@ -1010,15 +1133,19 @@ def _reject_observer_on_personal_install(user_role: UserRole, email: Optional[st
 
     is_mobile_platform = is_android() or is_ios()
     if user_role == UserRole.OBSERVER and is_mobile_platform:
-        masked_email = (email[:3] + "***@" + email.split("@")[-1]) if email and "@" in email else "unknown"
+        masked_email = _mask_email(email) or "unknown"
         logger.warning(f"[AUTH] Rejecting OBSERVER login on personal install: {masked_email}")  # NOSONAR - email masked
+        detail: Dict[str, Any] = {
+            "code": "auth_personal_install_observer_blocked",
+            "message": "This is a personal CIRIS installation. Only the owner can sign in. "
+            "If you are the owner, please use the same account you used during setup.",
+        }
+        owner_hint = _get_founding_owner_hint(auth_service)
+        if owner_hint is not None:
+            detail["owner_hint"] = owner_hint
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "auth_personal_install_observer_blocked",
-                "message": "This is a personal CIRIS installation. Only the owner can sign in. "
-                "If you are the owner, please use the same account you used during setup.",
-            },
+            detail=detail,
         )
 
 
@@ -1325,7 +1452,7 @@ async def oauth_callback(
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider=provider)
 
         # Block observer logins on personal (desktop/mobile) installs
-        _reject_observer_on_personal_install(user_role, user_email)
+        _reject_observer_on_personal_install(user_role, user_email, auth_service)
 
         oauth_user = auth_service.create_oauth_user(
             provider=provider,
@@ -1728,7 +1855,7 @@ async def native_google_token_exchange(
         logger.debug("[NativeAuth] Determined role: %s", user_role)
 
         # Block observer logins on personal (desktop/mobile) installs
-        _reject_observer_on_personal_install(user_role, user_email)
+        _reject_observer_on_personal_install(user_role, user_email, auth_service)
 
         # Create or get OAuth user
         oauth_user = auth_service.create_oauth_user(
@@ -2116,7 +2243,7 @@ async def native_apple_token_exchange(
         logger.info(f"[AppleNativeAuth] Determined role for {user_email}: {user_role}")
 
         # Block observer logins on personal (desktop/mobile) installs
-        _reject_observer_on_personal_install(user_role, user_email)
+        _reject_observer_on_personal_install(user_role, user_email, auth_service)
 
         # Create or get OAuth user
         logger.info(f"[AppleNativeAuth] Creating/getting OAuth user - external_id: {external_id}, email: {user_email}")

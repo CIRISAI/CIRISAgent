@@ -1820,7 +1820,13 @@
     "setup_byok_llm_desc": "Konfigurasi penyedia AI Anda. Masukkan kunci API dan pilih model untuk memulai.",
     "setup_ciris_llm_desc": "CIRIS AI aktif. Opsional konfigurasikan penyedia Anda sendiri untuk penggunaan offline atau privasi.",
     "setup_select_provider": "Pilih penyedia",
-    "setup_validation_select_provider": "Silakan pilih penyedia LLM"
+    "setup_validation_select_provider": "Silakan pilih penyedia LLM",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",

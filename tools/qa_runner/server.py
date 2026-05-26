@@ -811,6 +811,19 @@ class APIServerManager:
         # sought and which key_ids _api_keys actually held — the decisive
         # evidence for the --parallel-backends "Invalid API key" 401s.
         env.setdefault("CIRIS_AUTH_DEBUG", "1")
+        # Bump the server-side interact() response-correlation window
+        # for QA. The production default is 55s, which is the actual
+        # ceiling that returns "Still processing" — under the
+        # --parallel-backends matrix (two agent stacks sharing a CI
+        # runner) the agent's ASPDMA loop legitimately takes 60-90s,
+        # and the air-test stall we keep seeing on the postgres leg
+        # is the SERVER giving up at 55s before the client even
+        # times out. Bumping to 180s gives parallel-backend headroom
+        # while still acting as a circuit breaker if the agent really
+        # hangs. The client-side timeouts in air / context_enrichment
+        # tests are already sized above this (140s / 240s under
+        # CIRIS_QA_PARALLEL_BACKENDS=1).
+        env.setdefault("CIRIS_API_INTERACTION_TIMEOUT", "180")
 
         # Ensure CIRIS_MOCK_LLM matches our config (unset if not using mock)
         if not self.config.mock_llm:

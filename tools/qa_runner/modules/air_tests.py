@@ -189,12 +189,15 @@ class AIRTests:
         import uuid
 
         fresh_channel = f"air_qa_smoke_{uuid.uuid4().hex[:8]}"
-        # 70s baseline matches the server's interact response-correlation
+        # Baseline matches the server's interact response-correlation
         # window. Under the --parallel-backends QA matrix two agent stacks
-        # share one CI runner, halving effective throughput, so we double
-        # the budget when the parent qa_runner signals parallel mode (see
-        # runner.py:_run_parallel_backends).
-        interact_timeout = 140.0 if os.environ.get("CIRIS_QA_PARALLEL_BACKENDS") == "1" else 70.0
+        # share one CI runner, halving effective throughput. The QA runner
+        # bumps the server-side window to 180s in that mode (see
+        # server.py:CIRIS_API_INTERACTION_TIMEOUT); the client timeout MUST
+        # stay above that or we time out before the server can deliver the
+        # response — that was the actual #784/air-test failure mode on the
+        # postgres leg of #791. 200s leaves a 20s buffer over server-side.
+        interact_timeout = 200.0 if os.environ.get("CIRIS_QA_PARALLEL_BACKENDS") == "1" else 70.0
         async with httpx.AsyncClient(timeout=interact_timeout) as client:
             response = await client.post(
                 f"{self.base_url}/v1/agent/interact",

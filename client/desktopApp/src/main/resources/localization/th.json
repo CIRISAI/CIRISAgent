@@ -1820,7 +1820,13 @@
     "setup_byok_llm_desc": "กำหนดค่าผู้ให้บริการ AI ของคุณ ป้อนคีย์ API และเลือกโมเดลเพื่อเริ่มต้น",
     "setup_ciris_llm_desc": "CIRIS AI ใช้งานอยู่ กำหนดค่าผู้ให้บริการของคุณเองสำหรับการใช้งานออฟไลน์หรือความเป็นส่วนตัว",
     "setup_select_provider": "เลือกผู้ให้บริการ",
-    "setup_validation_select_provider": "กรุณาเลือกผู้ให้บริการ LLM"
+    "setup_validation_select_provider": "กรุณาเลือกผู้ให้บริการ LLM",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {กระทำion}",

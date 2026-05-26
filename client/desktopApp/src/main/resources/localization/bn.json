@@ -1821,7 +1821,13 @@
     "setup_byok_llm_desc": "আপনার AI প্রদানকারী কনফিগার করুন। শুরু করতে আপনার API কী লিখুন এবং একটি মডেল নির্বাচন করুন।",
     "setup_ciris_llm_desc": "CIRIS AI সক্রিয়। অফলাইন ব্যবহার বা গোপনীয়তার জন্য ঐচ্ছিকভাবে আপনার নিজের প্রদানকারী কনফিগার করুন।",
     "setup_select_provider": "প্রদানকারী নির্বাচন করুন",
-    "setup_validation_select_provider": "অনুগ্রহ করে একটি LLM প্রদানকারী নির্বাচন করুন"
+    "setup_validation_select_provider": "অনুগ্রহ করে একটি LLM প্রদানকারী নির্বাচন করুন",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",

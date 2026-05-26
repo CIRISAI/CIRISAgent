@@ -38,8 +38,16 @@ fun MainViewControllerWithAuth(
     NSLog("[Main.ios][INFO] MainViewControllerWithAuth called, creating NativeSignInCallback")
 
     val callback = object : NativeSignInCallback {
-        override fun onGoogleSignInRequested(onResult: (NativeSignInResult) -> Unit) {
-            NSLog("[Main.ios][INFO] onGoogleSignInRequested called - invoking Swift onAppleSignInRequested")
+        override fun onGoogleSignInRequested(
+            forceAccountChooser: Boolean,
+            onResult: (NativeSignInResult) -> Unit,
+        ) {
+            NSLog("[Main.ios][INFO] onGoogleSignInRequested called (forceAccountChooser=$forceAccountChooser) - invoking Swift onAppleSignInRequested")
+            // 2.9.2 — forceAccountChooser is honored by the Swift side
+            // (ASAuthorizationAppleIDProvider does not cache the
+            // selection across calls, so the platform behavior is
+            // already correct; the flag is wired through for parity
+            // with Android and any future Google-on-iOS path).
             onAppleSignInRequested { bridgeResult ->
                 NSLog("[Main.ios][INFO] Got bridgeResult from Swift: type=${bridgeResult.type}")
                 onResult(bridgeResult.toNativeResult())
@@ -90,8 +98,16 @@ fun MainViewControllerWithAuthAndStore(
     NSLog("[Main.ios][INFO] MainViewControllerWithAuthAndStore called")
 
     val signInCallback = object : NativeSignInCallback {
-        override fun onGoogleSignInRequested(onResult: (NativeSignInResult) -> Unit) {
-            NSLog("[Main.ios][INFO] onGoogleSignInRequested called - invoking Swift onAppleSignInRequested")
+        override fun onGoogleSignInRequested(
+            forceAccountChooser: Boolean,
+            onResult: (NativeSignInResult) -> Unit,
+        ) {
+            NSLog("[Main.ios][INFO] onGoogleSignInRequested called (forceAccountChooser=$forceAccountChooser) - invoking Swift onAppleSignInRequested")
+            // 2.9.2 — forceAccountChooser is honored by the Swift side
+            // (ASAuthorizationAppleIDProvider does not cache the
+            // selection across calls, so the platform behavior is
+            // already correct; the flag is wired through for parity
+            // with Android and any future Google-on-iOS path).
             onAppleSignInRequested { bridgeResult ->
                 NSLog("[Main.ios][INFO] Got bridgeResult from Swift: type=${bridgeResult.type}")
                 onResult(bridgeResult.toNativeResult())

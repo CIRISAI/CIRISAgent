@@ -1820,7 +1820,13 @@
     "setup_byok_llm_desc": "ਆਪਣੇ AI ਪ੍ਰਦਾਤਾ ਨੂੰ ਕੌਂਫਿਗਰ ਕਰੋ। ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਆਪਣੀ API ਕੁੰਜੀ ਦਰਜ ਕਰੋ ਅਤੇ ਮਾਡਲ ਚੁਣੋ।",
     "setup_ciris_llm_desc": "CIRIS AI ਸਰਗਰਮ ਹੈ। ਔਫਲਾਈਨ ਵਰਤੋਂ ਜਾਂ ਗੋਪਨੀਯਤਾ ਲਈ ਵਿਕਲਪਿਕ ਤੌਰ ਤੇ ਆਪਣੇ ਪ੍ਰਦਾਤਾ ਨੂੰ ਕੌਂਫਿਗਰ ਕਰੋ।",
     "setup_select_provider": "ਪ੍ਰਦਾਤਾ ਚੁਣੋ",
-    "setup_validation_select_provider": "ਕਿਰਪਾ ਕਰਕੇ LLM ਪ੍ਰਦਾਤਾ ਚੁਣੋ"
+    "setup_validation_select_provider": "ਕਿਰਪਾ ਕਰਕੇ LLM ਪ੍ਰਦਾਤਾ ਚੁਣੋ",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",

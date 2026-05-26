@@ -1728,7 +1728,13 @@
     "setup_byok_llm_desc": "Sanidi mtoa huduma wako wa AI. Ingiza ufunguo wako wa API na uchague mfano kuanza.",
     "setup_ciris_llm_desc": "CIRIS AI inafanya kazi. Unaweza kusanidi mtoa huduma wako mwenyewe kwa matumizi nje ya mtandao au faragha.",
     "setup_select_provider": "Chagua mtoa huduma",
-    "setup_validation_select_provider": "Tafadhali chagua mtoa huduma wa LLM"
+    "setup_validation_select_provider": "Tafadhali chagua mtoa huduma wa LLM",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "prompts": {
     "dma": {

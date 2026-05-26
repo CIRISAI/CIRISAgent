@@ -117,8 +117,18 @@ interface NativeSignInCallback {
     /**
      * Request interactive sign-in (shows UI).
      * Named onGoogleSignInRequested for backward compatibility with existing Android code.
+     *
+     * @param forceAccountChooser When true, clear any cached credential
+     *   selection (Android: `CredentialManager.clearCredentialState()`,
+     *   iOS: equivalent on the Apple/Google SDK in use) before launching
+     *   the request so the user sees the full account picker instead of
+     *   the auto-resumed last-account. Used by the 2.9.2 personal-install
+     *   observer-blocked recovery flow.
      */
-    fun onGoogleSignInRequested(onResult: (NativeSignInResult) -> Unit)
+    fun onGoogleSignInRequested(
+        forceAccountChooser: Boolean = false,
+        onResult: (NativeSignInResult) -> Unit,
+    )
 
     /**
      * Attempt silent sign-in (no UI).
@@ -189,7 +199,10 @@ interface LegacyGoogleSignInCallback {
     /**
      * Request interactive Google Sign-In (shows UI).
      */
-    fun onGoogleSignInRequested(onResult: (NativeSignInResult) -> Unit)
+    fun onGoogleSignInRequested(
+        forceAccountChooser: Boolean = false,
+        onResult: (NativeSignInResult) -> Unit,
+    )
 
     /**
      * Attempt silent sign-in (no UI).
@@ -415,6 +428,15 @@ fun CIRISApp(
     var isLoginLoading by remember { mutableStateOf(false) }
     var loginStatusMessage by remember { mutableStateOf<String?>(null) }
     var loginErrorMessage by remember { mutableStateOf<String?>(null) }
+
+    // 2.9.2 personal-install owner-hint recovery state. ownerHint is
+    // refreshed lazily — once via GET /v1/auth/owner-hint when the
+    // Login screen first renders, then again from the 403 detail body
+    // if a sign-in attempt fails with auth_personal_install_observer_
+    // blocked. observerBlocked = true means render the structured
+    // recovery card instead of the small red error line.
+    var ownerHint by remember { mutableStateOf<ai.ciris.mobile.shared.models.OwnerHint?>(null) }
+    var observerBlocked by remember { mutableStateOf(false) }
 
     // OAuth auth state for token exchange after setup (works for both Google and Apple)
     var pendingIdToken by remember { mutableStateOf<String?>(null) }
@@ -1026,6 +1048,35 @@ fun CIRISApp(
                     }
                 }
 
+                // 2.9.2 — Fetch the personal-install owner hint each time
+                // the Login screen renders. Always-fetch (rather than
+                // gated on isFirstRun) because: (a) isFirstRun is a state
+                // variable seeded at startup and not refreshed on
+                // logout, so the post-setup → logout path would
+                // otherwise never see a hint; (b) the server returns
+                // {"owner_hint": null} on pre-setup devices, so the
+                // pre-setup cost is one cheap API call and a null
+                // assignment; (c) network blip / pre-2.9.2 backend /
+                // multi-tenant server all degrade to a null hint and we
+                // render the Login screen exactly like 2.9.1 did.
+                LaunchedEffect(Unit) {
+                    runCatching { apiClient.getOwnerHint() }
+                        .onSuccess { hint ->
+                            ownerHint = hint
+                            if (hint != null) {
+                                platformLog(
+                                    TAG,
+                                    "[INFO][OwnerHint] Loaded: name=${hint.first_name} email=${hint.masked_email}"
+                                )
+                            } else {
+                                platformLog(TAG, "[DEBUG][OwnerHint] null hint (pre-setup or non-personal-install)")
+                            }
+                        }
+                        .onFailure { e ->
+                            platformLog(TAG, "[DEBUG][OwnerHint] fetch failed: ${e.message?.take(60)}")
+                        }
+                }
+
                 LoginScreen(
                     onGoogleSignIn = {
                         platformLog(TAG, "[INFO][onGoogleSignIn] Button click handler invoked, googleSignInCallback=${if (googleSignInCallback != null) "PRESENT" else "NULL"}")
@@ -1142,7 +1193,29 @@ fun CIRISApp(
                                                     platformLog(TAG, "[ERROR] Token exchange failed: ${e::class.simpleName}: ${e.message}")
                                                     isLoginLoading = false
                                                     loginStatusMessage = null
-                                                    loginErrorMessage = "Token exchange failed: ${e.message}"
+                                                    // 2.9.2 — detect the personal-install
+                                                    // observer-block 403 and route through
+                                                    // the structured recovery card. The
+                                                    // server error body looks like:
+                                                    //   Token exchange failed (403): {"detail":{"code":"auth_personal_install_observer_blocked","message":"...","owner_hint":{...}}}
+                                                    val errText = e.message ?: ""
+                                                    if (errText.contains("auth_personal_install_observer_blocked")) {
+                                                        observerBlocked = true
+                                                        loginErrorMessage = null
+                                                        val parsedHint = ai.ciris.mobile.shared.utils.parseOwnerHintFromErrorBody(errText)
+                                                        if (parsedHint != null) {
+                                                            ownerHint = parsedHint
+                                                            platformLog(TAG, "[INFO] Observer-blocked recovery — owner_hint=${parsedHint.first_name}/${parsedHint.masked_email}")
+                                                        } else {
+                                                            // Fall back to whatever hint we
+                                                            // already loaded (or null if
+                                                            // none); the card still renders
+                                                            // a generic body in that case.
+                                                            platformLog(TAG, "[WARN] Observer-blocked but no owner_hint parseable from error body")
+                                                        }
+                                                    } else {
+                                                        loginErrorMessage = "Token exchange failed: ${e.message}"
+                                                    }
                                                 }
                                             } else {
                                                 // Setup needed - go through wizard
@@ -1273,10 +1346,64 @@ fun CIRISApp(
                         }
                     },
                     onServerSettings = { currentScreen = Screen.ServerConnection },
+                    onChooseDifferentAccount = {
+                        // 2.9.2 recovery action — re-run the native sign-in
+                        // with the account chooser forced open. On Android
+                        // the GoogleSignInCallback impl calls
+                        // CredentialManager.clearCredentialState() before
+                        // launching the request, so the user sees Google's
+                        // multi-account picker instead of the cached
+                        // account. iOS uses the same callback path.
+                        platformLog(TAG, "[INFO][onChooseDifferentAccount] Clearing observerBlocked + re-launching sign-in with account picker")
+                        observerBlocked = false
+                        loginErrorMessage = null
+                        if (googleSignInCallback != null) {
+                            isLoginLoading = true
+                            loginStatusMessage = LocalizationHelper.getString(
+                                "mobile.status_signing_in",
+                                mapOf("provider" to getOAuthProviderName())
+                            )
+                            // The forceAccountChooser flag tells the platform
+                            // impl to call clearCredentialState() before the
+                            // sign-in request — see GoogleSignInCallback
+                            // platform implementations.
+                            googleSignInCallback.onGoogleSignInRequested(
+                                forceAccountChooser = true,
+                            ) { result ->
+                                isLoginLoading = false
+                                loginStatusMessage = null
+                                if (result is NativeSignInResult.Error) {
+                                    loginErrorMessage = "Sign-in failed: ${result.message}"
+                                }
+                                // Success path is handled by the original
+                                // onGoogleSignIn handler when the user runs
+                                // the regular flow next time; for the
+                                // recovery dialog we just reset state.
+                            }
+                        }
+                    },
+                    onResetSetup = {
+                        // 2.9.2 — graceful escape hatch: clear local state
+                        // and bounce to setup so a legitimate new owner
+                        // can claim the device. Mirrors the existing
+                        // settings-screen reset flow.
+                        platformLog(TAG, "[INFO][onResetSetup] User initiated device reset from observer-blocked recovery")
+                        observerBlocked = false
+                        loginErrorMessage = null
+                        interactViewModel.resetState()
+                        settingsViewModel.logout {
+                            currentAccessToken = null
+                            startupViewModel.retry()
+                            checkingFirstRun = false
+                            currentScreen = Screen.Startup
+                        }
+                    },
                     connectionStatus = serverConnectionViewModel.connectionStatus.collectAsState().value,
                     isLoading = isLoginLoading,
                     statusMessage = loginStatusMessage,
                     errorMessage = loginErrorMessage,
+                    ownerHint = ownerHint,
+                    observerBlocked = observerBlocked,
                     showLocalLoginForm = (googleSignInCallback == null && isFirstRun == false),
                     isFirstRun = isFirstRun ?: true
                 )

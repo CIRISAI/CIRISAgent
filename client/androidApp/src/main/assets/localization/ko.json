@@ -1728,7 +1728,13 @@
     "setup_byok_llm_desc": "AI 제공업체를 구성합니다. API 키를 입력하고 모델을 선택하여 시작하세요.",
     "setup_ciris_llm_desc": "CIRIS AI가 활성화되었습니다. 오프라인 사용이나 개인정보 보호를 위해 자체 제공업체를 구성할 수 있습니다.",
     "setup_select_provider": "제공업체 선택",
-    "setup_validation_select_provider": "LLM 제공업체를 선택해 주세요"
+    "setup_validation_select_provider": "LLM 제공업체를 선택해 주세요",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "prompts": {
     "dma": {

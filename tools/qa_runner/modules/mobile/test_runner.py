@@ -195,9 +195,36 @@ class MobileTestRunner:
             avd_name = avds[0]
             print(f"      Starting emulator: {avd_name}")
 
-            # Start emulator in background
+            # Start emulator in background with QuickBoot autosave disabled.
+            # The default file-backed RAM mapping (`snapshots/default_boot/
+            # ram.img` mmap'd into the qemu process) causes the host kernel to
+            # writeback every dirty guest RAM page — under a churny guest
+            # (mock-LLM cycles, retry loops, GC churn) that turns into
+            # 400+ MB/s sustained host disk writes and freezes laptops.
+            #
+            # Flags:
+            #   -no-snapshot-save     Don't persist quickboot state on exit.
+            #                         Cold boot or load existing snapshot, then
+            #                         throw away any RAM changes on shutdown.
+            #   -no-snapstorage       Don't open the snapstorage backing file
+            #                         at all, which stops the file-backed RAM
+            #                         mmap that's the actual source of the
+            #                         host writeback storm.
+            #   -no-snapshot-load     Force a cold boot so we never resume into
+            #                         a stale/poisoned guest state from a
+            #                         prior test run. Combined with -no-
+            #                         snapshot-save this is the canonical
+            #                         "ephemeral CI emulator" recipe.
+            # See discussion in commit notes + Android emulator-snapshots docs.
             subprocess.Popen(
-                [emulator_path, "-avd", avd_name, "-no-snapshot-load"],
+                [
+                    emulator_path,
+                    "-avd",
+                    avd_name,
+                    "-no-snapshot-load",
+                    "-no-snapshot-save",
+                    "-no-snapstorage",
+                ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )

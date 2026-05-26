@@ -1728,7 +1728,13 @@
     "setup_byok_llm_desc": "Konfigurieren Sie Ihren KI-Anbieter. Geben Sie Ihren API-Schlüssel ein und wählen Sie ein Modell.",
     "setup_ciris_llm_desc": "CIRIS AI ist aktiv. Konfigurieren Sie optional Ihren eigenen Anbieter für Offline-Nutzung oder Datenschutz.",
     "setup_select_provider": "Wählen Sie einen Anbieter",
-    "setup_validation_select_provider": "Bitte wählen Sie einen LLM-Anbieter"
+    "setup_validation_select_provider": "Bitte wählen Sie einen LLM-Anbieter",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "prompts": {
     "dma": {

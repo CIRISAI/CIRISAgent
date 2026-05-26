@@ -1820,7 +1820,13 @@
     "setup_byok_llm_desc": "သင်၏ AI ပံ့ပိုးသူကို ပြင်ဆင်ပါ။ စတင်ရန် သင်၏ API သော့ကို ထည့်သွင်းပြီး မော်ဒယ်ကို ရွေးချယ်ပါ။",
     "setup_ciris_llm_desc": "CIRIS AI အလုပ်လုပ်နေပါသည်။ အော့ဖ်လိုင်းအသုံးပြုမှု သို့မဟုတ် ကိုယ်ရေးကိုယ်တာအတွက် သင့်ကိုယ်ပိုင် ပံ့ပိုးသူကို ရွေးချယ်ပြင်ဆင်ပါ။",
     "setup_select_provider": "ပံ့ပိုးသူကို ရွေးချယ်ပါ",
-    "setup_validation_select_provider": "LLM ပံ့ပိုးသူကို ရွေးချယ်ပါ"
+    "setup_validation_select_provider": "LLM ပံ့ပိုးသူကို ရွေးချယ်ပါ",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {လုပ်ဆောင်ion}",

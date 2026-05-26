@@ -1820,7 +1820,13 @@
     "setup_byok_llm_desc": "Ṣeto olupese AI rẹ. Tẹ bọtini API rẹ ki o yan awoṣe lati bẹrẹ.",
     "setup_ciris_llm_desc": "CIRIS AI ti ṣiṣẹ́. O lè yan lati ṣeto olupese tirẹ fún lílo áìsípò tabi àṣírí.",
     "setup_select_provider": "Yan olupese kan",
-    "setup_validation_select_provider": "Jọwọ yan olupese LLM kan"
+    "setup_validation_select_provider": "Jọwọ yan olupese LLM kan",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",

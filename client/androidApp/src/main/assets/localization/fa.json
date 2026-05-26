@@ -1734,7 +1734,13 @@
     "setup_byok_llm_desc": "ارائه‌دهنده هوش مصنوعی خود را پیکربندی کنید. کلید API خود را وارد کنید و یک مدل را برای شروع انتخاب کنید.",
     "setup_ciris_llm_desc": "CIRIS AI فعال است. به صورت اختیاری ارائه‌دهنده خود را برای استفاده آفلاین یا حفظ حریم خصوصی پیکربندی کنید.",
     "setup_select_provider": "یک ارائه‌دهنده انتخاب کنید",
-    "setup_validation_select_provider": "لطفاً یک ارائه‌دهنده LLM انتخاب کنید"
+    "setup_validation_select_provider": "لطفاً یک ارائه‌دهنده LLM انتخاب کنید",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "prompts": {
     "dma": {

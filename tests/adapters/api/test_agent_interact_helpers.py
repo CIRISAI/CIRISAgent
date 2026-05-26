@@ -602,10 +602,22 @@ class TestCheckProcessorPauseStatus:
 
 
 class TestGetInteractionTimeout:
-    """Test _get_interaction_timeout helper method."""
+    """Test _get_interaction_timeout helper method.
 
-    def test_get_interaction_timeout_default(self):
+    Note: 2.9.2 made `CIRIS_API_INTERACTION_TIMEOUT` env var the
+    highest-priority resolution source (above api_config) so QA-runner
+    operator overrides actually take effect — the adapter's _load_config
+    discards the env-loaded config when an APIAdapterConfig object is
+    passed via `adapter_config`. Tests that exercise the api_config or
+    default branches must clear the env var first, since the repo's
+    `tests/test_config.env` sets `CIRIS_API_INTERACTION_TIMEOUT=5.0`
+    globally for fast in-test timeouts. See test_interaction_timeout_
+    resolution.py for the env-var-priority coverage.
+    """
+
+    def test_get_interaction_timeout_default(self, monkeypatch):
         """Test default timeout when no config available."""
+        monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)
         mock_request = Mock(spec=Request)
         mock_request.app.state = Mock()
         # Remove api_config attribute to test default behavior
@@ -616,8 +628,9 @@ class TestGetInteractionTimeout:
 
         assert timeout == 55.0
 
-    def test_get_interaction_timeout_from_config(self):
+    def test_get_interaction_timeout_from_config(self, monkeypatch):
         """Test timeout from API config."""
+        monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)
         mock_request = Mock(spec=Request)
         mock_config = Mock()
         mock_config.interaction_timeout = 120.0
@@ -628,8 +641,9 @@ class TestGetInteractionTimeout:
 
         assert timeout == 120.0
 
-    def test_get_interaction_timeout_no_state(self):
+    def test_get_interaction_timeout_no_state(self, monkeypatch):
         """Test timeout when app state is minimal."""
+        monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)
         mock_request = Mock(spec=Request)
         mock_request.app = Mock()
         mock_request.app.state = Mock()

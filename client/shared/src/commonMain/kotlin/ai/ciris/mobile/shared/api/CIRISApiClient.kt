@@ -742,6 +742,50 @@ class CIRISApiClient(
         }
     }
 
+    override suspend fun getOwnerHint(): OwnerHint? {
+        val method = "getOwnerHint"
+        // Personal-install-only endpoint shipped in 2.9.2. On a server
+        // install the backend returns 404 and we render an empty hint —
+        // never throw, never block the Login UI on a slow / offline
+        // backend, never log at ERROR for the expected 404 case.
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            try {
+                val response: HttpResponse = client.get("$baseUrl/v1/auth/owner-hint")
+                if (response.status.value == 404) {
+                    logDebug(method, "owner-hint endpoint returned 404 (multi-tenant server or pre-2.9.2 backend)")
+                    return null
+                }
+                if (response.status.value !in 200..299) {
+                    logWarn(method, "owner-hint returned ${response.status} — rendering empty hint")
+                    return null
+                }
+                val body: OwnerHintResponse = response.body()
+                val hint = body.owner_hint
+                if (hint == null) {
+                    logInfo(method, "owner-hint endpoint returned null hint (setup not complete yet)")
+                } else {
+                    logInfo(method, "owner-hint: provider=${hint.oauth_provider} authType=${hint.auth_type}")
+                }
+                hint
+            } finally {
+                client.close()
+            }
+        } catch (e: Exception) {
+            // Network/parse failure — log at DEBUG and degrade silently.
+            // The Login screen renders fine without a hint.
+            logDebug(method, "owner-hint fetch failed (${e::class.simpleName}: ${e.message?.take(60)}); rendering empty hint")
+            null
+        }
+    }
+
     override suspend fun googleAuth(idToken: String, userId: String?): AuthResponse {
         val method = "googleAuth"
         logInfo(method, "Attempting Google auth: userId=$userId, idToken=${maskToken(idToken)}")

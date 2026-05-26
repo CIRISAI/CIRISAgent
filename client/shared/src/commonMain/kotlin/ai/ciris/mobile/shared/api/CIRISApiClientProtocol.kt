@@ -59,6 +59,16 @@ interface CIRISApiClientProtocol {
     suspend fun login(username: String, password: String): AuthResponse
 
     /**
+     * Fetch the masked owner-identity hint shown on the Login screen of
+     * a personal-install client (2.9.2 — see GET /v1/auth/owner-hint).
+     * Returns null when the device hasn't completed setup yet OR when
+     * the endpoint is unavailable / the server isn't personal-install
+     * (404). Never throws on a network blip — render an empty hint
+     * instead so a slow / offline backend doesn't gate the Login UI.
+     */
+    suspend fun getOwnerHint(): OwnerHint?
+
+    /**
      * Authenticate with Google ID token (Android)
      */
     suspend fun googleAuth(idToken: String, userId: String? = null): AuthResponse

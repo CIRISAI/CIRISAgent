@@ -648,12 +648,24 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
         return NodeType.TSDB_SUMMARY
 
     def _is_period_consolidated(self, period_start: datetime, period_end: datetime) -> bool:
-        """Check if a period has a `tsdb_summary` already via persist's substrate."""
+        """Check if a period has been consolidated via persist's substrate.
+
+        Persist exposes `tsdb_query_summary_nodes` per typed sub-table
+        (`task_summary` / `conversation_summary` / `trace_summary` /
+        `audit_summary`); the cirisgraph-namespace string
+        "tsdb_summary" is NOT a valid `node_type` argument and would
+        silently return zero rows (root cause of #788's
+        "never-advances" behaviour). Use the shared
+        `query_typed_summaries` helper which unions across all 4 typed
+        tables.
+        """
         try:
-            import json as _json
             import os
 
             from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.services.graph.tsdb_consolidation.query_manager import (
+                query_typed_summaries,
+            )
 
             engine = get_persist_engine()
             if engine is None:
@@ -663,11 +675,8 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
             from_iso = period_start.isoformat().replace("+00:00", "Z")
             to_iso = (period_end + timedelta(milliseconds=1)).isoformat().replace("+00:00", "Z")
 
-            raw = engine.tsdb_query_summary_nodes(
-                "tsdb_summary", "basic", tenant_id, from_iso, to_iso
-            )
-            rows = _json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
-            return bool(isinstance(rows, list) and rows)
+            rows = query_typed_summaries(engine, "basic", tenant_id, from_iso, to_iso)
+            return bool(rows)
         except Exception as e:
             logger.error(f"Error checking if period consolidated: {e}")
             return False
@@ -716,24 +725,24 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
                 logger.error(f"persist {name}(level=basic) failed: {e}", exc_info=True)
 
         # Read back any summary rows produced for this period.
-        summaries: List[Dict[str, Any]] = []
-        filter_json = _json.dumps({
-            "tenant_id": tenant_id,
-            "period_start_after": period_start.isoformat().replace("+00:00", "Z"),
-            "period_start_before": period_end.isoformat().replace("+00:00", "Z"),
-            "level": "basic",
-        })
+        # Persist's `tsdb_query_summary_nodes` is typed (one node_type
+        # per call); the previous single-arg JSON-blob shape was
+        # removed in CIRISPersist v1.6.2 and any call still using it
+        # raises TypeError on import (this was the root cause of #788).
+        # Use the shared helper which unions across all 4 typed tables.
+        from ciris_engine.logic.services.graph.tsdb_consolidation.query_manager import (
+            query_typed_summaries,
+        )
+
+        from_iso = period_start.isoformat().replace("+00:00", "Z")
+        to_iso = period_end.isoformat().replace("+00:00", "Z")
         try:
-            raw = await asyncio.to_thread(engine.tsdb_query_summary_nodes, filter_json)
-            parsed = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
-            if isinstance(parsed, list):
-                summaries = parsed
-            elif isinstance(parsed, dict):
-                items = parsed.get("items")
-                if isinstance(items, list):
-                    summaries = items
+            summaries: List[Dict[str, Any]] = await asyncio.to_thread(
+                query_typed_summaries, engine, "basic", tenant_id, from_iso, to_iso
+            )
         except Exception as e:
             logger.error(f"reading summaries for period failed: {e}", exc_info=True)
+            summaries = []
 
         if summaries:
             self._basic_consolidations += 1
@@ -868,16 +877,21 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
         return result if result is not None else 0
 
     def get_summary_for_period(self, period_start: datetime, period_end: datetime) -> Optional[TSDBPeriodSummary]:
-        """Get the tsdb_summary for a specific period via persist's substrate.
+        """Get the consolidated summary for a specific period via persist.
 
-        Routes through `tsdb_query_summary_nodes('tsdb_summary', 'basic', ...)`.
-        Returns the typed TSDBPeriodSummary built from the attributes dict.
+        Persist exposes one summary per typed sub-table; we union across
+        all 4 (see `query_typed_summaries` docstring + #788). Returns the
+        typed TSDBPeriodSummary built from the FIRST matching attributes
+        dict — under normal consolidation any of the 4 sub-tables carries
+        the period-level totals + metrics this caller needs.
         """
         try:
-            import json as _json
             import os
 
             from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.services.graph.tsdb_consolidation.query_manager import (
+                query_typed_summaries,
+            )
 
             engine = get_persist_engine()
             if engine is None:
@@ -887,11 +901,8 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
             from_iso = period_start.isoformat().replace("+00:00", "Z")
             to_iso = (period_end + timedelta(milliseconds=1)).isoformat().replace("+00:00", "Z")
 
-            raw = engine.tsdb_query_summary_nodes(
-                "tsdb_summary", "basic", tenant_id, from_iso, to_iso
-            )
-            rows = _json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
-            if not isinstance(rows, list) or not rows:
+            rows = query_typed_summaries(engine, "basic", tenant_id, from_iso, to_iso)
+            if not rows:
                 return None
             attrs = rows[0] if isinstance(rows[0], dict) else {}
 

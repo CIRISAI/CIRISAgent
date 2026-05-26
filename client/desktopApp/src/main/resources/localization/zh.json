@@ -1728,7 +1728,13 @@
     "setup_byok_llm_desc": "配置您的AI提供商。输入您的API密钥并选择模型以开始。",
     "setup_ciris_llm_desc": "CIRIS AI 已激活。可选择配置您自己的提供商以供离线使用或保护隐私。",
     "setup_select_provider": "选择提供商",
-    "setup_validation_select_provider": "请选择LLM提供商"
+    "setup_validation_select_provider": "请选择LLM提供商",
+    "login_owner_hint": "Last signed in as {owner}",
+    "login_wrong_account_title": "Wrong account for this device",
+    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
+    "login_wrong_account_body_generic": "the owner of this device",
+    "login_choose_different_account": "Choose a different account",
+    "login_reset_device": "Reset device"
   },
   "prompts": {
     "dma": {

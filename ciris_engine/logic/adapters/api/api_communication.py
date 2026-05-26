@@ -125,8 +125,24 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             message_channel_map = getattr(self._app_state, "message_channel_map", {})
             queue = message_channel_map.get(channel_id)
             if not queue:
-                # No waiter — not all SPEAKs are replies to interact() calls.
-                logger.debug(f"[API_INTERACTION] No pending interact waiter for channel {channel_id}")
+                # No waiter for THIS channel. Could be benign (an
+                # autonomous SPEAK on a channel nobody is waiting on)
+                # or a real bug (the agent emitted on the wrong
+                # channel and the interact() request will time out
+                # at the server's correlation window).
+                #
+                # Bumped from DEBUG to INFO + include the set of
+                # channels that DO have waiters: when an [INTERACT_
+                # TIMEOUT] later fires, that log line tells us
+                # whether this SPEAK was misrouted (waiters exist
+                # elsewhere) vs. truly orphaned (no waiters at all).
+                pending = {k: len(v) for k, v in message_channel_map.items() if v}
+                logger.info(
+                    "[API_INTERACTION] SPEAK on channel %s but no pending "
+                    "interact() waiter on that channel. Active waiters: %s",
+                    channel_id,
+                    pending or "<none>",
+                )
                 return
 
             # FIFO: this response answers the OLDEST pending request on the
@@ -145,7 +161,16 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             await store_message_response(message_id, content)
             logger.info(f"Stored interact response for message {message_id} in channel {channel_id}")
         except Exception as e:
-            logger.debug(f"Could not store interact response: {e}")
+            # Was DEBUG — a real exception here means a queued
+            # interact() request will NEVER get its response. Bump
+            # to WARNING with traceback so incident-log scans pick
+            # it up alongside the eventual [INTERACT_TIMEOUT].
+            logger.warning(
+                "[API_INTERACTION] Could not store interact response on channel %s: %s",
+                channel_id,
+                e,
+                exc_info=True,
+            )
 
     def _track_response_time(self, start_time: datetime) -> None:
         """Track response time metrics."""

@@ -312,11 +312,28 @@ class MainActivity : ComponentActivity() {
      * GoogleSignInCallback implementation for CIRISApp
      */
     private val googleSignInCallback = object : GoogleSignInCallback {
-        override fun onGoogleSignInRequested(onResult: (NativeSignInResult) -> Unit) {
-            Log.i(TAG, "Google Sign-In requested from CIRISApp (interactive)")
+        override fun onGoogleSignInRequested(
+            forceAccountChooser: Boolean,
+            onResult: (NativeSignInResult) -> Unit,
+        ) {
+            Log.i(TAG, "Google Sign-In requested from CIRISApp (interactive, forceAccountChooser=$forceAccountChooser)")
             pendingGoogleSignInCallback = onResult
-            val signInIntent = googleSignInClient.signInIntent
-            startActivityForResult(signInIntent, RC_SIGN_IN)
+            if (forceAccountChooser) {
+                // 2.9.2 personal-install observer-blocked recovery:
+                // sign out of the cached account so Google's chooser
+                // re-prompts for which account to use, instead of
+                // auto-resuming the same wrong account the user just
+                // tried. silentSignIn / signInIntent both honour the
+                // post-signOut state.
+                googleSignInClient.signOut().addOnCompleteListener {
+                    Log.i(TAG, "Google Sign-In cache cleared — launching picker")
+                    val signInIntent = googleSignInClient.signInIntent
+                    startActivityForResult(signInIntent, RC_SIGN_IN)
+                }
+            } else {
+                val signInIntent = googleSignInClient.signInIntent
+                startActivityForResult(signInIntent, RC_SIGN_IN)
+            }
         }
 
         override fun onSilentSignInRequested(onResult: (NativeSignInResult) -> Unit) {

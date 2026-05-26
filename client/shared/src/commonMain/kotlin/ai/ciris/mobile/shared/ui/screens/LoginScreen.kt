@@ -73,10 +73,22 @@ fun LoginScreen(
         PlatformLogger.i("LoginScreen", "[onPrivacyPolicy] Privacy policy link clicked - opening https://ciris.ai/privacy")
     },
     onServerSettings: () -> Unit = {},
+    onChooseDifferentAccount: () -> Unit = {},
+    onResetSetup: () -> Unit = {},
     connectionStatus: ConnectionStatus = ConnectionStatus.DISCONNECTED,
     isLoading: Boolean = false,
     statusMessage: String? = null,
     errorMessage: String? = null,
+    // 2.9.2 personal-install owner hint (see GET /v1/auth/owner-hint).
+    // null on multi-tenant servers or pre-setup devices — caller treats
+    // null as "render no hint" and the screen omits the row.
+    ownerHint: ai.ciris.mobile.shared.models.OwnerHint? = null,
+    // 2.9.2 personal-install observer-blocked recovery flag. When the
+    // last sign-in attempt failed with the 403
+    // auth_personal_install_observer_blocked code, CIRISApp sets this
+    // and we render the structured recovery dialog instead of the
+    // small red error line.
+    observerBlocked: Boolean = false,
     showLocalLoginForm: Boolean = false,
     isFirstRun: Boolean = true,
     modifier: Modifier = Modifier
@@ -205,8 +217,21 @@ fun LoginScreen(
                 } else {
                     // Mobile mode - show OAuth buttons
 
-                    // Error message for OAuth failures (Google/Apple sign-in errors)
-                    if (errorMessage != null) {
+                    // 2.9.2 — Personal-install observer-blocked recovery card.
+                    // Surfaces when the *last* sign-in attempt failed with 403
+                    // auth_personal_install_observer_blocked AND the server
+                    // supplied an owner_hint. Lets the user see who they need
+                    // to sign in as and re-launch the account picker without
+                    // hunting through Google's account-switcher manually.
+                    if (observerBlocked && ownerHint != null) {
+                        ObserverBlockedRecoveryCard(
+                            ownerHint = ownerHint,
+                            onChooseDifferentAccount = onChooseDifferentAccount,
+                            onResetSetup = onResetSetup,
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    } else if (errorMessage != null) {
+                        // Error message for OAuth failures (Google/Apple sign-in errors)
                         val displayError = when {
                             errorMessage.contains("12500", ignoreCase = true) ->
                                 localizedString("mobile.login_error_google_config")
@@ -230,6 +255,17 @@ fun LoginScreen(
                                 .width(280.dp)
                                 .padding(bottom = 16.dp)
                                 .testable("txt_oauth_error")
+                        )
+                    } else if (ownerHint != null) {
+                        // Steady-state hint above the sign-in buttons — no
+                        // failed attempt yet, just letting the user confirm
+                        // which Google account this device is paired with.
+                        OwnerHintRow(
+                            ownerHint = ownerHint,
+                            modifier = Modifier
+                                .width(280.dp)
+                                .padding(bottom = 12.dp)
+                                .testable("txt_owner_hint")
                         )
                     }
 
@@ -600,4 +636,147 @@ private fun ConnectionStatusBadge(
             )
         }
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// 2.9.2 — Personal-install owner-hint UI
+// ---------------------------------------------------------------------------
+//
+// Two surfaces, driven by the same OwnerHint data class:
+//
+//   1) OwnerHintRow — small steady-state line above the sign-in buttons
+//      ("Last signed in as Eric — eri***@gmail.com"). Tells the user
+//      which account they paired the device with so they don't pick the
+//      wrong one in Google's account chooser.
+//
+//   2) ObserverBlockedRecoveryCard — full recovery card shown after a
+//      sign-in attempt failed with 403 auth_personal_install_observer_-
+//      blocked. Pairs the hint with primary "Choose different account"
+//      and secondary "Reset device" buttons.
+//
+// Privacy: every field rendered here was returned by the server's
+// /v1/auth/owner-hint endpoint, which only ever serialises a masked
+// email + first name on the personal-install code path. We never
+// concatenate or de-mask client-side.
+
+@Composable
+private fun OwnerHintRow(
+    ownerHint: ai.ciris.mobile.shared.models.OwnerHint,
+    modifier: Modifier = Modifier
+) {
+    val hintLine = buildOwnerHintLine(ownerHint)
+    if (hintLine.isBlank()) return
+    Text(
+        text = hintLine,
+        color = LoginColors.White.copy(alpha = 0.7f),
+        fontSize = 12.sp,
+        textAlign = TextAlign.Center,
+        lineHeight = 16.sp,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun ObserverBlockedRecoveryCard(
+    ownerHint: ai.ciris.mobile.shared.models.OwnerHint,
+    onChooseDifferentAccount: () -> Unit,
+    onResetSetup: () -> Unit,
+) {
+    val title = localizedString("mobile.login_wrong_account_title")
+    val body = localizedString(
+        "mobile.login_wrong_account_body",
+        "owner",
+        buildOwnerHintLine(ownerHint).ifBlank { localizedString("mobile.login_wrong_account_body_generic") }
+    )
+    val chooseAccountLabel = localizedString("mobile.login_choose_different_account")
+    val resetLabel = localizedString("mobile.login_reset_device")
+
+    Surface(
+        color = LoginColors.White.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .width(280.dp)
+            .testable("card_observer_blocked")
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = title,
+                color = LoginColors.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = body,
+                color = LoginColors.White.copy(alpha = 0.85f),
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onChooseDifferentAccount,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = LoginColors.White,
+                    contentColor = LoginColors.Primary,
+                ),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .testableClickable("btn_choose_different_account") {
+                        onChooseDifferentAccount()
+                    },
+            ) {
+                Text(text = chooseAccountLabel, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onResetSetup,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = LoginColors.White,
+                ),
+                border = ButtonDefaults.outlinedButtonBorder.copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(LoginColors.White.copy(alpha = 0.7f))
+                ),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .testableClickable("btn_reset_setup") {
+                        onResetSetup()
+                    },
+            ) {
+                Text(text = resetLabel, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+/**
+ * Build the single hint line we render in both UI variants. Falls back
+ * gracefully when only one of (name, masked email) is present so the
+ * local-login owner (name only, no email) still gets a usable line.
+ *
+ *   "Eric (eri***@gmail.com)"   — typical OAuth owner
+ *   "eri***@gmail.com"          — OAuth owner with no display name
+ *   "Eric"                      — local-login (password) owner
+ *   "" (blank)                  — no usable identity data — caller skips render
+ */
+@Composable
+internal fun buildOwnerHintLine(ownerHint: ai.ciris.mobile.shared.models.OwnerHint): String {
+    val name = ownerHint.first_name?.trim()?.takeIf { it.isNotEmpty() }
+    val email = ownerHint.masked_email?.trim()?.takeIf { it.isNotEmpty() }
+    val ownerString = when {
+        name != null && email != null -> "$name ($email)"
+        email != null -> email
+        name != null -> name
+        else -> return ""
+    }
+    return localizedString("mobile.login_owner_hint", "owner", ownerString)
 }

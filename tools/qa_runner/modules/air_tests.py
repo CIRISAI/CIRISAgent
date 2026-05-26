@@ -186,18 +186,22 @@ class AIRTests:
         message → no reminder" only holds on a channel AIR has not seen.
         """
         import os
+        import time
         import uuid
 
         fresh_channel = f"air_qa_smoke_{uuid.uuid4().hex[:8]}"
-        # Baseline matches the server's interact response-correlation
-        # window. Under the --parallel-backends QA matrix two agent stacks
-        # share one CI runner, halving effective throughput. The QA runner
-        # bumps the server-side window to 180s in that mode (see
-        # server.py:CIRIS_API_INTERACTION_TIMEOUT); the client timeout MUST
-        # stay above that or we time out before the server can deliver the
-        # response — that was the actual #784/air-test failure mode on the
-        # postgres leg of #791. 200s leaves a 20s buffer over server-side.
-        interact_timeout = 200.0 if os.environ.get("CIRIS_QA_PARALLEL_BACKENDS") == "1" else 70.0
+        parallel_mode = os.environ.get("CIRIS_QA_PARALLEL_BACKENDS") == "1"
+        # Client timeout MUST stay above the server-side
+        # CIRIS_API_INTERACTION_TIMEOUT (default 55s, QA-runner-bumped
+        # to 180s under --parallel-backends). Otherwise the client
+        # gives up before the server can deliver either a real
+        # response OR its own "Still processing" timeout body.
+        interact_timeout = 200.0 if parallel_mode else 70.0
+
+        # Wall-clock the request so failure diagnostics can tell us
+        # whether we hit the server-side ceiling (~180s under
+        # parallel) vs. the client ceiling (200s).
+        t0 = time.monotonic()
         async with httpx.AsyncClient(timeout=interact_timeout) as client:
             response = await client.post(
                 f"{self.base_url}/v1/agent/interact",
@@ -207,15 +211,58 @@ class AIRTests:
                     "context": {"channel_id": fresh_channel},
                 },
             )
+        elapsed = time.monotonic() - t0
         assert response.status_code == 200, f"interact returned {response.status_code}: {response.text[:200]}"
-        text = response.json().get("data", {}).get("response", "")
-        assert not text.startswith("Still processing"), (
-            "interact() returned 'Still processing' — the agent never delivered a "
-            "response within the timeout. AIR API wiring is UNVERIFIABLE. This is "
-            "the interact response-correlation stall (see [INTERACT_TIMEOUT] / "
-            "[STORE_RESPONSE] errors in incidents), not an AIR bug — but it is a "
-            "real failure and must not pass silently."
-        )
+        body = response.json()
+        text = (body.get("data") or {}).get("response", "")
+
+        if text.startswith("Still processing"):
+            # Pull diagnostics so the failure trace tells us WHICH
+            # stall this was rather than the third generic message
+            # in a row. The test docstring named two distinct root
+            # causes ([INTERACT_TIMEOUT] vs [STORE_RESPONSE]) and we
+            # need to disambiguate.
+            diag_lines: list[str] = []
+            data = body.get("data") or {}
+            diag_lines.append(f"channel_id={fresh_channel}")
+            diag_lines.append(f"client_timeout={interact_timeout}s")
+            diag_lines.append(f"parallel_backends={parallel_mode}")
+            diag_lines.append(f"wall_clock={elapsed:.1f}s")
+            diag_lines.append(f"server_processing_time_ms={data.get('processing_time_ms')}")
+            diag_lines.append(f"server_message_id={data.get('message_id')}")
+            diag_lines.append(f"server_state={data.get('state')}")
+
+            # Best-effort live probes — these can fail without the
+            # diagnostic capture being useful, so swallow exceptions.
+            async with httpx.AsyncClient(timeout=5.0) as probe:
+                for name, path in [
+                    ("queue", "/v1/system/runtime/queue"),
+                    ("health", "/v1/system/health"),
+                    ("status", "/v1/system/runtime/status"),
+                ]:
+                    try:
+                        r = await probe.get(
+                            f"{self.base_url}{path}",
+                            headers={"Authorization": f"Bearer {self.token}"},
+                        )
+                        diag_lines.append(f"{name}={r.status_code} body={r.text[:300]}")
+                    except Exception as e:  # pragma: no cover — best-effort
+                        diag_lines.append(f"{name}=probe-failed: {type(e).__name__}: {str(e)[:80]}")
+
+            diag = "\n  ".join(diag_lines)
+            raise AssertionError(
+                "interact() returned 'Still processing' — the agent never "
+                "delivered a response within the timeout. AIR API wiring is "
+                "UNVERIFIABLE. This is the interact response-correlation "
+                "stall (see [INTERACT_TIMEOUT] / [STORE_RESPONSE] errors in "
+                "incidents), not an AIR bug.\n"
+                f"  Diagnostics:\n  {diag}\n"
+                "  Compare wall_clock to the server-side window: ~180s "
+                "under parallel-backends means [INTERACT_TIMEOUT] "
+                "(asyncio.wait_for fired); much less than that with a "
+                "valid message_id present means [STORE_RESPONSE] "
+                "(response stored on a channel without a registered waiter)."
+            )
         assert "Mindful Interaction Reminder" not in text and "Artificial Interaction" not in text, (
             "an AIR reminder appeared on the FIRST message of a fresh channel — "
             "threshold logic regressed"

@@ -652,7 +652,29 @@ async def _check_processor_pause_status(
 
 
 def _get_interaction_timeout(request: Request) -> float:
-    """Get interaction timeout from config or return default."""
+    """Get interaction timeout from env var, config, or default.
+
+    Resolution order (highest priority first):
+      1. `CIRIS_API_INTERACTION_TIMEOUT` env var — operator override
+         that wins even when a stored `APIAdapterConfig` is being used.
+         The adapter's `_load_config` flow has a known shape where
+         passing an `APIAdapterConfig` object discards the env-loaded
+         config (adapter.py:_apply_adapter_config), so the env var
+         needs to be re-checked here for the QA / load-test path to
+         actually bump the server-side correlation window.
+      2. `request.app.state.api_config.interaction_timeout` — value
+         injected by the adapter at startup.
+      3. 55.0 — production default for longer processing.
+    """
+    import os
+
+    env_timeout = os.environ.get("CIRIS_API_INTERACTION_TIMEOUT")
+    if env_timeout:
+        try:
+            return float(env_timeout)
+        except ValueError:
+            pass  # malformed env var — fall through to config / default
+
     timeout = 55.0  # default timeout for longer processing
     if hasattr(request.app.state, "api_config"):
         timeout = request.app.state.api_config.interaction_timeout

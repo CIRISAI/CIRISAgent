@@ -5,6 +5,30 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.2] - 2026-05-26
+
+Patch release — personal-install owner-hint recovery UX, plus QA runner emulator hardening.
+
+### Added
+
+- **Owner-hint recovery UX** for personal-install Android/iOS. A user who picks the wrong Google account on a paired device now sees who the device is set up for instead of a bare 403. (#784)
+  - Server: new `GET /v1/auth/owner-hint` (mobile-only; 404 on multi-tenant servers) + 403 `auth_personal_install_observer_blocked` body now carries an `owner_hint` payload (masked email + first name, GDPR Art. 32 pseudonymisation). 32 unit tests pin the privacy contract.
+  - Android `LoginScreen`: steady-state `OwnerHintRow` ("*Last signed in as Eric (eri***@gmail.com)*") above the Sign-in buttons, plus an `ObserverBlockedRecoveryCard` on 403 with "Choose a different account" (calls `GoogleSignInClient.signOut()` then re-launches the picker) and "Reset device" actions.
+  - `NativeSignInCallback.onGoogleSignInRequested(forceAccountChooser=…)` plumbed through Android + iOS bridges.
+  - 7 unit tests for `OwnerHintParser` cover every JSON shape the 403 body emits (full envelope, top-level, local-login, truncated, escaped braces).
+
+### Fixed
+
+- **Android upgrade login bounce**: the in-place 2.9.0 → 2.9.2 upgrade path no longer bounces back to Login after Google sign-in. (#784)
+
+### Changed
+
+- **QA runner emulator launch** now passes `-no-snapshot-load -no-snapshot-save -no-snapstorage` so the Android emulator skips QuickBoot's file-backed RAM mmap. Eliminates a 400+ MB/s sustained host-disk-write storm caused by the kernel writing every dirty guest page back to `snapshots/default_boot/ram.img`. Local AVD configs also set `fastboot.forceFastBoot=no`. Measured drop: ~470 MB/s → <1 MB/s steady-state.
+
+### Tracking
+
+- **#790**: OAuth RBAC on device — multi-account OAuth via Users screen. Out of scope for 2.9.2; the recovery UX above unblocks the wrong-account case but does not yet let a non-owner be invited.
+
 ## [2.9.1] - 2026-05-24
 
 Patch release — iOS unblock, accord expansion, CI hardening, P0 Android login fix.

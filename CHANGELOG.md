@@ -20,6 +20,7 @@ Patch release — personal-install owner-hint recovery UX, plus QA runner emulat
 ### Fixed
 
 - **Android upgrade login bounce**: the in-place 2.9.0 → 2.9.2 upgrade path no longer bounces back to Login after Google sign-in. (#784)
+- **TSDB consolidation never advanced** (#788): five callsites in `tsdb_consolidation/` were broken against `ciris-persist` v1.6.2+. `service.py:_consolidate_period` still used the removed single-arg JSON-blob form (`engine.tsdb_query_summary_nodes(filter_json)`) and raised `TypeError` on every 6h tick; four other callsites passed the cirisgraph-namespace string `"tsdb_summary"` as `node_type`, which the persist Rust side rejects with `unknown summary node_type` and silently returns zero rows. The agent therefore thought no period was ever consolidated and re-attempted forever, filling the incidents log. All five now funnel through a shared `query_typed_summaries` helper that unions across the four valid persist sub-tables (`task_summary` / `conversation_summary` / `trace_summary` / `audit_summary`); 9 regression tests pin the contract.
 
 ### Changed
 

@@ -50,6 +50,62 @@ def _tenant() -> str:
     return os.environ.get("CIRIS_AGENT_TENANT", "agent-default")
 
 
+# Persist v1.6.2+ `tsdb_query_summary_nodes` accepts ONLY these four
+# `node_type` values. Passing the cirisgraph-namespace string
+# "tsdb_summary" silently returns `unknown summary node_type` from the
+# Rust side, which is what caused #788 to look like "consolidation
+# silently never advances" — the probe always returned 0 rows. To
+# probe "is this period consolidated?" we have to query all four types
+# and union the rows.
+_SUMMARY_NODE_TYPES = (
+    "task_summary",
+    "conversation_summary",
+    "trace_summary",
+    "audit_summary",
+)
+
+
+def query_typed_summaries(
+    engine: Any,
+    level: str,
+    tenant_id: str,
+    from_rfc3339: str,
+    to_rfc3339: str,
+) -> list[Dict[str, Any]]:
+    """Return the union of summary rows across all 4 persist node_types
+    for the given period + level.
+
+    Persist's `tsdb_query_summary_nodes` is typed (one node_type per
+    call). The agent's consolidation orchestration thinks of a period
+    as having "a tsdb_summary" (the cirisgraph-namespace node_type),
+    not a separate summary per persist sub-table — so this helper
+    aggregates across the 4 sub-tables and returns one flat list.
+
+    Best-effort per type: a Rust-side error on one type doesn't fail
+    the others; we log at WARNING and keep going. Returns [] if every
+    type errors (the caller's `if not rows` branch still works).
+    """
+    aggregate: list[Dict[str, Any]] = []
+    for node_type in _SUMMARY_NODE_TYPES:
+        try:
+            raw = engine.tsdb_query_summary_nodes(
+                node_type, level, tenant_id, from_rfc3339, to_rfc3339
+            )
+            rows = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
+            if isinstance(rows, list):
+                aggregate.extend(rows)
+        except Exception as e:
+            # Don't let one sub-table failure mask the others — we
+            # only need ANY row to consider the period consolidated.
+            logger.warning(
+                "tsdb_query_summary_nodes(node_type=%s, level=%s) failed: %s",
+                node_type,
+                level,
+                e,
+            )
+    return aggregate
+
+
 class QueryManager:
     """Thin persist-substrate wrapper preserving the legacy public API."""
 
@@ -129,7 +185,7 @@ class QueryManager:
     # ------------------------------------------------------------------
 
     def check_period_consolidated(self, period_start: datetime, period_end: Optional[datetime] = None) -> bool:
-        """Return True iff a tsdb_summary already exists for this period."""
+        """Return True iff at least one persist summary exists for this period."""
         engine = _engine()
         if engine is None:
             return False
@@ -137,18 +193,14 @@ class QueryManager:
             period_end = period_start + timedelta(hours=6)
         from_iso = period_start.isoformat().replace("+00:00", "Z")
         to_iso = (period_end + timedelta(milliseconds=1)).isoformat().replace("+00:00", "Z")
-        try:
-            raw = engine.tsdb_query_summary_nodes(
-                "tsdb_summary", "basic", _tenant(), from_iso, to_iso
-            )
-            rows = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
-            return bool(isinstance(rows, list) and rows)
-        except Exception as e:
-            logger.warning("check_period_consolidated probe failed: %s", e)
-            return False
+        # Persist's `tsdb_query_summary_nodes` rejects "tsdb_summary"
+        # as a node_type (#788 root cause); query all 4 valid sub-tables
+        # and treat ANY hit as "consolidated".
+        rows = query_typed_summaries(engine, "basic", _tenant(), from_iso, to_iso)
+        return bool(rows)
 
     async def get_last_consolidated_period(self) -> Optional[datetime]:
-        """Return the period_end of the most recent tsdb_summary."""
+        """Return the period_end of the most recent persist summary."""
         engine = _engine()
         if engine is None:
             return None
@@ -157,11 +209,9 @@ class QueryManager:
             # Pull the last 90 days of basic summaries DESC; take the newest period_end.
             from_iso = (now - timedelta(days=90)).isoformat().replace("+00:00", "Z")
             to_iso = (now + timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
-            raw = engine.tsdb_query_summary_nodes(
-                "tsdb_summary", "basic", _tenant(), from_iso, to_iso
-            )
-            rows = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
-            if not isinstance(rows, list) or not rows:
+            # Union across all 4 typed summaries (#788 — see helper docstring).
+            rows = query_typed_summaries(engine, "basic", _tenant(), from_iso, to_iso)
+            if not rows:
                 return None
             # Pick max period_end.
             latest: Optional[datetime] = None

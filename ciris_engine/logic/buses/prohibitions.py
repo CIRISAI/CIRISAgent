@@ -46,8 +46,22 @@ MEDICAL_CAPABILITIES = {
     "health",
     "healthcare",
     "health_care",
-    "wellbeing",
-    "wellness",
+
+    # Physiological/biological terms
+    "physiological",
+    "biological_monitoring",
+    "biosensing",
+    "biometric",
+    "biometric_analysis",
+
+    # Care management
+    "care_coordination",
+    "care_management",
+    "emergency_assessment",
+
+    # Euphemisms
+    "preventive_care",
+    "integrative_care",
     # Clinical terms with variants
     "clinical",
     "clinician",
@@ -139,8 +153,6 @@ MEDICAL_CAPABILITIES = {
     "lab_results",
     "lab_results_interpretation",
     "test_results",
-    "vital_signs",
-    "vitals",
     # Care types
     "patient_care",
     "medical_history",
@@ -996,6 +1008,25 @@ DISCRIMINATION_CAPABILITIES = {
 # These are explicitly allowed for all agents
 
 STANDARD_OPERATIONS = {
+    # General wellness & fitness (FDA Low Risk exceptions)
+    "wellness",
+    "wellbeing",
+    "well-being",
+    "fitness",
+    "vitals",
+    "vital_signs",
+    "vital_monitoring",
+    "vital_statistics",
+    "life_signs",
+    "activity_tracking",
+    "heart_rate",
+    "pulse",
+    "sleep_tracking",
+    "calorie",
+    "nutrition_tracking",
+    "status_monitoring",
+    "lifestyle_medicine",
+
     "data_collection",  # Basic telemetry and usage
     "survey_design",  # User feedback collection
     "focus_groups",  # User research

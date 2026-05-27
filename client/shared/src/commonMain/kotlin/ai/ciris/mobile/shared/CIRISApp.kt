@@ -1087,7 +1087,17 @@ fun CIRISApp(
                             loginStatusMessage = LocalizationHelper.getString("mobile.status_signing_in", mapOf("provider" to getOAuthProviderName()))
                             loginErrorMessage = null
 
-                            googleSignInCallback.onGoogleSignInRequested { result ->
+                            // 2.9.3 — force the account picker every time. Default
+                            // CredentialManager behavior auto-resumes the last-used
+                            // Google account; on a personal-install device that's
+                            // typically the WRONG account for users with multiple
+                            // signed-in accounts on their device, and they had no
+                            // affordance to switch (CIRISAgent#794 Bug B). Force-
+                            // chooser costs one extra tap on the happy path and
+                            // eliminates a whole class of "wrong account" stalls.
+                            googleSignInCallback.onGoogleSignInRequested(
+                                forceAccountChooser = true,
+                            ) { result ->
                                 platformLog(TAG, "[INFO][onGoogleSignIn] Got result from native sign-in: ${result::class.simpleName}")
                                 isLoginLoading = false
                                 loginStatusMessage = null
@@ -1201,17 +1211,30 @@ fun CIRISApp(
                                                     val errText = e.message ?: ""
                                                     if (errText.contains("auth_personal_install_observer_blocked")) {
                                                         observerBlocked = true
-                                                        loginErrorMessage = null
+                                                        // 2.9.3 — keep the raw server message as a
+                                                        // fallback (was cleared to null in 2.9.2,
+                                                        // which produced a silent failure when the
+                                                        // recovery card also failed to render — see
+                                                        // CIRISAgent#794). The Login screen renders
+                                                        // the card on observerBlocked AND surfaces
+                                                        // errorMessage in the else branch if for any
+                                                        // reason the card doesn't render.
+                                                        loginErrorMessage =
+                                                            "This device is set up for a different account. Choose a different Google account or reset the device."
                                                         val parsedHint = ai.ciris.mobile.shared.utils.parseOwnerHintFromErrorBody(errText)
                                                         if (parsedHint != null) {
                                                             ownerHint = parsedHint
                                                             platformLog(TAG, "[INFO] Observer-blocked recovery — owner_hint=${parsedHint.first_name}/${parsedHint.masked_email}")
                                                         } else {
-                                                            // Fall back to whatever hint we
-                                                            // already loaded (or null if
-                                                            // none); the card still renders
-                                                            // a generic body in that case.
-                                                            platformLog(TAG, "[WARN] Observer-blocked but no owner_hint parseable from error body")
+                                                            // Bugged-install case: server returned the
+                                                            // 403 but no owner_hint (no SYSTEM_ADMIN
+                                                            // exists). The recovery card renders with
+                                                            // a generic body — see ObserverBlocked-
+                                                            // RecoveryCard. The setup-status check in
+                                                            // 2.9.3 should also auto-route bugged
+                                                            // installs back to setup, but the card +
+                                                            // Reset device acts as the manual escape.
+                                                            platformLog(TAG, "[WARN] Observer-blocked with no owner_hint — bugged install (#794)?")
                                                         }
                                                     } else {
                                                         loginErrorMessage = "Token exchange failed: ${e.message}"

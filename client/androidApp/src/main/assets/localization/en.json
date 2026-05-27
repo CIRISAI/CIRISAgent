@@ -1826,7 +1826,10 @@
     "settings_location": "Location",
     "settings_location_desc": "Set your city for weather and local information",
     "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city..."
+    "settings_search_city_hint": "Search for a city...",
+    "login_reset_device_confirm_title": "Reset device?",
+    "login_reset_device_confirm_body": "This wipes CIRIS local state on this device and returns you to the setup wizard. Conversation history stays on the agent. Continue?",
+    "login_reset_device_cancel": "Cancel"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",

@@ -41,13 +41,20 @@ def _get_ingress_auth_info() -> tuple[bool, Optional[str]]:
         return (False, None)
 
 
-def _has_system_admin_user(request: Request) -> Optional[bool]:
+async def _has_system_admin_user(request: Request) -> Optional[bool]:
     """Return True if at least one SYSTEM_ADMIN user exists, False if not,
     None if we can't tell (auth service unavailable yet).
 
     The None case is important: returning False would force setup_required
     forever during early boot before auth is wired. None means "skip the
     check, fall back to is_first_run behavior".
+
+    APIAuthService loads users lazily (`_users_loaded` starts False; calls
+    to `list_users`/OAuth login trigger `_ensure_users_loaded()`). Setup
+    status is polled BEFORE any login, so the in-memory cache can be empty
+    even on a healthy install with admins persisted to the DB. We must
+    trigger the lazy load here — otherwise a healthy install reads as
+    "no admin" and gets bounced into the setup wizard.
 
     #794 root cause: setup_required was derived solely from is_first_run
     (which reads `.env` for CIRIS_CONFIGURED=true). On the bugged Samsung
@@ -61,6 +68,16 @@ def _has_system_admin_user(request: Request) -> Optional[bool]:
         if auth_service is None:
             return None
         from ciris_engine.schemas.runtime.api import APIRole
+
+        # Force lazy load. Idempotent — `_ensure_users_loaded` short-circuits
+        # on the `_users_loaded` flag, so polling this endpoint after the
+        # first load is a no-op cache check (no DB hit).
+        ensure_loaded = getattr(auth_service, "_ensure_users_loaded", None)
+        if ensure_loaded is not None:
+            await ensure_loaded()
+        else:
+            # Unknown auth service shape — can't safely assert admin absence.
+            return None
 
         users = getattr(auth_service, "_users", None)
         if users is None:
@@ -111,7 +128,7 @@ async def get_setup_status(request: Request, response: Response) -> SuccessRespo
     # if no SYSTEM_ADMIN exists the device cannot accept logins. Route
     # the user back through the setup wizard so they can re-establish
     # ownership.
-    has_admin = _has_system_admin_user(request)
+    has_admin = await _has_system_admin_user(request)
     setup_required = first_run or (has_admin is False and config_exists)
     if setup_required and not first_run:
         logger.warning(

@@ -243,38 +243,75 @@ class TestSetupStatusResolution:
             svc = None
         return _MockRequest(svc)
 
+    @staticmethod
+    def _patch_setup_state(first_run: bool, config_exists: bool):
+        """Patch the is_first_run + get_default_config_path symbols at every
+        bind site — status.py and dependencies.py both call them. Tests
+        that patch only one location silently miss the other (was the
+        bug in PR #795's test coverage; caught by Codex P1 #2 — the
+        gate symbol bound in dependencies.py was never patched, so
+        require_setup_mode kept seeing the real first-run result)."""
+        return [
+            patch(
+                "ciris_engine.logic.adapters.api.routes.setup.status.is_first_run",
+                return_value=first_run,
+            ),
+            patch(
+                "ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run",
+                return_value=first_run,
+            ),
+            patch(
+                "ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path"
+            ),
+            patch(
+                "ciris_engine.logic.adapters.api.routes.setup.dependencies.get_default_config_path"
+            ),
+        ]
+
+    @staticmethod
+    def _start_patches(patches, config_exists: bool):
+        """Enter all patches; set the config_path mocks to return a path
+        that reports `exists() == config_exists`."""
+        mocks = [p.start() for p in patches]
+        path_mock = MagicMock(exists=lambda: config_exists)
+        # The two get_default_config_path patches are at indices 2 and 3.
+        mocks[2].return_value = path_mock
+        mocks[3].return_value = path_mock
+        return patches
+
+    @staticmethod
+    def _stop_patches(patches):
+        for p in patches:
+            p.stop()
+
     @pytest.mark.asyncio
     async def test_first_run_always_required(self):
         """is_first_run=True always wins — we can't be "configured" if
         the .env doesn't even say so."""
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.is_first_run",
-            return_value=True,
-        ), patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path"
-        ) as mock_path:
-            mock_path.return_value = MagicMock(exists=lambda: False)
+        patches = self._patch_setup_state(first_run=True, config_exists=False)
+        self._start_patches(patches, config_exists=False)
+        try:
             req = self._make_request(has_admin=None)
             response = Response()
             result = await get_setup_status(req, response)
             assert result.data.setup_required is True
             assert result.data.is_first_run is True
+        finally:
+            self._stop_patches(patches)
 
     @pytest.mark.asyncio
     async def test_healthy_install_not_required(self):
         """The happy path: config exists, admin exists, setup is done."""
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.is_first_run",
-            return_value=False,
-        ), patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path"
-        ) as mock_path:
-            mock_path.return_value = MagicMock(exists=lambda: True)
+        patches = self._patch_setup_state(first_run=False, config_exists=True)
+        self._start_patches(patches, config_exists=True)
+        try:
             req = self._make_request(has_admin=True)
             response = Response()
             result = await get_setup_status(req, response)
             assert result.data.setup_required is False
             assert result.data.config_exists is True
+        finally:
+            self._stop_patches(patches)
 
     @pytest.mark.asyncio
     async def test_healthy_install_lazy_load_path(self):
@@ -283,13 +320,9 @@ class TestSetupStatusResolution:
         the lazy loader fires on this very poll. setup_required MUST
         come back False, not True. Pre-fix this scenario would have
         bounced real users into the wizard on every first poll."""
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.is_first_run",
-            return_value=False,
-        ), patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path"
-        ) as mock_path:
-            mock_path.return_value = MagicMock(exists=lambda: True)
+        patches = self._patch_setup_state(first_run=False, config_exists=True)
+        self._start_patches(patches, config_exists=True)
+        try:
             req = self._make_request(has_admin=True, populate_on_load=True)
             # Sanity: the cache really is empty until the route runs
             assert req.app.state.auth_service._users == {}
@@ -302,6 +335,8 @@ class TestSetupStatusResolution:
             )
             # And the loader was actually invoked exactly once
             req.app.state.auth_service._ensure_users_loaded.assert_awaited_once()
+        finally:
+            self._stop_patches(patches)
 
     @pytest.mark.asyncio
     async def test_bugged_install_routes_back_to_setup(self):
@@ -310,13 +345,9 @@ class TestSetupStatusResolution:
         run this with populate_on_load=True so the test exercises the
         real lazy-load contract — empty cache, loader fires, still no
         admin → setup_required."""
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.is_first_run",
-            return_value=False,
-        ), patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path"
-        ) as mock_path:
-            mock_path.return_value = MagicMock(exists=lambda: True)
+        patches = self._patch_setup_state(first_run=False, config_exists=True)
+        self._start_patches(patches, config_exists=True)
+        try:
             req = self._make_request(has_admin=False, populate_on_load=True)
             response = Response()
             result = await get_setup_status(req, response)
@@ -324,19 +355,17 @@ class TestSetupStatusResolution:
                 "Config exists but no SYSTEM_ADMIN — must route back to setup. "
                 "This is the load-bearing #794 self-heal."
             )
+        finally:
+            self._stop_patches(patches)
 
     @pytest.mark.asyncio
     async def test_unknown_admin_state_falls_back_to_first_run(self):
         """Auth service not wired yet (early boot) — don't force the
         user through setup just because we couldn't probe. Trust the
         is_first_run signal alone in that case."""
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.is_first_run",
-            return_value=False,
-        ), patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path"
-        ) as mock_path:
-            mock_path.return_value = MagicMock(exists=lambda: True)
+        patches = self._patch_setup_state(first_run=False, config_exists=True)
+        self._start_patches(patches, config_exists=True)
+        try:
             req = self._make_request(has_admin=None)
             response = Response()
             result = await get_setup_status(req, response)
@@ -345,20 +374,162 @@ class TestSetupStatusResolution:
                 "during early boot — the auth service comes up after this "
                 "endpoint is already serving."
             )
+        finally:
+            self._stop_patches(patches)
 
     @pytest.mark.asyncio
     async def test_no_config_still_first_run_path(self):
         """If config doesn't exist, the bugged-install check shouldn't
         fire — first_run handles it."""
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.is_first_run",
-            return_value=True,
-        ), patch(
-            "ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path"
-        ) as mock_path:
-            mock_path.return_value = MagicMock(exists=lambda: False)
+        patches = self._patch_setup_state(first_run=True, config_exists=False)
+        self._start_patches(patches, config_exists=False)
+        try:
             req = self._make_request(has_admin=False)
             response = Response()
             result = await get_setup_status(req, response)
             assert result.data.setup_required is True
             assert result.data.config_exists is False
+        finally:
+            self._stop_patches(patches)
+
+
+class TestRequireSetupMode:
+    """Regression tests for Codex P1 #2 — `require_setup_mode` must open
+    the gate for the bugged-install recovery flow, not just for first-run.
+
+    Pre-fix: Bug D made /setup/status report `setup_required=True` for
+    the configured-but-no-admin state, BUT `require_setup_mode()` still
+    only checked `is_first_run()` — so the wizard endpoints all 403'd.
+    The client navigated to Setup, every endpoint failed, the user was
+    stuck. Tests below pin that the gate and the signpost agree.
+    """
+
+    def setup_method(self):
+        from ciris_engine.schemas.runtime.api import APIRole
+
+        self.APIRole = APIRole
+
+    def _make_request(self, *, has_admin, populate_on_load=False):
+        if has_admin is True:
+            svc = _make_auth_service(
+                {"wa-1": _make_user("wa-1", api_role=self.APIRole.SYSTEM_ADMIN)},
+                populate_on_load=populate_on_load,
+            )
+        elif has_admin is False:
+            svc = _make_auth_service({}, populate_on_load=populate_on_load)
+        else:
+            svc = None
+        return _MockRequest(svc)
+
+    def _patches(self, *, first_run: bool, config_exists: bool):
+        return [
+            patch(
+                "ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run",
+                return_value=first_run,
+            ),
+            patch(
+                "ciris_engine.logic.adapters.api.routes.setup.dependencies.get_default_config_path",
+                return_value=MagicMock(exists=lambda: config_exists),
+            ),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_allows_during_first_run(self):
+        from ciris_engine.logic.adapters.api.routes.setup.dependencies import (
+            require_setup_mode,
+        )
+
+        for p in self._patches(first_run=True, config_exists=False):
+            p.start()
+        try:
+            req = self._make_request(has_admin=None)
+            # Should NOT raise
+            await require_setup_mode(req)
+        finally:
+            from unittest.mock import patch as _patch  # noqa: F401
+            patch.stopall()
+
+    @pytest.mark.asyncio
+    async def test_blocks_healthy_install(self):
+        from fastapi import HTTPException
+
+        from ciris_engine.logic.adapters.api.routes.setup.dependencies import (
+            require_setup_mode,
+        )
+
+        for p in self._patches(first_run=False, config_exists=True):
+            p.start()
+        try:
+            req = self._make_request(has_admin=True)
+            with pytest.raises(HTTPException) as exc:
+                await require_setup_mode(req)
+            assert exc.value.status_code == 403
+        finally:
+            patch.stopall()
+
+    @pytest.mark.asyncio
+    async def test_allows_bugged_install_recovery(self):
+        """THE Codex P1 #2 FIX: when /setup/status would return
+        setup_required=True for the bugged-install state, the wizard
+        endpoint gate must also open — otherwise the client navigates
+        to Setup and every endpoint 403s."""
+        from ciris_engine.logic.adapters.api.routes.setup.dependencies import (
+            require_setup_mode,
+        )
+
+        for p in self._patches(first_run=False, config_exists=True):
+            p.start()
+        try:
+            req = self._make_request(has_admin=False, populate_on_load=True)
+            # Should NOT raise — bugged-install recovery is in-scope for
+            # setup mode.
+            await require_setup_mode(req)
+        finally:
+            patch.stopall()
+
+    @pytest.mark.asyncio
+    async def test_status_signpost_and_gate_agree_on_bugged_install(self):
+        """The whole point of extracting is_setup_required is that both
+        /setup/status and require_setup_mode read the SAME predicate.
+        If they ever drift the client gets routed to Setup and then
+        bounced out again. Pin the lock-step explicitly."""
+        from ciris_engine.logic.adapters.api.routes.setup.dependencies import (
+            is_setup_required,
+            require_setup_mode,
+        )
+
+        for p in self._patches(first_run=False, config_exists=True):
+            p.start()
+        try:
+            req = self._make_request(has_admin=False, populate_on_load=True)
+            # The signpost says "setup required"
+            signpost = await is_setup_required(req)
+            assert signpost is True
+            # And the gate opens (must not raise)
+            req2 = self._make_request(has_admin=False, populate_on_load=True)
+            await require_setup_mode(req2)
+        finally:
+            patch.stopall()
+
+    @pytest.mark.asyncio
+    async def test_unknown_admin_state_blocks_gate(self):
+        """If we can't probe the auth service (early boot, unknown shape),
+        is_setup_required returns False — and the gate blocks. This is
+        the conservative bias: don't open the wizard on uncertainty,
+        because /setup/status is also reporting "not required" in that
+        ambiguous state."""
+        from fastapi import HTTPException
+
+        from ciris_engine.logic.adapters.api.routes.setup.dependencies import (
+            require_setup_mode,
+        )
+
+        for p in self._patches(first_run=False, config_exists=True):
+            p.start()
+        try:
+            req = self._make_request(has_admin=None)
+            with pytest.raises(HTTPException) as exc:
+                await require_setup_mode(req)
+            assert exc.value.status_code == 403
+        finally:
+            patch.stopall()

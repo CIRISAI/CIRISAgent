@@ -41,10 +41,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import Response
 
-from ciris_engine.logic.adapters.api.routes.setup.status import (
-    _has_system_admin_user,
-    get_setup_status,
+from ciris_engine.logic.adapters.api.routes.setup.dependencies import (
+    has_system_admin_user as _has_system_admin_user,
 )
+from ciris_engine.logic.adapters.api.routes.setup.status import get_setup_status
 
 
 class _MockRequest:

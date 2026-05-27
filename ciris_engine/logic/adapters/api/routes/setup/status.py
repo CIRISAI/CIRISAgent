@@ -11,7 +11,7 @@ from fastapi import APIRouter, Request, Response
 from ciris_engine.logic.setup.first_run import get_default_config_path, is_first_run
 from ciris_engine.schemas.api.responses import SuccessResponse
 
-from .dependencies import has_system_admin_user, is_setup_required
+from .dependencies import is_setup_required
 from .models import SetupStatusResponse
 
 router = APIRouter()
@@ -20,10 +20,6 @@ logger = logging.getLogger(__name__)
 
 # Cache duration for status endpoint (reduces polling frequency)
 STATUS_CACHE_SECONDS = 5
-
-# Re-export for backward compatibility with tests that imported the helper
-# from this module before the shared-dependency refactor.
-_has_system_admin_user = has_system_admin_user
 
 
 def _get_ingress_auth_info() -> tuple[bool, Optional[str]]:

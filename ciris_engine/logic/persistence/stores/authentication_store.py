@@ -392,7 +392,11 @@ def update_wa_certificate(wa_id: str, updates: Dict[str, Any]) -> None:
     raw = engine.wa_cert_get(wa_id)
     row = _parse_persist_payload(raw)
     if row is None:
-        logger.warning("update_wa_certificate: wa_id %s not found", wa_id)
+        # %r (repr) escapes newlines / CR / tabs / non-printables in user-
+        # controlled wa_id (path-param from PUT /v1/users/{user_id}/permissions
+        # — unvalidated FastAPI str) so an attacker can't inject log lines
+        # via crafted IDs (CWE-117 / Sonar S5145).
+        logger.warning("update_wa_certificate: wa_id %r not found", wa_id)
         return
 
     # Apply updates to the persist-shape row in place.

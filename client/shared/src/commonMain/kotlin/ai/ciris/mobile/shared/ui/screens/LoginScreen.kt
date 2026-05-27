@@ -97,6 +97,10 @@ fun LoginScreen(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showLoginForm by remember { mutableStateOf(showLocalLoginForm) }
+    // 2.9.3 — confirmation gate for the always-on Reset device link in
+    // the Login footer (see #794 Bug C). Reset device wipes user state +
+    // re-runs setup; we don't want a stray tap to do that silently.
+    var showResetConfirm by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
     // For desktop, always show login form (not OAuth buttons)
@@ -217,13 +221,17 @@ fun LoginScreen(
                 } else {
                     // Mobile mode - show OAuth buttons
 
-                    // 2.9.2 — Personal-install observer-blocked recovery card.
-                    // Surfaces when the *last* sign-in attempt failed with 403
-                    // auth_personal_install_observer_blocked AND the server
-                    // supplied an owner_hint. Lets the user see who they need
-                    // to sign in as and re-launch the account picker without
-                    // hunting through Google's account-switcher manually.
-                    if (observerBlocked && ownerHint != null) {
+                    // 2.9.2/2.9.3 — Personal-install observer-blocked recovery
+                    // card. Surfaces when the *last* sign-in attempt failed
+                    // with 403 auth_personal_install_observer_blocked. The
+                    // card renders even when ownerHint is null: bugged
+                    // installs (CIRISAgent#794 — config-complete with no
+                    // SYSTEM_ADMIN) return owner_hint=null AND 403 on every
+                    // sign-in, and the pre-2.9.3 gate of `&& ownerHint != null`
+                    // meant the user saw nothing happen. Card body falls back
+                    // to login_wrong_account_body_generic when there's no
+                    // hint to display.
+                    if (observerBlocked) {
                         ObserverBlockedRecoveryCard(
                             ownerHint = ownerHint,
                             onChooseDifferentAccount = onChooseDifferentAccount,
@@ -362,18 +370,43 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Privacy link
-                    Text(
-                        text = privacyText,
-                        color = LoginColors.Accent,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .clickable {
-                                PlatformLogger.i("LoginScreen", "[PrivacyPolicy] Privacy policy link clicked")
-                                onPrivacyPolicy()
-                            }
-                            .testable("btn_privacy_policy")
-                    )
+                    // Privacy link + 2.9.3 always-on Reset device escape hatch.
+                    // The Reset device button was previously only inside the
+                    // ObserverBlockedRecoveryCard, which doesn't render on a
+                    // bugged install (#794). Putting it in the footer means
+                    // there's an always-reachable recovery affordance for any
+                    // future "totally stuck" state without relying on the
+                    // observer-blocked render path.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = privacyText,
+                            color = LoginColors.Accent,
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .clickable {
+                                    PlatformLogger.i("LoginScreen", "[PrivacyPolicy] Privacy policy link clicked")
+                                    onPrivacyPolicy()
+                                }
+                                .testable("btn_privacy_policy")
+                        )
+                        Text(
+                            text = localizedString("mobile.login_reset_device"),
+                            color = LoginColors.White.copy(alpha = 0.55f),
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .clickable {
+                                    PlatformLogger.i(
+                                        "LoginScreen",
+                                        "[ResetDevice] Reset device link clicked from Login footer"
+                                    )
+                                    showResetConfirm = true
+                                }
+                                .testable("btn_login_reset_device")
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -394,6 +427,41 @@ fun LoginScreen(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = 24.dp, end = 16.dp)
+                )
+            }
+
+            // 2.9.3 — confirmation dialog for the always-on Reset device
+            // link. Reset device is destructive (wipes user state, returns
+            // to setup wizard); we never want it triggered without an
+            // explicit confirmation.
+            if (showResetConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showResetConfirm = false },
+                    title = {
+                        Text(localizedString("mobile.login_reset_device_confirm_title"))
+                    },
+                    text = {
+                        Text(localizedString("mobile.login_reset_device_confirm_body"))
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showResetConfirm = false
+                                onResetSetup()
+                            },
+                            modifier = Modifier.testable("btn_reset_device_confirm"),
+                        ) {
+                            Text(localizedString("mobile.login_reset_device"))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { showResetConfirm = false },
+                            modifier = Modifier.testable("btn_reset_device_cancel"),
+                        ) {
+                            Text(localizedString("mobile.login_reset_device_cancel"))
+                        }
+                    },
                 )
             }
         }
@@ -679,16 +747,23 @@ private fun OwnerHintRow(
 
 @Composable
 private fun ObserverBlockedRecoveryCard(
-    ownerHint: ai.ciris.mobile.shared.models.OwnerHint,
+    // 2.9.3 — nullable. On a bugged install (no SYSTEM_ADMIN) the
+    // server returns owner_hint=null, but the user still needs the
+    // recovery card to render so they can act. Body falls back to
+    // login_wrong_account_body_generic when hint is unavailable.
+    ownerHint: ai.ciris.mobile.shared.models.OwnerHint?,
     onChooseDifferentAccount: () -> Unit,
     onResetSetup: () -> Unit,
 ) {
     val title = localizedString("mobile.login_wrong_account_title")
-    val body = localizedString(
-        "mobile.login_wrong_account_body",
-        "owner",
-        buildOwnerHintLine(ownerHint).ifBlank { localizedString("mobile.login_wrong_account_body_generic") }
-    )
+    val ownerString = if (ownerHint != null) {
+        buildOwnerHintLine(ownerHint).ifBlank {
+            localizedString("mobile.login_wrong_account_body_generic")
+        }
+    } else {
+        localizedString("mobile.login_wrong_account_body_generic")
+    }
+    val body = localizedString("mobile.login_wrong_account_body", "owner", ownerString)
     val chooseAccountLabel = localizedString("mobile.login_choose_different_account")
     val resetLabel = localizedString("mobile.login_reset_device")
 

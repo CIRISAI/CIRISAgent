@@ -5,6 +5,20 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.3] - 2026-05-27
+
+Patch release — personal-install bugged-state self-recovery. Addresses the four-bug cascade on PR #794 surfaced by a Samsung release-build install where a previously-aborted setup left config-complete state with no SYSTEM_ADMIN user, producing a silent OAuth 403 loop with no on-screen error and no recovery affordance.
+
+### Fixed
+
+- **Server self-heal (#794 Bug D)**: `GET /v1/auth/setup/status` now flips `setup_required: true` when `config_exists` but no `SYSTEM_ADMIN` user is present in the auth service. Existing bricked installs auto-route through the setup wizard on first poll after upgrade, re-establishing the founding owner without user intervention. 14 regression tests pin the resolution truth table.
+- **Silent observer-block (#794 Bug A)**: `LoginScreen` recovery card now renders whenever `observerBlocked=true` — pre-2.9.3 required `ownerHint != null`, which meant bugged installs (server returns `owner_hint: null`) saw nothing on every 403. Card body falls back to `login_wrong_account_body_generic` when no hint. `CIRISApp.kt` 403 handler also keeps `loginErrorMessage` as a belt-and-braces fallback instead of clearing it.
+- **Google account switching (#794 Bug B)**: "Sign in with Google" now passes `forceAccountChooser=true` so `CredentialManager` never auto-resumes the last-used account. Eliminates the entire "wrong account" stall class on devices with multiple Google accounts signed in. One extra tap on the happy path.
+
+### Added
+
+- **Always-on Reset device link (#794 Bug C)**: Login footer now shows a "Reset device" link next to "View Privacy Policy", with confirmation dialog. Was previously only inside the recovery card, which doesn't render on bugged installs. Same `onResetSetup` callback as the existing settings-screen reset flow. 3 new localized strings (`login_reset_device_confirm_title` / `_body` / `_cancel`) propagated as English fallbacks to all 29 locales across all 4 platform dirs.
+
 ## [2.9.2] - 2026-05-26
 
 Patch release — personal-install owner-hint recovery UX, plus QA runner emulator hardening.

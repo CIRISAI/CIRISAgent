@@ -345,7 +345,13 @@ in the `PERFORM_DMAS` step:
 - **`PDMA`** (Principled DMA, `dma/pdma.py`) — Accord-anchored ethical
   evaluation. Stakeholder analysis + conflict detection.
 - **`CSDMA`** (Common-Sense DMA, `dma/csdma.py`) — reality / plausibility
-  checking. Red-flag enumeration.
+  checking across physical, causal, resource, AND relational realism.
+  Red-flag enumeration. The relational tail (family / dependent-care,
+  human labor, intermediary institutions) is realism — the same shape
+  as "does ice melt on a hot pan" — under the framework's Ubuntu-primary
+  anthropology; it is NOT principle evaluation (that is PDMA's job).
+  PDMA identifies named stakeholders; CSDMA asks whether the response's
+  implicit assumptions about the relational world are world-admitting.
 - **`DSDMA`** (Domain-Specific DMA, `dma/dsdma_base.py`) — domain
   alignment per the agent template (Discord moderator, scout, etc.).
 - **`IDMA`** (Intuition DMA, `dma/idma.py`) — Coherence Collapse Analysis:

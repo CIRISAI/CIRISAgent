@@ -1204,6 +1204,98 @@ class APIServerManager:
         except:
             return False
 
+    def _authenticate_with_retry(
+        self,
+        admin_password: str,
+        *,
+        start_time: float,
+    ) -> Optional[str]:
+        """Authenticate against /v1/auth/login, retrying while the runtime resume
+        is still in flight.
+
+        After /v1/setup/complete returns 200 the server begins a multi-second
+        RESUME cycle: it loads post-setup adapters, initializes the LLM service,
+        and only then reaches WORK state. /v1/system/health flips to 200 once
+        the FastAPI app is mounted, but /v1/auth/login can still hang for the
+        duration of resume because the auth_service is wired late in resume on
+        some backends.
+
+        Empirically observed timings (mock-llm, GitHub Actions runner):
+          - sqlite resume:    < 1 s
+          - postgres resume:  ~10-12 s (multi-table migration handover via persist)
+
+        Pre-fix this function called requests.post(..., timeout=5) exactly once
+        — postgres routinely tripped the timeout, raised a ReadTimeout, and the
+        whole QA backend was declared failed (#796 review observed this as a
+        deterministic CI failure during the duplicate Build-and-Deploy run on
+        9cc15f1, not a flake). Now we retry until either the server returns a
+        non-transient response or the overall server_startup_timeout budget is
+        exhausted — the same budget _is_server_running honors.
+        """
+        deadline = start_time + self.config.server_startup_timeout
+        attempt = 0
+        last_error: str = ""
+        last_status: Optional[int] = None
+        while time.time() < deadline:
+            attempt += 1
+            try:
+                auth_response = requests.post(
+                    f"{self.config.base_url}/v1/auth/login",
+                    json={
+                        "username": self.config.admin_username,
+                        "password": admin_password,
+                    },
+                    timeout=10,  # Generous per-attempt cap — handles slow postgres resume
+                )
+                last_status = auth_response.status_code
+                if auth_response.status_code == 200:
+                    if attempt > 1:
+                        self.console.print(
+                            f"[dim]Authenticated after {attempt} attempt(s)[/dim]"
+                        )
+                    return auth_response.json()["access_token"]
+
+                # Non-2xx that's NOT a transient resume-in-flight signature:
+                # 401 (bad creds), 403 (locked), 422 (bad payload). These won't
+                # become 200 by retrying — fail fast on the actual problem.
+                if auth_response.status_code in (401, 403, 422):
+                    self.console.print(
+                        f"[red]❌ Authentication rejected: {auth_response.status_code} - "
+                        f"{auth_response.text[:200]}[/red]"
+                    )
+                    self.console.print(
+                        "[yellow]Hint: Try --wipe-data to clear stale state, or check credentials[/yellow]"
+                    )
+                    self._report_first_run_diagnostics("post-setup authentication failed")
+                    return None
+
+                # 5xx / 503 from auth-service-not-wired-yet — retry.
+                last_error = f"HTTP {auth_response.status_code}: {auth_response.text[:120]}"
+            except requests.exceptions.Timeout as e:
+                # Server is alive (health passed) but auth route blocked — resume
+                # in flight. Retry.
+                last_error = f"Timeout: {e}"
+            except requests.exceptions.ConnectionError as e:
+                # Server temporarily stopped accepting connections during resume
+                # phase swap. Retry.
+                last_error = f"ConnectionError: {e}"
+            except Exception as e:
+                # Unexpected — surface it but keep retrying within the budget;
+                # might be a transient SSL/header issue.
+                last_error = f"{type(e).__name__}: {e}"
+
+            time.sleep(1.0)
+
+        # Budget exhausted.
+        self.console.print(
+            f"[red]❌ Authentication timed out after {attempt} attempts "
+            f"(last status={last_status}, last error={last_error[:160]})[/red]"
+        )
+        self._report_first_run_diagnostics(
+            f"post-setup authentication exhausted retries (last_error={last_error[:120]})"
+        )
+        return None
+
     def _extract_password_from_log(self) -> Optional[str]:
         """Extract the dynamically generated admin password from console log.
 
@@ -1444,26 +1536,10 @@ class APIServerManager:
         # Get auth token for checking cognitive state
         # Use dynamically extracted password if available, otherwise fall back to config
         admin_password = self.get_admin_password()
-        token = None
-        try:
-            auth_response = requests.post(
-                f"{self.config.base_url}/v1/auth/login",
-                json={"username": self.config.admin_username, "password": admin_password},
-                timeout=5,
-            )
-            if auth_response.status_code == 200:
-                token = auth_response.json()["access_token"]
-            else:
-                self.console.print(
-                    f"[red]❌ Authentication failed: {auth_response.status_code} - {auth_response.text[:100]}[/red]"
-                )
-                self.console.print("[yellow]Hint: Try --wipe-data to clear stale state, or check credentials[/yellow]")
-                self._report_first_run_diagnostics("post-setup authentication failed")
-                return False  # Exit immediately on auth failure
-        except Exception as e:
-            self.console.print(f"[red]❌ Authentication error: {e}[/red]")
-            self._report_first_run_diagnostics("post-setup authentication raised exception")
-            return False  # Exit immediately on auth error
+        token = self._authenticate_with_retry(admin_password, start_time=start_time)
+        if token is None:
+            # Diagnostics already emitted by _authenticate_with_retry on its final failure.
+            return False
 
         last_reported_state = ""
         last_state_report_at = 0.0

@@ -14,8 +14,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 139
-        versionName "2.9.2"
+        versionCode 140
+        versionName "2.9.3"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -65,7 +65,7 @@ android {
                 // Mobile uses OpenAI-compatible mode for all providers via OpenRouter/proxy services.
                 // The native SDKs are used on desktop/server only.
                 install "instructor==1.2.6"
-                install "pypdf==5.1.0"
+                install "pypdf==6.0.0"  // CVE FlateDecode RAM exhaustion fixed in 6.0.0
                 install "docx2txt==0.9"
                 // Removed croniter - cron scheduling not needed on mobile client
                 install "python-dateutil==2.8.2"

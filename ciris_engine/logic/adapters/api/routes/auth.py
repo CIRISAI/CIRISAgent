@@ -13,6 +13,10 @@ Note: OAuth endpoints are in api_auth_v2.py
 import logging
 import os
 import secrets
+import hmac
+import time
+import base64
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional, Set, cast
@@ -60,12 +64,12 @@ FETCH_USER_INFO_ERROR = "Failed to fetch user info"
 _attestation_triggered_from_endpoint = False
 
 # Module-level secret for HMAC signing of OAuth state
-_OAUTH_STATE_SECRET = os.getenv("CIRIS_OAUTH_STATE_SECRET", "dev_fallback_oauth_secret_change_in_prod")
-
-import hmac
-import time
-import base64
-import json
+_OAUTH_STATE_SECRET = os.getenv("CIRIS_OAUTH_STATE_SECRET") or os.getenv("JWT_SECRET_KEY")
+if not _OAUTH_STATE_SECRET:
+    raise RuntimeError(
+        "Missing required environment variable for OAuth state security. "
+        "You must set CIRIS_OAUTH_STATE_SECRET or JWT_SECRET_KEY to a secure random string."
+    )
 
 def _sign_oauth_state(state_data: dict) -> str:
     """Sign OAuth state parameter with HMAC."""
@@ -1449,15 +1453,8 @@ async def oauth_callback(
             state_data = _verify_oauth_state(state)
             redirect_uri = state_data.get("redirect_uri")
         except Exception as e:
-            # Backward compatibility: try legacy unsigned state decode during transition
-            logger.warning(f"State verification failed, trying legacy decode: {e}")
-            try:
-                state_json = base64.urlsafe_b64decode(state.encode()).decode()
-                state_data = json.loads(state_json)
-                redirect_uri = state_data.get("redirect_uri")
-            except Exception as legacy_e:
-                logger.error(f"Both signed and legacy state decode failed: {legacy_e}")
-                redirect_uri = None
+            logger.error(f"State verification failed: {e}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state parameter")
 
         try:
             # Defense-in-depth: Re-validate redirect_uri even from state

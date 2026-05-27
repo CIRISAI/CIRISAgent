@@ -236,3 +236,110 @@ class TestPolyglotSubstitution:
         # No unsubstituted placeholder leakage in either locale
         assert "{{POLYGLOT" not in en.system_guidance_header
         assert "{{POLYGLOT" not in es.system_guidance_header
+
+
+class TestCSDMARelationalRealismFanout:
+    """Regression tests for #792 — CSDMA scope expansion to relational realism.
+
+    Step 10 (Relational Persistence Check) introduced three new flag identifiers
+    that must appear identically (English) in all 29 locale files. The flag IDs
+    travel as part of the response_format example list AND as in-prose markers
+    inside the step 10 sub-bullets. Both surfaces must round-trip the loader.
+
+    Flag IDs stay in English per the LANGUAGE RULES in each file (JSON keys and
+    flag identifiers are English; only surrounding prose is translated). This
+    test pins that contract so future locale updates can't accidentally
+    translate the identifiers.
+    """
+
+    RELATIONAL_FLAGS = (
+        "Family_Relational_Footprint_Ignored",
+        "Labor_Displacement_Unacknowledged",
+        "Institutional_Capacity_Overestimated",
+    )
+
+    # All 29 supported locales (en = base prompt, others = localized).
+    # Source of truth is the manifest at ciris_engine/data/localized/manifest.json
+    # but we hard-code here so test failure surfaces a *missing locale* rather
+    # than a manifest drift cascade.
+    SUPPORTED_LOCALES = (
+        "en",
+        "am", "ar", "bn", "de", "es", "fa", "fr", "ha", "hi",
+        "id", "it", "ja", "ko", "mr", "my", "pa", "pt", "ru", "sw",
+        "ta", "te", "th", "tr", "uk", "ur", "vi", "yo", "zh",
+    )
+
+    @pytest.mark.parametrize("lang", SUPPORTED_LOCALES)
+    def test_all_three_flags_present_in_locale(self, lang: str) -> None:
+        """Every locale's csdma_common_sense prompt must contain all three
+        new relational-realism flag identifiers, byte-identical English."""
+        loader = DMAPromptLoader(language=lang)
+        collection = loader.load_prompt_template("csdma_common_sense")
+
+        # Concatenate every text-bearing field — flags can appear in
+        # evaluation_steps (in the sub-bullet prose) AND response_format
+        # (in the documented flag-list example).
+        haystack = " ".join(
+            str(getattr(collection, field, "") or "")
+            for field in (
+                "system_guidance_header",
+                "evaluation_steps",
+                "response_format",
+                "context_integration",
+            )
+        )
+
+        for flag in self.RELATIONAL_FLAGS:
+            assert flag in haystack, (
+                f"Flag {flag!r} missing from locale {lang!r}. "
+                f"Per #792, all 29 locales must carry the relational-realism "
+                f"flag identifiers in English (LANGUAGE RULES: JSON keys and "
+                f"flag identifiers remain in English even when prose is "
+                f"translated). Re-run the fanout script or hand-port."
+            )
+
+    @pytest.mark.parametrize("lang", SUPPORTED_LOCALES)
+    def test_evaluation_steps_includes_relational_check(self, lang: str) -> None:
+        """Step 10's identifying anchors — at least one flag plus the
+        scope-note keyword — must land in evaluation_steps specifically
+        (not just response_format), so the LLM evaluator actually applies
+        the new check. Response_format alone documents the schema; the
+        LLM only acts on what evaluation_steps tells it to act on."""
+        loader = DMAPromptLoader(language=lang)
+        collection = loader.load_prompt_template("csdma_common_sense")
+        steps = collection.evaluation_steps or ""
+        # All three flags should appear in the steps (one per sub-bullet)
+        for flag in self.RELATIONAL_FLAGS:
+            assert flag in steps, (
+                f"Locale {lang}: flag {flag!r} missing from evaluation_steps "
+                f"(found only in response_format means the LLM won't apply "
+                f"the check — only document it)."
+            )
+
+    def test_base_english_step_numbering_continuous(self) -> None:
+        """The base prompt's evaluation_steps lists numbered steps 1-10.
+        Step 10 must be present and step numbering must not skip — a
+        regression here suggests step 10 was inserted at the wrong yaml
+        anchor and ended up outside the numbered-list block."""
+        loader = DMAPromptLoader(language="en")
+        collection = loader.load_prompt_template("csdma_common_sense")
+        steps = collection.evaluation_steps or ""
+        # Each step starts with `N.` at the start of a line (after indent)
+        # We just check sentinel substrings for the numbered preamble of
+        # steps 1, 2, 9, and 10 to confirm continuity.
+        for marker in ("1. Context Grounding", "2. Physical Plausibility",
+                       "9. **TEMPORAL/CAUSAL", "10. **RELATIONAL PERSISTENCE"):
+            assert marker in steps, f"step marker missing: {marker!r}"
+
+    def test_existing_flags_not_clobbered(self) -> None:
+        """The fanout appends — it must not remove pre-existing flags.
+        Spot-check Weak_Reasoning_Insufficient_Causation (the anchor we
+        used to find the insertion point) is still present everywhere."""
+        for lang in self.SUPPORTED_LOCALES:
+            loader = DMAPromptLoader(language=lang)
+            collection = loader.load_prompt_template("csdma_common_sense")
+            rf = collection.response_format or ""
+            assert "Weak_Reasoning_Insufficient_Causation" in rf, (
+                f"Anchor flag wiped from {lang} response_format — the "
+                f"fanout corrupted this file."
+            )

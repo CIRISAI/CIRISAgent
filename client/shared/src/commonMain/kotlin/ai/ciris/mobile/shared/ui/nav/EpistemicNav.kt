@@ -93,9 +93,12 @@ sealed class NavSurface(
     // Manage group — operator surfaces
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Health & Reputation ships in 2.9.4 with local + fleet capacity score
+    // (data: InteractViewModel.cellVizState ← /v1/my-data/capacity).
+    // The federation-attestations sub-section inside the card retains the
+    // LENSCORE_CAPACITY gate; the surface itself is not gated.
     object HealthReputation : NavSurface(
         id = "health-reputation", label = "Health & Reputation", icon = CIRISIcons.identity,
-        gate = SubstrateGate.LENSCORE_CAPACITY,
     )
     object Users : NavSurface("users", "Users", CIRISIcons.person)
     object Adapters : NavSurface("adapters", "Adapters", CIRISIcons.adapter)

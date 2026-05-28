@@ -1018,6 +1018,41 @@ fun CIRISApp(
         LocalCurrency provides currencyManager
     ) {
         MaterialTheme(colorScheme = colorScheme) {
+            // ─── 2.9.4 — Epistemic Commons sidebar shell ─────────────────────
+            // Pre-login screens (Startup/Login/Setup/ServerConnection) and the
+            // Help utility have no NavSurface; for those the sidebar is hidden
+            // and content fills the screen. After login, the sidebar replaces
+            // the old top-bar dropdown nav as the SOLE navigation chrome.
+            val activeSurface = screenToSurface(currentScreen)
+            val showSidebar = currentScreen !is Screen.Startup &&
+                currentScreen !is Screen.Login &&
+                currentScreen !is Screen.Setup &&
+                currentScreen !is Screen.ServerConnection
+            // CIRIS Capacity Score state — hoisted from InteractViewModel so
+            // HealthReputationScreen renders the same StateFlow that drives
+            // the cell-viz dials. Anti-Goodhart constraint per FSD-002 §4.7:
+            // operator-facing render only; never re-injected into the agent
+            // context.
+            val capacityForCard by interactViewModel.cellVizState.collectAsState()
+            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+            androidx.compose.foundation.layout.Row(
+                modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+            ) {
+                if (showSidebar) {
+                    ai.ciris.mobile.shared.ui.nav.EpistemicSidebar(
+                        activeSurface = activeSurface,
+                        onSurfaceSelected = { surf ->
+                            currentScreen = surfaceToScreen(surf)
+                        },
+                        onIssueClick = { url -> uriHandler.openUri(url) },
+                        appVersion = "v2.9.4",
+                    )
+                }
+                androidx.compose.foundation.layout.Box(
+                    modifier = androidx.compose.ui.Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                ) {
             when (currentScreen) {
             Screen.Startup -> {
                 StartupScreen(viewModel = startupViewModel)
@@ -3004,8 +3039,48 @@ fun CIRISApp(
                     onSetPreviewTab = { skillStudioViewModel.setPreviewTab(it) }
                 )
             }
+
+            // ─── 2.9.4 — New Epistemic Commons surfaces ──────────────────────
+            Screen.HealthReputation -> {
+                ai.ciris.mobile.shared.ui.screens.HealthReputationScreen(
+                    state = capacityForCard,
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.Commons -> {
+                ai.ciris.mobile.shared.ui.screens.federation.CommonsScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.Participate -> {
+                ai.ciris.mobile.shared.ui.screens.federation.ParticipateScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.Delegation -> {
+                ai.ciris.mobile.shared.ui.screens.federation.DelegationScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.TrustTopology -> {
+                ai.ciris.mobile.shared.ui.screens.federation.TrustTopologyScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.Constitutional -> {
+                ai.ciris.mobile.shared.ui.screens.federation.ConstitutionalScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.AgentsList -> {
+                ai.ciris.mobile.shared.ui.screens.AgentsListScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
         }
-    }
+                } // close Box(weight=1f)
+            } // close Row
+        } // close MaterialTheme
     } // CompositionLocalProvider
 }
 
@@ -3452,6 +3527,104 @@ private sealed class Screen {
     object VizSettings : Screen()
     object Help : Screen()
     object ServerConnection : Screen()
+
+    // 2.9.4 — new Epistemic Commons surfaces.
+    // HealthReputation ships with a real card (CellVizState-backed).
+    // The other six are Coming Soon placeholders pinned to their substrate issue.
+    object HealthReputation : Screen()
+    object Commons : Screen()
+    object Participate : Screen()
+    object Delegation : Screen()
+    object TrustTopology : Screen()
+    object Constitutional : Screen()
+    object AgentsList : Screen()
+}
+
+/**
+ * Bidirectional bridge between the legacy [Screen] sealed class and the
+ * 2.9.4 [NavSurface] taxonomy. The sidebar drives `onSurfaceSelected`;
+ * we translate to a Screen and assign `currentScreen`. The active surface
+ * is computed back from the Screen so the sidebar's highlight state stays
+ * in sync.
+ *
+ * Pre-login screens (Startup / Login / Setup / ServerConnection) and the
+ * Help utility have no NavSurface (they're [FLOW_ONLY_SURFACES]); the
+ * function returns null and the sidebar is hidden by the shell.
+ */
+private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface? = when (s) {
+    Screen.Interact -> ai.ciris.mobile.shared.ui.nav.NavSurface.Interact
+    Screen.Sessions -> ai.ciris.mobile.shared.ui.nav.NavSurface.Sessions
+    Screen.Tickets -> ai.ciris.mobile.shared.ui.nav.NavSurface.Tickets
+    Screen.Scheduler -> ai.ciris.mobile.shared.ui.nav.NavSurface.Scheduler
+    Screen.Services -> ai.ciris.mobile.shared.ui.nav.NavSurface.Services
+    Screen.Tools -> ai.ciris.mobile.shared.ui.nav.NavSurface.Tools
+    Screen.Telemetry -> ai.ciris.mobile.shared.ui.nav.NavSurface.Telemetry
+    Screen.Logs -> ai.ciris.mobile.shared.ui.nav.NavSurface.Logs
+    Screen.Memory -> ai.ciris.mobile.shared.ui.nav.NavSurface.Memory
+    Screen.GraphMemory -> ai.ciris.mobile.shared.ui.nav.NavSurface.GraphMemory
+    Screen.WiseAuthority -> ai.ciris.mobile.shared.ui.nav.NavSurface.WiseAuthority
+    Screen.Settings -> ai.ciris.mobile.shared.ui.nav.NavSurface.AgentSettings
+    Screen.LLMSettings -> ai.ciris.mobile.shared.ui.nav.NavSurface.LLMSettings
+    Screen.System -> ai.ciris.mobile.shared.ui.nav.NavSurface.System
+    Screen.Runtime -> ai.ciris.mobile.shared.ui.nav.NavSurface.Runtime
+    Screen.Config -> ai.ciris.mobile.shared.ui.nav.NavSurface.Config
+    Screen.SkillStudio, Screen.SkillImport -> ai.ciris.mobile.shared.ui.nav.NavSurface.Skills
+    Screen.HealthReputation -> ai.ciris.mobile.shared.ui.nav.NavSurface.HealthReputation
+    Screen.Users -> ai.ciris.mobile.shared.ui.nav.NavSurface.Users
+    Screen.Adapters -> ai.ciris.mobile.shared.ui.nav.NavSurface.Adapters
+    Screen.DataManagement -> ai.ciris.mobile.shared.ui.nav.NavSurface.Data
+    Screen.Audit -> ai.ciris.mobile.shared.ui.nav.NavSurface.Audit
+    Screen.Consent -> ai.ciris.mobile.shared.ui.nav.NavSurface.Consent
+    Screen.Trust -> ai.ciris.mobile.shared.ui.nav.NavSurface.Trust
+    Screen.Billing -> ai.ciris.mobile.shared.ui.nav.NavSurface.Billing
+    Screen.Wallet -> ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet
+    Screen.Commons -> ai.ciris.mobile.shared.ui.nav.NavSurface.Commons
+    Screen.Participate -> ai.ciris.mobile.shared.ui.nav.NavSurface.Participate
+    Screen.EnvironmentInfo -> ai.ciris.mobile.shared.ui.nav.NavSurface.EnvironmentGraph
+    Screen.Delegation -> ai.ciris.mobile.shared.ui.nav.NavSurface.Delegation
+    Screen.TrustTopology -> ai.ciris.mobile.shared.ui.nav.NavSurface.TrustTopology
+    Screen.Constitutional -> ai.ciris.mobile.shared.ui.nav.NavSurface.Constitutional
+    Screen.AgentsList -> ai.ciris.mobile.shared.ui.nav.NavSurface.AgentsList
+    Screen.VizSettings -> ai.ciris.mobile.shared.ui.nav.NavSurface.ClientInterface
+    // Flow-only / no sidebar
+    Screen.Startup, Screen.Login, Screen.Setup, Screen.ServerConnection, Screen.Help -> null
+}
+
+private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen = when (s) {
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Interact -> Screen.Interact
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Sessions -> Screen.Sessions
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Tickets -> Screen.Tickets
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Scheduler -> Screen.Scheduler
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Services -> Screen.Services
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Tools -> Screen.Tools
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Telemetry -> Screen.Telemetry
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Logs -> Screen.Logs
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Memory -> Screen.Memory
+    ai.ciris.mobile.shared.ui.nav.NavSurface.GraphMemory -> Screen.GraphMemory
+    ai.ciris.mobile.shared.ui.nav.NavSurface.WiseAuthority -> Screen.WiseAuthority
+    ai.ciris.mobile.shared.ui.nav.NavSurface.AgentSettings -> Screen.Settings
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LLMSettings -> Screen.LLMSettings
+    ai.ciris.mobile.shared.ui.nav.NavSurface.System -> Screen.System
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Runtime -> Screen.Runtime
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Config -> Screen.Config
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Skills -> Screen.SkillStudio
+    ai.ciris.mobile.shared.ui.nav.NavSurface.HealthReputation -> Screen.HealthReputation
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Users -> Screen.Users
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Adapters -> Screen.Adapters
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Data -> Screen.DataManagement
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Audit -> Screen.Audit
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Consent -> Screen.Consent
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Trust -> Screen.Trust
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Billing -> Screen.Billing
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet -> Screen.Wallet
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Commons -> Screen.Commons
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Participate -> Screen.Participate
+    ai.ciris.mobile.shared.ui.nav.NavSurface.EnvironmentGraph -> Screen.EnvironmentInfo
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Delegation -> Screen.Delegation
+    ai.ciris.mobile.shared.ui.nav.NavSurface.TrustTopology -> Screen.TrustTopology
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Constitutional -> Screen.Constitutional
+    ai.ciris.mobile.shared.ui.nav.NavSurface.AgentsList -> Screen.AgentsList
+    ai.ciris.mobile.shared.ui.nav.NavSurface.ClientInterface -> Screen.VizSettings
 }
 
 /**

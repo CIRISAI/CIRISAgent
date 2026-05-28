@@ -71,7 +71,7 @@
 
 ## Known gaps / not-yet-implemented
 
-- **Per-trace calibration version anchor**: the agent does NOT pin which RATCHET/calibration package version a given trace was emitted under. A downstream consumer cannot reproduce calibration-dependent analysis without timestamp-guessing the registered calibration at trace-emission time.
+- **Per-trace calibration version anchor**: the agent does NOT pin which RATCHET/calibration package version a given trace was emitted under. Substrate-specced via the `delegates_to` chain pattern in FSD-002 §3.5.3 — "Consumers pinning `RATCHET/calibration/correlated_action_v{N}.yaml` SHOULD see a `delegates_to` structural attestation from the RATCHET release authority mapping the old name to the new (`delegates_to:correlated_action_v{N+1}:from:emergent_deception_v{N}`). One of FSD-002 §2.2's four structural primitives doing real federation work — the rename happens *through* the wire format's own mechanisms rather than as a breaking flag day." Calibration-package amendment discipline per FSD-002 §4.9.2 (rules-layer Contribution + WA quorum). Agent emits the calibration-version pin once federation-wire `delegates_to` envelopes land.
 - **Cross-substrate provenance chains** (the seed's "foundational technical-infrastructure attestation"):
     - CIRISAgent (staged tree) → ciris-build-sign (signing) → CIRISRegistry (manifest registration) → CIRISVerify (runtime verification): WIRED for `ciris_engine`, `ciris_adapters`, `ciris_sdk` source trees
     - CI workflow run → `actions/attest-build-provenance@v1` → SLSA-style attestation: WIRED in `safety_battery.py`, but the resulting SLSA attestation is NOT cross-referenced from the runtime `AttestationResult` — they are two parallel provenance trails

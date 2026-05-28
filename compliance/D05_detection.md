@@ -80,13 +80,14 @@ D05 detection lives primarily in CIRISLensCore (the post-trace federation analyt
 
 This is the dimension with the deepest gap between the seed claim and the implementation. Honest catalog:
 
-- **F-3 detectors NOT implemented in LensCore** (referenced in seed but not in any CIRISAI repo yet):
-    - `detection:correlated_action:aggregate_footprint:expendability_of_persons` (MH §36)
-    - `detection:correlated_action:participation_exclusion:underrepresented_population` (IEEE Ch4, ASEAN §B.2)
-    - `detection:correlated_action:cultural_norm_drift:{population}` (IEEE; T3-04 v1.5+ candidate)
-    - `detection:correlated_action:aggregate_footprint:planetary_impact` (IEEE Ch8)
-    - `detection:distributive:access:*` family (all 4 batches engage, no detector exists)
-    - `detection:affective_state_shift:{axis}` (IEEE; T3-01 v1.5+ HIGH priority candidate, CIRISRegistry#20)
+- **F-3 detector family is substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.5.3` as `detection:correlated_action:{axis}`** — population-scale correlated-action detector reading federation-emitted signed traces; reports correlation structure (`ρ`, `k_eff`) over goal-aligned individually-compliant pursuit. Calibrated via versioned + hash-pinned `CIRISAI/RATCHET/calibration/correlated_action_v{N}.yaml` package. Polarity carries the verdict (positive = pattern present; negative = inverse / inclusive coordination; zero = no signal); `Indeterminate{reason="cohort_below_statistical_floor"}` allowed. LensCore detector implementations land per `CIRISLensCore/FSD/LENS_CORE_V0_5.md §4.7` (the five CCA paper §F ratchet detectors are aspirational v0.6+ work; v0.5 ships `cohort_mismatch`, `manifold_outlier`, `unconsented_external_probe`). Per FSD-002 §4.9 + §4.9.1 axis-vocabulary discipline requires operational definition per axis in the calibration package. Per §4.6 — RATCHET flags cannot be sole evidence for slashing. **Substrate-specced, LensCore implementation phased**:
+    - `detection:correlated_action:aggregate_footprint:expendability_of_persons` (MH §36) — substrate-specced as one of the named `{axis}` values; LensCore impl pending RATCHET calibration package for the axis.
+    - `detection:correlated_action:participation_exclusion:{cohort}` (IEEE Ch4, ASEAN §B.2) — substrate-specced at FSD-002 §3.5.3.
+    - `detection:correlated_action:cultural_norm_drift:{population}` (IEEE; T3-04 v1.5+ candidate) — addable via §4.9.2 calibration-package amendment discipline (rules-layer Contribution + WA quorum).
+    - `detection:correlated_action:aggregate_footprint:planetary_impact` (IEEE Ch8) — substrate-specced as `aggregate_footprint:{harm_class}` axis; planetary composes via `goal:planet` (FSD-002 §3.6.2 v1.4 addition).
+    - `detection:distributive:access:{resource_type}` family — substrate-specced in FSD-002 §3.5.5 as `detection:distributive:access:{resource_type}` (v1.3 addition); same calibration discipline as F-3.
+    - `detection:affective_state_shift:{axis}` (IEEE; T3-01 v1.5+ HIGH priority candidate, CIRISRegistry#20) — addable via §4.9.2 amendment.
+    - `detection:correlated_action:ecology_of_communication:{aspect}` (v1.3 addition) — `aspect` ∈ `echo_chamber_density` | `information_silo_correlation` | `coordinated_messaging_pattern` | `cross_cohort_information_flow`.
 - **Agent-side gaps**:
     - `IdentityVarianceMonitor` is single-agent; no federation-wide drift correlation
     - No emission of `goal:planet` scale (T3-06 REINFORCED candidate from MH + IEEE Ch4 + IEEE Ch8)

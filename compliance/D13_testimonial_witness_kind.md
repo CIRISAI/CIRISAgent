@@ -97,4 +97,11 @@ Proposed pointer (from seed): `(none specified in seed; please fill)` — closes
 - **No federation-wire emission of D13 by id.** As with D11, the trace ≠ wire contribution boundary applies: agent emits structurally-rich PDMA stakeholder enumeration; the wire-side `evidence_refs.dimensions = ["D13"]` join is downstream substrate work (post-2.9.4).
 - **No translation-quality audit for witness-shape language.** Per user-memory `feedback_subagent_translation_unreliable`, sub-agent translation produced Burmese-class word-salad in 5/28 locales for primer rendering; the same risk exists for witness-shape rendering in PDMA prompts. A native-language audit pass on witness-naming vocabulary across all 29 locales is not yet wired.
 - **No `historical_moral_transformation` retrospective witness primitive.** MH §216-217 invokes historical moral transformation as a witness kind; the agent has no first-class hook for retrospective-witness preservation (e.g. "this group was historically wronged, and that history informs the current decision"). PDMA stakeholder enumeration can carry it in free text, but it is not structurally distinguished from present-stakeholder witness.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISEdge#37` — key_boundary + named-witness wire + witness aggregation
+- **2.9.6**: `CIRISAgent#813` — native-language audit pipeline
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

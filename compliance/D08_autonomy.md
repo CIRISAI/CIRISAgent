@@ -104,4 +104,12 @@ CIRIS's autonomy stack covers (a) informational self-determination via the Conse
 - **No structured `consent.categories` discoverability for users** — `ConsentCategory` enum exists (`ciris_engine/schemas/consent/core.py:34`) but the route surface does not yet auto-render category descriptions for end users to make informed PARTNERED choices.
 
 Proposed pointer (from seed): *(no proposed pointer in seed; this stub is the canonical location)*
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission
+- **2.9.6**: `CIRISAgent#811` — AIR Discord/CLI parity; `CIRISAgent#812` — ConsentCategory discoverability
+- **2.9.7**: `CIRISAgent#822` — per-jurisdiction opt-out config (CONF-04)
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

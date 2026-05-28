@@ -93,4 +93,12 @@ The L1-L5 ladder is owned by CIRISVerify (Rust); CIRISAgent consumes it via the 
 - **No `/v1/system/federation` endpoint** exists yet despite the user-supplied reference; federation status is currently inferred from auth service + verifier state at request time.
 
 Proposed pointer (from seed): `CIRISVerify attestation ladder L1-L5` (canonical ladder lives in CIRISVerify Rust). Agent-side integration: `ciris_adapters/ciris_verify/`, `ciris_engine/logic/services/infrastructure/authentication/attestation/`, `ciris_engine/schemas/services/attestation.py`. Ladder definitions: `FSD/TRACE_WIRE_FORMAT.md:510-517`.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISEdge#37` — key_boundary + named-witness wire + witness aggregation
+- **2.9.5**: `CIRISAgent#806` — l3_branch field on AttestationResult
+- **2.9.6**: `CIRISAgent#814` — hardware_trust_degraded → /v1/system/health
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

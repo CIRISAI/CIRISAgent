@@ -132,4 +132,10 @@ Per [MEASUREMENT_METHODOLOGY.md](MEASUREMENT_METHODOLOGY.md), the method discipl
 - **16 auth-related routes** — the authZ method discipline surface
 
 Method is the densest dimension (39 file-path citations in this stub) — the entire H3ERE pipeline is the method declaration. The route + service counts above are the *operational expressions* of that method; the code references in the CIRIS-side compliance implementation section are the *structural expressions*. Both must be cited together to make a complete method attestation.
+
+## Tracked requirements
+
+- **2.9.7**: `CIRISAgent#828` — fallback-disclosure standardization
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

@@ -99,4 +99,12 @@ Proposed pointer (from seed): `(none specified in seed; please fill)` — agent-
 - **Translation quality is unreliable below a quality bar.** Per user-memory `feedback_subagent_translation_unreliable` (Burmese-class word-salad in 5/28 locales): structural prefix-checks miss semantic-quality failures. Without a native-language audit pipeline, 29-locale "diversity" can shade into "29 broken translations." Tier-0 primer-hardening (am / ha / yo) is partial mitigation; closure requires native-audit infrastructure not yet in CIRISAgent.
 - **No `red_team` consultation primitive (EU §III.7).** Stakeholder red-teaming as a consultation kind has no agent-side runtime hook — it lives in the SDLC (operator-side QA process), not in runtime witness aggregation.
 - **Sub-agent translation cannot be trusted to render bad-pattern examples.** Per user-memory `feedback_priming_aware_primer` — primer prompts must render abstract descriptions only, never verbatim bad-pattern examples. The CIRISAgent localization pipeline complies but is not formally checked.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISEdge#37` — key_boundary + named-witness wire + witness aggregation
+- **2.9.6**: `CIRISAgent#813` — native-language audit pipeline
+- **2.9.7**: `CIRISAgent#827` — witness diversity self-monitor
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

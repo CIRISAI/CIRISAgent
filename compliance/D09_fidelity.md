@@ -96,4 +96,12 @@ CIRIS fidelity covers four overlapping surfaces: (a) explicit policy text in the
 - **Originator-channel fidelity asymmetric** — `accord:485` "Fidelity to Mandated Purpose" assumes a clear originator/operator distinction; in multi-occurrence deployments (CLAUDE.md), the mandate channel is the same code-deployment path for all occurrences and there is no per-occurrence mandate-fidelity attestation.
 
 Proposed pointer (from seed): *(no proposed pointer in seed; this stub is the canonical location)*
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission
+- **Substrate spec(s)**: `CIRISRegistry#26` — `fidelity:explainability_sla:{tier}` primitive; `CIRISPersist#110` — occurrence_id field for per-occurrence mandate attestation
+- **2.9.7**: `CIRISAgent#823` — explainability SLA fallback (depends on `CIRISRegistry#26`)
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

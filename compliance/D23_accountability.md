@@ -98,4 +98,11 @@ Proposed pointer (from seed): `(none specified in seed; please fill)`
 - **`accountability:rights_based_legal` (IEEE Ch11)**: Substrate-specced via `testimonial_witness:{kind}` preservation primitives (FSD-002 §3.6.3 v1.4 addition — `harmed_party`, `displaced_worker`, etc.) PLUS the lexical-vulnerability-priority reference policy (FSD-002 §6.1.4 v1.3 addition). UDHR-grounded rights basis composes via scalar attestations on the rights-instrument prefix once Contribution envelope ships.
 - **Originator-creation bidirectional obligations (Accord §IV Ch 2, MH functional analogue)**: Substrate-specced via the trust-graph primitives (`trust_grant`, `registry_vouch` in MESSAGE_TAXONOMY §4.14, §4.13) + the `commitment` Contribution kind (MESSAGE_TAXONOMY.md §4.26 Commissive / Bilateral or Broadcast / Open; high-stakes witness-gated). Originator-side obligations register via Commissive commitment; receiver-side obligations register via `trust_grant`. Bidirectional composition runs consumer-side.
 - **Likely to become STRONG-4 when oversight-ladder regulatory batches map** — promoting `accountability:*` to a named axis in CIRIS Agent is contingent on the seed graduating it.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission
+- **Substrate spec(s)**: `CIRISRegistry#27` — oversight_mode HITL/HOTL/HOOTL envelope field
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

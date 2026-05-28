@@ -110,4 +110,10 @@ Proposed pointer (from seed): `CIRISNodeCore P8 Moderation primitives` — confi
 - **`partner_role:ethics_board` (IEEE adjacency) is a CIRISRegistry primitive (D19), not an agent runtime primitive.** Substrate-specced in FSD-002 §3.9 as `partner_role:{role}` (the IEEE-style ethics-board / certification-body construction extends the COMMUNITY / PROFESSIONAL_* enum); agent observes via WACertificate scope.
 - **`reconsideration:rollback_on_wellbeing_reduction` (IEEE Ch4 adjacency).** Substrate-specced as the four-primitive retraction family in FSD-002 §2.2 (`delegates_to`, `supersedes`, `withdraws`, `recants`) + Reconcile stage `CONTRIBUTION_LIFECYCLE.md §10`; rollback is the `withdraws`/`recants` follow-up against a prior SPEAK/TOOL Contribution. See D24 for the agent-side reconsideration surface.
 - **No federation-wire emission of D15 by id.** As with D11 / D13, the trace ≠ wire contribution boundary applies; agent emits per-deferral structural data, the wire-side join is downstream substrate work.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3; `CIRISNodeCore#15` — Step-4 primitives (P8 moderation + E-4 multilateral + P11 ReconsiderationRequest + P2 CommonsCredits + 4-primitive retraction)
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

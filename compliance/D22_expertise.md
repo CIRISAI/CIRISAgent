@@ -94,4 +94,10 @@ Per [MEASUREMENT_METHODOLOGY.md](MEASUREMENT_METHODOLOGY.md), the externally-mea
 - **256 API routes** — the externally-bounded expertise surface
 
 These figures are deliberately conservative — the baseline measures *implemented competence*, not claimed competence. Per the D22 inversion noted above, CIRIS does not declare expertise in any domain; instead it declares deferral surfaces where the named DomainCategory routes to a WA. The baseline route count is therefore a ceiling on what CIRIS could attest expertise over, not an attestation itself.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISRegistry#25` — Federation taxonomy expansion (forum/partner_role/jurisdiction/dual_remit)
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

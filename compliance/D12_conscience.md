@@ -109,4 +109,12 @@ D12 is **the most directly load-bearing dimension** in CIRIS Agent — the four-
 - **Judge-model independent attestation** — Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.6` as `judge_model:verdict:{model_id}` (default model Claude Opus 4.7); polarity boolean-via-score, `Indeterminate` allowed. Per `CIRISNodeCore/FSD/JUDGE_MODEL.md §3-§5`, the judge is a foundation model that emits PASS/FAIL/UNDETERMINED on the (judge_model, judge_prompt_sha256, criterion, response) tuple. Calibration via `judge_model_vote` + `judge_prompt_edit` Contributions. Agent's existing conscience layer is the per-thought self-judgment; the federation-side independent judge is substrate-specced but not yet emitted from the agent context.
 
 Proposed pointer (from seed): `CIRISAgent/logic/conscience/* (4 epistemic faculties)` — actual location: `ciris_engine/logic/conscience/`
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission
+- **Substrate spec(s)**: `CIRISRegistry#27` — oversight_mode HITL/HOTL/HOOTL envelope field
+- **2.9.7**: `CIRISAgent#826` — phronesis explicit in EpistemicHumility prompt
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

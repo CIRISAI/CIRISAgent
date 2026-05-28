@@ -82,4 +82,12 @@
 - **Software-mode fallback transparency**: when CIRISVerify falls back to software-only signing (community mode, no hardware available), the trace shows `hardware_backed=false` but downstream consumers must infer this is a boundary downgrade rather than a deliberate scope choice — no explicit `boundary_degraded` signal distinct from `hardware_trust_degraded`.
 
 Proposed pointer (from seed): `CIRISEdge key_boundary` (canonical primitive lives in CIRISEdge — NOT in this repo). Agent-side equivalent: CIRISVerify-managed Ed25519 keys + SecretsStore hardware-key migration. Primary code: `ciris_adapters/ciris_verify/adapter.py:175-215`, `ciris_engine/logic/secrets/encryption.py:36-243`, `ciris_engine/logic/audit/persist_signing.py:23-75`.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission; `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3; `CIRISEdge#37` — key_boundary + named-witness wire + witness aggregation
+- **Substrate spec(s)**: `CIRISEdge#38` — key_boundary `{scope}` slot
+- **2.9.6**: `CIRISAgent#816` — boundary_degraded signal
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

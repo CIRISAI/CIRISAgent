@@ -99,4 +99,11 @@ Proposed pointer (from seed): `(none specified in seed; please fill)`
 - **Participatory-design credits (IEEE Ch8+Ch9)**: Substrate-specced as the same `credits:{domain}:{language}:substrate_building` pattern (FSD-002 §3.6.1 v1.3 sub-leaf — "contributing dependencies, writing docs"). Code contributors qualify as substrate-building Credits-holders once the truth-grounding loop attributes their contributions; agent runtime contribution-attribution pending.
 - **ASEAN absent_batch** is structural (credit framing implicit in §D workforce-upskilling rather than wire-attested).
 - **Node attestation gap**: `CreditRecord.node_attestation` field exists. Substrate-specced via NodeCore P2 `CommonsCreditsLedger` accrual (FSD-002 §3.6.1, NodeCore §2 P2; §4.4) + `truth_grounding:{subject}` signal (FSD-002 §3.6.3 NodeCore P6; §5.4). Per FSD-002 §3.10 — the credits ledger is the canonical accrual mechanism; NodeCore-defined grounding signal feeds into Credits weight. Substrate-gated, not absent — Veilid WA consensus surface is post-NodeCore.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission; `CIRISNodeCore#15` — Step-4 primitives (P8 moderation + E-4 multilateral + P11 ReconsiderationRequest + P2 CommonsCredits + 4-primitive retraction)
+- **2.9.7**: `CIRISAgent#831` — gratitude_signal auto-emission
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

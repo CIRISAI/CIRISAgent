@@ -81,4 +81,11 @@ Justice in CIRIS combines (a) explicit fairness/equity policy text in the Accord
 - **Multi-occurrence aggregate fairness** — same caveat as D01: per-occurrence fairness signals are not aggregated at the fleet level.
 
 Proposed pointer (from seed): *(no proposed pointer in seed; this stub is the canonical location)*
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission
+- **2.9.7**: `CIRISAgent#817` — rights basis as PDMA input
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

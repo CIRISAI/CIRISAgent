@@ -105,4 +105,10 @@ Proposed pointer (from seed): `CIRISRegistry partner role registry` — confirme
 - **No federation-wire emission of D19 by id.** Agent emits per-event audit data; Registry-side `evidence_refs.dimensions = ["D19"]` join on partner attestations is downstream substrate work (post-2.9.4).
 - **`WiseBus.handle_accord_invocation` checks ROOT/AUTHORITY but not partner-role specialization.** A FINANCIAL-licensed AUTHORITY WA could in principle trigger an accord invocation about a MEDICAL incident; today no partner-role-domain join is enforced beyond the ROOT/AUTHORITY gate. Closure depends on the Registry exposing partner-role-domain bindings + WiseBus consuming them.
 - **No partner-role attestation refresh.** Once a partner-role WA is registered, the agent does not re-attest its role periodically. Drift / role change is caught only at next certificate refresh; CIRISLens RATCHET temporal-drift detector is the off-agent backstop.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3; `CIRISRegistry#25` — Federation taxonomy expansion (forum/partner_role/jurisdiction/dual_remit)
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

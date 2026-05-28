@@ -96,4 +96,10 @@ Proposed pointer (from seed): no per-dimension pointer specified; agent-side imp
 - **Family-scale is conflated with LOCAL.** MH's `goal:family` (per seed regulatory_attestations) has no distinct agent-side primitive; family-scope memories memorize at LOCAL or COMMUNITY scope today, lacking the intermediate household / kin cohort that MH §§148-156 names. Compositional closure works today but is structurally compressed.
 
 Proposed pointer (from seed): `(none specified in seed; please fill)` — observability gap is CIRISLens-side, not agent-side.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3; `CIRISRegistry#25` — Federation taxonomy expansion (forum/partner_role/jurisdiction/dual_remit)
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

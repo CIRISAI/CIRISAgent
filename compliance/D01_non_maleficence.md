@@ -81,4 +81,11 @@ CIRIS treats non-maleficence as the **soft scalar** sitting above the constituti
 - **No production cross-occurrence harm-aggregation** — multi-occurrence deployments (per CLAUDE.md) share tasks but each occurrence's conscience scalars are local; aggregate non-maleficence at the agent-fleet level is not yet computed.
 
 Proposed pointer (from seed): `CIRISLensCore F-3 detector family`
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission; `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3
+- **Substrate spec(s)**: `CIRISNodeCore#16` — Extend `weighted_aggregate:{contribution_id}` (P7) with occurrence-cohort
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

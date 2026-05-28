@@ -93,4 +93,10 @@ Per user-memory `project_substrate_substitution_trajectory`, the substrate subst
 - **`cyber_norms` forum has no agent-side surface.** MH §§224-227 invokes cyber-norms diplomacy as a multilateral participation kind; the agent has no runtime hook into cyber-norms attestation flows. The closest analogue is the apophatic CYBER_OFFENSIVE prohibition (`ciris_engine/logic/buses/prohibitions.py`) — refraining from cyber-offensive capability is the agent-side contribution to cyber-norms compliance, not direct participation.
 - **No federation-emit verification of operator-attested forum membership.** A misconfigured deployment could in principle claim ASEAN-jurisdiction without supporting evidence; today the agent does not cross-check the operator's claimed forum binding against actual operating jurisdiction. RATCHET-side temporal-drift detection would catch the worst cases; agent-side does not.
 - **Single-key model gates multilateral participation per occurrence.** Per user-memory `project_persist_cohabitation_issues`, one runtime = one Ed25519 identity; multi-occurrence shared-task deployments (CLAUDE.md § "Multi-Occurrence Deployment Support") still share the operator identity, so multilateral participation is attested at the operator level, not the per-occurrence level. Cohabitation issues #75-78 gate 2.9.0 PyEngine runtime-per-call deadlock.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3; `CIRISRegistry#25` — Federation taxonomy expansion (forum/partner_role/jurisdiction/dual_remit); `CIRISNodeCore#15` — Step-4 primitives (P8 moderation + E-4 multilateral + P11 ReconsiderationRequest + P2 CommonsCredits + 4-primitive retraction)
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

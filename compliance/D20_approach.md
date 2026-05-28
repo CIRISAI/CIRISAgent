@@ -80,4 +80,11 @@ Proposed pointer (from seed): `(none specified in seed; please fill)`
 - **ASEAN absent_batch** (single use): ASEAN frames recommendations directly as methods rather than as named approaches. CIRIS exhibits the same shape — the approach layer is implicit in cognitive-state selection. Substrate primitive `approach:{goal_id}` admits both framings.
 - **`approach:trustworthy_ai_lawful_ethical_robust` triad**: Substrate-specced via three parallel `approach:{goal_id}` attestations (FSD-002 §3.6.2 NodeCore P13) — one per triad component. Composition runs consumer-side via FSD-002 §6.1 reference policies.
 - **Per-thought approach-trajectory query**: Substrate-specced as the upward-only DAG Goal→Approach→Method→Progress-Measure (FSD-002 §3.6.2 Tier-2 decision-hierarchy — `goal:{scale}` → `approach:{goal_id}` → `method:{approach_id}:{substrate_rung}` → `progress_measure:{method_id}`). The DAG slice IS the substrate primitive; agent-side endpoint composes the slice from audit + telemetry once NodeCore P13-P15 ship.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission
+- **2.9.7**: `CIRISAgent#829` — /v1/visibility/dag/{thought_id} endpoint
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

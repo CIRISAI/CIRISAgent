@@ -90,4 +90,12 @@ Beneficence is the positive-duty surface of CIRIS — substantially lighter in c
 - **No cross-occurrence aggregate beneficence** — multi-occurrence deployments share tasks but per-occurrence M-1 alignment is local; aggregate beneficence at the fleet level is not yet computed.
 
 Proposed pointer (from seed): *(no proposed pointer in seed; this stub is the canonical location)*
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission
+- **Substrate spec(s)**: `CIRISNodeCore#16` — Extend `weighted_aggregate:{contribution_id}` (P7) with occurrence-cohort
+- **2.9.7**: `CIRISAgent#824` — M-1 alignment dashboard; `CIRISAgent#825` — human_dignity as PDMA input
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

@@ -87,4 +87,12 @@ Per [MEASUREMENT_METHODOLOGY.md](MEASUREMENT_METHODOLOGY.md), externally-observa
 - **256 API method+path routes** — full API surface available for per-stakeholder disclosure; **16 auth-related** routes (the authZ surface); **6 OAuth** routes (the multi-stakeholder identity surface)
 
 Per the methodology, claims about CIRIS's transparency surface in grant or regulatory submissions cite the dated baseline file rather than embedding raw numbers — this prevents drift when routes are added/removed.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission; `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3
+- **2.9.5**: `CIRISAgent#804` — disclosure_text trace test; `CIRISAgent#808` — /v1/system/federation manifest hash
+- **2.9.7**: `CIRISAgent#832` — disclosure_version field on traces; `CIRISAgent#833` — audit chain records disclosure_version
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

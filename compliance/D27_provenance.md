@@ -95,4 +95,13 @@ Per [MEASUREMENT_METHODOLOGY.md](MEASUREMENT_METHODOLOGY.md), the build-provenan
 - **6 service categories** (graph/infrastructure/lifecycle/governance/runtime/tool) — each manifests separately in `ApiServiceConfiguration`
 
 Historical baselines in [`baselines/`](baselines/) provide the provenance trail for the documentation itself — D27 is partly self-referential: this dimension's evidence claims about CIRIS provenance ARE provenance-tracked via the same dated-snapshot pattern.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3
+- **Substrate spec(s)**: `CIRISRegistry#28` — `provenance:skill_import:{source}` primitive; `CIRISRegistry#29` — Per-locale `provenance:build_manifest:{target}` granularity
+- **2.9.5**: `CIRISAgent#807` — CI gate: no .md from runtime
+- **2.9.7**: `CIRISAgent#820` — calibration_version per trace
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

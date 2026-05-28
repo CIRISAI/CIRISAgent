@@ -102,4 +102,11 @@ D04 is the **constitutional floor** of CIRIS — the polarity-(-1)/categorical w
 - **Localized prohibition policy text** — prohibitions code is English-only; the localized Accord copies (29 languages) carry the policy framing but not the canonical capability list. Localization parity is partial.
 
 Proposed pointer (from seed): `CIRISAgent/logic/prohibitions.py` (actual location: `ciris_engine/logic/buses/prohibitions.py`)
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3
+- **2.9.7**: `CIRISAgent#818` — adapter-manifest dark-pattern linter
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

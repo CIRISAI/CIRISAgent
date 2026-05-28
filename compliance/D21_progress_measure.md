@@ -102,4 +102,11 @@ Per [MEASUREMENT_METHODOLOGY.md](MEASUREMENT_METHODOLOGY.md), the canonical nume
 - **Auth-related routes**: 16 (the authZ audit surface relevant to declared-metric trust)
 
 Historical drift: 257 → 255 → 256 across 2026-04-22 → 2026-04-24 → 2026-05-28 (see [`baselines/`](baselines/) for the full set of dated snapshots). Drift is normal; the methodology requires re-running the script before any external claim.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission
+- **2.9.7**: `CIRISAgent#830` — TSDB longitudinal progress emission
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

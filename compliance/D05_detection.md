@@ -97,4 +97,11 @@ This is the dimension with the deepest gap between the seed claim and the implem
 - **CIRISVerify → LensCore link**: integrity dimensions (`*_ok` booleans) are projected into traces today but the lens-side F-3 family that correlates them is the missing component. Substrate substitution trajectory routes this into the LensCore Rust crate at step 3.
 
 Proposed pointer (from seed): `CIRISLensCore detector family` (NOT in this repo); monitor pointer: `CIRISAI/RATCHET calibration packages (versioned, hash-pinned)`. Agent-side primary code references: `ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py`, `ciris_engine/logic/services/governance/self_observation/service.py`, `ciris_engine/logic/services/governance/adaptive_filter/service.py`, `ciris_engine/schemas/runtime/system_context.py:163` (per-trace dimension projection).
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3
+- **2.9.7**: `CIRISAgent#819` — adaptive-filter trigger rates as detection signal; `CIRISAgent#820` — calibration_version per trace
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

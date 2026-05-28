@@ -102,4 +102,11 @@ Proposed pointer (from seed): `CIRISNodeCore reconsideration primitive`
 - **ASEAN absent_batch** is structural (forward-looking 2024 document with no predecessor to reconsider) — CIRIS exceeds ASEAN's surface here.
 - **CIRISNodeCore reconsideration primitive** (proposed pointer in seed) is upstream-pending; the canonical primitive is `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.4 reconsideration:{grounds}` + `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §10 Stage 8` (Reconcile, ReconsiderationRequest P11 + ReconsiderationAttestation). CIRISAgent currently carries the reconsideration semantics in the PONDER/DEFER/RECURSIVE_ASPDMA triad rather than at NodeCore level; Agent emits at the Reconcile stage once NodeCore P11 lands.
 - **Harassment-pattern bound**: substrate-specced in FSD-002 §3.7 as `ratchet:flag:harassment_pattern` (three+ Reconsiderations on single SlashingAttestation triggers review). Agent-side has no equivalent rate-limiter on PONDER/DEFER cycling against the same target.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission; `CIRISNodeCore#15` — Step-4 primitives (P8 moderation + E-4 multilateral + P11 ReconsiderationRequest + P2 CommonsCredits + 4-primitive retraction)
+- **2.9.6**: `CIRISAgent#815` — per-task reconsideration budget
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

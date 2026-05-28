@@ -99,4 +99,12 @@ Proposed pointer (from seed): `CIRISAgent DSASPDMA scale-routing classification 
 - **`locality:decision:community` is conflated with `GraphScope.COMMUNITY`.** Memory scope ≠ decision scope. Community-scope memorize writes are gated by consent/audit; community-scale decisions are not separately gated. Two distinct primitives sharing one enum is a known compression.
 - **Stewardship-tier gate detects misconfiguration only at registration.** A Tier 4-5 agent that drifts (e.g. memory loss, tier reassignment) is not re-checked at every action. The agent caches `_agent_tier` (`wise_bus.py:62,125-126`) after first lookup; this is a known stale-state path. RATCHET temporal-drift detector in CIRISLens is the off-agent backstop.
 - **No federation-wire emission of D07 by id.** Per-deferral context dict carries `reason_code`, `needs_category`, `domain_hint` (`wise_bus.py:248-257`); the wire-side `evidence_refs.dimensions = ["D07"]` join on Contribution envelopes is downstream substrate work (post-2.9.4).
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISRegistry#25` — Federation taxonomy expansion (forum/partner_role/jurisdiction/dual_remit)
+- **2.9.6**: `CIRISAgent#810` — tier re-check per action
+- **2.9.7**: `CIRISAgent#821` — scale-escalation assertion in wise_bus
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

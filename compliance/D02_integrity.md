@@ -85,4 +85,13 @@ Integrity is the system-holds-together property — CIRIS implements it through 
 - Test coverage: `tests/ciris_engine/logic/services/graph/test_audit_service.py` exercises persist-routed chain writes and `verify_complete_chain` against a 69-entry fixture but no fixture asserts that identity-variance + audit-chain + file-integrity together compose into a single "integrity verified" attestation surface.
 
 Proposed pointer (from seed): `(none specified in seed)` — primary code references: `ciris_engine/logic/audit/`, `ciris_engine/logic/services/graph/audit_service/`, `tools/dev/stage_runtime.py`, `ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py`.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISLensCore#26` — F-3 detector family per FSD-002 §3.5.3
+- **Substrate spec(s)**: `CIRISRegistry#29` — Per-locale `provenance:build_manifest:{target}` granularity
+- **2.9.5**: `CIRISAgent#805` — integrity attestation fixture
+- **2.9.6**: `CIRISAgent#809` — key-rotation alert
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
 <!-- END HUMAN -->

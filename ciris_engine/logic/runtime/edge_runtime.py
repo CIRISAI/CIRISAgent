@@ -1,0 +1,176 @@
+"""
+CIRISEdge runtime bootstrap and process singleton.
+
+Edge is a REQUIRED foundation dependency in CIRISAgent 2.9.4+, alongside
+ciris-persist and ciris-verify. Failure to initialize the Edge runtime
+blocks agent boot — the federation identity (signer_key_id) is part of
+the agent's identity and must exist before any cognitive state can run.
+
+Cohabitation contract (CIRISEdge#16 / COHABITATION.md rule 1):
+    init_edge_runtime() consumes the SAME ciris_persist.Engine the rest
+    of the agent uses. The keyring is NOT re-bootstrapped — Edge extracts
+    the signer + rooting directory + outbound queue from the persist
+    engine and reuses them. One keyring identity per host.
+
+Test escape:
+    PYTEST_CURRENT_TEST or CIRIS_EDGE_DISABLED=true skips Edge init and
+    leaves the singleton unset. Callers that hit get_edge() with no live
+    runtime get a clear RuntimeError, NOT a silent None — matches the
+    persist pattern at logic/persistence/models/graph.py:_get_engine().
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from pathlib import Path
+from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
+
+_edge: Optional[Any] = None
+_identity_path: Optional[Path] = None
+
+
+def _edge_disabled() -> bool:
+    """Edge init skipped under pytest or explicit CIRIS_EDGE_DISABLED=true."""
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    return os.environ.get("CIRIS_EDGE_DISABLED", "").lower() in ("true", "1", "yes")
+
+
+def initialize_edge_runtime(identity_dir: Path) -> None:
+    """Bootstrap the Edge runtime singleton.
+
+    Called once during agent startup AFTER persist's initialize_database()
+    has set the global engine. The identity file lives at
+    {identity_dir}/edge_identity.rid; on first boot Reticulum generates a
+    fresh Ed25519 identity, on subsequent boots it loads.
+
+    Raises:
+        RuntimeError: if persist engine is not yet wired, or if Edge
+            construction fails (port bind error, identity load failure).
+            This is a hard boot blocker — same treatment as persist.
+    """
+    global _edge, _identity_path
+
+    if _edge_disabled():
+        logger.info("Edge runtime init skipped (PYTEST_CURRENT_TEST or CIRIS_EDGE_DISABLED set)")
+        return
+
+    if _edge is not None:
+        logger.debug("Edge runtime already initialized; skipping re-init")
+        return
+
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    engine = get_persist_engine()
+    if engine is None:
+        raise RuntimeError(
+            "Cannot initialize Edge runtime: persist engine not yet wired. "
+            "Call ciris_engine.logic.persistence.initialize_database() first."
+        )
+
+    try:
+        import ciris_edge  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise RuntimeError(
+            "ciris-edge not importable but is REQUIRED for 2.9.4+. "
+            "Pin ciris-edge>=0.9.1,<1.0.0 in requirements.txt."
+        ) from e
+
+    identity_dir.mkdir(parents=True, exist_ok=True)
+    identity_path = identity_dir / "edge_identity.rid"
+
+    listen_addr = os.environ.get("CIRIS_EDGE_LISTEN_ADDR", "0.0.0.0:4242")
+    bootstrap_peers_raw = os.environ.get("CIRIS_EDGE_BOOTSTRAP_PEERS", "")
+    bootstrap_peers = [p.strip() for p in bootstrap_peers_raw.split(",") if p.strip()]
+
+    try:
+        edge = ciris_edge.ciris_edge.init_edge_runtime(
+            engine,
+            str(identity_path),
+            listen_addr=listen_addr,
+            bootstrap_peers=bootstrap_peers,
+        )
+    except TypeError as e:
+        # PyO3 cross-crate PyClass identity failure — Edge v0.9.1's bundled
+        # persist Rust crate produces a different PyClass than the runtime
+        # ciris_persist Python module. Tracked at CIRISEdge#22 (cohabitation
+        # comment). Until Edge ships a fix (likely v0.9.2+), boot proceeds
+        # with Edge in degraded state — UI surface advertises this via
+        # GET /v1/system/federation returning {available: false}.
+        if "'Engine' object is not an instance of 'Engine'" in str(e):
+            logger.warning(
+                "Edge runtime init blocked by Edge/persist PyO3 cohabitation bug "
+                "(CIRISEdge#22). Federation address unavailable until Edge ships fix. "
+                "Boot continuing in degraded state — GET /v1/system/federation will "
+                "return available=false."
+            )
+            return
+        raise RuntimeError(
+            f"Edge runtime initialization failed with unexpected TypeError: {e}. "
+            f"Set CIRIS_EDGE_DISABLED=true to skip."
+        ) from e
+    except Exception as e:
+        raise RuntimeError(
+            f"Edge runtime initialization failed (REQUIRED foundation dep): {e}. "
+            f"Set CIRIS_EDGE_DISABLED=true to skip in constrained environments."
+        ) from e
+
+    _edge = edge
+    _identity_path = identity_path
+
+    try:
+        key_id = edge.signer_key_id()
+        logger.info(
+            "Edge runtime initialized: key_id=%s identity=%s listen=%s peers=%d",
+            key_id,
+            identity_path,
+            listen_addr,
+            len(bootstrap_peers),
+        )
+    except Exception:
+        logger.info("Edge runtime initialized (signer_key_id not yet queryable)")
+
+
+def get_edge() -> Any:
+    """Return the live Edge instance. Raises if not initialized."""
+    if _edge is None:
+        if _edge_disabled():
+            raise RuntimeError(
+                "Edge runtime is disabled (PYTEST_CURRENT_TEST or CIRIS_EDGE_DISABLED set). "
+                "Callers must guard with edge_runtime.is_available()."
+            )
+        raise RuntimeError(
+            "Edge runtime not initialized. Call initialize_edge_runtime() during boot."
+        )
+    return _edge
+
+
+def try_get_edge() -> Optional[Any]:
+    """Return the Edge instance if initialized, else None (no exception)."""
+    return _edge
+
+
+def is_available() -> bool:
+    """True if Edge runtime is live and queryable."""
+    return _edge is not None
+
+
+def get_federation_address() -> Optional[str]:
+    """Return the local agent's federation key_id, or None if Edge unavailable."""
+    if _edge is None:
+        return None
+    try:
+        return _edge.signer_key_id()
+    except Exception as e:
+        logger.warning("Edge signer_key_id() failed: %s", e)
+        return None
+
+
+def reset_edge_runtime() -> None:
+    """Test-only: clear the singleton. Production code MUST NOT call this."""
+    global _edge, _identity_path
+    _edge = None
+    _identity_path = None

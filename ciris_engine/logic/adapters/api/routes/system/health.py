@@ -26,7 +26,13 @@ from .helpers import (
     get_current_time,
     get_system_uptime,
 )
-from .schemas import StartupStatusResponse, SystemHealthResponse, SystemTimeResponse, SystemWarning
+from .schemas import (
+    FederationAddressResponse,
+    StartupStatusResponse,
+    SystemHealthResponse,
+    SystemTimeResponse,
+    SystemWarning,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +170,40 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
     )
 
     return SuccessResponse(data=response)
+
+
+@router.get("/federation")
+async def get_federation_address(_auth: AuthObserverDep) -> SuccessResponse[FederationAddressResponse]:
+    """
+    Local agent's federation address (CIRISEdge signer_key_id).
+
+    Returned to operator-facing UI so the user knows which key_id to share
+    with peers seeding `federation_keys` rows for them. When Edge runtime
+    is disabled (CIRIS_EDGE_DISABLED=true) or not yet initialized, returns
+    `available=false` with null key_id.
+    """
+    from ciris_engine.logic.runtime import edge_runtime
+
+    if not edge_runtime.is_available():
+        return SuccessResponse(
+            data=FederationAddressResponse(available=False, key_id=None, edge_version=None)
+        )
+
+    key_id = edge_runtime.get_federation_address()
+    edge_version: Optional[str] = None
+    try:
+        edge = edge_runtime.get_edge()
+        edge_version = edge.crate_version()
+    except Exception as e:
+        logger.debug("Edge crate_version() unavailable: %s", e)
+
+    return SuccessResponse(
+        data=FederationAddressResponse(
+            available=key_id is not None,
+            key_id=key_id,
+            edge_version=edge_version,
+        )
+    )
 
 
 @router.get("/startup-status")

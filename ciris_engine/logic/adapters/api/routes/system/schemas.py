@@ -47,6 +47,19 @@ class SystemHealthResponse(BaseModel):
         return serialize_timestamp(timestamp, _info)
 
 
+class FederationAddressResponse(BaseModel):
+    """Local agent's federation identity (CIRISEdge signer_key_id).
+
+    Operators share this with peers who want to seed `federation_keys`
+    rows for them — it's the addressable identity used by Edge's
+    send_durable_inline_text(recipient_key_id=...) Reticulum routing.
+    """
+
+    available: bool = Field(..., description="True when Edge runtime is initialized and key_id queryable")
+    key_id: Optional[str] = Field(None, description="Federation key_id (the local agent's federation address); null when Edge runtime is disabled or not yet initialized")
+    edge_version: Optional[str] = Field(None, description="Live ciris-edge crate version, or null when Edge runtime unavailable")
+
+
 class SystemTimeResponse(BaseModel):
     """System and agent time information."""
 

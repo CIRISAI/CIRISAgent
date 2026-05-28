@@ -13,6 +13,23 @@ if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.models import ImageContent
 
 
+class MessageType(str, Enum):
+    """Typed classification of FetchedMessage origin.
+
+    Replaces the historical free-string `message_type` field on
+    FetchedMessage — string values kept identical for backward
+    compatibility with existing adapters that still write the raw
+    strings. New code (EdgeCommunicationService and beyond) should
+    pass MessageType.* explicitly.
+    """
+
+    USER = "user"
+    AGENT = "agent"
+    SYSTEM = "system"
+    ERROR = "error"
+    INLINE_TEXT = "inline_text"  # CIRISEdge federation inline-text (Tier 2, v0.9.0+)
+
+
 class MessageHandlingStatus(str, Enum):
     """Status of message handling after submission."""
 
@@ -115,6 +132,7 @@ class FetchedMessage(BaseModel):
 
 
 __all__ = [
+    "MessageType",
     "MessageHandlingStatus",
     "PassiveObservationResult",
     "MessageHandlingResult",

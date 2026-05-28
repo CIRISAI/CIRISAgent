@@ -48,6 +48,21 @@ def register_all_initialization_steps(
         critical=True,
     )
 
+    # Phase 1 (post-database): CIRISEdge federation runtime.
+    # Required foundation dep in concept (CIRISEdge#16 cohabitation) but
+    # currently best-effort due to Edge v0.9.1's PyO3 cross-crate PyClass
+    # identity bug (CIRISEdge#22 issuecomment-4560383149). Boot continues
+    # in degraded state when Edge can't initialize; `GET /v1/system/federation`
+    # returns `{available: false}`. Flip to critical=True once Edge v0.9.2+
+    # ships the cohabitation fix (tracked at CIRISAgent task #197).
+    init_manager.register_step(
+        phase=InitializationPhase.DATABASE,
+        name="Initialize Edge Runtime",
+        handler=lambda: init_edge_runtime(runtime),
+        verifier=verify_edge_runtime,
+        critical=False,
+    )
+
     # Phase 2: MEMORY
     init_manager.register_step(
         phase=InitializationPhase.MEMORY,
@@ -234,6 +249,51 @@ async def verify_database_integrity() -> bool:
     except Exception as e:
         logger.error(f"Database integrity check failed: {e}")
         return False
+
+
+async def init_edge_runtime(runtime: Any) -> None:
+    """Initialize the CIRISEdge federation runtime.
+
+    REQUIRED foundation layer for 2.9.4+, alongside persist + verify.
+    The signer_key_id() exposed by Edge is part of the agent's identity
+    and must exist before any cognitive state runs. Failure to initialize
+    blocks boot — same treatment as a failed persist init.
+
+    Cohabitation (CIRISEdge#16): Edge consumes the SAME ciris_persist
+    Engine; one keyring identity per host. Must run AFTER init_database.
+
+    Test escape: PYTEST_CURRENT_TEST or CIRIS_EDGE_DISABLED=true.
+    """
+    from ciris_engine.logic.runtime import edge_runtime
+    from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+    config = _ensure_config(runtime)
+    # Reticulum identity lives in the agent's data dir, NOT per-occurrence —
+    # multi-occurrence agents share the same federation identity.
+    identity_dir = get_data_dir() / "edge"
+    edge_runtime.initialize_edge_runtime(identity_dir)
+
+
+async def verify_edge_runtime() -> bool:
+    """Verify Edge runtime is healthy and signer_key_id is queryable."""
+    from ciris_engine.logic.runtime import edge_runtime
+
+    if not edge_runtime.is_available():
+        # Disabled (pytest or CIRIS_EDGE_DISABLED) is an explicit opt-out,
+        # NOT a failure — return True so boot continues.
+        if edge_runtime._edge_disabled():
+            logger.info("Edge runtime verification skipped (disabled)")
+            return True
+        logger.error("Edge runtime not available after init")
+        return False
+
+    addr = edge_runtime.get_federation_address()
+    if not addr:
+        logger.error("Edge runtime up but signer_key_id() returned empty")
+        return False
+
+    logger.info("Edge runtime verified: federation_address=%s", addr)
+    return True
 
 
 async def initialize_memory_service(runtime: Any) -> None:

@@ -32,20 +32,19 @@
 <!-- BEGIN HUMAN -->
 ## What this dimension covers
 
-This is the five-level verification ladder (L1 says software was bit-for-bit signed; L5 adds hardware-rooted attestation that the code is running on the device it claims to run on). Each level adds an independent check: at L1 you know the binary is genuine; at L4 you know every loadable file is genuine; at L5 you also know the audit log is end-to-end verified and (on mobile) that the device itself is genuine. Each higher level subsumes all lower ones.
+This is the five-level verification ladder that an external party uses to decide how much to trust an attestation from a running CIRIS agent. Each higher level adds an independent check on top of every lower level; if any lower level fails, all higher levels are reported UNVERIFIED. That "watchman" principle is the heart of the ladder: the verifier proves itself first, then proves its environment, then proves its registry standing, then proves its file integrity, then proves its operator identity and tamper-evident history.
+
+The ladder itself is owned by CIRISAgent — its canonical UI surface lives in `client/shared/src/commonMain/kotlin/ai/ciris/mobile/shared/ui/screens/TrustPage.kt`. CIRISVerify supplies the raw data points (`binarySelfCheck`, `hardwareBacked`, `hardwareType`, `sourcesOk`, `moduleIntegrityOk`, `fileIntegrityOk`, `auditOk`, `registryKeyStatus`, `playIntegrityOk`, etc.); CIRISAgent composes those points into the L1–L5 picture an auditor reads.
 
 ## How CIRIS implements this today
 
-The canonical ladder lives in the upstream CIRIS substrate (Rust-based CIRISVerify). CIRISAgent consumes it, projects the achieved level into every reasoning trace, and uses the level to gate runtime behaviors. Canonical definitions live in `FSD/TRACE_WIRE_FORMAT.md:510-517`:
-
-| Level | Requires | Plain-language meaning |
-|------:|----------|---------|
-| 0 | (nothing) | Verifier not loaded |
-| 1 | binary OK | The running binary matches its published hash |
-| 2 | + environment OK | The runtime environment matches expected config |
-| 3 | + registry OK OR hardware-backed | The signing key is either registered with the federation directory OR held in a Trusted Platform Module (TPM — a hardware chip that signs cryptographically without ever exposing the private key) / secure enclave |
-| 4 | + file-integrity OK | Every prompt, config, and ACCORD text file matches its registered fingerprint of every file in the running build |
-| 5 | + audit OK AND device OK (mobile) | The audit chain is end-to-end verified; on mobile, Google Play Integrity has passed |
+| Level | Plain-language meaning | What has to be true |
+|------:|------------------------|---------------------|
+| **L1 — Binary Loaded** | The CIRISVerify library is genuinely the published library and its critical signing functions exist. The watchman has proven itself. | `binarySelfCheck` passes (CIRISVerify computes a SHA-256 of its own native library at runtime and compares against the registry-published hash) |
+| **L2 — Environment (hardware-rooted)** | The agent's signing key is held in hardware that won't release it — TPM 2.0 on Linux/Windows desktop, Secure Enclave on iOS/macOS, StrongBox / Android Keystore on Android — and a device-attestation token has been obtained from the platform vendor where available. | `hardwareBacked` is true; `hardwareType` identifies the keystore; on mobile, Apple App Attest or Google Play Integrity has returned a token; on desktop, a TPM PCR quote has been produced. |
+| **L3 — Registry Cross-Validation** | The Steward Key and file manifest agree across three independent network channels, so a single network compromise can't lie about identity. | 2 of 3 sources agree: HTTPS authoritative + DNS US advisory + DNS EU advisory. |
+| **L4 — File Integrity** | Every file on disk (Python code, config, ACCORD text, dependencies) matches the SHA-256 hash the registry publishes for the current build. | `moduleIntegrityOk` and `fileIntegrityOk` are both true. |
+| **L5 — Full Attestation (Registry & Audit)** | The operator's Steward Key (purchased through CIRISPortal) is registered and active, and the audit chain shows no tampering. This is the operator's identity claim plus the tamper-evident log of past attestation events. | `registryKeyStatus` reports `active` AND `auditOk` is true. |
 
 - **Verifier wiring**:
     - `ciris_adapters/ciris_verify/adapter.py:48-127` — registers the verifier as a high-priority tool service; exposes verify, capability-check, disclosure, and tier queries.
@@ -56,8 +55,10 @@ The canonical ladder lives in the upstream CIRIS substrate (Rust-based CIRISVeri
 - **Agent-side attestation pipeline**:
     - `ciris_engine/logic/services/infrastructure/authentication/attestation/verifier_runner.py` — drives full attestation.
     - `ciris_engine/logic/services/infrastructure/authentication/attestation/result_builder.py:210-300` — builds the `AttestationResult` from raw verifier response; cross-validates disk, agent, and registry hashes.
-    - `ciris_engine/logic/services/infrastructure/authentication/attestation/play_integrity.py` — Play Integrity verification (Android L5).
+    - `ciris_engine/logic/services/infrastructure/authentication/attestation/play_integrity.py` — Play Integrity verification (Android L2 device attestation).
     - `ciris_engine/logic/services/infrastructure/authentication/attestation/tree_verify.py` — file-tree integrity walk (L4).
+- **Agent-side ladder composition**:
+    - `client/shared/src/commonMain/kotlin/ai/ciris/mobile/shared/ui/screens/TrustPage.kt` — canonical UI surface; lines 549–622 compose each level from raw verifier data points; lines 1419–1560 (L2 Environment), 1564–1640 (L3 Cross-Validation), 1640–1850 (L4 File Integrity), 2124–2200 (L5 Registry & Audit) carry the per-level explanations rendered to operators.
 - **Schemas**:
     - `ciris_engine/schemas/services/attestation.py:13-218` — full attestation state with achieved level, per-check booleans, hardware-trust-degradation flags (CVE detection), and per-source cross-validation.
     - `ciris_engine/schemas/services/attestation.py:244-298` — unified projection into traces and API responses.
@@ -67,7 +68,7 @@ The canonical ladder lives in the upstream CIRIS substrate (Rust-based CIRISVeri
     - `ciris_engine/logic/utils/platform_detection.py:157-161` — TPM detection via `/dev/tpm0`, `/dev/tpmrm0`.
     - Mobile two-phase attestation: pending state while waiting for device token (`ciris_engine/schemas/services/attestation.py:47`).
 - **Hardware-trust degradation on known vulnerabilities**:
-    - `ciris_engine/schemas/services/attestation.py:175-219` — detects vulnerable SoCs (e.g. CVE-2026-20435 MediaTek); flags `hardware_trust_degraded`, populates reason and advisories with patch levels.
+    - `ciris_engine/schemas/services/attestation.py:175-219` — detects vulnerable SoCs (e.g. CVE-2026-20435 MediaTek); flags `hardware_trust_degraded`, populates reason and advisories with patch levels. This degrades L2 specifically (the hardware-rooted level), and because every higher level requires L2 to pass, L3–L5 also become UNVERIFIED.
     - When trust is degraded, wallet operations auto-downgrade to receive-only (policy enforced by the wallet adapter).
 - **Startup attestation budget**:
     - The agent will not transition out of WAKEUP until attestation completes or a 15-second budget expires.
@@ -85,11 +86,10 @@ If you want to verify the agent's attestation claim, you can re-run the same che
 
 ## Current limitations & next steps
 
-- **L5 on server platforms** — reaches L4 today on Linux/macOS servers; L5 requires Play Integrity (Android-only) today. L5 on server lands when the agent populates the L5 claim from a TPM hardware-quote rather than from Play Integrity. The wire format already specifies the TPM-quote shape (`CIRISVerify/FSD/FSD-001 §4 HardwareAttestation` with `tpm_quote` + `pcr_values` + `aik_certificate`); the substrate primitive exists. Agent-side integration is the next step.
-- **iOS App Attest pipeline** — the schema is in place (`device_attestation`, `ciris_engine/schemas/services/attestation.py:52-56`). The wire format is specified (`IOSAttestation` proto with `app_attest_assertion` + `device_check_token`). Maturity lags Android Play Integrity; today iOS falls back to L4 in the verifier runner. iOS L5 is shared work with the upstream CIRISVerify substrate.
-- **Distinct L3-branch signal** — L3 passes on either federation-directory registration OR hardware-backed signing. The upstream substrate specifies these as two independent claims (`attestation:l3:registry_consensus` and `hardware_custody:{platform}`); the agent-side wire-format binding that disambiguates them per-trace is tracked at `CIRISAgent#806`.
-- **Hardware-trust-degraded warning surfaced via system health** — when the verifier flags hardware-trust-degraded, the wallet auto-downgrades but no top-level warning shows up on `/v1/system/health`. Operators must read the advisory list directly today. Tracked at `CIRISAgent#814`.
-- **End-to-end L5 test on real TPM hardware** — CI today uses software-only fallback. A fixture exercising L5 on TPM-equipped hardware is next.
+- **L2 device-attestation reach** — Android (Google Play Integrity) and desktop (TPM PCR quote) cover most of the install base. iOS App Attest is staged (`device_attestation` schema at `ciris_engine/schemas/services/attestation.py:52-56`); the wire shape is specified (`IOSAttestation` proto with `app_attest_assertion` + `device_check_token`). On iOS today the L2 hardware-rooted check still passes via Secure Enclave key storage; the App Attest token piece is the next iOS-side step.
+- **Which L3 channels agreed, per-trace** — L3 passes when at least 2 of 3 network channels (HTTPS authoritative + DNS US + DNS EU) agree on the Steward Key and manifest. The traced result today says "L3 passed" without naming which 2/3 contributed. Tracked at `CIRISAgent#806` (re-scoped from the original OR-gate framing — see issue thread).
+- **Hardware-trust-degraded warning on system health** — when the verifier flags `hardware_trust_degraded` (e.g. CVE-affected SoC), the wallet auto-downgrades but no top-level warning surfaces on `/v1/system/health`. Operators have to read the advisory list directly today. Tracked at `CIRISAgent#814`.
+- **End-to-end L2 test on real TPM hardware** — CI today uses software-only fallback. A fixture exercising L2 on TPM-equipped hardware (real PCR quote, real EK certificate chain) is next.
 - **`/v1/system/federation` endpoint** — coming next; federation status is currently inferred from the auth service and verifier state per request.
 - **ASEAN attestation absent** — D18 has zero ASEAN attestations because ASEAN frames in normative-principles + risk-assessment language rather than an attestation-ladder vocabulary; the seed marks accountability-tier composition as the functional analogue.
 

@@ -10,6 +10,8 @@ The `compliance/` directory is the umbrella for all regulatory evidence. Dimensi
 
 Originally drafted as the "Round 1 grant baseline" workflow (PR #695); subsumed into compliance/ on 2026-05-28 because the same pipeline serves grants, regulatory attestations, and ongoing compliance audits — keeping one source of truth eliminates drift across contexts.
 
+**Federation wire format** (added 2026-05-28): CEG 0.2 ([`CIRISRegistry/FSD/CEG/`](https://github.com/CIRISAI/CIRISRegistry/tree/main/FSD/CEG)) is the authoritative wire-form spec for the CIRIS 3.0 agent release. Where this methodology cites dimension prefix families, the CEG-canonical form is ground truth; the historical FSD-002 references in older stubs are design-history. See [`README.md`](README.md) § "Federation wire format: CEG 0.2".
+
 ## Validation Hierarchy
 
 ### Level 1: Implementation Files (Ground Truth)

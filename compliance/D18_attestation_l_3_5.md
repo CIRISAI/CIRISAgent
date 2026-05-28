@@ -36,6 +36,8 @@ This is the five-level verification ladder that an external party uses to decide
 
 The ladder itself is owned by CIRISAgent — its canonical UI surface lives in `client/shared/src/commonMain/kotlin/ai/ciris/mobile/shared/ui/screens/TrustPage.kt`. CIRISVerify supplies the raw data points (`binarySelfCheck`, `hardwareBacked`, `hardwareType`, `sourcesOk`, `moduleIntegrityOk`, `fileIntegrityOk`, `auditOk`, `registryKeyStatus`, `playIntegrityOk`, etc.); CIRISAgent composes those points into the L1–L5 picture an auditor reads.
 
+This consumer-side-composition rule is now formally specified by the federation: **CEG 0.2 §8.1.9 Policy I — Attestation-Ladder Composition** (`CIRISRegistry/FSD/CEG/08_composition.md`). The CEG 0.2 wire-break (§5.2 + §13.1, commit `4b27130` on CIRISRegistry main) renames the on-wire attestation prefixes from the old `attestation:l{N}:*` form to mechanism-only: `self_verify` / `hardware_rooted` / `registry_consensus` / `license_validity` / `agent_integrity`. The L1–L5 numbering survives only as a consumer-rendering convention; the wire never speaks levels. CIRIS 3.0 ships with CEG as the federation wire format.
+
 ## How CIRIS implements this today
 
 | Level | Plain-language meaning | What has to be true |
@@ -92,7 +94,7 @@ If you want to verify the agent's attestation claim, you can re-run the same che
 - **`/v1/system/federation` endpoint** — coming next; federation status is currently inferred from the auth service and verifier state per request.
 - **ASEAN attestation absent** — D18 has zero ASEAN attestations because ASEAN frames in normative-principles + risk-assessment language rather than an attestation-ladder vocabulary; the seed marks accountability-tier composition as the functional analogue.
 
-Proposed pointer (from seed): `CIRISVerify attestation ladder L1-L5` (canonical ladder lives in the upstream Rust substrate). Agent-side integration: `ciris_adapters/ciris_verify/`, `ciris_engine/logic/services/infrastructure/authentication/attestation/`, `ciris_engine/schemas/services/attestation.py`. Ladder definitions: `FSD/TRACE_WIRE_FORMAT.md:510-517`.
+Proposed pointer (from seed): `CIRISVerify attestation ladder L1-L5` (this seed line predates CEG 0.2 and reads as "the ladder lives in the substrate" — under CEG 0.2 the ladder is consumer-side composition per §8.1.9 Policy I; the substrate ships mechanism-only data points). Agent-side integration: `ciris_adapters/ciris_verify/`, `ciris_engine/logic/services/infrastructure/authentication/attestation/`, `ciris_engine/schemas/services/attestation.py`. Canonical consumer-side ladder composition: `client/shared/src/commonMain/kotlin/ai/ciris/mobile/shared/ui/screens/TrustPage.kt`. Authoritative wire-form spec: `CIRISRegistry/FSD/CEG/05_namespace.md §5.2` (mechanism-only prefixes) + `08_composition.md §8.1.9` (Policy I composition rule) + `13_anti_patterns.md §13.1` (deprecation of `attestation:l{N}:*`).
 
 ## Tracked requirements
 

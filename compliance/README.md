@@ -8,6 +8,19 @@ This directory is the umbrella for CIRIS Agent compliance documentation. It serv
 2. **Grant submissions** — every numeric claim about the codebase is reproducible from a dated baseline artifact, not embedded prose.
 3. **Internal compliance audits** — honest "Known gaps" inventory per dimension lets the team and external reviewers see what's done, what's substrate-gated, what's not started.
 
+## Federation wire format: CEG 0.2
+
+The CIRIS federation rolls **CEG (CIRIS Epistemic Grammar) 0.2** as the wire format for the **CIRIS 3.0 agent release**. CEG supersedes FSD-002 as the authoritative federation primitive spec; FSD-002 is retained in this repo's substrate-FSD cross-references as design history.
+
+- **Spec home**: [`CIRISRegistry/FSD/CEG/`](https://github.com/CIRISAI/CIRISRegistry/tree/main/FSD/CEG) (17 numbered sections)
+- **README**: [`CEG/README.md`](https://github.com/CIRISAI/CIRISRegistry/blob/main/FSD/CEG/README.md)
+- **Status**: Public Working Draft; pin against `0.x` until 1.0 publication. **0.2 carries one wire-break vs 0.1**: §5.2 attestation-ladder prefixes renamed from `attestation:l{N}:*` to mechanism-only form per §1.3.1 T2 (the L-ladder is consumer composition per §8.1.9 **Policy I — Attestation-Ladder Composition**, not wire prefix). See §16.1 lineage. Cross-repo coordination tracked under CIRISVerify#38, CIRISPersist#116, CIRISPortal#2, CIRISConformance#1, plus FYI threads on Agent / NodeCore / Edge / LensCore / RATCHET / Bench.
+
+What this means for readers of this directory:
+- The compliance dimensions D01–D27 still derive from `SEED_DIMENSIONS.yaml` v1.0; the seed-rendered tops cite the historical wire-form prefixes (e.g. D18 reads `attestation:l{3,5}:*`). Under CEG 0.2 those prefixes are deprecated — see §13.1 deprecation entry. The HUMAN-authored section of each affected stub references the new mechanism-only prefixes (`self_verify` / `hardware_rooted` / `registry_consensus` / `license_validity` / `agent_integrity`) and the §8.1.9 Policy I composition rule where it applies.
+- The L1–L5 attestation ladder visible to operators (in `client/.../TrustPage.kt`) is now formally **consumer-side rendering** per §8.1.9 Policy I — CIRISVerify supplies the data points, CIRISAgent composes the picture. This validates the D18 framing and replaces all prior "L-ladder lives in the substrate" wording.
+- The seed itself (`tools/compliance/SEED_DIMENSIONS.yaml`) will get a v1.1 update aligned to CEG 0.2 prefix families; the dimension IDs (D01..D27) are stable across that change.
+
 ## Structure
 
 ```

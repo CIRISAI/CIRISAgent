@@ -102,6 +102,13 @@ sealed class NavSurface(
     )
     object Users : NavSurface("users", "Users", CIRISIcons.person)
     object Adapters : NavSurface("adapters", "Adapters", CIRISIcons.adapter)
+    /**
+     * Federation transport substrate — Reticulum + HTTPS + cohabitation Local.
+     * Edge data is source of truth; UI is display + content-type-aware CRUD.
+     * Lands in lockstep with CIRISEdge 1.0 / 1.1 (CIRISEdge#23–29 + the
+     * sibling ask threads referenced in NETWORK_FFI_GAPS).
+     */
+    object Network : NavSurface("network", "Network", CIRISIcons.globe)
 
     object Audit : NavSurface("audit", "Audit", CIRISIcons.audit)
     object Consent : NavSurface("consent", "Consent", CIRISIcons.lock)
@@ -251,6 +258,7 @@ val MANAGE_GROUP = NavGroup(
         NavSurface.HealthReputation,
         NavSurface.Users,
         NavSurface.Adapters,
+        NavSurface.Network,         // federation transport substrate (Edge 1.0/1.1)
         NavSurface.Data,            // + Audit, Consent
         NavSurface.Trust,
         NavSurface.Billing,         // + Wallet

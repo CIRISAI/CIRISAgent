@@ -3077,6 +3077,13 @@ fun CIRISApp(
                     onIssueClick = { url -> uriHandler.openUri(url) },
                 )
             }
+            Screen.Network -> {
+                // Federation transport substrate operator surface — Edge data
+                // is source of truth; UI is display + content-type-aware CRUD.
+                // Mock snapshot until PyEdge FFI lands in Edge 1.0/1.1
+                // (CIRISEdge#23–29 + sibling pymethod asks).
+                ai.ciris.mobile.shared.ui.screens.NetworkScreen()
+            }
         }
                 } // close Box(weight=1f)
             } // close Row
@@ -3538,6 +3545,7 @@ private sealed class Screen {
     object TrustTopology : Screen()
     object Constitutional : Screen()
     object AgentsList : Screen()
+    object Network : Screen()
 }
 
 /**
@@ -3572,6 +3580,7 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.HealthReputation -> ai.ciris.mobile.shared.ui.nav.NavSurface.HealthReputation
     Screen.Users -> ai.ciris.mobile.shared.ui.nav.NavSurface.Users
     Screen.Adapters -> ai.ciris.mobile.shared.ui.nav.NavSurface.Adapters
+    Screen.Network -> ai.ciris.mobile.shared.ui.nav.NavSurface.Network
     Screen.DataManagement -> ai.ciris.mobile.shared.ui.nav.NavSurface.Data
     Screen.Audit -> ai.ciris.mobile.shared.ui.nav.NavSurface.Audit
     Screen.Consent -> ai.ciris.mobile.shared.ui.nav.NavSurface.Consent
@@ -3611,6 +3620,7 @@ private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen
     ai.ciris.mobile.shared.ui.nav.NavSurface.HealthReputation -> Screen.HealthReputation
     ai.ciris.mobile.shared.ui.nav.NavSurface.Users -> Screen.Users
     ai.ciris.mobile.shared.ui.nav.NavSurface.Adapters -> Screen.Adapters
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Network -> Screen.Network
     ai.ciris.mobile.shared.ui.nav.NavSurface.Data -> Screen.DataManagement
     ai.ciris.mobile.shared.ui.nav.NavSurface.Audit -> Screen.Audit
     ai.ciris.mobile.shared.ui.nav.NavSurface.Consent -> Screen.Consent

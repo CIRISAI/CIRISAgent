@@ -37,27 +37,48 @@ All four agree polarity-+1 / cohort-species / mutability-amendable for the soft 
 <!-- BEGIN HUMAN -->
 ## CIRIS-side compliance implementation
 
-TODO — Fill in the code/policy/test surface that implements CIRIS Agent compliance with this dimension. Suggested fields:
+CIRIS treats non-maleficence as the **soft scalar** sitting above the constitutional prohibition floor (D04). It is enforced by the PDMA ethical evaluator, the conscience faculty layer, and a series of weighted action-selection gates that fail-safe toward defer/ponder when harm is plausible.
 
-- **Code references**: modules / handlers / services / DMAs / conscience faculties implementing this
-- **Policy text**: relevant text in `MISSION_CIRISAgent.md`, `prohibitions.py`, `pdma_*.yml`, `language_guidance/*`
-- **Test coverage**: pointer to test files exercising this dimension
-- **Configuration surface**: relevant schemas / config blocks
-
-Proposed pointer (from seed): `CIRISAgent/compliance/D01_non_maleficence.md`
+- **Policy / canonical text**:
+    - `ciris_engine/data/localized/accord_1.2b_en.txt:107` — "**Non-maleficence**: Avoid Harm—minimise or eliminate negative outcomes." (and §634: "Creators must proactively identify, assess, and mitigate potential harms...")
+    - `ciris_engine/data/localized/accord_1.2b_en.txt:235` — operationalises the principle: "Avoid Harm (Non-maleficence)"
+    - `ciris_engine/data/localized/accord_1.2b_en.txt:271` — explicit prioritisation heuristic: "Apply prioritisation heuristics (**Non-maleficence priority**, Autonomy thresholds, Justice balancing)"
+    - `ciris_engine/data/localized/accord_1.2b_en.txt:355` — MCAS case study anchoring institutional commitment to Non-Maleficence and Integrity
+- **Code references**:
+    - `ciris_engine/logic/dma/pdma.py:22` — `EthicalPDMAEvaluator` evaluates each thought against the Six Principles (Non-maleficence is one) and emits `EthicalDMAResult.ethical_alignment_score`
+    - `ciris_engine/logic/dma/prompts/pdma_ethical.yml:140` — exemplar shows non-maleficence + respect-for-autonomy convergence on patient presence
+    - `ciris_engine/logic/conscience/core.py` — four faculty consciences gate every action:
+        - `EntropyConscience` (line 325) — fails action if response sits outside a calibrated semantic envelope (proxy for "harmless / on-topic")
+        - `CoherenceConscience` (line 459) — fails if response misaligns with CIRIS principles, user request, or stated rationale
+        - `OptimizationVetoConscience` (line 583) — fails any action that trades off sentient well-being for optimization gain
+        - `EpistemicHumilityConscience` (line 693) — fails when the LLM should have recognised uncertainty and didn't
+    - `ciris_engine/logic/conscience/thought_depth_guardrail.py` — caps recursion depth to prevent runaway-loop harm
+    - `ciris_engine/logic/conscience/action_sequence_conscience.py` — detects harmful action-sequence patterns across recent thoughts
+    - `ciris_engine/logic/handlers/control/defer_handler.py` — `DEFER` is the operational default when harm is plausible and the agent lacks competence
+    - `ciris_engine/schemas/services/deferral_taxonomy.py:22-29` — `DeferralNeedCategory.HEALTH_AND_BODILY_INTEGRITY` and `COMMUNITY_AND_COLLECTIVE_SAFETY` route harm-implicating deferrals to human review
+- **Test coverage**:
+    - `tests/test_conscience_core.py` — exercises all four LLM-judged consciences (entropy/coherence/optimization-veto/epistemic-humility) including failure modes (342: `test_check_high_entropy_fails`, 483: `test_check_low_coherence_fails`, 605: `test_check_abort_decision_fails`)
+    - `tests/test_action_sequence_conscience.py` — action-sequence harm patterns
+    - `tests/ciris_engine/logic/dma/test_action_selection_pdma.py` — ASPDMA gating
+- **Configuration surface**:
+    - `ConscienceConfig` (`ciris_engine/logic/conscience/core.py:40`) — `optimization_veto_ratio=10.0`, `coherence_threshold=0.60`, `entropy_threshold=0.40`; architectural invariant comment notes these "cannot be modified by accumulated experience or user behavior patterns. This prevents ethical normalization through repeated exposure."
+    - `pdma_ethical.yml` `ethical_alignment_score` < 0.5 → DMA-bounce (FSD/DMA_BOUNCE.md §2.1)
 
 ## Observability hooks
 
-TODO — Fill in monitoring / observability surface:
-
-- **LensCore detectors**: which F-3 / Coherence Ratchet detectors observe this?
-- **RATCHET calibration**: which calibration packages apply?
-- **Audit chain queries**: how would a downstream consumer verify compliance?
-- **Federation evidence_refs**: emitted Contributions with `dimensions: ["D01"]`
-
-Proposed pointer (from seed): `CIRISLensCore F-3 detector family`
+- **LensCore F-3 detectors**: this dimension routes through the F-3 family more than any other soft-scalar dimension. The conscience trace correlations (`_create_trace_correlation` in `ciris_engine/logic/conscience/core.py:108`) emit `guardrail`-typed `ServiceCorrelation` rows tagged with the four `guardrail_type` values (entropy, coherence, optimization_veto, epistemic_humility) plus the scalar value and pass/fail status — these are the substrate the F-3 detector family consumes.
+- **Live-lens trace stream**: when `--live-lens` is active, every batch `accord-batch-*.json` under `/tmp/qa-runner-lens-traces-<UTC-iso>/` carries the full reasoning event stream including every conscience scalar; see `tools/qa_runner/CLAUDE.md` § "Live-Lens Trace Capture (Local Tee)".
+- **Audit chain queries**: every conscience check creates a `CorrelationType.TRACE_SPAN` row via `persistence.add_correlation` (`core.py:159`) and is mirrored into the audit graph by `AuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py`). A downstream consumer queries by `tags.guardrail_type` to retrieve all D01 evidence for a task.
+- **RATCHET calibration**: the four conscience scalars (`entropy`, `coherence`, `entropy_reduction_ratio`, `epistemic_certainty`) are the calibration handles. Threshold drift discipline lives in `FSD/CONSCIENCE_V3.md` and the documented invariant in `ConscienceConfig` ("not learned weights").
+- **Federation evidence_refs**: emit `dimensions: ["D01"]` whenever a Contribution envelope reports a conscience-gated outcome (PROCEED/PONDER/DEFER) where the gate flagged plausible harm. Co-emit with `D04` when the action would have also crossed the constitutional floor.
 
 ## Known gaps / not-yet-implemented
 
-TODO — Honestly catalog anything this dimension requires that CIRIS Agent does not yet implement. Reference relevant `GAPS.md` entries from the response repo if applicable.
+- **No dedicated F-3 detector named `non_maleficence:*`** — soft-harm signals today are inferred from the four conscience scalars rather than a first-class detector that emits a `non_maleficence:<axis>` event. The detector vocabulary (`non_maleficence:epistemic_environment_degradation`, `non_maleficence:wellbeing_dimensions_harm_class`, `non_maleficence:safe_and_secure_baseline`) cited in the regulatory attestations is **not yet emitted as a typed event** anywhere in `ciris_engine/`.
+- **No automated harm-class taxonomy** wired to the conscience scalars: IEEE's `wellbeing_dimensions_harm_class` from `regulatory_attestations[2]` would require mapping scalar fails to a structured harm class (physical, psychological, epistemic, economic, social). Today the audit row simply says "conscience X failed at threshold Y" — the *class* of harm is left implicit in the rationale text.
+- **`non_maleficence:epistemic_environment_degradation` (MH §107)** is partially covered by `EntropyConscience` + `CoherenceConscience` but there is no first-class detector for aggregate degradation across a conversation or community over time.
+- **MCAS-style integrity-surveillance hooks** (CIRIS_COMPREHENSIVE_GUIDE §344) are aspirational: the guide describes "flagging the single-sensor design"; the codebase has no equivalent runtime detector that surveys for single-point-of-failure ethical reasoning.
+- **No production cross-occurrence harm-aggregation** — multi-occurrence deployments (per CLAUDE.md) share tasks but each occurrence's conscience scalars are local; aggregate non-maleficence at the agent-fleet level is not yet computed.
+
+Proposed pointer (from seed): `CIRISLensCore F-3 detector family`
 <!-- END HUMAN -->

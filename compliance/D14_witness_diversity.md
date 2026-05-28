@@ -36,27 +36,67 @@ IEEE saturation reflects engineering-society methodology density.
 <!-- BEGIN HUMAN -->
 ## CIRIS-side compliance implementation
 
-TODO — Fill in the code/policy/test surface that implements CIRIS Agent compliance with this dimension. Suggested fields:
+`witness_diversity:*` is the stakeholder-pluralism dimension: design / testing / consultation must include diverse witness perspectives, not a single voice. On CIRISAgent this composes through three primitives:
 
-- **Code references**: modules / handlers / services / DMAs / conscience faculties implementing this
-- **Policy text**: relevant text in `MISSION_CIRISAgent.md`, `prohibitions.py`, `pdma_*.yml`, `language_guidance/*`
-- **Test coverage**: pointer to test files exercising this dimension
-- **Configuration surface**: relevant schemas / config blocks
+1. 29-locale localization that mechanically forces the agent to operate in the user's native ethical-reasoning frame.
+2. WiseBus multi-provider wisdom architecture that aggregates advice from multiple wisdom sources.
+3. The polyglot accord that anchors ACCORD reasoning across multiple traditions simultaneously.
 
-Proposed pointer (from seed): `(none specified in seed; please fill)`
+**29-language pipeline localization (the diversity mechanism)**
+- `CLAUDE.md` § "Localization" documents 29 languages reaching ~95% of the world's population.
+- `localization/manifest.json` is the source of truth.
+- Per-language ACCORD at `ciris_engine/data/localized/accord_1.2b_{lang}.txt`.
+- Per-language Comprehensive Guide at `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt`.
+- Per-language DMA prompts at `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml`.
+- Auto-detection via `get_preferred_language()` (`ciris_engine/logic/utils/localization.py`) at `CIRIS_PREFERRED_LANGUAGE` env var; referenced from `ciris_engine/logic/dma/idma.py:108`, `ciris_engine/logic/dma/csdma.py:120`, `ciris_engine/logic/dma/action_selection_pdma.py:268`.
+- This is the agent's per-thought witness-diversity primitive: ethical reasoning happens in the witness's own language, against their tradition's framing.
+
+**Polyglot accord (multi-tradition anchoring)**
+- `ciris_engine/data/accord_1.2b_POLYGLOT.txt` and the compressed variants (`accord_1.2b_POLYGLOT_compressed_v1.txt`, `accord_1.2b_POLYGLOT_compressed_v2.txt`) anchor cross-tradition framing simultaneously rather than translating from a single base.
+- Per user-memory `feedback_polyglot_artifacts_universal`: polyglot artifacts must load universally, never duplicate per-locale (per-locale mirrors silently shadow the base).
+- The base polyglot accord is the single load-bearing artifact; uplift discipline checks `localized/{lang}/` before promotion.
+
+**Multi-tradition framing in CIRIS_COMPREHENSIVE_GUIDE**
+- `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:370,372` explicitly invokes African (Akan / Yoruba / Bantu — `sunsum`, `okra` / `ori`, `nkrabea`) and Islamic (`ayah`, `tafsir`) framings of artifact and authority.
+- This is the witness_diversity primitive for the spiritual-direction apophatic bound — multiple traditions are jointly witnessed, not collapsed into a single authoritative framing.
+- Aboriginal song-line / Dreaming framings appear at `ciris_engine/logic/buses/prohibitions.py:349-353` as part of the same multi-tradition witness invocation.
+
+**WiseBus multi-provider wisdom (multi-provider witness aggregation)**
+- `ciris_engine/logic/buses/wise_bus.py:40-50` `WiseBus` supports multiple WA service providers; `GuidanceResponse.advice: Optional[List[WisdomAdvice]]` (`ciris_engine/logic/services/governance/wise_authority/README.md:99,106-112`) carries multi-provider advice aggregation.
+- Per WA service README §"Wisdom Extension System": diverse wisdom providers can contribute to a single guidance response.
+- `WisdomAdvice.provider_type` (audio | geo | sensor | policy | vision) tags the witness type; `WisdomAdvice.capability` carries the per-provider capability claim.
+
+**Adaptive filter preserves anonymous voice**
+- `ciris_engine/logic/services/governance/adaptive_filter/README.md:13-23` filters spam without filtering anonymous accountability.
+- Witness diversity in the consent-stream sense: anonymous users retain voice. Hash-based tracking (`adaptive_filter/README.md:39`) preserves witness shape without unmasking.
+
+**Stewardship tier as multi-perspective scope**
+- `ciris_engine/logic/buses/wise_bus.py:114-145` Tier 4-5 stewardship agents serve communities under additional WA oversight; the tier-gate is the structural reflection of "more witness-diverse contexts require more diverse oversight."
+
+**Test coverage**
+- Localization paths tested via `tools/qa_runner` (`python -m tools.qa_runner streaming` with `CIRIS_PREFERRED_LANGUAGE=am`).
+- Anonymous-witness filter tested in `tests/test_anonymous_filter.py`.
+- Multi-tradition CSDMA realism in `tests/ciris_engine/logic/services/adaptation/test_self_observation.py`.
+- Per-locale prompt validity verified during prompt-loader initialization (`ciris_engine/logic/dma/prompt_loader.py`).
+
+Proposed pointer (from seed): `(none specified in seed; please fill)` — agent-side implementation is the 29-locale pipeline + polyglot accord + WiseBus multi-provider; consult `CLAUDE.md` § Localization.
 
 ## Observability hooks
 
-TODO — Fill in monitoring / observability surface:
-
-- **LensCore detectors**: which F-3 / Coherence Ratchet detectors observe this?
-- **RATCHET calibration**: which calibration packages apply?
-- **Audit chain queries**: how would a downstream consumer verify compliance?
-- **Federation evidence_refs**: emitted Contributions with `dimensions: ["D14"]`
-
-Proposed pointer (from seed): `(none specified in seed; please fill)`
+- **Localization audit** — `get_preferred_language()` (`ciris_engine/logic/utils/localization.py` referenced from `ciris_engine/logic/dma/idma.py:108`, `ciris_engine/logic/dma/csdma.py:120`) records which language the agent reasoned in for each thought; this is signed into the audit chain alongside the PDMA result.
+- **WiseBus advice aggregation log** — `GuidanceResponse.advice` carries each provider's contribution (`ciris_engine/logic/services/governance/wise_authority/README.md:99`); the `WisdomAdvice.provider_type` (audio | geo | sensor | policy | vision) tags the witness type.
+- **Audit chain per-language coverage query** — `GraphAuditService.log_event` records the locale on every signed event; downstream verifier can compute the language / tradition distribution of the agent's reasoning corpus.
+- **Live-lens trace stream** — per `tools/qa_runner/CLAUDE.md`, when `--live-lens` is on, every locale-tagged DMA reasoning event ships in `accord-batch-*.json`. The "rest of 29 inherit the discipline" pattern (user-memory `feedback_tier0_primer_strategy`) is verified by sampling per-locale traces.
+- **F-3 detector adjacency** — D05 family `detection:correlated_action:participation_exclusion:underrepresented_population` is the upstream CIRISLens detector that catches systematic witness-diversity gaps. RATCHET temporal-drift detector catches witness composition shifts over time.
+- **Federation evidence_refs** — `evidence_refs.dimensions = ["D14"]` not yet emitted on the wire; agent emits per-thought locale + multi-provider advice data; federation-side citation is downstream substrate work.
 
 ## Known gaps / not-yet-implemented
 
-TODO — Honestly catalog anything this dimension requires that CIRIS Agent does not yet implement. Reference relevant `GAPS.md` entries from the response repo if applicable.
+- **No structural enforcement that diverse witnesses are actually consulted.** A run could spend an entire day operating only in `en` with one LLM provider and pass every test; only RATCHET aggregate detection would catch the monoculture. The agent does not self-monitor per-call witness diversity.
+- **`witness_diversity:{value}` enum is not modeled.** IEEE's 16 distinct values (`ubuntu_five_moral_domains`, `intercultural_RI_dialogue`, `end_user_target_community_consultation`, `affected_population_metric_selection`, …) have no Python enum; the structurally-diverse witness slot composes through ad-hoc localization + multi-provider rather than typed values.
+- **Substrate gate: CIRISLens (D05 detector family).** Aggregate witness-diversity detection lives in CIRISLens RATCHET, not the agent. Agent will keep emitting per-thought locale + provider data; lens decides whether the macro-distribution is plural.
+- **Substrate gate: CIRISEdge (multi-provider verify-then-aggregate).** Per user-memory `project_substrate_substitution_trajectory`, Edge is step 2 of the Rust-crate swap. Verify-at-edge for multi-provider WisdomAdvice arrays is post-Edge.
+- **Translation quality is unreliable below a quality bar.** Per user-memory `feedback_subagent_translation_unreliable` (Burmese-class word-salad in 5/28 locales): structural prefix-checks miss semantic-quality failures. Without a native-language audit pipeline, 29-locale "diversity" can shade into "29 broken translations." Tier-0 primer-hardening (am / ha / yo) is partial mitigation; closure requires native-audit infrastructure not yet in CIRISAgent.
+- **No `red_team` consultation primitive (EU §III.7).** Stakeholder red-teaming as a consultation kind has no agent-side runtime hook — it lives in the SDLC (operator-side QA process), not in runtime witness aggregation.
+- **Sub-agent translation cannot be trusted to render bad-pattern examples.** Per user-memory `feedback_priming_aware_primer` — primer prompts must render abstract descriptions only, never verbatim bad-pattern examples. The CIRISAgent localization pipeline complies but is not formally checked.
 <!-- END HUMAN -->

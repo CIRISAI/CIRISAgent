@@ -40,27 +40,86 @@ Tier with asymmetry note: density tracks each source's operational-design-discip
 <!-- BEGIN HUMAN -->
 ## CIRIS-side compliance implementation
 
-TODO — Fill in the code/policy/test surface that implements CIRIS Agent compliance with this dimension. Suggested fields:
+`method:*` is the densest dimension in the corpus because it covers the entire operational-design discipline. In CIRIS the wire family maps almost 1:1 onto the H3ERE pipeline: every thought passes through a fixed, declared method sequence (gather context → parallel DMA fan-out → action selection → conscience evaluation → recursive retry → handler dispatch), and every step has named code, declared prompts, and named tests. The 11-step pipeline IS the method declaration.
 
-- **Code references**: modules / handlers / services / DMAs / conscience faculties implementing this
-- **Policy text**: relevant text in `MISSION_CIRISAgent.md`, `prohibitions.py`, `pdma_*.yml`, `language_guidance/*`
-- **Test coverage**: pointer to test files exercising this dimension
-- **Configuration surface**: relevant schemas / config blocks
+- **Code references** — DMA chain (PDMA, CSDMA, DSDMA, IDMA, ASPDMA, recursive ASPDMA):
+    - `ciris_engine/logic/dma/pdma.py:23` — `EthicalPDMAEvaluator` (principled-ethical method)
+    - `ciris_engine/logic/dma/csdma.py` — common-sense plausibility method
+    - `ciris_engine/logic/dma/dsdma_base.py` — domain-specific decision method
+    - `ciris_engine/logic/dma/idma.py` — intuition / Coherence Collapse Analysis (k_eff)
+    - `ciris_engine/logic/dma/action_selection_pdma.py` — ASPDMA action selection
+    - `ciris_engine/logic/dma/dsaspdma.py` — domain-specialized ASPDMA (carries `DomainCategory` deferral routing)
+    - `ciris_engine/logic/dma/tsaspdma.py` — tool-specialized ASPDMA
+    - `ciris_engine/logic/dma/base_dma.py` — `BaseDMA[InputT, OutputT]` typed base; enforces structured-instructor LLM outputs
+    - `ciris_engine/logic/dma/prompt_loader.py` — `DMAPromptLoader` (locale-aware, prompt-versioned)
+    - `ciris_engine/logic/dma/prompts/pdma_ethical.yml`, `csdma_common_sense.yml`, `dsdma_base.yml`, `idma.yml`, `action_selection_pdma.yml`, `dsaspdma.yml`, `tsaspdma.yml` — declared method-prompts, one file per DMA, with `localized/{lang}/` mirrors for 29 languages
+- **Code references** — conscience layer (method discipline as run-time veto):
+    - `ciris_engine/logic/conscience/core.py:38` — `ConscienceConfig` (entropy/coherence/optimization-veto thresholds; architectural invariant: thresholds are config, not learned weights — explicit comment at `core.py:36`)
+    - `ciris_engine/logic/conscience/core.py` — `EntropyConscience`, `CoherenceConscience`, `OptimizationVetoConscience`, `EpistemicHumilityConscience` (the 4 epistemic faculties — see also `ciris_engine/logic/conscience/README.md:51-110`)
+    - `ciris_engine/logic/conscience/action_sequence_conscience.py` — action-sequence guardrail
+    - `ciris_engine/logic/conscience/updated_status_conscience.py` — reconsideration-triggering conscience
+    - `ciris_engine/logic/conscience/thought_depth_guardrail.py:37` — max-thought-depth floor (matches `EssentialConfig.security.max_thought_depth=5`)
+- **Code references** — processor / pipeline (method orchestration):
+    - `ciris_engine/logic/processors/core/thought_processor/main.py` — 11-step pipeline coordinator
+    - `ciris_engine/logic/processors/core/thought_processor/perform_dmas.py` — parallel DMA fan-out step
+    - `ciris_engine/logic/processors/core/thought_processor/perform_aspdma.py` — action-selection step
+    - `ciris_engine/logic/processors/core/thought_processor/conscience_execution.py` — conscience-evaluation step
+    - `ciris_engine/logic/processors/core/thought_processor/recursive_processing.py:249` — `RECURSIVE_ASPDMA` retry-with-guidance step (the method-discipline knob behind conscience-driven re-selection)
+    - `ciris_engine/logic/processors/support/dma_orchestrator.py` — orchestrates the DMA fan-out
+- **Code references** — bus architecture (method:bus_architecture wire form):
+    - `ciris_engine/logic/buses/wise_bus.py` — WiseBus + `PROHIBITED_CAPABILITIES` enforcement
+    - `ciris_engine/logic/buses/llm_bus.py`, `communication_bus.py`, `memory_bus.py`, `tool_bus.py`, `runtime_control_bus.py` — the 6 buses
+    - `ciris_engine/logic/buses/prohibitions.py` — 22 prohibited capability categories enforced at bus level (no override path)
+- **Code references** — handler layer (method:action_dispatch):
+    - `ciris_engine/logic/handlers/control/ponder_handler.py`, `defer_handler.py`, `reject_handler.py`
+    - `ciris_engine/logic/handlers/external/speak_handler.py`, `observe_handler.py`, `tool_handler.py`
+    - `ciris_engine/logic/handlers/memory/` (memorize, recall, forget)
+    - `ciris_engine/logic/handlers/terminal/task_complete_handler.py`
+- **Policy text**:
+    - `MISSION.md:24-30` — Meta-Goal M-1 as the single objective every method choice is checked against
+    - `MISSION.md:36-66` — apophatic bounds (the negative-space method discipline: `ciris_engine/logic/buses/prohibitions.py`)
+    - `ciris_engine/data/accord_1.2b.txt` — Accord text loaded into every DMA prompt via `get_accord_text()` (see `pdma.py:11`); enforces method-discipline across all DMA calls
+    - `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:201-237` — explicit H3ERE pipeline reference (the canonical method declaration in agent-readable form)
+- **Test coverage**:
+    - `tests/ciris_engine/logic/dma/` — per-DMA unit tests
+    - `tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py`
+    - `tests/test_conscience_core.py`, `tests/test_action_sequence_conscience.py`
+    - `tests/ciris_engine/logic/handlers/control/test_ponder_handler.py`, `test_defer_handler.py`, `test_reject_handler.py`
+    - `tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py`
+- **Configuration surface**:
+    - `EssentialConfig.security.max_thought_depth` (default 5 since 2.7.1) — the recursion bound on the method loop
+    - `ConscienceConfig` thresholds — `optimization_veto_ratio=10.0`, `coherence_threshold=0.60`, `entropy_threshold=0.40`
+    - `CIRIS_PREFERRED_LANGUAGE` env var — selects localized method-prompt set across 29 languages
 
 Proposed pointer (from seed): `(none specified in seed; please fill)`
 
 ## Observability hooks
 
-TODO — Fill in monitoring / observability surface:
+The DMA + conscience pipeline emits a dense stream of `LLM_CALL`, conscience-scalar, and step-point events. Live-lens runs (with `--live-lens`) tee every batch to `/tmp/qa-runner-lens-traces-<UTC-iso>/` for forensics.
 
-- **LensCore detectors**: which F-3 / Coherence Ratchet detectors observe this?
-- **RATCHET calibration**: which calibration packages apply?
-- **Audit chain queries**: how would a downstream consumer verify compliance?
-- **Federation evidence_refs**: emitted Contributions with `dimensions: ["D16"]`
+- **Step-point telemetry**: every pipeline step is decorated with `@step_point` and `@streaming_step` (see `recursive_processing.py:249`). Each method-step emits a discrete observation.
+- **Audit chain queries**:
+    - `GET /v1/audit/entries` — chronological audit entries
+    - `POST /v1/audit/search` — query by action_type (PONDER, DEFER, REJECT, SPEAK, etc.)
+    - `POST /v1/audit/verify/{entry_id}` — Ed25519 chain verification
+    - `ciris_engine/schemas/audit/core.py` — `AuditEventType` enum (21 values) locks the audit chain
+- **Telemetry surface** (method-discipline observability):
+    - `GET /v1/telemetry/overview`, `/metrics`, `/traces`, `/logs`, `/unified` — full operational view (see `routes/telemetry.py:639-1917`)
+    - `GET /v1/telemetry/metrics/{metric_name}` — per-DMA / per-handler counters
+- **LensCore F-3 detectors** (method-discipline drift):
+    - `detection:correlated_action:aggregate_footprint:*` — emitted when method-execution drifts (energy, latency, error)
+    - `detection:temporal_drift` — flags conscience-threshold drift over time
+    - `detection:intra_agent_consistency` — flags DMA-output divergence within a single thought
+- **Federation evidence_refs**: a runtime Contribution citing `dimensions: ["D16"]` resolves through this seed to MH §§ approach:species, EU §2 trustworthy-AI triad, IEEE all-11-chapters, ASEAN §C.3.
 
 Proposed pointer (from seed): `(none specified in seed; please fill)`
 
 ## Known gaps / not-yet-implemented
 
-TODO — Honestly catalog anything this dimension requires that CIRIS Agent does not yet implement. Reference relevant `GAPS.md` entries from the response repo if applicable.
+- **`method:bus_architecture` wire-form emission**: the 6-bus topology is enforced but not currently emitted as a wire-form Contribution. Compliance is structural; explicit attestation is pending.
+- **`method:algorithmic_impact_assessment` (EU)**: CIRIS performs per-thought PDMA evaluation but does not produce a standalone EU-HLEG-shaped AIA document. The PDMA rationale + audit chain is the functional analogue; closure-by-documentation pending.
+- **`method:fallback:rule_based_or_human_intervention` (EU)**: DEFER handler routes to Wise Authority (rule-based + human-intervention compatible), but the fallback-disclosure surface (telling users when an answer is rule-based vs LLM) is not standardized.
+- **`method:pre_deployment_robustness_testing` (ASEAN)**: tests exist (`tests/`) but a structured pre-deployment robustness attestation tied to the build manifest (D27) is not yet emitted.
+- **CONF-05 disposition**: ASEAN §A.2.1 admits experimental-sandbox phases with reduced oversight. CIRIS does not admit reduced oversight by lifecycle stage — conscience thresholds and prohibitions are constant. Conflict logged; CIRIS posture stays.
+- **`method:explainable_ai_research` (EU)**: PDMA rationales + IDMA k_eff + conscience reasoning ARE explainability, but no separate "explainable AI research" attestation surface exists.
 <!-- END HUMAN -->

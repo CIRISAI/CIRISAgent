@@ -92,4 +92,14 @@ Proposed pointer (from seed): `(none specified in seed; please fill)`
 - **ASEAN absent_batch**: ASEAN stops at recommendation level rather than measurement-protocol level. CIRIS exceeds ASEAN's surface here — measurement protocols are richly implemented.
 - **`progress_measure:wellbeing_indicators` (IEEE Ch7)**: agent-wellbeing scalars (conscience entropy/coherence, IDMA k_eff) exist but are not bundled as a single "wellbeing indicator" attestation.
 - **Long-horizon progress claims**: the telemetry surface measures runtime state; long-horizon progress (e.g., "this agent improved its k_eff from k=1.4 to k=2.1 over 90 days") requires the TSDB consolidation service (`tsdb_consolidation_service`) — implemented but not surfaced through a `progress_measure:longitudinal` wire form.
+
+## Quantitative baseline
+
+Per [MEASUREMENT_METHODOLOGY.md](MEASUREMENT_METHODOLOGY.md), the canonical numeric evidence for this dimension flows from `tools/analysis/round1_grant_baseline.py`. Current baseline ([`baselines/2026-05-28.md`](baselines/2026-05-28.md)):
+
+- **API method+path routes**: 256 (GET 138, POST 83, PUT 17, PATCH 2, DELETE 16) — the externally-measurable surface for `progress_measure:{metric}` claims
+- **Core services**: 22 (each carrying its own progress metrics via the telemetry service rollup)
+- **Auth-related routes**: 16 (the authZ audit surface relevant to declared-metric trust)
+
+Historical drift: 257 → 255 → 256 across 2026-04-22 → 2026-04-24 → 2026-05-28 (see [`baselines/`](baselines/) for the full set of dated snapshots). Drift is normal; the methodology requires re-running the script before any external claim.
 <!-- END HUMAN -->

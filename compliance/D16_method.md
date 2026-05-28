@@ -122,4 +122,14 @@ Proposed pointer (from seed): `(none specified in seed; please fill)`
 - **`method:pre_deployment_robustness_testing` (ASEAN)**: tests exist (`tests/`) but a structured pre-deployment robustness attestation tied to the build manifest (D27) is not yet emitted.
 - **CONF-05 disposition**: ASEAN §A.2.1 admits experimental-sandbox phases with reduced oversight. CIRIS does not admit reduced oversight by lifecycle stage — conscience thresholds and prohibitions are constant. Conflict logged; CIRIS posture stays.
 - **`method:explainable_ai_research` (EU)**: PDMA rationales + IDMA k_eff + conscience reasoning ARE explainability, but no separate "explainable AI research" attestation surface exists.
+
+## Quantitative baseline
+
+Per [MEASUREMENT_METHODOLOGY.md](MEASUREMENT_METHODOLOGY.md), the method discipline's externally-measurable surface in the current baseline ([`baselines/2026-05-28.md`](baselines/2026-05-28.md)):
+
+- **22 services across 6 categories** — the operational-design discipline expressed as service taxonomy
+- **256 API routes** (GET 138, POST 83, PUT 17, PATCH 2, DELETE 16) — the externally-observable behavior surface
+- **16 auth-related routes** — the authZ method discipline surface
+
+Method is the densest dimension (39 file-path citations in this stub) — the entire H3ERE pipeline is the method declaration. The route + service counts above are the *operational expressions* of that method; the code references in the CIRIS-side compliance implementation section are the *structural expressions*. Both must be cited together to make a complete method attestation.
 <!-- END HUMAN -->

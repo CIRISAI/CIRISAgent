@@ -78,4 +78,13 @@ The transparency log primitive is owned by CIRISVerify (per-stakeholder mandator
 - **MH §honest-signs** (MH=2 attestations) is structurally low because encyclical genre is not a technical-disclosure framework; the seed's functional analogue (`detection:correlated_action:ecology_of_communication:*` + F-3 detector family) is a lens-side primitive that doesn't yet exist anywhere in CIRISAI.
 
 Proposed pointer (from seed): `CIRISVerify transparency_log` (canonical primitive lives outside this repo). Agent-side integration: `ciris_adapters/ciris_verify/adapter.py:339-350`, `ciris_adapters/ciris_verify/service.py:232-249`, `ciris_engine/schemas/services/attestation.py:244-298` (`VerifyAttestationContext`).
+
+## Quantitative baseline
+
+Per [MEASUREMENT_METHODOLOGY.md](MEASUREMENT_METHODOLOGY.md), externally-observable transparency surfaces in the current baseline ([`baselines/2026-05-28.md`](baselines/2026-05-28.md)):
+
+- **22 core services** — each surfaces health + telemetry via the unified telemetry endpoint
+- **256 API method+path routes** — full API surface available for per-stakeholder disclosure; **16 auth-related** routes (the authZ surface); **6 OAuth** routes (the multi-stakeholder identity surface)
+
+Per the methodology, claims about CIRIS's transparency surface in grant or regulatory submissions cite the dated baseline file rather than embedding raw numbers — this prevents drift when routes are added/removed.
 <!-- END HUMAN -->

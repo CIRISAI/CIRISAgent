@@ -85,4 +85,13 @@ Proposed pointer (from seed): `(none specified in seed; please fill)`
 - **ASEAN absent_batch**: ASEAN frames competence at organizational-governance level rather than named-expert level — CIRIS sits closer to ASEAN's pattern than to IEEE's.
 - **Sensus-fidelium analogue (MH)**: MH §§ discernment-expertise has no direct CIRIS analogue; the closest is multi-WA broadcast via WiseBus, but the spiritual/communal dimension is not represented.
 - **`expertise:*` likely promotes to a dedicated wire family in a future seed version** — currently it is structurally embedded in DEFER + DomainCategory routing rather than named as its own axis.
+
+## Quantitative baseline
+
+Per [MEASUREMENT_METHODOLOGY.md](MEASUREMENT_METHODOLOGY.md), the externally-measurable expertise domains in the current baseline ([`baselines/2026-05-28.md`](baselines/2026-05-28.md)):
+
+- **22 services across 6 categories** — each category represents a declared competence domain (graph, infrastructure, lifecycle, governance, runtime, tool)
+- **256 API routes** — the externally-bounded expertise surface
+
+These figures are deliberately conservative — the baseline measures *implemented competence*, not claimed competence. Per the D22 inversion noted above, CIRIS does not declare expertise in any domain; instead it declares deferral surfaces where the named DomainCategory routes to a WA. The baseline route count is therefore a ceiling on what CIRIS could attest expertise over, not an attestation itself.
 <!-- END HUMAN -->

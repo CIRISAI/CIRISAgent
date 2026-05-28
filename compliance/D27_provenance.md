@@ -86,4 +86,13 @@
 - **Skill-import provenance**: `ciris_engine/logic/services/skill_import/parser.py:172` and `builder.py:181` track `source_url` for imported skills but do not require a signed manifest — community skills enter the runtime with parser-validated but unsigned provenance.
 
 Proposed pointer (from seed): `(none specified in seed)` — Agent-side primary code: `tools/dev/stage_runtime.py` (canonical staging), `tools/templates/generate_manifest.py` (template manifest), `ciris_engine/logic/services/infrastructure/authentication/attestation/tree_verify.py` (runtime verification), `ciris_engine/schemas/services/attestation.py:69-167` (per-file results, cross-validation flags).
+
+## Quantitative baseline
+
+Per [MEASUREMENT_METHODOLOGY.md](MEASUREMENT_METHODOLOGY.md), the build-provenance evidence pipeline uses `tools/analysis/round1_grant_baseline.py` to capture reproducible numeric claims. Current baseline ([`baselines/2026-05-28.md`](baselines/2026-05-28.md)):
+
+- **22 core services**, **256 API routes** — the surface CIRISVerify's tree-verify covers per `tree_verify.py`
+- **6 service categories** (graph/infrastructure/lifecycle/governance/runtime/tool) — each manifests separately in `ApiServiceConfiguration`
+
+Historical baselines in [`baselines/`](baselines/) provide the provenance trail for the documentation itself — D27 is partly self-referential: this dimension's evidence claims about CIRIS provenance ARE provenance-tracked via the same dated-snapshot pattern.
 <!-- END HUMAN -->

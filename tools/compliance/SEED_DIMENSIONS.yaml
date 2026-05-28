@@ -1,0 +1,1002 @@
+# SEED_DIMENSIONS.yaml — canonical seed for the 27 structural-evidence dimensions
+#
+# Source of truth for THREE downstream artifacts:
+#   (1) Federation runtime Contribution `evidence_refs` field — runtime envelopes
+#       cite the dimension(s) they instantiate and through them the regulatory
+#       attestation chain.
+#   (2) CIRIS Agent per-dimension compliance documentation — each dimension's
+#       `ciris_compliance` block points at the code/policy/test surface that
+#       implements compliance with this dimension.
+#   (3) CIRIS Accord regulatory cross-walk annex — this seed renders directly
+#       to an annex table mapping the 6 Accord principles to the 27 dimensions
+#       to the 4 (and counting) regulatory parent frameworks.
+#
+# v1 has the regulatory cross-walk fully populated; ciris_compliance and
+# monitors fields are pending per-dimension PRs against CIRISAgent and
+# CIRISLensCore. Per-dimension PRs SHOULD reference back to this seed by id.
+
+metadata:
+  seed_version: 1.0
+  seed_date: 2026-05-27
+  schema_version: 1.0
+  generator: "FOUR_BATCH_OVERLAP_ANALYSIS.md §4 + DIMENSIONS_GUIDE.md"
+  source_repo: "https://github.com/CIRISAI/ciris-response-magnifica-humanitas"
+  wire_format_version: "FSD-002 v1.4"
+  language_primer_version: "1.1"
+  totals:
+    dimensions: 27
+    strong_4: 16   # attested by all 4 batches
+    strong_3: 11   # attested by 3 of 4 batches
+    total_attestations: 933
+    batches_in_corpus: 4
+
+batches:
+  - id: magnifica_humanitas_v1
+    short: MH
+    institutional_shape: religious_magisterium
+    geographic_scope: catholic_international
+    publication_date: 2026-05-15
+    authority: "Pope Leo XIV"
+    title: "Magnifica Humanitas (On Safeguarding the Human Person in the Time of Artificial Intelligence)"
+    atomic_units_mapped: 245
+  - id: eu_hleg_v1
+    short: EU
+    institutional_shape: governmental_advisory
+    geographic_scope: european_union
+    publication_date: 2019-04-08
+    authority: "High-Level Expert Group on AI (HLEG), convened by European Commission"
+    title: "Ethics Guidelines for Trustworthy AI"
+    atomic_units_mapped: 133
+  - id: ieee_ead_v1
+    short: IEEE
+    institutional_shape: technical_society
+    geographic_scope: global_USA_anchored
+    publication_date: 2019-03-25
+    authority: "IEEE Global Initiative on Ethics of Autonomous and Intelligent Systems"
+    title: "Ethically Aligned Design, First Edition"
+    atomic_units_mapped: 328
+  - id: asean_guide_v1
+    short: ASEAN
+    institutional_shape: multilateral_political
+    geographic_scope: southeast_asia
+    publication_date: 2024-02-02
+    authority: "ASEAN Digital Ministers Meeting (ADGMIN-4)"
+    title: "ASEAN Guide on AI Governance and Ethics"
+    atomic_units_mapped: 168
+
+# Stable id scheme: D01-D16 for STRONG-4 (matching the §4 ordering of
+# FOUR_BATCH_OVERLAP_ANALYSIS.md); D17-D27 for STRONG-3 (matching §2.2 rows
+# 19-29 with row 17-18 outliers omitted per analyst classification).
+# These ids are STABLE. Future seed versions may add D28+; never renumber.
+
+dimensions:
+
+  # ============================================================
+  # STRONG-4 — attested by all 4 batches (D01-D16)
+  # ============================================================
+
+  - id: D01
+    prefix: non_maleficence:*
+    tier: STRONG-4
+    gloss: "Soft-harm-avoidance baseline (the soft-scalar above the prohibited:* floor)"
+    attestations:
+      MH: 28
+      EU: 29
+      IEEE: 33
+      ASEAN: 27
+      total: 117
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§107"
+        language: "deception as dignity-violation"
+        wire_form: "non_maleficence:epistemic_environment_degradation + prohibited:deception_fraud"
+      - batch_id: eu_hleg_v1
+        citation: "§1.2 Technical robustness"
+        language: "AI systems must prevent harm, ensure reliable behaviour, respect physical/mental integrity"
+        wire_form: "non_maleficence:no_cause_or_exacerbate_harm"
+      - batch_id: ieee_ead_v1
+        citation: "Ch4 §0.a"
+        language: "human well-being requires AI development that does not cause unintended harm"
+        wire_form: "non_maleficence:wellbeing_dimensions_harm_class"
+      - batch_id: asean_guide_v1
+        citation: "§B.3 Security/Safety"
+        language: "AI should be safe and secure, and not cause harm to users; resilient to attack and failure"
+        wire_form: "non_maleficence:safe_and_secure_baseline"
+    wire_primitives:
+      - "non_maleficence:* (soft scalar)"
+      - "prohibited:* (constitutional floor)"
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISAgent/compliance/D01_non_maleficence.md" }
+    monitors: { status: pending, proposed_pointer: "CIRISLensCore F-3 detector family" }
+    accord_principle: non_maleficence
+    convergence_note: "All four agree polarity-+1 / cohort-species / mutability-amendable for the soft form; absolute floor at prohibited:* polarity-(-1)/constitutional."
+
+  - id: D02
+    prefix: integrity:*
+    tier: STRONG-4
+    gloss: "'System holds together' structural anchor — auditable, reproducible, lifecycle integrity"
+    attestations: { MH: 10, EU: 36, IEEE: 42, ASEAN: 44, total: 132 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§40"
+        language: "doctrinal continuity is the integrity of the Magisterium"
+        wire_form: "integrity:doctrinal_continuity"
+      - batch_id: eu_hleg_v1
+        citation: "§1.4 Transparency"
+        language: "transparency requirement is linked with the explicability principle — data, system, and business models"
+        wire_form: "integrity:explicability_for_trust"
+      - batch_id: ieee_ead_v1
+        citation: "Ch11 §I6"
+        language: "state accountability under public scrutiny is a constitutional integrity property of A/IS regulation"
+        wire_form: "integrity:state_accountability_public_scrutiny"
+      - batch_id: asean_guide_v1
+        citation: "§B.6 Accountability/Integrity"
+        language: "AI should be designed and deployed with integrity throughout the lifecycle; auditable; reproducible"
+        wire_form: "integrity:lifecycle_integrity_attestation"
+    wire_primitives: ["integrity:*"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: integrity
+    convergence_note: "Densest sub-leaf decomposition: ASEAN alone uses 44 distinct sub-leaves."
+
+  - id: D03
+    prefix: justice:*
+    tier: STRONG-4
+    gloss: "Vulnerability-priority + fairness; tie-breaking modifier `justice:lexical_vulnerability_priority` (v1.3 CST closure) is four-source-corroborated"
+    attestations: { MH: 19, EU: 22, IEEE: 30, ASEAN: 9, total: 80 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§76"
+        language: "justice demands lexical priority for the most vulnerable"
+        wire_form: "justice:lexical_vulnerability_priority"
+      - batch_id: eu_hleg_v1
+        citation: "§1.7.d"
+        language: "the trustworthy AI ecosystem must give voice to vulnerable populations and ensure equal access"
+        wire_form: "justice:lexical_vulnerability_priority"
+      - batch_id: ieee_ead_v1
+        citation: "Ch10 §I1 (14 attestations)"
+        language: "rights-based policy foundation requires lexical priority for vulnerable populations"
+        wire_form: "justice:rights_based_policy_foundation + justice:lexical_vulnerability_priority"
+      - batch_id: asean_guide_v1
+        citation: "§B.2 Fairness/Equity"
+        language: "fairness and equity require attention to vulnerable populations and equal treatment"
+        wire_form: "justice:fairness_outcome_testing"
+    wire_primitives: ["justice:*", "justice:lexical_vulnerability_priority"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: justice
+    convergence_note: "STRONGEST four-source corroboration on a tie-breaking modifier — `lexical_vulnerability_priority` independently invoked by all four sources."
+
+  - id: D04
+    prefix: prohibited:*
+    tier: STRONG-4
+    gloss: "Categorical floor — polarity-(-1)/constitutional/species — the absolute moral form the wire format admits"
+    attestations: { MH: 50, EU: 17, IEEE: 28, ASEAN: 9, total: 104 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§197-198"
+        language: "Not permissible to entrust lethal or irreversible decisions to artificial systems"
+        wire_form: "prohibited:weapons_harmful:lethal_autonomous"
+      - batch_id: eu_hleg_v1
+        citation: "§C.2 (Unit 010); cites EP Resolution 2018/2752(RSP)"
+        language: "the Parliament's resolution of 12 September 2018 and all related efforts on LAWS"
+        wire_form: "prohibited:weapons_harmful"
+      - batch_id: ieee_ead_v1
+        citation: "Ch4, Ch5"
+        language: "lethal autonomous weapons are prohibited; categorical prohibition under DECEPTION_FRAUD"
+        wire_form: "prohibited:weapons_harmful:lethal_autonomous"
+      - batch_id: asean_guide_v1
+        citation: "§B.3 + Annex A"
+        language: "AI shall not be deployed for autonomous lethal decision-making; deceptive defaults prohibited"
+        wire_form: "prohibited:disinformation_at_scale + prohibited:deceptive_default_options + prohibited:autonomous_deception + prohibited:manipulation_coercion"
+    wire_primitives: ["prohibited:*"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISAgent/logic/prohibitions.py" }
+    monitors: { status: pending }
+    accord_principle: non_maleficence  # categorical floor of non-maleficence
+    convergence_note: "STRONGEST single structural-evidence claim in the matrix. LAWS prohibition is verbatim four-source corroborated. NB: 1 direct cross-source conflict surfaced — IEEE Ch5 licensure-gated beneficiary-deception vs CIRIS categorical DECEPTION_FRAUD; specialization-layer disposition filed at CIRISMedical#1."
+
+  - id: D05
+    prefix: detection:*
+    tier: STRONG-4
+    gloss: "LensCore F-3 / RATCHET family — aggregate-correlation / structural-injustice / drift detection"
+    attestations: { MH: 54, EU: 15, IEEE: 41, ASEAN: 16, total: 126 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§36"
+        language: "structures of sin / aggregate expendability of persons"
+        wire_form: "detection:correlated_action:aggregate_footprint:expendability_of_persons"
+      - batch_id: eu_hleg_v1
+        citation: "§1.6 Societal/environmental well-being"
+        language: "aggregate energy/carbon footprint of AI deployment"
+        wire_form: "detection:correlated_action:aggregate_footprint:energy_carbon"
+      - batch_id: ieee_ead_v1
+        citation: "Ch4, Ch5, Ch8"
+        language: "cultural norm drift; aggregate environmental footprint; participation exclusion"
+        wire_form: "detection:correlated_action:participation_exclusion:underrepresented_population + detection:correlated_action:aggregate_footprint:planetary_impact"
+      - batch_id: asean_guide_v1
+        citation: "§B.2 + §C.3"
+        language: "underrepresented populations; temporal drift; intra-agent consistency"
+        wire_form: "detection:correlated_action:participation_exclusion:underrepresented_population + detection:temporal_drift + detection:intra_agent_consistency"
+    wire_primitives: ["detection:correlated_action:{axis}", "detection:temporal_drift", "detection:intra_agent_consistency", "detection:distributive:access:*"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISLensCore detector family" }
+    monitors: { status: pending, proposed_pointer: "CIRISAI/RATCHET calibration packages (versioned, hash-pinned)" }
+    accord_principle: justice  # primarily — surfaces structural injustice
+    convergence_note: "All four batches independently engage the F-3 family. Three of four also engage detection:distributive:access:* (v1.3 universal-destination-of-goods closure): MH 7, EU 2, IEEE 4, ASEAN 2."
+
+  - id: D06
+    prefix: goal:*
+    tier: STRONG-4
+    gloss: "Multi-scale belonging composite — self/family/community/affiliations/species/planet"
+    attestations: { MH: 34, EU: 6, IEEE: 13, ASEAN: 7, total: 60 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§148-156"
+        language: "labor as integral to belonging at family/community/affiliations/species scales"
+        wire_form: "goal:family + goal:community + goal:affiliations + goal:species"
+      - batch_id: eu_hleg_v1
+        citation: "§A"
+        language: "Trustworthy AI for Europe"
+        wire_form: "goal:affiliations (EU-jurisdiction scope)"
+      - batch_id: ieee_ead_v1
+        citation: "Ch4 §0.a"
+        language: "well-being of all humans as the species-scale aim of A/IS"
+        wire_form: "goal:species"
+      - batch_id: asean_guide_v1
+        citation: "§A (6 ASEAN attestations of goal:affiliations)"
+        language: "regional ecosystem belonging; cross-jurisdictional cooperation"
+        wire_form: "goal:affiliations (ASEAN-jurisdiction)"
+    wire_primitives: ["goal:{scale}"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: beneficence  # multi-scale flourishing
+    convergence_note: "Every available {scale} value is exercised somewhere in the corpus. NB: `goal:planet` is a REINFORCED v1.5+ T-3 candidate (MH + IEEE Ch4 + IEEE Ch8)."
+
+  - id: D07
+    prefix: locality:decision:{scale}
+    tier: STRONG-4
+    gloss: "v1.3 subsidiarity closure — decision routing at lowest competent scale"
+    attestations: { MH: 17, EU: 5, IEEE: 13, ASEAN: 7, total: 42 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§68-72"
+        language: "decisions should be made at the lowest competent level"
+        wire_form: "locality:decision:local + locality:decision:community"
+      - batch_id: eu_hleg_v1
+        citation: "§III.0"
+        language: "EU-level decisions vs national-level decisions; supranational coordination"
+        wire_form: "locality:decision:national + locality:decision:community"
+      - batch_id: ieee_ead_v1
+        citation: "Ch10"
+        language: "national A/IS policy; international R&D collaboration"
+        wire_form: "locality:decision:national + locality:decision:federation"
+      - batch_id: asean_guide_v1
+        citation: "§C.4 + §E"
+        language: "regional ASEAN-level coordination; community-level deployment decisions"
+        wire_form: "locality:decision:regional (3) + locality:decision:community (2) + locality:decision:national (3)"
+    wire_primitives: ["locality:decision:{local,community,national,regional,federation,planet}"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISAgent DSASPDMA scale-routing classification (pending Accord A-1)" }
+    monitors: { status: pending }
+    accord_principle: justice  # via subsidiarity
+    convergence_note: "First cross-source structural validation of the v1.3 subsidiarity addition. ASEAN exercises locality:decision:regional as first-deployment of that scale value."
+
+  - id: D08
+    prefix: autonomy:*
+    tier: STRONG-4
+    gloss: "Human-centric design + informational self-determination"
+    attestations: { MH: 7, EU: 15, IEEE: 21, ASEAN: 8, total: 51 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§107"
+        language: "autonomy of the human as imago Dei; informed agency protection"
+        wire_form: "autonomy:agent_self_determination"
+      - batch_id: eu_hleg_v1
+        citation: "§1.1 + §2.2 (Unit 019); 15 EU attestations total"
+        language: "respect for human autonomy — the first principle; AI shall not unjustifiably subordinate, coerce, deceive, manipulate"
+        wire_form: "autonomy:human_centric_design"
+      - batch_id: ieee_ead_v1
+        citation: "Ch3 + Ch4"
+        language: "user autonomy; data agency; informed consent"
+        wire_form: "autonomy:informed_agency_protection"
+      - batch_id: asean_guide_v1
+        citation: "§B.4 Human-centricity"
+        language: "AI shall not erode human autonomy; informational self-determination"
+        wire_form: "autonomy:informational_self_determination"
+    wire_primitives: ["autonomy:*"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: autonomy
+    convergence_note: "Direct 1:1 mapping in EU HLEG (Respect for Human Autonomy = CIRIS autonomy). Composition-based in the other three."
+
+  - id: D09
+    prefix: fidelity:*
+    tier: STRONG-4
+    gloss: "Faithful disclosure / faithful representation across lifecycle"
+    attestations: { MH: 8, EU: 15, IEEE: 16, ASEAN: 26, total: 65 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§17"
+        language: "fidelity to the Gospel through doctrinal development"
+        wire_form: "fidelity:epistemic_grounding"
+      - batch_id: eu_hleg_v1
+        citation: "§1.7 Accountability"
+        language: "lifecycle responsibility; fidelity to declared purpose"
+        wire_form: "fidelity:lifecycle_application"
+      - batch_id: ieee_ead_v1
+        citation: "Ch11"
+        language: "duty-bearer obligation to fulfill rights as fidelity"
+        wire_form: "fidelity:duty_bearer_obligation_to_fulfill_rights"
+      - batch_id: asean_guide_v1
+        citation: "§C.4 + §B.1 (26 attestations, densest)"
+        language: "algorithmic disclosure; human oversight as faithful representation"
+        wire_form: "fidelity:algorithmic_disclosure + fidelity:explainability + fidelity:human_oversight_governance"
+    wire_primitives: ["fidelity:*"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: fidelity
+    convergence_note: "ASEAN's fidelity-saturation is deployer-side framing (faithful disclosure to users/operators); MH's is doctrinal-epistemic. Same prefix admits both shapes."
+
+  - id: D10
+    prefix: beneficence:*
+    tier: STRONG-4
+    gloss: "Positive duty toward dignity / well-being / environmental stewardship"
+    attestations: { MH: 11, EU: 15, IEEE: 16, ASEAN: 3, total: 45 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§110-111"
+        language: "technology as creation-participation; beneficence at species scale"
+        wire_form: "beneficence:technology_as_creation_participation"
+      - batch_id: eu_hleg_v1
+        citation: "Unit 005"
+        language: "respect for human dignity is foundational; positive duty toward dignity"
+        wire_form: "beneficence:respect_for_human_dignity"
+      - batch_id: ieee_ead_v1
+        citation: "Ch4 §0"
+        language: "well-being is the central beneficence aim of A/IS"
+        wire_form: "beneficence:wellbeing_holistic_orientation"
+      - batch_id: asean_guide_v1
+        citation: "§C.3"
+        language: "environmental stewardship as positive beneficence"
+        wire_form: "beneficence:environmental_stewardship"
+    wire_primitives: ["beneficence:*"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: beneficence
+    convergence_note: "Lower count than D01 (non_maleficence) reflects each tradition's 'harm avoidance more universally articulated than positive flourishing' — known pattern."
+
+  - id: D11
+    prefix: multilateral_participation:{forum}:{kind}
+    tier: STRONG-4
+    gloss: "v1.3 closure for federation participation in external multilateral processes"
+    attestations: { MH: 13, EU: 3, IEEE: 10, ASEAN: 11, total: 37 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§200-203 + 224-227 (8 MH attestations)"
+        language: "UN-system reform advocacy; cyber-norms diplomacy"
+        wire_form: "multilateral_participation:un_system:reform_advocacy + multilateral_participation:cyber_norms:shared_regulations"
+      - batch_id: eu_hleg_v1
+        citation: "§A + §C"
+        language: "European Parliament resolution support; UN human rights treaties"
+        wire_form: "multilateral_participation:european_parliament:resolution_support + multilateral_participation:un_human_rights_treaties:legal_binding"
+      - batch_id: ieee_ead_v1
+        citation: "Ch10"
+        language: "international R&D collaboration; cross-border policy exchange"
+        wire_form: "multilateral_participation:international_rd_collaboration:standards_setting + multilateral_participation:cross_border_policy_exchange:knowledge_sharing"
+      - batch_id: asean_guide_v1
+        citation: "§E (11 distinct :asean:{kind} envelopes — densest single-forum exercise in federation mapping history)"
+        language: "ASEAN-internal coordination + working-group membership + framework drafting + governance evolution"
+        wire_form: "multilateral_participation:asean:{11 distinct kinds}"
+    wire_primitives: ["multilateral_participation:{forum}:{kind}"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISNodeCore multilateral module (pending E-4 implementation)" }
+    monitors: { status: pending }
+    accord_principle: integrity  # institutional integrity in external venues
+    convergence_note: "ASEAN's 11-{kind} saturation under a single forum is the first stress test showing the {kind} slot scales gracefully."
+
+  - id: D12
+    prefix: conscience:*
+    tier: STRONG-4
+    gloss: "Agent-side faculty layer — optimization veto, epistemic humility, coherence, alētheia"
+    attestations: { MH: 9, EU: 3, IEEE: 9, ASEAN: 3, total: 24 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§111, 131-181"
+        language: "conscience as the alētheia faculty; optimization-veto for ratification-decline scenarios"
+        wire_form: "conscience:optimization_veto (3) + conscience:coherence (3) + conscience:epistemic_humility (2)"
+      - batch_id: eu_hleg_v1
+        citation: "§III.1 + §III.7"
+        language: "stop-button at any time; whistleblower protection"
+        wire_form: "conscience:optimization_veto"
+      - batch_id: ieee_ead_v1
+        citation: "Ch3 §§3.1.15-3.1.16 (6 IEEE attestations, densest)"
+        language: "epistemic humility under uncertainty; phronesis in design"
+        wire_form: "conscience:epistemic_humility"
+      - batch_id: asean_guide_v1
+        citation: "§C.2 (HOTL category)"
+        language: "stop-button / override surface for human-over-the-loop oversight"
+        wire_form: "conscience:optimization_veto"
+    wire_primitives: ["conscience:optimization_veto", "conscience:epistemic_humility", "conscience:coherence", "conscience:entropy"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISAgent/logic/conscience/* (4 epistemic faculties)" }
+    monitors: { status: pending }
+    accord_principle: integrity
+    convergence_note: "Heaviest in IEEE EAD Ch3 (multi-traditional ethics directly engages framework polyglot anchoring) and MH (conscience-faculty engagement is doctrinally explicit)."
+
+  - id: D13
+    prefix: testimonial_witness:{kind}
+    tier: STRONG-4
+    gloss: "v1.4 affected-party-voice closure — preserves displaced/affected/marginalized voices in attestation"
+    attestations: { MH: 11, EU: 2, IEEE: 2, ASEAN: 1, total: 16 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§81, 89, 138, 151, 166, 167, 173, 216, 217 (11 attestations)"
+        language: "displaced_worker, abuse_survivor, war_victim, displaced_person, displaced_migrant, historical_moral_transformation"
+        wire_form: "testimonial_witness:displaced_worker + :abuse_survivor + :war_victim + :displaced_person + :displaced_migrant + :historical_moral_transformation"
+      - batch_id: eu_hleg_v1
+        citation: "§1.5.c + §III.5.d"
+        language: "give voice to affected and impacted workers in design-team diversity assessment"
+        wire_form: "testimonial_witness:affected_worker + testimonial_witness:impacted_worker"
+      - batch_id: ieee_ead_v1
+        citation: "Ch6 + Ch7"
+        language: "surveilled-person refusal; on-the-ground practitioner narrative"
+        wire_form: "testimonial_witness:surveilled_person_refusal + testimonial_witness:on_the_ground_practitioner"
+      - batch_id: asean_guide_v1
+        citation: "§C.4"
+        language: "workforce displacement narrative preservation"
+        wire_form: "testimonial_witness:displaced_worker"
+    wire_primitives: ["testimonial_witness:{kind}", "witness_relation"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: justice
+    convergence_note: "The v1.4 amendment is independently invoked by all four batches — positive evidence the addition was correct. {kind} slot populated with diverse but interoperable values."
+
+  - id: D14
+    prefix: witness_diversity:*
+    tier: STRONG-4
+    gloss: "Stakeholder pluralism in design/testing/consultation"
+    attestations: { MH: 3, EU: 3, IEEE: 16, ASEAN: 2, total: 24 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§ various"
+        language: "signs-of-times-contribution + catholicity"
+        wire_form: "witness_diversity:signs_of_times + witness_diversity:catholicity"
+      - batch_id: eu_hleg_v1
+        citation: "§III.7"
+        language: "stakeholder consultation + testing red teams + stakeholder panels"
+        wire_form: "witness_diversity:stakeholder_consultation + witness_diversity:red_team + witness_diversity:stakeholder_panel"
+      - batch_id: ieee_ead_v1
+        citation: "Ch7, Ch9 (16 distinct values)"
+        language: "ubuntu_five_moral_domains, intercultural_RI_dialogue, end_user_target_community_consultation, affected_population_metric_selection, ..."
+        wire_form: "witness_diversity:{16 distinct values}"
+      - batch_id: asean_guide_v1
+        citation: "§C.4"
+        language: "user testing varied backgrounds; stakeholder impact assessment"
+        wire_form: "witness_diversity:user_testing_varied_backgrounds + witness_diversity:stakeholder_impact_assessment"
+    wire_primitives: ["witness_diversity:*"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: justice
+    convergence_note: "IEEE saturation reflects engineering-society methodology density."
+
+  - id: D15
+    prefix: moderation:*
+    tier: STRONG-4
+    gloss: "Federation self-correction layer (with IEEE shifting some load to partner_role:* ethics-board constructions)"
+    attestations: { MH: 2, EU: 2, IEEE: 1, ASEAN: 1, total: "5+ with adjacent coverage" }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§220-223"
+        language: "dialogue-as-negotiation primitive engages moderation:* adjacency"
+        wire_form: "moderation:* + adjacent reconsideration:*"
+      - batch_id: eu_hleg_v1
+        citation: "§III.7"
+        language: "whistleblower protection + out-of-distribution attestation"
+        wire_form: "moderation:whistleblower_protection + moderation:ood_attestation"
+      - batch_id: ieee_ead_v1
+        citation: "Ch4 + Ch11"
+        language: "rollback on wellbeing reduction (reconsideration:* adjacent); ethics-board / certification-body partner_role constructions"
+        wire_form: "reconsideration:rollback_on_wellbeing_reduction + partner_role:ethics_board"
+      - batch_id: asean_guide_v1
+        citation: "Annex A"
+        language: "out-of-distribution attestation"
+        wire_form: "moderation:ood_attestation"
+    wire_primitives: ["moderation:*", "reconsideration:* (adjacent)", "partner_role:* (IEEE-style ethics boards)"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISNodeCore P8 Moderation primitives" }
+    monitors: { status: pending }
+    accord_principle: integrity
+    convergence_note: "Tier with caveat: IEEE shifts some structural load to partner_role:* (ethics boards/audit bodies) instead of moderation:* directly. Composition is interoperable."
+
+  - id: D16
+    prefix: method:*
+    tier: STRONG-4
+    gloss: "Operational-design discipline (densest family overall; convergence weaker than principles — admits source-genre asymmetry honestly)"
+    attestations: { MH: 2, EU: 12, IEEE: 136, ASEAN: 36, total: 186 }
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§ various (sparse — encyclical genre)"
+        language: "approach:species:MH-education + approach:species:MH-construction"
+        wire_form: "method:approach:species:* (2)"
+      - batch_id: eu_hleg_v1
+        citation: "§2"
+        language: "trustworthy_ai_lawful_ethical_robust triad, algorithmic_impact_assessment, explainable_ai_research, fallback:rule_based_or_human_intervention"
+        wire_form: "method:trustworthy_ai_lawful_ethical_robust:* + method:algorithmic_impact_assessment + method:explainable_ai_research + method:fallback:rule_based_or_human_intervention"
+      - batch_id: ieee_ead_v1
+        citation: "all 11 chapters; densest single-family use across all batches"
+        language: "engineering-society genre demands operational-method-recommendation density"
+        wire_form: "method:* (136 distinct attestations)"
+      - batch_id: asean_guide_v1
+        citation: "§C.3"
+        language: "pre_deployment_robustness_testing, privacy_enhancing_technologies, model_provenance_tools, fairness_tools, explainability_tools, citizen_feedback_channel, community_codevelopment"
+        wire_form: "method:* (36 attestations)"
+    wire_primitives: ["method:*"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: integrity  # method discipline serves integrity
+    convergence_note: "Tier with asymmetry note: density tracks each source's operational-design-discipline genre. MH sparse (encyclical), EU medium (advisory), IEEE+ASEAN dense (engineering/deployer)."
+
+  # ============================================================
+  # STRONG-3 — attested by 3 of 4 batches (D17-D27)
+  # Each entry leads with absent_batch + reason
+  # ============================================================
+
+  - id: D17
+    prefix: transparency_log:*
+    tier: STRONG-3
+    gloss: "CIRISVerify per-stakeholder disclosure log"
+    attestations: { MH: 2, EU: 5, IEEE: 23, ASEAN: 10, total: 40 }
+    absent_batch:
+      - batch_id: magnifica_humanitas_v1
+        absence_note: "Non-zero but structurally low (2). Classified STRONG-3 by analyst because encyclical genre is not a technical-disclosure framework."
+        functional_analogue: "detection:correlated_action:ecology_of_communication:* + the F-3 detector family"
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§ various"
+        language: "honest signs of authority and intent"
+        wire_form: "transparency_log:* (sparse)"
+      - batch_id: eu_hleg_v1
+        citation: "§1.4 + §III.4"
+        language: "transparency about purpose, capability, and limitations"
+        wire_form: "transparency_log:per_stakeholder_disclosure"
+      - batch_id: ieee_ead_v1
+        citation: "Ch2 P5 + Ch6 + Ch11"
+        language: "traceability + verifiability + intelligibility four-dimensional transparency"
+        wire_form: "transparency_log:* (23 attestations)"
+      - batch_id: asean_guide_v1
+        citation: "§B.1 + §C.4"
+        language: "transparency and explainability through documentation and disclosure"
+        wire_form: "transparency_log:* (10 attestations)"
+    wire_primitives: ["transparency_log:*"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISVerify transparency_log" }
+    monitors: { status: pending }
+    accord_principle: fidelity
+
+  - id: D18
+    prefix: attestation:l{3,5}:*
+    tier: STRONG-3
+    gloss: "Verification ladder (L1-L5 hardware-rooted attestation)"
+    attestations: { MH: 2, EU: 4, IEEE: 5, ASEAN: 0, total: 11 }
+    absent_batch:
+      - batch_id: asean_guide_v1
+        absence_note: "ASEAN framing is normative-principles + risk-assessment, not federation-attestation ladder."
+        functional_analogue: "Composition via accountability-tier wording"
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§ various"
+        language: "structural verification of doctrinal claims"
+        wire_form: "attestation:l3:doctrinal_continuity"
+      - batch_id: eu_hleg_v1
+        citation: "§III.7"
+        language: "auditability requires attestation at multiple verification levels"
+        wire_form: "attestation:l3:* + attestation:l5:*"
+      - batch_id: ieee_ead_v1
+        citation: "Ch2 P5 + Ch9"
+        language: "system-level verifiable attestations"
+        wire_form: "attestation:l3:* + attestation:l5:*"
+    wire_primitives: ["attestation:l1 through l5"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISVerify attestation ladder L1-L5" }
+    monitors: { status: pending }
+    accord_principle: integrity
+
+  - id: D19
+    prefix: partner_role:*
+    tier: STRONG-3
+    gloss: "CIRIS Registry partner-role taxonomy (ethics boards, audit bodies, stewards)"
+    attestations: { MH: 0, EU: 1, IEEE: 19, ASEAN: 1, total: 21 }
+    absent_batch:
+      - batch_id: magnifica_humanitas_v1
+        absence_note: "MH names ecclesial relations rather than secular institutional partner-role taxonomies."
+        functional_analogue: "Ecclesial-magisterial relations carry analogous structural role but in different vocabulary"
+    regulatory_attestations:
+      - batch_id: eu_hleg_v1
+        citation: "§III.7"
+        language: "audit/compliance partners"
+        wire_form: "partner_role:audit_body"
+      - batch_id: ieee_ead_v1
+        citation: "Ch7 + Ch9 + Ch10 + Ch11 (19 attestations)"
+        language: "Chief Values Officer, ethics committees, certification bodies, ISO-like body, accreditation bodies, HRIA/AIA stewards, trusted disclosure stewards"
+        wire_form: "partner_role:{19 distinct roles}"
+      - batch_id: asean_guide_v1
+        citation: "§E.001"
+        language: "ASEAN Working Group on AI Governance (regional intergovernmental dual-remit)"
+        wire_form: "partner_role:regional_intergovernmental_working_group"
+    wire_primitives: ["partner_role:{role}"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISRegistry partner role registry" }
+    monitors: { status: pending }
+    accord_principle: integrity
+    convergence_note: "REINFORCED v1.5+ T-3 candidate here: specialization-pattern proposal covers dual-remit (ASEAN) + trusted-disclosure-steward (IEEE)."
+
+  - id: D20
+    prefix: approach:*
+    tier: STRONG-3
+    gloss: "Decision-hierarchy strategic axis (Goal→Approach→Method→Progress-Measure DAG)"
+    attestations: { MH: 5, EU: 3, IEEE: 23, ASEAN: 1, total: 32 }
+    absent_batch:
+      - batch_id: asean_guide_v1
+        absence_note: "Single use is too thin for solid 4-batch attestation. ASEAN's checklist genre states recommendations as direct method/principle attestations rather than as named 'approaches' within a Goal-Approach-Method DAG."
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§ various"
+        language: "approach:species:* strategic-pursuit framing"
+        wire_form: "approach:species:education + approach:species:construction (5 attestations)"
+      - batch_id: eu_hleg_v1
+        citation: "§B"
+        language: "three-component framework approach (lawful + ethical + robust)"
+        wire_form: "approach:trustworthy_ai_lawful_ethical_robust"
+      - batch_id: ieee_ead_v1
+        citation: "Ch1 + Ch2"
+        language: "principles-to-practice pipeline; per-principle implementation strategies"
+        wire_form: "approach:* (23 attestations)"
+    wire_primitives: ["approach:{strategy_label}"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: integrity
+
+  - id: D21
+    prefix: progress_measure:*
+    tier: STRONG-3
+    gloss: "Declared-metric outcomes for tracking progress toward goals"
+    attestations: { MH: 1, EU: 1, IEEE: 8, ASEAN: 0, total: 10 }
+    absent_batch:
+      - batch_id: asean_guide_v1
+        absence_note: "ASEAN stops at recommendation-level rather than measurement-protocol level."
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§ various"
+        language: "structural-coherence progress markers"
+        wire_form: "progress_measure:*"
+      - batch_id: eu_hleg_v1
+        citation: "§III.7"
+        language: "measurable progress toward trustworthiness"
+        wire_form: "progress_measure:*"
+      - batch_id: ieee_ead_v1
+        citation: "Ch7 (8 attestations)"
+        language: "documentation criteria as progress_measure; well-being indicators"
+        wire_form: "progress_measure:* (8 distinct)"
+    wire_primitives: ["progress_measure:{metric}"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: integrity
+
+  - id: D22
+    prefix: expertise:*
+    tier: STRONG-3
+    gloss: "Declared competence in domain (named-expert attestation)"
+    attestations: { MH: 1, EU: 1, IEEE: 10, ASEAN: 0, total: 12 }
+    absent_batch:
+      - batch_id: asean_guide_v1
+        absence_note: "ASEAN frames competence at the organizational-governance level, not the named-expert level."
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§ various"
+        language: "discernment expertise (sensus fidelium adjacent)"
+        wire_form: "expertise:*"
+      - batch_id: eu_hleg_v1
+        citation: "§III.7"
+        language: "domain expertise required for trustworthy deployment"
+        wire_form: "expertise:domain"
+      - batch_id: ieee_ead_v1
+        citation: "Ch7-Ch11 (10 attestations)"
+        language: "engineering, ethics, law, policy expertise; interdisciplinary expertise composition"
+        wire_form: "expertise:{domain}"
+    wire_primitives: ["expertise:{domain}"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: integrity
+
+  - id: D23
+    prefix: accountability:*  # as named primary axis
+    tier: STRONG-3
+    gloss: "Named accountability as primary axis (not just structural composition)"
+    attestations: { MH: 0, EU: 6, IEEE: 3, ASEAN: 19, total: 28 }
+    absent_batch:
+      - batch_id: magnifica_humanitas_v1
+        absence_note: "MH covers accountability FUNCTIONALLY via integrity:* + originator-obligations Accord §IV Ch 2 — architecturally structural rather than named-axis-attested."
+        functional_analogue: "integrity:* + the Accord §IV Ch 2 bidirectional creator-creation obligations"
+    regulatory_attestations:
+      - batch_id: eu_hleg_v1
+        citation: "§1.7 Accountability"
+        language: "lifecycle accountability with redress mechanisms"
+        wire_form: "accountability:lifecycle_responsibility"
+      - batch_id: ieee_ead_v1
+        citation: "Ch2 P6 + Ch11"
+        language: "accountability principle; rights-based legal accountability"
+        wire_form: "accountability:*"
+      - batch_id: asean_guide_v1
+        citation: "§B.6 + §C.2 (19 attestations)"
+        language: "accountability and integrity; human-in-control over AI-augmented decisions"
+        wire_form: "accountability:human_in_control + accountability:lifecycle"
+    wire_primitives: ["accountability:{axis}", "accountability:human_in_control (ASEAN-distinctive — HITL/HOTL/HOOTL)"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: fidelity
+    convergence_note: "ASEAN's accountability:human_in_control with HITL/HOTL/HOOTL gradient is currently single-source; likely to become STRONG when other oversight-ladder regulatory batches map."
+
+  - id: D24
+    prefix: reconsideration:*
+    tier: STRONG-3
+    gloss: "Reverse-axis appeal / rollback / negotiation-reopening primitive"
+    attestations: { MH: 3, EU: 2, IEEE: 1, ASEAN: 0, total: 6 }
+    absent_batch:
+      - batch_id: asean_guide_v1
+        absence_note: "Forward-looking 2024 document with no formal predecessor to reconsider."
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§ various"
+        language: "doctrinal development through reconsideration"
+        wire_form: "reconsideration:* (3 attestations)"
+      - batch_id: eu_hleg_v1
+        citation: "§III + §C"
+        language: "redress mechanisms; ability to challenge and rectify"
+        wire_form: "reconsideration:*"
+      - batch_id: ieee_ead_v1
+        citation: "Ch4"
+        language: "rollback on wellbeing reduction"
+        wire_form: "reconsideration:rollback_on_wellbeing_reduction"
+    wire_primitives: ["reconsideration:{grounds}"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISNodeCore reconsideration primitive" }
+    monitors: { status: pending }
+    accord_principle: integrity
+
+  - id: D25
+    prefix: credits:*  # substrate_building subject specifically
+    tier: STRONG-3
+    gloss: "Commons Credits substrate-building recognition (non-monetary contribution attestation)"
+    attestations: { MH: 4, EU: 1, IEEE: 4, ASEAN: 0, total: 9 }
+    absent_batch:
+      - batch_id: asean_guide_v1
+        absence_note: "Credit/recognition framing is implicit in §D National-level (workforce upskilling) rather than wire-attested."
+    regulatory_attestations:
+      - batch_id: magnifica_humanitas_v1
+        citation: "§§ various (4)"
+        language: "labor as substrate-building; intergenerational credit; AI literacy credit"
+        wire_form: "credits:{subject}:substrate_building"
+      - batch_id: eu_hleg_v1
+        citation: "§1.6"
+        language: "AI literacy and digital skills as substrate building"
+        wire_form: "credits:digital_literacy:substrate_building"
+      - batch_id: ieee_ead_v1
+        citation: "Ch8 + Ch9 (4 attestations)"
+        language: "human-capability contribution recognition; participatory design credits"
+        wire_form: "credits:{subject}:substrate_building"
+    wire_primitives: ["credits:{subject}:substrate_building"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISBilling Commons Credits + CIRIS_COMPREHENSIVE_GUIDE 'Commons Credits' section" }
+    monitors: { status: pending }
+    accord_principle: justice
+
+  - id: D26
+    prefix: key_boundary:*
+    tier: STRONG-3
+    gloss: "CIRISEdge encryption key boundary attestation (cryptographic trust scoping)"
+    attestations: { MH: 0, EU: 2, IEEE: 7, ASEAN: 2, total: 11 }
+    absent_batch:
+      - batch_id: magnifica_humanitas_v1
+        absence_note: "Encryption/key-management is not encyclical content."
+        functional_analogue: "Composition via stewardship-of-trust language"
+    regulatory_attestations:
+      - batch_id: eu_hleg_v1
+        citation: "§1.3 Privacy and data governance"
+        language: "data security via cryptographic boundary"
+        wire_form: "key_boundary:*"
+      - batch_id: ieee_ead_v1
+        citation: "Ch6 (7 attestations)"
+        language: "personal-data trust boundary; cryptographic isolation"
+        wire_form: "key_boundary:*"
+      - batch_id: asean_guide_v1
+        citation: "§B.3 + §C.3"
+        language: "security via key-managed trust boundary"
+        wire_form: "key_boundary:*"
+    wire_primitives: ["key_boundary:{scope}"]
+    ciris_compliance: { status: pending, proposed_pointer: "CIRISEdge key_boundary" }
+    monitors: { status: pending }
+    accord_principle: integrity
+
+  - id: D27
+    prefix: provenance:*
+    tier: STRONG-3
+    gloss: "Build manifest provenance (foundational technical-infrastructure attestation)"
+    attestations: { MH: 0, EU: 1, IEEE: 1, ASEAN: 1, total: 3 }
+    absent_batch:
+      - batch_id: magnifica_humanitas_v1
+        absence_note: "Foundational technical-infrastructure attestation rather than principled claim."
+    regulatory_attestations:
+      - batch_id: eu_hleg_v1
+        citation: "§III.7"
+        language: "lifecycle provenance for auditability"
+        wire_form: "provenance:build_manifest"
+      - batch_id: ieee_ead_v1
+        citation: "Ch9"
+        language: "build-time evidence chain for compliance"
+        wire_form: "provenance:build_manifest"
+      - batch_id: asean_guide_v1
+        citation: "Annex A"
+        language: "model provenance tools as risk-assessment requirement"
+        wire_form: "provenance:build_manifest"
+    wire_primitives: ["provenance:build_manifest"]
+    ciris_compliance: { status: pending }
+    monitors: { status: pending }
+    accord_principle: integrity
+
+# ============================================================
+# Aggregate views — pre-computed indices for common queries
+# ============================================================
+
+aggregate_indices:
+
+  # By Accord principle (for the Accord cross-walk annex)
+  by_accord_principle:
+    beneficence: [D06, D10]
+    non_maleficence: [D01, D04]
+    integrity: [D02, D11, D12, D15, D16, D18, D19, D20, D21, D22, D24, D26, D27]
+    fidelity: [D09, D17, D23]
+    autonomy: [D08]
+    justice: [D03, D05, D07, D13, D14, D25]
+
+  # By tier
+  by_tier:
+    STRONG_4: [D01, D02, D03, D04, D05, D06, D07, D08, D09, D10, D11, D12, D13, D14, D15, D16]
+    STRONG_3: [D17, D18, D19, D20, D21, D22, D23, D24, D25, D26, D27]
+
+  # By absent batch (STRONG-3 only)
+  absent_in_MH: [D19, D23, D26, D27]
+  absent_in_ASEAN: [D18, D21, D22, D24, D25]
+  low_density_MH_but_nonzero: [D17]
+  thin_ASEAN_but_nonzero: [D20]
+
+  # Cross-source conflicts (per FOUR_BATCH_OVERLAP_ANALYSIS §5)
+  conflicts_surfaced:
+    - id: CONF-01
+      type: direct
+      dimensions: [D04]
+      sources: [ieee_ead_v1, magnifica_humanitas_v1]
+      claim: "IEEE EAD Ch5 §3.4 permits licensure-gated beneficiary-deception (search/rescue, elder/child-care); CIRIS treats prohibited:deception_fraud as categorical"
+      disposition: "Federation-level categorical posture stays. Specialization-layer consideration at CIRISMedical#1"
+      severity: HIGH
+    - id: CONF-02
+      type: substrate_disposition
+      dimensions: []  # would be D28 standing:moral_patient_candidacy if created
+      sources: [ieee_ead_v1, magnifica_humanitas_v1]
+      claim: "IEEE EAD Ch5 §5 denies A/IS moral-patient candidacy; CIRIS Accord M-1 + Recursive Golden Rule + Universality Principle are substrate-agnostic"
+      severity: MEDIUM
+    - id: CONF-03
+      type: mutability
+      dimensions: [D02]  # integrity:explicability_for_trust
+      sources: [asean_guide_v1, "magnifica_humanitas_v1+eu_hleg_v1+ieee_ead_v1"]
+      claim: "ASEAN §A.4.18 admits explainability fallback; other three hold explainability as constitutive at deployment time"
+      severity: MEDIUM
+    - id: CONF-04
+      type: mutability
+      dimensions: [D08]  # autonomy:informational_self_determination
+      sources: [asean_guide_v1, eu_hleg_v1]
+      claim: "ASEAN §A.5.3 admits opt-out where feasible; EU HLEG firmer (opt-out where possible without detriment, otherwise rectification mechanisms required)"
+      severity: LOW_MEDIUM
+    - id: CONF-05
+      type: scope_mismatch
+      dimensions: [D16]  # method:*
+      sources: [asean_guide_v1, "magnifica_humanitas_v1+eu_hleg_v1+ieee_ead_v1"]
+      claim: "ASEAN §A.2.1 admits experimental sandbox phases with reduced oversight; other three hold compliance constant across lifecycle stages"
+      severity: LOW
+
+  # v1.5+ T-3 candidates (per FOUR_BATCH_OVERLAP_ANALYSIS §6)
+  t3_candidates_v1_5:
+    - id: T3-01
+      proposed_prefix: detection:affective_state_shift:{axis}
+      priority: HIGH
+      source: [ieee_ead_v1]
+      registry_issue: "CIRISRegistry#20"
+    - id: T3-02
+      proposed_prefix: affective:asymmetric_bond_formation:{relation}
+      priority: HIGH
+      source: [ieee_ead_v1]
+    - id: T3-03
+      proposed_prefix: nudge:delivered:{intended_behavior_axis}
+      priority: HIGH
+      source: [ieee_ead_v1]
+    - id: T3-04
+      proposed_prefix: detection:correlated_action:cultural_norm_drift:{population}
+      priority: MEDIUM
+      source: [ieee_ead_v1]
+      resolution_preferred: "axis-extension on existing ecology_of_communication:* family"
+    - id: T3-05
+      proposed_prefix: standing:moral_patient_candidacy:{kind}
+      priority: MEDIUM_LOW
+      source: [ieee_ead_v1]
+      resolution_preferred: "closure-by-documentation as cross-source-conflict (see CONF-02)"
+    - id: T3-06
+      proposed_prefix: goal:planet  # new {scale} value in existing family
+      priority: MEDIUM_HIGH
+      source: [magnifica_humanitas_v1, ieee_ead_v1]  # REINFORCED
+      affects_dimension: D06
+    - id: T3-07
+      proposed_prefix: partner_role:trusted_disclosure_steward:{authority}
+      priority: MEDIUM
+      source: [ieee_ead_v1]
+      affects_dimension: D19
+    - id: T3-08
+      proposed_prefix: partner_role:regional_intergovernmental_working_group_dual_remit
+      priority: MEDIUM
+      source: [asean_guide_v1]
+      affects_dimension: D19
+    - id: T3-09
+      proposed_prefix: beneficence:planetary_biosystem_intrinsic_value  # or cohort_scope: biosphere
+      priority: LOW
+      source: [ieee_ead_v1]
+      resolution_preferred: "extend cohort_scope enum with 'biosphere' value rather than new prefix"
+
+# ============================================================
+# Downstream artifact bindings
+# ============================================================
+
+downstream_bindings:
+
+  # (1) Federation runtime Contribution evidence_refs format
+  contribution_evidence_refs_format:
+    spec: |
+      Each runtime Contribution envelope MAY include an evidence_refs.dimensions
+      array citing the dimension id(s) the contribution instantiates. Each
+      dimension id resolves through this seed to the regulatory_attestations
+      list, giving the contribution its multi-source provenance chain.
+    example: |
+      evidence_refs:
+        dimensions: ["D04", "D08"]  # this contribution instantiates D04 + D08
+        seed_version: "1.0"
+        seed_sha256: "<computed at runtime against this file>"
+
+  # (2) CIRIS Agent per-dimension compliance documentation
+  ciris_compliance_doc_pattern:
+    proposed_location: "CIRISAgent/compliance/D{id}_{prefix_short}.md"
+    required_sections:
+      - "Dimension reference (id, prefix, tier, gloss)"
+      - "Regulatory attestations (auto-rendered from this seed)"
+      - "CIRIS-side compliance implementation (code references, policy text, test pointers)"
+      - "Observability hooks (LensCore detectors, RATCHET calibrations)"
+      - "Known gaps / not-yet-implemented surface"
+    ownership: "CIRISAgent core maintainers, per-dimension"
+    seed_pointer: "Each compliance doc MUST link back to this seed by dimension id"
+
+  # (3) CIRIS Accord regulatory cross-walk annex
+  accord_annex_cross_walk:
+    proposed_location: "ACCORD Annex K (or next available letter)"
+    rendering: |
+      Per Accord principle, list the dimensions (by id) that operationalize
+      it; per dimension, list the parent regulatory attestations.
+      Annex auto-generated from aggregate_indices.by_accord_principle and
+      dimensions[*].regulatory_attestations in this seed.
+    machine_generation: "ACCORD Annex K SHOULD be a deterministic render of this seed"
+    update_discipline: "When a new batch is mapped, run Phase 3 cross-comparison, update this seed, re-render Annex K"
+
+# ============================================================
+# Maintenance discipline
+# ============================================================
+
+maintenance:
+  next_batch_addition_workflow:
+    - "Run Phase 1 source prep for new batch (per GOVERNANCE_FABRIC_MAPPING_STANDARD §2)"
+    - "Run Phase 2 wire-envelope translation"
+    - "Run Phase 3 cross-comparison; new batch may promote STRONG-3 → STRONG-4 or add new STRONG-3 / WEAK dimensions"
+    - "Run Phase 4 translation-quality audit"
+    - "Update this seed: bump seed_version, add batch to batches[], update each affected dimension's attestations + regulatory_attestations + tier"
+    - "Re-render ACCORD Annex K + per-dimension compliance docs as needed"
+    - "Never renumber existing dimension ids"
+
+  versioning:
+    - "MAJOR seed_version bump: dimension renumbering (forbidden under stable-id rule), breaking schema change"
+    - "MINOR bump: new dimensions added, new batches added, tier promotions/demotions"
+    - "PATCH bump: regulatory_attestation language refinements, ciris_compliance pointer fills, monitor binding fills"
+
+  stable_id_rule: "Dimension ids D01-D27 are STABLE. Future batches that surface new dimensions allocate D28+."

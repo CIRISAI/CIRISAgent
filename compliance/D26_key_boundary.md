@@ -11,7 +11,7 @@
 
 ## Regulatory attestations
 
-*(Auto-rendered from seed; do not hand-edit. Re-run `generate_ciris_compliance_stubs.py` after seed updates.)*
+*(Auto-rendered from seed; do not hand-edit. Re-run `python tools/compliance/generate_ciris_compliance_stubs.py tools/compliance/SEED_DIMENSIONS.yaml compliance/` after seed updates.)*
 
 - **EU** (Ethics Guidelines for Trustworthy AI) — *§1.3 Privacy and data governance*
     > "data security via cryptographic boundary"

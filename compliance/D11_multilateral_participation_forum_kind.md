@@ -8,7 +8,7 @@
 
 ## Regulatory attestations
 
-*(Auto-rendered from seed; do not hand-edit. Re-run `generate_ciris_compliance_stubs.py` after seed updates.)*
+*(Auto-rendered from seed; do not hand-edit. Re-run `python tools/compliance/generate_ciris_compliance_stubs.py tools/compliance/SEED_DIMENSIONS.yaml compliance/` after seed updates.)*
 
 - **MH** (Magnifica Humanitas (On Safeguarding the Human Person in the Time of Artificial Intelligence)) — *§§200-203 + 224-227 (8 MH attestations)*
     > "UN-system reform advocacy; cyber-norms diplomacy"

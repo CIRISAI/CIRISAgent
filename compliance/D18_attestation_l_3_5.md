@@ -87,7 +87,6 @@ If you want to verify the agent's attestation claim, you can re-run the same che
 ## Current limitations & next steps
 
 - **L2 device-attestation reach** — Android (Google Play Integrity) and desktop (TPM PCR quote) cover most of the install base. iOS App Attest is staged (`device_attestation` schema at `ciris_engine/schemas/services/attestation.py:52-56`); the wire shape is specified (`IOSAttestation` proto with `app_attest_assertion` + `device_check_token`). On iOS today the L2 hardware-rooted check still passes via Secure Enclave key storage; the App Attest token piece is the next iOS-side step.
-- **Which L3 channels agreed, per-trace** — L3 passes when at least 2 of 3 network channels (HTTPS authoritative + DNS US + DNS EU) agree on the Steward Key and manifest. The traced result today says "L3 passed" without naming which 2/3 contributed. Tracked at `CIRISAgent#806` (re-scoped from the original OR-gate framing — see issue thread).
 - **Hardware-trust-degraded warning on system health** — when the verifier flags `hardware_trust_degraded` (e.g. CVE-affected SoC), the wallet auto-downgrades but no top-level warning surfaces on `/v1/system/health`. Operators have to read the advisory list directly today. Tracked at `CIRISAgent#814`.
 - **End-to-end L2 test on real TPM hardware** — CI today uses software-only fallback. A fixture exercising L2 on TPM-equipped hardware (real PCR quote, real EK certificate chain) is next.
 - **`/v1/system/federation` endpoint** — coming next; federation status is currently inferred from the auth service and verifier state per request.
@@ -98,7 +97,6 @@ Proposed pointer (from seed): `CIRISVerify attestation ladder L1-L5` (canonical 
 ## Tracked requirements
 
 - **Umbrella(s)**: `CIRISEdge#37` — key_boundary + named-witness wire + witness aggregation
-- **2.9.5**: `CIRISAgent#806` — l3_branch field on AttestationResult
 - **2.9.6**: `CIRISAgent#814` — hardware_trust_degraded → /v1/system/health
 
 See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.

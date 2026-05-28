@@ -29,69 +29,83 @@
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-`progress_measure:*` is the bottom layer of the Goal→Approach→Method→Progress-Measure DAG. CIRIS implements progress measurement through a dedicated Telemetry Service (one of the 7 graph services) plus a structured metric schema. The Round 1 baseline (`docs/grant/ROUND1_BASELINE_2026-04-22.md`) declares the surface: 22 core services, 257 method+path API routes, 10662 collected tests — these counts are the headline progress measures.
+Progress measure is the bottom layer of the four-level decision hierarchy: Goal (what we're trying to achieve) → Approach (the strategy) → Method (the specific algorithm) → Progress Measure (how we know we're getting there). For an auditor, the question is: "Can you show me the numbers, declared in advance, that tell you whether you're succeeding?"
 
-- **Code references** — Telemetry Service (the measurement substrate):
-    - `ciris_engine/logic/services/graph/telemetry_service/` — service implementation
-    - `ciris_engine/schemas/services/graph/telemetry.py:150` — `metric_name` field on telemetry records
-    - `ciris_engine/schemas/telemetry/core.py:101` — `MetricData` schema
-    - `ciris_engine/schemas/telemetry/unified.py:18` — `MetricDataPoint`, `:32` — `ResourceMetricWithStats`
-    - `ciris_engine/schemas/telemetry/collector.py:35` — `MetricEntry`
-- **Code references** — IDMA k_eff (the core quality measurement):
-    - `ciris_engine/logic/dma/idma.py` — Intuition DMA; emits `k_eff = k / (1 + ρ(k-1))` per thought
-    - `ciris_engine/schemas/dma/results.py:45-75` — IDMA result schema; `reasoning` field carries the epistemic-health progress measure
-    - `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:233-239` — k_eff documented as the canonical fragility progress measure
-- **Code references** — conscience scalars (per-thought progress measures):
-    - `ciris_engine/logic/conscience/core.py:38-45` — entropy / coherence / optimization-veto scalar thresholds
-    - `ciris_engine/logic/conscience/core.py` — `EntropyConscience`, `CoherenceConscience` emit normalized scalars per thought
-- **Code references** — Commons Credits reputation summary (governance-weight progress measure):
-    - `ciris_engine/schemas/services/agent_credits.py:180-226` — `AgentCreditSummary` (total_interactions, resolved_interactions, average_coherence, k_eff diversity)
-- **Code references** — API telemetry surface:
-    - `ciris_engine/logic/adapters/api/routes/telemetry.py:681` — `GET /v1/telemetry/overview`
-    - `:748` — `GET /v1/telemetry/resources`
-    - `:966` — `GET /v1/telemetry/metrics`
-    - `:1260` — `GET /v1/telemetry/traces`
-    - `:1431` — `GET /v1/telemetry/logs`
-    - `:1717` — `POST /v1/telemetry/query` (custom telemetry query)
-    - `:1756` — `GET /v1/telemetry/metrics/{metric_name}`
-    - `:1854` — `GET /v1/telemetry/unified` (the "35/35 services healthy" headline)
-    - `:1917` — `GET /v1/telemetry/resources/history`
-    - `:639` — `GET /v1/telemetry/otlp/{signal}` (OTLP export for external observability stacks)
-- **Code references** — incident-management service (negative-progress measures):
-    - `ciris_engine/logic/services/graph/incident_service/` — tracks incidents as anti-progress observations
-- **Policy text**:
-    - `MISSION.md` — Goal-Approach-Method-Progress DAG; progress is measured against Meta-Goal M-1
-    - `docs/grant/ROUND1_BASELINE_2026-04-22.md` — declared baseline metrics (service taxonomy, endpoint inventory, test collection)
-    - `CLAUDE.md` (root) — declared quality standards: test coverage target 80%, response time <1s, memory ≤4GB
-- **Test coverage**:
-    - `tests/` — 10662 collected tests (per baseline) — the meta-progress-measure
-    - `tests/ciris_engine/logic/services/graph/telemetry_service/` (if present)
-- **Configuration surface**:
-    - `EssentialConfig` — declared performance bounds (memory, depth, timeouts)
-    - `ConscienceConfig` thresholds — declared scalar bounds
+## How CIRIS implements this today
+
+A dedicated Telemetry Service (one of the seven graph services) collects structured metrics, and the Round 1 baseline (`docs/grant/ROUND1_BASELINE_2026-04-22.md`) declares the headline counts: 22 core services, 257 API routes, 10662 collected tests. Each metric is anchored to an audit entry so that claims about progress are tamper-evident.
+
+**Telemetry Service (the measurement substrate).**
+- `ciris_engine/logic/services/graph/telemetry_service/` — service implementation
+- `ciris_engine/schemas/services/graph/telemetry.py:150` — the `metric_name` field on telemetry records
+- `ciris_engine/schemas/telemetry/core.py:101` — `MetricData` schema
+- `ciris_engine/schemas/telemetry/unified.py:18` — `MetricDataPoint`, `:32` — `ResourceMetricWithStats`
+- `ciris_engine/schemas/telemetry/collector.py:35` — `MetricEntry`
+
+**The fragility scalar `k_eff` (the core epistemic-health measurement).** Computed by the inverse-decision check (IDMA — flags when the agent is approaching a decision-boundary), one number per thought.
+- `ciris_engine/logic/dma/idma.py` — emits `k_eff = k / (1 + ρ(k-1))` per thought
+- `ciris_engine/schemas/dma/results.py:45-75` — IDMA result schema; the `reasoning` field carries the epistemic-health measure
+- `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:233-239` — `k_eff` documented as the canonical fragility measure
+
+**Conscience scalars (per-thought safety measurements).** Each internal safety check on a thought emits a normalized scalar.
+- `ciris_engine/logic/conscience/core.py:38-45` — entropy / coherence / optimization-veto thresholds
+- `ciris_engine/logic/conscience/core.py` — `EntropyConscience`, `CoherenceConscience` emit normalized scalars per thought
+
+**Commons Credits reputation summary (governance-weight measure).** Credit records (CommonsCredits — non-monetary recognition of substrate-building work) aggregate into a per-agent reputation summary.
+- `ciris_engine/schemas/services/agent_credits.py:180-226` — `AgentCreditSummary` (total interactions, resolved interactions, average coherence, `k_eff` diversity)
+
+**API telemetry surface (the reporting endpoints).**
+- `ciris_engine/logic/adapters/api/routes/telemetry.py:681` — `GET /v1/telemetry/overview`
+- `:748` — `GET /v1/telemetry/resources`
+- `:966` — `GET /v1/telemetry/metrics`
+- `:1260` — `GET /v1/telemetry/traces`
+- `:1431` — `GET /v1/telemetry/logs`
+- `:1717` — `POST /v1/telemetry/query` (custom query)
+- `:1756` — `GET /v1/telemetry/metrics/{metric_name}`
+- `:1854` — `GET /v1/telemetry/unified` (the headline "X / Y services healthy" view)
+- `:1917` — `GET /v1/telemetry/resources/history`
+- `:639` — `GET /v1/telemetry/otlp/{signal}` (OTLP export for external observability stacks)
+
+**Incident-management service (negative progress).**
+- `ciris_engine/logic/services/graph/incident_service/` — tracks incidents as anti-progress observations
+
+**Policy text.**
+- `MISSION.md` — the four-level hierarchy; progress is measured against Meta-Goal M-1
+- `docs/grant/ROUND1_BASELINE_2026-04-22.md` — declared baseline metrics (service taxonomy, endpoint inventory, test collection)
+- `CLAUDE.md` (root) — declared quality standards: 80% test-coverage target, <1s response time, ≤4GB memory
+
+**Tests.**
+- `tests/` — 10662 collected tests (per baseline) — the meta-progress measure
+- `tests/ciris_engine/logic/services/graph/telemetry_service/` (where present)
+
+**Configuration.**
+- `EssentialConfig` — declared performance bounds (memory, depth, timeouts)
+- `ConscienceConfig` thresholds — declared scalar bounds
 
 Proposed pointer (from seed): `(none specified in seed; please fill)`
 
-## Observability hooks
+## How you can tell it's working (observability)
 
-- **OTLP export**: `GET /v1/telemetry/otlp/{metrics,traces,logs}` emits CNCF-compatible OTLP JSON. External observability platforms (Grafana, Honeycomb, Datadog) can consume the progress-measure stream directly.
+If you wanted to verify this from outside, the telemetry stream exports in standard formats (OTLP, Prometheus, Graphite), every progress claim is anchored to a tamper-evident audit entry, and the unified health endpoint returns a single roll-up number.
+
+- **OTLP export**: `GET /v1/telemetry/otlp/{metrics,traces,logs}` emits CNCF-compatible OTLP JSON. External observability platforms (Grafana, Honeycomb, Datadog) can consume the stream directly.
 - **Prometheus / Graphite converters**: `routes/telemetry_converters.py:36` (`convert_to_graphite`, `convert_to_prometheus`)
-- **Unified service health**: `GET /v1/telemetry/unified` returns `services_online`/`services_total` — the headline progress measure of system integrity.
-- **Audit chain**: every progress measurement is anchored to an audit entry (`GET /v1/audit/entries`) for tamper-evident progress claims.
-- **LensCore F-3 detectors**: `detection:temporal_drift` on conscience scalars; `detection:correlated_action:aggregate_footprint:*` on resource consumption.
-- **Federation evidence_refs**: a Contribution citing `dimensions: ["D21"]` resolves through this seed to MH structural-coherence markers, EU §III.7 measurable progress, IEEE Ch7 documentation-as-progress-measure.
+- **Unified service health**: `GET /v1/telemetry/unified` returns `services_online`/`services_total` — the headline measure of system integrity.
+- **Audit chain anchor**: every progress measurement is anchored to an audit entry (`GET /v1/audit/entries`) for tamper-evident progress claims.
+- **Drift detectors**: `detection:temporal_drift` on conscience scalars; `detection:correlated_action:aggregate_footprint:*` on resource consumption.
+- **Federation evidence_refs**: a typed federation message citing `dimensions: ["D21"]` resolves through this seed to MH structural-coherence markers, EU §III.7 measurable progress, IEEE Ch7 documentation-as-progress-measure.
 
 Proposed pointer (from seed): `(none specified in seed; please fill)`
 
-## Known gaps / not-yet-implemented
+## Current limitations & next steps
 
-- **No declared `progress_measure:{metric}` wire-form emission**: Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.2` as `progress_measure:{method_id}` (NodeCore §2 P15; `CIRISNodeCore/FSD/PROGRESS_MEASURE_PRIMITIVE.md` referenced in §3.6.2). **Required fields**: `tracks[]`, `computation`, `validity_window`, `goodhart_resistance`. Polarity signed. Agent emits at telemetry-write time once NodeCore P15 ships and the federation-wire `progress_measure:{method_id}` envelope binding lands.
-- **No per-Goal progress-measure binding**: Substrate-specced as the upward-only DAG (FSD-002 §3.6.2 Tier-2 — `goal:{scale}` ← `approach:{goal_id}` ← `method:{approach_id}:{substrate_rung}` ← `progress_measure:{method_id}`). The `method_id` reference in `progress_measure:{method_id}` IS the binding; the DAG resolves goal-binding by walking up from method to approach to goal. Agent emits the per-metric Contribution; the binding runs structurally via the substrate primitives once NodeCore P12-P15 ship.
-- **ASEAN absent_batch**: ASEAN stops at recommendation level rather than measurement-protocol level. CIRIS exceeds ASEAN's surface here — measurement protocols are richly implemented.
-- **`progress_measure:wellbeing_indicators` (IEEE Ch7)**: Substrate-specced as `progress_measure:{method_id}` (FSD-002 §3.6.2 NodeCore P15) bundling the `tracks[]` field over conscience entropy/coherence + IDMA k_eff. The `goodhart_resistance` field is the substrate-side guard against optimization-toward-the-metric.
-- **Long-horizon progress claims**: Substrate-specced via the `validity_window` field on `progress_measure:{method_id}` (FSD-002 §3.6.2 NodeCore P15 required field) + Stage 9 Archive long-retention policy (`CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §11` — long-retention default 90 days for decision-hierarchy entries; permanent for SlashingAttestations and ReconsiderationAttestations). TSDB consolidation feeds the longitudinal slice; federation-wire `progress_measure:longitudinal` rides on the existing primitive with a multi-period validity_window.
+- **Typed `progress_measure:{metric}` federation envelope**: shared work with the upstream CIRIS substrate (`CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.2`, `CIRISNodeCore/FSD/PROGRESS_MEASURE_PRIMITIVE.md`). Required fields are `tracks[]`, `computation`, `validity_window`, `goodhart_resistance`. The agent will emit at telemetry-write time when NodeCore P15 ships.
+- **Per-Goal progress-measure binding**: shared work with the upstream substrate (FSD-002 §3.6.2 Tier-2 hierarchy). The hierarchy resolves goal-binding by walking up from method to approach to goal — the binding falls out structurally when NodeCore P12-P15 ship. The agent emits the per-metric data today.
+- **ASEAN stops at recommendation level** rather than measurement-protocol level. CIRIS exceeds ASEAN's surface here — measurement protocols are richly implemented.
+- **IEEE Ch7 `progress_measure:wellbeing_indicators`**: shared work with the upstream substrate (FSD-002 §3.6.2). Bundles the conscience entropy/coherence scalars plus the `k_eff` fragility scalar. The substrate-side `goodhart_resistance` field is the guard against optimization-toward-the-metric.
+- **Long-horizon progress claims** (next step, tracked in `CIRISAgent#830`): the `validity_window` field on the typed envelope plus the Stage 9 Archive retention policy (`CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §11`) carry the longitudinal slice. TSDB consolidation feeds it; emission rides the existing primitive with a multi-period validity window.
 
 ## Quantitative baseline
 

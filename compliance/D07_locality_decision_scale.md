@@ -34,71 +34,74 @@ First cross-source structural validation of the v1.3 subsidiarity addition. ASEA
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-Subsidiarity — routing decisions to the lowest competent scale — is implemented today through three layered primitives:
+Decisions should be made at the lowest competent level — close to the people affected, escalated upward only when the local scale genuinely can't handle them (decisions made at the lowest competent scale — subsidiarity). This dimension is about the agent recognising when something is over its head and routing it to the right next level instead of either over-acting or fanning out indiscriminately. Forty-two attestations across MH, EU, IEEE, and ASEAN treat this as a core fairness concern.
 
-1. The DEFER → DSASPDMA second-pass that classifies "this is not mine; it belongs higher up the wisdom stack."
-2. `WiseBus.send_deferral()`'s domain-hint routing that broadcasts to a specific licensed scale rather than fanning out.
-3. The stewardship-tier gate that floors what scales a given agent is allowed to act at on its own.
+## How CIRIS implements this today
 
-**DEFER action + Wise Authority deferral (the upward-escalation primitive)**
-- `ciris_engine/logic/buses/wise_bus.py:147-289` (`send_deferral`) implements upward escalation.
-- When the agent's at-scale competence is insufficient, the action is deferred to a human Wise Authority (the "next scale up").
-- The role hierarchy `ROOT > AUTHORITY > OBSERVER` (`ciris_engine/logic/services/governance/wise_authority/README.md:58-62`) is the agent-side approximation of decision-scale stratification.
-- `WACertificate.scopes_json` (`ciris_engine/logic/services/governance/wise_authority/README.md:53`) carries the per-WA scope of authority, used by `check_authorization()` to enforce the floor.
+When the agent meets a question it can't resolve at its own scale, it escalates to a Wise Authority (a human or panel the agent escalates to), but it doesn't just broadcast — it tags the request with a domain hint so only the right kind of authority is consulted. Three layers make this concrete: an escalate-to-human action (DEFER — escalate to a Wise Authority), a second-pass classifier that decides which authority is competent, and a stewardship tier (the agent's level of authorization — stewardship tier) that floors what an agent can do on its own.
 
-**DSASPDMA second-pass classifier (the scale-routing classifier)**
-- `ciris_engine/logic/dma/dsaspdma.py:1-90` is the deferral-specific PDMA, activated only when ASPDMA selects DEFER (per module docstring).
-- DSASPDMA classifies the deferral against a needs taxonomy (`DeferralNeedCategory` at `ciris_engine/schemas/services/deferral_taxonomy.py:19-30`) — 9 categories spanning HEALTH_AND_BODILY_INTEGRITY through GENERAL_HUMAN_OVERSIGHT.
-- Tags it with a `DomainCategory` (`ciris_engine/schemas/services/agent_credits.py:38-51`): `MEDICAL | FINANCIAL | LEGAL | HOME_SECURITY | IDENTITY_VERIFICATION | CONTENT_MODERATION | RESEARCH | INFRASTRUCTURE_CONTROL`.
-- The `domain_hint` is the agent's articulation of "which competent scale should receive this," routed by `WiseBus` to services advertising support for that domain.
+**Escalation to a Wise Authority.** When the agent's competence at its own scale is not enough, it escalates upward.
+- `ciris_engine/logic/buses/wise_bus.py:147-289` (`send_deferral`) implements the escalation path.
+- The role hierarchy `ROOT > AUTHORITY > OBSERVER` (`ciris_engine/logic/services/governance/wise_authority/README.md:58-62`) is the agent-side stratification of decision authority.
+- Each Wise Authority carries a scope of authority in `WACertificate.scopes_json` (`ciris_engine/logic/services/governance/wise_authority/README.md:53`), enforced by `check_authorization()`.
 
-**Domain-hint routing (the subsidiarity gate)**
-- `ciris_engine/logic/buses/wise_bus.py:163-211`: if `context.domain_hint` is set, only WA services with that domain in their `supported_domains` capability receive the deferral.
-- Services with empty `supported_domains` OR without the required domain are explicitly skipped (`wise_bus.py:185-196`).
-- This is the wire-form of "decide at the lowest competent scale": don't broadcast a medical question to a financial-licensed WA, route it to the medical-licensed one.
-- Fallback behavior at `wise_bus.py:155-156`: if no domain_hint is set, broadcasts to all services with send_deferral capability (legacy human-deferral behavior).
+**Scale-routing classifier (DSASPDMA).** When the agent decides to escalate, a second-pass classifier figures out which authority is the right one to receive it.
+- The classifier lives at `ciris_engine/logic/dma/dsaspdma.py:1-90` and fires only when the agent's primary decision is to escalate.
+- It assigns a needs category from a nine-value taxonomy at `ciris_engine/schemas/services/deferral_taxonomy.py:19-30` (covering health, justice, privacy, livelihood, and general human oversight).
+- It also tags a domain category from `ciris_engine/schemas/services/agent_credits.py:38-51`: medical, financial, legal, home security, identity verification, content moderation, research, or infrastructure control.
+- The combined hint is the agent's articulation of "the competent scale for this question is X."
 
-**Memory scope as locality primitive**
-- `ciris_engine/schemas/services/graph_core.py:39` `GraphScope = {LOCAL, IDENTITY, ENVIRONMENT, COMMUNITY}`.
-- Identity-scope writes require WA approval (per `graph_core.py:96-105` config-type → scope mapping: `behavior_config`, `ethical_boundaries`, `capability_limits`, `trust_parameters`, `learning_rules`, `cognitive_state_behaviors`, `ticket_sops` all IDENTITY-scope), so identity-level changes structurally escalate above local.
+**Routing by domain hint.** The routing layer respects the hint instead of broadcasting blindly.
+- `ciris_engine/logic/buses/wise_bus.py:163-211`: when a domain hint is set, only Wise Authority services advertising that domain receive the request.
+- Services without the required domain are skipped (`wise_bus.py:185-196`).
+- A medical question routes to medical-licensed authorities, not to financial ones.
+- Fallback: when no domain hint is set, the request broadcasts to every Wise Authority with deferral capability (`wise_bus.py:155-156`).
 
-**Stewardship tier gate (Tier 4/5 community moderation)**
-- `ciris_engine/logic/buses/wise_bus.py:114-145` `get_agent_tier()` reads agent tier from config or identity.
-- Tier 1-3 agents are blocked from community-moderation capabilities (subsidiarity-floor: don't moderate communities you're not trusted to moderate); Tier 4-5 stewardship agents are allowed.
-- Capability gate at `ciris_engine/logic/buses/prohibitions.py:1085-1089`: `COMMUNITY_MODERATION_CAPABILITIES = {CRISIS_ESCALATION, PATTERN_DETECTION, PROTECTIVE_ROUTING}`.
-- Severity `TIER_RESTRICTED` (`prohibitions.py:1245-1252`) is the structural mark of "this capability is gated at a stewardship-tier scale."
+**Memory scope reinforces the same discipline.** Some kinds of memory writes structurally require Wise Authority approval.
+- `ciris_engine/schemas/services/graph_core.py:39` defines the four memory scopes.
+- The mapping at `graph_core.py:96-105` pins ethical boundaries, capability limits, trust parameters, and behaviour configuration to the IDENTITY scope — those changes can only happen with Wise Authority sign-off.
 
-**Test coverage**
-- Deferral routing in `tests/test_wise_bus_deferrals.py`.
-- Broadcast logic in `tests/test_wise_bus_broadcast_integration.py`.
-- Domain safety in `tests/logic/buses/test_wise_bus_safe_domains.py`.
-- Medical scale-block in `tests/logic/buses/test_wise_bus_medical_blocking.py`.
-- Taxonomy at `tests/test_deferral_taxonomy.py`.
-- Permission scaling at `tests/test_deferral_permissions.py`.
-- Discord-side deferral integration at `tests/adapters/test_discord_deferrals.py`.
+**Stewardship tier floor for community moderation.** A new or low-tier agent doesn't get to moderate communities it isn't trusted to moderate.
+- `ciris_engine/logic/buses/wise_bus.py:114-145` `get_agent_tier()` reads the agent's tier from config or identity.
+- Tiers 1-3 are blocked from community-moderation capabilities; tiers 4-5 (stewardship) are allowed.
+- The gated capabilities are listed at `ciris_engine/logic/buses/prohibitions.py:1085-1089` (crisis escalation, pattern detection, protective routing).
+- The structural mark for "this needs a stewardship tier" is the `TIER_RESTRICTED` severity at `prohibitions.py:1245-1252`.
 
-Proposed pointer (from seed): `CIRISAgent DSASPDMA scale-routing classification (pending Accord A-1)` — DSASPDMA exists today at `ciris_engine/logic/dma/dsaspdma.py`; the Accord A-1 binding is still pending.
+**Tests covering this behaviour:**
+- Deferral routing: `tests/test_wise_bus_deferrals.py`
+- Broadcast logic: `tests/test_wise_bus_broadcast_integration.py`
+- Domain safety: `tests/logic/buses/test_wise_bus_safe_domains.py`
+- Medical scale-block: `tests/logic/buses/test_wise_bus_medical_blocking.py`
+- Taxonomy: `tests/test_deferral_taxonomy.py`
+- Permission scaling: `tests/test_deferral_permissions.py`
+- Discord-side integration: `tests/adapters/test_discord_deferrals.py`
 
-## Observability hooks
+Proposed pointer (from seed): `CIRISAgent DSASPDMA scale-routing classification (pending Accord A-1)` — the classifier exists today at `ciris_engine/logic/dma/dsaspdma.py`; the Accord A-1 binding is still pending.
 
-- **Deferral count metric** — `WiseBus._deferrals_count` (`ciris_engine/logic/buses/wise_bus.py:66,283`) tracks every cross-scale escalation. Exposed via service metrics; downstream of CIRISLens as one of the scope-escalation rate signals.
-- **DeferralOperationalReason enum** — `ciris_engine/schemas/services/deferral_taxonomy.py:33-45` (`LICENSED_DOMAIN_REQUIRED`, `RIGHTS_IMPACT_REVIEW`, `SAFETY_ESCALATION`, `CONSENT_OR_AUTHORITY_REQUIRED`, `INSUFFICIENT_CONTEXT`, `POLICY_REVIEW_REQUIRED`, `RESOURCE_OR_SYSTEM_LIMITATION`, `TIME_BASED_REVIEW`, `ETHICAL_UNCERTAINTY`, `UNKNOWN`) is the audited reason-code on every cross-scale escalation. `LICENSED_DOMAIN_REQUIRED` is the canonical subsidiarity reason-code.
-- **Audit chain coverage** — every `send_deferral` goes through `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`) with the domain_hint, operational_reason, and needs_category embedded in the event payload, producing a tamper-evident scale-routing trail.
-- **Live-lens trace stream** — when `--live-lens` is on (default for `--live` per user memory `feedback_live_lens_default`), each DEFER event is shipped as a discrete `action_executed: defer` event in `accord-batch-*.json`. `tools/qa_runner/CLAUDE.md` § "Reasoning-Stream Forensics" documents the recipe to decode `execution_reason` to see which DeferralOperationalReason fired.
-- **F-3 detector adjacency** — `detection:correlated_action:participation_exclusion:*` (D05 seed) catches "agent is always escalating instead of acting at local scale" or its inverse. RATCHET intra-agent-consistency detector catches sudden scale-routing shifts.
-- **Federation evidence_refs** — `evidence_refs.dimensions = ["D07"]` on Contribution envelopes will be emitted once the wire schema lands; today the data exists per-deferral in the context dict (`reason_code`, `needs_category`, `domain_hint`).
+## How you can tell it's working (observability)
 
-## Known gaps / not-yet-implemented
+If you want to verify subsidiarity is alive in production, here's what to check.
 
-- **`locality:decision:regional` has no agent-side primitive.** Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.5` (v1.3 addition) as `locality:decision:{scale}` with `{scale}` ∈ `local` | `regional` | `national` | `federation`. Polarity-carries-the-verdict: positive = decision at appropriate scale relative to the cohort of affected persons; negative = escalating past the constituting scale. FSD-002 §6.1.5 specs the **locality-scaled quorum** reference policy (v1.3 addition — closes G3). Per §3.6.5 — "Mechanism-descriptive (names *where*, not *whether-good*); per §1.10.1 polarity carries the matching claim." Agent emits the data; the §6.1.5 quorum rule applies federation-side. **Substrate-specced as `locality:decision:regional`, agent-side scale-extraction pending NodeCore decision-authority extension.**
-- **`locality:decision:federation` and `locality:decision:planet`.** `locality:decision:federation` IS a substrate-specced value in FSD-002 §3.6.5 (one of the four enum members). `locality:decision:planet` is not in the §3.6.5 enum but composes via `goal:planet` (FSD-002 §3.6.2 v1.4 addition) — planet-scale decisions ride on the goal-scale enum rather than the locality-scale enum. Agent consumes both prefixes once Registry + NodeCore expose the decision-authority extension; today agent-side routing only sees scale via the licensed-domain handler's `supported_domains` capability set.
-- **No assertion that scale-escalation actually went up.** Substrate-specced via FSD-002 §6.1.5 locality-scaled-quorum policy (v1.3 addition) — consumer policy composes `locality:decision:{scale}` against decision's substantive content (P12-P15) to flag escalation past the constituting scale of affected cohorts. Per §3.6.5 — "decisions affecting persons should be at the scale where those persons are constituted as decision-bearing." Agent emits the data; the substrate quorum-rule fires the check. Agent-side structural-check ("the chosen service is at a higher scale than the agent itself") is the WA role hierarchy + audit chain; formal cross-scale assertion is substrate-side.
-- **No reverse-routing (RECONSIDER at higher scale, defer-down).** Substrate-specced in FSD-002 §3.6.4 as `reconsideration:{grounds}` with grounds ∈ `new_evidence` | `procedural_error` | `quorum_compromise`; the "this should be solved locally, not by me" shape maps to `procedural_error` grounds (escalation was procedural). Per `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §10` Stage 8 Reconcile row 5 — `ReconsiderationRequest` (P11) is reviewed by fresh WA quorum (original adjudicators recused) with hash-pinned-evidence-per-ground + 180-day time bound. Agent emits a defer-down request via the substrate flow once P11 ships; today escalation is one-directional. See D24 for the agent-side reconsideration surface.
-- **`locality:decision:community` is conflated with `GraphScope.COMMUNITY`.** Memory scope ≠ decision scope. Community-scope memorize writes are gated by consent/audit; community-scale decisions are not separately gated. Two distinct primitives sharing one enum is a known compression.
-- **Stewardship-tier gate detects misconfiguration only at registration.** A Tier 4-5 agent that drifts (e.g. memory loss, tier reassignment) is not re-checked at every action. The agent caches `_agent_tier` (`wise_bus.py:62,125-126`) after first lookup; this is a known stale-state path. RATCHET temporal-drift detector in CIRISLens is the off-agent backstop.
-- **No federation-wire emission of D07 by id.** Per-deferral context dict carries `reason_code`, `needs_category`, `domain_hint` (`wise_bus.py:248-257`); the wire-side `evidence_refs.dimensions = ["D07"]` join on Contribution envelopes is downstream substrate work (post-2.9.4).
+- **Escalation counter.** `WiseBus._deferrals_count` (`ciris_engine/logic/buses/wise_bus.py:66,283`) tracks every escalation. Exposed via service metrics.
+- **Reason codes on every escalation.** `ciris_engine/schemas/services/deferral_taxonomy.py:33-45` enumerates the audited reasons — `LICENSED_DOMAIN_REQUIRED` is the canonical subsidiarity reason. Each escalation carries one.
+- **Signed audit chain.** Every `send_deferral` is signed by `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`) with the domain hint, reason code, and needs category embedded.
+- **Live reasoning stream.** When live-lens tracing is on, every escalation ships as a discrete event in `accord-batch-*.json`. `tools/qa_runner/CLAUDE.md` § "Reasoning-Stream Forensics" documents the decode recipe.
+- **Upstream pattern detection.** The structural-pattern detector (`detection:correlated_action:participation_exclusion:*`) catches "always escalating" or "never escalating" patterns. Lives in CIRISLens; agent emits the data.
+- **Federation citation by ID.** Once the federation envelope includes `evidence_refs.dimensions = ["D07"]`, the per-deferral context already has the reason code, needs category, and domain hint ready to cite (`wise_bus.py:248-257`).
+
+## Current limitations & next steps
+
+Most of this dimension's remaining work is shared with the upstream CIRIS substrate. The agent already emits the per-deferral data; the remaining steps add federation-wire structure on top.
+
+- **Regional and federation scales are upstream-defined.** The federation surface (`CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.5`) defines `locality:decision:{scale}` with values `local`, `regional`, `national`, `federation`. The agent's escalation today routes via the licensed-domain hint; the regional and federation scale values land once Registry and NodeCore expose the decision-authority extension. The locality-scaled quorum policy (FSD-002 §6.1.5) is the upstream check that pairs with the agent's emit. Shared roadmap with NodeCore. ([CIRISAgent#821](https://github.com/CIRISAI/CIRISAgent/issues/821))
+- **Planet scale composes with `goal:planet`.** Planet-scale decisions are carried by the goal-scale enum rather than the locality-scale enum (FSD-002 §3.6.2 v1.4). Agent picks both up once Registry + NodeCore expose the extension.
+- **Cross-scale assertion is upstream.** A formal check that "the chosen authority is in fact at a higher competent scale than the agent" rides on the locality-scaled quorum policy (FSD-002 §6.1.5). The agent's contribution today is the Wise Authority role hierarchy plus the signed audit chain; the structural assertion lands substrate-side.
+- **Downward reconsideration ("this should be handled locally, not by me") is a v1.3 federation primitive.** The reconsideration shape (FSD-002 §3.6.4, `reconsideration:{grounds}`) and the fresh-quorum review flow (`CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §10`) are upstream-defined; the agent will emit downward-defer once that primitive ships. See D24 for the agent-side reconsideration surface.
+- **Memory scope and decision scope share an enum at `COMMUNITY`.** Memory writes at community scope are gated by consent and audit; community-scale decisions are not separately gated. A known compression of two related but distinct concepts; cleanup is a future refinement.
+- **Stewardship tier is cached at first lookup.** `_agent_tier` (`wise_bus.py:62,125-126`) is cached, so a tier change isn't re-checked on every action. Per-action recheck is tracked at [CIRISAgent#810](https://github.com/CIRISAI/CIRISAgent/issues/810); the upstream temporal-drift detector in CIRISLens is the cross-deployment backstop today.
+- **Federation citation by ID is post-2.9.4.** The data is already in the per-deferral context (`wise_bus.py:248-257`); the wire-side join lands with the upstream substrate work.
 
 ## Tracked requirements
 

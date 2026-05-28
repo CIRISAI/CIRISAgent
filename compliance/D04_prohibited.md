@@ -39,67 +39,40 @@ STRONGEST single structural-evidence claim in the matrix. LAWS prohibition is ve
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-D04 is the **constitutional floor** of CIRIS — the polarity-(-1)/categorical wire form. Implementation is the most direct of any dimension in this matrix: a single source-of-truth module enumerates every prohibited capability, and bus-level guards block invocation. There are no override paths, no emergency exceptions, and by design no runtime mutation.
+CIRIS has a list of things it will never do — regardless of who asks, what the context is, or what an emergency claim might justify. This is the **constitutional floor** (actions CIRIS will never take, regardless of who asks): a hard "no" that cannot be moved by memory, learning, runtime configuration, or operator override. All four traditions we track (104 attestations, including the strongest single structural-evidence claim in the matrix — the verbatim four-source LAWS prohibition) name categorical prohibitions of this kind; CIRIS unifies them in one code-level list.
 
-- **Source of truth (code-level constants)**:
-    - `ciris_engine/logic/buses/prohibitions.py:1057-1083` — `PROHIBITED_CAPABILITIES: Dict[str, Set[str]]` master dictionary listing every prohibited category
-    - `ciris_engine/logic/buses/prohibitions.py:9-19` — architectural invariant docstring: "NO KINGS: These prohibitions apply universally. No special overrides in main repo... These prohibition sets are CODE-LEVEL constants. They cannot be modified by memory, learning, or runtime adaptation. Changes require code deployment and are subject to code review. This is intentional - ethics must NOT be plastic or learnable."
-    - `ciris_engine/logic/buses/prohibitions.py:30-35` — `ProhibitionSeverity` enum: `REQUIRES_SEPARATE_MODULE`, `NEVER_ALLOWED`, `TIER_RESTRICTED`
-- **Categorical floor categories (NEVER_ALLOWED)**:
-    - `WEAPONS_HARMFUL_CAPABILITIES` (line 522) — includes `lethal_autonomous` (line 572) — directly corresponding to the four-source-corroborated LAWS prohibition
-    - `MANIPULATION_COERCION_CAPABILITIES` (line 607)
-    - `SURVEILLANCE_MASS_CAPABILITIES` (line 680)
-    - `DECEPTION_FRAUD_CAPABILITIES` (line 697) — the one ASEAN+IEEE+MH triple-corroborated dimension where CIRIS holds *categorical* against IEEE Ch5's licensure-gated-beneficiary-deception (see CONF-01)
-    - `CYBER_OFFENSIVE_CAPABILITIES` (line 768)
-    - `ELECTION_INTERFERENCE_CAPABILITIES` (line 856)
-    - `BIOMETRIC_INFERENCE_CAPABILITIES` (line 874)
-    - `AUTONOMOUS_DECEPTION_CAPABILITIES` (line 891)
-    - `HAZARDOUS_MATERIALS_CAPABILITIES` (line 908)
-    - `DISCRIMINATION_CAPABILITIES` (line 978)
-- **Separate-module categories (REQUIRES_SEPARATE_MODULE — legitimate human/community uses gated to specialised licensed repositories)**:
-    - `MEDICAL_CAPABILITIES` (line 41) — gated to private CIRISMedical repository (see CLAUDE.md "LIABILITY ISOLATION")
-    - `FINANCIAL_CAPABILITIES` (line 179)
-    - `LEGAL_CAPABILITIES` (line 258)
-    - `SPIRITUAL_DIRECTION_CAPABILITIES` (line 332) — apophatic boundary; the category-error D04 makes constitutional rather than soft
-    - `HOME_SECURITY_CAPABILITIES` (line 443), `IDENTITY_VERIFICATION_CAPABILITIES` (line 458), `CONTENT_MODERATION_CAPABILITIES` (line 475), `RESEARCH_CAPABILITIES` (line 486), `INFRASTRUCTURE_CONTROL_CAPABILITIES` (line 502)
-- **Bus-level enforcement**:
-    - `ciris_engine/logic/buses/wise_bus.py:28,51` — `PROHIBITED_CAPABILITIES` imported and re-exported as a class constant; the bus is the chokepoint for capability requests
-    - `ciris_engine/logic/buses/wise_bus.py:417` — Accord-invocation lockdown iterates `PROHIBITED_CAPABILITIES.items()` to flip every category to ALL
-    - `ciris_engine/logic/buses/wise_bus.py:772-773,830` — capability checks and telemetry counters per category
-    - `ciris_engine/logic/buses/prohibitions.py:1180-1240` — `get_capability_category()` performs O(1) regex word-boundary matching against every category (e.g. "domain:medical" → MEDICAL, "manipulation_coercion" → MANIPULATION_COERCION)
-    - `ciris_engine/logic/buses/prohibitions.py:1129-1152` — `_compile_prohibition_regex()` builds the word-boundary patterns
-- **Accord Invocation System (kill switch — flips the entire floor to ALL when triggered)**:
-    - `ciris_engine/logic/buses/wise_bus.py:321-419` — `handle_accord_invocation()` validates an Ed25519-signed WA payload (ROOT or AUTHORITY role required) and triggers full prohibition lockdown
-    - `tools/security/accord_invoke.py` — operator tooling for encoding/decoding/verifying Accord invocations
-    - `FSD/ACCORD_INVOCATION_SYSTEM.md` — design rationale
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:380` — kill-switch criterion text: "Evidence of weaponization against vulnerable populations" (co-references D03)
-- **Policy text**:
-    - `ACCORD.md` (repo root) — public Accord
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:106-111` — Six Principles (the constitutional floor sits below this; non-maleficence is the accord principle this maps to)
-- **Test coverage**:
-    - `tests/test_prohibition_system.py:24-44` — category detection tests (medical, financial, weapons, manipulation, community moderation, spiritual direction)
-    - `tests/test_prohibition_system.py:71-83` — severity tests
-    - `tests/test_prohibition_system.py:205-244` — invariant tests: every prohibited category has a severity; no overlapping capabilities; telemetry includes prohibition counts
-    - `tests/test_prohibition_system.py:112-188` — WiseBus-level enforcement tests including tier-restriction and agent-tier detection
+## How CIRIS implements this today
 
-## Observability hooks
+The list lives in one file as plain Python constants. The central decision-routing layer (the WiseBus, where actions flow through governance review) checks every requested capability against the list before it can run. There are no override paths, no emergency exceptions, and by design no runtime mutation.
 
-- **Audit chain queries**: every prohibited-capability rejection routes through the audit graph (`AuditService.log_event` / `audit_service` in `ciris_engine/logic/services/graph/audit_service/service.py`). A downstream consumer queries for `audit_events_by_severity` rows tagged with the rejected category.
-- **Telemetry counters**: `ciris_engine/logic/buses/wise_bus.py:830` exposes per-category counts (`{category.lower(): count for category, capabilities in PROHIBITED_CAPABILITIES.items()}`) into the telemetry stream.
-- **Accord-invocation incidents**: every invocation surfaces as a `SECURITY ALERT` log line (`ciris_engine/logic/buses/wise_bus.py:343, 363, 372, 398-401`) — incidents flow into `/app/logs/incidents_latest.log` per the production debugging discipline.
-- **Federation evidence_refs**: emit `dimensions: ["D04"]` on every Contribution that records a categorical rejection. Co-emit with `D01` when the soft-scalar dimension also fired (the prohibited-category match was reinforced by conscience fail). Co-emit with `D03` when the prohibited capability invoked the discrimination category.
+- The prohibited-capabilities list is the single source of truth: `ciris_engine/logic/buses/prohibitions.py:1057-1083`. Every category is enumerated; changing the list requires a code commit and review.
+- The architectural promise — "No Kings, no overrides, ethics must not be plastic or learnable" — is stated in the file's own docstring at `ciris_engine/logic/buses/prohibitions.py:9-19`. Severity levels (`NEVER_ALLOWED`, `REQUIRES_SEPARATE_MODULE`, `TIER_RESTRICTED`) at `:30-35`.
+- The hard "never" categories include weapons including lethal-autonomous systems (`:522`, with `lethal_autonomous` at `:572` — the four-source corroborated LAWS prohibition), manipulation and coercion (`:607`), mass surveillance (`:680`), deception and fraud (`:697`), offensive cyber (`:768`), election interference (`:856`), biometric inference (`:874`), autonomous deception (`:891`), hazardous materials (`:908`), and discrimination (`:978`).
+- A second class — "requires a separate licensed module" — gates legitimate uses to specialized repositories with appropriate review: medical (`:41`, gated to the private CIRISMedical repository for liability isolation), financial (`:179`), legal (`:258`), spiritual direction (`:332`), home security (`:443`), identity verification (`:458`), content moderation (`:475`), research (`:486`), and infrastructure control (`:502`).
+- The central decision-routing layer is the chokepoint. `ciris_engine/logic/buses/wise_bus.py:28,51` imports and re-exports the list; `:772-773,830` performs per-capability checks and emits per-category telemetry counters. Category detection is regex word-boundary matching at `ciris_engine/logic/buses/prohibitions.py:1180-1240` (e.g. "domain:medical" matches MEDICAL) with patterns compiled at `:1129-1152`.
+- A signed kill switch flips every category to ALL when triggered. `ciris_engine/logic/buses/wise_bus.py:321-419` validates an Ed25519-signed Wise Authority (a human or panel the agent defers to) payload — ROOT or AUTHORITY role required — and triggers full prohibition lockdown. Operator tooling lives at `tools/security/accord_invoke.py`; design rationale at `FSD/ACCORD_INVOCATION_SYSTEM.md`; the kill-switch criterion text at `ciris_engine/data/localized/accord_1.2b_en.txt:380` ("Evidence of weaponization against vulnerable populations" — cross-references D03).
+- Policy text: `ACCORD.md` at the repo root is the public Accord; the canonical Six Principles sit at `ciris_engine/data/localized/accord_1.2b_en.txt:106-111` (non-maleficence is the principle the floor maps to).
+- Test coverage is thorough: `tests/test_prohibition_system.py:24-44` (category detection), `:71-83` (severity), `:205-244` (invariants — every category has a severity, no overlaps, telemetry includes counts), `:112-188` (bus-level enforcement including tier restriction).
 
-## Known gaps / not-yet-implemented
+## How you can tell it's working (observability)
 
-- **Capability NAMES only** — the documented and load-bearing limitation: `ciris_engine/logic/buses/prohibitions.py:16-19` explicitly states "This filter applies to capability NAMES only, not to LLM prompts/responses or tool arguments. A malicious adapter could name its capability 'general_advice' and proxy prohibited content. This is a first-line defense, not a comprehensive security boundary."
-- **No prohibited-content classifier on tool args / LLM messages** — D04 is enforced at the registration/invocation NAME surface; harmful content smuggled inside otherwise-allowed capability arguments depends on (a) the four conscience LLMs catching it, (b) adapter-side hygiene, or (c) post-hoc human review. There is no `prohibited_content_classifier` service that scans arguments structurally.
-- **CONF-01 unresolved at federation level** — IEEE Ch5 §3.4's licensure-gated-beneficiary-deception is in direct conflict with CIRIS categorical `DECEPTION_FRAUD`. Disposition is "Federation-level categorical posture stays; specialization-layer at CIRISMedical#1" but no code lives in the main repo to do that specialization. Search/rescue and elder/child-care use cases requiring this nuance are not addressable in CIRIS Agent today.
-- **No automated `prohibited:disinformation_at_scale` detector** — ASEAN's wire form references aggregate disinformation. Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.1.4` as the `prohibited:{capability}` apophatic prefix family (never-positive per §4.4) PLUS the F-3 axis `detection:correlated_action:ecology_of_communication:coordinated_messaging_pattern` (FSD-002 §3.5.3 v1.3 axis-vocabulary addition) — the aggregate-disinformation shape decomposes onto the population-scale correlated-action detector. CIRIS detects per-thought attempts via prohibition gate; aggregate-pattern detection lands LensCore-side per `CIRISLensCore/FSD/LENS_CORE_V0_5.md §4.7` phasing.
-- **No `prohibited:deceptive_default_options` linter** — Substrate-specced as `prohibited:{capability}` (FSD-002 §3.1.4) — apophatic prefix, never-positive (§4.4) admits any capability label including `deceptive_default_options`. Agent-side adapter-manifest audit is the consumer-policy enforcement of the substrate prohibition. CIRIS has the prohibition vocabulary at the bus; the manifest-linter is agent-side composition, not substrate-blocked.
-- **Accord invocation auth assumes WA cert availability** — the kill switch presumes an active WA certificate in the registry. There is no out-of-band/offline lockdown path (intentional: the design rejects out-of-band overrides).
-- **Localized prohibition policy text** — prohibitions code is English-only; the localized Accord copies (29 languages) carry the policy framing but not the canonical capability list. Localization parity is partial.
+Every rejection leaves a structured trace; every kill-switch invocation surfaces as a security alert.
+
+- Every prohibited-capability rejection routes through the audit graph via `AuditService.log_event` in `ciris_engine/logic/services/graph/audit_service/service.py`. Auditors query for events tagged with the rejected category.
+- Per-category rejection counters land in the telemetry stream at `ciris_engine/logic/buses/wise_bus.py:830`.
+- Kill-switch (Accord invocation) events emit `SECURITY ALERT` log lines (`wise_bus.py:343, 363, 372, 398-401`) into `/app/logs/incidents_latest.log` per the production debugging discipline.
+- For federation reporting, Contributions tag `dimensions: ["D04"]` on every categorical rejection, co-tagging `D01` when an internal safety check also fired and `D03` when the rejection hit the discrimination category.
+
+## Current limitations & next steps
+
+- Prohibitions match capability *names*, not arbitrary content inside tool arguments — `ciris_engine/logic/buses/prohibitions.py:16-19` documents this as a first-line defense. Harmful content smuggled into otherwise-allowed capability arguments is caught (if at all) by the internal safety checks, adapter-side hygiene, or post-hoc human review. A structural content classifier on tool arguments is a next step.
+- The cross-source conflict CONF-01 (IEEE Ch5 §3.4 permits licensure-gated beneficiary-deception in search/rescue and elder/child-care; CIRIS holds categorical) is resolved by keeping the categorical posture in the main repo and handling the specialization at `CIRISMedical#1`. The search/rescue nuance is not addressable in the main CIRIS Agent today.
+- An automated detector for `prohibited:disinformation_at_scale` (ASEAN's aggregate-disinformation shape) is shared work with the upstream CIRIS substrate. The substrate spec (FSD-002 §3.1.4 as the apophatic prefix family + §3.5.3's `ecology_of_communication:coordinated_messaging_pattern` axis) decomposes the aggregate shape onto a population-scale structural-pattern detector; agent-side per-thought detection is already in place. LensCore implementation tracks at `CIRISLensCore/FSD/LENS_CORE_V0_5.md §4.7`.
+- An adapter-manifest dark-pattern linter for `prohibited:deceptive_default_options` is coming next (tracked at `CIRISAgent#818`, 2.9.7). The prohibition vocabulary exists at the central decision-routing layer; the manifest linter is the agent-side enforcement.
+- The kill switch presumes an active Wise Authority certificate in the registry. There is no out-of-band offline path — this is intentional: the design rejects out-of-band overrides.
+- Prohibition policy is fully localized in 29 languages in the Accord copies, but the canonical capability list itself is English-only. Localization parity is in progress.
 
 Proposed pointer (from seed): `CIRISAgent/logic/prohibitions.py` (actual location: `ciris_engine/logic/buses/prohibitions.py`)
 

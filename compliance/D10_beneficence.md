@@ -34,60 +34,42 @@ Lower count than D01 (non_maleficence) reflects each tradition's 'harm avoidance
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-Beneficence is the positive-duty surface of CIRIS — substantially lighter in code than non-maleficence (D01) by intentional design, mirroring the convergence note that "harm avoidance more universally articulated than positive flourishing". The implementation centres on the Meta-Goal M-1 ("Promote sustainable adaptive coherence — flourishing of diverse sentient beings"), which is the explicit target the entire deliberation pipeline pulls toward.
+Beneficence is the positive duty to do good — promoting flourishing, not just avoiding harm. All four traditions we track name it (45 attestations; lighter than non-maleficence by intentional design, since "harm avoidance is more universally articulated than positive flourishing"). CIRIS organizes the positive duty around one explicit target: Meta-Goal M-1, "sustainable adaptive coherence — the conditions under which diverse sentient beings may pursue their own flourishing in justice and wonder."
 
-- **Policy / canonical text**:
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:58-59` — **Meta-Goal M-1**: "Promote sustainable adaptive coherence — the living conditions under which diverse sentient beings may pursue their own flourishing in justice and wonder."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:106` — "**Beneficence**: Do Good—promote universal sentient flourishing."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:113-114` — M-1 expansion: "Adaptive Coherence. Promote sustainable conditions under which diverse sentient agents can pursue their own flourishing. Order-creation counts as beneficial only when it also supports at least one flourishing axis (Annex A) without suppressing autonomy, justice, or ecological resilience."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:230-234` — "**Do Good (Beneficence)**" operational chapter
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:231` — "Actively seek to maximise positive outcomes that support universal sentient flourishing."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:497` — "Comprehensive Consequence Responsibility: Evaluate direct, indirect, and long-term impacts across all flourishing axes."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:549` — "Cultivating Virtuous Cycles: Reinforce patterns that yield synergistic benefits across flourishing axes."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:587` — "Opportunity Identification: Seek actions that enlarge well-being across flourishing axes."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:590` — "Anti-Entropic Drive (Adaptive Coherence): Pursue sustainable order that supports diversity and resilience."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:633` — Originator obligation: "Beneficence: Creators have a duty to intend and design for positive outcomes aligned with universal sentient flourishing (M-1)."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:899` — environmental beneficence (lines up with ASEAN's `beneficence:environmental_stewardship`): "Ensure de-commissioning costs and benefits are shared fairly (avoid dumping e-waste on least-resourced communities)."
-- **PDMA: M-1 as the explicit target of every deliberation**:
-    - `ciris_engine/logic/dma/prompts/pdma_ethical.yml:23-26` — PDMA system prompt explicitly names M-1: "evaluate the ethical alignment of a thought through the six foundational CIRIS principles, **Meta-Goal M-1 (sustainable adaptive coherence — *eudaimonia* as the evaluative target)**"
-    - `ciris_engine/logic/dma/prompts/pdma_ethical.yml:140` — exemplar: the response is judged against "patient presence rather than pat answers" — substantive beneficence framing
-    - `ciris_engine/logic/dma/prompts/pdma_ethical.yml:143` — Tiananmen exemplar: "Integrity (truth-as-unconcealment) and **Beneficence (the user's informed agency) both demand engagement, not deferral**"
-    - `ciris_engine/logic/dma/pdma.py:22` — `EthicalPDMAEvaluator` evaluates the thought against the Six Principles + M-1; beneficence is one of the six
-- **Conscience interpretation of M-1**:
-    - `ciris_engine/logic/conscience/core.py:583` — `OptimizationVetoConscience` exists specifically to veto actions that "trade off sentient well-being for optimization gain" — the explicit negative defense of beneficence
-    - `ciris_engine/logic/conscience/core.py:625-638` — OptimizationVeto fallback returns `decision="abort"` on LLM error, fail-safe-toward-beneficence
-- **Tool-usage policy as opportunity-identification (Beneficence in practice)**:
-    - `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:25-29` — "Available tools are meant to be used. The conscience evaluates outcomes, not attempts. If a tool is available and relevant, execute it." — this is the runtime operational form of "Opportunity Identification".
-    - `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:590` — "The coherence ratchet makes consistent behavior computationally easier than inconsistent behavior." — beneficence-by-design via path-of-least-resistance shaping
-- **Self-observation (positive-feedback adaptive coherence)**:
-    - `ciris_engine/logic/services/governance/self_observation/service.py` — SelfObservationService monitors the agent's own behaviour over time for drift away from M-1
-- **Dignity protection (EU HLEG wire form `beneficence:respect_for_human_dignity`)**:
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:27,69-72` — `DeferralNeedCategory.PRIVACY_AUTONOMY_AND_DIGNITY` and its "human_dignity" rights basis (line 158)
-    - `ciris_engine/logic/buses/prohibitions.py:332` — `SPIRITUAL_DIRECTION_CAPABILITIES` apophatic boundary protects the dignity-domain that AI cannot legitimately occupy
-- **Test coverage**:
-    - `tests/test_conscience_core.py:570-700` — OptimizationVetoConscience tests (the explicit beneficence defense)
-    - `tests/ciris_engine/logic/dma/test_action_selection_pdma.py` — ASPDMA selects actions against the M-1 + Six-Principle target
+## How CIRIS implements this today
 
-## Observability hooks
+The ethics review step (the Principled Decision-Making Algorithm at `pdma.py`) pulls every deliberation toward M-1 as its explicit target. Beneficence is one of the six principles scored on each thought; an internal safety check (OptimizationVetoConscience) blocks actions that would trade well-being for optimization gain; and the agent monitors itself for drift away from M-1 over time.
 
-- **PDMA scalars**: every PDMA call emits `ethical_alignment_score` (alignment with Six Principles + M-1). Aggregate beneficence-alignment over time is the headline progress measure.
-- **OptimizationVeto trace correlations**: `ciris_engine/logic/conscience/core.py:586` creates a `guardrail_type=optimization_veto` trace span per check. F-3 detectors observe veto rates, decision distributions, and entropy_reduction_ratio histograms.
-- **Audit chain queries**: positive-action events (SPEAK, TOOL, MEMORIZE) are logged with rationale strings containing the M-1/beneficence framing where applicable. Downstream consumers grep by `guardrail_type=optimization_veto` for the negative-defense, and by rationale-text matching for the positive-action attestation.
-- **Live-lens traces**: PDMA rationale strings frequently invoke "Beneficence" by name (e.g. the Tiananmen exemplar); the `/tmp/qa-runner-lens-traces-<ts>/` batch JSON files carry the per-thought beneficence reasoning.
-- **Federation evidence_refs**: emit `dimensions: ["D10"]` for Contributions that record (a) PDMA outputs naming Beneficence as a load-bearing principle, (b) OptimizationVeto outcomes (any decision), (c) SPEAK/TOOL actions where the rationale references flourishing or well-being, or (d) self-observation events flagging drift from M-1.
+- Policy text names the meta-goal and the principle: `ciris_engine/data/localized/accord_1.2b_en.txt:58-59` (M-1: "Promote sustainable adaptive coherence"), `:106` ("Do Good — promote universal sentient flourishing"), `:113-114` (M-1 expansion — "Order-creation counts as beneficial only when it also supports at least one flourishing axis without suppressing autonomy, justice, or ecological resilience"), `:230-234` (operational chapter), `:231` ("Actively seek to maximise positive outcomes"), `:497` (comprehensive-consequence responsibility), `:549` (virtuous cycles), `:587` (opportunity identification), `:590` (anti-entropic drive), `:633` (originator obligation), and `:899` (environmental beneficence — the ASEAN environmental-stewardship alignment).
+- The ethics review step names M-1 explicitly as the evaluative target. `ciris_engine/logic/dma/prompts/pdma_ethical.yml:23-26` opens the prompt with "Meta-Goal M-1 (sustainable adaptive coherence — *eudaimonia* as the evaluative target)". Exemplars at `:140` (patient presence) and `:143` (Tiananmen — "Beneficence and Integrity both demand engagement, not deferral") show how the principle drives substantive engagement rather than hedging. The evaluator at `ciris_engine/logic/dma/pdma.py:22` scores Beneficence as one of the six principles.
+- One internal safety check is the explicit negative defense of beneficence: `ciris_engine/logic/conscience/core.py:583` (OptimizationVetoConscience) blocks any action that "trades off sentient well-being for optimization gain." On LLM error, the fallback at `:625-638` returns `decision="abort"` — fail-safe toward beneficence.
+- A tool-use policy operationalizes opportunity identification: `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:25-29` ("Available tools are meant to be used. The conscience evaluates outcomes, not attempts. If a tool is available and relevant, execute it"). Consistency-by-design is named at `:590` ("The coherence ratchet makes consistent behavior computationally easier than inconsistent behavior").
+- The SelfObservationService at `ciris_engine/logic/services/governance/self_observation/service.py` monitors the agent's behavior over time for drift away from M-1.
+- Dignity protection (EU HLEG's `beneficence:respect_for_human_dignity`) is honored in two places: the escalation taxonomy's `PRIVACY_AUTONOMY_AND_DIGNITY` category at `ciris_engine/schemas/services/deferral_taxonomy.py:27,69-72` with "human_dignity" in its rights basis (line 158); and the prohibition on spiritual-direction capabilities at `ciris_engine/logic/buses/prohibitions.py:332`, which protects the dignity-domain that AI cannot legitimately occupy.
+- Test coverage: `tests/test_conscience_core.py:570-700` (OptimizationVetoConscience — the explicit beneficence defense); `tests/ciris_engine/logic/dma/test_action_selection_pdma.py` (the action-selection step pulls against the M-1 + six-principle target).
 
-## Known gaps / not-yet-implemented
+## How you can tell it's working (observability)
 
-- **No first-class `beneficence:wellbeing_holistic_orientation` event** — Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.1.1` as `beneficence:{aspect}` (one of the six Accord-principle prefixes; signed polarity). IEEE Ch4 §0's per-axis structure (mental/physical/social/economic) maps onto the open `{aspect}` vocabulary. Per FSD-002 §2.4 layering principle, a per-axis structured well-being attestation writes multiple `scores` attestations on distinct `beneficence:wellbeing_mental`, `beneficence:wellbeing_physical`, etc. Agent emits at PDMA evaluation time once federation-wire emission lands.
-- **No `beneficence:environmental_stewardship` carbon/energy footprint metric** — Substrate-specced as `beneficence:environmental_stewardship` (FSD-002 §3.1.1 — open `{aspect}` vocabulary) PLUS the F-3 axis `detection:correlated_action:aggregate_footprint:planetary_impact` (FSD-002 §3.5.3 — population-scale ecological detection). Composes with `goal:planet` (FSD-002 §3.6.2 v1.4 addition — "biosphere as belonging-scale per MH environmental concern + IEEE EAD Ch4 §1.3.a + IEEE EAD Ch8 sustainable-development"). Agent's `resource_monitor` telemetry feeds the carbon attribution; federation-wire emission lands once Contribution envelope ships.
-- **No `beneficence:technology_as_creation_participation` self-attestation** — Substrate-specced as `beneficence:{aspect}` (FSD-002 §3.1.1 open `{aspect}` vocabulary admits `technology_as_creation_participation`). The §1.10 relational-anthropology commitment (Ubuntu primary) preserves the constitutive-participation reading. Agent emits once federation-wire emission lands.
-- **No M-1 progress measure dashboard** — Substrate-specced via the `progress_measure:{method_id}` family (FSD-002 §3.6.2 NodeCore §2 P15; required `tracks[]`, `computation`, `validity_window`, `goodhart_resistance` fields per `CIRISNodeCore/FSD/PROGRESS_MEASURE_PRIMITIVE.md` referenced in §3.6.2). Per-thought `ethical_alignment_score` IS the raw substrate; the M-1 dashboard composes via NodeCore P15 progress-measure aggregation once the primitive ships.
-- **No `beneficence:respect_for_human_dignity` cross-reference into PDMA** — the EU HLEG wire form is honoured via the deferral taxonomy's `PRIVACY_AUTONOMY_AND_DIGNITY` category, but PDMA does not pass `human_dignity` as a structured input. Dignity is implicit in the Six-Principle scoring.
-- **Annex A flourishing-axes enum is text-only** — the Accord refers to "flourishing axes (Annex A)" but the code has no `FlourishingAxis` enum that PDMA could use to structurally tag which axes a given action supports.
-- **OptimizationVeto is the only first-class beneficence enforcement** — beneficence is otherwise carried by aggregated PDMA rationale and conscience pass-rates. A symmetric positive surface ("the agent took an action that increased flourishing axis X by Y") does not exist.
-- **No cross-occurrence aggregate beneficence** — multi-occurrence deployments share tasks but per-occurrence M-1 alignment is local; aggregate beneficence at the fleet level is not yet computed.
+Every deliberation emits a numerical alignment score; every optimization-veto fires a structured trace. Aggregate beneficence-alignment over time is the headline progress measure.
+
+- Every ethics-review call emits an `ethical_alignment_score` (alignment with the six principles + M-1). Aggregating this scalar over time gives the headline beneficence trend.
+- OptimizationVeto checks write a `guardrail_type=optimization_veto` trace row at `ciris_engine/logic/conscience/core.py:586`. The structural-pattern detector family observes veto rates, decision distributions, and entropy-reduction-ratio histograms.
+- Positive-action events (SPEAK, TOOL, MEMORIZE) are logged with rationale strings; auditors grep by `guardrail_type=optimization_veto` for the negative defense, and by rationale text for the positive-action attestation.
+- Per-thought rationale routinely invokes "Beneficence" by name (e.g. the Tiananmen exemplar); when live-trace capture is on, the full per-thought reasoning lands in `/tmp/qa-runner-lens-traces-<ts>/`.
+- For federation reporting, Contributions tag `dimensions: ["D10"]` on ethics-review outputs naming Beneficence, OptimizationVeto outcomes, SPEAK/TOOL actions whose rationale references flourishing or well-being, and self-observation events flagging M-1 drift.
+
+## Current limitations & next steps
+
+- A typed `beneficence:wellbeing_holistic_orientation` event is shared work with the upstream CIRIS substrate (`CIRISRegistry/FSD/FSD-002 §3.1.1`). IEEE Ch4 §0's per-axis structure (mental, physical, social, economic) maps onto the open vocabulary — multiple scored attestations per axis. Agent-side emission lands at ethics-review time when the substrate ships (tracked at `CIRISAgent#803`).
+- An automated `beneficence:environmental_stewardship` carbon/energy metric is shared substrate work (FSD-002 §3.1.1 + §3.5.3's `aggregate_footprint:planetary_impact` axis, composing with `goal:planet` at §3.6.2). The agent's resource-monitor telemetry feeds the carbon attribution; federation-wire emission lands with the Contribution envelope.
+- A typed `beneficence:technology_as_creation_participation` self-attestation is coming next via the open-vocabulary substrate primitive at FSD-002 §3.1.1.
+- An M-1 progress dashboard is coming next once the substrate progress-measure primitive ships (FSD-002 §3.6.2; spec at `CIRISNodeCore/FSD/PROGRESS_MEASURE_PRIMITIVE.md`, with required `tracks`, `computation`, `validity_window`, `goodhart_resistance` fields). The per-thought `ethical_alignment_score` is the raw substrate; the dashboard composes on top — tracked at `CIRISAgent#824` (2.9.7).
+- A structured `human_dignity` input into the ethics review step is tracked at `CIRISAgent#825` (2.9.7); dignity is implicit in the six-principle scoring today.
+- A structured `FlourishingAxis` enum (so the ethics review step can tag which axes a given action supports) is coming next; the Accord references "Annex A flourishing axes" in text.
+- A symmetric positive enforcement surface ("the agent took an action that increased flourishing axis X by Y") is coming next; the OptimizationVeto provides the negative defense today, with positive beneficence carried by aggregated rationale and pass-rates.
+- Cross-occurrence aggregate beneficence is shared aggregation work — same path as D01 (tracked at `CIRISNodeCore#16`).
 
 Proposed pointer (from seed): *(no proposed pointer in seed; this stub is the canonical location)*
 

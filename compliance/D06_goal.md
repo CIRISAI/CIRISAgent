@@ -38,62 +38,55 @@ Every available {scale} value is exercised somewhere in the corpus. NB: `goal:pl
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-`goal:*` is a multi-scale belonging composite; CIRISAgent operationalizes the {scale} slot through three layered primitives:
+When CIRIS makes a decision, it has to ask "whose flourishing is at stake?" — and the answer is rarely just one person. A decision can affect the individual, their family, their community, the wider network of groups they belong to, the species, and (eventually) the planet. This dimension keeps every one of those scales in view at the same time. Sixty attestations across the four regulatory batches (Magnifica Humanitas, EU, IEEE, ASEAN) treat this as a shared concern, not a CIRIS invention.
 
-1. The `GraphScope` enum stratifies stored memory by who-it-belongs-to (the cohort of belonging).
-2. The Recursive Golden Rule requires the agent to apply the same ethical shape at every scale simultaneously (the fractal enforcement).
-3. The PDMA / CSDMA stakeholder identification step names whose flourishing is in scope for a given thought (the per-thought read-out of goal:{scale}).
+## How CIRIS implements this today
 
-**Multi-scale memory primitive (the {scale} enum on the agent side)**
-- `ciris_engine/schemas/services/graph_core.py:39` defines `GraphScope = {LOCAL, IDENTITY, ENVIRONMENT, COMMUNITY}`.
-- Every memorize / recall / forget action carries a scope; community-scope writes are gated through the consent and audit chains.
-- Worked example of COMMUNITY-scope writes: `ciris_engine/logic/services/governance/consent/service.py:562` (consent stream conversation summaries scoped to community) and `:764` (anonymous-stream community summaries).
-- Config-type → scope mapping at `ciris_engine/schemas/services/graph_core.py:96-105`: filter_config / channel_config / response_templates are LOCAL; behavior_config / ethical_boundaries / capability_limits / trust_parameters are IDENTITY (requiring WA approval to mutate).
+CIRIS tracks "whose flourishing is in play" through three layers that work together: a memory scope tag on every stored thought, an explicit stakeholder list written into every reasoning step, and a recursive ethical lens that asks the same question at every scale (the Recursive Golden Rule — a fractal application of the same ethical structure at self, community, and ecosystem levels).
 
-**MEMORIZE action surface (operator visibility)**
-- `ciris_engine/logic/dma/prompts/action_selection_pdma.yml:29` enumerates the four user-visible scales (`local|identity|environment|community`) in every locale's localized ASPDMA prompt.
-- Localized variants verified at e.g. `ciris_engine/logic/dma/prompts/localized/{es,fr,bn,ta}/action_selection_pdma.yml:29`.
+**Memory scope: the "who does this belong to" tag.** Every memory the agent writes carries a scope label so downstream readers know whose context it sits in.
+- The scope values are defined at `ciris_engine/schemas/services/graph_core.py:39`: `GraphScope = {LOCAL, IDENTITY, ENVIRONMENT, COMMUNITY}`.
+- Writes at community scope go through consent and audit checks — see `ciris_engine/logic/services/governance/consent/service.py:562` (conversation summaries) and `:764` (anonymous community summaries).
+- Some config types are pinned to the IDENTITY scope and require a Wise Authority (a human or panel the agent escalates to) to change — mapping at `ciris_engine/schemas/services/graph_core.py:96-105` covers ethical boundaries, capability limits, trust parameters, and behavior config.
 
-**Species-scale orientation (the M-1 anchor)**
-- `ACCORD.md` Meta-Goal M-1 ("Promote sustainable adaptive coherence enabling diverse sentient beings to pursue flourishing") is the species-scale species (in the original sense — a category of being) anchor.
-- Referenced from `ciris_engine/logic/services/governance/wise_authority/README.md:11` and `ciris_engine/data/accord_1.2b.txt:725` ("species-specific welfare minima throughout the creation's lifecycle").
-- Species is the outermost cohort the wire format admits today; planet is a v1.5+ candidate (T3-06).
+**Stakeholder enumeration: every decision names who is affected.** Before the agent picks an action, it has to list the parties affected by it (stakeholder enumeration — listing every party affected by a decision).
+- The requirement lives in the ethical-decision prompt at `ciris_engine/logic/dma/prompts/pdma_ethical.yml:27,40,68,107`.
+- The four user-visible scale values are exposed to the operator in the action-selection prompt at `ciris_engine/logic/dma/prompts/action_selection_pdma.yml:29`, mirrored across all 29 languages — e.g. `ciris_engine/logic/dma/prompts/localized/{es,fr,bn,ta}/action_selection_pdma.yml:29`.
+- A common-sense check at `ciris_engine/logic/dma/prompts/csdma_common_sense.yml:36` asks whether the named stakeholders are real people in the real world, not fictionalized.
 
-**Recursive Golden Rule (the fractal enforcement)**
-- `MISSION.md:70-77` ("Same shape, different scale… all the way up and all the way down") is the policy text that requires agents to reason at self / next-agent / user / community simultaneously.
-- PDMA template carries this into the per-thought prompt at `ciris_engine/logic/dma/prompts/pdma_ethical.yml:68` ("names the subject being evaluated and the key stakeholders").
-- Per user-memory `project_recursive_golden_rule`: "fractal, not symmetric — same structure at every scale (Self/Originator/Ecosystem self-similar); literal recursive-modelling with Mandelbrot-style termination; hollow-center prohibition."
+**Species-scale anchor: M-1.** The Accord's Meta-Goal M-1 — "Promote sustainable adaptive coherence enabling diverse sentient beings to pursue flourishing" — is the species-scale anchor. It is referenced from the Wise Authority documentation at `ciris_engine/logic/services/governance/wise_authority/README.md:11` and the canonical Accord text at `ciris_engine/data/accord_1.2b.txt:725`.
 
-**Stakeholder identification step (PDMA Step 1)**
-- `ciris_engine/logic/dma/prompts/pdma_ethical.yml:27,40,68,107` requires the agent to enumerate stakeholders and conflicts between their interests before action selection.
-- This is the goal:* slot read-out at thought time: every PDMA result names the cohorts of belonging implicated by the response.
-- CSDMA realism check at `ciris_engine/logic/dma/prompts/csdma_common_sense.yml:36` validates that the enumerated stakeholders are world-admitting (real, not fictionalized).
+**Recursive Golden Rule: the same question at every scale.** `MISSION.md:70-77` ("Same shape, different scale… all the way up and all the way down") tells the agent to reason about self, next-agent, user, and community simultaneously, with the same ethical structure at each level. The per-thought ethical prompt carries this discipline at `ciris_engine/logic/dma/prompts/pdma_ethical.yml:68`.
 
-**Test coverage**
-- Scope correctness exercised in `tests/ciris_engine/logic/services/graph/test_filter_config_bug.py`.
-- Memory filter scope handling in `tests/ciris_engine/logic/adapters/api/routes/test_memory_filters.py`.
-- Scoped consent / WA approval surface in `tests/ciris_engine/logic/services/governance/test_wise_authority_service.py`.
-- Cohort-of-belonging implicitly exercised in every PDMA / ASPDMA evaluator test via the stakeholder enumeration block.
+**Tests covering this behaviour:**
+- Scope correctness: `tests/ciris_engine/logic/services/graph/test_filter_config_bug.py`
+- Memory filter scope handling: `tests/ciris_engine/logic/adapters/api/routes/test_memory_filters.py`
+- Scoped consent and Wise Authority approval: `tests/ciris_engine/logic/services/governance/test_wise_authority_service.py`
+- Stakeholder enumeration is exercised implicitly in every ethical-decision evaluator test.
 
-Proposed pointer (from seed): no per-dimension pointer specified; agent-side implementation lives in `GraphScope` + Recursive Golden Rule + PDMA Step 1.
+Proposed pointer (from seed): no per-dimension pointer specified; agent-side implementation lives in `GraphScope` + Recursive Golden Rule + stakeholder enumeration.
 
-## Observability hooks
+## How you can tell it's working (observability)
 
-- **Per-thought trace emission** — every PDMA / ASPDMA result carries the stakeholder enumeration in its rationale field, shipped to lens via the local-tee at `/tmp/qa-runner-lens-traces-<ts>/accord-batch-*.json` when `--live-lens` is on (see `tools/qa_runner/CLAUDE.md` § "Live-Lens Trace Capture (Local Tee)"). Each event has the agent's at-call goal:{scale} read-out embedded in the PDMA stakeholders block.
-- **Audit chain** — `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`) signs every MEMORIZE / RECALL / FORGET event with the scope value, giving downstream verifiers a tamper-evident record of which {scale} the agent operated at.
-- **MEMORIZE / RECALL scope-distribution telemetry** — `ciris_engine/logic/services/graph/telemetry_service/` records per-event scope alongside the standard service metrics; aggregate scope distribution per agent is computable from this stream.
-- **LensCore detector adjacency** — D05 detection family (`detection:correlated_action:*` per seed) is the upstream consumer; same-scale-only deferral patterns and aggregate cohort-skew are flagged by the F-3 family. CIRISLens's Coherence Ratchet (`MISSION.md:518-535`) reads the conscience-scalar drift per scope.
-- **Federation evidence_refs** — once `evidence_refs.dimensions = ["D06"]` lands on the Contribution envelope, GraphScope-tagged memorize/recall events become the per-thought structural-evidence basis for D06 attestations. Today the agent emits the data in audit + trace streams; the wrapper to cite D06 by id is the seed v1.0 binding pending downstream substrate work.
+If you want to verify this dimension is alive in production, here's where to look.
 
-## Known gaps / not-yet-implemented
+- **The reasoning stream itself.** When live-lens tracing is on, every reasoning step ships to `/tmp/qa-runner-lens-traces-<ts>/accord-batch-*.json` with the stakeholder list embedded — see `tools/qa_runner/CLAUDE.md` § "Live-Lens Trace Capture (Local Tee)".
+- **The signed audit chain.** Every memory write records its scope, signed by `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`). Downstream verifiers get a tamper-evident record of which scale the agent operated at.
+- **Scope-distribution telemetry.** `ciris_engine/logic/services/graph/telemetry_service/` exposes the per-event scope tag so the distribution across scales can be computed for any agent.
+- **Upstream pattern detection.** The structural-pattern detector family (`detection:correlated_action:*` in the seed) catches things like "this agent only ever operates at one scale." That detector lives in the upstream CIRISLens layer; the Coherence Ratchet (`MISSION.md:518-535`) reads conscience-scalar drift per scope.
+- **Federation citation by ID.** Once the federation envelope includes `evidence_refs.dimensions = ["D06"]`, the scope-tagged memory events become the structural-evidence basis for this dimension's claims. The data is already emitted; the wire-side citation wrapper lands with the upstream substrate work.
 
-- **`goal:planet` is not yet a first-class scale value agent-side.** Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.2` as `goal:{scale}` with `{scale}` ∈ `self` | `family` | `community` | `affiliations` | `species` | `planet` (v1.4 cross-source-reinforced addition — biosphere as belonging-scale per MH environmental concern + IEEE EAD Ch4 §1.3.a + IEEE EAD Ch8 sustainable-development); scored by 𝒞_CIRIS. Per FSD-002 §3.10 namespace-summary v1.4 entry — "`goal:planet` added to `goal:{scale}` enum per §3.6.2 — cross-source-reinforced HIGH-priority from CIRISRegistry#20, NOT a new prefix family, just a new value within existing prefix." Agent will emit at trace-emit time by mapping the federation `goal:planet` value onto its existing scope discipline once the NodeCore Goal Primitive lands (`CIRISNodeCore/FSD/GOAL_PRIMITIVE.md §2.1`); today the implicit composition is through species + ENVIRONMENT scope. **Substrate-specced, agent-side mapping pending.**
-- **No federation-wire emission of D06 by id yet.** Per-thought DMA outputs carry the stakeholder enumeration in rationale text, but the wire envelope does not yet include `evidence_refs.dimensions = ["D06"]`. This is the same "trace ≠ wire contribution" boundary noted in user-memory `feedback_trace_vs_wire_contributions` — agent emits structurally-rich PDMA results; mapping those to D06 by id is downstream substrate work (CIRISLens accord_metrics adapter, CIRISPersist federation contribution schema). Trace-side work is in scope today; wire-side is post-2.9.4.
-- **No automated calibration that goal:* is exercised across all scales in production.** A run could spend an entire day operating only at LOCAL scope and still pass; only RATCHET-style aggregate detection (which is in CIRISLens, not the agent) would catch the omission. The agent does not self-monitor scope-distribution skew.
-- **Affiliations scale has no agent-side primitive.** Federation jurisdictional belonging ("EU agent," "ASEAN agent") is a CIRISRegistry license attribute, not a memory scope. Until the Registry license model exposes `goal:affiliations:{jurisdiction}` to the agent, affiliations is structurally implicit at deploy-config level.
-- **Family-scale is conflated with LOCAL.** MH's `goal:family` (per seed regulatory_attestations) has no distinct agent-side primitive; family-scope memories memorize at LOCAL or COMMUNITY scope today, lacking the intermediate household / kin cohort that MH §§148-156 names. Compositional closure works today but is structurally compressed.
+## Current limitations & next steps
+
+Most of the remaining work here is shared with the upstream CIRIS substrate (the upstream CIRIS components being progressively replaced with Rust-native implementations — Persist → Edge → LensCore → NodeCore). Where the agent already emits the right data, the remaining step is just citing it by ID once the federation envelope is in place.
+
+- **Planet scale is composed, not yet named directly.** The federation surface (`CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.2`) defines `goal:planet` as one of six scale values. Today the agent expresses planet-scale concerns through the combination of species scope and ENVIRONMENT scope; once the NodeCore Goal Primitive ships (`CIRISNodeCore/FSD/GOAL_PRIMITIVE.md §2.1`) the agent will emit `goal:planet` directly. Shared roadmap with NodeCore.
+- **Citation by ID on the federation wire is post-2.9.4 work.** Per-thought reasoning carries the full stakeholder enumeration in its rationale text. Adding `evidence_refs.dimensions = ["D06"]` to the federation envelope (messages exchanged with peer CIRIS agents in the federation network) is downstream work in CIRISLens's accord-metrics adapter and CIRISPersist's contribution schema — same "trace vs. wire" boundary noted for D11 and D13.
+- **Self-monitoring of scope distribution.** The agent does not yet flag its own scope-distribution skew (e.g. "I have been operating at LOCAL scope all day"). The structural-pattern detector in CIRISLens is the off-agent backstop today; on-agent self-monitoring is a complementary next step.
+- **Affiliations scale rides on operator metadata.** Jurisdictional belonging ("EU agent," "ASEAN agent") is carried in the operator's CIRISRegistry license rather than in a memory scope. Once the Registry license model exposes `goal:affiliations:{jurisdiction}` directly to the agent, this becomes a first-class runtime primitive.
+- **Family scope sits inside LOCAL today.** Magnifica Humanitas §§148-156 names the family / household / kin scale explicitly. The agent currently composes it as a subset of LOCAL or COMMUNITY; an intermediate family-scope primitive is a future refinement.
 
 Proposed pointer (from seed): `(none specified in seed; please fill)` — observability gap is CIRISLens-side, not agent-side.
 

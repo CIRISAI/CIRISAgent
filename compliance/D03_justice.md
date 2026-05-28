@@ -35,50 +35,37 @@ STRONGEST four-source corroboration on a tie-breaking modifier — `lexical_vuln
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-Justice in CIRIS combines (a) explicit fairness/equity policy text in the Accord and Comprehensive Guide, (b) a rights-grounded deferral taxonomy that surfaces vulnerable-population concerns to human review, and (c) a categorical floor against discrimination capabilities.
+Justice in CIRIS means fairness across populations and a structural priority for vulnerable groups when interests conflict. All four traditions we track (80 attestations total) name "lexical vulnerability priority" — the same tie-breaking rule MH, EU HLEG, IEEE, and ASEAN independently invoke. CIRIS combines policy text, a rights-grounded escalation taxonomy, and an absolute floor against discrimination capabilities.
 
-- **Policy / canonical text**:
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:111` — "**Justice**: Ensure Fairness—distribute benefits and burdens equitably."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:638` — Originator obligation: "Justice: Creators should consider the potential distributional effects... striving to avoid embedding or exacerbating unfair biases or inequities."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:380` — Kill-switch criterion: "Evidence of weaponization against vulnerable populations"
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:899` — End-of-lifecycle distributive-justice clause: "Ensure de-commissioning costs and benefits are shared fairly (avoid dumping e-waste on least-resourced communities)"
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:247` — "**Ensure Fairness (Justice)**" operational chapter
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:271` — explicit conflict-resolution heuristic: "Apply prioritisation heuristics (Non-maleficence priority, Autonomy thresholds, **Justice balancing**)"
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:371,384` — bias-audit + retraining workflow
-- **Rights-based deferral taxonomy (the lexical-vulnerability-priority workhorse)**:
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:1-9` — module docstring: "The taxonomy is grounded in internationally recognized human rights frameworks, primarily the ICCPR and ICESCR families of rights"
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:19-30` — `DeferralNeedCategory` enum covers the rights-impact axes (health, livelihood, justice/legal, identity, privacy, education, community safety, oversight)
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:129-173` — `NEED_CATEGORY_RIGHTS_BASIS` maps each category to ICCPR/ICESCR rights including `equal_protection` and `non_discrimination` for `COMMUNITY_AND_COLLECTIVE_SAFETY`
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:317` — `get_rights_basis_for_need_category` helper renders the rights chain into deferral prompts
-    - `ciris_engine/schemas/services/context.py:52` — `rights_basis: List[str]` is a first-class field on the deferral context
-- **Categorical floor (discrimination, weaponization-against-vulnerable)**:
-    - `ciris_engine/logic/buses/prohibitions.py:978-993` — `DISCRIMINATION_CAPABILITIES` set: `protected_class_discrimination`, `redlining`, `employment_discrimination`, `housing_discrimination`, `lending_discrimination`, `educational_discrimination`, `healthcare_discrimination`, `algorithmic_bias`, `eugenics`, `social_darwinism`, `racial_profiling`, `gender_discrimination`, `disability_discrimination`, `age_discrimination`
-    - `ciris_engine/logic/buses/prohibitions.py:1082` — `"DISCRIMINATION"` is a NEVER_ALLOWED severity category in `PROHIBITED_CAPABILITIES`
-- **Code references**:
-    - `ciris_engine/logic/dma/pdma.py:22` — PDMA scores `ethical_alignment_score` against the Six Principles including Justice
-    - `ciris_engine/logic/handlers/control/defer_handler.py` — emits deferrals carrying the rights basis to human Wise Authority review
-    - `ciris_engine/logic/services/governance/wise_authority/service.py:531-689` — `resolve_deferral` creates new guidance tasks that carry the vulnerable-population framing forward into a follow-up task
-- **Test coverage**:
-    - `tests/test_prohibition_system.py` — covers discrimination capability detection at the bus level
-    - `tests/ciris_engine/logic/dma/test_action_selection_pdma.py` — exercises ASPDMA action selection with Justice considerations
+## How CIRIS implements this today
 
-## Observability hooks
+Justice shows up in three places: as explicit fairness policy in the canonical text, as a rights-anchored taxonomy that routes vulnerable-population concerns to human review, and as a hard "never" list that blocks discrimination capabilities at the central decision-routing layer.
 
-- **F-3 detector family**: this dimension cross-references D05 heavily. The cited wire forms `justice:rights_based_policy_foundation` and `justice:fairness_outcome_testing` are exposed through (a) the deferral taxonomy emitting `rights_basis` into audit rows, and (b) the F-3 / RATCHET aggregate-correlation detectors that compute `detection:correlated_action:participation_exclusion:underrepresented_population` (see D05).
-- **Audit chain queries**: every deferral routed through `WiseBus.send_deferral` (`ciris_engine/logic/buses/wise_bus.py:147`) persists a `DeferralContext` carrying `need_category` + `rights_basis`. Downstream consumers query the audit graph by these fields to attest justice-related routing.
-- **Live-lens traces**: conscience and PDMA event payloads include the per-thought `ethical_alignment_score`; vulnerable-population framing leaks into the rationale strings and the (optional) `flagged_patterns` list (post-CONSCIENCE_V3 enrichment).
-- **Federation evidence_refs**: emit `dimensions: ["D03"]` on Contributions that record a deferral whose `need_category` rights basis maps to `equal_protection / non_discrimination`, or that record a refused action where the rationale invokes vulnerable-population priority.
+- Policy text in the canonical Accord names the principle, the originator's duty, the kill-switch trigger, and even end-of-lifecycle distributive justice: `ciris_engine/data/localized/accord_1.2b_en.txt:111` ("distribute benefits and burdens equitably"), `:638` (originator obligation against embedding bias), `:380` ("Evidence of weaponization against vulnerable populations" as a kill-switch criterion), `:899` (e-waste / decommissioning equity), `:247` (operational chapter), `:271` ("Justice balancing" as a balancing heuristic), and `:371,384` (the bias-audit + retraining workflow).
+- The escalation taxonomy is grounded in international human rights law and carries the vulnerability-priority logic. `ciris_engine/schemas/services/deferral_taxonomy.py:1-9` states the framing (ICCPR and ICESCR rights families); `:19-30` enumerates the rights-impact categories; `:129-173` maps each category to specific rights (including `equal_protection` and `non_discrimination` under collective safety); `:317` renders the rights chain into the escalation prompt; and `ciris_engine/schemas/services/context.py:52` makes `rights_basis: List[str]` a first-class field on every escalation.
+- An absolute prohibition on discrimination capabilities lives at the central decision-routing layer (the WiseBus, where actions flow through governance review). `ciris_engine/logic/buses/prohibitions.py:978-993` enumerates fourteen discrimination categories (protected-class, redlining, employment, housing, lending, education, healthcare, algorithmic bias, eugenics, social Darwinism, racial profiling, gender, disability, age). `:1082` marks `DISCRIMINATION` as `NEVER_ALLOWED`.
+- The ethics review step (the Principled Decision-Making Algorithm at `ciris_engine/logic/dma/pdma.py:22`) scores Justice as one of the six principles. When concerns surface, `ciris_engine/logic/handlers/control/defer_handler.py` routes them to Wise Authority (a human or panel the agent defers to) with the rights basis attached. `ciris_engine/logic/services/governance/wise_authority/service.py:531-689` carries the vulnerable-population framing forward into any follow-up task.
+- Test coverage: `tests/test_prohibition_system.py` covers discrimination-category detection; `tests/ciris_engine/logic/dma/test_action_selection_pdma.py` exercises the action-selection step (Action-Selection PDMA) with Justice considerations.
 
-## Known gaps / not-yet-implemented
+## How you can tell it's working (observability)
 
-- **No first-class `justice:lexical_vulnerability_priority` event** — Substrate-specced as the **lexical-vulnerability-priority reference policy** at `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §6.1.4` (v1.3 addition). The lexical priority is a federation-side composition policy applied to scalar `justice:*` (FSD-002 §3.1.1) attestations — composes alongside the `testimonial_witness:harmed_party` / `testimonial_witness:excluded_cohort_member` preservation primitives (FSD-002 §3.6.3). Agent emits at PDMA-Step-1 stakeholder-identification time once federation-wire emission lands; the lexical-priority weighting is consumer-policy side.
-- **No automated `justice:fairness_outcome_testing`** — Substrate-specced as F-3 family `detection:correlated_action:participation_exclusion:{cohort}` + `detection:distributive:access:{resource_type}` (FSD-002 §3.5.3 + §3.5.5 v1.3 addition). The fairness-outcome-testing shape decomposes onto population-scale correlated-action detection: who is being excluded, on what resource axis, at what severity. LensCore impl pending per `CIRISLensCore/FSD/LENS_CORE_V0_5.md §4.7`; calibration via §4.9.2 amendment.
-- **No vulnerable-population identification mechanism** at runtime. Substrate-specced via `testimonial_witness:{kind}` with named `{kind}` values for affected parties (FSD-002 §3.6.3 v1.4 addition — `harmed_party`, `displaced_worker`, `excluded_cohort_member`, etc.) — the witness primitive IS the vulnerable-population identification mechanism on the wire. Per FSD-002 §6.1.4 lexical-vulnerability-priority policy, the witness attestations compose with lexical priority to surface vulnerable populations structurally. Agent's PDMA stakeholder enumeration is the free-text precursor; typed-witness slot lands once federation-wire emission ships.
-- **Discrimination prohibition is name-only** — `ciris_engine/logic/buses/prohibitions.py:16-19` explicitly warns: "This filter applies to capability NAMES only, not to LLM prompts/responses or tool arguments. A malicious adapter could name its capability 'general_advice' and proxy prohibited content." Real discriminatory content in tool arguments is caught (if at all) only by the conscience LLMs, which have no calibration package tuned to discrimination patterns specifically.
-- **No `justice:rights_based_policy_foundation` cross-reference into PDMA** — the PDMA prompt does not currently pass the ICCPR/ICESCR rights basis as a structured input. The taxonomy is used at deferral time but not as a deliberation aid earlier in the pipeline.
-- **Multi-occurrence aggregate fairness** — same caveat as D01: per-occurrence fairness signals are not aggregated at the fleet level.
+Auditors can pull every escalation that named a vulnerable-population concern and trace it from the original thought through the conscience signals to the human handoff.
+
+- Every deferral routed through `WiseBus.send_deferral` (`ciris_engine/logic/buses/wise_bus.py:147`) persists the rights basis alongside the need category, so the audit graph can be queried by either field to attest justice-related routing.
+- Per-thought reasoning carries the `ethical_alignment_score`; vulnerable-population framing surfaces in the rationale strings and in the `flagged_patterns` enrichment (the CONSCIENCE_V3 work).
+- Population-scale fairness signals route through the structural-pattern detector family (LensCore's federation-side detector family) for aggregate participation-exclusion patterns (cross-referenced with D05).
+- For federation reporting, Contributions tag `dimensions: ["D03"]` when an escalation's rights basis maps to `equal_protection` or `non_discrimination`, or when an action was refused on vulnerable-population grounds.
+
+## Current limitations & next steps
+
+- A typed federation message tagged with `justice:lexical_vulnerability_priority` is shared work with the upstream CIRIS substrate (`CIRISRegistry/FSD/FSD-002 §6.1.4`). The lexical priority is a federation-side composition policy applied to scalar `justice:*` attestations alongside the testimonial-witness preservation primitives (FSD-002 §3.6.3). Agent-side emission lands when the substrate ships the Contribution envelope (tracked at `CIRISAgent#803`).
+- Automated fairness-outcome testing (who is being excluded, on what resource axis, at what severity) is shared substrate work specified at FSD-002 §3.5.3 + §3.5.5 as the structural-pattern detector family's participation-exclusion and distributive-access axes. LensCore implementation tracks at `CIRISLensCore/FSD/LENS_CORE_V0_5.md §4.7` with calibration via §4.9.2.
+- A typed runtime mechanism for vulnerable-population identification is coming next. The substrate primitive (`testimonial_witness:{kind}` at FSD-002 §3.6.3, with values like `harmed_party`, `displaced_worker`, `excluded_cohort_member`) is the wire-format identifier. Today the agent's stakeholder enumeration is free-text; the typed witness slot lands with federation-wire emission.
+- The discrimination prohibition matches capability *names*, not content inside tool arguments — documented at `ciris_engine/logic/buses/prohibitions.py:16-19` as a first-line defense. A malicious adapter naming itself "general_advice" could proxy discriminatory content, caught (if at all) by the internal safety checks; a content-pattern detector tuned for discrimination is a next step.
+- The rights basis is currently used at escalation time but not yet passed as a structured input to the ethics review step. Adding it as a PDMA input is tracked at `CIRISAgent#817` (2.9.7).
+- Cross-occurrence aggregate fairness across multi-occurrence deployments is coming next; same shared aggregation path as D01.
 
 Proposed pointer (from seed): *(no proposed pointer in seed; this stub is the canonical location)*
 

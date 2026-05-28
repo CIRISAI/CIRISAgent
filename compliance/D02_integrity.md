@@ -38,51 +38,56 @@ Densest sub-leaf decomposition: ASEAN alone uses 44 distinct sub-leaves.
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-Integrity is the system-holds-together property — CIRIS implements it through a tamper-evident audit chain, identity-variance bounds, a build-time signed manifest, and the L1-L5 attestation ladder. The chain is the load-bearing surface; everything else hangs off it.
+Integrity is the "system holds together" property — proof that the running agent is the same software that was signed, that its actions have not been silently rewritten, and that its identity has not drifted past safe bounds. Without integrity, every other ethical claim becomes unverifiable.
 
-- **Audit chain (lifecycle integrity)**:
-    - `ciris_engine/logic/audit/persist_signing.py:23` — resolves the agent's CIRISVerify-backed Ed25519 signing material; same key bridges legacy chain and signs every regular entry
-    - `ciris_engine/logic/audit/persist_signing.py:60` — signs canonical bytes (canonicalization owned by persist's `audit_canonicalize_for_signing`)
-    - `ciris_engine/logic/audit/persist_signing.py:78` — tenant_id resolution (`agent-default` when `CIRIS_AGENT_TENANT` unset)
-    - `ciris_engine/logic/audit/verifier.py:72` — `verify_complete_chain()` walks the full chain via persist's `audit_verify_chain` against `cirislens_audit_log`
-    - `ciris_engine/logic/audit/chain_bridge.py:132` — A0b bridge entry brings the legacy `ciris_audit.db` chain into persist's canonical store; signed with the same TPM-backed key as regular entries
-    - `ciris_engine/logic/services/graph/audit_service/service.py:192-196` — A3 cutover: all writes go through `_write_to_persist_chain`; reads delegate to persist's verifier; legacy `AuditHashChain` / `AuditSignatureManager` removed
-- **Reproducibility / lifecycle (build-time integrity)**:
-    - `tools/dev/stage_runtime.py:1-52` — canonical runtime tree staging; mirrors `ciris_verify_core::security::build_manifest::walk_file_tree` + `ExemptRules` so the `file_tree_hash` computed at sign time equals the one CIRISVerify computes at verify time
-    - `tools/dev/stage_runtime.py:76-101` — `ExemptRules` serialized into signed `FileTreeExtras`; deterministic across CI and runtime
-    - `tools/templates/generate_manifest.py` — generates a signed manifest of pre-approved agent templates
-- **Identity-variance bounds (doctrinal continuity)**:
-    - `ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py:43-50` — `IdentityVarianceMonitor` tracks drift from baseline; triggers WA review when variance exceeds 20% threshold
-    - `ciris_engine/schemas/infrastructure/identity_variance.py` — `IdentitySnapshot`, `IdentityDiff`, `VarianceReport`, `WAReviewRequest` schemas
-- **Hardware-rooted signing material**:
-    - `ciris_adapters/ciris_verify/adapter.py:175-215` — `_migrate_wa_keys()` and `_migrate_secrets_master_key()` move WA signing keys + secrets master key into CIRISVerify's TPM/Keystore when hardware is available
-    - `ciris_engine/logic/services/infrastructure/authentication/service.py:1790-1859` — `_register_agent_pubkey_with_persist()` registers the agent's pubkey with `accord_public_keys` (C3 lane); audit-chain verifiers resolve `signing_key_id → pubkey` here
-- **Policy/schema surface**:
-    - `ciris_engine/schemas/services/attestation.py:13-219` — `AttestationResult` carries `audit_ok`, `file_integrity_ok`, `module_integrity_ok`, integrity-failure reasons, per-file results
-    - `ciris_engine/schemas/audit/hash_chain.py` and `ciris_engine/schemas/audit/verification.py` — chain + verification result schemas
-    - `FSD/TRACE_WIRE_FORMAT.md:495-562` — federation wire spec for the per-trace integrity block
+## How CIRIS implements this today
 
-## Observability hooks
+CIRIS rests integrity on four pillars: a cryptographically signed log of every action the agent took (the audit chain), a fingerprint of every file in the running build, a monitor that watches for drift between the agent's intended identity and its actual behavior, and modern signing algorithms (Ed25519 + ML-DSA-65 post-quantum) rooted in hardware where available. The audit chain is load-bearing; everything else hangs off it.
 
-- **LensCore F-3 family**: not yet implemented in this repo. Per-trace integrity dimensions (`audit_ok`, `file_integrity_ok`, `binary_ok`, `env_ok`, `registry_ok`, `hardware_backed`) are projected into every traced thought via `VerifyAttestationContext` (`ciris_engine/schemas/runtime/system_context.py:163`) so the lens can run k_eff analysis treating each as a separate near-zero-correlation dimension — see `FSD/TRACE_WIRE_FORMAT.md:519-522`.
-- **Audit chain queries**: downstream verification uses `engine.audit_list_entries(filter_json, cursor, limit)` (tenant-scoped DESC by sequence_number) and `engine.audit_verify_chain` for end-to-end walk. Production fixture: 69-entry chain (clean + tampered) — see `ciris_engine/logic/audit/verifier.py:72-100`.
-- **Identity drift telemetry**: `IdentityVarianceMonitor` periodically samples identity state into `IdentitySnapshot` nodes (`created_by="identity_variance_monitor"` per `ciris_engine/schemas/services/nodes.py:281`); drift > 20% raises `WAReviewRequest`.
-- **Telemetry rollup**: `/v1/telemetry/unified` (`ciris_engine/logic/adapters/api/routes/telemetry.py:1879+`) aggregates audit/incident/tsdb services into a single integrity health view.
-- **TSDB consolidation**: `ciris_engine/logic/services/graph/tsdb_consolidation/service.py:539` preserves the `cirislens_audit_log` chain across consolidation windows; `AuditConsolidator` (`service.py:97`) generates `tsdb_consolidate_audit` summary nodes per window.
-- **Federation evidence_refs**: emitted Contributions cite `dimensions: ["D02"]` when instantiating integrity claims; per-row `verify_attestation` block in traces carries the full ladder state. CONF-03 (ASEAN explainability fallback vs other three batches holding it constitutive) should surface in evidence_refs as a mutability flag.
+- **The audit chain — a tamper-evident running record of every action**:
+    - `ciris_engine/logic/audit/persist_signing.py:23` — resolves the agent's signing key; the same key bridges the legacy log and signs every new entry.
+    - `ciris_engine/logic/audit/persist_signing.py:60` — signs canonical bytes so two verifiers compute the same fingerprint.
+    - `ciris_engine/logic/audit/persist_signing.py:78` — tenant scoping (`agent-default` when no tenant set).
+    - `ciris_engine/logic/audit/verifier.py:72` — `verify_complete_chain()` walks the full log end-to-end and reports any break.
+    - `ciris_engine/logic/audit/chain_bridge.py:132` — brings the older audit DB into the canonical store, signed by the same hardware-backed key.
+    - `ciris_engine/logic/services/graph/audit_service/service.py:192-196` — every write goes through the persist chain; legacy direct-write paths are removed.
+- **Build-time integrity — proof the running files match what CI signed**:
+    - `tools/dev/stage_runtime.py:1-52` — produces a deterministic runtime tree so the fingerprint computed at sign time equals the one computed at verification time.
+    - `tools/dev/stage_runtime.py:76-101` — exemption rules are themselves signed into the manifest, so what's excluded is auditable too.
+    - `tools/templates/generate_manifest.py` — signs the manifest of pre-approved agent templates.
+- **Identity-variance monitor — watches for drift from baseline**:
+    - `ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py:43-50` — tracks drift; triggers Wise Authority review when variance exceeds 20%.
+    - `ciris_engine/schemas/infrastructure/identity_variance.py` — `IdentitySnapshot`, `IdentityDiff`, `VarianceReport`, `WAReviewRequest` schemas.
+- **Hardware-rooted signing material — keys that never leave the chip**:
+    - `ciris_adapters/ciris_verify/adapter.py:175-215` — migrates Wise Authority signing keys and the secrets master key into a Trusted Platform Module (TPM — a hardware chip that signs cryptographically without ever exposing the private key) or platform secure enclave when available.
+    - `ciris_engine/logic/services/infrastructure/authentication/service.py:1790-1859` — publishes the agent's public key to the federation directory; verifiers resolve key ID → pubkey from there.
+- **Schemas that carry the integrity state**:
+    - `ciris_engine/schemas/services/attestation.py:13-219` — `AttestationResult` carries booleans for audit, file-integrity, module-integrity, per-file results, and failure reasons.
+    - `ciris_engine/schemas/audit/hash_chain.py` and `ciris_engine/schemas/audit/verification.py` — chain and verification schemas.
+    - `FSD/TRACE_WIRE_FORMAT.md:495-562` — federation wire spec for the per-trace integrity block.
 
-## Known gaps / not-yet-implemented
+## How you can tell it's working (observability)
 
-- LensCore F-3 detector family (cross-trace integrity correlation analysis) — Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.5.1` as the five Coherence-Ratchet detectors, including `detection:hash_chain_integrity` (boolean-via-score, -1 on break — "non-forgeable evidence of deletion") + `detection:intra_agent_consistency` (signed — same agent over time, sudden self-inconsistency). LensCore phasing per `CIRISLensCore/FSD/LENS_CORE_V0_5.md §4.7` (the five CCA §F detectors are v0.6+ work; v0.5 ships `cohort_mismatch`, `manifold_outlier`, `unconsented_external_probe`). Substrate substitution trajectory routes detection into LensCore at step 3.
-- No automated `attestation:l5` ratification flow yet — L5 requires both `audit_ok` and `play_integrity_ok`. Substrate-specced as `attestation:l5:agent_integrity` (FSD-002 §3.2; Verify §4 + Agent §4.6 — "agent source-tree byte-equal against registered manifest"). TPM-quote equivalent for server-side is structurally supported via `TPMAttestation` proto in `CIRISVerify/FSD/FSD-001 §4 HardwareAttestation` (`tpm_quote` + `pcr_values` + `aik_certificate` fields). Server-side L5 lands when agent populates `attestation:l5:agent_integrity` from a TPM-quote rather than from Play Integrity.
-- `accord_public_keys` registration (`service.py:1790`) is one-way — Substrate-specced via the `delegates_to` structural primitive (FSD-002 §2.2.1) with `delegation_purpose: "hardware_rotation"` and bounded `delegation_valid_from`/`delegation_valid_until` window. Rotation surfaces structurally through the `delegates_to` chain in the federation chain; agent emits the rotation `delegates_to` row once federation-wire `delegates_to` envelopes land. Anti-rollback specced as `rollback_detected:{revision_field}` (FSD-002 §3.2 — "-1 only" polarity — "Anti-rollback — decrease in revocation revision").
-- `tsdb_consolidate_audit` summary nodes carry `audits=attrs.get("audits", [])` lists but no chain hash anchor — a consolidation window's integrity proof is implicit in the persist chain, not explicit in the summary node.
-- CONF-03 (ASEAN §A.4.18 explainability fallback) is not yet wire-flagged; downstream consumers cannot distinguish "explainability constitutive" vs "explainability fallback admissible" in evidence_refs.
-- Cross-substrate provenance from CIRISVerify → CIRISRegistry → CIRISAgent is fully implemented for binary + file-tree integrity but does NOT yet extend to localization artifacts (`localization/*.json`, `ciris_engine/data/localized/*.txt`) at L4 granularity — they share a single coarse hash rather than per-locale signed sub-manifests.
-- TSDB consolidation occasionally produces `tsdb_consolidate_audit` summary nodes (`tsdb_consolidation/service.py:720,1088,1197`) but their integrity guarantee is implicit in the persist chain — no explicit Merkle anchor per consolidation window.
-- Test coverage: `tests/ciris_engine/logic/services/graph/test_audit_service.py` exercises persist-routed chain writes and `verify_complete_chain` against a 69-entry fixture but no fixture asserts that identity-variance + audit-chain + file-integrity together compose into a single "integrity verified" attestation surface.
+If you want to verify integrity yourself, the surfaces below tell you what the agent claims and let you re-check the claim independently.
+
+- **Per-trace integrity block**: every traced thought carries six near-independent integrity signals (audit-chain OK, file-integrity OK, binary OK, environment OK, registry OK, hardware-backed) via `VerifyAttestationContext` (`ciris_engine/schemas/runtime/system_context.py:163`). They are independent on purpose so a downstream analyst cannot be fooled by one signal masking another (`FSD/TRACE_WIRE_FORMAT.md:519-522`).
+- **Re-walk the chain**: `engine.audit_list_entries(filter_json, cursor, limit)` paginates the log; `engine.audit_verify_chain` walks it end-to-end. A production fixture (clean + tampered, 69 entries) exercises both paths — see `ciris_engine/logic/audit/verifier.py:72-100`.
+- **Identity-drift telemetry**: the variance monitor periodically writes `IdentitySnapshot` nodes (`created_by="identity_variance_monitor"`, `ciris_engine/schemas/services/nodes.py:281`); drift over 20% raises a Wise Authority review request.
+- **Unified telemetry rollup**: `/v1/telemetry/unified` (`ciris_engine/logic/adapters/api/routes/telemetry.py:1879+`) aggregates audit, incident, and TSDB services into a single integrity health view.
+- **Long-window preservation**: TSDB consolidation preserves the chain across consolidation windows (`ciris_engine/logic/services/graph/tsdb_consolidation/service.py:539`) and writes a per-window audit summary node (`service.py:97`).
+- **Federation evidence**: outbound Contributions cite `dimensions: ["D02"]` when integrity is the load-bearing claim; the per-trace integrity block carries the full ladder state.
+
+## Current limitations & next steps
+
+- **Cross-trace correlation detector (LensCore F-3 family)** — coming next via the upstream LensCore substrate. The detector family is specified in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.5.1` (chain-integrity break detector + intra-agent consistency detector). LensCore v0.5 ships three detectors today; the chain-integrity family lands in v0.6 (`CIRISLensCore/FSD/LENS_CORE_V0_5.md §4.7`). Tracked at `CIRISLensCore#26`.
+- **Level-5 attestation on server platforms** — currently L4 on server; L5 on mobile (Android Play Integrity). Server-side L5 lands when the agent populates an L5 claim from a TPM hardware-quote (`CIRISVerify/FSD/FSD-001 §4 HardwareAttestation` already specifies the wire format with `tpm_quote` + `pcr_values` + `aik_certificate`). Substrate spec is ready; agent-side integration is the next step.
+- **Key rotation as a signed event** — the public-key directory accepts registration; rotation is operator-driven today. Next step: emit rotation as a structural delegation event over the wire (FSD-002 §2.2.1 `delegates_to:hardware_rotation`), with anti-rollback enforced via the `rollback_detected:{revision_field}` primitive (FSD-002 §3.2).
+- **Per-window tamper-evident anchor in TSDB summaries** — consolidation summary nodes today carry the audit list but no separate chain-hash anchor; the integrity guarantee is implicit in the chain rather than explicit in the summary.
+- **CONF-03 explainability-fallback mutability flag** — the ASEAN explainability-fallback admissibility is not yet flagged in outbound evidence; downstream consumers cannot yet distinguish "explainability constitutive" from "explainability fallback admissible."
+- **Per-locale signed sub-manifests** — localization artifacts (`localization/*.json`, `ciris_engine/data/localized/*.txt`) currently share a single coarse hash. Per-locale granularity is shared work with the upstream CIRISRegistry substrate; tracked at `CIRISRegistry#29`.
+- **Composite integrity fixture** — existing tests cover chain-write and end-to-end verification against a 69-entry fixture, but no single fixture asserts that identity-variance + audit-chain + file-integrity compose into a unified "integrity verified" surface. Tracked at `CIRISAgent#805`.
 
 Proposed pointer (from seed): `(none specified in seed)` — primary code references: `ciris_engine/logic/audit/`, `ciris_engine/logic/services/graph/audit_service/`, `tools/dev/stage_runtime.py`, `ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py`.
 

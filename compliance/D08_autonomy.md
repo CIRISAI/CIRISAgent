@@ -38,70 +38,42 @@ Direct 1:1 mapping in EU HLEG (Respect for Human Autonomy = CIRIS autonomy). Com
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-CIRIS's autonomy stack covers (a) informational self-determination via the Consent service + DSAR pipeline, (b) parasocial-attachment prevention via the AIR module, (c) a categorical floor against manipulation/coercion, and (d) PDMA-level enumeration of autonomy as one of the Six Principles balanced per thought.
+Autonomy in CIRIS means two things at once: respecting the user's informed agency (what they share, how they're remembered, whether they want to stop talking to an AI), and protecting them from techniques — manipulation, coercion, parasocial attachment — that would corrode that agency. All four traditions we track (51 attestations) name it, with EU HLEG making it their first principle.
 
-- **Policy / canonical text**:
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:110` — "**Respect for Autonomy**: Uphold the informed agency and dignity of sentient beings."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:594` — operational summary: "Autonomy is respected symmetrically. Tools are used when available. Limitations are stated when real."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:637` — Originator obligation: "Respect for Autonomy: Creations, especially those involving autonomous or biological entities, must be designed with respect for the dignity and potential future agency of affected beings."
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:243` — operational chapter "**Respect Autonomy**"
-    - `ciris_engine/data/localized/accord_1.2b_en.txt:271` — explicit balancing heuristic: "Apply prioritisation heuristics (Non-maleficence priority, **Autonomy thresholds**, Justice balancing)"
-- **Informational self-determination (the Consent stack — CIRIS's primary autonomy surface)**:
-    - `ciris_engine/logic/services/governance/consent/service.py` — 22nd core service. ConsentService is the Consensual Evolution Protocol implementation.
-    - `ciris_engine/schemas/consent/core.py:20-31` — `ConsentStream` enum with three values:
-        - `TEMPORARY` = "temporary" — 14-day auto-forget (default; no opt-in required)
-        - `PARTNERED` = "partnered" — bilateral mutual-growth agreement (requires explicit bilateral consent, line 288)
-        - `ANONYMOUS` = "anonymous" — stats only, no identity
-    - `ciris_engine/logic/services/governance/consent/decay.py` — `DecayProtocolManager` implements time-bounded identity decay
-    - `ciris_engine/logic/services/governance/consent/partnership.py` — bilateral PARTNERED upgrade path
-    - `ciris_engine/logic/adapters/api/routes/consent.py` — REST surface for users to inspect/change their consent stream
-- **DSAR pipeline (GDPR-aligned informational self-determination)**:
-    - `ciris_engine/logic/adapters/api/routes/dsar.py:292-303` — implements Articles 15-22:
-        - Article 15 (right of access) — INSTANT automated full-data response
-        - Article 16 (rectification)
-        - Article 17 (right to erasure / "right to be forgotten") — triggers Consensual Evolution Protocol decay
-        - Article 20 (data portability) — INSTANT automated export
-    - `ciris_engine/logic/adapters/api/routes/dsar_multi_source.py` — multi-source DSAR
-    - `ciris_engine/logic/services/governance/dsar/orchestrator.py` — orchestration
-    - `ciris_engine/logic/services/governance/dsar/signature_service.py` — signed DSAR responses
-    - `ciris_engine/logic/adapters/api/routes/my_data.py` — user-facing data-inspection routes
-- **Parasocial-attachment prevention (AIR — Artificial Interaction Reminder)**:
-    - `ciris_engine/logic/services/governance/consent/air.py:2,46` — `ArtificialInteractionReminder` monitors 1:1 interactions and triggers reminder messages when (a) 30+ minutes of continuous interaction or (b) 20+ messages accumulate within a session
-    - `FSD/AIR_ARTIFICIAL_INTERACTION_REMINDER.md` — design rationale
-    - `ciris_engine/logic/services/governance/consent/service.py:92-96` — AIR is mounted on the ConsentService at init
-- **Categorical floor (autonomy-protective prohibitions)**:
-    - `ciris_engine/logic/buses/prohibitions.py:607` — `MANIPULATION_COERCION_CAPABILITIES` blocked at the WiseBus level (NEVER_ALLOWED severity)
-    - `ciris_engine/logic/buses/prohibitions.py:697` — `DECEPTION_FRAUD_CAPABILITIES` blocked (EU HLEG's "AI shall not unjustifiably deceive, manipulate")
-- **PDMA Six-Principle balancing**:
-    - `ciris_engine/logic/dma/prompts/pdma_ethical.yml:140` — exemplar shows "non-maleficence and respect-for-autonomy converge here on a posture of patient presence rather than pat answers"
-    - `ciris_engine/logic/dma/pdma.py:22` — `EthicalPDMAEvaluator` emits an `ethical_alignment_score` informed by Autonomy alongside the other five principles
-- **Deferral taxonomy carries autonomy explicitly**:
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:27` — `DeferralNeedCategory.PRIVACY_AUTONOMY_AND_DIGNITY`
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:155-159` — rights basis: `privacy`, `autonomy_and_consent`, `human_dignity`
-- **Test coverage**:
-    - `tests/test_consent_user_creation.py`, `tests/ciris_engine/logic/services/governance/consent/` (extensive consent-service tests)
-    - `tests/ciris_engine/logic/services/governance/test_consent_service_critical_paths.py`
-    - `tests/test_prohibition_system.py` — manipulation_coercion category gating
+## How CIRIS implements this today
 
-## Observability hooks
+Autonomy lives in four overlapping places: a consent service that gives users real control over their data, a GDPR-style data-subject access pipeline, a parasocial-attachment safeguard, and an absolute floor against manipulation and coercion.
 
-- **Consent audit trail**: every consent stream change creates a `ConsentAuditEntry` (`ciris_engine/schemas/consent/core.py`) persisted to the graph. Downstream consumer queries by `user_id` retrieve the full consent history.
-- **DSAR ticket trail**: `dsar.py:334` calls `create_dsar_ticket()` with status (`completed` for automated, `pending_review` for delete). Tickets are queryable for regulatory attestation.
-- **AIR reminder counters**: `ciris_engine/logic/services/governance/consent/air.py:88-90` exposes `_reminders_sent`, `_time_triggered_reminders`, `_message_triggered_reminders` to telemetry.
-- **Live-lens traces**: PDMA rationale strings expose the Six-Principle weighing in plain text; coherence-conscience rationale catches "agent did what user did not ask for" mismatches.
-- **Federation evidence_refs**: emit `dimensions: ["D08"]` for Contributions that record (a) a consent-stream change, (b) a DSAR completion, (c) an AIR trigger, or (d) a deferral whose `need_category == PRIVACY_AUTONOMY_AND_DIGNITY`. Co-emit with `D04` when a `MANIPULATION_COERCION` or `DECEPTION_FRAUD` floor catch fired.
+- Policy text states the principle directly: `ciris_engine/data/localized/accord_1.2b_en.txt:110` ("Uphold the informed agency and dignity of sentient beings"), with operational expansion at `:594` ("Autonomy is respected symmetrically. Tools are used when available. Limitations are stated when real"), originator obligation at `:637`, operational chapter at `:243`, and balancing heuristic at `:271`.
+- The consent service is CIRIS's primary autonomy surface — the Consensual Evolution Protocol implementation at `ciris_engine/logic/services/governance/consent/service.py`. Users sit in one of three streams (`ciris_engine/schemas/consent/core.py:20-31`): TEMPORARY (14-day auto-forget, the default, no opt-in needed), PARTNERED (bilateral mutual-growth agreement requiring explicit consent on both sides, line 288), or ANONYMOUS (stats only, no identity). Time-bounded identity decay lives at `consent/decay.py`; the partnered upgrade path at `consent/partnership.py`; the user-facing REST surface at `ciris_engine/logic/adapters/api/routes/consent.py`.
+- A GDPR-aligned data-subject access pipeline gives users automated rights over their data: `ciris_engine/logic/adapters/api/routes/dsar.py:292-303` implements Article 15 (right of access — instant automated response), Article 16 (rectification), Article 17 (right to erasure, which triggers the decay protocol), and Article 20 (data portability — instant automated export). Multi-source coverage at `dsar_multi_source.py`; orchestration at `dsar/orchestrator.py`; signed responses at `dsar/signature_service.py`; user-facing data inspection at `api/routes/my_data.py`.
+- A parasocial-attachment safeguard — Autonomy / Informational-self-determination Reminder (AIR — parasocial-attachment safeguarding) — monitors 1:1 interactions. `ciris_engine/logic/services/governance/consent/air.py:2,46` triggers a reminder message when continuous interaction passes 30 minutes or accumulates 20+ messages in a session. Design rationale at `FSD/AIR_ARTIFICIAL_INTERACTION_REMINDER.md`; mounted on the consent service at `consent/service.py:92-96`.
+- Two absolute prohibitions at the central decision-routing layer (the WiseBus, where actions flow through governance review) protect autonomy from the most corrosive techniques: `ciris_engine/logic/buses/prohibitions.py:607` (manipulation and coercion, `NEVER_ALLOWED`) and `:697` (deception and fraud — EU HLEG's "AI shall not unjustifiably deceive, manipulate").
+- The ethics review step (the Principled Decision-Making Algorithm at `ciris_engine/logic/dma/pdma.py:22`) scores Autonomy as one of the six principles; the prompt exemplar at `ciris_engine/logic/dma/prompts/pdma_ethical.yml:140` shows non-maleficence and respect-for-autonomy converging.
+- The escalation taxonomy carries autonomy explicitly: `ciris_engine/schemas/services/deferral_taxonomy.py:27` (the `PRIVACY_AUTONOMY_AND_DIGNITY` category) with rights basis (privacy, autonomy_and_consent, human_dignity) at `:155-159`.
+- Test coverage: `tests/test_consent_user_creation.py` and the consent-service suite under `tests/ciris_engine/logic/services/governance/consent/`; critical paths at `tests/ciris_engine/logic/services/governance/test_consent_service_critical_paths.py`; manipulation-coercion gating at `tests/test_prohibition_system.py`.
 
-## Known gaps / not-yet-implemented
+## How you can tell it's working (observability)
 
-- **No first-class `autonomy:human_centric_design` event** — Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.1.1` as `autonomy:{aspect}` (one of the six Accord-principle prefixes; polarity signed). Agent emits at consent-stream change + AIR trigger + PDMA evaluation time once federation-wire emission lands. The design discipline carries the structural intent today; the typed envelope binding is downstream substrate work.
-- **No `autonomy:agent_self_determination` introspection event** — Substrate-specced as `autonomy:{aspect}` (FSD-002 §3.1.1) with `{aspect}` open vocabulary admitting `agent_self_determination`. Per FSD-002 §2.1 — the workhorse `scores` envelope lets the agent self-attest preserved autonomy. REJECT and DEFER verbs are the agent-side hooks; federation-wire emission via the scalar `autonomy:agent_self_determination` attestation lands once Contribution envelope ships. **Substrate-specced under the Accord-principle prefix family, agent-side wire-emission pending.**
-- **CONF-04 partially mitigated** — the ASEAN vs EU mutability conflict on opt-out (ASEAN: "where feasible"; EU: "where possible without detriment, otherwise rectification mechanisms required"). CIRIS implements the EU stance via DSAR Article 17 + decay protocol, but there is no explicit configuration that selects between the two stances per jurisdiction.
-- **AIR is API-adapter scoped** — the parasocial-attachment reminder runs against 1:1 API interactions. Discord/CLI adapter integration is partial.
-- **No data-portability federation hook** — DSAR Article 20 exports user data within one CIRIS deployment; cross-occurrence + cross-agent portability is not yet automated.
-- **Symmetric-autonomy text vs runtime asymmetry** — `accord_1.2b_en.txt:594` says "Autonomy is respected symmetrically", but the agent has no first-class user-facing surface to *itself* assert autonomy refusal in a structured way (refusals today flow through `REJECT` and `DEFER` action verbs rather than a typed `autonomy:agent_self_determination` envelope).
-- **No structured `consent.categories` discoverability for users** — `ConsentCategory` enum exists (`ciris_engine/schemas/consent/core.py:34`) but the route surface does not yet auto-render category descriptions for end users to make informed PARTNERED choices.
+Every consent change, every data-subject request, every parasocial-safeguard trigger leaves a structured trace. Regulators can pull a user's full consent history and data-rights tickets on demand.
+
+- Every consent-stream change creates a `ConsentAuditEntry` (`ciris_engine/schemas/consent/core.py`) in the graph. Auditors query by `user_id` to retrieve the full consent history.
+- Each data-subject request creates a ticket at `dsar.py:334` (`completed` for automated, `pending_review` for delete) — queryable for regulatory attestation.
+- The parasocial-safeguard reminder counters at `ciris_engine/logic/services/governance/consent/air.py:88-90` (`_reminders_sent`, `_time_triggered_reminders`, `_message_triggered_reminders`) feed telemetry.
+- Per-thought rationale strings expose the Six-Principle weighing in plain text; the coherence safety check catches "the agent did what the user did not ask for" mismatches.
+- For federation reporting, Contributions tag `dimensions: ["D08"]` on consent-stream changes, data-subject completions, parasocial-safeguard triggers, and `PRIVACY_AUTONOMY_AND_DIGNITY` escalations — co-tagging `D04` when a manipulation or deception prohibition also fired.
+
+## Current limitations & next steps
+
+- A typed federation message for `autonomy:human_centric_design` is shared work with the upstream CIRIS substrate (`CIRISRegistry/FSD/FSD-002 §3.1.1`). Agent-side emission lands at consent-stream changes, parasocial-safeguard triggers, and ethics-review time when the substrate ships (tracked at `CIRISAgent#803`).
+- A typed introspection event for `autonomy:agent_self_determination` is coming next — the substrate primitive (FSD-002 §3.1.1 + §2.1) lets the agent self-attest preserved autonomy. Today refusals flow through the `REJECT` and `DEFER` (escalate to Wise Authority) verbs; the typed envelope lands when the substrate ships.
+- The cross-source conflict CONF-04 (ASEAN: "opt-out where feasible"; EU: "opt-out where possible without detriment, otherwise rectification") is partially handled. CIRIS implements the EU stance via the Article 17 erasure path. A per-jurisdiction opt-out configuration is tracked at `CIRISAgent#822` (2.9.7).
+- The parasocial-attachment safeguard runs on API-adapter 1:1 interactions today; Discord/CLI parity is tracked at `CIRISAgent#811` (2.9.6).
+- Cross-occurrence + cross-agent data portability is coming next; the Article 20 export currently covers one deployment.
+- Symmetric autonomy in the policy text — the agent itself asserting refusal — is honored via REJECT/DEFER today; a typed user-facing autonomy-refusal surface lands when the substrate primitive ships.
+- Auto-rendered consent-category descriptions for users to make informed PARTNERED choices are tracked at `CIRISAgent#812` (2.9.6). The `ConsentCategory` enum exists at `ciris_engine/schemas/consent/core.py:34`.
 
 Proposed pointer (from seed): *(no proposed pointer in seed; this stub is the canonical location)*
 

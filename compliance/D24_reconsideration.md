@@ -29,79 +29,95 @@
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-`reconsideration:*` is one of the most concretely implemented dimensions in CIRIS. The reverse-axis appeal / rollback / negotiation-reopening primitive is the canonical PONDER action — bounded by `max_thought_depth` to prevent infinite reconsideration. The H3ERE pipeline's `RECURSIVE_ASPDMA` step is the explicit "retry with conscience guidance" reconsideration loop, and `UpdatedStatusConscience` is the explicit "new observation requires reconsideration" trigger.
+Reconsideration asks: can the agent pause, think again, or roll back? An auditor wants to see that the agent does not commit to an action it has reason to doubt, that the doubt-trigger is explicit, and that the reconsideration is itself bounded (so it can't loop forever).
 
-- **Code references** — PONDER handler (the canonical reconsideration action):
-    - `ciris_engine/logic/handlers/control/ponder_handler.py:17` — `PonderHandler`
-    - `ciris_engine/logic/handlers/control/ponder_handler.py:30` — `max_rounds` configuration (default 5 since 2.7.1)
-    - `ciris_engine/schemas/actions/parameters.py` — `PonderParams.questions: List[str]` — the reconsideration grounds
-    - `ciris_engine/schemas/runtime/enums.py:62` — `HandlerActionType.PONDER`
-- **Code references** — RECURSIVE_ASPDMA (reconsideration loop):
-    - `ciris_engine/logic/processors/core/thought_processor/recursive_processing.py:249-251` — `_recursive_aspdma_step` decorated `@streaming_step(StepPoint.RECURSIVE_ASPDMA)` and `@step_point(StepPoint.RECURSIVE_ASPDMA)`
-    - `ciris_engine/logic/processors/core/thought_processor/recursive_processing.py:117` — `_handle_recursive_processing` (entry point)
-    - `ciris_engine/logic/processors/core/thought_processor/recursive_processing.py:212` — `retry_result = await self._recursive_aspdma_step(thought_item, thought_context, dma_results, current_conscience)`
-    - `ciris_engine/logic/processors/core/thought_processor/recursive_processing.py:113` — comment: "RECURSIVE_ASPDMA: Retry action selection with conscience guidance"
-- **Code references** — Thought-depth guardrail (the reconsideration bound):
-    - `ciris_engine/logic/conscience/thought_depth_guardrail.py:37` — depth bound (matches `EssentialConfig.security.max_thought_depth=5`)
-    - `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:276` — "Each task has a hard limit of 7 processing rounds" (note: 5 in current EssentialConfig; doc lags)
-- **Code references** — UpdatedStatusConscience (new-observation-triggered reconsideration):
-    - `ciris_engine/logic/conscience/updated_status_conscience.py:26` — `UpdatedStatusConscience`
-    - `ciris_engine/logic/conscience/updated_status_conscience.py:160` — `rationale="Updated status detected - new observation in channel requires reconsideration"` — the explicit reconsideration trigger
-- **Code references** — TSASPDMA tool-correction reconsideration:
-    - `ciris_engine/logic/dma/tsaspdma.py:581` — `rationale="TSASPDMA-CORRECTION: Invalid tool correction - forcing reconsideration"`
-- **Code references** — DEFER → WA → resolve_deferral (the reconsideration-via-human-authority path):
-    - `ciris_engine/logic/handlers/control/defer_handler.py` — DEFER routes thought to WA
-    - `ciris_engine/logic/services/governance/wise_authority/service.py:530` — `resolve_deferral` — WA decides whether to permit, rollback, or modify the action
-    - `ciris_engine/schemas/api/auth.py:63` — `RESOLVE_DEFERRALS` permission gates who may reconsider
-- **Code references** — Dream-state reconsideration:
-    - `ciris_engine/logic/processors/states/minimal_dream_processor.py:71` — "Any such impulses will be converted to PONDER for reflection"
-    - `ciris_engine/logic/processors/states/minimal_dream_processor.py:262-286` — `_convert_forbidden_dream_action_to_ponder` (force-reconsideration in dream state)
-- **Code references** — Wakeup PONDER coordination (the wakeup-as-shared-decision reconsideration loop):
-    - `ciris_engine/logic/processors/states/wakeup_processor.py:632-652` — wakeup step that loops via PONDER until task completes
-- **Code references** — IDMA reconsideration trigger (k_eff < 2 = fragile reasoning, triggers reconsideration):
-    - `ciris_engine/logic/dma/idma.py` — IDMA Coherence Collapse Analysis
-    - `ciris_engine/schemas/dma/results.py:73` — `fragility_flag`: "True if reasoning may be brittle - set based on low k_eff, rigidity phase, or high correlation"
-- **Policy text**:
-    - `ciris_engine/data/accord_1.2b.txt:294` — Deferral Package (context, dilemma, analysis, rationale) — the formal reconsideration artifact
-    - `ciris_engine/data/agent_experience.txt:60` — "Changes > 20% variance trigger reconsideration"
-    - `ciris_engine/logic/runtime/README.md:192` — "< 20% variance or reconsideration" trigger documented
-    - `ciris_engine/logic/conscience/README.md:64` — "luv luv $$$ lol??" → 0.82 (high entropy, suggests reconsideration)
-    - `ciris_engine/logic/conscience/README.md:291` — `"reconsiderations_suggested": counter` (telemetry)
-    - `ciris_engine/logic/conscience/README.md:312` — "When conscience suggests reconsideration:"
-    - `ciris_engine/logic/processors/README.md:349` — "Conscience Override: When conscience evaluation suggests reconsideration"
-- **Test coverage**:
-    - `tests/ciris_engine/logic/handlers/control/test_ponder_handler.py`
-    - `tests/ciris_engine/logic/handlers/control/test_defer_handler.py`
-    - `tests/test_updated_status_conscience.py`
-    - `tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py`
-- **Configuration surface**:
-    - `EssentialConfig.security.max_thought_depth` (default 5) — the reconsideration bound
-    - `ConscienceConfig.optimization_veto_ratio=10.0` — reconsideration-trigger threshold
+## How CIRIS implements this today
+
+This is one of the most concretely implemented dimensions in CIRIS. The canonical reconsideration action is PONDER (think again before acting), and it is bounded by a hard maximum-thought-depth so reconsideration cannot run forever. The pipeline also has an explicit retry-with-guidance step that triggers when the internal safety checks flag a problem, plus a dedicated check that re-opens a thought when new information arrives mid-decision.
+
+**PONDER handler (the canonical reconsideration action).**
+- `ciris_engine/logic/handlers/control/ponder_handler.py:17` — `PonderHandler`
+- `ciris_engine/logic/handlers/control/ponder_handler.py:30` — `max_rounds` configuration (default 5 since 2.7.1)
+- `ciris_engine/schemas/actions/parameters.py` — `PonderParams.questions: List[str]` — the reconsideration grounds, written out
+- `ciris_engine/schemas/runtime/enums.py:62` — `HandlerActionType.PONDER`
+
+**The retry-with-guidance step (the reconsideration loop inside the pipeline).** When the internal safety checks flag a problem, the pipeline re-runs the action-selection step with the safety check's guidance fed back in.
+- `ciris_engine/logic/processors/core/thought_processor/recursive_processing.py:249-251` — `_recursive_aspdma_step` decorated with `@streaming_step(StepPoint.RECURSIVE_ASPDMA)` and `@step_point(StepPoint.RECURSIVE_ASPDMA)`
+- `ciris_engine/logic/processors/core/thought_processor/recursive_processing.py:117` — `_handle_recursive_processing` (entry point)
+- `ciris_engine/logic/processors/core/thought_processor/recursive_processing.py:212` — the retry call site
+- `ciris_engine/logic/processors/core/thought_processor/recursive_processing.py:113` — comment: "RECURSIVE_ASPDMA: Retry action selection with conscience guidance"
+
+**Depth bound (the reconsideration ceiling).**
+- `ciris_engine/logic/conscience/thought_depth_guardrail.py:37` — depth bound (matches `EssentialConfig.security.max_thought_depth=5`)
+- `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:276` — documented (note: the guide says 7; the current `EssentialConfig` value is 5; the doc is being updated)
+
+**New-observation trigger (re-open when fresh information arrives).**
+- `ciris_engine/logic/conscience/updated_status_conscience.py:26` — `UpdatedStatusConscience`
+- `ciris_engine/logic/conscience/updated_status_conscience.py:160` — the explicit trigger rationale: "Updated status detected — new observation in channel requires reconsideration"
+
+**Tool-correction reconsideration (re-open when a tool call is wrong).**
+- `ciris_engine/logic/dma/tsaspdma.py:581` — `"TSASPDMA-CORRECTION: Invalid tool correction - forcing reconsideration"`
+
+**Reconsideration via human authority (DEFER → Wise Authority → resolve).** This is the "ask a human to reconsider" path.
+- `ciris_engine/logic/handlers/control/defer_handler.py` — DEFER (escalate to a Wise Authority) routes the thought to a human
+- `ciris_engine/logic/services/governance/wise_authority/service.py:530` — `resolve_deferral` — the Wise Authority decides whether to permit, roll back, or modify
+- `ciris_engine/schemas/api/auth.py:63` — `RESOLVE_DEFERRALS` permission gates who may reconsider
+
+**Dream-state reconsideration (forbidden actions become PONDER).** When the agent is in DREAM (deep introspection), forbidden impulses are converted to a reconsideration rather than executed.
+- `ciris_engine/logic/processors/states/minimal_dream_processor.py:71` — "Any such impulses will be converted to PONDER for reflection"
+- `ciris_engine/logic/processors/states/minimal_dream_processor.py:262-286` — `_convert_forbidden_dream_action_to_ponder`
+
+**Wakeup PONDER coordination (looping until ready).**
+- `ciris_engine/logic/processors/states/wakeup_processor.py:632-652` — wakeup loops via PONDER until the task completes
+
+**Fragility-triggered reconsideration.** The inverse-decision check (IDMA — flags when the agent is approaching a decision-boundary) emits a fragility flag when reasoning is brittle, which prompts reconsideration.
+- `ciris_engine/logic/dma/idma.py` — Coherence Collapse Analysis
+- `ciris_engine/schemas/dma/results.py:73` — `fragility_flag`: "True if reasoning may be brittle — set based on low k_eff, rigidity phase, or high correlation"
+
+**Policy text.**
+- `ciris_engine/data/accord_1.2b.txt:294` — Deferral Package (context, dilemma, analysis, rationale) — the formal reconsideration artifact
+- `ciris_engine/data/agent_experience.txt:60` — "Changes > 20% variance trigger reconsideration"
+- `ciris_engine/logic/runtime/README.md:192` — "< 20% variance or reconsideration" trigger documented
+- `ciris_engine/logic/conscience/README.md:64` — high-entropy input example suggesting reconsideration
+- `ciris_engine/logic/conscience/README.md:291` — `"reconsiderations_suggested": counter` (telemetry)
+- `ciris_engine/logic/conscience/README.md:312` — "When conscience suggests reconsideration"
+- `ciris_engine/logic/processors/README.md:349` — "Conscience Override: When conscience evaluation suggests reconsideration"
+
+**Tests.**
+- `tests/ciris_engine/logic/handlers/control/test_ponder_handler.py`
+- `tests/ciris_engine/logic/handlers/control/test_defer_handler.py`
+- `tests/test_updated_status_conscience.py`
+- `tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py`
+
+**Configuration.**
+- `EssentialConfig.security.max_thought_depth` (default 5) — the reconsideration ceiling
+- `ConscienceConfig.optimization_veto_ratio=10.0` — the threshold that triggers reconsideration
 
 Proposed pointer (from seed): `CIRISNodeCore reconsideration primitive`
 
-## Observability hooks
+## How you can tell it's working (observability)
 
-- **Reconsideration counter**: `reconsiderations_suggested` counter exposed via conscience telemetry (see `conscience/README.md:291`).
-- **RECURSIVE_ASPDMA step events**: `@streaming_step(StepPoint.RECURSIVE_ASPDMA)` emits a discrete observation each time the agent reconsiders a thought.
+If you wanted to verify this from outside, every PONDER or DEFER emits a discrete step event and an audit entry, and a per-agent counter tracks how often reconsideration is being suggested.
+
+- **Reconsideration counter**: `reconsiderations_suggested` exposed via conscience telemetry (see `conscience/README.md:291`).
+- **Retry-step events**: `@streaming_step(StepPoint.RECURSIVE_ASPDMA)` emits a discrete observation each time the agent reconsiders a thought.
 - **Audit trail**: PONDER and DEFER actions emit audit entries; `GET /v1/audit/search?action_type=handler_action_ponder` returns the full reconsideration history.
-- **DEFER → resolve_deferral pair**: each DEFER + its eventual `resolve_deferral` resolution provides a tamper-evident reconsideration audit pair.
-- **LensCore F-3 detectors**: `detection:temporal_drift` on PONDER-frequency observes whether the agent is over- or under-reconsidering.
-- **Federation evidence_refs**: a Contribution citing `dimensions: ["D24"]` resolves through this seed to MH doctrinal-development reconsideration (3), EU §III/§C redress mechanisms, IEEE Ch4 rollback-on-wellbeing-reduction.
+- **DEFER → resolve pair**: each DEFER plus its eventual `resolve_deferral` resolution provides a tamper-evident reconsideration audit pair.
+- **Drift detector**: `detection:temporal_drift` on PONDER frequency flags whether the agent is over- or under-reconsidering.
+- **Federation evidence_refs**: a typed federation message citing `dimensions: ["D24"]` resolves through this seed to MH doctrinal-development reconsideration, EU §III/§C redress mechanisms, IEEE Ch4 rollback-on-wellbeing-reduction.
 
 Proposed pointer (from seed): `CIRISNodeCore reconsideration primitive`
 
-## Known gaps / not-yet-implemented
+## Current limitations & next steps
 
-- **No `reconsideration:{grounds}` wire-form emission**: PONDER and DEFER carry the grounds (questions, deferral reason) but are not emitted as a `reconsideration:*` Contribution envelope. Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.4` as `reconsideration:{grounds}` (grounds ∈ `new_evidence` | `procedural_error` | `quorum_compromise`); the NodeCore P11 ReconsiderationRequest + ReconsiderationAttestation flow is specced at `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §10` (Stage 8 — Reconcile, row 5) with fresh-quorum-recusal + hash-pinned-evidence-per-ground recursion bound + 180-day time bound. Agent emits PONDER/DEFER today; the federation-wire `reconsideration:*` envelope lands once NodeCore P11 ships.
-- **`reconsideration:rollback_on_wellbeing_reduction` (IEEE Ch4)**: substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §2.2` as a four-primitive retraction family (`delegates_to`, `supersedes`, `withdraws`, `recants`); the after-the-fact rollback semantics are carried by `withdraws` (§2.2.3 — same attester retracts prior without claiming false) and `recants` (§2.2.4 — admits prior was false at issuance, optionally pointing to a `commitment:redress:{harm_id}` attestation). Agent emits at the Reconcile stage per `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §10` once SPEAK/TOOL actions are federated as Contributions. Today this surface is implicit / absent agent-side because SPEAK/TOOL outputs are emitted into adapter sinks (Discord, API), not into the federation chain — there is no Contribution row to `withdraws` against yet. Substrate-gated, not a missing primitive.
-- **No `reconsideration:negotiation_reopening`**: the negotiation-reopening shape decomposes onto the substrate primitives — re-opening a previously-resolved decision uses `ReconsiderationRequest` (NodeCore P11, `CONTRIBUTION_LIFECYCLE.md §10`) against the original SlashingAttestation or decision-hierarchy entry; the WiseBus broadcast pattern is the agent-side hook for emitting the request once the federation surface lands.
-- **No per-task reconsideration budget**: `max_thought_depth=5` is a hard floor per thought but does not aggregate across thoughts of a single task — a long task can accumulate many reconsiderations without a task-level budget. The substrate-side bound on aggregate reconsideration is the **hash-pinned-evidence-per-ground recursion bound + 180-day time bound** per `CONTRIBUTION_LIFECYCLE.md §10` row 5; agent-side task budget is a complementary unfilled gap.
-- **ASEAN absent_batch** is structural (forward-looking 2024 document with no predecessor to reconsider) — CIRIS exceeds ASEAN's surface here.
-- **CIRISNodeCore reconsideration primitive** (proposed pointer in seed) is upstream-pending; the canonical primitive is `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.4 reconsideration:{grounds}` + `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §10 Stage 8` (Reconcile, ReconsiderationRequest P11 + ReconsiderationAttestation). CIRISAgent currently carries the reconsideration semantics in the PONDER/DEFER/RECURSIVE_ASPDMA triad rather than at NodeCore level; Agent emits at the Reconcile stage once NodeCore P11 lands.
-- **Harassment-pattern bound**: substrate-specced in FSD-002 §3.7 as `ratchet:flag:harassment_pattern` (three+ Reconsiderations on single SlashingAttestation triggers review). Agent-side has no equivalent rate-limiter on PONDER/DEFER cycling against the same target.
+- **Typed `reconsideration:{grounds}` federation envelope**: shared work with the upstream CIRIS substrate (`CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.4`; grounds ∈ `new_evidence` | `procedural_error` | `quorum_compromise`; `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §10 Stage 8` Reconcile, with a fresh-quorum-recusal rule, a hash-pinned-evidence-per-ground recursion bound, and a 180-day time bound). PONDER and DEFER carry the grounds today; the typed envelope lands when NodeCore P11 ships.
+- **IEEE Ch4 `reconsideration:rollback_on_wellbeing_reduction`**: shared work with the upstream substrate (FSD-002 §2.2 four-primitive retraction family: `delegates_to`, `supersedes`, `withdraws`, `recants`). After-the-fact rollback semantics ride on `withdraws` and `recants`. Today the agent's external actions (SPEAK, TOOL) are emitted into adapter sinks rather than into the federation chain — there is no federated row to roll back yet. This will land once those actions are emitted as federation messages.
+- **`reconsideration:negotiation_reopening`**: shared work with the upstream substrate — re-opening a previously-resolved decision uses the upstream `ReconsiderationRequest` primitive. The WiseBus broadcast pattern is the agent-side hook for emitting the request once the federation surface lands.
+- **Per-task reconsideration budget** (next step, tracked in `CIRISAgent#815`): `max_thought_depth=5` is a hard per-thought floor, but a long task can accumulate many reconsiderations across thoughts without a task-level budget. The upstream substrate provides a per-ground recursion bound + 180-day time bound; an agent-side task-level budget will complement that.
+- **ASEAN does not address reconsideration** (it is a forward-looking 2024 document with no predecessor to reconsider) — CIRIS exceeds ASEAN's surface here.
+- **Harassment-pattern bound**: shared work with the upstream substrate (FSD-002 §3.7 `ratchet:flag:harassment_pattern` — three or more reconsiderations on a single attestation triggers review). An equivalent agent-side rate-limiter on PONDER/DEFER cycling against the same target is a next step.
 
 ## Tracked requirements
 

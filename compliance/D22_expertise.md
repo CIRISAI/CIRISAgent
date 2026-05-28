@@ -29,62 +29,75 @@
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-`expertise:*` (named-expert attestation) is the dimension where CIRIS has the most structural gaps. CIRIS does not currently declare named-expert competence in machine-readable wire form. The functional analogue is the Wise Authority (WA) system + Domain Category routing: when a thought touches a domain where expertise is required (medical, financial, legal, etc.), the agent DEFERs to a human WA. Expertise is *outsourced* rather than *attested*.
+Expertise asks: what does the agent claim to be competent in, and what does it decline? An auditor wants to know that the agent has a clear, machine-readable answer to "do you know what you don't know?"
 
-- **Code references** — Wise Authority (the expertise-routing primary surface):
-    - `ciris_engine/logic/services/governance/wise_authority/service.py:42` — `WiseAuthorityService`
-    - `ciris_engine/protocols/services/governance/wise_authority.py:24` — `WiseAuthorityServiceProtocol`
-    - `ciris_engine/protocols/services/governance/wise_authority.py:38` — `get_guidance(request: GuidanceRequest)` — the named-expert query surface
-    - `ciris_engine/protocols/services/governance/wise_authority.py:73` — `fetch_guidance(context: GuidanceContext)` — WiseBus-compatible variant
-    - `ciris_engine/logic/services/governance/wise_authority/service.py:378` — `send_deferral(deferral: DeferralRequest)`
-    - `ciris_engine/logic/services/governance/wise_authority/service.py:530` — `resolve_deferral(deferral_id, response: DeferralResponse)` — the WA's expert ruling
-- **Code references** — domain-routing (expertise:domain via deferral taxonomy):
-    - `ciris_engine/schemas/services/agent_credits.py:38` — `DomainCategory` enum (MEDICAL, FINANCIAL, LEGAL, HOME_SECURITY, IDENTITY_VERIFICATION, CONTENT_MODERATION, RESEARCH, INFRASTRUCTURE_CONTROL, etc.)
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:19` — `DeferralNeedCategory` (HEALTH_AND_BODILY_INTEGRITY, LIVELIHOOD_AND_FINANCIAL_SECURITY, JUSTICE_AND_LEGAL_AGENCY, etc.)
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:33` — `DeferralOperationalReason`
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:245-254` — `DOMAIN_TO_NEED_CATEGORY` mapping (machine-readable expertise routing)
-    - `ciris_engine/schemas/services/deferral_taxonomy.py:317` — `get_rights_basis_for_need_category()` — UDHR-grounded rights basis tied to each expertise domain
-    - `ciris_engine/logic/dma/dsaspdma.py:27` — domain-specialized ASPDMA imports `DomainCategory` and routes accordingly
-- **Code references** — Wise Bus broadcast (multiple expertise sources):
-    - `ciris_engine/logic/buses/wise_bus.py` — broadcasts to multiple WiseAuthorityService providers; aggregates expert opinions
-    - `ciris_engine/logic/buses/prohibitions.py` — categorical prohibitions; the negative-space attestation of where CIRIS asserts non-expertise
-- **Code references** — DEFER handler (the expertise-routing trigger):
-    - `ciris_engine/logic/handlers/control/defer_handler.py` — sends to WA
-    - `ciris_engine/logic/handlers/control/defer_handler.py:1-30` — `DeferParams`, `DeferralContext` imports
-- **Code references** — Commons Credits (the proxy for domain-expertise reputation):
-    - `ciris_engine/schemas/services/agent_credits.py:226` — `CreditGenerationPolicy`
-    - `ciris_engine/schemas/services/agent_credits.py:180` — `AgentCreditSummary` carries domain-category breakdown
-- **Policy text**:
-    - `CLAUDE.md` — "Medical Domain Prohibition" — explicit non-expertise declaration; medical/health/financial/legal are blocked at bus level
-    - `MISSION.md:36-66` — apophatic bounds; the agent declares which domains it lacks expertise in
-    - `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:572` — explicit non-capability list (medical/health/financial/legal/spiritual-direction)
-- **Test coverage**:
-    - `tests/test_agent_credits.py`
-    - WiseAuthority service tests under `tests/`
-- **Configuration surface**:
-    - `WiseBus` provider registration — declares which WA providers (Discord WA channel, API WA endpoint, etc.) the agent will consult
+## How CIRIS implements this today
+
+CIRIS takes a different approach to expertise than IEEE's named-expert framing: instead of declaring expertise in specific domains, CIRIS declares the domains it will *not* act in on its own — and routes any thought that touches one of those domains to a Wise Authority (a human or panel the agent defers to). This is the same goal achieved by a different structure: an auditor can read off the agent's competence boundary by inspecting (1) the categorical prohibition list, (2) the domain taxonomy (medical, financial, legal, etc.), and (3) the deferral trail in the audit chain.
+
+**Wise Authority service (the deferral-routing surface).**
+- `ciris_engine/logic/services/governance/wise_authority/service.py:42` — `WiseAuthorityService`
+- `ciris_engine/protocols/services/governance/wise_authority.py:24` — `WiseAuthorityServiceProtocol`
+- `ciris_engine/protocols/services/governance/wise_authority.py:38` — `get_guidance(request: GuidanceRequest)` — the query surface
+- `ciris_engine/protocols/services/governance/wise_authority.py:73` — `fetch_guidance(context: GuidanceContext)` — the WiseBus-compatible variant
+- `ciris_engine/logic/services/governance/wise_authority/service.py:378` — `send_deferral(deferral: DeferralRequest)`
+- `ciris_engine/logic/services/governance/wise_authority/service.py:530` — `resolve_deferral(deferral_id, response: DeferralResponse)` — the Wise Authority's ruling
+
+**Domain routing (the machine-readable expertise boundary).** The domain taxonomy (medical, financial, legal, etc.) plus its rights basis is enumerated in code.
+- `ciris_engine/schemas/services/agent_credits.py:38` — `DomainCategory` enum (MEDICAL, FINANCIAL, LEGAL, HOME_SECURITY, IDENTITY_VERIFICATION, CONTENT_MODERATION, RESEARCH, INFRASTRUCTURE_CONTROL, etc.)
+- `ciris_engine/schemas/services/deferral_taxonomy.py:19` — `DeferralNeedCategory` (HEALTH_AND_BODILY_INTEGRITY, LIVELIHOOD_AND_FINANCIAL_SECURITY, JUSTICE_AND_LEGAL_AGENCY, etc.)
+- `ciris_engine/schemas/services/deferral_taxonomy.py:33` — `DeferralOperationalReason`
+- `ciris_engine/schemas/services/deferral_taxonomy.py:245-254` — `DOMAIN_TO_NEED_CATEGORY` mapping (the machine-readable routing table)
+- `ciris_engine/schemas/services/deferral_taxonomy.py:317` — `get_rights_basis_for_need_category()` — the UDHR-grounded rights basis tied to each domain
+- `ciris_engine/logic/dma/dsaspdma.py:27` — the domain-specialized action selection imports `DomainCategory` and routes accordingly
+
+**WiseBus broadcast (multiple expertise sources).** The central decision-routing layer (the WiseBus) can fan out a query to multiple registered Wise Authority providers and aggregate the responses.
+- `ciris_engine/logic/buses/wise_bus.py` — broadcast and aggregation
+- `ciris_engine/logic/buses/prohibitions.py` — categorical prohibitions: the explicit declaration of where CIRIS asserts it lacks expertise
+
+**DEFER handler (the routing trigger).**
+- `ciris_engine/logic/handlers/control/defer_handler.py` — sends to Wise Authority
+- `ciris_engine/logic/handlers/control/defer_handler.py:1-30` — `DeferParams`, `DeferralContext`
+
+**Commons Credits (the reputation proxy for domain experience).** Credit records (CommonsCredits — non-monetary recognition of substrate-building work) carry a domain breakdown.
+- `ciris_engine/schemas/services/agent_credits.py:226` — `CreditGenerationPolicy`
+- `ciris_engine/schemas/services/agent_credits.py:180` — `AgentCreditSummary` (per-domain breakdown)
+
+**Policy text.**
+- `CLAUDE.md` — "Medical Domain Prohibition" — explicit non-expertise declaration; medical / health / financial / legal are blocked at the bus boundary
+- `MISSION.md:36-66` — apophatic bounds: the agent declares which domains it does not operate in
+- `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:572` — explicit non-capability list (medical / health / financial / legal / spiritual direction)
+
+**Tests.**
+- `tests/test_agent_credits.py`
+- WiseAuthority service tests under `tests/`
+
+**Configuration.**
+- WiseBus provider registration — declares which Wise Authority providers (Discord channel, API endpoint, etc.) the agent will consult
 
 Proposed pointer (from seed): `(none specified in seed; please fill)`
 
-## Observability hooks
+## How you can tell it's working (observability)
 
-- **Deferral audit trail**: every DEFER emits an audit entry (action_type = "handler_action_defer") visible via `GET /v1/audit/search` — the chronological record of "where the agent acknowledged it lacked expertise."
-- **WA response logging**: `resolve_deferral` writes the expert's ruling to the audit chain.
-- **Domain-routing telemetry**: `dsaspdma.py` DomainCategory selections are observable per-thought.
-- **Federation evidence_refs**: a Contribution citing `dimensions: ["D22"]` resolves through this seed to MH discernment-expertise, EU §III.7 domain-expertise requirement, IEEE Ch7-Ch11 interdisciplinary-expertise composition.
+If you wanted to verify this from outside, every deferral produces an audit entry naming the domain and reason, every Wise Authority ruling is written back to the audit chain, and the per-thought domain selection is observable in telemetry.
+
+- **Deferral audit trail**: every DEFER (escalate to a Wise Authority) emits an audit entry (action type `handler_action_defer`) visible via `GET /v1/audit/search`. This is the chronological record of where the agent acknowledged it had reached its competence boundary.
+- **Wise Authority response logging**: `resolve_deferral` writes the Wise Authority's ruling to the audit chain.
+- **Domain-routing telemetry**: the domain selections made by `dsaspdma.py` are observable per thought.
+- **Federation evidence_refs**: a typed federation message citing `dimensions: ["D22"]` resolves through this seed to MH discernment expertise, EU §III.7 domain-expertise requirement, IEEE Ch7-Ch11 interdisciplinary-expertise composition.
 
 Proposed pointer (from seed): `(none specified in seed; please fill)`
 
-## Known gaps / not-yet-implemented
+## Current limitations & next steps
 
-- **No `expertise:{domain}` wire-form emission**: substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.1` as `expertise:{domain}:{language}` (NodeCore §2 P3; §4.5 `ExpertiseLedger`); positive-only, broader granularity than credits. Emitted as a `Declaration` via `expertise_attestation` Contribution kind (`CIRISNodeCore/FSD/MESSAGE_TAXONOMY.md §4.10` — bilateral, open / jump-threshold witness-gated). CIRIS today inverts the IEEE pattern (agent defers rather than attests); future agent emission lands once NodeCore P3 ExpertiseLedger ships and the agent runs the `expertise_attestation` declaration flow on its self-known competence domains.
-- **No interdisciplinary-expertise composition attestation**: composes via FSD-002 §6 composition policies (§6.1.2 one-hop transitive, §6.1.3 weighted-graph EigenTrust-style) over multiple `expertise:{domain}:{language}` attestations; the "panel composition" surface emerges from the witness-set discipline `witness_diversity:{contribution_id}` (FSD-002 §3.6.3 NodeCore P10 — meets jurisdictional + organizational + software-stack + cell-expertise bars). Agent emits per-WA-response data; composition runs substrate-side.
-- **No expertise:agent_self_capability declaration**: substrate-specced as the bilateral `expertise_attestation` Contribution kind (MESSAGE_TAXONOMY.md §4.10 Declaration / Bilateral / Open with jump-threshold witness-gating). Agent emits once the federation-wire emission lands; today the Identity Template (Scout / Ally / Sage) is the human-readable analogue. The §4.13 `registry_vouch` Contribution is the inverse — third-party vouching of expertise.
-- **ASEAN absent_batch**: ASEAN frames competence at organizational-governance level rather than named-expert level — CIRIS sits closer to ASEAN's pattern than to IEEE's. Organizational governance composes via `partner_role:{role}` (FSD-002 §3.9) rather than `expertise:{domain}:{language}`.
-- **Sensus-fidelium analogue (MH)**: closest substrate primitive is multi-witness `witness_diversity:{contribution_id}` with the cell-expertise bar (FSD-002 §3.6.3 NodeCore P10) — sensus fidelium = "the cell whose constitution carries the question collectively attests." Spiritual / communal dimension preserved by the relational-anthropology commitment (FSD-002 §1.10 Ubuntu primary) but not lifted to a per-claim primitive.
-- **`expertise:*` is already in the wire** — promoted in FSD-002 §3.6.1 as `expertise:{domain}:{language}` with the existing `expertise_attestation` Contribution kind for declaration. Agent's structurally-embedded DEFER + DomainCategory routing is the inverse surface (lack-of-expertise) rather than absence of the prefix itself.
+- **Typed `expertise:{domain}` federation envelope**: currently implemented via the escalation path (CIRIS declares non-expertise and routes to a Wise Authority); the explicit declaration form will be added when the federation primitive ships. Shared work with the upstream substrate (`CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.1 expertise:{domain}:{language}`, `CIRISNodeCore/FSD/MESSAGE_TAXONOMY.md §4.10 expertise_attestation`). When NodeCore P3 ExpertiseLedger ships, the agent will run the declaration flow on its self-known competence domains.
+- **Interdisciplinary-expertise composition**: shared work with the upstream substrate (FSD-002 §6 composition policies, §3.6.3 `witness_diversity` NodeCore P10 — meets jurisdictional, organizational, software-stack, and cell-expertise bars). The agent emits per-Wise-Authority-response data; the composition layer runs substrate-side.
+- **`expertise:agent_self_capability` declaration**: shared work with the upstream substrate (`MESSAGE_TAXONOMY.md §4.10` bilateral `expertise_attestation`). Today the Identity Template (Scout / Ally / Sage) is the human-readable analogue; the typed envelope lands once the federation primitive ships. (The inverse — third-party vouching for the agent's expertise — uses `registry_vouch` from §4.13.)
+- **ASEAN frames competence at the organizational level** rather than the named-expert level — CIRIS sits closer to ASEAN's framing than IEEE's. Organizational governance composes via the upstream `partner_role:{role}` primitive (FSD-002 §3.9) rather than via `expertise:*`.
+- **MH "sensus fidelium" analogue** (community discernment): closest upstream primitive is multi-witness `witness_diversity:{contribution_id}` with the cell-expertise bar (FSD-002 §3.6.3 NodeCore P10) — "the cell whose constitution carries the question collectively attests." The relational-anthropology commitment (FSD-002 §1.10 Ubuntu primary) preserves the spiritual / communal dimension at the policy level; a per-claim primitive is a possible next step.
+- **`expertise:*` is already declared in the federation wire** (FSD-002 §3.6.1). The agent's current DEFER + DomainCategory routing is the inverse surface (the boundary of non-expertise); the explicit attestation surface lands when the agent runs the declaration flow.
 
 ## Quantitative baseline
 

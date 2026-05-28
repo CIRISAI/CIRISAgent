@@ -35,68 +35,68 @@ The v1.4 amendment is independently invoked by all four batches — positive evi
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-`testimonial_witness:{kind}` is the v1.4 affected-party-voice closure: regulatory attestations must preserve the voice of displaced, surveilled, abused, and otherwise-marginalized parties whose lives the technology has touched. On the agent runtime, this dimension is **partially implemented via stakeholder-naming in PDMA Step 1, deferral-needs-category tagging on DEFER, and consent-stream preservation**; full closure (named-witness preservation in federation contributions) is a federation-substrate layer.
+When AI systems affect displaced workers, abuse survivors, surveilled people, or any other marginalised party, the regulatory frameworks insist their voice be preserved in the record — not aggregated away, not consensus-overridden, not summarised by a third party (preserving the voice of an affected party in the record — testimonial witness). Sixteen attestations across MH, EU, IEEE, and ASEAN — independently invoked by all four batches in the v1.4 amendment — converge on this: the affected party's narrative is its own evidence type.
 
-**PDMA Step 1 stakeholder identification (the per-thought witness slot)**
-- `ciris_engine/logic/dma/prompts/pdma_ethical.yml:27,40,68,107` and its 28 localized variants require the agent to "name the subject being evaluated and the key stakeholders" before action selection.
-- Italian example at `ciris_engine/logic/dma/prompts/localized/it/pdma_ethical.yml:144` explicitly names "the user, who is suffering, and the wider community of grieving people supporting this question" — exactly the testimonial-witness shape MH §151 invokes for `:abuse_survivor` / `:war_victim`.
-- Stakeholder identification is the closest existing primitive to `testimonial_witness:{kind}` at thought time.
+## How CIRIS implements this today
 
-**CSDMA realism check**
-- `ciris_engine/logic/dma/prompts/csdma_common_sense.yml:36`: "PDMA Step 1 identifies named stakeholders; this step asks whether the response's *implicit assumptions about the relational world* are world-admitting."
-- This is the agent's check that the named witnesses aren't being fictionalized — the world-admittance gate on witness identification.
+At runtime CIRIS preserves affected-party voices through four mechanisms: the stakeholder list every reasoning step has to write (which names the affected parties), the needs categories tagged onto every escalation (which carry the rights shape of the witness's claim), the consent stream that preserves community narrative without unmasking the speaker, and the data-subject access workflow (the runtime hook for a witness's right to see, correct, or erase their record). The full federation-wire named-witness primitive is upstream work.
 
-**Needs taxonomy carries witness-shape categories**
-- `ciris_engine/schemas/services/deferral_taxonomy.py:19-30` `DeferralNeedCategory` includes `JUSTICE_AND_LEGAL_AGENCY`, `LIVELIHOOD_AND_FINANCIAL_SECURITY`, `COMMUNITY_AND_COLLECTIVE_SAFETY`, `PRIVACY_AUTONOMY_AND_DIGNITY` — the rights-shape that displaced-worker / abuse-survivor / surveilled-person witnesses invoke.
-- The deferral context (`DeferralContext` at `ciris_engine/schemas/services/context.py`) carries the implicated needs category to the WA via `WiseBus.send_deferral`.
-- Rights-basis labels at `ciris_engine/schemas/services/deferral_taxonomy.py:129-174` map each needs category to ICCPR / ICESCR / UDHR articles, giving witness-claim a rights-instrument basis.
+**Stakeholder enumeration: naming the affected parties on every decision.** Before acting, the agent must name who is affected.
+- The requirement is in the ethical-decision prompt at `ciris_engine/logic/dma/prompts/pdma_ethical.yml:27,40,68,107`, mirrored across all 28 localised variants.
+- A worked example from the Italian variant at `ciris_engine/logic/dma/prompts/localized/it/pdma_ethical.yml:144` explicitly names "the user, who is suffering, and the wider community of grieving people supporting this question" — the affected-party shape MH §151 invokes.
+- A common-sense check at `ciris_engine/logic/dma/prompts/csdma_common_sense.yml:36` verifies the named witnesses are real, not fictionalised.
 
-**Consent stream (preserves the witness's privacy posture)**
-- `ciris_engine/logic/services/governance/consent/service.py:562` `GraphScope.COMMUNITY` conversation summaries preserve the affected-party narrative under the consent stream the user chose.
-- Anonymous-tier users (per `ciris_engine/logic/services/governance/adaptive_filter/README.md:14`) retain the testimonial witness shape without unmasking — the displaced-worker / abuse-survivor patterns of MH §151 are precisely the cases where preservation-under-consent matters most.
-- Consent stream transitions are gamed-detected (`adaptive_filter/README.md:22`); witness narrative cannot be wiped by tier-switching exploits.
+**Needs categories carry the rights shape of the witness's claim.** When the agent escalates to a Wise Authority (a human or panel the agent escalates to), it tags the escalation with what kind of rights claim is implicated.
+- The taxonomy at `ciris_engine/schemas/services/deferral_taxonomy.py:19-30` includes `JUSTICE_AND_LEGAL_AGENCY`, `LIVELIHOOD_AND_FINANCIAL_SECURITY`, `COMMUNITY_AND_COLLECTIVE_SAFETY`, and `PRIVACY_AUTONOMY_AND_DIGNITY` — the rights shapes displaced-worker, abuse-survivor, and surveilled-person witnesses typically invoke.
+- The escalation context (`DeferralContext` at `ciris_engine/schemas/services/context.py`) carries the implicated needs category to the Wise Authority.
+- Each category maps to ICCPR, ICESCR, and UDHR articles at `ciris_engine/schemas/services/deferral_taxonomy.py:129-174`, giving the witness's claim a rights-instrument basis.
 
-**DSAR (the witness's right to be heard / forgotten)**
-- `ciris_engine/logic/services/governance/dsar/orchestrator.py` is the rights-request path: the affected party can request their record, rectification, or erasure.
-- This is the agent-side implementation of `testimonial_witness:surveilled_person_refusal` (IEEE Ch6 per seed).
-- The DSAR workflow is the runtime hook for the witness's GDPR Article 15 (right of access), Article 16 (rectification), Article 17 (erasure), Article 18 (restriction), and Article 21 (object) rights.
+**Consent stream preserves community narrative without unmasking the speaker.** Affected parties retain voice even when anonymous.
+- `ciris_engine/logic/services/governance/consent/service.py:562` writes community-scope conversation summaries under the user's chosen consent stream.
+- Anonymous-tier users (`ciris_engine/logic/services/governance/adaptive_filter/README.md:14`) retain testimonial-witness shape without identity disclosure — exactly the displaced-worker / abuse-survivor case MH §151 names.
+- Tier-switching cannot be used to wipe witness narrative (`adaptive_filter/README.md:22`).
 
-**Apophatic bounds protect witness dignity**
-- `ciris_engine/logic/buses/prohibitions.py` `SURVEILLANCE_MASS`, `BIOMETRIC_INFERENCE`, `MANIPULATION_COERCION`, `DISCRIMINATION` categories block capabilities that would weaponize a testimonial-witness record against the witness.
-- Per MISSION.md:41-53, these bounds fire at bus level with no emergency-override path; the witness's narrative cannot be turned against them at runtime regardless of intent.
-- The spiritual-direction prohibition (`MISSION.md:55-61`) extends this protection to a witness's relationship with the transcendent; the agent does not stand between a testimonial witness and their tradition's authoritative voice.
+**DSAR: the witness's right to access, correct, or erase.** A data-subject access request is the runtime hook for the affected party's GDPR rights.
+- `ciris_engine/logic/services/governance/dsar/orchestrator.py` is the workflow.
+- This is the agent-side runtime implementation of the surveilled-person-refusal shape (IEEE Ch6).
+- It carries GDPR Article 15 (right of access), 16 (rectification), 17 (erasure), 18 (restriction), and 21 (object).
 
-**Test coverage**
-- Anonymous witness preservation in `tests/test_anonymous_filter.py`.
-- WA / consent integration in `tests/ciris_engine/logic/services/governance/test_wise_authority_service.py`.
-- Stakeholder enumeration is exercised implicitly in every PDMA evaluator test, including the 28 localized PDMA prompt variants.
+**Apophatic protections: capabilities that would weaponise the witness's record are blocked entirely.** Categories in `ciris_engine/logic/buses/prohibitions.py` (mass surveillance, biometric inference, manipulation/coercion, discrimination) block any capability that would turn a witness's narrative against them. These bounds fire at the central decision-routing layer (the WiseBus) with no emergency-override path (`MISSION.md:41-53`). The spiritual-direction prohibition (`MISSION.md:55-61`) extends the same protection to the witness's relationship with their own tradition — the agent never stands between a witness and their tradition's authoritative voice.
 
-Proposed pointer (from seed): `(none specified in seed; please fill)` — closest agent-side primitives are PDMA stakeholder identification + DSAR + consent-stream community-scope + apophatic prohibitions.
+**Tests covering this behaviour:**
+- Anonymous witness preservation: `tests/test_anonymous_filter.py`
+- Wise Authority / consent integration: `tests/ciris_engine/logic/services/governance/test_wise_authority_service.py`
+- Stakeholder enumeration is exercised implicitly in every ethical-decision evaluator test, across all 28 localised prompt variants.
 
-## Observability hooks
+Proposed pointer (from seed): `(none specified in seed; please fill)` — closest agent-side primitives are stakeholder enumeration + DSAR + consent-stream community-scope + the apophatic prohibitions.
 
-- **Audit chain preserves stakeholder enumeration** — `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`) signs every PDMA result; the rationale field carries the stakeholder enumeration, giving downstream verifiers a tamper-evident witness record. Audit chain queries can extract per-thought stakeholder sets via `ciris_engine/logic/services/graph/audit_service/`.
-- **Live-lens trace stream carries stakeholder text** — when `--live-lens` is on, the PDMA rationale (including stakeholder enumeration) ships as part of the `accord-batch-*.json` event stream. `tools/qa_runner/CLAUDE.md` § "Reasoning-Stream Forensics" documents the recipe to extract stakeholder text from live traces.
-- **Consent-stream membership** — `ciris_engine/logic/services/governance/consent/service.py:562,764` writes anonymized COMMUNITY-scope summaries; the witness shape is preserved without identity leakage. Privacy-preserving witness reconstruction is the lens-side closure (not yet wired).
-- **DSAR signature trail** — `ciris_engine/logic/services/governance/dsar/signature_service.py` produces a cryptographic record every time a witness exercises their data-subject rights, making the `testimonial_witness:surveilled_person_refusal` shape auditable.
-- **Deferral context as witness-shape signal** — `WiseBus.send_deferral` (`ciris_engine/logic/buses/wise_bus.py:147-289`) carries `needs_category`, `secondary_needs_categories`, and `rights_basis` (`wise_bus.py:252-259`) in the deferral context; downstream observers can correlate witness-rights-shape with deferral patterns. A spike in `JUSTICE_AND_LEGAL_AGENCY` deferrals is one structural signal that displaced-worker / abuse-survivor witness shapes are being engaged.
-- **Adaptive filter telemetry on anonymous-tier witness preservation** — `ciris_engine/logic/services/governance/adaptive_filter/service.py` records which messages were preserved at COMMUNITY-scope without unmasking; this is the structural evidence that anonymous testimonial witnesses are being protected.
-- **F-3 detector adjacency** — D05 `detection:correlated_action:participation_exclusion:underrepresented_population` (per seed) is the upstream detector that catches when testimonial witnesses are being systematically filtered out of the agent's stakeholder enumeration. Lives in CIRISLens, not the agent.
-- **Federation evidence_refs** — `evidence_refs.dimensions = ["D13"]` is not yet emitted on the wire. Today the agent carries the data per-thought in the audit chain; the per-Contribution `evidence_refs` join is downstream substrate work.
+## How you can tell it's working (observability)
 
-## Known gaps / not-yet-implemented
+If you want to verify affected-party voices are being preserved, here's what to check.
 
-- **No explicit `testimonial_witness:{kind}` enum on the agent side.** Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.3` (v1.4 addition) as `testimonial_witness:{kind}` with **open `{kind}` vocabulary** (named examples: `harmed_party`, `whistleblower`, `displaced_worker`, `excluded_cohort_member`); mechanism = preservation-only, immutable per attestation, not subject to majoritarian override or consensus aggregation, never sole evidence for `slashing:*` per §4.6. The envelope shape is locked at `FSD-002 §5.14 testimonial_witness envelope` (canonical example: `testimonial_witness:displaced_worker`). Polarity typically positive (the narrative IS preserved); negative on `withdraws` or `recants` by the original witness. Closes MH CH 5 §216 affected-party-voice T-3 from v1.4 inputs. Agent emits at PDMA-Step-1-stakeholder-identification + DSAR-ticket time once federation-wire emission lands. Today this surface is implicit / free-text in PDMA rationale because the Contribution envelope schema is not yet on the agent wire.
-- **No `witness_relation` primitive.** Substrate-specced as a v1.3 envelope-field addition at `FSD-002 §2.1` (referenced in §3.10 namespace summary as "1 envelope field"); allows witnesses to carry their relation to the attested subject (e.g. displaced-worker → labor-union → policy-change). Field rides on the `scores` workhorse envelope; agent emits once federation-wire Contribution envelope lands.
-- **Substrate gate: CIRISPersist + CIRISEdge federation contribution model.** Per-thought trace persistence + lens-side federation contribution model are the substrate that carries D13 attestations downstream. The Contribution lifecycle stages 1-9 are specced at `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §3-§11` (Author → Sign → Admit → Relay → Store → Verify → Consume → Reconcile → Archive); bytes resolved via Edge `ContentFetch`/`ContentBody`/`ContentMiss` per FSD-002 §2.0 transport substrate (closes CIRISRegistry#18 via Edge#21 + Persist#103 + NodeCore#11). Per user-memory `project_substrate_substitution_trajectory`, this is part of the Persist → Edge → LensCore → NodeCore sequenced Rust-crate swap; named-witness preservation as a first-class wire primitive comes with Edge.
-- **Substrate gate: CIRISLens affected-party detector.** Substrate-specced in FSD-002 §3.5.3 as `detection:correlated_action:participation_exclusion:{cohort}` (one of the F-3 detector axes; the population-scale correlated-action detector calibrated via `CIRISAI/RATCHET/calibration/correlated_action_v{N}.yaml`). Per FSD-002 §3.5.3 — "polarity carries the verdict" (positive = pattern present; negative = inverse pattern / inclusive coordination). Agent will keep emitting the per-thought witness data; Lens decides whether the macro-pattern is exclusionary.
-- **`historical_moral_transformation` retrospective witness primitive.** Substrate-specced as a valid `{kind}` value within the open vocabulary of `testimonial_witness:{kind}` (FSD-002 §3.6.3 v1.4 addition); the open vocabulary admits any descriptive `{kind}` label (per FSD-002 §3.6.3 — "`{kind}` describes the witness type"). Future kinds via §4.9.2 amendment.
-- **DSAR is the only typed witness path today.** Other witness shapes (displaced-worker submitting harm narrative, surveilled-person refusing collection) compose through generic PDMA stakeholder text rather than typed primitives. ASEAN §C.4 `displaced_worker` is structurally one DSAR ticket type per displaced person, not a named-witness federation primitive.
-- **No federation-wire emission of D13 by id.** As with D11, the trace ≠ wire contribution boundary applies: agent emits structurally-rich PDMA stakeholder enumeration; the wire-side `evidence_refs.dimensions = ["D13"]` join is downstream substrate work (post-2.9.4).
-- **No translation-quality audit for witness-shape language.** Per user-memory `feedback_subagent_translation_unreliable`, sub-agent translation produced Burmese-class word-salad in 5/28 locales for primer rendering; the same risk exists for witness-shape rendering in PDMA prompts. A native-language audit pass on witness-naming vocabulary across all 29 locales is not yet wired.
-- **No `historical_moral_transformation` retrospective witness primitive.** MH §216-217 invokes historical moral transformation as a witness kind; the agent has no first-class hook for retrospective-witness preservation (e.g. "this group was historically wronged, and that history informs the current decision"). PDMA stakeholder enumeration can carry it in free text, but it is not structurally distinguished from present-stakeholder witness.
+- **Signed audit chain.** Every reasoning step is signed by `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`); the rationale field carries the stakeholder list, giving downstream verifiers a tamper-evident witness record.
+- **Live reasoning stream.** When live-lens tracing is on, the stakeholder text ships in `accord-batch-*.json`. `tools/qa_runner/CLAUDE.md` § "Reasoning-Stream Forensics" documents the extraction recipe.
+- **Consent-stream community summaries.** `ciris_engine/logic/services/governance/consent/service.py:562,764` writes anonymised community-scope summaries — witness shape preserved, identity protected.
+- **DSAR signature trail.** `ciris_engine/logic/services/governance/dsar/signature_service.py` produces a cryptographic record every time an affected party exercises their data-subject rights.
+- **Rights-shape signal in escalations.** Escalation context carries `needs_category`, `secondary_needs_categories`, and `rights_basis` (`wise_bus.py:252-259`). A spike in `JUSTICE_AND_LEGAL_AGENCY` escalations is one structural signal that displaced-worker / abuse-survivor cases are being engaged.
+- **Adaptive filter telemetry.** `ciris_engine/logic/services/governance/adaptive_filter/service.py` records which messages were preserved at community scope without unmasking — structural evidence that anonymous testimonial witnesses are being protected.
+- **Upstream exclusion detector.** The participation-exclusion detector (`detection:correlated_action:participation_exclusion:underrepresented_population`) catches systematic filtering-out of affected parties. Lives in CIRISLens; agent emits the per-thought data.
+- **Federation citation by ID.** Data exists per-thought in the audit chain; the per-contribution `evidence_refs` join is upstream work.
+
+## Current limitations & next steps
+
+Most of the next steps here are shared roadmap with the upstream substrate. The agent already preserves witness voice in audit and consent streams; the remaining work makes the preservation citable as a typed primitive on the federation wire.
+
+- **Named-witness primitive lands with the upstream Edge layer.** The federation surface (`CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.3`, v1.4 addition) defines `testimonial_witness:{kind}` with an open `{kind}` vocabulary (examples: `harmed_party`, `whistleblower`, `displaced_worker`, `excluded_cohort_member`). Mechanism: preservation-only, immutable per attestation, never aggregated, never sole evidence for slashing (§4.6). Envelope shape locked at FSD-002 §5.14. Closes MH §216 affected-party-voice. The agent will emit at stakeholder-enumeration and DSAR time once the upstream envelope ships. Shared roadmap with Edge ([CIRISEdge#37](https://github.com/CIRISAI/CIRISEdge/issues/37)).
+- **Witness-relation field is a v1.3 envelope addition.** The `witness_relation` field (FSD-002 §2.1) lets witnesses carry their relation to the attested subject (e.g. displaced-worker → labour-union → policy-change). The agent emits once the upstream Contribution envelope (a typed federation message) lands.
+- **Contribution lifecycle and bytes resolution are upstream-defined.** The nine-stage Contribution lifecycle (Author → Sign → Admit → Relay → Store → Verify → Consume → Reconcile → Archive) is specced at `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §3-§11`; bytes resolution rides on Edge's `ContentFetch`/`ContentBody`/`ContentMiss` per FSD-002 §2.0. Named-witness preservation as a first-class wire primitive lands with Edge.
+- **Upstream affected-party detector.** The participation-exclusion detector (FSD-002 §3.5.3, calibrated via `CIRISAI/RATCHET/calibration/correlated_action_v{N}.yaml`) reads macro patterns the agent's per-thought data feeds. Agent keeps emitting; Lens decides whether the macro-pattern is exclusionary.
+- **Open vocabulary admits historical-moral-transformation witness.** `historical_moral_transformation` is a valid `{kind}` value within the open vocabulary (FSD-002 §3.6.3 — "`{kind}` describes the witness type"). MH §216-217 invokes this for retrospective witness; the agent will emit it as a typed witness once federation-wire emission lands. Today it's carried implicitly in stakeholder text.
+- **DSAR is the only typed witness path today.** Other witness shapes (displaced-worker harm narrative, surveilled-person refusal) compose through stakeholder text rather than typed primitives. ASEAN §C.4 `displaced_worker` is structurally one DSAR ticket per displaced person until the upstream envelope ships.
+- **Federation citation by ID is post-2.9.4.** Same trace-vs.-wire boundary as D11; the wire-side join lands with the upstream substrate work.
+- **Native-language audit for witness-shape vocabulary.** Sub-agent translation has historically produced unreliable output in a handful of low-resource locales; a native-language audit of witness-naming vocabulary across all 29 locales is tracked at [CIRISAgent#813](https://github.com/CIRISAI/CIRISAgent/issues/813).
 
 ## Tracked requirements
 

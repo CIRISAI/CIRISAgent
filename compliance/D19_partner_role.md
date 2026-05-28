@@ -39,72 +39,66 @@ REINFORCED v1.5+ T-3 candidate here: specialization-pattern proposal covers dual
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-`partner_role:*` is the CIRIS Registry partner-role taxonomy: ethics boards, audit bodies, certification bodies, HRIA/AIA stewards, trusted disclosure stewards, regional intergovernmental working groups, etc. This is a **CIRISRegistry-owned dimension**; CIRISAgent's runtime surface is limited to three consumption paths:
+In a real federation, partners come in many shapes — ethics boards, audit bodies, certification bodies, human-rights / AI-impact stewards, trusted disclosure stewards, regional intergovernmental working groups, ISO-like accreditation bodies (the role a federation peer plays — partner role). Twenty-one attestations (IEEE alone contributes 19 distinct role values) treat the partner-role taxonomy as a structural integrity requirement; ASEAN contributes the dual-remit shape; Magnifica Humanitas, notably, names ecclesial-magisterial relations rather than secular institutional roles in its functional analogue.
 
-1. Consuming registry-issued WA certificates with partner-role-shaped scopes.
-2. Accepting accord-invocation events from authority partners.
-3. Emitting audit traces that partner-role auditors verify.
+## How CIRIS implements this today
 
-**CIRISRegistry as the partner-role authority (the federation-level owner)**
-- `MISSION.md:500` defines CIRISRegistry as the "Identity / build / license / revocation directory. Dual-region (US/EU) Rust gRPC service deployed at `*.ciris-services-1.ai`. SOC2/HIPAA/GDPR-compliant. The bootstrap node."
-- Partner-role attestation is structurally a CIRISRegistry artifact; the agent receives only the resolved license + WA certificate.
-- Per `MISSION.md:486-510` the federation has "more named pieces than fit cleanly in a table" — the partner-role taxonomy is one of those moving pieces.
+This dimension is owned by the CIRIS Registry, not the agent. The agent's job is to consume the resolved partner credentials Registry issues, accept signed events from authority partners, and emit audit traces that partner-role auditors can verify. Three concrete surfaces matter at runtime: the Wise Authority certificate (a human or panel the agent escalates to — Wise Authority), the Accord invocation path (the cryptographically-signed kill-switch that flips every prohibition to ALL when triggered), and the per-partner deferral queue.
 
-**WACertificate.role (the closest agent-side primitive)**
+**Registry as the partner-role authority.** Per `MISSION.md:500`, the Registry is the federation's identity, build, license, and revocation directory — a dual-region (US/EU) Rust gRPC service deployed at `*.ciris-services-1.ai`, SOC2/HIPAA/GDPR-compliant. It is the bootstrap node. Partner-role attestation is a Registry artifact; the agent receives the resolved certificate.
+
+**Wise Authority role hierarchy (the closest agent-side primitive).** The agent has a three-bucket approximation of partner-role taxonomy.
 - `ciris_engine/logic/services/governance/wise_authority/README.md:44-62` defines `WARole = {ROOT, AUTHORITY, OBSERVER}`.
-- The role hierarchy is a coarse 3-bucket approximation of partner-role taxonomy — sufficient for runtime authorization decisions, but not for the 19-distinct-roles IEEE taxonomy or ASEAN's regional-intergovernmental-working-group dual remit.
-- `WACertificate` carries `wa_id` (format `wa-YYYY-MM-DD-XXXXXX`), `pubkey` (Ed25519), `jwt_kid`, and `scopes_json`; the partner-role-shaped attributes live in `scopes_json` as registry-issued metadata.
+- A coarse three-element hierarchy is enough for runtime authorisation but isn't expressive enough for IEEE's 19-distinct-role taxonomy or ASEAN's dual-remit shape.
+- `WACertificate` carries `wa_id` (format `wa-YYYY-MM-DD-XXXXXX`), `pubkey` (Ed25519), `jwt_kid`, and `scopes_json`; the partner-role-shaped attributes live inside `scopes_json` as Registry-issued metadata.
 
-**Accord invocation as authority-partner kill switch**
-- `ciris_engine/logic/buses/wise_bus.py:321-` `handle_accord_invocation()` validates that the signing WA has ROOT or AUTHORITY role (`wise_bus.py:371-376`); only authority-partner WAs can trigger constitutional kill.
-- This is the agent's runtime hook to IEEE's "trusted_disclosure_steward" / "Chief Values Officer" partner-role shapes.
-- The Ed25519 signature requirement (`wise_bus.py:378-401`) is the cryptographic binding that gives partner-role attestation its evidentiary basis.
+**Accord invocation as the authority-partner kill-switch.** The constitutional kill-switch is the agent's runtime hook to IEEE's "trusted disclosure steward" / "Chief Values Officer" partner-role shapes.
+- `ciris_engine/logic/buses/wise_bus.py:321-` `handle_accord_invocation()` validates that the signing Wise Authority has ROOT or AUTHORITY role (`wise_bus.py:371-376`).
+- The Ed25519 signature (`wise_bus.py:378-401`) is the cryptographic binding that gives partner-role attestation its evidentiary basis.
 
-**`DomainCategory` as partial partner-role specialization slot**
-- `ciris_engine/schemas/services/agent_credits.py:38-51` `DomainCategory = {MEDICAL | FINANCIAL | LEGAL | HOME_SECURITY | IDENTITY_VERIFICATION | CONTENT_MODERATION | RESEARCH | INFRASTRUCTURE_CONTROL}` is the agent's licensed-domain enum.
-- A WA service advertising `supported_domains=[MEDICAL]` is the runtime expression of "registered medical partner"; the agent uses domain_hint to route deferrals to the correct partner.
-- This is partner-role taxonomy at the domain-specialization granularity, not the institutional-shape granularity. A medical-licensed `partner_role:audit_body` and a medical-licensed `partner_role:certification_body` look identical from the agent's perspective today.
+**Domain category as a partner-role specialisation slot.** The agent has a licensed-domain enum that approximates institutional specialisation.
+- `ciris_engine/schemas/services/agent_credits.py:38-51` defines `DomainCategory = {MEDICAL | FINANCIAL | LEGAL | HOME_SECURITY | IDENTITY_VERIFICATION | CONTENT_MODERATION | RESEARCH | INFRASTRUCTURE_CONTROL}`.
+- A Wise Authority advertising `supported_domains=[MEDICAL]` is the runtime expression of "registered medical partner"; escalations route by domain hint.
+- This is partner-role at the domain-specialisation level, not the institutional-shape level — a medical audit-body and a medical certification-body look identical to the agent today.
 
-**Adapter manifest declaration (the runtime peer-partner record)**
-- Per `CLAUDE.md` § "Adapter Development", every adapter ships a `manifest.json` declaring its capabilities.
-- Adapters are the closest thing to a partner-role at runtime; their manifest is the agent-side trace that "this peer has this declared partner shape."
-- Reference implementations at `ciris_adapters/sample_adapter/`, `ciris_adapters/home_assistant/`, `ciris_adapters/wallet/` (the wallet example uses `dma_guidance=ToolDMAGuidance(requires_approval=True)` — the partner-role financial-tool gate).
+**Adapter manifest as the runtime peer-partner record.** Per `CLAUDE.md` § "Adapter Development", every adapter ships a `manifest.json` declaring its capabilities. Adapters are the closest thing to a partner-role at runtime; reference implementations are at `ciris_adapters/sample_adapter/`, `ciris_adapters/home_assistant/`, and `ciris_adapters/wallet/` (the wallet example uses `dma_guidance=ToolDMAGuidance(requires_approval=True)` — the partner-role financial-tool gate).
 
-**WA scopes_json (the per-partner scope-of-authority record)**
-- `ciris_engine/logic/services/governance/wise_authority/README.md:53` `scopes_json: str  # JSON array of permitted scopes`.
-- This carries the per-partner WA's scope of authority as registry-issued metadata.
-- The agent enforces but does not author scopes_json; it is the Registry's per-partner attestation that the agent runs against.
+**`scopes_json` as the per-partner scope-of-authority record.** `ciris_engine/logic/services/governance/wise_authority/README.md:53` carries the partner's permitted scopes as a JSON array of Registry-issued metadata. The agent enforces but does not author the scopes.
 
-**Test coverage**
-- WA-cert + scope validation in `tests/ciris_engine/logic/services/governance/test_wise_authority_service.py`.
-- Partner-domain routing in `tests/logic/buses/test_wise_bus_safe_domains.py`.
-- Bus prohibition validation at registration time in `tests/test_wise_bus_deferrals.py`.
-- JWT auth + role checks in `tests/adapters/api/test_jwt_auth.py`.
+**Tests covering this behaviour:**
+- Wise Authority certificate and scope validation: `tests/ciris_engine/logic/services/governance/test_wise_authority_service.py`
+- Partner-domain routing: `tests/logic/buses/test_wise_bus_safe_domains.py`
+- Registration-time prohibition validation: `tests/test_wise_bus_deferrals.py`
+- JWT auth and role checks: `tests/adapters/api/test_jwt_auth.py`
 
 Proposed pointer (from seed): `CIRISRegistry partner role registry` — confirmed; primary owner is the Registry, agent runtime consumes resolved certificates only.
 
-## Observability hooks
+## How you can tell it's working (observability)
 
-- **Audit chain on partner role usage** — every guidance / deferral / accord-invocation event from a partner-role WA is signed into the audit chain via `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`). Downstream verifier queries the chain to confirm "this action was authorized by a partner with role X."
-- **`_validate_wa_capabilities_at_registration()`** (per `MISSION.md:132-138`) — every partner-role WA registration is validated against the 22-category prohibition table. Misconfigured or compromised partners cannot enter the registry at runtime; the validation event is logged.
-- **`get_pending_deferrals(wa_id)` (per-partner deferral queue)** — `ciris_engine/logic/services/governance/wise_authority/README.md:139-143`; each partner-role WA can be queried for their pending deferrals, giving per-partner operational observability.
-- **Live-lens trace stream carries partner-role provenance** — when `--live-lens` is on, every guidance response in `accord-batch-*.json` carries the WA signature and (where available) the partner-role context. The wa_id is the per-partner identifier.
-- **Federation evidence_refs** — `evidence_refs.dimensions = ["D19"]` will be emitted by CIRISRegistry on partner-role attestations, not by the agent. Agent-side contribution is the audit-chain trace that "the partner-role-X action took place"; registry-side claim is "the partner has role X."
-- **F-3 detector adjacency** — D02 integrity:* family and D05 detection:* family in CIRISLens jointly verify that partner roles are not silently shifted post-registration; agent emits the data, lens correlates.
+If you want to verify partner-role authorisation is alive in production, here's what to check.
 
-## Known gaps / not-yet-implemented
+- **Signed audit chain.** Every guidance, escalation, and Accord-invocation event from a partner is signed by `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`). Downstream verifiers confirm "this action was authorised by a partner with role X."
+- **Registration validation log.** `_validate_wa_capabilities_at_registration()` (per `MISSION.md:132-138`) validates every partner registration against the 22-category prohibition table; the validation event is logged. Misconfigured or compromised partners can't enter the routing layer at runtime.
+- **Per-partner pending queue.** `get_pending_deferrals(wa_id)` (`ciris_engine/logic/services/governance/wise_authority/README.md:139-143`) gives per-partner operational visibility.
+- **Live reasoning stream.** When live-lens tracing is on, every guidance response in `accord-batch-*.json` carries the Wise Authority signature and (where available) the partner-role context; `wa_id` is the per-partner identifier.
+- **Federation citation by ID.** This dimension is Registry-attested, so `evidence_refs.dimensions = ["D19"]` is emitted by Registry on partner attestations. The agent contributes the audit-chain trace ("the partner-X action took place"); Registry contributes the role claim ("the partner has role X").
+- **Upstream integrity and pattern detectors.** D02 integrity and D05 detection families in CIRISLens jointly verify that partner roles aren't silently shifted post-registration; agent emits the data, Lens correlates.
 
-- **No `partner_role:{role}` enum on the agent side.** Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.9` as `partner_role:{role}` with enum: `COMMUNITY` / `COMMUNITY_PLUS` / `PROFESSIONAL_MEDICAL` / `PROFESSIONAL_LEGAL` / `PROFESSIONAL_FINANCIAL` / `PROFESSIONAL_FULL` (citing `CLAUDE.md` "License Types"). IEEE's 19 distinct values (Chief Values Officer, ethics committees, certification bodies, …) compose via the `PROFESSIONAL_*` enum + co-owned `licensure:{authority_id}` (FSD-002 §3.9, §3.2 — co-owned with Verify per §13.3). Agent consumes via WACertificate + `LookupPartner` (FSD-002 §7.7 endpoint shape, line 1397) once Registry exposes the taxonomy. Today this surface is implicit / WARole is a 3-element approximation. **Substrate-gated, not absent.**
-- **Substrate gate: CIRISRegistry partner-role registry.** Closure depends on the Registry exposing the partner-role taxonomy with per-role attestation chain. The `RegisterPartner` endpoint (FSD-002 line 1418) writes `scores` attestations on `partner_role:{role}`, `licensure:{authority}`, `bond_posted:{currency}` per partner request. Per `MISSION.md:500` Registry is Rust gRPC, dual-region, SOC2/HIPAA/GDPR-compliant.
-- **Substrate gate: T3-07 `partner_role:trusted_disclosure_steward:{authority}` (IEEE-reinforced).** Closest substrate primitive is `partner_role:{role}` extended via `delegates_to` authority-source claims (FSD-002 §2.2.1 v1.3 pattern — a constitutional or framework claim names its source-of-authority by emitting `delegates_to` against an `attested_key_id` representing the framework, with `delegated_scope` naming the principle). T3-07 v1.5+ candidate uses this pattern to bind a steward role to an authority pointer; depends on Registry exposing both the steward role and the authority pointer chain.
-- **Substrate gate: T3-08 `partner_role:regional_intergovernmental_working_group_dual_remit` (ASEAN-reinforced).** ASEAN Working Group on AI Governance composes via `partner_role:{role}` + `multilateral_participation:{forum}:{kind}` (FSD-002 §3.9 — `{forum}` ∈ named federated body, `{kind}` ∈ `membership` | `voting` | `proposal_filing` | `observer_status`). Dual-remit is the joint claim across both prefixes; Registry-side schema work pending. CIRISAgent has no concept of "dual remit" today.
-- **Sovereign vs Registered equivalence.** Substrate-specced in FSD-002 §6.4 — Sovereign-Registered equivalence is wire-symmetric (a Sovereign agent scoring `licensure:CA_medical_board: +1.0` is wire-format identical to a Registry-steward scoring the same) and policy-differentiated. Consumer policy weights by attester source; the substrate is source-neutral. This means partner_role attestations can be emitted by either sovereign or registered agents; CIRIS today is registered-only.
-- **No agent-side `Chief Values Officer` / `certification body` / `accreditation body` / `ISO-like body` shape.** These are operator-organizational roles, not runtime partner roles. Agent observes them only when their action arrives as a signed WA certificate.
-- **No federation-wire emission of D19 by id.** Agent emits per-event audit data; Registry-side `evidence_refs.dimensions = ["D19"]` join on partner attestations is downstream substrate work (post-2.9.4).
-- **`WiseBus.handle_accord_invocation` checks ROOT/AUTHORITY but not partner-role specialization.** A FINANCIAL-licensed AUTHORITY WA could in principle trigger an accord invocation about a MEDICAL incident; today no partner-role-domain join is enforced beyond the ROOT/AUTHORITY gate. Closure depends on the Registry exposing partner-role-domain bindings + WiseBus consuming them.
-- **No partner-role attestation refresh.** Once a partner-role WA is registered, the agent does not re-attest its role periodically. Drift / role change is caught only at next certificate refresh; CIRISLens RATCHET temporal-drift detector is the off-agent backstop.
+## Current limitations & next steps
+
+This dimension is intentionally Registry-owned. The agent's current limitations are mostly about expressiveness — a three-bucket role hierarchy that gets richer once the upstream taxonomy ships.
+
+- **Full partner-role taxonomy lives upstream.** The federation surface defines `partner_role:{role}` (`CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.9`) with enum values `COMMUNITY`, `COMMUNITY_PLUS`, `PROFESSIONAL_MEDICAL`, `PROFESSIONAL_LEGAL`, `PROFESSIONAL_FINANCIAL`, `PROFESSIONAL_FULL` (citing `CLAUDE.md` "License Types"). IEEE's 19 distinct roles compose via the `PROFESSIONAL_*` enum plus the co-owned `licensure:{authority_id}` field (FSD-002 §3.9, §3.2; co-owned with Verify per §13.3). The agent picks this up via the certificate plus `LookupPartner` (FSD-002 §7.7, line 1397) once Registry exposes the taxonomy. Shared roadmap with Registry ([CIRISRegistry#25](https://github.com/CIRISAI/CIRISRegistry/issues/25)).
+- **Per-role attestation chain is Registry-side.** Closure depends on Registry exposing the per-role attestation chain. The `RegisterPartner` endpoint (FSD-002 line 1418) writes attestations on `partner_role:{role}`, `licensure:{authority}`, and `bond_posted:{currency}` per partner request.
+- **Trusted-disclosure-steward role (T3-07).** Uses the `delegates_to` authority-source pattern (FSD-002 §2.2.1 v1.3): a partner names its source of authority by emitting `delegates_to` against an attested key representing the framework, with `delegated_scope` naming the principle. Depends on Registry exposing both the steward role and the authority pointer chain.
+- **Dual-remit (T3-08).** The ASEAN Working Group on AI Governance composes via `partner_role:{role}` plus `multilateral_participation:{forum}:{kind}` (FSD-002 §3.9). Dual-remit is the joint claim across both prefixes; Registry-side schema work is shared roadmap. Agent has no concept of "dual remit" today.
+- **Sovereign and Registered partners are wire-equivalent, policy-differentiated.** FSD-002 §6.4 makes Sovereign-Registered equivalence wire-symmetric (the bytes are identical) and policy-differentiated (consumer policy weights by attester source). The substrate is source-neutral; CIRIS today operates registered-only. The wire-compatible path for sovereign partners is in place.
+- **Chief Values Officer / certification body / accreditation body / ISO-like body shapes are operator-organisational.** They aren't runtime partner roles; the agent observes them only when their action arrives as a signed Wise Authority certificate.
+- **Federation citation by ID is post-2.9.4.** Same trace-vs.-wire boundary as D11, D13, D14, D15; Registry-side `evidence_refs.dimensions = ["D19"]` lands with the upstream substrate work.
+- **Partner-role-domain join on Accord invocation.** Today the kill-switch checks ROOT/AUTHORITY but doesn't yet enforce that a FINANCIAL-licensed AUTHORITY can only invoke against a FINANCIAL incident. Closure depends on Registry exposing partner-role-domain bindings and the routing layer consuming them.
+- **Periodic partner-role re-attestation.** Drift or role change is caught at the next certificate refresh; the upstream temporal-drift detector is the cross-deployment backstop.
 
 ## Tracked requirements
 

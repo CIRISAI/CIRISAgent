@@ -29,57 +29,69 @@
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-`approach:*` is the middle layer of the Goal→Approach→Method→Progress-Measure DAG. In CIRIS, the strategic-pursuit axis is named: Meta-Goal M-1 is the goal, the Accord principles are the approach, and the H3ERE pipeline is the method. The named approach lives in the 6-state cognitive state machine (WAKEUP / WORK / PLAY / SOLITUDE / DREAM / SHUTDOWN) — each state selects an approach by routing thoughts through a different processor with different DMA emphasis and conscience configuration.
+Approach is the strategy layer: not the ultimate goal, not the algorithm — but the named strategic stance the agent takes to pursue the goal. This sits inside the four-level decision hierarchy: Goal (what we're trying to achieve) → Approach (the strategy) → Method (the specific algorithm) → Progress Measure (how we know we're getting there).
 
-- **Code references** — cognitive state machine (named approach selection):
-    - `ciris_engine/logic/processors/states/wakeup_processor.py` — identity-confirmation approach
-    - `ciris_engine/logic/processors/states/work_processor.py` — normal-task approach
-    - `ciris_engine/logic/processors/states/play_processor.py` — creative approach
-    - `ciris_engine/logic/processors/states/solitude_processor.py` — reflective approach
-    - `ciris_engine/logic/processors/states/minimal_dream_processor.py:71` — deep-introspection approach (forbidden actions converted to PONDER — `minimal_dream_processor.py:262`)
-    - `ciris_engine/logic/processors/states/shutdown_processor.py` — graceful-termination approach
-- **Code references** — Goal→Approach→Method DAG:
-    - `MISSION.md:24-30` — Meta-Goal M-1 (the Goal layer)
-    - `ciris_engine/data/accord_1.2b.txt` — the 6 Accord principles (the Approach layer: beneficence / non-maleficence / integrity / fidelity / autonomy / justice)
-    - `ciris_engine/logic/dma/` — the 5 DMA evaluators (the Method layer)
-    - `ciris_engine/logic/services/graph/telemetry/` — measurement (the Progress-Measure layer — see D21)
-- **Code references** — `approach:trustworthy_ai_lawful_ethical_robust` (EU mapping):
-    - `ciris_engine/logic/dma/pdma.py:23` — `EthicalPDMAEvaluator` (ethical)
-    - `ciris_engine/logic/dma/csdma.py` — common-sense robustness check (robust)
-    - `ciris_engine/logic/buses/prohibitions.py` — categorical prohibitions, including legal-floor capabilities (lawful)
-- **Code references** — `approach:species:*` (MH-education / MH-construction adjacent):
-    - `MISSION.md:24-30` (M-1 species-scale framing)
-    - `ciris_engine/logic/dma/prompts/pdma_ethical.yml` + `localized/{lang}/pdma_ethical.yml` — the approach declarations rendered in 29 languages
-- **Policy text**:
-    - `MISSION.md` — full Mission Driven Development charter; § 1.1 names the Goal, §§ 1.2-2 name the Approach (apophatic bounds), § 3 names the Method (the schema/protocol/logic layer)
-    - `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:33-45` — H3ERE pipeline as the canonical approach declaration
-- **Test coverage**:
-    - `tests/ciris_engine/logic/processors/` — per-state processor tests
-    - `tests/ciris_engine/logic/dma/` — per-DMA approach-execution tests
-- **Configuration surface**:
-    - `ciris_engine/schemas/processors/states.py` (and adjacent) — cognitive-state enum drives approach selection
-    - Identity Template (Scout, Ally, Sage, etc.) — declares which approach the agent emphasizes (see `CIRIS_COMPREHENSIVE_GUIDE.txt:17`)
+## How CIRIS implements this today
+
+CIRIS names each layer of that hierarchy explicitly. The goal is Meta-Goal M-1 (declared in `MISSION.md`); the approach is the set of six Accord principles; the method is the chain of decision-making algorithms each thought passes through; the progress measures are emitted by the telemetry service. The strategic stance the agent takes also depends on the cognitive state it is in — CIRIS has six cognitive states the agent can be in (WAKEUP / WORK / PLAY / SOLITUDE / DREAM / SHUTDOWN), and each state routes thoughts through a different processor with different emphasis and conscience settings.
+
+**The cognitive state machine (each state selects a strategic approach).**
+- `ciris_engine/logic/processors/states/wakeup_processor.py` — identity-confirmation
+- `ciris_engine/logic/processors/states/work_processor.py` — normal task processing
+- `ciris_engine/logic/processors/states/play_processor.py` — creative mode
+- `ciris_engine/logic/processors/states/solitude_processor.py` — reflective mode
+- `ciris_engine/logic/processors/states/minimal_dream_processor.py:71` — deep introspection (forbidden actions are converted to PONDER — see `minimal_dream_processor.py:262`)
+- `ciris_engine/logic/processors/states/shutdown_processor.py` — graceful termination
+
+**The four-level hierarchy (Goal → Approach → Method → Progress Measure).**
+- `MISSION.md:24-30` — Meta-Goal M-1 (the Goal layer)
+- `ciris_engine/data/accord_1.2b.txt` — the six Accord principles (the Approach layer: beneficence, non-maleficence, integrity, fidelity, autonomy, justice)
+- `ciris_engine/logic/dma/` — the five decision-making algorithms (the Method layer)
+- `ciris_engine/logic/services/graph/telemetry/` — measurement (the Progress-Measure layer — see D21)
+
+**The EU "lawful + ethical + robust" triad mapped to CIRIS components.**
+- `ciris_engine/logic/dma/pdma.py:23` — the ethics review step (ethical)
+- `ciris_engine/logic/dma/csdma.py` — the situational realism check (robust)
+- `ciris_engine/logic/buses/prohibitions.py` — categorical prohibitions, including legal-floor capabilities (lawful)
+
+**The "species-scale" approach declarations referenced by MH.**
+- `MISSION.md:24-30` (the species-scale framing of M-1)
+- `ciris_engine/logic/dma/prompts/pdma_ethical.yml` plus `localized/{lang}/pdma_ethical.yml` — the approach declarations rendered in 29 languages
+
+**Policy text.**
+- `MISSION.md` — the Mission Driven Development charter; § 1.1 names the Goal, §§ 1.2-2 name the Approach (the apophatic bounds), § 3 names the Method (the schema / protocol / logic layer)
+- `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:33-45` — the H3ERE pipeline as the canonical approach declaration
+
+**Tests.**
+- `tests/ciris_engine/logic/processors/` — per-state processor tests
+- `tests/ciris_engine/logic/dma/` — per-algorithm execution tests
+
+**Configuration.**
+- `ciris_engine/schemas/processors/states.py` (and adjacent) — the cognitive-state enum drives approach selection
+- Identity Template (Scout, Ally, Sage, etc.) — declares which approach the agent emphasizes (see `CIRIS_COMPREHENSIVE_GUIDE.txt:17`)
 
 Proposed pointer (from seed): `(none specified in seed; please fill)`
 
-## Observability hooks
+## How you can tell it's working (observability)
 
-- **State-transition telemetry**: every cognitive-state transition emits an audit event (`AuditEventType` in `ciris_engine/schemas/audit/core.py`). A downstream verifier can reconstruct the approach trajectory from `GET /v1/audit/entries?event_type=state_transition`.
-- **DMA-result telemetry**: each ASPDMA emission carries a `rationale` field (`ciris_engine/schemas/dma/results.py:242`) — the verbal approach-declaration for that thought.
+If you wanted to verify this from outside, every state transition emits an audit event, and every action-selection step carries a written rationale.
+
+- **State-transition telemetry**: each cognitive-state transition emits an audit event (`AuditEventType` in `ciris_engine/schemas/audit/core.py`). A downstream verifier can reconstruct the approach trajectory from `GET /v1/audit/entries?event_type=state_transition`.
+- **Rationale on every action selection**: every action-selection result carries a written `rationale` (`ciris_engine/schemas/dma/results.py:242`) — the agent's stated approach for that thought.
 - **Streaming step events**: `@streaming_step(StepPoint.PERFORM_DMAS)` and `@streaming_step(StepPoint.PERFORM_ASPDMA)` (see `ciris_engine/logic/processors/core/thought_processor/`) emit the approach choice as a discrete observation.
-- **LensCore F-3 detectors**: `detection:temporal_drift` and `detection:intra_agent_consistency` track approach-stability across thoughts.
-- **Federation evidence_refs**: a Contribution citing `dimensions: ["D20"]` resolves through this seed to MH approach:species:*, EU §B three-component framework, IEEE Ch1+Ch2 principles-to-practice.
+- **Drift detectors**: `detection:temporal_drift` and `detection:intra_agent_consistency` track approach stability across thoughts.
+- **Federation evidence_refs**: a typed federation message citing `dimensions: ["D20"]` resolves through this seed to MH approach:species:*, EU §B three-component framework, IEEE Ch1+Ch2 principles-to-practice.
 
 Proposed pointer (from seed): `(none specified in seed; please fill)`
 
-## Known gaps / not-yet-implemented
+## Current limitations & next steps
 
-- **No explicit `approach:{strategy_label}` wire-form emission**: Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.2` as `approach:{goal_id}` (NodeCore §2 P13; `CIRISNodeCore/FSD/APPROACH_PRIMITIVE.md` referenced in §3.6.2). Strategic pathway from current state toward Goals (Piece 10 karma); evaluation derived from linked Progress Measures; signed polarity. Composes with `commitment_fulfillment:{prior_contribution_id}` (FSD-002 §3.6.4 — APPROACH_PRIMITIVE `commits` field tracking follow-through). Cognitive state transitions and DMA rationales carry the approach choice implicitly today; federation-wire emission via `approach:{goal_id}` lands once NodeCore P13 ships.
-- **ASEAN absent_batch** (single use): ASEAN frames recommendations directly as methods rather than as named approaches. CIRIS exhibits the same shape — the approach layer is implicit in cognitive-state selection. Substrate primitive `approach:{goal_id}` admits both framings.
-- **`approach:trustworthy_ai_lawful_ethical_robust` triad**: Substrate-specced via three parallel `approach:{goal_id}` attestations (FSD-002 §3.6.2 NodeCore P13) — one per triad component. Composition runs consumer-side via FSD-002 §6.1 reference policies.
-- **Per-thought approach-trajectory query**: Substrate-specced as the upward-only DAG Goal→Approach→Method→Progress-Measure (FSD-002 §3.6.2 Tier-2 decision-hierarchy — `goal:{scale}` → `approach:{goal_id}` → `method:{approach_id}:{substrate_rung}` → `progress_measure:{method_id}`). The DAG slice IS the substrate primitive; agent-side endpoint composes the slice from audit + telemetry once NodeCore P13-P15 ship.
+- **Typed `approach:{strategy_label}` federation envelope**: shared work with the upstream CIRIS substrate (`CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.2`, `CIRISNodeCore/FSD/APPROACH_PRIMITIVE.md`). Cognitive-state transitions and algorithm rationales already carry the approach choice implicitly; the agent will emit the typed envelope when NodeCore P13 ships.
+- **ASEAN frames recommendations directly as methods** rather than as named approaches — a different framing of the same content. CIRIS sits in the same shape (the approach layer is implicit in cognitive-state selection), and the upstream substrate primitive admits both framings.
+- **EU "lawful + ethical + robust" triad as a typed envelope**: shared work with the upstream substrate — emitted as three parallel typed approach attestations (FSD-002 §3.6.2). Composition runs at the consumer side via the reference policies in FSD-002 §6.1.
+- **Per-thought approach-trajectory query endpoint** (next step, tracked in `CIRISAgent#829`): the four-level hierarchy slice will be exposed via `/v1/visibility/dag/{thought_id}`, composing audit + telemetry into a single trajectory view, landing alongside NodeCore P13-P15.
 
 ## Tracked requirements
 

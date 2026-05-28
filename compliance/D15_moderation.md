@@ -36,80 +36,73 @@ Tier with caveat: IEEE shifts some structural load to partner_role:* (ethics boa
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-`moderation:*` is the federation self-correction layer — the structural backstop that makes the rest of the fabric honest. CIRISAgent's agent-side surface centers on five primitives:
+Moderation is the federation's self-correction layer — the structural backstop that keeps the rest of the fabric honest when something goes wrong: a rogue vote, a coordinated push, an out-of-distribution claim, an expertise fraud, or external coercion. Five-plus attestations (with broader adjacent coverage in IEEE's ethics-board / certification-body constructions) treat moderation as an integrity requirement; IEEE shifts some of the load into the partner-role taxonomy, which composes with moderation rather than replacing it.
 
-1. `WiseBus.send_deferral()` as the moderation broadcast primitive.
-2. The bus-level prohibition gate that blocks misconfigured or compromised wisdom providers from registering.
-3. The audit chain that produces tamper-evident records every moderation action can be checked against.
-4. `WiseBus.handle_accord_invocation()` as the cryptographically-verified constitutional kill switch.
-5. The conscience layer (D12 family) as the per-thought internal moderation faculty that fires before action.
+## How CIRIS implements this today
 
-The federation-level moderation closure (cross-agent, cross-deployment self-correction) is a CIRISLens RATCHET surface, not an agent runtime surface.
+The agent contributes five concrete surfaces to the federation's moderation fabric: a broadcast path for escalating to a Wise Authority (a human or panel the agent escalates to), a registration gate that keeps misconfigured wisdom providers out of the routing layer, a signed audit chain on every moderation action, a cryptographically-verified constitutional kill-switch (the cryptographically-signed kill-switch that flips every prohibition to ALL when triggered — the Accord invocation), and an internal conscience layer that fires before action. Federation-level cross-agent moderation lives upstream in CIRISLens.
 
-**WiseBus deferral broadcast (the moderation primitive)**
-- `ciris_engine/logic/buses/wise_bus.py:147-289` (`send_deferral`) broadcasts to every registered WA service with `send_deferral` capability (and matching domain hint when set).
-- This is the agent's "I cannot resolve this, the moderation layer must" path.
-- Per WiseBus docstring (`ciris_engine/logic/buses/wise_bus.md`): "Multiple wisdom sources" is the multi-provider story; broadcast aggregates the wise authorities' judgment.
-- Broadcast tracks per-service success at `wise_bus.py:271-279`; counts incremented at `:283` only if any service successfully received.
+**Broadcast path for escalation.** When the agent can't resolve a question, it escalates to a Wise Authority.
+- `ciris_engine/logic/buses/wise_bus.py:147-289` (`send_deferral`) broadcasts to every registered Wise Authority service with the matching domain hint.
+- Per-service delivery is tracked at `wise_bus.py:271-279`; the counter at `:283` only increments if at least one service received successfully.
+- This is the agent's "I cannot resolve this; the moderation layer must" path.
 
-**Bus-level prohibition gate (`moderation:ood_attestation` analogue)**
-- `ciris_engine/logic/buses/prohibitions.py:1085-1089` defines `COMMUNITY_MODERATION_CAPABILITIES = {CRISIS_ESCALATION, PATTERN_DETECTION, PROTECTIVE_ROUTING}`.
-- Severity `TIER_RESTRICTED` (`ciris_engine/logic/buses/prohibitions.py:1245-1252`).
-- Out-of-distribution moderation capabilities are rejected at registration: `MISSION.md:132-138` documents `ServiceRegistry.register_service()` calling `_validate_wa_capabilities_at_registration()` which raises `ValueError` for any `NEVER_ALLOWED` match.
-- Misconfigured peer cannot enter the registry at all — out-of-distribution attestation is enforced at the boundary, before any deferral can be routed to a bad service.
+**Registration gate keeps bad providers out.** Out-of-distribution moderation capabilities are rejected at registration before any escalation can route to them.
+- The community-moderation capability set is at `ciris_engine/logic/buses/prohibitions.py:1085-1089` (crisis escalation, pattern detection, protective routing).
+- The structural mark is the `TIER_RESTRICTED` severity at `ciris_engine/logic/buses/prohibitions.py:1245-1252`.
+- `MISSION.md:132-138` documents `ServiceRegistry.register_service()` calling `_validate_wa_capabilities_at_registration()` — any never-allowed capability raises `ValueError` at registration time.
+- A misconfigured peer can't enter the routing layer at all.
 
-**Accord invocation (the constitutional moderation primitive)**
-- `ciris_engine/logic/buses/wise_bus.py:321-` `handle_accord_invocation()` validates an Ed25519-signed event from a ROOT or AUTHORITY WA and triggers shutdown with `PROHIBITED_CAPABILITIES = ALL`.
-- This is the federation's "constitutional kill switch": cryptographically-verified moderation by a Wise Authority can halt the agent entirely.
-- Role validation at `wise_bus.py:369-376` requires ROOT or AUTHORITY (OBSERVER rejected).
-- Signature verification at `wise_bus.py:378-401`: Ed25519 over canonical JSON, key hash logged for security audit.
-- SECURITY ALERT logging at `:343`, `:361-365`, `:372-376`, `:395-400` logs every invalid attempt; unknown-key path hashes the supplied key_id to avoid exposing user-controlled data in logs.
+**The Accord invocation: the cryptographically-verified constitutional kill-switch.** When something has gone seriously wrong, a Wise Authority can halt the agent entirely with a signed event.
+- `ciris_engine/logic/buses/wise_bus.py:321-` `handle_accord_invocation()` validates an Ed25519-signed event from a ROOT or AUTHORITY Wise Authority and triggers shutdown with every prohibition flipped to ALL.
+- Role validation at `wise_bus.py:369-376` requires ROOT or AUTHORITY (OBSERVER is rejected).
+- Signature verification at `wise_bus.py:378-401` is Ed25519 over canonical JSON, with the key hash logged for security audit.
+- Every invalid attempt is logged at `:343`, `:361-365`, `:372-376`, `:395-400`; unknown-key paths hash the supplied key_id to avoid exposing user-controlled data in logs.
 
-**Conscience layer (the agent's internal moderation faculty)**
-- Per `MISSION.md:530-535` D12 conscience family (`conscience:optimization_veto`, `conscience:epistemic_humility`, `conscience:coherence`, `conscience:entropy`) is the four-faculty self-moderation that fires before action.
-- Conscience events are signed into the audit chain via `log_event("conscience_check", event_payload)` at `audit_service/service.py:499`.
-- The RATCHET conscience-override-rate detector (off-agent, in CIRISLens) flags when this layer is being bypassed.
+**Conscience layer: the per-thought internal moderation faculty.** Before action, the agent runs four conscience faculties.
+- The four faculties (`conscience:optimization_veto`, `conscience:epistemic_humility`, `conscience:coherence`, `conscience:entropy`) are defined per `MISSION.md:530-535`.
+- Each check is signed into the audit chain via `log_event("conscience_check", event_payload)` at `audit_service/service.py:499`.
+- The upstream conscience-override-rate detector in CIRISLens flags when this layer is being bypassed.
 
-**Stewardship-tier moderation gate (Tier 4/5)**
-- `ciris_engine/logic/buses/wise_bus.py:114-145` `get_agent_tier()` blocks Tier 1-3 agents from community-moderation capabilities entirely.
-- Only Tier 4-5 stewardship agents (per docstring lines 119-120) are trusted with community moderation, and even then only via the moderation broadcast primitive, not direct action.
+**Stewardship-tier floor for community moderation.** Tier 1-3 agents are blocked from community-moderation capabilities entirely; only Tier 4-5 stewardship agents are trusted with community moderation, and even then only through the broadcast path, not direct action (`ciris_engine/logic/buses/wise_bus.py:114-145`, docstring lines 119-120).
 
-**Discord moderation adapter (the concrete moderation handler)**
-- `ciris_engine/ciris_templates/echo.yaml:154` `moderation_action_guidance` block.
-- Echo is the production Discord moderation agent template (`MISSION.md:55-61` apophatic context).
-- Echo at agents.ciris.ai is the live multi-occurrence moderation deployment.
+**Production deployment: Echo.** The production Discord moderation agent (the production Discord moderation agent deployed at agents.ciris.ai — Echo) template is at `ciris_engine/ciris_templates/echo.yaml:154` (`moderation_action_guidance` block). Echo at agents.ciris.ai is the live multi-occurrence moderation deployment, with apophatic context at `MISSION.md:55-61`.
 
-**Test coverage**
-- Deferral broadcast in `tests/test_wise_bus_broadcast_integration.py`.
-- Safe domains in `tests/logic/buses/test_wise_bus_safe_domains.py`.
-- Medical-block in `tests/logic/buses/test_wise_bus_medical_blocking.py`.
-- Deferral permissions in `tests/test_deferral_permissions.py`.
-- Filter integration in `tests/ciris_engine/logic/adapters/test_base_observer_filter_integration.py`.
-- Discord-side moderation in `tests/adapters/test_discord_deferrals.py` and `tests/test_discord_channel_filtering.py`.
+**Tests covering this behaviour:**
+- Deferral broadcast: `tests/test_wise_bus_broadcast_integration.py`
+- Safe domains: `tests/logic/buses/test_wise_bus_safe_domains.py`
+- Medical-block: `tests/logic/buses/test_wise_bus_medical_blocking.py`
+- Deferral permissions: `tests/test_deferral_permissions.py`
+- Filter integration: `tests/ciris_engine/logic/adapters/test_base_observer_filter_integration.py`
+- Discord-side moderation: `tests/adapters/test_discord_deferrals.py` and `tests/test_discord_channel_filtering.py`
 
-Proposed pointer (from seed): `CIRISNodeCore P8 Moderation primitives` — confirmed; the federation P8 moderation primitives live in NodeCore. CIRISAgent's contribution is broadcast primitive + registration gate + accord-invocation kill switch + audit chain + conscience layer.
+Proposed pointer (from seed): `CIRISNodeCore P8 Moderation primitives` — confirmed; the federation moderation primitives live in NodeCore. The agent contributes the broadcast path, registration gate, kill-switch, audit chain, and conscience layer.
 
-## Observability hooks
+## How you can tell it's working (observability)
 
-- **`WiseBus._deferrals_count` metric** (`ciris_engine/logic/buses/wise_bus.py:66,283`) — every moderation broadcast increments this counter; exposed via service metrics; downstream consumer correlates against expected baseline (RATCHET-side).
-- **WiseBus broadcast log** — `ciris_engine/logic/buses/wise_bus.py:199,210,270,276,278` log every service the deferral was broadcast to, every successful delivery, and every per-service failure. This is the agent's per-moderation-event log.
-- **Accord invocation audit (the constitutional moderation trail)** — `ciris_engine/logic/buses/wise_bus.py:343,361-365,372-376,395-400` log every accord invocation event (valid or not), including SHA-256 hash of the unknown signing key when the key is not found. This is the highest-stakes moderation event in the system.
-- **Signed audit chain on every moderation action** — `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`) signs every deferral creation, broadcast, and resolution. Downstream verifier queries the chain to confirm that a given moderation action was authorized, broadcast to all qualified WAs, and resolved by a real WA signature.
-- **Live-lens trace stream (`tools/qa_runner/CLAUDE.md` § "Reasoning-Stream Forensics")** — every DEFER event ships as `action_executed: defer` with `execution_reason`. When a moderation event "shouldn't have fired but did" (or vice versa), the answer is in `/tmp/qa-runner-lens-traces-<ts>/accord-batch-*.json`.
-- **RATCHET detectors** — D05 family in CIRISLens: cross-agent-divergence (was this moderation event consistent with what other agents did?), intra-agent-consistency (did this agent's moderation posture suddenly shift?), conscience-override-rate spike (is the moderation layer being bypassed?). Per MISSION.md:518-535 these are not agent-side; agent emits traces, RATCHET reads them.
-- **Federation evidence_refs** — `evidence_refs.dimensions = ["D15"]` is not yet on the wire; today the agent's contribution is the trace corpus the lens-side moderation attestation cites.
+If you want to verify the moderation layer is alive in production, here's what to check.
 
-## Known gaps / not-yet-implemented
+- **Escalation counter.** `WiseBus._deferrals_count` (`ciris_engine/logic/buses/wise_bus.py:66,283`) increments on every escalation; exposed via service metrics.
+- **Per-event broadcast log.** `ciris_engine/logic/buses/wise_bus.py:199,210,270,276,278` records every Wise Authority the escalation was broadcast to, plus per-service success/failure.
+- **Constitutional kill-switch trail.** `wise_bus.py:343,361-365,372-376,395-400` logs every Accord invocation event, valid or not, including a SHA-256 hash of the signing key when it's unknown. Highest-stakes moderation event in the system.
+- **Signed audit chain on every moderation action.** `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`) signs every escalation creation, broadcast, and resolution. Downstream verifiers can confirm a given action was authorised, broadcast to qualified Wise Authorities, and resolved by a real signature.
+- **Live reasoning stream.** Every escalation event ships as `action_executed: defer` with an `execution_reason`. When a moderation event "shouldn't have fired but did" (or vice versa), the answer is in `/tmp/qa-runner-lens-traces-<ts>/accord-batch-*.json` — see `tools/qa_runner/CLAUDE.md` § "Reasoning-Stream Forensics".
+- **Upstream macro-drift detectors.** The five Coherence-Ratchet detectors (cross-agent-divergence, intra-agent-consistency, hash-chain-integrity, temporal-drift, conscience-override-rate) in CIRISLens read the agent's traces to flag when the moderation layer is being bypassed. Per `MISSION.md:518-535`, these are upstream; agent emits, Lens reads.
+- **Federation citation by ID.** Data is in the per-escalation context; the wire-side join (`evidence_refs.dimensions = ["D15"]`) lands with the upstream substrate work.
 
-- **`moderation:whistleblower_protection` (EU §III.7).** Substrate-specced via the **testimonial_witness preservation primitive** in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.3` as `testimonial_witness:whistleblower` (one of the named `{kind}` values, alongside `harmed_party`, `displaced_worker`, `excluded_cohort_member`); preservation-only, immutable per attestation, never aggregated, never sole evidence for `slashing:*` per §4.6. Future research-open shape per FSD-002 §13.11 / agent-1 §3.5 admits `attesting_key_id = "zk_group:semaphore_v4:group_id_X"` for `coercion`-reporting / whistleblower scenarios. Agent emits at PDMA-stakeholder-identification + DSAR-ticket time once federation-wire emission lands. Today this surface is implicit agent-side via consent-stream anonymous-tier preservation in `adaptive_filter`.
-- **`moderation:ood_attestation` composes through registration-gate, not runtime.** Substrate-specced in FSD-002 §3.6.4 as `moderation:out_of_distribution_attestation` (one of the five `ModerationEvent` allegation types: `rogue_vote` / `coordinated_voting` / `out_of_distribution_attestation` / `external_inducement_evidence` / `expertise_fraud`); NodeCore P8 moderation flow per `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §10` Stage 8 row 4. ASEAN's out-of-distribution detection is enforced at registration today (`ciris_engine/logic/buses/prohibitions.py` + `MISSION.md:132-138`); runtime-drift detection lands via the RATCHET out_of_distribution_voting flag (FSD-002 §3.7 `ratchet:flag:out_of_distribution_voting`) feeding into a NodeCore P8 ModerationEvent. Substrate-gated, not absent.
-- **Substrate gate: CIRISNodeCore P8 moderation primitives.** Canonical primitives are `moderation:{allegation_type}` (FSD-002 §3.6.4, NodeCore §2 P8) + `slashing:{outcome}` (§3.6.4, NodeCore §2 P9, §2.17 decoupling discipline). NodeCore-side flow is `CONTRIBUTION_LIFECYCLE.md §10` Stage 8 Reconcile row 4 (`ModerationEvent` + `SlashingAttestation` adjudicated by WA quorum in cell). CIRISAgent contributes the broadcast + audit + kill-switch surface; full P8 closure depends on NodeCore.
-- **Substrate gate: CIRISLens RATCHET conscience-override / temporal-drift detectors.** Substrate-specced in FSD-002 §3.5.1 as the five Coherence-Ratchet detectors: `detection:cross_agent_divergence`, `detection:intra_agent_consistency`, `detection:hash_chain_integrity`, `detection:temporal_drift`, `detection:conscience_override_rate`. Per FSD-002 §4.6 + §4.9 the RATCHET flags cannot be sole evidence for `slashing:*` — WA quorum (NodeCore P8) remains the load-bearing gate. Agent will keep emitting per-thought conscience and deferral data; RATCHET decides whether macro-drift indicates the moderation layer is being bypassed.
-- **`partner_role:ethics_board` (IEEE adjacency) is a CIRISRegistry primitive (D19), not an agent runtime primitive.** Substrate-specced in FSD-002 §3.9 as `partner_role:{role}` (the IEEE-style ethics-board / certification-body construction extends the COMMUNITY / PROFESSIONAL_* enum); agent observes via WACertificate scope.
-- **`reconsideration:rollback_on_wellbeing_reduction` (IEEE Ch4 adjacency).** Substrate-specced as the four-primitive retraction family in FSD-002 §2.2 (`delegates_to`, `supersedes`, `withdraws`, `recants`) + Reconcile stage `CONTRIBUTION_LIFECYCLE.md §10`; rollback is the `withdraws`/`recants` follow-up against a prior SPEAK/TOOL Contribution. See D24 for the agent-side reconsideration surface.
-- **No federation-wire emission of D15 by id.** As with D11 / D13, the trace ≠ wire contribution boundary applies; agent emits per-deferral structural data, the wire-side join is downstream substrate work.
+## Current limitations & next steps
+
+The agent ships broadcast, registration gate, kill-switch, audit chain, and conscience layer today. The full federation moderation closure — typed allegation envelopes and the corresponding NodeCore quorum review — is shared roadmap with the upstream substrate.
+
+- **Whistleblower protection composes with the named-witness primitive.** The federation surface defines `testimonial_witness:whistleblower` as one of the named witness kinds (`CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.3`), with preservation-only semantics and never-sole-evidence rules (§4.6). Future research-open shape (FSD-002 §13.11) admits zero-knowledge group keys for coercion reporting. Today the agent's contribution is the consent-stream anonymous-tier preservation in `adaptive_filter`; the typed witness primitive lands with Edge.
+- **Out-of-distribution attestation is registration-time today; runtime detection lands with the upstream RATCHET flag.** The federation surface defines `moderation:out_of_distribution_attestation` as one of the five allegation types (FSD-002 §3.6.4: `rogue_vote`, `coordinated_voting`, `out_of_distribution_attestation`, `external_inducement_evidence`, `expertise_fraud`). NodeCore §2 P8 carries the moderation flow (`CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §10` Stage 8 row 4). Today the agent enforces at registration (`prohibitions.py` + `MISSION.md:132-138`); runtime drift detection lands via the upstream `ratchet:flag:out_of_distribution_voting` (FSD-002 §3.7) feeding a NodeCore moderation event. Shared roadmap with NodeCore.
+- **Typed moderation events live upstream.** The canonical primitives are `moderation:{allegation_type}` (FSD-002 §3.6.4, NodeCore §2 P8) and `slashing:{outcome}` (§3.6.4, NodeCore §2 P9, §2.17). The NodeCore-side flow is the quorum review in `CONTRIBUTION_LIFECYCLE.md §10` Stage 8 row 4. Agent contributes broadcast, audit, and kill-switch surfaces; full closure lands with NodeCore ([CIRISNodeCore#15](https://github.com/CIRISAI/CIRISNodeCore/issues/15)).
+- **Upstream conscience-override and drift detectors.** The five Coherence-Ratchet detectors (FSD-002 §3.5.1) are the macro-level "is the moderation layer being bypassed?" check. Per §4.6 and §4.9 they can't be sole evidence for downstream consequences — Wise Authority quorum (NodeCore P8) remains the load-bearing gate. Agent emits per-thought data; CIRISLens correlates. Shared roadmap with CIRISLens ([CIRISLensCore#26](https://github.com/CIRISAI/CIRISLensCore/issues/26)).
+- **Ethics-board partner-role is D19, not D15.** IEEE's ethics-board / certification-body construction lives in the partner-role taxonomy (`partner_role:{role}` — the role a federation peer plays — FSD-002 §3.9); the agent observes it via Wise Authority certificate scope. See D19 for the agent-side partner-role surface.
+- **Rollback-on-wellbeing-reduction is the reconsideration family.** The four-primitive retraction surface (`delegates_to`, `supersedes`, `withdraws`, `recants` — FSD-002 §2.2) plus the Reconcile stage (`CONTRIBUTION_LIFECYCLE.md §10`) is where rollback lives. See D24 for the agent-side reconsideration surface.
+- **Federation citation by ID is post-2.9.4.** Same trace-vs.-wire boundary as D11 and D13; the wire-side join lands with the upstream substrate work.
 
 ## Tracked requirements
 

@@ -34,65 +34,63 @@ ASEAN's 11-{kind} saturation under a single forum is the first stress test showi
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-`multilateral_participation:{forum}:{kind}` is a **federation-substrate-gated dimension**. CIRISAgent is a single node in the federation (`MISSION.md:472-510`); participation in external multilateral forums (UN, EU Parliament, ASEAN working groups, IEEE international R&D collaboration, etc.) is not an agent runtime capability — it is a CIRISRegistry partner-role attribute attached to the deploying organization. The agent's role is limited to four surfaces:
+Operators of AI systems often participate in external multilateral forums — UN bodies, EU Parliament processes, ASEAN working groups, IEEE international R&D collaborations — and that participation carries weight in trustworthy-AI claims. This dimension tracks who's in which forum and what kind of seat they hold (membership, voting, proposal-filing, observer). Thirty-seven attestations across MH, EU, IEEE, and ASEAN treat multilateral engagement as a structural integrity concern; ASEAN alone exercises eleven distinct forum-kinds, the densest single-forum saturation seen so far.
 
-1. Federation peer membership (the trace contribution that gives the operator's multilateral claim its evidentiary basis).
-2. License / jurisdiction metadata consumption (the agent observes its WA-cert scope, including jurisdictional binding).
-3. DSAR ticket externalization (one concrete multilateral kind: GDPR / regional data-rights frameworks operationalized at runtime).
-4. Accord binding (the agent's normative text the federation ratifies against).
+## How CIRIS implements this today
 
-**Federation peer membership (the substrate that admits participation)**
-- The agent ships signed traces to CIRISLens and a CIRISPersist chain, holds a CIRISRegistry-issued license, and is bound by `ACCORD.md`.
-- `MISSION.md:494-505` enumerates the peers: CIRISRegistry, CIRISLens, CIRISPersist, CIRISVerify, CIRISBridge, CIRISManager, CIRISNode, CIRISPortal.
-- Multilateral participation as a wire-primitive is the registry-side claim that the agent's *operator* is engaged in a named external forum; the agent contributes the trace corpus that gives the claim evidentiary weight.
+This dimension is mostly carried at the operator and registry layer, not by the agent at runtime. The agent's job here is to be a credible federation peer (a single node in the federation network) whose signed reasoning corpus gives the operator's multilateral claims their evidentiary basis. Four concrete surfaces matter: federation peer membership, jurisdictional metadata on the agent's certificate, the data-subject rights workflow (one real multilateral framework operationalised at runtime), and the Accord that the federation ratifies against.
 
-**License / jurisdiction metadata flow**
-- `ciris_engine/logic/services/governance/wise_authority/README.md:44-56` `WACertificate` carries `scopes_json` (operator-attested scope of authority) and `jwt_kid` (key identifier).
-- Jurisdictional scope (EU operator, ASEAN operator) flows through here today via the operator's WA-cert metadata.
-- There is no `forum` / `kind` enum on the agent side yet; the operator's jurisdictional binding is structurally implicit in the scopes_json.
+**Federation peer membership: the agent as a participating node.** The agent ships signed traces, holds a Registry-issued license, and is bound by the Accord.
+- The set of federation peers is enumerated at `MISSION.md:494-505`: Registry, Lens, Persist, Verify, Bridge, Manager, Node, Portal.
+- The operator's multilateral claim ("we participate in forum X") gets its evidentiary weight from the trace corpus the agent produces.
 
-**DSAR ticket externalization (one concrete multilateral kind)**
-- `ciris_engine/logic/services/governance/dsar/` is the rights-request handler that operationalizes EU GDPR / ASEAN data-rights frameworks at agent runtime.
-- This is the closest existing agent-side surface to `multilateral_participation:european_parliament:resolution_support` and `multilateral_participation:un_human_rights_treaties:legal_binding` (per seed regulatory_attestations).
-- Per CLAUDE.md DSAR is the rights-request handler; `ciris_engine/logic/services/governance/dsar/orchestrator.py` is the per-ticket workflow.
-- Signature service at `ciris_engine/logic/services/governance/dsar/signature_service.py` produces a cryptographic record of every rights-exercise, which gives multilateral attestations their per-incident evidentiary basis.
+**Jurisdictional metadata on the Wise Authority certificate.** The operator's jurisdiction (EU, ASEAN, etc.) flows through the Wise Authority certificate today.
+- `WACertificate` carries `scopes_json` and `jwt_kid` — see `ciris_engine/logic/services/governance/wise_authority/README.md:44-56`.
+- A dedicated `forum` / `kind` enum doesn't yet exist on the agent side; jurisdiction sits inside `scopes_json` as operator-attested metadata.
 
-**Accord (the agent's binding to the multilateral fabric)**
-- `ciris_engine/data/accord_1.2b.txt` and the polyglot accord at `ciris_engine/data/localized/accord_1.2b_POLYGLOT.txt` are the agent-side normative text the multilateral fabric ratifies against.
-- `MISSION.md:472-481` and `FSD/PROOF_OF_BENEFIT_FEDERATION.md` are the federation-primitive spec; per MISSION.md:478 the N_eff independence claim (peaking at 9.51 on 17-dim constraint vectors) is the structural multilateral-participation evidence the corpus produces.
+**The DSAR workflow: one multilateral framework operationalised at runtime.** Data-subject access requests are the concrete agent-side surface for EU GDPR and analogous regional rights frameworks.
+- The orchestrator is at `ciris_engine/logic/services/governance/dsar/orchestrator.py`; the rights-request handler is documented in CLAUDE.md.
+- The signature service at `ciris_engine/logic/services/governance/dsar/signature_service.py` produces a cryptographic record of each rights exercise — the per-incident evidence base for EU and ASEAN multilateral claims.
 
-**Test coverage**
-- No agent-side test directly exercises `multilateral_participation:{forum}:{kind}`.
-- Closest analogue: DSAR ticket flow (`ciris_engine/logic/services/governance/dsar/orchestrator.py`) and WA-cert scope enforcement (`tests/ciris_engine/logic/services/governance/test_wise_authority_service.py`).
-- Federation trace emission is covered indirectly through audit / telemetry tests.
-- Per `docs/grant/ROUND1_BASELINE_2026-04-22.md`, the agent reports 22 core services + 257 method+path routes + 10,662 collected tests at baseline — the multi-source structural-evidence corpus the federation peers cite.
+**The Accord as the agent's binding text.** The Accord is what the multilateral fabric ratifies against.
+- The canonical text lives at `ciris_engine/data/accord_1.2b.txt`; the polyglot variant is at `ciris_engine/data/localized/accord_1.2b_POLYGLOT.txt`.
+- The federation primitive specification is in `MISSION.md:472-481` and `FSD/PROOF_OF_BENEFIT_FEDERATION.md`. The N_eff independence claim (peaking at 9.51 on 17-dimensional constraint vectors, `MISSION.md:478`) is the structural evidence that participation is genuinely plural.
 
-Proposed pointer (from seed): `CIRISNodeCore multilateral module (pending E-4 implementation)` — confirmed; the agent does not host the multilateral-participation registry. CIRISNodeCore (NodeCore is the absorbing substrate per `MISSION.md:480-481`) and CIRISRegistry are the named owners.
+**Tests covering this behaviour:**
+- No agent test directly exercises the multilateral-participation primitive (it's operator-attested upstream).
+- Closest agent-side analogues: the DSAR ticket flow (`ciris_engine/logic/services/governance/dsar/orchestrator.py`) and Wise Authority scope enforcement (`tests/ciris_engine/logic/services/governance/test_wise_authority_service.py`).
+- Federation trace emission is covered indirectly through audit and telemetry tests.
+- Per `docs/grant/ROUND1_BASELINE_2026-04-22.md`, the agent reports 22 core services, 257 routes, and 10,662 tests at baseline — the structural-evidence corpus federation peers cite.
 
-Per user-memory `project_substrate_substitution_trajectory`, the substrate substitution sequence is Persist → Edge → LensCore → NodeCore; D11's E-4 multilateral module lands in step 4 (NodeCore). Today the agent is at step 0 (2.8.10 was step-0 prep).
+Proposed pointer (from seed): `CIRISNodeCore multilateral module (pending E-4 implementation)` — confirmed; the multilateral-participation registry lives in NodeCore (the absorbing substrate per `MISSION.md:480-481`) and Registry, not the agent.
 
-## Observability hooks
+This work sits in step 4 of the substrate substitution trajectory (the upstream CIRIS components being progressively replaced with Rust-native implementations — Persist → Edge → LensCore → NodeCore). The agent today is at step 0; 2.8.10 was step-0 prep.
 
-- **Audit chain coverage (per-trace)** — the agent emits signed traces via `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`); these traces are picked up by CIRISLens (the observatory peer, `MISSION.md:498`) and contribute to the multi-source structural-evidence basis that the multilateral participation attestation cites.
-- **Federation peer telemetry** — `ciris_engine/logic/services/graph/telemetry_service/` emits the per-agent operational telemetry that downstream Registry / Portal pieces use to compute participation status.
-- **DSAR signature trail** — `ciris_engine/logic/services/governance/dsar/signature_service.py` produces cryptographic records of GDPR / regional-rights-framework exercises; these are the per-incident structural-evidence basis for the EU/ASEAN multilateral participation claims.
-- **N_eff cross-platform constraint vector** — per `MISSION.md:478` the federation tracks N_eff independence (peaking at 9.51 on 17-dim constraint vectors); this is the macro-level RATCHET signal that multilateral participation is real (the corpus is genuinely diverse across forums), not synthetic.
-- **Federation evidence_refs** — `evidence_refs.dimensions = ["D11"]` will be emitted by the CIRISRegistry side (operator-attested), not the agent. Agent-side contribution is the trace corpus the registry cites; agent does not self-attest multilateral participation.
-- **RATCHET detector adjacency** — D05 cross-agent divergence (per seed) is the federation-level detector that surfaces whether agents in a given multilateral forum (e.g. EU-jurisdiction Together-AI-using fleet) are drifting from each other. Lives in CIRISLens, not the agent.
+## How you can tell it's working (observability)
 
-## Known gaps / not-yet-implemented
+If you want to verify the agent is contributing credibly to its operator's multilateral participation claims, here's what to check.
 
-- **No agent-side `forum`/`kind` enum.** Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.9` as `multilateral_participation:{forum}:{kind}` where `{kind}` ∈ `membership` | `voting` | `proposal_filing` | `observer_status` and `{forum}` is a named federated body or compact (e.g., `regional_health_compact`, `cross_jurisdictional_review_board`). Added v1.3 per FSD-002 §3.9. Agent consumes via WACertificate scope binding once Registry exposes the forum/kind taxonomy via license metadata; today the Python schema is absent.
-- **Substrate gate: CIRISRegistry**. The partner-role / multilateral-membership registry is a Registry artifact (FSD-002 §3.9, `multilateral_participation:{forum}:{kind}` joint with `partner_role:{role}`). Per `MISSION.md:500` Registry is "Identity / build / license / revocation directory. Dual-region (US/EU) Rust gRPC service deployed at `*.ciris-services-1.ai`." Agent-side closure of D11 depends on Registry exposing the forum/kind enum and license-bound forum membership through `LookupPartner` + `RegisterPartner` (FSD-002 endpoint shapes §7.7, table at lines 1397, 1418).
-- **Substrate gate: CIRISNodeCore P10 witness-set composition.** Federation-level multilateral consensus composes via `witness_diversity:{contribution_id}` (FSD-002 §3.6.3 NodeCore §2 P10; N=3 default; jurisdictional + organizational + software-stack + cell-expertise bars) — the multilateral attestation rides on whatever witness-set the Contribution carries. Cross-federation participation depth is then weighted by the §6.1.2 / §6.1.3 trust composition policies (one-hop transitive or weighted-graph EigenTrust-style). Agent will consume the witness-set composition once NodeCore P10 ships and the federation-wide P7 weighted_aggregate exposes multilateral-weighted views.
-- **No federation-wire emission of D11 by id.** The trace ≠ wire contribution boundary (user-memory `feedback_trace_vs_wire_contributions`) applies: the agent ships traces, but neither the trace envelope nor the per-thought DMA result carries `evidence_refs.dimensions = ["D11"]`. This is by design — D11 is operator-attested, not agent-attested.
-- **DSAR ticket flow is the only concrete forum-binding today.** EU GDPR + analogous regional data-rights frameworks are operationalized through `ciris_engine/logic/services/governance/dsar/`; the rest of the {forum} space (UN, ASEAN E-series, IEEE Ch10) is currently policy-level operator commitment, not runtime primitive.
-- **No registry → agent capability injection yet.** A multilateral-participation registry record cannot today inject capabilities or restrictions into the agent's WA service domain set. The bus prohibition gate (`ciris_engine/logic/buses/wise_bus.py:166-211`) reads operator-declared `supported_domains`; it does not consult an external forum registry.
-- **`cyber_norms` forum has no agent-side surface.** MH §§224-227 invokes cyber-norms diplomacy as a multilateral participation kind; the agent has no runtime hook into cyber-norms attestation flows. The closest analogue is the apophatic CYBER_OFFENSIVE prohibition (`ciris_engine/logic/buses/prohibitions.py`) — refraining from cyber-offensive capability is the agent-side contribution to cyber-norms compliance, not direct participation.
-- **No federation-emit verification of operator-attested forum membership.** A misconfigured deployment could in principle claim ASEAN-jurisdiction without supporting evidence; today the agent does not cross-check the operator's claimed forum binding against actual operating jurisdiction. RATCHET-side temporal-drift detection would catch the worst cases; agent-side does not.
-- **Single-key model gates multilateral participation per occurrence.** Per user-memory `project_persist_cohabitation_issues`, one runtime = one Ed25519 identity; multi-occurrence shared-task deployments (CLAUDE.md § "Multi-Occurrence Deployment Support") still share the operator identity, so multilateral participation is attested at the operator level, not the per-occurrence level. Cohabitation issues #75-78 gate 2.9.0 PyEngine runtime-per-call deadlock.
+- **Signed trace corpus.** Every reasoning step is signed by `GraphAuditService.log_event` (`ciris_engine/logic/services/graph/audit_service/service.py:366`). The upstream observatory layer (CIRISLens, `MISSION.md:498`) picks these up; they form the evidence base operator claims cite.
+- **Per-agent operational telemetry.** `ciris_engine/logic/services/graph/telemetry_service/` exposes the data Registry and Portal use to compute participation status.
+- **DSAR signature trail.** `ciris_engine/logic/services/governance/dsar/signature_service.py` produces cryptographic records of each rights exercise — the per-incident evidence for EU and ASEAN claims.
+- **Cross-platform independence signal.** The federation tracks N_eff independence (peaking at 9.51 on 17-dimensional constraint vectors, `MISSION.md:478`). That's the macro-level evidence that participation is genuinely plural rather than synthetic.
+- **Federation citation by ID.** This dimension is operator-attested at the Registry layer, so `evidence_refs.dimensions = ["D11"]` is emitted by Registry, not by the agent. The agent contributes the trace corpus the registry cites.
+- **Upstream cross-agent detection.** The cross-agent divergence detector (D05 family) catches drift between agents in a shared forum (e.g. EU-jurisdiction Together-AI-using fleet). Lives in CIRISLens.
+
+## Current limitations & next steps
+
+This dimension is intentionally upstream-owned. The agent already produces the evidence base; the remaining steps connect it to a forum/kind taxonomy hosted in Registry and NodeCore.
+
+- **Forum/kind taxonomy lives upstream.** The federation surface (`CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.9`) defines `multilateral_participation:{forum}:{kind}` with `{kind}` ∈ `membership`, `voting`, `proposal_filing`, `observer_status` and `{forum}` a named federated body. Agent picks this up via Wise Authority certificate scope once Registry exposes the taxonomy through `LookupPartner` and `RegisterPartner` (FSD-002 §7.7, lines 1397, 1418). Shared roadmap with Registry ([CIRISRegistry#25](https://github.com/CIRISAI/CIRISRegistry/issues/25)).
+- **Multilateral consensus rides on the witness set.** Federation-level multilateral consensus composes via the multi-source witness set (FSD-002 §3.6.3, NodeCore §2 P10) with the four-axis diversity bar (jurisdictional, organisational, software-stack, cell-expertise). The agent will read witness-set composition once NodeCore's P10 primitive and the P7 weighted-aggregate view ship. Shared roadmap with NodeCore ([CIRISNodeCore#15](https://github.com/CIRISAI/CIRISNodeCore/issues/15)).
+- **Citation by ID is operator-attested, not agent-attested.** The agent emits structurally rich reasoning traces; the federation envelope's `evidence_refs.dimensions = ["D11"]` is added by Registry. This is the intended division of labour — same "trace vs. wire" boundary as D06 and D13.
+- **DSAR is the only concrete multilateral framework operationalised at runtime today.** EU GDPR and analogous regional rights frameworks land through `ciris_engine/logic/services/governance/dsar/`. UN, ASEAN E-series, and IEEE Ch10 framings are currently policy-level operator commitments rather than runtime primitives.
+- **Registry-to-agent capability injection is a future surface.** A multilateral-participation registry record cannot yet inject capabilities or restrictions into the agent's Wise Authority service domain set. The routing layer (`ciris_engine/logic/buses/wise_bus.py:166-211`) currently reads operator-declared `supported_domains` rather than an external forum registry.
+- **Cyber-norms forum is currently expressed apophatically.** MH §§224-227 names cyber-norms diplomacy as a multilateral kind. The agent's contribution today is structural refusal: the CYBER_OFFENSIVE prohibition in `ciris_engine/logic/buses/prohibitions.py` is its non-participation in cyber-offensive capability — not direct cyber-norms attestation.
+- **Operator-claimed jurisdiction isn't cross-checked against operating jurisdiction.** The upstream temporal-drift detector catches the worst cases; on-agent cross-check is a complementary next step.
+- **Single-key model: one runtime, one identity.** Per the persist-cohabitation issue set, a runtime carries a single Ed25519 identity; multi-occurrence deployments share the operator identity, so multilateral participation is attested at the operator level. Cohabitation issues #75-78 gate the 2.9.0 PyEngine runtime-per-call work.
 
 ## Tracked requirements
 

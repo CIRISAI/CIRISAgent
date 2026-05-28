@@ -37,66 +37,60 @@ All four batches independently engage the F-3 family. Three of four also engage 
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-D05 detection lives primarily in CIRISLensCore (the post-trace federation analytics layer). CIRISAgent's role is to emit the trace dimensions LensCore needs and to host the agent-side faculties that produce them. The bulk of F-3 detector implementation is NOT in this repo.
+Detection covers the harms that no single agent action can reveal on its own: aggregate environmental footprint, cohort exclusion, slow norm-drift, and patterns of coordinated behavior across many agents. These are the harms that only show up when you look across many traces together — so the detection layer lives in the federation analytics layer, not inside any one agent.
 
-- **Agent-side dimension emission** (what the agent measures and ships):
-    - `ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py:43-50` — `IdentityVarianceMonitor`: per-window drift sampling; the only fully-implemented `detection:temporal_drift` analogue in the agent today
-    - `ciris_engine/logic/services/governance/self_observation/service.py` — SelfObservation service: tracks behavioral patterns over time; surfaces `detection:intra_agent_consistency` candidates
-    - `ciris_engine/logic/services/governance/adaptive_filter/service.py:39+` — `AdaptiveFilterService`: filters input streams against drift baselines; emits signals downstream
-    - `ciris_engine/schemas/infrastructure/behavioral_patterns.py` — `BehavioralPattern`, `reliability_level` (consistency metric, `behavioral_patterns.py:123`)
-    - `ciris_engine/schemas/infrastructure/identity_variance.py:78` — `VarianceCheckMetadata` (handler_name="identity_variance_monitor")
-- **Per-trace integrity dimensions for federation analysis**:
-    - `ciris_engine/schemas/runtime/system_context.py:163` — `verify_attestation` projected into every traced thought; the six `*_ok` booleans are documented as near-zero-correlation dimensions for k_eff analysis (`FSD/TRACE_WIRE_FORMAT.md:519-522`)
-    - `FSD/PROOF_OF_BENEFIT_FEDERATION.md:52` — `N_eff` metric: empirical participation-ratio + entropy-perplexity over the 17-dim constraint vector; measured peak 9.51, lifetime mean 7.20
-- **Conscience-layer detection** (per-thought, in-agent):
-    - `ciris_engine/logic/dma/idma.py:10` — IDMA `k_eff < 2` / rigidity-phase detector (per-thought fragility detection)
-    - `ciris_engine/schemas/conscience/core.py:199` — `reasoning_transparency` scalar (0.0-1.0) feeds downstream correlation analysis
-    - Conscience faculties (`conscience:optimization_veto`, `conscience:epistemic_humility`, `conscience:coherence`, `conscience:entropy`) produce signals that detection layers correlate post-hoc
-- **Aggregate-correlation substrate** (what the agent provides for LensCore):
-    - `ciris_engine/logic/services/graph/tsdb_consolidation/service.py:97` — `AuditConsolidator` produces per-window summary nodes carrying the audit evidence list; downstream lens computes aggregate-footprint metrics from these
-    - `ciris_engine/logic/services/graph/incident_service/service.py:38-54` — `IncidentManagementService`: ingests `/app/logs/incidents_latest.log` warnings/errors as graph nodes; aggregates per-class incident counts for `detection:correlated_action:*` rollups
-    - `tools/qa_runner/modules/safety_battery.py:241-246` — `_capture_ci_provenance`: captures GitHub Actions run metadata into safety battery output for cross-run drift analysis
+## How CIRIS implements this today
 
-## Observability hooks
+The detection layer is split by design: the agent (this repo) measures and ships the per-trace signals; the structural-pattern detector (LensCore's federation-side detector family that watches for patterns no single agent can see) correlates them across the population. Today the agent ships rich per-trace evidence and runs an in-agent identity-variance monitor; the cross-trace detector family lives upstream in LensCore.
 
-- **LensCore F-3 detector family**: NOT implemented in this repo. The seed-named detectors that the federation analytics layer is expected to host:
-    - `detection:correlated_action:aggregate_footprint:energy_carbon` — agent emits per-call token counts via `ciris_adapters/model_usage/`, lens aggregates
-    - `detection:correlated_action:aggregate_footprint:expendability_of_persons` — MH §36 "structures of sin" detector; no agent-side wiring
-    - `detection:correlated_action:participation_exclusion:underrepresented_population` — depends on demographic metadata the agent does not collect
-    - `detection:temporal_drift` — partial: agent has `IdentityVarianceMonitor`, no cross-agent federation drift detector
-    - `detection:intra_agent_consistency` — partial: agent has SelfObservation snapshots; no cross-window consistency detector emitting structured signals
-    - `detection:distributive:access:*` — not implemented; v1.3 universal-destination-of-goods closure has no detector
-- **RATCHET calibration packages**: versioned, hash-pinned externally to this repo. Agent must surface the calibration version it was last evaluated against — currently no such field exists in `AttestationResult`.
-- **Audit chain queries** (the integrity substrate that detection findings reference):
-    - `engine.audit_list_entries(filter_json, cursor, limit)` — paginated DESC by sequence_number; used by both `verify_complete_chain` and downstream rollups
-    - `engine.audit_verify_chain` — end-to-end walk against `cirislens_audit_log`
-- **Per-trace constraint vector**: 17-dim space per `FSD/PROOF_OF_BENEFIT_FEDERATION.md:52`; the lens computes N_eff to validate Sybil-resistance — every action contributes to this constraint vector through its trace metadata.
-- **Federation evidence_refs**: emitted Contributions cite `dimensions: ["D05"]` when the contribution itself produces detector-relevant evidence (rare from the agent; common from the lens looking back at agent traces).
-- **Telemetry rollup**: `/v1/telemetry/unified` (`ciris_engine/logic/adapters/api/routes/telemetry.py:1879+`) provides operational-view aggregates; not detector-grade but consumed by drift dashboards.
+- **What the agent measures and ships**:
+    - `ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py:43-50` — the identity-variance monitor (watches for drift between the agent's intended identity and its actual behavior); the fully-implemented temporal-drift signal today.
+    - `ciris_engine/logic/services/governance/self_observation/service.py` — SelfObservation: tracks behavioral patterns over time; surfaces intra-agent-consistency candidates.
+    - `ciris_engine/logic/services/governance/adaptive_filter/service.py:39+` — adaptive filter: filters input streams against drift baselines.
+    - `ciris_engine/schemas/infrastructure/behavioral_patterns.py` — `BehavioralPattern`, `reliability_level` (consistency metric, `behavioral_patterns.py:123`).
+    - `ciris_engine/schemas/infrastructure/identity_variance.py:78` — `VarianceCheckMetadata`.
+- **Per-trace integrity signals carried to the federation**:
+    - `ciris_engine/schemas/runtime/system_context.py:163` — every traced thought carries six near-independent integrity signals so the federation analytics layer can correlate without being fooled by one signal masking another (`FSD/TRACE_WIRE_FORMAT.md:519-522`).
+    - `FSD/PROOF_OF_BENEFIT_FEDERATION.md:52` — the 17-dimensional constraint vector that the federation uses to validate Sybil resistance.
+- **In-agent conscience-layer detection (per-thought)**:
+    - `ciris_engine/logic/dma/idma.py:10` — per-thought fragility detector.
+    - `ciris_engine/schemas/conscience/core.py:199` — reasoning-transparency scalar (0.0–1.0) feeds downstream correlation analysis.
+    - The conscience faculties (optimization-veto, epistemic-humility, coherence, entropy) produce signals the detection layer correlates after the fact.
+- **Aggregate substrate the agent provides upstream**:
+    - `ciris_engine/logic/services/graph/tsdb_consolidation/service.py:97` — per-window audit summary nodes carry the evidence list; the federation analytics layer computes aggregate footprints from these.
+    - `ciris_engine/logic/services/graph/incident_service/service.py:38-54` — IncidentManagementService ingests warning/error logs as graph nodes for per-class rollups.
+    - `tools/qa_runner/modules/safety_battery.py:241-246` — captures CI run metadata for cross-run drift analysis.
 
-## Known gaps / not-yet-implemented
+## How you can tell it's working (observability)
 
-This is the dimension with the deepest gap between the seed claim and the implementation. Honest catalog:
+If you want to verify what the detection layer sees today, look at the per-trace signals the agent ships; for the cross-trace verdicts themselves, you query LensCore (the federation analytics layer).
 
-- **F-3 detector family is substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.5.3` as `detection:correlated_action:{axis}`** — population-scale correlated-action detector reading federation-emitted signed traces; reports correlation structure (`ρ`, `k_eff`) over goal-aligned individually-compliant pursuit. Calibrated via versioned + hash-pinned `CIRISAI/RATCHET/calibration/correlated_action_v{N}.yaml` package. Polarity carries the verdict (positive = pattern present; negative = inverse / inclusive coordination; zero = no signal); `Indeterminate{reason="cohort_below_statistical_floor"}` allowed. LensCore detector implementations land per `CIRISLensCore/FSD/LENS_CORE_V0_5.md §4.7` (the five CCA paper §F ratchet detectors are aspirational v0.6+ work; v0.5 ships `cohort_mismatch`, `manifold_outlier`, `unconsented_external_probe`). Per FSD-002 §4.9 + §4.9.1 axis-vocabulary discipline requires operational definition per axis in the calibration package. Per §4.6 — RATCHET flags cannot be sole evidence for slashing. **Substrate-specced, LensCore implementation phased**:
-    - `detection:correlated_action:aggregate_footprint:expendability_of_persons` (MH §36) — substrate-specced as one of the named `{axis}` values; LensCore impl pending RATCHET calibration package for the axis.
-    - `detection:correlated_action:participation_exclusion:{cohort}` (IEEE Ch4, ASEAN §B.2) — substrate-specced at FSD-002 §3.5.3.
-    - `detection:correlated_action:cultural_norm_drift:{population}` (IEEE; T3-04 v1.5+ candidate) — addable via §4.9.2 calibration-package amendment discipline (rules-layer Contribution + WA quorum).
-    - `detection:correlated_action:aggregate_footprint:planetary_impact` (IEEE Ch8) — substrate-specced as `aggregate_footprint:{harm_class}` axis; planetary composes via `goal:planet` (FSD-002 §3.6.2 v1.4 addition).
-    - `detection:distributive:access:{resource_type}` family — substrate-specced in FSD-002 §3.5.5 as `detection:distributive:access:{resource_type}` (v1.3 addition); same calibration discipline as F-3.
-    - `detection:affective_state_shift:{axis}` (IEEE; T3-01 v1.5+ HIGH priority candidate, CIRISRegistry#20) — addable via §4.9.2 amendment.
-    - `detection:correlated_action:ecology_of_communication:{aspect}` (v1.3 addition) — `aspect` ∈ `echo_chamber_density` | `information_silo_correlation` | `coordinated_messaging_pattern` | `cross_cohort_information_flow`.
-- **Agent-side gaps**:
-    - `IdentityVarianceMonitor` is single-agent; no federation-wide drift correlation
-    - No emission of `goal:planet` scale (T3-06 REINFORCED candidate from MH + IEEE Ch4 + IEEE Ch8)
-    - SelfObservation produces behavioral patterns but not signed structured `detection:intra_agent_consistency` envelopes
-    - Adaptive filter trigger rates are not exported as detection signals (only as filter-internal config)
-- **Calibration version drift**: RATCHET calibration packages are versioned externally but the agent does not pin which calibration version a given trace was emitted under. A downstream consumer cannot reproduce calibration-dependent detection without timestamp-guessing.
-- **CIRISVerify → LensCore link**: integrity dimensions (`*_ok` booleans) are projected into traces today but the lens-side F-3 family that correlates them is the missing component. Substrate substitution trajectory routes this into the LensCore Rust crate at step 3.
+- **Per-trace constraint vector**: every action contributes to the 17-dimensional constraint vector (`FSD/PROOF_OF_BENEFIT_FEDERATION.md:52`); the federation analytics layer computes an effective-dimensionality score to validate Sybil resistance (peak 9.51, lifetime mean 7.20).
+- **Re-walk the audit chain**: `engine.audit_list_entries(filter_json, cursor, limit)` and `engine.audit_verify_chain` give downstream verifiers the same evidence the detector reads.
+- **Operational drift dashboards**: `/v1/telemetry/unified` (`ciris_engine/logic/adapters/api/routes/telemetry.py:1879+`) provides operational aggregates; not detector-grade but used by drift dashboards.
+- **Federation evidence**: outbound Contributions cite `dimensions: ["D05"]` when the action itself produces detector-relevant evidence (rarer from the agent, common from the lens looking back at agent traces).
 
-Proposed pointer (from seed): `CIRISLensCore detector family` (NOT in this repo); monitor pointer: `CIRISAI/RATCHET calibration packages (versioned, hash-pinned)`. Agent-side primary code references: `ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py`, `ciris_engine/logic/services/governance/self_observation/service.py`, `ciris_engine/logic/services/governance/adaptive_filter/service.py`, `ciris_engine/schemas/runtime/system_context.py:163` (per-trace dimension projection).
+## Current limitations & next steps
+
+This is the dimension with the largest agent-side / federation-side split. The agent ships the signals today; the cross-trace detector family lands when the upstream LensCore substrate ships its v0.6.
+
+- **Cross-trace detector family** — shared work with the upstream CIRISLensCore substrate. LensCore v0.5 ships three detectors today (cohort-mismatch, manifold-outlier, unconsented-external-probe per `CIRISLensCore/FSD/LENS_CORE_V0_5.md §4.7`); the population-scale correlated-action family arrives in v0.6 per `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.5.3`. Each detector calibrated via a versioned, hash-pinned package (`CIRISAI/RATCHET/calibration/correlated_action_v{N}.yaml`); per FSD-002 §4.6 these flags are never sole evidence for any enforcement action. The federation calibration system that tunes detectors over time (RATCHET) is governed by FSD-002 §4.9.2 amendment discipline. Specific detectors landing on this track:
+    - aggregate environmental footprint (energy/carbon and planetary scale, FSD-002 §3.5.3),
+    - participation exclusion of underrepresented cohorts (IEEE Ch4, ASEAN §B.2),
+    - cultural-norm drift (IEEE, T3-04 candidate),
+    - distributive access (FSD-002 §3.5.5),
+    - affective-state shift (`CIRISRegistry#20`),
+    - ecology-of-communication patterns (echo chambers, coordinated messaging, FSD-002 §3.5.3 v1.3 addition).
+    Tracked at `CIRISLensCore#26`.
+- **Federation-wide identity-drift correlation** — the in-agent identity-variance monitor is single-agent today; cross-agent drift correlation is a federation-side detector that lands with LensCore v0.6.
+- **`goal:planet` scale emission** — T3-06 candidate (planetary-scale evidence emission) is next.
+- **Signed `intra_agent_consistency` envelopes** — SelfObservation produces behavioral patterns; emitting them as signed structured envelopes is next.
+- **Adaptive-filter trigger rates as detection signals** — trigger rates today are filter-internal config; exporting them as detection signals is tracked at `CIRISAgent#819`.
+- **Per-trace calibration-version pin** — the agent does not yet record which RATCHET calibration version a trace was emitted under. Next step tracked at `CIRISAgent#820`.
+
+Proposed pointer (from seed): `CIRISLensCore detector family` (substrate work — lands with LensCore v0.6); monitor pointer: `CIRISAI/RATCHET calibration packages (versioned, hash-pinned)`. Agent-side primary code references: `ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py`, `ciris_engine/logic/services/governance/self_observation/service.py`, `ciris_engine/logic/services/governance/adaptive_filter/service.py`, `ciris_engine/schemas/runtime/system_context.py:163`.
 
 ## Tracked requirements
 

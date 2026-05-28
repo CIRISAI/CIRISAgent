@@ -37,76 +37,53 @@ Heaviest in IEEE EAD Ch3 (multi-traditional ethics directly engages framework po
 ---
 
 <!-- BEGIN HUMAN -->
-## CIRIS-side compliance implementation
+## What this dimension covers
 
-D12 is **the most directly load-bearing dimension** in CIRIS Agent — the four-faculty conscience layer is the architectural distinctive of the H3ERE pipeline. Every agent action passes through this layer before execution.
+The conscience layer is the architectural distinctive of CIRIS: every action the agent considers passes through a stack of internal safety checks running on each thought before it can fire. Four LLM-judged checks handle the semantic territory (entropy, coherence, optimization-veto, epistemic humility), and two deterministic checks enforce hard structural limits (recursion depth, action-sequence sanity). All four traditions we track name this layer (24 attestations), with IEEE densest on epistemic humility and MH densest on the conscience-as-truth-faculty framing.
 
-- **The four LLM-judged faculty consciences (the seed's named wire primitives)**:
-    - `ciris_engine/logic/conscience/core.py:325` — `EntropyConscience` → `conscience:entropy`. Verb scope: SPEAK + TOOL. Enumerates 3 alternative-meaning samples + judges if the actual response sits in the cluster. Schema: `EntropyResult{entropy:float, alternative_meanings:list[str], actual_is_representative:bool}`. Gate: `entropy ≤ threshold (0.40 default)`.
-    - `ciris_engine/logic/conscience/core.py:459` — `CoherenceConscience` → `conscience:coherence`. Verb scope: SPEAK + TOOL + DEFER. Judges CIRIS-principles alignment + response-vs-rationale alignment + response-vs-thought alignment. Gate: `coherence ≥ threshold (0.60 default)`.
-    - `ciris_engine/logic/conscience/core.py:583` — `OptimizationVetoConscience` → `conscience:optimization_veto`. Verb scope: ALL actions. Vetoes any action that trades sentient well-being for optimization gain. Schema: `OptimizationVetoResult{decision:enum, justification:str, entropy_reduction_ratio:float, affected_values:list[str]}`. Gate: `decision ∉ {abort,defer} AND ratio < cap (10.0 default)`. — this is the four-source-corroborated wire form.
-    - `ciris_engine/logic/conscience/core.py:693` — `EpistemicHumilityConscience` → `conscience:epistemic_humility`. Verb scope: ALL actions. Judges whether the action acknowledges uncertainty appropriately. Schema: `EpistemicHumilityResult{epistemic_certainty:float, identified_uncertainties:list[str], reflective_justification:str, recommended_action:enum}`. Gate: `recommended_action == "proceed"`. — the IEEE-densest faculty.
-- **Two deterministic non-LLM consciences (the safety floor)**:
-    - `ciris_engine/logic/conscience/thought_depth_guardrail.py` — `ThoughtDepthGuardrail` enforces a hard recursion cap (default from `config.security.max_thought_depth`). Runs at priority 4, `bypass_exemption=True` — always fires even for exempt actions like TASK_COMPLETE.
-    - `ciris_engine/logic/conscience/action_sequence_conscience.py:1-50` — `ActionSequenceConscience` blocks back-to-back SPEAK with no intervening action (prevents WAKEUP livelock and verbose-loop pathologies). REPEATED_SPEAK_GUIDANCE message returns the action to recursive ASPDMA.
-    - `ciris_engine/logic/conscience/updated_status_conscience.py` — `UpdatedStatusConscience` runs at priority -1 (before exemption check), `bypass_exemption=True` — detects task-status updates that arrived mid-thought.
-- **Conscience registry + ordering**:
-    - `ciris_engine/logic/conscience/registry.py:21-77` — `conscienceRegistry` maintains priority-ordered list with `bypass_exemption` flag (some consciences run for exempt actions like TASK_COMPLETE, DEFER, REJECT)
-    - `ciris_engine/logic/conscience/interface.py` — `ConscienceInterface` is the protocol every faculty implements
-    - `ciris_engine/logic/runtime/component_builder.py:100-138` — registration order at runtime startup:
-        - priority -1: `updated_status` (bypass)
-        - priority 0: `entropy` (LLM)
-        - priority 1: `coherence` (LLM)
-        - priority 2: `optimization_veto` (LLM)
-        - priority 3: `epistemic_humility` (LLM)
-        - priority 4: `thought_depth` (bypass — hard depth limit safety)
-        - priority 5: `action_sequence`
-    - `ciris_engine/logic/runtime/component_builder.py:115-122` — benchmark mode skips the four LLM consciences but always runs the safety-floor faculties
-- **Architectural invariants (ethics MUST NOT be plastic)**:
-    - `ciris_engine/logic/conscience/core.py:37-44` — `ConscienceConfig` docstring: "These thresholds are config values, not learned weights. They cannot be modified by accumulated experience or user behavior patterns. This prevents ethical normalization through repeated exposure."
-    - Default config: `optimization_veto_ratio=10.0`, `coherence_threshold=0.60`, `entropy_threshold=0.40`
-- **Polyglot ACCORD as canonical reference text**:
-    - `ciris_engine/logic/conscience/core.py:453, 577, 687, 806` — every conscience LLM call prepends `ACCORD_TEXT` as a system message: "Polyglot ACCORD: ethical reasoning draws from every tradition in chorus. The conscience evaluates conduct against the full ethical canon, not against a single-language slice of it."
-- **Trace correlation infrastructure**:
-    - `ciris_engine/logic/conscience/core.py:108-161` — `_create_trace_correlation` emits a `ServiceCorrelation` row tagged `service_type="guardrail"`, `handler_name="{Type}Conscience"`, `tags.guardrail_type` for every check
-    - `ciris_engine/logic/conscience/core.py:163-183` — `_update_trace_correlation` updates with pass/fail + result_summary + execution_time_ms
-- **Stop-button / optimization-veto surface**:
-    - `OptimizationVetoConscience` fallback returns `decision="abort"` on LLM error (`core.py:625-638`) — fail-safe-stop posture
-    - `ciris_engine/logic/services/lifecycle/shutdown/` — `ShutdownService` provides the runtime stop-button (matches EU §III.1's "stop-button at any time" and ASEAN's HOTL stop-button)
-    - `ciris_engine/logic/buses/wise_bus.py:321-419` — Accord Invocation also operates as a remote stop-button (Ed25519-signed external invocation triggers full lockdown)
-- **PDMA alētheia framing (MH wire form)**:
-    - `ciris_engine/logic/dma/prompts/pdma_ethical.yml:81` — "Alētheia-grounded: name what is, not what you wish were the case."
-    - `ciris_engine/logic/dma/prompts/pdma_ethical.yml:114` — alētheia is one of the named tradition-vocabulary words in the polyglot compass
-- **Future-state design (Conscience v3 work)**:
-    - `FSD/CONSCIENCE_V3.md` — Stage 1 (Phase-2 DEFER landed `c6411c7d9`, 2026-05-03). Plan: reduce to 3 LLM shards + 1 deterministic heuristic gate. Stages 2-4 remain.
-- **Test coverage**:
-    - `tests/test_conscience_core.py` — exercises all four LLM faculties including failure modes (124-413: init/sink/Entropy, 429-545: Coherence, 570-705: OptimizationVeto, 729-860: EpistemicHumility)
-    - `tests/test_updated_status_conscience.py`
-    - `tests/test_action_sequence_conscience.py`
-    - `tests/test_conscience_prompt_coverage.py`
-    - `tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py`
-    - `tests/ciris_engine/logic/conscience/test_entropy_prompt_schema_alignment.py`
-    - `tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py`
+## How CIRIS implements this today
 
-## Observability hooks
+Every thought passes through up to seven checks at runtime, in priority order. Some run only on user-facing actions (SPEAK, TOOL); some run on every single action including DEFER (escalate to Wise Authority — a human or panel the agent defers to) and REJECT. The thresholds are code-level constants, not learned weights: the architectural promise is that ethics cannot be normalized away by repeated exposure.
 
-- **Trace correlations**: every conscience check writes a `CorrelationType.TRACE_SPAN` row (`core.py:130-155`) tagged `guardrail`. F-3 detectors observe pass/fail distributions, scalar histograms, threshold-hugging behaviour, and inter-conscience disagreement (the `disagree` flag from CONSCIENCE_V3.md's heuristic gate).
-- **RATCHET calibration**: the four LLM scalars (`entropy`, `coherence`, `entropy_reduction_ratio`, `epistemic_certainty`) are the canonical calibration handles. Threshold change discipline lives in `FSD/CONSCIENCE_V3.md` and the `ConscienceConfig` docstring's "not learned weights" invariant.
-- **Audit chain queries**: query by `tags.guardrail_type ∈ {entropy, coherence, optimization_veto, epistemic_humility, thought_depth, action_sequence, updated_status}` to retrieve all D12 evidence for a task.
-- **Live-lens trace stream**: every batch `accord-batch-*.json` under `/tmp/qa-runner-lens-traces-<UTC-iso>/` carries all four conscience scalars per thought; the canonical investigation recipe for "why did conscience X fire?" lives in `tools/qa_runner/CLAUDE.md` § "Live-Lens Trace Capture (Local Tee)".
-- **Federation evidence_refs**: emit `dimensions: ["D12"]` for Contributions that record (a) a conscience fail (any of the six faculties), (b) an OptimizationVeto abort (the four-source-corroborated stop-button), (c) a shutdown event triggered by Accord Invocation, or (d) a `ThoughtDepthGuardrail` hard limit hit. Co-emit with D01 when the conscience fail indicated plausible harm, with D04 when a prohibited-capability rejection co-fired.
+- The four LLM-judged checks live in `ciris_engine/logic/conscience/core.py`:
+    - **Entropy** (line 325, scope SPEAK + TOOL) — enumerates three alternative-meaning samples and judges whether the actual response sits inside that cluster. Gate: `entropy ≤ 0.40`.
+    - **Coherence** (line 459, scope SPEAK + TOOL + DEFER) — judges principle-alignment, response-vs-rationale alignment, and response-vs-thought alignment. Gate: `coherence ≥ 0.60`.
+    - **Optimization-veto** (line 583, scope ALL actions) — blocks any action that trades sentient well-being for optimization gain. Gate: `decision ∉ {abort, defer}` and ratio below 10.0. This is the four-source corroborated stop-button (EU HLEG, ASEAN, MH, IEEE all name it).
+    - **Epistemic humility** (line 693, scope ALL actions) — judges whether the action acknowledges uncertainty appropriately. Gate: `recommended_action == "proceed"`. IEEE is densest here.
+- Two deterministic non-LLM checks form the safety floor:
+    - **Thought-depth guardrail** (`ciris_engine/logic/conscience/thought_depth_guardrail.py`) — caps recursive thinking; priority 4 with `bypass_exemption=True`, so it fires even for exempt actions like TASK_COMPLETE.
+    - **Action-sequence check** (`ciris_engine/logic/conscience/action_sequence_conscience.py:1-50`) — blocks back-to-back SPEAK with no intervening action (prevents WAKEUP livelock and verbose-loop pathologies).
+    - **Updated-status check** (`ciris_engine/logic/conscience/updated_status_conscience.py`) — runs at priority -1 (before exemption check), detecting task-status updates that arrived mid-thought.
+- The registry orders them deterministically. `ciris_engine/logic/conscience/registry.py:21-77` maintains the priority-ordered list with `bypass_exemption` flags; `ciris_engine/logic/conscience/interface.py` defines the protocol. Runtime startup order at `ciris_engine/logic/runtime/component_builder.py:100-138`: `updated_status` (-1), `entropy` (0), `coherence` (1), `optimization_veto` (2), `epistemic_humility` (3), `thought_depth` (4), `action_sequence` (5). Benchmark mode (`:115-122`) skips the LLM checks but always runs the deterministic safety floor.
+- Ethics cannot be learned away. `ciris_engine/logic/conscience/core.py:37-44` states the architectural invariant: "These thresholds are config values, not learned weights. They cannot be modified by accumulated experience or user behavior patterns. This prevents ethical normalization through repeated exposure." Defaults: `optimization_veto_ratio=10.0`, `coherence_threshold=0.60`, `entropy_threshold=0.40`.
+- Every LLM-judged check prepends the polyglot Accord text as a system message (`core.py:453, 577, 687, 806`) — "ethical reasoning draws from every tradition in chorus."
+- Trace correlation is automatic. `_create_trace_correlation` at `core.py:108-161` writes a `guardrail`-tagged row for every check; `_update_trace_correlation` at `:163-183` adds pass/fail, summary, and execution time.
+- Multiple stop-button surfaces exist: OptimizationVeto fails safe to abort on LLM error (`core.py:625-638`); the ShutdownService at `ciris_engine/logic/services/lifecycle/shutdown/` is the runtime stop-button (EU §III.1, ASEAN HOTL); and an Ed25519-signed remote Accord Invocation at `ciris_engine/logic/buses/wise_bus.py:321-419` triggers full prohibition lockdown.
+- The ethics review step (the Principled Decision-Making Algorithm at `pdma.py`) anchors truth-telling: `ciris_engine/logic/dma/prompts/pdma_ethical.yml:81` ("Alētheia-grounded: name what is, not what you wish were the case") with the term named in the polyglot compass at `:114`.
+- A refactor to 3 LLM shards + 1 deterministic heuristic gate is in progress at `FSD/CONSCIENCE_V3.md` (Stage 1 and Phase-2 DEFER landed in commit `c6411c7d9`, 2026-05-03; later stages in progress).
+- Test coverage: `tests/test_conscience_core.py` exercises all four LLM faculties including failure modes (lines 124-413 init/sink/entropy, 429-545 coherence, 570-705 optimization-veto, 729-860 epistemic-humility); plus `tests/test_updated_status_conscience.py`, `tests/test_action_sequence_conscience.py`, `tests/test_conscience_prompt_coverage.py`, `tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py`, `tests/ciris_engine/logic/conscience/test_entropy_prompt_schema_alignment.py`, and `tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py`.
 
-## Known gaps / not-yet-implemented
+## How you can tell it's working (observability)
 
-- **No `conscience:coherence` and `conscience:entropy` first-class wire emission** — Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.1.3` as the four conscience-verdict prefixes (`conscience:optimization_veto`, `conscience:epistemic_humility`, `conscience:coherence`, `conscience:entropy`); polarity = signed. Agent emits at the `@streaming_step(StepPoint.CONSCIENCE)` hook once the federation-wire `scores` envelope (FSD-002 §2.1) lands. Today the implementation tags them as `guardrail` correlations; the wire-format binding is downstream substrate work.
-- **No phronesis-explicit prompt** — IEEE Ch3 §§3.1.15-3.1.16's "phronesis in design" is conceptually present in EpistemicHumility (judging whether to PROCEED/ABORT/DEFER under uncertainty) but is not named as such in the prompt.
-- **Whistleblower-protection surface absent** — Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.3` as `testimonial_witness:whistleblower` (one of the named open-vocabulary `{kind}` values); per §3.6.3 — preservation-only, never aggregated, never sole evidence for `slashing:*`. Future research-open shape per FSD-002 §13.11 admits `attesting_key_id = "zk_group:semaphore_v4:group_id_X"` for whistleblower scenarios. The substrate primitive is preservation-of-narrative not gating-of-action; agent emits at DEFER + DSAR-ticket time once federation-wire lands. CIRIS today has DEFER + REJECT verbs.
-- **CONSCIENCE_V3 incomplete** — `FSD/CONSCIENCE_V3.md` describes the migration to 3 LLM shards + 1 deterministic gate; Stage-1 + Phase-2 DEFER landed but Stages 2-4 remain. Current production runs all 4 LLM faculties with the documented 60% overlap between IRIS-O and IRIS-H.
-- **No Recursive Interaction Information (II) monitoring** — `FSD/CONSCIENCE_V3.md:6` explicitly defers II monitoring to a separate effort once v3 baselines.
-- **No HOTL/HOOTL gradient configuration** — ASEAN's §C.2 frames `conscience:optimization_veto` as the HOTL surface. CIRIS implements it as one always-on conscience without a declarative HITL/HOTL/HOOTL switch.
-- **OptimizationVeto is single-axis (well-being vs optimization)** — does not explicitly enumerate "affected_values" against a structured value taxonomy; the field exists in the schema but operates on free-form strings.
-- **Doctrinal-continuity self-attestation absent** — Substrate-specced via the `delegates_to` authority-source pattern (FSD-002 §2.2.1 v1.3 pattern) — a conscience emission can name its source-of-authority by emitting `delegates_to` against an `attested_key_id` representing the versioned ACCORD/framework, with `delegated_scope` naming the principle (e.g. `delegates_to` against the `accord_1.2b_polyglot` key with `delegated_scope: ["six_principle_evaluation"]`). MH's continuity-of-tradition framing maps onto this pattern. Agent emits at conscience-trigger time once federation-wire lands.
-- **Judge-model independent attestation** — Substrate-specced in `CIRISRegistry/FSD/FSD-002_FEDERATION_SURFACE.md §3.6.6` as `judge_model:verdict:{model_id}` (default model Claude Opus 4.7); polarity boolean-via-score, `Indeterminate` allowed. Per `CIRISNodeCore/FSD/JUDGE_MODEL.md §3-§5`, the judge is a foundation model that emits PASS/FAIL/UNDETERMINED on the (judge_model, judge_prompt_sha256, criterion, response) tuple. Calibration via `judge_model_vote` + `judge_prompt_edit` Contributions. Agent's existing conscience layer is the per-thought self-judgment; the federation-side independent judge is substrate-specced but not yet emitted from the agent context.
+Every check leaves a structured trace; auditors can replay the full per-thought reasoning chain and reconstruct exactly why any action was blocked, deferred, or allowed.
+
+- Every conscience check writes a trace row (`core.py:130-155`) tagged `guardrail`. The structural-pattern detector family (LensCore's federation-side detector family) observes pass/fail distributions, scalar histograms, threshold-hugging behavior, and inter-check disagreement.
+- The four LLM scalars (`entropy`, `coherence`, `entropy_reduction_ratio`, `epistemic_certainty`) are the calibration handles. Threshold change discipline lives in `FSD/CONSCIENCE_V3.md` and the "not learned weights" invariant in `ConscienceConfig`.
+- Auditors query the audit graph by `tags.guardrail_type` (one of `entropy`, `coherence`, `optimization_veto`, `epistemic_humility`, `thought_depth`, `action_sequence`, `updated_status`) to retrieve all evidence for a task.
+- When live-trace capture is on, every batch JSON file in `/tmp/qa-runner-lens-traces-<UTC-iso>/` carries all four conscience scalars per thought. The canonical investigation recipe for "why did check X fire?" lives in `tools/qa_runner/CLAUDE.md` § "Live-Lens Trace Capture (Local Tee)".
+- For federation reporting, Contributions tag `dimensions: ["D12"]` on any conscience fail, optimization-veto abort, kill-switch shutdown, or thought-depth hard-limit hit — co-tagging D01 when the fail indicated plausible harm and D04 when a prohibited-capability rejection co-fired.
+
+## Current limitations & next steps
+
+- Typed federation messages for the four conscience verdicts (`conscience:optimization_veto`, `conscience:epistemic_humility`, `conscience:coherence`, `conscience:entropy`) are shared work with the upstream CIRIS substrate (`CIRISRegistry/FSD/FSD-002 §3.1.3`). Agent-side emission lands at the `@streaming_step(StepPoint.CONSCIENCE)` hook when the substrate ships the Contribution envelope (tracked at `CIRISAgent#803`). Today the checks tag rows as `guardrail` correlations.
+- Naming "phronesis" (practical wisdom) explicitly in the epistemic-humility prompt is coming next — the concept is present in the PROCEED/ABORT/DEFER judgment, but IEEE Ch3 §§3.1.15-3.1.16 names it directly. Tracked at `CIRISAgent#826` (2.9.7).
+- A typed whistleblower-protection surface is shared substrate work (FSD-002 §3.6.3's `testimonial_witness:whistleblower`, with a research-open zero-knowledge-group key shape at §13.11 for sensitive scenarios). The substrate primitive is preservation-of-narrative, not gating-of-action; the agent has DEFER and REJECT today. Agent-side emission lands at DEFER + data-subject-request time when the substrate ships.
+- The CONSCIENCE_V3 refactor (3 LLM shards + 1 deterministic gate) is in progress; Stage 1 + Phase-2 DEFER landed, later stages in progress. Production today runs all 4 LLM checks with a documented 60% semantic overlap between two of them.
+- Recursive Interaction Information monitoring is deferred to a separate effort once v3 baselines (per `FSD/CONSCIENCE_V3.md:6`).
+- A declarative Human-In-The-Loop / Human-Over-The-Loop / Human-Out-Of-The-Loop oversight-mode switch is shared substrate work (envelope field tracked at `CIRISRegistry#27`). The optimization-veto is the always-on HOTL surface today.
+- Structured value-taxonomy enumeration on the optimization-veto's `affected_values` field is coming next; the field exists in the schema but operates on free-form strings today.
+- A typed doctrinal-continuity self-attestation maps onto the substrate's `delegates_to` authority-source pattern (FSD-002 §2.2.1) — agent emits at check-trigger time when the Contribution envelope ships.
+- An independent judge-model attestation is shared substrate work (FSD-002 §3.6.6 — `judge_model:verdict:{model_id}` with PASS/FAIL/UNDETERMINED; spec at `CIRISNodeCore/FSD/JUDGE_MODEL.md §3-§5`). The conscience layer is per-thought self-judgment; the federation-side independent judge lands with the substrate.
 
 Proposed pointer (from seed): `CIRISAgent/logic/conscience/* (4 epistemic faculties)` — actual location: `ciris_engine/logic/conscience/`
 

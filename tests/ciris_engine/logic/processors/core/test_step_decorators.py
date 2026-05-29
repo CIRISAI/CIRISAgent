@@ -26,6 +26,7 @@ from ciris_engine.logic.processors.core.step_decorators import (  # Helper funct
     _create_step_result_schema,
     _create_typed_step_data,
     _extract_timing_data,
+    _pause_thought_execution,
     _paused_thoughts,
     _single_step_mode,
     disable_single_step_mode,
@@ -310,6 +311,63 @@ class TestStepControlAPI:
         assert len(paused) == 2
         assert paused["thought-a"] == "paused_awaiting_resume"
         assert paused["thought-b"] == "paused_awaiting_resume"
+
+    @pytest.mark.asyncio
+    async def test_disable_single_step_mode_drains_paused_thoughts(self):
+        """Regression test for CIRISAgent QA flake on 2026-05-29 (run 26611381137).
+
+        `disable_single_step_mode()` MUST signal any pending
+        `_paused_thoughts` events. Without this, a thought that already
+        entered `_pause_thought_execution(thought_id)` stays blocked on
+        `event.wait()` forever — pinning the work_processor batch on
+        whichever thought is paused and starving every subsequent task.
+
+        The original bug surfaced as: comprehensive_single_step paused a
+        thought at `gather_context`, the cleanup test called
+        `/v1/system/runtime/resume` → `disable_single_step_mode()` flipped
+        the global flag → paused thought stayed waiting → AIR smoke test
+        message queued behind it → AIR test's 180s interact() timeout
+        fired → Staged QA (all_2) flaked.
+        """
+        # Use the real `_pause_thought_execution` flow so this test exercises
+        # the actual code path the production bug hit. Two paused thoughts so
+        # we also assert that drain hits more than one.
+        enable_single_step_mode()
+
+        async def pause_one(thought_id: str) -> None:
+            await _pause_thought_execution(thought_id)
+
+        t1 = asyncio.create_task(pause_one("thought-paused-1"))
+        t2 = asyncio.create_task(pause_one("thought-paused-2"))
+
+        # Give the tasks a tick to enter `event.wait()`
+        await asyncio.sleep(0.01)
+
+        assert "thought-paused-1" in _paused_thoughts
+        assert "thought-paused-2" in _paused_thoughts
+        assert not _paused_thoughts["thought-paused-1"].is_set()
+        assert not _paused_thoughts["thought-paused-2"].is_set()
+        assert not t1.done()
+        assert not t2.done()
+
+        # The fix: disable_single_step_mode must drain the paused events.
+        disable_single_step_mode()
+
+        # The paused thought coroutines should now complete on their own.
+        await asyncio.wait_for(asyncio.gather(t1, t2), timeout=1.0)
+
+        assert not is_single_step_mode()
+
+    def test_disable_single_step_mode_no_paused_thoughts(self):
+        """`disable_single_step_mode()` is a no-op for events when nothing is paused."""
+        enable_single_step_mode()
+        assert is_single_step_mode()
+
+        # No paused thoughts; should just flip the flag without raising.
+        disable_single_step_mode()
+
+        assert not is_single_step_mode()
+        assert _paused_thoughts == {}
 
 
 class TestStepDataExtraction:

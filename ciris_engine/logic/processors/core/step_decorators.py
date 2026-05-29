@@ -1254,10 +1254,44 @@ def enable_single_step_mode() -> None:
 
 
 def disable_single_step_mode() -> None:
-    """Disable single-step mode - thoughts run normally."""
-    global _single_step_mode
+    """Disable single-step mode and drain any currently-paused thoughts.
+
+    Flipping `_single_step_mode = False` alone is not sufficient: thoughts
+    that already crossed into `_pause_thought_execution(thought_id)` are
+    waiting on per-thought `asyncio.Event`s that nothing else signals.
+    Without draining those events here, those coroutines stay blocked
+    forever even after the caller has "resumed" the processor — which
+    pins the work_processor batch on whichever thought is currently
+    paused and starves every subsequent task. The QA AIR-smoke flake
+    on 2026-05-29 (run 26611381137) was a direct consequence: the
+    `comprehensive_single_step` module paused a thought at
+    `gather_context`, the cleanup test called `/v1/system/runtime/resume`,
+    `_single_step_mode` went False, but the paused thought stayed waiting
+    on its Event for 5+ minutes — blocking the AIR test message behind
+    it until the AIR test's own 180s `interact()` timeout fired.
+
+    Setting every pending `_paused_thoughts[*]` event lets those
+    coroutines fall through `event.wait()`, hit the `event.clear()` line
+    below in `_pause_thought_execution`, and continue their natural step
+    execution. We keep the entries in the dict — `execute_step`'s contract
+    is "set the event, the wrapper clears it for the next pause" — so
+    matching that contract here keeps the per-thought map consistent.
+    """
+    global _single_step_mode, _paused_thoughts
     _single_step_mode = False
-    logger.info("Single-step mode disabled")
+    pending = list(_paused_thoughts.items())
+    drained = 0
+    for thought_id, event in pending:
+        try:
+            if not event.is_set():
+                event.set()
+                drained += 1
+        except Exception as e:
+            logger.warning(f"Failed to signal resume for paused thought {thought_id}: {e}")
+    if drained:
+        logger.info(f"Single-step mode disabled; drained {drained} paused thought(s)")
+    else:
+        logger.info("Single-step mode disabled")
 
 
 def is_single_step_mode() -> bool:

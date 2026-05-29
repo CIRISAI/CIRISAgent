@@ -878,6 +878,36 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         )
         return
 
+    # Local signing seed for the persist Engine. Per persist 3.0 CHANGELOG
+    # #112 ("Engine::sign_hybrid facade + cohabitation propagation fix"),
+    # `local_key_id` + `local_key_path` configure a LocalSigner so the
+    # agent can call `Engine::sign_hybrid` directly. The seed file holds
+    # 32 raw Ed25519 bytes mode 0o600, persisted under the data dir so the
+    # local identity is stable across restarts.
+    #
+    # NOTE — this alone does NOT close the Edge cohabitation pubkey-shape
+    # mismatch (CIRISEdge#43): persist 3.0 exposes the LocalSigner's 32-
+    # byte Ed25519 surface via `local_public_key_b64()` (correct), but
+    # `keyring_signer_capsule()` — which Edge's ReticulumTransport reads —
+    # still returns the hardware-rooted hybrid signer whose `public_key()`
+    # is 65 bytes. Edge then refuses with "federation Ed25519 pubkey must
+    # be 32 bytes, got 65". Tracked upstream; agent-side config below is
+    # the correct shape regardless.
+    from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+    data_dir = get_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    local_seed_path = data_dir / "local_signing.seed"
+    if not local_seed_path.exists():
+        # Bootstrap a fresh Ed25519 seed. Persist's LocalSigner reads 32
+        # raw bytes from this path; matching shape is the entire interface.
+        local_seed_path.write_bytes(os.urandom(32))
+        try:
+            local_seed_path.chmod(0o600)
+        except OSError as e:  # noqa: BLE001 - chmod is best-effort on platforms (Windows)
+            logger.debug("Could not chmod local signing seed (non-fatal): %s", e)
+        logger.info("Bootstrapped local signing seed at %s", local_seed_path)
+
     # Test isolation only: under pytest, fixtures routinely bootstrap a
     # fresh per-test engine, and a single test may invoke more than one
     # engine-wiring fixture. ciris-persist's process-singleton rejects a
@@ -899,7 +929,12 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         graph_persistence._engine_dsn = None
 
     try:
-        engine = Engine(dsn, signing_key_id)
+        engine = Engine(
+            dsn,
+            signing_key_id,
+            local_key_id=signing_key_id,
+            local_key_path=str(local_seed_path),
+        )
     except Exception as e:
         # iOS: flock() returns EPERM in the sandbox. Single-process mobile app
         # has no multi-agent risk. Delete any stale lock file and retry once.

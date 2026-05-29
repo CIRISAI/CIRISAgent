@@ -10,6 +10,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.runtime.agent_mode import AgentMode
+
 
 def _get_default_main_db() -> Path:
     """Get default main database path using central path resolution."""
@@ -35,9 +37,18 @@ def _get_default_audit_db() -> Path:
 class DatabaseConfig(BaseModel):
     """Core database paths configuration."""
 
-    main_db: Path = Field(default_factory=_get_default_main_db, description="Main SQLite database for persistence")
-    secrets_db: Path = Field(default_factory=_get_default_secrets_db, description="Encrypted secrets storage database")
-    audit_db: Path = Field(default_factory=_get_default_audit_db, description="Audit trail database with signatures")
+    main_db: Path = Field(
+        default_factory=_get_default_main_db,
+        description="Main SQLite database for persistence",
+    )
+    secrets_db: Path = Field(
+        default_factory=_get_default_secrets_db,
+        description="Encrypted secrets storage database",
+    )
+    audit_db: Path = Field(
+        default_factory=_get_default_audit_db,
+        description="Audit trail database with signatures",
+    )
     database_url: Optional[str] = Field(
         None,
         description="Database connection string. If set, overrides main_db path. "
@@ -64,7 +75,8 @@ class SecurityConfig(BaseModel):
 
     audit_retention_days: int = Field(90, description="Days to retain audit logs")
     secrets_encryption_key_env: str = Field(
-        "CIRIS_MASTER_KEY", description="Environment variable containing master encryption key"
+        "CIRIS_MASTER_KEY",
+        description="Environment variable containing master encryption key",
     )
     secrets_key_path: Path = Field(Path(".ciris_keys"), description="Directory containing secrets master key")
     secrets_key_storage_mode: str = Field(
@@ -163,7 +175,11 @@ class AdaptersConfig(BaseModel):
         description="Enable auto-discovery and loading of eligible adapters at startup",
     )
     discovery_paths: list[str] = Field(
-        default_factory=lambda: ["ciris_adapters", "~/.ciris/adapters", ".ciris/adapters"],
+        default_factory=lambda: [
+            "ciris_adapters",
+            "~/.ciris/adapters",
+            ".ciris/adapters",
+        ],
         description="Paths to scan for adapter manifests (in priority order)",
     )
     disabled_adapters: list[str] = Field(
@@ -204,6 +220,14 @@ class EssentialConfig(BaseModel):
         "default",
         description="Unique ID for this runtime occurrence (enables multiple instances against same database)",
     )
+    agent_mode: AgentMode = Field(
+        default=AgentMode.PROXY,
+        description=(
+            "Global runtime mode for this occurrence: CLIENT (egress-only), "
+            "PROXY (bidirectional, default), or SERVER (always-on listener, "
+            "requires >= 256 GiB free disk). Visible to all 22 core services."
+        ),
+    )
 
     model_config = ConfigDict(defer_build=True, extra="forbid")  # No ambiguity allowed in mission-critical config
 
@@ -225,6 +249,17 @@ class EssentialConfig(BaseModel):
         env_template = os.getenv("CIRIS_TEMPLATE")
         if env_template:
             self.default_template = env_template
+
+        # Load agent mode from environment. Accepts case-insensitive values
+        # ("client", "PROXY", "Server"). Invalid values fall through and the
+        # default (PROXY) is preserved so a typo does not flip a node into
+        # SERVER mode silently.
+        env_agent_mode = os.getenv("AGENT_MODE")
+        if env_agent_mode:
+            try:
+                self.agent_mode = AgentMode(env_agent_mode.lower())
+            except ValueError:
+                pass
 
 
 class CIRISNodeConfig(BaseModel):

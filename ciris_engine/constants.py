@@ -34,3 +34,10 @@ DEFAULT_API_PORT = 8080
 
 # Timezone and datetime parsing constants
 UTC_TIMEZONE_SUFFIX = "+00:00"
+
+# AgentMode: minimum free disk required to run SERVER mode.
+# SERVER nodes accept inbound traffic and must be able to absorb sustained
+# write load (audit, TSDB consolidation, federation cache, secrets DB). The
+# 256 GiB floor leaves headroom for ~12 months of sustained operation at
+# the busiest tier we currently observe in production.
+SERVER_MINIMUM_DISK_BYTES = 256 * 1024**3

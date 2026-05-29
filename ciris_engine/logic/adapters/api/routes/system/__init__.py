@@ -21,6 +21,7 @@ from fastapi import APIRouter
 from . import (
     adapter_config,
     adapters,
+    agent_mode,
     data_management,
     health,
     llm_routes,
@@ -70,6 +71,9 @@ router.include_router(tools.router)
 
 # LLM management: /system/llm/status, /system/llm/providers, /system/llm/distribution
 router.include_router(llm_routes.router)
+
+# AgentMode: /system/agent-mode (GET observer+, PUT system_admin)
+router.include_router(agent_mode.router)
 
 from .schemas import (
     AdapterActionRequest,

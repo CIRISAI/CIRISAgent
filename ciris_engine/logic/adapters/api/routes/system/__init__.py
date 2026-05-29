@@ -25,6 +25,7 @@ from . import (
     data_management,
     health,
     llm_routes,
+    peers,
     runtime,
     services,
     shutdown,
@@ -74,6 +75,9 @@ router.include_router(llm_routes.router)
 
 # AgentMode: /system/agent-mode (GET observer+, PUT system_admin)
 router.include_router(agent_mode.router)
+
+# Federation peer-bootstrap: NodeCode share/add (GET observer+, POST system_admin)
+router.include_router(peers.router)
 
 from .schemas import (
     AdapterActionRequest,

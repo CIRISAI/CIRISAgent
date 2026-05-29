@@ -75,8 +75,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         import ciris_edge  # type: ignore[import-not-found]
     except ImportError as e:
         raise RuntimeError(
-            "ciris-edge not importable but is REQUIRED for 2.9.4+. "
-            "Pin ciris-edge>=0.9.1,<1.0.0 in requirements.txt."
+            "ciris-edge not importable but is REQUIRED for 2.9.4+. " "Pin ciris-edge>=0.9.1,<1.0.0 in requirements.txt."
         ) from e
 
     identity_dir.mkdir(parents=True, exist_ok=True)
@@ -133,6 +132,54 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     except Exception:
         logger.info("Edge runtime initialized (signer_key_id not yet queryable)")
 
+    # Bootstrap-peer framework hooks (CIRISEdge#46).
+    # These run AFTER Edge init succeeds and are non-blocking — any
+    # failure is logged but does not fail boot. The hooks themselves
+    # are stubs today because Edge 0.13.1 does not yet expose the
+    # bootstrap_peers init param or the recent_events ANNOUNCE stream.
+    # When Edge 1.0 lands, wire a real BootstrapPeerSeeder here.
+    try:
+        _seed_bootstrap_peers_into_edge(seeder=None, edge=edge)
+    except Exception as exc:
+        logger.warning("Bootstrap-peer seed hook failed (non-fatal): %s", exc)
+    try:
+        register_organic_announce_subscriber(seeder=None)
+    except Exception as exc:
+        logger.warning("Organic-announce subscriber registration failed (non-fatal): %s", exc)
+
+
+def _seed_bootstrap_peers_into_edge(seeder: Optional[Any], edge: Any) -> None:
+    """Hook: push canonical peers into Edge's bootstrap-peer set.
+
+    TODO CIRISEdge#46 — pass bootstrap_peers to init_edge_runtime when
+    Edge 1.0 lands. Today Edge 0.13.1 accepts ``bootstrap_peers`` only
+    as a list of transport-hint strings via the CIRIS_EDGE_BOOTSTRAP_PEERS
+    env var (already wired above). Once Edge 1.0 exposes a typed
+    bootstrap-peer surface (key_id + pubkey + transport_hint), this
+    hook will translate ``seeder.list_peers(canonical_only=True)`` into
+    that surface and apply it.
+    """
+    logger.debug(
+        "TODO CIRISEdge#46 — pass bootstrap_peers to init_edge_runtime when 1.0 lands "
+        "(stub no-op, seeder=%s, edge=%s)",
+        type(seeder).__name__ if seeder is not None else "None",
+        type(edge).__name__ if edge is not None else "None",
+    )
+
+
+def register_organic_announce_subscriber(seeder: Optional[Any]) -> None:
+    """Hook: subscribe the seeder to Edge ANNOUNCE events.
+
+    TODO CIRISEdge#46 — subscribe to recent_events ANNOUNCE stream when
+    Edge 1.0 lands. The wire shape will be (key_id, pubkey, alias?)
+    per ANNOUNCE, and this hook will forward each to
+    ``seeder.record_organic_peer()``.
+    """
+    logger.debug(
+        "TODO CIRISEdge#46 — subscribe to recent_events ANNOUNCE stream when Edge 1.0 lands " "(stub no-op, seeder=%s)",
+        type(seeder).__name__ if seeder is not None else "None",
+    )
+
 
 def get_edge() -> Any:
     """Return the live Edge instance. Raises if not initialized."""
@@ -142,9 +189,7 @@ def get_edge() -> Any:
                 "Edge runtime is disabled (PYTEST_CURRENT_TEST or CIRIS_EDGE_DISABLED set). "
                 "Callers must guard with edge_runtime.is_available()."
             )
-        raise RuntimeError(
-            "Edge runtime not initialized. Call initialize_edge_runtime() during boot."
-        )
+        raise RuntimeError("Edge runtime not initialized. Call initialize_edge_runtime() during boot.")
     return _edge
 
 

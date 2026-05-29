@@ -48,6 +48,7 @@ import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
 import ai.ciris.mobile.shared.viewmodels.StartupPhase
 import ai.ciris.mobile.shared.viewmodels.StartupViewModel
+import ai.ciris.mobile.shared.viewmodels.NetworkViewModel
 import ai.ciris.mobile.shared.viewmodels.SystemViewModel
 import ai.ciris.mobile.shared.viewmodels.TelemetryViewModel
 import ai.ciris.mobile.shared.viewmodels.UsersViewModel
@@ -412,6 +413,18 @@ fun CIRISApp(
             is Screen.LLMSettings -> Screen.Interact
             is Screen.VizSettings -> Screen.Settings
 
+            // Federation sub-screens (reached from Network hub) go back to Network
+            is Screen.NetworkIdentity,
+            is Screen.NetworkMap,
+            is Screen.NetworkTrustGraph,
+            is Screen.NetworkPeers,
+            is Screen.NetworkInterfaces,
+            is Screen.NetworkPaths,
+            is Screen.NetworkAnnounces,
+            is Screen.NetworkQueue,
+            is Screen.NetworkDiagnostics,
+            is Screen.NetworkContent -> Screen.Network
+
             // All other screens go back to Interact (main screen)
             else -> Screen.Interact
         }
@@ -636,6 +649,9 @@ fun CIRISApp(
     }
     val dataManagementViewModel: DataManagementViewModel = viewModel {
         DataManagementViewModel(apiClient, secureStorage, envFileUpdater)
+    }
+    val networkViewModel: NetworkViewModel = viewModel {
+        NetworkViewModel(apiClient)
     }
 
     // Set up purchase result callback — routes through handlePurchaseResult for typed error handling
@@ -3078,12 +3094,59 @@ fun CIRISApp(
                 )
             }
             Screen.Network -> {
-                // Federation transport substrate operator surface — Edge data
-                // is source of truth; UI is display + content-type-aware CRUD.
-                // Mock snapshot until PyEdge FFI lands in Edge 1.0/1.1
+                // Federation transport substrate operator hub (2.9.4) —
+                // identity card + agent-mode selector + live stats strip +
+                // 10 federation nav tiles. Real Edge data lands in 1.0/1.1
                 // (CIRISEdge#23–29 + sibling pymethod asks).
-                ai.ciris.mobile.shared.ui.screens.NetworkScreen()
+                ai.ciris.mobile.shared.ui.screens.NetworkScreen(
+                    viewModel = networkViewModel,
+                    onTileClick = { tile ->
+                        currentScreen = when (tile) {
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.IDENTITY -> Screen.NetworkIdentity
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.MAP -> Screen.NetworkMap
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.TRUST_GRAPH -> Screen.NetworkTrustGraph
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.PEERS -> Screen.NetworkPeers
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.INTERFACES -> Screen.NetworkInterfaces
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.PATHS -> Screen.NetworkPaths
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.ANNOUNCES -> Screen.NetworkAnnounces
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.QUEUE -> Screen.NetworkQueue
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.DIAGNOSTICS -> Screen.NetworkDiagnostics
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.CONTENT -> Screen.NetworkContent
+                        }
+                    },
+                )
             }
+            // ── Federation sub-screens (reached from NetworkScreen tiles) ──
+            Screen.NetworkIdentity -> ai.ciris.mobile.shared.ui.screens.federation.NetworkIdentityScreen(
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkMap -> ai.ciris.mobile.shared.ui.screens.federation.NetworkMapScreen(
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkTrustGraph -> ai.ciris.mobile.shared.ui.screens.federation.NetworkTrustGraphScreen(
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkPeers -> ai.ciris.mobile.shared.ui.screens.federation.NetworkPeersScreen(
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkInterfaces -> ai.ciris.mobile.shared.ui.screens.federation.NetworkInterfacesScreen(
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkPaths -> ai.ciris.mobile.shared.ui.screens.federation.NetworkPathsScreen(
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkAnnounces -> ai.ciris.mobile.shared.ui.screens.federation.NetworkAnnouncesScreen(
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkQueue -> ai.ciris.mobile.shared.ui.screens.federation.NetworkQueueScreen(
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkDiagnostics -> ai.ciris.mobile.shared.ui.screens.federation.NetworkDiagnosticsScreen(
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkContent -> ai.ciris.mobile.shared.ui.screens.federation.NetworkContentScreen(
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
         }
                 } // close Box(weight=1f)
             } // close Row
@@ -3546,6 +3609,21 @@ private sealed class Screen {
     object Constitutional : Screen()
     object AgentsList : Screen()
     object Network : Screen()
+
+    // 2.9.4 — Network hub federation sub-screens. Each is a ComingSoonScreen
+    // wrapper pinned to the Edge PeerResolver substrate issue until Edge 1.0
+    // wires in the corresponding PyEdge FFI surface. Reached via the 10-tile
+    // grid on NetworkScreen; not sidebar-navigable.
+    object NetworkIdentity : Screen()
+    object NetworkMap : Screen()
+    object NetworkTrustGraph : Screen()
+    object NetworkPeers : Screen()
+    object NetworkInterfaces : Screen()
+    object NetworkPaths : Screen()
+    object NetworkAnnounces : Screen()
+    object NetworkQueue : Screen()
+    object NetworkDiagnostics : Screen()
+    object NetworkContent : Screen()
 }
 
 /**
@@ -3581,6 +3659,17 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.Users -> ai.ciris.mobile.shared.ui.nav.NavSurface.Users
     Screen.Adapters -> ai.ciris.mobile.shared.ui.nav.NavSurface.Adapters
     Screen.Network -> ai.ciris.mobile.shared.ui.nav.NavSurface.Network
+    // Federation sub-screens — sidebar highlights the Network parent.
+    Screen.NetworkIdentity,
+    Screen.NetworkMap,
+    Screen.NetworkTrustGraph,
+    Screen.NetworkPeers,
+    Screen.NetworkInterfaces,
+    Screen.NetworkPaths,
+    Screen.NetworkAnnounces,
+    Screen.NetworkQueue,
+    Screen.NetworkDiagnostics,
+    Screen.NetworkContent -> ai.ciris.mobile.shared.ui.nav.NavSurface.Network
     Screen.DataManagement -> ai.ciris.mobile.shared.ui.nav.NavSurface.Data
     Screen.Audit -> ai.ciris.mobile.shared.ui.nav.NavSurface.Audit
     Screen.Consent -> ai.ciris.mobile.shared.ui.nav.NavSurface.Consent

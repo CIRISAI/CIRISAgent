@@ -2,6 +2,10 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.LocationResultData
+import ai.ciris.mobile.shared.models.AgentMode
+import ai.ciris.mobile.shared.models.AgentModeChangeResult
+import ai.ciris.mobile.shared.models.AgentModeStatus
+import ai.ciris.mobile.shared.ui.components.AgentModeSelector
 import ai.ciris.mobile.shared.localization.LocalCurrency
 import ai.ciris.mobile.shared.localization.LocalLocalization
 import ai.ciris.mobile.shared.localization.localizedString
@@ -220,6 +224,11 @@ fun SettingsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Agent Mode section — mirror surface of Network hub mode card.
+                AgentModeSection(apiClient = apiClient)
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
                 // LLM Configuration - Navigate to LLM Settings screen
                 Text(
                     text = localizedString("mobile.settings_ai_config"),
@@ -2139,5 +2148,130 @@ private fun PreferencesSection() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
         }
+    }
+}
+
+/**
+ * Agent Mode section — mirror surface of NetworkScreen's mode selector card.
+ * Same component, same dialog flow, same INSUFFICIENT_DISK error rendering.
+ *
+ * Self-contained: holds its own GET/PUT state instead of leaning on
+ * NetworkViewModel so SettingsScreen's existing constructor stays stable.
+ */
+@Composable
+private fun AgentModeSection(apiClient: CIRISApiClient) {
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<AgentModeStatus?>(null) }
+    var mode by remember { mutableStateOf(AgentMode.PROXY) }
+    var loading by remember { mutableStateOf(false) }
+    var pendingMode: AgentMode? by remember { mutableStateOf(null) }
+    var insufficientDisk: AgentModeChangeResult.InsufficientDisk? by remember { mutableStateOf(null) }
+    var errorMsg: String? by remember { mutableStateOf(null) }
+
+    LaunchedEffect(Unit) {
+        loading = true
+        try {
+            val s = apiClient.getAgentMode()
+            status = s
+            mode = s.mode
+        } catch (e: Exception) {
+            errorMsg = e.message
+        } finally {
+            loading = false
+        }
+    }
+
+    pendingMode?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingMode = null },
+            title = { Text(localizedString("network.mode_card.confirm_change_title")) },
+            text = { Text(localizedString("network.mode_card.confirm_change_body")) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val toApply = target
+                        pendingMode = null
+                        scope.launch {
+                            loading = true
+                            insufficientDisk = null
+                            errorMsg = null
+                            try {
+                                when (val r = apiClient.setAgentMode(toApply)) {
+                                    is AgentModeChangeResult.Success -> {
+                                        status = r.status
+                                        mode = r.status.mode
+                                    }
+                                    is AgentModeChangeResult.InsufficientDisk -> insufficientDisk = r
+                                    is AgentModeChangeResult.Failure -> errorMsg = r.message
+                                }
+                            } finally {
+                                loading = false
+                            }
+                        }
+                    },
+                ) { Text(localizedString("network.mode_card.confirm_change_button")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingMode = null }) {
+                    Text(localizedString("network.mode_card.cancel_button"))
+                }
+            },
+        )
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = localizedString("settings.agent_mode_section.title"),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = localizedString("settings.agent_mode_section.subtitle"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        AgentModeSelector(
+            mode = mode,
+            serverEligible = status?.serverEligible ?: false,
+            availableDiskBytes = status?.availableDiskBytes ?: 0L,
+            requiredDiskBytes = status?.serverMinimumDiskBytes ?: (256L * 1024 * 1024 * 1024),
+            loading = loading,
+            onModeChange = { target -> if (target != mode) pendingMode = target },
+        )
+        val disk = insufficientDisk
+        if (disk != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = localizedString(
+                    "network.mode_card.insufficient_disk_error",
+                    mapOf(
+                        "available" to settingsHumanGiB(disk.availableBytes),
+                        "required" to settingsHumanGiB(disk.requiredBytes),
+                    ),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        errorMsg?.let { msg ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+private fun settingsHumanGiB(bytes: Long): String {
+    if (bytes <= 0) return "0 GB"
+    val gib = bytes / (1024.0 * 1024.0 * 1024.0)
+    return when {
+        gib >= 100 -> "${gib.toInt()} GB"
+        gib >= 10 -> "${(gib * 10).toInt() / 10.0} GB"
+        else -> "${(gib * 100).toInt() / 100.0} GB"
     }
 }

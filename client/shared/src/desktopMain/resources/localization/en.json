@@ -2055,5 +2055,68 @@
     "metrics": "Metrics",
     "services": "Services"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "Network",
+    "identity_card": {
+      "title": "Federation identity",
+      "copy_address": "Copy address",
+      "qr_label": "QR · ratchet / rotation"
+    },
+    "mode_card": {
+      "title": "Agent mode",
+      "subtitle": "How this agent participates in the federation. Edge will restart on change.",
+      "client_label": "Client",
+      "client_description": "Connect outward to a remote node.",
+      "proxy_label": "Proxy",
+      "proxy_description": "Local agent with proxy federation surface.",
+      "proxy_default_marker": "(default)",
+      "server_label": "Server",
+      "server_description": "Full federation node.",
+      "server_disk_gate": "Requires ≥256 GB free disk · {available} free of {required} required",
+      "confirm_change_title": "Restart required",
+      "confirm_change_body": "Switching agent mode requires an Edge restart. Continue?",
+      "confirm_change_button": "Restart Edge",
+      "cancel_button": "Cancel",
+      "insufficient_disk_error": "Not enough free disk for SERVER mode. {available} free, {required} required."
+    },
+    "stats_strip": {
+      "peers": "Peers",
+      "transports": "Transports",
+      "queue": "Queue",
+      "errors": "Errors",
+      "awaiting_edge_1_0": "Awaiting Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Identity",
+      "map": "Map",
+      "trust_graph": "Trust Graph",
+      "peers": "Peers",
+      "interfaces": "Interfaces",
+      "paths": "Paths",
+      "announces": "Announces",
+      "queue": "Queue",
+      "diagnostics": "Diagnostics",
+      "content": "Content",
+      "coming_soon_badge": "Coming soon"
+    },
+    "sub_screens": {
+      "identity_description": "Federation identity — signer key, hardware-custody attestation chain, ratchet state, rotation history.",
+      "map_description": "Force-directed canvas of the local federation neighborhood — peers as nodes, transports as colored edges.",
+      "trust_graph_description": "Operator view of transport-trust topology — direct grants, delegated authority, adversarial flags.",
+      "peers_description": "Sortable peer × transport reachability matrix — every federation identity this stack has heard from.",
+      "interfaces_description": "Per-transport health + config + stats (rnstatus-style). CRUD over the reticulum.conf-equivalent.",
+      "paths_description": "RNS path table — every destination Edge knows how to reach, via which transport, hops, expiry.",
+      "announces_description": "Live + retrospective announce stream — who, which interface, hops, signature validation.",
+      "queue_description": "Outbound packet queue per transport: depth, age, retry count, fragmentation state.",
+      "diagnostics_description": "Recent errors, signature failures, policy blocks, transport churn — operator forensics.",
+      "content_description": "Federation content store browser — cached locally, federated, hash-addressed retrieval."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Agent mode",
+      "subtitle": "Change how this agent participates in the federation. Mirrors the Network screen."
+    }
+  }
 }

@@ -606,6 +606,113 @@ class CIRISApiClient(
         }
     }
 
+    // ─── Agent Mode (global) ─────────────────────────────────────────────────
+    // GET/PUT /v1/system/agent-mode — drives federation transport posture.
+    // Hand-rolled (not via SDK) because the route is newer than the SDK regen
+    // cadence and uses an envelope distinct from the SuccessResponse default.
+
+    /**
+     * Fetch the current global [AgentMode] plus the disk facts that gate
+     * SERVER eligibility.
+     */
+    suspend fun getAgentMode(): AgentModeStatus {
+        val method = "getAgentMode"
+        logDebug(method, "Fetching agent-mode from $baseUrl/v1/system/agent-mode")
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+        return try {
+            val response = client.get("$baseUrl/v1/system/agent-mode") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Agent-mode fetch failed: ${response.status}")
+            }
+            parseAgentModeStatus(response.bodyAsText())
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Attempt to switch the global [AgentMode]. Handles the 400
+     * INSUFFICIENT_DISK case as a typed [AgentModeChangeResult.InsufficientDisk]
+     * so the UI can render an actionable inline message.
+     */
+    suspend fun setAgentMode(mode: AgentMode): AgentModeChangeResult {
+        val method = "setAgentMode"
+        logInfo(method, "Setting agent-mode → ${mode.wire}")
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 5000
+            }
+        }
+        return try {
+            val response = client.put("$baseUrl/v1/system/agent-mode") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("mode", mode.wire) })
+            }
+            val body = response.bodyAsText()
+            when {
+                response.status.isSuccess() -> {
+                    val root = Json.parseToJsonElement(body).jsonObject
+                    val status = parseAgentModeStatus(body)
+                    val requiresRestart = root["requires_restart"]?.jsonPrimitive?.booleanOrNull ?: true
+                    AgentModeChangeResult.Success(status, requiresRestart)
+                }
+                response.status.value == 400 -> {
+                    val root = Json.parseToJsonElement(body).jsonObject
+                    val error = root["error"]?.jsonPrimitive?.contentOrNull
+                    if (error == "INSUFFICIENT_DISK") {
+                        val available = root["available_bytes"]?.jsonPrimitive?.longOrNull ?: 0L
+                        val required = root["required_bytes"]?.jsonPrimitive?.longOrNull ?: 0L
+                        AgentModeChangeResult.InsufficientDisk(available, required)
+                    } else {
+                        AgentModeChangeResult.Failure("Bad request: ${error ?: body.take(200)}")
+                    }
+                }
+                else -> AgentModeChangeResult.Failure("HTTP ${response.status.value}: ${body.take(200)}")
+            }
+        } catch (e: Exception) {
+            logException(method, e, "mode=${mode.wire}")
+            AgentModeChangeResult.Failure(e.message ?: e::class.simpleName ?: "unknown error")
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Decode an [AgentModeStatus] from a `{"data": {...}}`-wrapped response.
+     * Used by both GET (envelope = SuccessResponse) and PUT (envelope adds
+     * `requires_restart`). Tolerates an unwrapped `{...}` body for resilience.
+     */
+    private fun parseAgentModeStatus(rawBody: String): AgentModeStatus {
+        val root = Json.parseToJsonElement(rawBody).jsonObject
+        val data = root["data"]?.jsonObject ?: root
+        val modeStr = data["mode"]?.jsonPrimitive?.contentOrNull
+        val available = data["available_disk_bytes"]?.jsonPrimitive?.longOrNull ?: 0L
+        val minimum = data["server_minimum_disk_bytes"]?.jsonPrimitive?.longOrNull ?: 0L
+        val eligible = data["server_eligible"]?.jsonPrimitive?.booleanOrNull ?: false
+        val dataDir = data["data_dir"]?.jsonPrimitive?.contentOrNull ?: ""
+        return AgentModeStatus(
+            mode = AgentMode.fromWire(modeStr),
+            availableDiskBytes = available,
+            serverMinimumDiskBytes = minimum,
+            serverEligible = eligible,
+            dataDir = dataDir,
+        )
+    }
+
     // System Status (from /v1/system/health)
     // Uses direct HTTP to support dynamic baseUrl changes
     override suspend fun getSystemStatus(): SystemStatus {

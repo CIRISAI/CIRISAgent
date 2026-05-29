@@ -448,3 +448,211 @@ class TestConcurrentMutations:
 
         peers = [p for p in seeder.list_peers() if p.key_id == "k1"]
         assert len(peers) == 1
+
+
+# ---------------------------------------------------------------------------
+# Pubkey-as-first-class-field invariants (fixup).
+# ---------------------------------------------------------------------------
+
+
+class TestPubkeyFieldInvariants:
+    """Invariants for the post-fixup pubkey_ed25519_base64 field on LocalPeerState."""
+
+    @pytest.mark.asyncio
+    async def test_every_local_peer_state_has_non_empty_pubkey(self, seeder):
+        """INVARIANT: every LocalPeerState in local state has a non-empty pubkey.
+
+        Covers canonical seed + organic record + post-mutation re-reads.
+        """
+        canonical = _peer(key_id="canon", pubkey="CANONPUB==")
+        seeder.seed_canonical_peers([canonical])
+        await seeder.record_organic_peer("org-1", "ORGANICPUB1==", alias="bob")
+        await seeder.record_organic_peer("org-2", "ORGANICPUB2==", alias=None)
+
+        await seeder.set_trust("canon", PeerTrustState.UNTRUSTED)
+        await seeder.set_appearance("org-1", PeerAppearance(icon="x"))
+
+        all_peers = seeder.list_peers()
+        assert len(all_peers) >= 3
+        for p in all_peers:
+            assert p.pubkey_ed25519_base64
+            assert len(p.pubkey_ed25519_base64) >= 1
+
+    def test_canonical_reseed_preserves_pubkey_from_seed_source(self, seeder):
+        """INVARIANT: pubkey is refreshed from the seed source on every reseed.
+
+        That's the authoritative copy — if the federation directory rotates
+        a peer's key, the rotation must propagate on next boot.
+        """
+        v1 = _peer(key_id="canon", pubkey="VERSION1=")
+        seeder.seed_canonical_peers([v1])
+        assert seeder.get_local_state("canon").pubkey_ed25519_base64 == "VERSION1="
+
+        # Simulate directory rotation: same key_id, new pubkey.
+        v2 = _peer(key_id="canon", pubkey="VERSION2=")
+        seeder.seed_canonical_peers([v2])
+        assert seeder.get_local_state("canon").pubkey_ed25519_base64 == "VERSION2="
+
+    @pytest.mark.asyncio
+    async def test_canonical_reseed_preserves_pubkey_even_with_user_trust_flip(self, seeder):
+        """The two preservation paths must compose: pubkey refreshes, trust survives."""
+        v1 = _peer(key_id="canon", pubkey="V1=")
+        seeder.seed_canonical_peers([v1])
+        await seeder.set_trust("canon", PeerTrustState.BLOCKED)
+
+        v2 = _peer(key_id="canon", pubkey="V2=")
+        seeder.seed_canonical_peers([v2])
+
+        after = seeder.get_local_state("canon")
+        assert after.pubkey_ed25519_base64 == "V2="
+        assert after.trust is PeerTrustState.BLOCKED
+
+    @pytest.mark.asyncio
+    async def test_organic_record_stores_supplied_pubkey_verbatim(self, seeder):
+        """INVARIANT: record_organic_peer persists the supplied pubkey on the field,
+        not in the alias_override slot."""
+        state = await seeder.record_organic_peer("k1", "MYORGANICPUBKEY==", alias="bob")
+        assert state.pubkey_ed25519_base64 == "MYORGANICPUBKEY=="
+        assert state.alias_override == "bob"  # alias is alias, NOT pubkey-smuggling
+
+        re_read = seeder.get_local_state("k1")
+        assert re_read.pubkey_ed25519_base64 == "MYORGANICPUBKEY=="
+        assert re_read.alias_override == "bob"
+
+    @pytest.mark.asyncio
+    async def test_organic_record_with_no_alias_leaves_alias_override_none(self, seeder):
+        """No more peer-{pubkey[:12]} smuggling — if caller passes no alias,
+        alias_override stays None and the pubkey lives on its own field."""
+        state = await seeder.record_organic_peer("k1", "PUBKEY1234567890")
+        assert state.pubkey_ed25519_base64 == "PUBKEY1234567890"
+        assert state.alias_override is None
+
+    @pytest.mark.asyncio
+    async def test_organic_re_record_does_not_overwrite_pubkey(self, seeder):
+        """INVARIANT: a follow-up ANNOUNCE cannot silently rotate a known peer's pubkey.
+
+        Pubkey rotation must come through a fresh canonical reseed or explicit
+        user action — accepting an ANNOUNCE's pubkey would let an attacker
+        replace a known peer's key.
+        """
+        await seeder.record_organic_peer("k1", "ORIGINAL==", alias="bob")
+        await seeder.record_organic_peer("k1", "ATTACKER==", alias="bob")
+        state = seeder.get_local_state("k1")
+        assert state.pubkey_ed25519_base64 == "ORIGINAL=="
+
+    @pytest.mark.asyncio
+    async def test_empty_pubkey_to_record_organic_peer_raises(self, seeder):
+        with pytest.raises(ValueError, match="pubkey_ed25519_base64"):
+            await seeder.record_organic_peer("k1", "", alias="bob")
+
+
+# ---------------------------------------------------------------------------
+# Legacy-shape backfill on load.
+# ---------------------------------------------------------------------------
+
+
+class TestLegacyBackfill:
+    """Pre-fixup persisted rows used the `peer-{pubkey[:12]}` alias_override
+    convention. On load, the seeder backfills pubkey_ed25519_base64 from
+    that shape — and fails loud when it can't."""
+
+    def test_backfill_from_legacy_alias_override_shape(self, temp_db, time_service):
+        """If a row exists with no pubkey field but alias_override matches
+        the legacy ``peer-{12char}`` shape, load it and recover the prefix.
+        """
+        from ciris_engine.logic.persistence.models.graph import add_graph_node
+        from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+        legacy_payload = {
+            "key_id": "legacy-key",
+            # NOTE: no pubkey_ed25519_base64
+            "canonical": False,
+            "trust": "unknown",
+            "appearance": None,
+            "alias_override": "peer-ABCDEFGH1234",
+            "notes": None,
+            "first_seen": "2026-01-01T00:00:00+00:00",
+            "last_seen": None,
+        }
+        node = GraphNode(
+            id="organic_peer/legacy-key",
+            type=NodeType.CONFIG,
+            scope=GraphScope.LOCAL,
+            attributes={"local_peer_state": legacy_payload},
+            updated_by="legacy_test_setup",
+            updated_at=time_service.now(),
+        )
+        add_graph_node(node, time_service)
+
+        seeder = BootstrapPeerSeeder(time_service=time_service, registry_fetch_url=None)
+        state = seeder.get_local_state("legacy-key")
+        assert state is not None
+        # Recovered the 12-char prefix from the alias_override.
+        assert state.pubkey_ed25519_base64 == "ABCDEFGH1234"
+        # alias_override is preserved as-is (legacy shape).
+        assert state.alias_override == "peer-ABCDEFGH1234"
+
+    def test_backfill_fails_loud_when_no_recovery_shape(self, temp_db, time_service):
+        """If a row has no pubkey AND no legacy alias_override shape,
+        raise rather than fabricate a pubkey or silently drop the row."""
+        from ciris_engine.logic.persistence.models.graph import add_graph_node
+        from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+        corrupt_payload = {
+            "key_id": "corrupt-key",
+            # NOTE: no pubkey, alias_override does NOT match legacy shape
+            "canonical": False,
+            "trust": "unknown",
+            "appearance": None,
+            "alias_override": "just-a-friendly-name",
+            "notes": None,
+            "first_seen": "2026-01-01T00:00:00+00:00",
+            "last_seen": None,
+        }
+        node = GraphNode(
+            id="organic_peer/corrupt-key",
+            type=NodeType.CONFIG,
+            scope=GraphScope.LOCAL,
+            attributes={"local_peer_state": corrupt_payload},
+            updated_by="corrupt_test_setup",
+            updated_at=time_service.now(),
+        )
+        add_graph_node(node, time_service)
+
+        seeder = BootstrapPeerSeeder(time_service=time_service, registry_fetch_url=None)
+        with pytest.raises(ValueError, match="refusing silent corruption"):
+            seeder.get_local_state("corrupt-key")
+
+    def test_backfill_skipped_when_pubkey_already_present(self, temp_db, time_service):
+        """A row that already has pubkey_ed25519_base64 must NOT be touched
+        by backfill — even if alias_override happens to match the legacy
+        regex by coincidence."""
+        from ciris_engine.logic.persistence.models.graph import add_graph_node
+        from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+        modern_payload = {
+            "key_id": "modern-key",
+            "pubkey_ed25519_base64": "REAL_PUBKEY_FULL=",
+            "canonical": False,
+            "trust": "trusted",
+            "appearance": None,
+            # alias_override happens to match legacy regex; must be IGNORED.
+            "alias_override": "peer-ABCDEFGH1234",
+            "notes": None,
+            "first_seen": "2026-01-01T00:00:00+00:00",
+            "last_seen": None,
+        }
+        node = GraphNode(
+            id="organic_peer/modern-key",
+            type=NodeType.CONFIG,
+            scope=GraphScope.LOCAL,
+            attributes={"local_peer_state": modern_payload},
+            updated_by="modern_test_setup",
+            updated_at=time_service.now(),
+        )
+        add_graph_node(node, time_service)
+
+        seeder = BootstrapPeerSeeder(time_service=time_service, registry_fetch_url=None)
+        state = seeder.get_local_state("modern-key")
+        assert state is not None
+        assert state.pubkey_ed25519_base64 == "REAL_PUBKEY_FULL="

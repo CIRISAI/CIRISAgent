@@ -35,6 +35,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -77,6 +78,15 @@ _UPDATED_BY = "bootstrap_peer_seeder"
 # through LocalPeerState without inspecting node.id format.
 _ATTR_PAYLOAD = "local_peer_state"
 
+# Backfill regex for the legacy "peer-{pubkey[:12]}" alias_override
+# format used by the pre-pubkey-field organic-peer flow. Captures the
+# 12-character truncated pubkey prefix so we can promote it onto the
+# new required pubkey_ed25519_base64 field on load. This is a
+# best-effort recovery — the recovered value is the truncated prefix,
+# NOT the original full pubkey. We surface it as such so any wire-level
+# signature check fails loudly rather than silently using a wrong key.
+_LEGACY_ALIAS_PUBKEY_PATTERN = re.compile(r"^peer-(?P<prefix>[A-Za-z0-9+/=_-]{12})$")
+
 
 def _node_id_for(key_id: str, *, canonical: bool) -> str:
     """Deterministic graph-node id for a peer."""
@@ -98,7 +108,21 @@ def _state_to_node(state: LocalPeerState, time_service: TimeServiceProtocol) -> 
 
 
 def _state_from_node(node: GraphNode) -> Optional[LocalPeerState]:
-    """Decode LocalPeerState from a graph node. None on shape mismatch."""
+    """Decode LocalPeerState from a graph node.
+
+    Returns None on shape mismatch (missing payload, not-a-dict, etc).
+
+    Migration: if the persisted payload predates the
+    ``pubkey_ed25519_base64`` field (introduced in the fixup), backfill
+    it from ``alias_override`` IFF it matches the legacy
+    ``peer-{pubkey[:12]}`` shape used by ``record_organic_peer`` before
+    the field existed. The backfilled value is the 12-char prefix —
+    NOT the full pubkey — so any signature check downstream fails loud
+    rather than silently using a wrong key. We deliberately do not
+    fabricate a pubkey when no recovery shape matches: those rows
+    raise so the caller sees the corruption rather than silently
+    losing the peer.
+    """
     attrs = node.attributes
     if hasattr(attrs, "model_dump"):
         attrs_dict = attrs.model_dump()
@@ -109,6 +133,30 @@ def _state_from_node(node: GraphNode) -> Optional[LocalPeerState]:
     payload = attrs_dict.get(_ATTR_PAYLOAD)
     if not isinstance(payload, dict):
         return None
+
+    # Backfill missing pubkey from legacy alias_override pattern.
+    if not payload.get("pubkey_ed25519_base64"):
+        alias_override = payload.get("alias_override")
+        if isinstance(alias_override, str):
+            match = _LEGACY_ALIAS_PUBKEY_PATTERN.match(alias_override)
+            if match:
+                payload = {
+                    **payload,
+                    "pubkey_ed25519_base64": match.group("prefix"),
+                }
+                logger.info(
+                    "Backfilled pubkey_ed25519_base64 from legacy alias_override for node %s "
+                    "(recovered 12-char prefix — wire signature checks will fail until refreshed)",
+                    node.id,
+                )
+            else:
+                # No recovery shape — fail loud per spec migration concern.
+                raise ValueError(
+                    f"Persisted peer node {node.id!r} has no pubkey_ed25519_base64 "
+                    "and alias_override does not match the legacy peer-{{prefix}} "
+                    "format. Cannot safely load — refusing silent corruption."
+                )
+
     try:
         return LocalPeerState.model_validate(payload)
     except Exception as exc:  # pragma: no cover - defensive
@@ -247,8 +295,10 @@ class BootstrapPeerSeeder:
         """Merge canonical peers into local state.
 
         For each input peer:
-            - If a canonical row exists, refresh canonical fields but
-              preserve user trust + appearance + alias_override + notes.
+            - If a canonical row exists, refresh canonical metadata
+              (pubkey is overwritten from the seed source — that's
+              authoritative) but preserve user trust + appearance +
+              alias_override + notes.
             - If no row exists, create one with trust=TRUSTED.
             - If only an organic row exists for this key_id, leave it
               alone — the canonical row supersedes future ANNOUNCE
@@ -266,13 +316,14 @@ class BootstrapPeerSeeder:
             existing_state = _state_from_node(existing_node) if existing_node else None
 
             if existing_state is not None:
-                # Preserve user-controlled fields; canonical metadata is
-                # implicitly refreshed via _CANONICAL_ALIAS_ATTRS below
-                # (we don't persist those into LocalPeerState — they live
-                # on the CanonicalBootstrapPeer row in memory). last_seen
-                # is left alone here; that's wire territory.
+                # Preserve user-controlled fields. Canonical metadata
+                # (here: pubkey_ed25519_base64) is REFRESHED from the
+                # seed source — that's the authoritative copy and a
+                # rotation in the federation directory must propagate.
+                # last_seen is left alone here; that's wire territory.
                 merged = LocalPeerState(
                     key_id=peer.key_id,
+                    pubkey_ed25519_base64=peer.pubkey_ed25519_base64,
                     canonical=True,
                     trust=existing_state.trust,
                     appearance=existing_state.appearance,
@@ -284,6 +335,7 @@ class BootstrapPeerSeeder:
             else:
                 merged = LocalPeerState(
                     key_id=peer.key_id,
+                    pubkey_ed25519_base64=peer.pubkey_ed25519_base64,
                     canonical=True,
                     trust=PeerTrustState.TRUSTED,
                     appearance=None,
@@ -383,7 +435,7 @@ class BootstrapPeerSeeder:
     async def record_organic_peer(
         self,
         key_id: str,
-        pubkey: str,
+        pubkey_ed25519_base64: str,
         alias: Optional[str] = None,
     ) -> LocalPeerState:
         """Idempotently record an organically-discovered peer.
@@ -391,18 +443,22 @@ class BootstrapPeerSeeder:
         Called from the Edge ANNOUNCE subscriber (CIRISEdge#46 — currently
         stubbed in ``edge_runtime.py``). Trust defaults to UNKNOWN.
 
-        - If a canonical row exists for ``key_id``, return that row
-          unchanged (canonical wins, organic learning is no-op).
+        - If a canonical row exists for ``key_id``, refresh ``last_seen``
+          on it and return it unchanged otherwise (canonical wins —
+          canonical's pubkey is authoritative, never overwritten by an
+          ANNOUNCE).
         - If an organic row exists, refresh ``last_seen`` and return it.
-          ``alias_override``, ``appearance``, ``notes``, and ``trust``
-          are preserved.
-        - If no row exists, create an organic row at ``trust=UNKNOWN``.
-
-        ``pubkey`` is currently held only in the alias slot (alias =
-        alias arg or ``f"peer-{pubkey[:12]}"``) — when Edge 1.0 lands
-        we'll add a pubkey field to LocalPeerState or persist alongside.
-        For now we don't need it for the agent-side framework tests.
+          ``alias_override``, ``appearance``, ``notes``, ``trust``, and
+          ``pubkey_ed25519_base64`` are preserved (a pubkey rotation
+          must come through a fresh canonical reseed or an explicit
+          user action — silent overwrite via ANNOUNCE would let an
+          attacker replace a known peer's key).
+        - If no row exists, create an organic row at ``trust=UNKNOWN``
+          with the supplied pubkey.
         """
+        if not pubkey_ed25519_base64:
+            raise ValueError("pubkey_ed25519_base64 is required and must be non-empty")
+
         async with self._lock:
             now = self._now()
 
@@ -411,7 +467,8 @@ class BootstrapPeerSeeder:
                 state = _state_from_node(canonical_node)
                 if state is not None:
                     # Refresh last_seen so the canonical peer surfaces
-                    # as recently-active, but don't downgrade trust.
+                    # as recently-active, but don't downgrade trust and
+                    # don't overwrite the authoritative pubkey.
                     updated = state.model_copy(update={"last_seen": now})
                     self._persist(updated)
                     return updated
@@ -423,9 +480,10 @@ class BootstrapPeerSeeder:
                 self._persist(updated)
                 return updated
 
-            display_alias = alias or f"peer-{pubkey[:12]}"
+            display_alias = alias  # may be None — that's fine
             new_state = LocalPeerState(
                 key_id=key_id,
+                pubkey_ed25519_base64=pubkey_ed25519_base64,
                 canonical=False,
                 trust=PeerTrustState.UNKNOWN,
                 appearance=None,

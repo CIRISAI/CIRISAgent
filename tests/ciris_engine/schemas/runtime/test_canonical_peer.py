@@ -107,12 +107,14 @@ class TestLocalPeerState:
     def test_minimal_canonical(self) -> None:
         state = LocalPeerState(
             key_id="k1",
+            pubkey_ed25519_base64="AAAA==",
             canonical=True,
             trust=PeerTrustState.TRUSTED,
             first_seen=self._now(),
         )
         assert state.canonical is True
         assert state.trust is PeerTrustState.TRUSTED
+        assert state.pubkey_ed25519_base64 == "AAAA=="
         assert state.appearance is None
         assert state.alias_override is None
         assert state.notes is None
@@ -121,17 +123,20 @@ class TestLocalPeerState:
     def test_minimal_organic(self) -> None:
         state = LocalPeerState(
             key_id="k2",
+            pubkey_ed25519_base64="BBBB==",
             canonical=False,
             trust=PeerTrustState.UNKNOWN,
             first_seen=self._now(),
         )
         assert state.canonical is False
         assert state.trust is PeerTrustState.UNKNOWN
+        assert state.pubkey_ed25519_base64 == "BBBB=="
 
     def test_full(self) -> None:
         ap = PeerAppearance(icon="x", fg_color="#fff", bg_color="#000")
         state = LocalPeerState(
             key_id="k3",
+            pubkey_ed25519_base64="CCCC==",
             canonical=True,
             trust=PeerTrustState.BLOCKED,
             appearance=ap,
@@ -143,11 +148,34 @@ class TestLocalPeerState:
         assert state.appearance is not None
         assert state.appearance.icon == "x"
         assert state.alias_override == "my-datum"
+        assert state.pubkey_ed25519_base64 == "CCCC=="
 
     def test_empty_key_id_rejected(self) -> None:
         with pytest.raises(ValidationError):
             LocalPeerState(
                 key_id="",
+                pubkey_ed25519_base64="AAAA==",
+                canonical=True,
+                trust=PeerTrustState.TRUSTED,
+                first_seen=self._now(),
+            )
+
+    def test_missing_pubkey_rejected(self) -> None:
+        """INVARIANT: pubkey_ed25519_base64 is required — no Optional, no default."""
+        with pytest.raises(ValidationError):
+            LocalPeerState(
+                key_id="k",
+                canonical=True,
+                trust=PeerTrustState.TRUSTED,
+                first_seen=self._now(),
+            )  # type: ignore[call-arg]
+
+    def test_empty_pubkey_rejected(self) -> None:
+        """INVARIANT: empty-string pubkey is rejected — min_length=1."""
+        with pytest.raises(ValidationError):
+            LocalPeerState(
+                key_id="k",
+                pubkey_ed25519_base64="",
                 canonical=True,
                 trust=PeerTrustState.TRUSTED,
                 first_seen=self._now(),
@@ -156,6 +184,7 @@ class TestLocalPeerState:
     def test_round_trip_through_json(self) -> None:
         state = LocalPeerState(
             key_id="k4",
+            pubkey_ed25519_base64="DDDD==",
             canonical=True,
             trust=PeerTrustState.UNTRUSTED,
             first_seen=self._now(),
@@ -165,11 +194,13 @@ class TestLocalPeerState:
         payload = state.model_dump(mode="json")
         restored = LocalPeerState.model_validate(payload)
         assert restored == state
+        assert restored.pubkey_ed25519_base64 == "DDDD=="
 
     def test_extra_fields_forbidden(self) -> None:
         with pytest.raises(ValidationError):
             LocalPeerState(
                 key_id="k",
+                pubkey_ed25519_base64="AAAA==",
                 canonical=True,
                 trust=PeerTrustState.TRUSTED,
                 first_seen=self._now(),

@@ -128,9 +128,18 @@ class LocalPeerState(BaseModel):
     ``first_seen`` is stamped at row creation and never changes.
     ``last_seen`` is updated by callers that observe the peer on the
     wire. No online/offline flag — caller decides freshness threshold.
+
+    ``pubkey_ed25519_base64`` is required — every peer has a pubkey by
+    definition, canonical or organic. This is the wire-verifiable
+    identity bound to ``key_id``.
     """
 
     key_id: str = Field(..., min_length=1, description="Ed25519 signer_key_id")
+    pubkey_ed25519_base64: str = Field(
+        ...,
+        min_length=1,
+        description="Ed25519 public key, base64-encoded — bound to key_id, used to verify wire signatures",
+    )
     canonical: bool = Field(
         ...,
         description="True if this peer was seeded from CIRIS_CANONICAL_BOOTSTRAP_PEERS or the federation directory",

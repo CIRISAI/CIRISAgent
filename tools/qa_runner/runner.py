@@ -564,7 +564,10 @@ class QARunner:
         if not incidents_log.exists():
             return []
 
-        # Patterns to ignore (non-critical)
+        # Patterns to ignore (non-critical).
+        # Kept in sync with the comprehensive list in `_has_incidents_occurred`
+        # below — both filter against the same incidents log and the same
+        # categories of expected / environmental / test-induced ERRORs.
         ignore_patterns = [
             "MOCK_MODULE_LOADED",
             "MOCK LLM",
@@ -582,6 +585,27 @@ class QARunner:
             "get_ed25519_public_key: no key loaded",
             "Error when creating a TCTI context",
             "TPM: failed to create context",
+            # CIRISVerify file-integrity periodically re-checks the working
+            # tree against the registry-published manifest. CI runs against
+            # an unregistered working tree so this always fails — the
+            # CI-vs-prod ground truth is set up that way deliberately. The
+            # SQLite-vs-Postgres CI flake on 2026-05-28 was caused by this
+            # periodic re-check landing inside the SQLite test window (and
+            # not the Postgres one). See run 26608575466 + CIRISAgent#836.
+            "check_full: manifest integrity verification FAILED",
+            # Same shape as the patterns in _has_incidents_occurred below —
+            # see comments there for the test-module that drives each:
+            "qa_manifest_test_",
+            "Invalid target state",
+            "Config validation failed: Configuration is empty",
+            "No channel context found for thought thought_dream_",
+            "Failed to transition from AgentState.WORK to AgentState.WORK",
+            "ciris_adapters.mcp_common' has no attribute 'Adapter'",
+            "No consent found for user user_dsar",
+            "WBD deferral rejected: Status 404",
+            "ciris_verify_run_attestation: TIMEOUT",
+            "Attestation in progress - sign_ed25519 blocked",
+            "Reddit credentials are not configured",
         ]
 
         critical_errors = []
@@ -819,6 +843,15 @@ class QARunner:
                 # there is no registry and L4 file integrity is legitimately
                 # skipped — an environmental degradation, not a test failure.
                 "MANIFEST_CACHE MISS",
+                # CIRISVerify's file-integrity periodic re-check fails in CI
+                # because CI runs against the working tree, not a registry-
+                # published build. The re-check fires every ~3 minutes and on
+                # 2026-05-28 (run 26608575466) the SQLite-vs-Postgres timing
+                # diff made the third re-check land inside the SQLite test
+                # window while Postgres just missed it — flaking the SQLite
+                # backend. Both backends always produce ≥2 of these per run.
+                # Environmental; tracked at CIRISAgent#836.
+                "check_full: manifest integrity verification FAILED",
                 # QA/CI hosts have no TPM and no hardware Ed25519 key, so the
                 # CIRISVerify FFI key probe + TPM TCTI context creation log
                 # ERROR and fall back to software — expected, not a failure.

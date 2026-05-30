@@ -5,6 +5,30 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.4] - 2026-05-30
+
+Federation transport release — CIRISEdge 1.0 GA wired through. Adds the **Network screen** (10-screen federation operator UI) on the unified KMP client, the **global AgentMode** (CLIENT/PROXY/SERVER) config with 256GB disk gate, **CIRIS-V1 NodeCode** peer-add codec, and a desktop QA walk-test that drives all 10 federation screens via the test-automation HTTP server.
+
+### Added
+
+- **Network screen** (KMP client): hub with identity card, live stats, global AgentMode segmented control, and 10 navigation tiles routing to federation sub-screens: Identity, Map, Trust Graph, Peers, PeerDetail, Interfaces, Paths, Announces, Queue, Diagnostics, Content. Sub-screens consume the new `/v1/federation/*` REST + SSE surface. Reticulum cribsheet conventions applied (32-char `<hash>` addresses, rnstatus-style interface cards, Sideband trust glyphs, force-directed trust graph). EpistemicSidebar gains `nav_epistemic_<slug>` tags.
+- **AgentMode infrastructure** (CLIENT / PROXY / SERVER): `EssentialConfig.agent_mode` (env var `AGENT_MODE`), `AgentModeBroker` pub/sub utility seeded from EssentialConfig at runtime boot, `GET/PUT /v1/system/agent-mode` admin-gated endpoints with 256GB available-disk gate for SERVER mode. Edge consumes via `init_edge_runtime(agent_mode=...)`.
+- **Federation REST + SSE surface** (`/v1/federation/*`): identity, peers (list/detail/SAS/trust/appearance), metrics, content fetch, and 7-channel SSE event stream (announces, feed, interface/link/path/resource events, all). Pydantic models throughout; no `Dict[str, Any]` on wire. 58 route tests + 19 SSE bridge tests.
+- **CIRIS canonical bootstrap discovery**: `CanonicalBootstrapPeer` schema + `BootstrapPeerSeeder` utility, infrastructure peers reseed on every start with `CIRIS_CANONICAL` badge, user trust mutations survive across reseeds. Anti-key-swap guard refuses pubkey overwrites on organic re-record. 51 invariants pinned in tests.
+- **CIRIS-V1 NodeCode**: `CIRIS-V1-{base32-groups}` codec encoding version + key_id + pubkey + optional transport/alias hints + CRC-16. `GET /v1/system/peers/my-node-code` for share, `POST /v1/system/peers/add-from-code` for remote add via paste/QR. 115 codec tests.
+- **Federation walk-test** (`python3 -m tools.qa_runner.modules.web_ui federation --launch`): drives backend + desktop app + walks all 10 screens via TestAutomationServer; current state: login PASS, hub PASS, 10/11 sub-screens PASS, 1 SKIP-tolerated (peer-detail on fresh agent), 2 popup-tree contract follow-ups.
+
+### Changed
+
+- **Substrate pin**: ciris-edge `1.0.1` / ciris-persist `3.6.4` / ciris-verify `>=4.4.2` — closes the 0.15.x cohabitation regression (CIRISEdge#43) and consumes the full Edge 1.0 PyO3+UniFFI surface.
+
+### Fixed
+
+- **CIRIS_HOME honored end-to-end**: `get_ciris_home()` now ranks the `CIRIS_HOME` env var (priority 2) above implicit dev-mode auto-detect (demoted to priority 4); `get_default_config_path()` and the setup wizard's `create_env_file()` both route through `get_data_dir()` instead of hardcoding `~/ciris/.env` and `~/ciris/data` on desktop. Multi-process test harnesses (qa_runner) can now pin every subprocess to the same data dir; setup wizard writes its `.env` to whichever dir `CIRIS_HOME` points at.
+- **Persist 3.6.3+ process-singleton compatibility**: removed the eager `Engine(...)` probe in `directory_setup.ensure_database_exclusive_access` — the probe pinned a bootstrap-keyed Engine in-process, then the real `initialize_database` hit `EngineConfigMismatch`. Lock detection moved fully to persist's own bootstrap (no behavior loss). Anti-pattern documented inline; affected tests updated to the new contract.
+- **`disable_single_step_mode()`** now drains paused thoughts so a `/v1/system/runtime/resume` after a single-step pause unblocks the processor instead of stranding it. (CIRISAgent#838)
+- **QA runner manifest-integrity flake**: added `check_full: manifest integrity verification FAILED` to both `_check_incidents_for_test` and `_has_incidents_occurred` ignore-pattern lists so timing-dependent periodic re-checks don't cascade-fail the run. (CIRISAgent#836)
+
 ## [2.9.3] - 2026-05-27
 
 Patch release — personal-install bugged-state self-recovery. Addresses the four-bug cascade on PR #794 surfaced by a Samsung release-build install where a previously-aborted setup left config-complete state with no SYSTEM_ADMIN user, producing a silent OAuth 403 loop with no on-screen error and no recovery affordance.

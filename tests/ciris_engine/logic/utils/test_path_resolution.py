@@ -42,7 +42,14 @@ class TestGetCirisHome:
     """Test CIRIS home directory resolution."""
 
     def test_development_mode_uses_cwd(self, tmp_path, monkeypatch):
-        """Development mode should use current directory."""
+        """Development mode should use current directory.
+
+        Clears CIRIS_HOME so this test is robust against env-var leakage
+        from sibling tests in the same xdist worker. Post-2.9.4 CIRIS_HOME
+        (priority 2) wins above dev-mode (priority 4), so a leaked value
+        would shadow Path.cwd() resolution.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
         assert get_ciris_home() == tmp_path
@@ -77,19 +84,26 @@ class TestDirectoryHelpers:
     """Test directory helper functions."""
 
     def test_get_data_dir(self, tmp_path, monkeypatch):
-        """get_data_dir should return CIRIS_HOME/data/."""
+        """get_data_dir should return CIRIS_HOME/data/.
+
+        Clears CIRIS_HOME for env-leakage isolation — see
+        ``test_development_mode_uses_cwd`` for the rationale.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
         assert get_data_dir() == tmp_path / "data"
 
     def test_get_logs_dir(self, tmp_path, monkeypatch):
         """get_logs_dir should return CIRIS_HOME/logs/."""
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
         assert get_logs_dir() == tmp_path / "logs"
 
     def test_get_config_dir(self, tmp_path, monkeypatch):
         """get_config_dir should return CIRIS_HOME/config/."""
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
         assert get_config_dir() == tmp_path / "config"
@@ -343,7 +357,12 @@ class TestIntegration:
     """Integration tests for path resolution."""
 
     def test_paths_consistent_in_dev_mode(self, tmp_path, monkeypatch):
-        """All paths should be consistent in development mode."""
+        """All paths should be consistent in development mode.
+
+        Clears CIRIS_HOME for env-leakage isolation — see
+        ``test_development_mode_uses_cwd`` for the rationale.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
 

@@ -360,7 +360,12 @@ class TestConfigPaths:
         assert path == explicit_home / ".env"
 
     def test_get_default_config_path_user_install(self, tmp_path, monkeypatch):
-        """Test default path is ~/ciris/.env for user install."""
+        """Test default path is ~/ciris/.env for user install.
+
+        Clears CIRIS_HOME for env-leakage isolation — post-2.9.4 a leaked
+        CIRIS_HOME (priority 2) would shadow the installed-mode fallback.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.setenv("HOME", str(tmp_path))
         work_dir = tmp_path / "some" / "other" / "dir"
         work_dir.mkdir(parents=True)

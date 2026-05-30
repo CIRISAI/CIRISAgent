@@ -157,10 +157,6 @@ class EdgeCommunicationService(BaseService, CommunicationServiceProtocol):
         """Edge has no default channel — addressing is always per-peer."""
         return None
 
-    def get_capabilities(self) -> List[str]:
-        """Capabilities surfaced to ServiceRegistry."""
-        return ["send_message", "fetch_messages", "federation:inline_text"]
-
     # ─── BaseService abstract method implementations ────────────────────────
 
     def _check_dependencies(self) -> bool:
@@ -170,7 +166,14 @@ class EdgeCommunicationService(BaseService, CommunicationServiceProtocol):
         return edge_runtime.is_available()
 
     def _get_actions(self) -> List[str]:
-        return ["send_message", "fetch_messages"]
+        # Actions list flows through BaseService.get_capabilities() which
+        # wraps it in a ServiceCapabilities pydantic model. Previously
+        # this file also overrode get_capabilities → list[str], which is
+        # incompatible with the BaseService / ServiceProtocol contract
+        # (ServiceCapabilities). Removed the override; the base does the
+        # right thing now, and `federation:inline_text` is folded into
+        # the actions list returned from here.
+        return ["send_message", "fetch_messages", "federation:inline_text"]
 
     def get_service_type(self) -> ServiceType:
         return ServiceType.ADAPTER

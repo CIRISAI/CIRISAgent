@@ -72,7 +72,12 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         )
 
     try:
-        import ciris_edge  # type: ignore[import-not-found]
+        # `import-not-found` covers the wheel-absent case (CI without the
+        # ciris-edge wheel installed); `import-untyped` covers the case
+        # where it IS installed but ships no py.typed marker (current
+        # 1.0.x state); `unused-ignore` keeps both contexts green —
+        # whichever of the first two doesn't apply in a given environment.
+        import ciris_edge  # type: ignore[import-not-found, import-untyped, unused-ignore]
     except ImportError as e:
         raise RuntimeError(
             "ciris-edge not importable but is REQUIRED for 2.9.4+. Pin ciris-edge>=1.0.0,<2.0.0 in requirements.txt."
@@ -213,7 +218,11 @@ def get_federation_address() -> Optional[str]:
     if _edge is None:
         return None
     try:
-        return _edge.signer_key_id()
+        # ciris_edge is untyped (no py.typed marker yet) so
+        # `_edge.signer_key_id()` is inferred Any. Narrow to Optional[str]
+        # before returning to satisfy mypy [no-any-return].
+        key_id: Optional[str] = _edge.signer_key_id()
+        return key_id
     except Exception as e:
         logger.warning("Edge signer_key_id() failed: %s", e)
         return None

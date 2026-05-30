@@ -66,6 +66,10 @@ def _get_or_create_seeder(request: Request) -> BootstrapPeerSeeder:
     """
     existing = getattr(request.app.state, _SEEDER_STATE_KEY, None)
     if existing is not None:
+        # `getattr` returns Any; narrow to the declared return type so
+        # mypy's [no-any-return] check is satisfied without changing
+        # runtime behavior.
+        assert isinstance(existing, BootstrapPeerSeeder)
         return existing
 
     time_service = getattr(request.app.state, "time_service", None)

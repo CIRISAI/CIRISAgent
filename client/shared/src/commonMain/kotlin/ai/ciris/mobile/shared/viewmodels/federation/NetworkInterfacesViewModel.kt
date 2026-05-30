@@ -143,7 +143,8 @@ class NetworkInterfacesViewModel(
             }
             .mapValues { (_, entries) -> entries.map { it.value } }
 
-        val transportIds = (bytesIn.keys + bytesOut.keys + reachByTransport.keys).toSortedSet()
+        // toSortedSet() is JVM-only; commonMain uses sorted() + distinct().
+        val transportIds = (bytesIn.keys + bytesOut.keys + reachByTransport.keys).distinct().sorted()
         return transportIds.map { id ->
             val ratios = reachByTransport[id].orEmpty()
             TransportRow(

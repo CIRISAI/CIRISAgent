@@ -424,6 +424,8 @@ fun CIRISApp(
             is Screen.NetworkQueue,
             is Screen.NetworkDiagnostics,
             is Screen.NetworkContent -> Screen.Network
+            // Peer detail (parameterised) goes back to the peer list, not the hub
+            is Screen.NetworkPeerDetail -> Screen.NetworkPeers
 
             // All other screens go back to Interact (main screen)
             else -> Screen.Interact
@@ -3118,6 +3120,8 @@ fun CIRISApp(
             }
             // ── Federation sub-screens (reached from NetworkScreen tiles) ──
             Screen.NetworkIdentity -> ai.ciris.mobile.shared.ui.screens.federation.NetworkIdentityScreen(
+                apiClient = apiClient,
+                onNavigateBack = { currentScreen = Screen.Network },
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkMap -> ai.ciris.mobile.shared.ui.screens.federation.NetworkMapScreen(
@@ -3127,16 +3131,26 @@ fun CIRISApp(
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkPeers -> ai.ciris.mobile.shared.ui.screens.federation.NetworkPeersScreen(
+                apiClient = apiClient,
+                onNavigateBack = { currentScreen = Screen.Network },
+                onPeerClick = { keyId -> currentScreen = Screen.NetworkPeerDetail(keyId) },
                 onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            is Screen.NetworkPeerDetail -> ai.ciris.mobile.shared.ui.screens.federation.NetworkPeerDetailScreen(
+                apiClient = apiClient,
+                keyId = (currentScreen as Screen.NetworkPeerDetail).keyId,
+                onNavigateBack = { currentScreen = Screen.NetworkPeers },
             )
             Screen.NetworkInterfaces -> ai.ciris.mobile.shared.ui.screens.federation.NetworkInterfacesScreen(
                 apiClient = apiClient,
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkPaths -> ai.ciris.mobile.shared.ui.screens.federation.NetworkPathsScreen(
+                apiClient = apiClient,
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkAnnounces -> ai.ciris.mobile.shared.ui.screens.federation.NetworkAnnouncesScreen(
+                apiClient = apiClient,
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkQueue -> ai.ciris.mobile.shared.ui.screens.federation.NetworkQueueScreen(
@@ -3144,6 +3158,7 @@ fun CIRISApp(
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkDiagnostics -> ai.ciris.mobile.shared.ui.screens.federation.NetworkDiagnosticsScreen(
+                apiClient = apiClient,
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkContent -> ai.ciris.mobile.shared.ui.screens.federation.NetworkContentScreen(
@@ -3627,6 +3642,13 @@ private sealed class Screen {
     object NetworkQueue : Screen()
     object NetworkDiagnostics : Screen()
     object NetworkContent : Screen()
+
+    /**
+     * Parameterised peer-detail route (2.9.4 T-E-UI Batch A). The only
+     * federation sub-screen that takes runtime state; rendered via the
+     * existing `is Screen.NetworkPeerDetail` arm in the `when` dispatch.
+     */
+    data class NetworkPeerDetail(val keyId: String) : Screen()
 }
 
 /**
@@ -3673,6 +3695,8 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.NetworkQueue,
     Screen.NetworkDiagnostics,
     Screen.NetworkContent -> ai.ciris.mobile.shared.ui.nav.NavSurface.Network
+    // Parameterised peer-detail also highlights the Network parent.
+    is Screen.NetworkPeerDetail -> ai.ciris.mobile.shared.ui.nav.NavSurface.Network
     Screen.DataManagement -> ai.ciris.mobile.shared.ui.nav.NavSurface.Data
     Screen.Audit -> ai.ciris.mobile.shared.ui.nav.NavSurface.Audit
     Screen.Consent -> ai.ciris.mobile.shared.ui.nav.NavSurface.Consent

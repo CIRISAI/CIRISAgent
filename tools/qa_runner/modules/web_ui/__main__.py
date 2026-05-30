@@ -52,6 +52,7 @@ import requests
 
 from .browser_helper import BrowserConfig, ensure_playwright_installed
 from .desktop_app_helper import DesktopAppConfig, DesktopAppHelper, check_desktop_app_running
+from .federation_walk_test import FederationWalkTest
 from .server_manager import ServerConfig
 from .test_cases import WebUITestConfig
 from .test_runner import WebUITestRunner, run_web_ui_tests
@@ -304,6 +305,7 @@ Examples:
             "desktop-login",
             "desktop-chat",
             "desktop-up",
+            "federation",
             "e2e",
             "setup",
             "interact",
@@ -438,6 +440,18 @@ Examples:
         "--keep-open",
         action="store_true",
         help="Keep browser and server running after tests (for demos)",
+    )
+
+    # Federation walk-test options
+    parser.add_argument(
+        "--launch",
+        action="store_true",
+        help="For federation: wipe + launch backend + desktop app before walking (full bring-up)",
+    )
+    parser.add_argument(
+        "--json-report",
+        default=None,
+        help="For federation: write the FederationWalkReport JSON to this path",
     )
 
     return parser.parse_args()
@@ -729,6 +743,66 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     return 0
 
 
+async def run_federation_walk(args: argparse.Namespace) -> int:
+    """Walk the federation Network screens via TestAutomationServer :8091.
+
+    Exit codes:
+        0 — all walk steps PASS
+        1 — at least one FAIL / ERROR (or only-SKIP outside of expected cascade)
+        2 — cannot reach the desktop app's test automation server
+    """
+    server_url = f"http://localhost:{args.desktop_port}"
+
+    # Optional full bring-up: backend + desktop, then walk.
+    if args.launch:
+        print("federation: --launch requested, bringing up backend + desktop first")
+        rc = await run_desktop_up(args)
+        if rc != 0:
+            print(f"federation: bring-up failed (rc={rc})")
+            return rc
+
+    # Verify reachability
+    print(f"federation: checking desktop test automation server at {server_url}")
+    if not await check_desktop_app_running(server_url):
+        print()
+        print("FATAL: cannot reach the desktop app's test automation server.")
+        print("       Start the desktop app with CIRIS_TEST_MODE=true first, e.g.:")
+        print()
+        print("         export CIRIS_TEST_MODE=true")
+        print("         cd client && ./gradlew :desktopApp:run")
+        print()
+        print("       or use --launch to bring up the full stack.")
+        return 2
+
+    config = DesktopAppConfig(
+        server_url=server_url,
+        screenshot_dir=args.output_dir,
+    )
+    helper = DesktopAppHelper(config)
+    await helper.start()
+    try:
+        walker = FederationWalkTest(
+            helper=helper,
+            verbose=args.verbose,
+            login_username=args.username or "admin",
+            login_password=args.password or "qa_test_password_12345",
+        )
+        report = await walker.run()
+    finally:
+        await helper.stop()
+
+    # Output
+    report.print_summary()
+    if args.json_report:
+        Path(args.json_report).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.json_report).write_text(report.to_json())
+        print(f"federation: JSON report written to {args.json_report}")
+
+    if report.all_passed:
+        return 0
+    return 1
+
+
 async def run_desktop_tests(args: argparse.Namespace) -> int:
     """Run desktop app tests."""
     # Check if desktop app is running
@@ -792,6 +866,10 @@ async def main() -> int:
     # Handle desktop-up (full orchestration: wipe → setup → launch → login)
     if args.command == "desktop-up":
         return await run_desktop_up(args)
+
+    # Federation Network screen walk-test
+    if args.command == "federation":
+        return await run_federation_walk(args)
 
     # Handle desktop commands (connect to already-running app)
     if args.command.startswith("desktop"):

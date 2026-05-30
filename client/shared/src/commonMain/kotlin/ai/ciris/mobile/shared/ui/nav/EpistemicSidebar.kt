@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 
@@ -30,14 +31,22 @@ import ai.ciris.mobile.shared.ui.theme.CIRISColors
  * surface is highlighted in `CIRISColors.AccentCyan`.
  *
  * Test tags follow the pattern:
- *   nav_group_{group.id}            — group expand/collapse toggle
- *   nav_surface_{surface.id}        — surface row (clickable)
- *   nav_substrate_gate_{surface.id} — Coming Soon chip when surface is gated
+ *   nav_group_{group.id}              — group expand/collapse toggle
+ *   nav_epistemic_{slug}              — surface row (clickable via test server)
+ *   nav_substrate_gate_{surface.id}   — Coming Soon chip when surface is gated
+ *
+ * Slugs are the surface id with hyphens normalized to underscores so the QA
+ * walk-test can use stable Python-identifier-style names (e.g.
+ * "trust-topology" → "nav_epistemic_trust_topology"). The Network surface
+ * specifically exposes `nav_epistemic_network` — that's the entry point the
+ * federation walk-test uses to reach the Network hub.
  *
  * Existing QA scripts that drove the old top-bar dropdown menu (`menu_*`
- * testTags) will need updating to the new `nav_surface_*` testTags. This is
+ * testTags) will need updating to the new `nav_epistemic_*` testTags. This is
  * expected scope for the 2.9.4 rewire — the old chrome is fully replaced.
  */
+private fun navTag(surfaceId: String): String =
+    "nav_epistemic_${surfaceId.replace('-', '_')}"
 @Composable
 fun EpistemicSidebar(
     activeSurface: NavSurface?,
@@ -185,8 +194,7 @@ private fun NavGroupHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
-            .testTag("nav_group_${group.id}")
+            .testableClickable("nav_group_${group.id}") { onToggle() }
             .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -255,11 +263,10 @@ private fun NavSurfaceRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(4.dp))
             .background(rowBg)
-            .clickable {
+            .testableClickable(navTag(surface.id)) {
                 onSurfaceSelected(surface)
                 if (hasChildren) expandedMap[surface.id] = !isExpanded
             }
-            .testTag("nav_surface_${surface.id}")
             .padding(
                 start = (8 + 12 * indent).dp,
                 end = 10.dp,

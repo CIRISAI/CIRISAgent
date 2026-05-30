@@ -147,7 +147,14 @@ class FederationWalkTest:
         return await self.helper.is_element_visible(NETWORK_HUB)
 
     async def _back_to_hub(self) -> bool:
-        """Best-effort back-nav to the Network hub between screen visits."""
+        """Best-effort back-nav to the Network hub between screen visits.
+
+        The canonical "drop me at the hub" path is the EpistemicSidebar's
+        Network row (helper.navigate_to("Network")) — the sidebar is always
+        visible post-login, so a single click on `nav_epistemic_network`
+        reliably routes back to the hub. We try a legacy back button first
+        for screens that have one, then fall through to sidebar nav.
+        """
         # Try the system back button (common testTag) then re-verify hub root.
         for back_tag in ("btn_back", "btn_top_back", "btn_nav_back"):
             try:
@@ -157,7 +164,8 @@ class FederationWalkTest:
                     break
             except Exception:  # noqa: BLE001
                 continue
-        # Re-verify hub root visible — if not, try navigating fresh.
+        # Re-verify hub root visible — if not, route through the sidebar
+        # (the canonical path post-2.9.4).
         if await self.helper.is_element_visible(NETWORK_HUB):
             return True
         return await self._navigate_to_hub()

@@ -454,17 +454,26 @@ class DesktopAppHelper:
 
     async def navigate_to(self, screen_name: str, timeout_ms: int = 5000) -> bool:
         """
-        Navigate to a screen using the menu.
+        Navigate to a screen using the EpistemicSidebar (post-2.9.4 nav chrome)
+        or the legacy menu for screens not yet migrated.
 
         Args:
-            screen_name: Screen to navigate to (e.g., "Adapters", "Settings")
+            screen_name: Screen to navigate to (e.g., "Network", "Adapters",
+                "Settings")
             timeout_ms: Timeout for navigation
 
         Returns:
             True if navigation successful
         """
-        # Map screen names to menu item tags
+        # Map screen names to:
+        #   - EpistemicSidebar nav rows (preferred for post-2.9.4 nav)
+        #   - Legacy menu items / direct buttons (fallback)
+        # Sidebar tags follow `nav_epistemic_<slug>` where slug = surface id
+        # with hyphens normalized to underscores.
         menu_items = {
+            # Sidebar-driven (2.9.4 EpistemicSidebar)
+            "Network": "nav_epistemic_network",
+            # Legacy menu-driven
             "Adapters": "menu_adapters",
             "Settings": "btn_settings",  # Direct button, not in menu
             # Add more as needed
@@ -475,11 +484,48 @@ class DesktopAppHelper:
             print(f"Unknown screen: {screen_name}")
             return False
 
-        # Settings has a direct button
+        # Settings has a direct button (pre-sidebar legacy chrome)
         if screen_name == "Settings":
             return await self.click_and_wait_for_screen("btn_settings", "Settings", timeout_ms=timeout_ms)
 
-        # For menu items, first open menu
+        # Sidebar-driven navigation — the EpistemicSidebar is always rendered
+        # post-login (no toggle). Click the nav row directly, then wait for
+        # the destination's root testTag.
+        if menu_tag.startswith("nav_epistemic_"):
+            # Each surface lives in a collapsible group; the active group is
+            # expanded on render and others are collapsed. If the destination
+            # row isn't visible yet, expand its group first via the
+            # nav_group_<id> header (also a testableClickable).
+            screen_groups = {
+                "Network": "nav_group_manage",
+            }
+            screen_roots = {
+                "Network": "screen_network_hub",
+            }
+            group_tag = screen_groups.get(screen_name)
+            root_tag = screen_roots.get(screen_name)
+
+            if not await self.is_element_visible(menu_tag):
+                if group_tag is not None and await self.is_element_visible(group_tag):
+                    await self.click(group_tag)
+                    try:
+                        await self.wait_for_element(menu_tag, timeout=2000)
+                    except RuntimeError:
+                        return False
+                else:
+                    return False
+
+            if not await self.click(menu_tag):
+                return False
+            if root_tag is not None:
+                try:
+                    return await self.wait_for_element(root_tag, timeout=timeout_ms)
+                except RuntimeError:
+                    return False
+            # No known root testTag — fall back to screen-name polling.
+            return await self.wait_for_screen(screen_name, timeout=timeout_ms)
+
+        # For legacy menu items, first open menu
         if not await self.click_and_wait_for_element("btn_menu", menu_tag, timeout_ms=2000):
             return False
 

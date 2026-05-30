@@ -25,6 +25,16 @@ from typing import Dict, List, Optional
 
 
 # ───────────────────────────────────────────────────────────────────
+# Sidebar nav entry (EpistemicSidebar)
+# ───────────────────────────────────────────────────────────────────
+# EpistemicSidebar item that opens the Network hub. The sidebar tags every
+# nav row as `nav_epistemic_<slug>` where <slug> is the surface id with
+# hyphens normalized to underscores. The Network surface id is "network",
+# so its tag is "nav_epistemic_network".
+NAV_EPISTEMIC_NETWORK = "nav_epistemic_network"
+
+
+# ───────────────────────────────────────────────────────────────────
 # Network hub (the federation screen entry-point)
 # ───────────────────────────────────────────────────────────────────
 NETWORK_HUB = "screen_network_hub"

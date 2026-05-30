@@ -2111,6 +2111,79 @@
       "queue_description": "Outbound packet queue per transport: depth, age, retry count, fragmentation state.",
       "diagnostics_description": "Recent errors, signature failures, policy blocks, transport churn — operator forensics.",
       "content_description": "Federation content store browser — cached locally, federated, hash-addressed retrieval."
+    },
+    "interfaces": {
+      "refresh": "Refresh",
+      "empty": "No transports configured.",
+      "not_measured": "Not yet measured",
+      "peers": "peers",
+      "row": {
+        "status": "Status",
+        "bytes_in": "Bytes In",
+        "bytes_out": "Bytes Out",
+        "reach": "Reach %"
+      },
+      "status": {
+        "active": "Active",
+        "degraded": "Degraded",
+        "idle": "Idle",
+        "unknown": "Unknown"
+      }
+    },
+    "queue": {
+      "refresh": "Refresh",
+      "stats": {
+        "title": "Queue stats",
+        "depth": "Queue depth",
+        "sent": "Sent",
+        "received": "Received"
+      },
+      "failures": {
+        "title": "Failures",
+        "send": "Send failures",
+        "verify": "Verify failures"
+      },
+      "throughput": {
+        "title": "Throughput",
+        "session": "Total this session",
+        "bytes_in": "Bytes in",
+        "bytes_out": "Bytes out",
+        "sent": "Sent",
+        "received": "Received"
+      }
+    },
+    "content": {
+      "back": "Back",
+      "refresh": "Refresh",
+      "step1": {
+        "title": "Select a peer to query"
+      },
+      "step2": {
+        "title": "Fetch content from peer"
+      },
+      "peer": {
+        "search": "Search peers",
+        "empty": "No peers available. Add peers first.",
+        "change": "Change peer"
+      },
+      "fetch": {
+        "content_id_label": "Content ID (SHA-256)",
+        "content_id_placeholder": "64-character hex digest",
+        "timeout_label": "Timeout",
+        "button": "Fetch",
+        "invalid_id": "Content ID must be 64 hexadecimal characters."
+      },
+      "result": {
+        "title": "Result",
+        "content_type": "Content type",
+        "size": "Size",
+        "fetched_at": "Fetched at",
+        "preview": "Payload preview (first 200 bytes)"
+      },
+      "error": {
+        "not_found": "Content not found at this peer. Try a different peer.",
+        "edge_unavailable": "Edge unavailable."
+      }
     }
   },
   "settings": {

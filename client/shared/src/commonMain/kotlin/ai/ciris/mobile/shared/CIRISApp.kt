@@ -3130,6 +3130,7 @@ fun CIRISApp(
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkInterfaces -> ai.ciris.mobile.shared.ui.screens.federation.NetworkInterfacesScreen(
+                apiClient = apiClient,
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkPaths -> ai.ciris.mobile.shared.ui.screens.federation.NetworkPathsScreen(
@@ -3139,12 +3140,14 @@ fun CIRISApp(
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkQueue -> ai.ciris.mobile.shared.ui.screens.federation.NetworkQueueScreen(
+                apiClient = apiClient,
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkDiagnostics -> ai.ciris.mobile.shared.ui.screens.federation.NetworkDiagnosticsScreen(
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkContent -> ai.ciris.mobile.shared.ui.screens.federation.NetworkContentScreen(
+                apiClient = apiClient,
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
         }

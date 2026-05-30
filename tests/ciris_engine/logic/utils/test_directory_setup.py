@@ -359,16 +359,31 @@ class TestErrorMessages:
 class TestDatabaseExclusiveAccess:
     """Test database exclusive access functionality."""
 
+    # 2.9.4: `ensure_database_exclusive_access` no longer pre-constructs a
+    # `ciris_persist.Engine(...)` probe — the probe was incompatible with
+    # persist 3.6.3's process-singleton Engine guardrail (the probe pinned
+    # a bootstrap-keyed Engine in-process, then the real initialize_database
+    # call hit EngineConfigMismatch). Lock detection still happens
+    # end-to-end inside persist's own `Engine()` constructor at
+    # `_bootstrap_persist_engine` — see `ciris_engine.logic.persistence.db.core`.
+    # The contract this function holds is now narrower: ensure the parent
+    # dir exists and is writable. The mapping of lock errors → CRITICAL
+    # ERROR / sys.exit(1) still applies, but it fires against permission
+    # errors at this layer rather than a synthetic Engine probe.
+
     def test_database_exclusive_access_success(self):
-        """Test successful database access check."""
+        """Test successful parent-dir validation."""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = str(Path(tmpdir) / "test.db")
 
-            # Should succeed on first access
+            # Should succeed when parent dir is writable. NOTE: post-2.9.4 the
+            # function no longer constructs an Engine, so the .db file is NOT
+            # created here — that's persist's job during initialize_database.
             ensure_database_exclusive_access(db_path, fail_fast=False)
 
-            # Verify database file was created
-            assert Path(db_path).exists()
+            # Parent dir is the contract this function guarantees.
+            assert Path(db_path).parent.exists()
+            assert os.access(Path(db_path).parent, os.W_OK)
 
     def test_database_exclusive_access_creates_parent_directory(self):
         """Test that parent directories are created if needed."""
@@ -378,59 +393,63 @@ class TestDatabaseExclusiveAccess:
             # Should succeed and create parent directories
             ensure_database_exclusive_access(db_path, fail_fast=False)
 
-            # Verify database and parent directories were created
-            assert Path(db_path).exists()
+            # Verify parent directories were created (the .db itself is
+            # created later by persist's Engine constructor — not this
+            # function's responsibility post-2.9.4).
             assert Path(db_path).parent.exists()
+            assert os.access(Path(db_path).parent, os.W_OK)
 
     def test_database_exclusive_access_locked_database(self):
-        """Test detection of locked database (another agent running).
+        """Lock detection moved to persist.initialize_database (2.9.4).
 
-        Post-2.9.0 absorption the probe is `ciris_persist.Engine(...)` rather
-        than `sqlite3.connect(...)`. The lock detection contract is the same,
-        but the probe error surface is whatever persist raises — we simulate
-        it by patching Engine to raise `database is locked`.
+        The prior implementation pre-constructed `ciris_persist.Engine(...)`
+        as a probe and mapped the resulting "database is locked" error
+        into `DatabaseAccessError`. Persist 3.6.3's process-singleton
+        Engine guardrail made that probe incompatible with the real
+        bootstrap (the probe pinned a bootstrap-keyed Engine; the real
+        init then hit EngineConfigMismatch).
+
+        Lock detection still works end-to-end — persist's `Engine()`
+        constructor in `_bootstrap_persist_engine` raises "database is
+        locked" naturally when another process holds the file. The
+        lock-error mapping in `ensure_database_exclusive_access` is now
+        a no-op pass-through because this function no longer constructs
+        Engine, and we trust persist to surface the lock instead.
         """
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = str(Path(tmpdir) / "test.db")
-
-            with patch("ciris_persist.Engine") as mock_engine:
-                mock_engine.side_effect = Exception("database is locked")
-
-                with pytest.raises(DatabaseAccessError) as exc_info:
-                    ensure_database_exclusive_access(db_path, fail_fast=False)
-
-                error_msg = str(exc_info.value)
-                assert "CANNOT ACCESS DATABASE" in error_msg
-                assert "ANOTHER AGENT MAY BE RUNNING" in error_msg
+        # Test is now an executable comment — there is no Engine-probe
+        # path to exercise here. Lock-detection coverage moved to
+        # persistence/db/core's tests.
+        pytest.skip(
+            "Lock detection moved to persist.initialize_database post-2.9.4 "
+            "(CIRIS_HOME end-to-end fix; see commit 4af552836)."
+        )
 
     def test_database_exclusive_access_fail_fast_exits(self):
-        """Test that fail_fast=True causes system exit."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = str(Path(tmpdir) / "test.db")
+        """fail_fast=True path is preserved but no longer fires on Engine probe.
 
-            with patch("ciris_persist.Engine") as mock_engine:
-                mock_engine.side_effect = Exception("database is locked")
-
-                with patch("sys.exit") as mock_exit:
-                    with pytest.raises(DatabaseAccessError):
-                        ensure_database_exclusive_access(db_path, fail_fast=True)
-                    mock_exit.assert_called_once_with(1)
+        See `test_database_exclusive_access_locked_database` — the function
+        no longer constructs an Engine, so the test's `patch ciris_persist.Engine`
+        has no observable effect. The fail_fast → sys.exit(1) wiring is still
+        there for parent-dir permission errors; covered by Test*Permission
+        elsewhere in this file.
+        """
+        pytest.skip(
+            "Engine-probe path removed post-2.9.4; fail_fast wiring covered by "
+            "TestSetupApplicationDirectories permission tests."
+        )
 
     def test_database_exclusive_access_unexpected_error(self):
-        """Test handling of unexpected database errors."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = str(Path(tmpdir) / "test.db")
+        """Unexpected-error wrapping moved to persist (2.9.4).
 
-            with patch("ciris_persist.Engine") as mock_engine:
-                mock_engine.side_effect = Exception("Unexpected database error")
-
-                # Should catch and wrap unexpected errors
-                with pytest.raises(DatabaseAccessError) as exc_info:
-                    ensure_database_exclusive_access(db_path, fail_fast=False)
-
-                error_msg = str(exc_info.value)
-                assert "UNEXPECTED DATABASE ERROR" in error_msg
-                assert "Unexpected database error" in error_msg
+        See `test_database_exclusive_access_locked_database` — `ciris_persist.Engine`
+        is no longer called by `ensure_database_exclusive_access`. Any unexpected
+        errors from persist now surface where they originate (db/core) rather than
+        being wrapped here.
+        """
+        pytest.skip(
+            "Engine-probe path removed post-2.9.4; unexpected-error coverage moved "
+            "to persistence/db/core tests."
+        )
 
     def test_setup_with_database_access_check_enabled(self):
         """Test that setup_application_directories includes database check by default."""
@@ -474,24 +493,19 @@ class TestDatabaseExclusiveAccess:
                 mock_db_check.assert_called_once_with(config_db_path, False)
 
     def test_database_exclusive_access_error_messages(self):
-        """Test that database access errors have helpful messages.
+        """Error-message wrapping moved to persist (2.9.4).
 
-        See `test_database_exclusive_access_locked_database` for the probe
-        path change (sqlite3 → ciris_persist.Engine).
+        See `test_database_exclusive_access_locked_database` for the full
+        context — `ciris_persist.Engine` is no longer constructed here, so
+        the "CANNOT ACCESS DATABASE" / "ANOTHER AGENT MAY BE RUNNING"
+        message strings are now produced by persist's own bootstrap
+        error path rather than this function. Lock-error wording lives at
+        the persistence layer where lock detection actually happens.
         """
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = str(Path(tmpdir) / "locked.db")
-
-            with patch("ciris_persist.Engine") as mock_engine:
-                mock_engine.side_effect = Exception("database is locked")
-
-                with pytest.raises(DatabaseAccessError) as exc_info:
-                    ensure_database_exclusive_access(db_path, fail_fast=False)
-
-                error_msg = str(exc_info.value)
-                assert "CANNOT ACCESS DATABASE" in error_msg
-                assert db_path in error_msg
-                assert "ANOTHER AGENT MAY BE RUNNING" in error_msg
+        pytest.skip(
+            "Engine-probe error-message wrapping removed post-2.9.4; "
+            "lock-error wording moved to persistence/db/core."
+        )
 
 
 class TestWindowsCompatibility:

@@ -313,11 +313,20 @@ class TestConfigPaths:
         assert paths[0].parts[-2:] == ("ciris", ".env")
 
     def test_get_default_config_path_git_repo(self, tmp_path, monkeypatch):
-        """Test default path is ~/ciris/.env even in git repo.
+        """Test default path in git repo (dev-mode) honors CIRIS_HOME / cwd.
 
-        As of 2.3.2, config path is standardized to ~/ciris/.env regardless of
-        whether we're in a git repo. CWD-based paths were removed for consistency.
+        2.3.2 standardized this to ~/ciris/.env regardless of git repo.
+        2.9.4 reverted that for desktop/dev to honor CIRIS_HOME end-to-end
+        — see commit 4af552836. The contract is now:
+          - CIRIS_HOME env (priority 2) wins against everything below
+          - Dev mode (Path.cwd()/.git exists) → cwd
+          - Fallback → ~/ciris/
+
+        Without CIRIS_HOME set, dev mode here puts .env at cwd directly,
+        which is what the qa_runner / multi-process test harness needs to
+        keep both backend subprocesses on the same data dir across restart.
         """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.chdir(tmp_path)
         git_dir = tmp_path / ".git"
@@ -326,8 +335,29 @@ class TestConfigPaths:
         from ciris_engine.logic.setup.first_run import get_default_config_path
 
         path = get_default_config_path()
-        # Now always uses ~/ciris/.env regardless of git repo
-        assert path == tmp_path / "ciris" / ".env"
+        # Dev mode in tmp_path (with .git): get_ciris_home() returns
+        # Path.cwd() = tmp_path, so .env lives at tmp_path/.env.
+        assert path == tmp_path / ".env"
+
+    def test_get_default_config_path_ciris_home_wins(self, tmp_path, monkeypatch):
+        """CIRIS_HOME env var (2.9.4) overrides every implicit auto-detect.
+
+        Even in a git repo (which would otherwise put .env at cwd via
+        dev-mode), an explicit CIRIS_HOME knob takes priority. This is the
+        contract the qa_runner desktop module relies on to pin every
+        backend subprocess to the same data dir across restart.
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".git").mkdir()  # dev-mode would normally win
+
+        explicit_home = tmp_path / "explicit_ciris_home"
+        monkeypatch.setenv("CIRIS_HOME", str(explicit_home))
+
+        from ciris_engine.logic.setup.first_run import get_default_config_path
+
+        path = get_default_config_path()
+        assert path == explicit_home / ".env"
 
     def test_get_default_config_path_user_install(self, tmp_path, monkeypatch):
         """Test default path is ~/ciris/.env for user install."""

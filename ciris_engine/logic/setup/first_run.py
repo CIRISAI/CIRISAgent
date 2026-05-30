@@ -287,9 +287,20 @@ def get_default_config_path() -> Path:
         override_dir.mkdir(parents=True, exist_ok=True)
         return override_dir / ".env"
 
-    # Default: ~/ciris/.env for all modes (dev, installed, desktop)
-    # Per XDG best practices: fixed path, not CWD
-    # ~/.ciris/ is for secrets/keys only
-    user_ciris_dir = Path.home() / "ciris"
-    user_ciris_dir.mkdir(parents=True, exist_ok=True)
-    return user_ciris_dir / ".env"
+    # Default: CIRIS_HOME/.env if set, otherwise ~/ciris/.env (XDG default).
+    # Previously this branch hardcoded ~/ciris/.env on desktop/dev. That
+    # broke multi-process test harnesses (qa_runner desktop module): the
+    # FIRST backend run with CIRIS_HOME=<project_root> still wrote the
+    # setup wizard's .env to ~/ciris/.env, and that .env carried
+    # CIRIS_DB_PATH=~/ciris/data/... — which then overrode CIRIS_HOME on
+    # the SECOND backend run, putting the auth WAs in /home/emoore/ciris/
+    # while the rest of the agent state lived in <project_root>/data.
+    # Honoring CIRIS_HOME here means an operator's explicit "this is where
+    # the agent data lives" knob applies to .env too. ~/.ciris/ remains
+    # for secrets/keys only; ~/ciris/.env is still the fallback when
+    # CIRIS_HOME is unset (XDG-friendly desktop default).
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+    ciris_home_dir = get_ciris_home()
+    ciris_home_dir.mkdir(parents=True, exist_ok=True)
+    return ciris_home_dir / ".env"

@@ -375,32 +375,45 @@ def get_ciris_home() -> Path:
     Returns:
         Path to CIRIS home directory:
         - /app/ if managed by CIRIS Manager (highest priority)
+        - CIRIS_HOME env var if set (explicit operator override)
         - Android app files/ciris/ if on Android
         - iOS Documents/ciris/ if on iOS
         - Current directory if in git repo (development)
-        - CIRIS_HOME env var if set
         - ~/ciris/ otherwise (installed mode)
+
+    Priority rationale: CIRIS_HOME is the operator's explicit "where the
+    agent's data lives" knob — it MUST win against implicit auto-detection
+    so that test harnesses (qa_runner desktop module) and multi-instance
+    deployments can pin every subprocess to the same data dir without
+    racing the dev-mode `Path.cwd()/.git` check. Previously dev-mode beat
+    CIRIS_HOME, which meant the qa_runner's first backend (FORCE_FIRST_RUN)
+    and second backend (configured mode) could resolve to different data
+    dirs even with CIRIS_HOME explicitly set, splitting the auth WA table
+    across two SQLite files. Managed (/app) still ranks above CIRIS_HOME
+    because the CIRIS Manager owns the mount layout for containerized
+    deployments and we don't want operators to override that by accident.
     """
-    # Priority 1: CIRIS Manager mode - use /app/
+    # Priority 1: CIRIS Manager mode - use /app/ (container deployment owns mount layout)
     if is_managed():
         return Path("/app")
 
-    # Priority 2: Android mode - use robust Android path detection
-    if is_android():
-        return _get_android_ciris_home()
-
-    # Priority 2b: iOS mode - use robust iOS path detection
-    if is_ios():
-        return _get_ios_ciris_home()
-
-    # Priority 3: Development mode - use current directory
-    if is_development_mode():
-        return Path.cwd()
-
-    # Priority 4: CIRIS_HOME environment variable
+    # Priority 2: CIRIS_HOME environment variable — explicit operator override
+    # wins against all auto-detection paths below (dev-mode, Android, iOS).
     validated = _validate_ciris_home_env()
     if validated:
         return validated
+
+    # Priority 3: Android mode - use robust Android path detection
+    if is_android():
+        return _get_android_ciris_home()
+
+    # Priority 3b: iOS mode - use robust iOS path detection
+    if is_ios():
+        return _get_ios_ciris_home()
+
+    # Priority 4: Development mode - use current directory (git repo auto-detect)
+    if is_development_mode():
+        return Path.cwd()
 
     # Priority 5: Default installed mode - ~/ciris/
     return Path.home() / "ciris"

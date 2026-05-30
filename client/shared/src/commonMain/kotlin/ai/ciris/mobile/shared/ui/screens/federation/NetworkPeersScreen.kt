@@ -413,14 +413,18 @@ private fun AddPeerSheet(
             singleLine = false,
         )
 
-        if (error != null) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = error,
-                style = MaterialTheme.typography.bodySmall,
-                color = CIRISColors.ErrorRed,
-            )
-        }
+        // Always render the error Text slot so `text_add_peer_error` is
+        // discoverable by the QA walk-test post-submit even when the error
+        // string hasn't arrived yet on the StateFlow. When there's no error,
+        // we render an empty Text (height 0) — same compose-eagerness pattern
+        // as T-T2 / T-T3.
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = error.orEmpty(),
+            style = MaterialTheme.typography.bodySmall,
+            color = CIRISColors.ErrorRed,
+            modifier = Modifier.testable("text_add_peer_error"),
+        )
 
         Spacer(Modifier.height(12.dp))
 

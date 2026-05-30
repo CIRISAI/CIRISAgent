@@ -83,7 +83,7 @@ fun NetworkIdentityScreen(
                     IconButton(
                         onClick = { viewModel.refresh() },
                         enabled = !loading,
-                        modifier = Modifier.testableClickable("btn_network_identity_refresh") { viewModel.refresh() },
+                        modifier = Modifier.testableClickable("btn_federation_identity_refresh") { viewModel.refresh() },
                     ) {
                         Icon(
                             imageVector = CIRISIcons.refresh,
@@ -98,7 +98,7 @@ fun NetworkIdentityScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .testable("screen_network_identity"),
+                    .testable("screen_federation_identity"),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -163,7 +163,7 @@ private fun IdentityHeaderCard(identity: FederationIdentity?) {
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 13.sp,
-                        modifier = Modifier.testable("text_identity_signer_key"),
+                        modifier = Modifier.testable("text_signer_key_id"),
                     )
                 }
                 if (!keyId.isNullOrBlank()) {
@@ -176,7 +176,10 @@ private fun IdentityHeaderCard(identity: FederationIdentity?) {
                                 copied = false
                             }
                         },
-                        modifier = Modifier.testable("btn_copy_identity_signer_key"),
+                        modifier = Modifier.testableClickable("btn_copy_signer_key") {
+                            clipboard.setText(AnnotatedString(keyId))
+                            copied = true
+                        },
                     ) {
                         Icon(
                             imageVector = CIRISMaterialIcons.Filled.ContentCopy,
@@ -237,6 +240,7 @@ private fun StatsRow(identity: FederationIdentity?) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         StatChip(
+            tag = "text_crate_version",
             label = localizedString(
                 "network.identity_card.crate_version",
                 mapOf("version" to (identity?.crateVersion ?: "—")),
@@ -244,10 +248,12 @@ private fun StatsRow(identity: FederationIdentity?) {
             modifier = Modifier.weight(1f),
         )
         StatChip(
+            tag = "text_peer_count_total",
             label = localizedString("network.identity_card.peers_total") + ": " + (identity?.peerCountTotal?.toString() ?: "—"),
             modifier = Modifier.weight(1f),
         )
         StatChip(
+            tag = "text_peer_count_canonical",
             label = localizedString("network.identity_card.peers_canonical") + ": " + (identity?.peerCountCanonical?.toString() ?: "—"),
             modifier = Modifier.weight(1f),
         )
@@ -255,9 +261,9 @@ private fun StatsRow(identity: FederationIdentity?) {
 }
 
 @Composable
-private fun StatChip(label: String, modifier: Modifier = Modifier) {
+private fun StatChip(tag: String, label: String, modifier: Modifier = Modifier) {
     Surface(
-        modifier = modifier,
+        modifier = modifier.testable(tag),
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
         tonalElevation = 2.dp,
@@ -389,7 +395,7 @@ private fun NodeCodeCard(nodeCode: NodeCodeShareResponse?) {
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 12.sp,
-                            modifier = Modifier.testable("text_node_code"),
+                            modifier = Modifier.testable("text_my_node_code"),
                         )
                     }
                     Spacer(Modifier.height(8.dp))
@@ -417,7 +423,7 @@ private fun NodeCodeCard(nodeCode: NodeCodeShareResponse?) {
                         }
                     },
                     enabled = code != null,
-                    modifier = Modifier.testableClickable("btn_copy_node_code") {
+                    modifier = Modifier.testableClickable("btn_copy_my_node_code") {
                         if (code != null) {
                             clipboard.setText(AnnotatedString(code))
                             copied = true

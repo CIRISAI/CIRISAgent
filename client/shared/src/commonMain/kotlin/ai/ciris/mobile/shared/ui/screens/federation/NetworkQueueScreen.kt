@@ -2,6 +2,8 @@ package ai.ciris.mobile.shared.ui.screens.federation
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.viewmodels.federation.NetworkQueueViewModel
 import androidx.compose.foundation.Canvas
@@ -75,7 +77,10 @@ fun NetworkQueueScreen(
             TopAppBar(
                 title = { Text(localizedString("network.tiles.queue")) },
                 actions = {
-                    IconButton(onClick = { vm.refreshNow() }) {
+                    IconButton(
+                        onClick = { vm.refreshNow() },
+                        modifier = Modifier.testableClickable("btn_federation_queue_refresh") { vm.refreshNow() },
+                    ) {
                         Icon(
                             imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("network.queue.refresh"),
@@ -101,7 +106,8 @@ fun NetworkQueueScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(16.dp)
+                .testable("screen_federation_queue"),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             error?.let { msg ->
@@ -129,17 +135,17 @@ fun NetworkQueueScreen(
                 BigStatCard(
                     label = localizedString("network.queue.stats.depth"),
                     value = vm.queueDepth.toString(),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testable("text_queue_depth"),
                 )
                 BigStatCard(
                     label = localizedString("network.queue.stats.sent"),
                     value = vm.envelopesSent.toString(),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testable("text_envelopes_sent"),
                 )
                 BigStatCard(
                     label = localizedString("network.queue.stats.received"),
                     value = vm.envelopesReceived.toString(),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testable("text_envelopes_received"),
                 )
             }
 
@@ -152,12 +158,12 @@ fun NetworkQueueScreen(
                 FailureCard(
                     label = localizedString("network.queue.failures.send"),
                     count = vm.sendFailures,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testable("text_send_failures"),
                 )
                 FailureCard(
                     label = localizedString("network.queue.failures.verify"),
                     count = vm.verifyFailures,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testable("text_verify_failures"),
                 )
             }
 

@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.ui.components
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.AgentMode
 import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -53,7 +54,7 @@ fun AgentModeSelector(
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     shape = RoundedCornerShape(10.dp),
                 )
-                .testable("agent_mode_selector"),
+                .testable("segment_agent_mode"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ModeButton(
@@ -112,6 +113,7 @@ fun AgentModeSelector(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
+                modifier = Modifier.testable("tooltip_mode_disk_gate"),
             )
         }
     }
@@ -146,7 +148,7 @@ private fun ModeButton(
             .background(containerColor)
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 12.dp, vertical = 12.dp)
-            .testable(testTag),
+            .testableClickable(testTag) { if (enabled) onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

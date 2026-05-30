@@ -5,6 +5,8 @@ import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.federation.FederationContentResponse
 import ai.ciris.mobile.shared.models.federation.LocalPeerState
 import ai.ciris.mobile.shared.models.federation.PeerTrustState
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.viewmodels.federation.ContentStep
 import ai.ciris.mobile.shared.viewmodels.federation.NetworkContentViewModel
@@ -120,7 +122,8 @@ fun NetworkContentScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .testable("screen_federation_content"),
         ) {
             when (step) {
                 ContentStep.PICK_PEER -> PeerPickerStep(vm = vm, loading = loading)
@@ -149,7 +152,8 @@ private fun PeerPickerStep(vm: NetworkContentViewModel, loading: Boolean) {
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(16.dp)
+                .testable("input_peer_search"),
         )
 
         error?.let { msg ->
@@ -210,7 +214,8 @@ private fun PeerRow(peer: LocalPeerState, onClick: () -> Unit) {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .clickable { onClick() }
+            .testableClickable("peer_pick_row_${peer.keyId}") { onClick() },
     ) {
         Row(
             modifier = Modifier

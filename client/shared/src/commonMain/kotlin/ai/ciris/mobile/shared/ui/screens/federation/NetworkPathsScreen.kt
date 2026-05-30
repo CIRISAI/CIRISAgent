@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.ui.screens.federation
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.federation.FederationEventEnvelope
+import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.viewmodels.federation.NetworkPathsViewModel
@@ -74,7 +75,7 @@ fun NetworkPathsScreen(
         topBar = {
             TopAppBar(
                 title = { Text(localizedString("network.paths.title")) },
-                actions = { ConnectionDot(connectionState) },
+                actions = { ConnectionDot(connectionState, indicatorTag = "indicator_paths_connection") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
@@ -87,7 +88,8 @@ fun NetworkPathsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(CIRISColors.BackgroundDark),
+                .background(CIRISColors.BackgroundDark)
+                .testable("screen_federation_paths"),
         ) {
             Text(
                 text = localizedString("network.paths.section_recent"),
@@ -106,6 +108,8 @@ fun NetworkPathsScreen(
                 onPauseToggle = { if (paused) viewModel.resume() else viewModel.pause() },
                 onClear = { viewModel.clear() },
                 onReconnect = { viewModel.reconnect() },
+                pauseTag = "btn_paths_pause",
+                clearTag = "btn_paths_clear",
             )
 
             if (resumeNoticeShown) {

@@ -3,6 +3,8 @@ package ai.ciris.mobile.shared.ui.screens.federation
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.federation.PeerTrustState
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.viewmodels.federation.NetworkTrustGraphViewModel
 import ai.ciris.mobile.shared.viewmodels.federation.PeerWithReachability
@@ -121,7 +123,10 @@ fun NetworkTrustGraphScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { vm.refresh() }) {
+                    IconButton(
+                        onClick = { vm.refresh() },
+                        modifier = Modifier.testableClickable("btn_trust_graph_refresh") { vm.refresh() },
+                    ) {
                         Icon(
                             imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("network.trust_graph.refresh"),
@@ -134,7 +139,8 @@ fun NetworkTrustGraphScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .testable("screen_federation_trust_graph"),
         ) {
             when {
                 peers.isEmpty() && loading -> {
@@ -272,6 +278,7 @@ private fun TrustGraphCanvas(
     Canvas(
         modifier = modifier
             .background(MaterialTheme.colorScheme.surfaceVariant)
+            .testable("canvas_trust_graph")
             .pointerInput(peers) {
                 detectTapGestures { offset ->
                     val hit = positions.firstOrNull { node ->

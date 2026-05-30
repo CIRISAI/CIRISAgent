@@ -2182,37 +2182,43 @@ private fun AgentModeSection(apiClient: CIRISApiClient) {
     }
 
     pendingMode?.let { target ->
+        val applyMode: () -> Unit = {
+            val toApply = target
+            pendingMode = null
+            scope.launch {
+                loading = true
+                insufficientDisk = null
+                errorMsg = null
+                try {
+                    when (val r = apiClient.setAgentMode(toApply)) {
+                        is AgentModeChangeResult.Success -> {
+                            status = r.status
+                            mode = r.status.mode
+                        }
+                        is AgentModeChangeResult.InsufficientDisk -> insufficientDisk = r
+                        is AgentModeChangeResult.Failure -> errorMsg = r.message
+                    }
+                } finally {
+                    loading = false
+                }
+            }
+        }
         AlertDialog(
             onDismissRequest = { pendingMode = null },
+            modifier = Modifier.testable("dialog_mode_confirm"),
             title = { Text(localizedString("network.mode_card.confirm_change_title")) },
             text = { Text(localizedString("network.mode_card.confirm_change_body")) },
             confirmButton = {
                 TextButton(
-                    onClick = {
-                        val toApply = target
-                        pendingMode = null
-                        scope.launch {
-                            loading = true
-                            insufficientDisk = null
-                            errorMsg = null
-                            try {
-                                when (val r = apiClient.setAgentMode(toApply)) {
-                                    is AgentModeChangeResult.Success -> {
-                                        status = r.status
-                                        mode = r.status.mode
-                                    }
-                                    is AgentModeChangeResult.InsufficientDisk -> insufficientDisk = r
-                                    is AgentModeChangeResult.Failure -> errorMsg = r.message
-                                }
-                            } finally {
-                                loading = false
-                            }
-                        }
-                    },
+                    onClick = applyMode,
+                    modifier = Modifier.testableClickable("btn_mode_confirm") { applyMode() },
                 ) { Text(localizedString("network.mode_card.confirm_change_button")) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingMode = null }) {
+                TextButton(
+                    onClick = { pendingMode = null },
+                    modifier = Modifier.testableClickable("btn_mode_cancel") { pendingMode = null },
+                ) {
                     Text(localizedString("network.mode_card.cancel_button"))
                 }
             },

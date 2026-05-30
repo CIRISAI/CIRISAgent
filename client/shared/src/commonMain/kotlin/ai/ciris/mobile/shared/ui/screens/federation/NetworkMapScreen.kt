@@ -2,6 +2,8 @@ package ai.ciris.mobile.shared.ui.screens.federation
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.icons.CIRISMaterialIcons
 import ai.ciris.mobile.shared.ui.icons.Language
@@ -95,7 +97,10 @@ fun NetworkMapScreen(
             TopAppBar(
                 title = { Text(localizedString("network.tiles.map")) },
                 actions = {
-                    IconButton(onClick = { vm.refresh() }) {
+                    IconButton(
+                        onClick = { vm.refresh() },
+                        modifier = Modifier.testableClickable("btn_federation_map_refresh") { vm.refresh() },
+                    ) {
                         Icon(
                             imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("network.map.refresh"),
@@ -110,7 +115,8 @@ fun NetworkMapScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(16.dp)
+                .testable("screen_federation_map"),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Hero()
@@ -232,7 +238,8 @@ private fun ConcentricCountsCard(canonical: Int, trusted: Int, other: Int) {
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(240.dp),
+                    .height(240.dp)
+                    .testable("canvas_federation_map"),
             ) {
                 val w = size.width
                 val h = size.height

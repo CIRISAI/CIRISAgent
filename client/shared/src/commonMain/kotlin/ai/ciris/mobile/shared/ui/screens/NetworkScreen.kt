@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.ui.screens
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.AgentMode
 import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.AgentModeSelector
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
@@ -78,6 +79,7 @@ fun NetworkScreen(
     pendingMode?.let { target ->
         AlertDialog(
             onDismissRequest = { pendingMode = null },
+            modifier = Modifier.testable("dialog_mode_confirm"),
             title = { Text(localizedString("network.mode_card.confirm_change_title")) },
             text = { Text(localizedString("network.mode_card.confirm_change_body")) },
             confirmButton = {
@@ -86,13 +88,16 @@ fun NetworkScreen(
                         viewModel.setMode(target)
                         pendingMode = null
                     },
-                    modifier = Modifier.testable("btn_mode_confirm"),
+                    modifier = Modifier.testableClickable("btn_mode_confirm") {
+                        viewModel.setMode(target)
+                        pendingMode = null
+                    },
                 ) { Text(localizedString("network.mode_card.confirm_change_button")) }
             },
             dismissButton = {
                 TextButton(
                     onClick = { pendingMode = null },
-                    modifier = Modifier.testable("btn_mode_cancel"),
+                    modifier = Modifier.testableClickable("btn_mode_cancel") { pendingMode = null },
                 ) { Text(localizedString("network.mode_card.cancel_button")) }
             },
         )
@@ -101,7 +106,7 @@ fun NetworkScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .testable("screen_network"),
+            .testable("screen_network_hub"),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -300,12 +305,14 @@ private fun AddressRow(
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 12.sp,
-                modifier = Modifier.testable("text_federation_address"),
+                modifier = Modifier.testable("text_network_identity_key"),
             )
         }
         IconButton(
             onClick = { clipboard.setText(AnnotatedString(address)) },
-            modifier = Modifier.testable("btn_copy_federation_address"),
+            modifier = Modifier.testableClickable("btn_network_identity_copy") {
+                clipboard.setText(AnnotatedString(address))
+            },
         ) {
             Icon(
                 imageVector = CIRISMaterialIcons.Filled.ContentCopy,
@@ -379,10 +386,10 @@ private fun ModeCard(
 @Composable
 private fun StatsStrip() {
     val cells = listOf(
-        localizedString("network.stats_strip.peers"),
-        localizedString("network.stats_strip.transports"),
-        localizedString("network.stats_strip.queue"),
-        localizedString("network.stats_strip.errors"),
+        "text_stat_peers" to localizedString("network.stats_strip.peers"),
+        "text_stat_transports" to localizedString("network.stats_strip.transports"),
+        "text_stat_queue" to localizedString("network.stats_strip.queue"),
+        "text_stat_errors" to localizedString("network.stats_strip.errors"),
     )
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -393,8 +400,8 @@ private fun StatsStrip() {
         Row(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
         ) {
-            cells.forEachIndexed { idx, label ->
-                StatCell(label = label, modifier = Modifier.weight(1f))
+            cells.forEachIndexed { idx, (tag, label) ->
+                StatCell(tag = tag, label = label, modifier = Modifier.weight(1f))
                 if (idx != cells.lastIndex) StatDivider()
             }
         }
@@ -402,9 +409,9 @@ private fun StatsStrip() {
 }
 
 @Composable
-private fun StatCell(label: String, modifier: Modifier = Modifier) {
+private fun StatCell(tag: String, label: String, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.padding(horizontal = 8.dp),
+        modifier = modifier.padding(horizontal = 8.dp).testable(tag),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
@@ -549,7 +556,7 @@ private fun NavTile(
         modifier = modifier
             .height(120.dp)
             .clickable { onClick() }
-            .testable("tile_${spec.tile.name.lowercase()}"),
+            .testableClickable("tile_federation_${spec.tile.name.lowercase()}") { onClick() },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         ),

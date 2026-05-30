@@ -4,6 +4,8 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.federation.FederationChannel
 import ai.ciris.mobile.shared.models.federation.FederationEventEnvelope
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.viewmodels.federation.NetworkDiagnosticsViewModel
 import androidx.compose.foundation.background
@@ -94,7 +96,7 @@ fun NetworkDiagnosticsScreen(
         topBar = {
             TopAppBar(
                 title = { Text(localizedString("network.diagnostics.title")) },
-                actions = { ConnectionDot(connectionState) },
+                actions = { ConnectionDot(connectionState, indicatorTag = "indicator_diagnostics_connection") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
@@ -107,7 +109,8 @@ fun NetworkDiagnosticsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(CIRISColors.BackgroundDark),
+                .background(CIRISColors.BackgroundDark)
+                .testable("screen_federation_diagnostics"),
         ) {
             // Channel counters strip
             CountersStrip(channelCounters)
@@ -131,6 +134,8 @@ fun NetworkDiagnosticsScreen(
                 onPauseToggle = { if (paused) viewModel.resume() else viewModel.pause() },
                 onClear = { viewModel.clear() },
                 onReconnect = { viewModel.reconnect() },
+                pauseTag = "btn_diagnostics_pause",
+                clearTag = "btn_diagnostics_clear",
             )
 
             if (resumeNoticeShown) {
@@ -201,11 +206,13 @@ private fun CountersStrip(counters: Map<FederationChannel, Int>) {
             FederationChannel.RESOURCE_EVENTS,
         ).forEach { ch ->
             val count = counters[ch] ?: 0
+            val short = channelShortLabel(ch)
             Text(
-                text = "${channelShortLabel(ch)}: $count",
+                text = "$short: $count",
                 color = if (count > 0) CIRISColors.TextPrimary else CIRISColors.TextTertiary,
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
+                modifier = Modifier.testable("text_counter_$short"),
             )
         }
     }
@@ -234,14 +241,16 @@ private fun ChannelFilterChipRow(
             FederationChannel.RESOURCE_EVENTS,
         ).forEach { ch ->
             val isSelected = ch in selected
+            val short = channelShortLabel(ch)
             FilterChip(
                 selected = isSelected,
                 onClick = { onToggle(ch) },
-                label = { Text(channelShortLabel(ch)) },
+                label = { Text(short) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = CIRISColors.AccentCyan.copy(alpha = 0.20f),
                     selectedLabelColor = CIRISColors.AccentCyan,
                 ),
+                modifier = Modifier.testableClickable("chip_channel_$short") { onToggle(ch) },
             )
         }
     }
@@ -263,7 +272,8 @@ private fun DiagnosticsSearchBox(
                 color = Color.White.copy(alpha = 0.10f),
                 shape = RoundedCornerShape(6.dp),
             )
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .testable("input_diagnostics_search"),
     ) {
         BasicTextField(
             value = query,

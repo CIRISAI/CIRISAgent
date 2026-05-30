@@ -3,6 +3,8 @@ package ai.ciris.mobile.shared.ui.screens.federation
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.federation.FederationEventEnvelope
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.viewmodels.federation.FederationStreamConnectionState
@@ -88,7 +90,7 @@ fun NetworkAnnouncesScreen(
                     }
                 },
                 actions = {
-                    ConnectionDot(connectionState)
+                    ConnectionDot(connectionState, indicatorTag = "indicator_announces_connection")
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -102,7 +104,8 @@ fun NetworkAnnouncesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(CIRISColors.BackgroundDark),
+                .background(CIRISColors.BackgroundDark)
+                .testable("screen_federation_announces"),
         ) {
             FederationStreamControlBar(
                 paused = paused,
@@ -111,6 +114,8 @@ fun NetworkAnnouncesScreen(
                 onPauseToggle = { if (paused) viewModel.resume() else viewModel.pause() },
                 onClear = { viewModel.clear() },
                 onReconnect = { viewModel.reconnect() },
+                pauseTag = "btn_announces_pause",
+                clearTag = "btn_announces_clear",
             )
 
             if (resumeNoticeShown) {
@@ -245,7 +250,10 @@ internal fun RadioMetricChip(label: String, value: String) {
 }
 
 @Composable
-internal fun ConnectionDot(state: FederationStreamConnectionState) {
+internal fun ConnectionDot(
+    state: FederationStreamConnectionState,
+    indicatorTag: String? = null,
+) {
     val color = when (state) {
         FederationStreamConnectionState.CONNECTED -> CIRISColors.StatusOk
         FederationStreamConnectionState.CONNECTING -> CIRISColors.StatusWarn
@@ -253,12 +261,13 @@ internal fun ConnectionDot(state: FederationStreamConnectionState) {
         FederationStreamConnectionState.ERROR -> CIRISColors.StatusErr
         FederationStreamConnectionState.DISCONNECTED -> CIRISColors.TextDim
     }
+    val base = Modifier
+        .padding(end = 12.dp)
+        .size(10.dp)
+        .clip(CircleShape)
+        .background(color)
     Box(
-        modifier = Modifier
-            .padding(end = 12.dp)
-            .size(10.dp)
-            .clip(CircleShape)
-            .background(color),
+        modifier = if (indicatorTag != null) base.testable(indicatorTag) else base,
     )
 }
 
@@ -270,6 +279,9 @@ internal fun FederationStreamControlBar(
     onPauseToggle: () -> Unit,
     onClear: () -> Unit,
     onReconnect: () -> Unit,
+    pauseTag: String? = null,
+    clearTag: String? = null,
+    reconnectTag: String? = null,
 ) {
     Row(
         modifier = Modifier
@@ -279,7 +291,14 @@ internal fun FederationStreamControlBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        OutlinedButton(onClick = onPauseToggle) {
+        OutlinedButton(
+            onClick = onPauseToggle,
+            modifier = if (pauseTag != null) {
+                Modifier.testableClickable(pauseTag) { onPauseToggle() }
+            } else {
+                Modifier
+            },
+        ) {
             Text(
                 text = if (paused) {
                     localizedString("network.stream.resume")
@@ -288,13 +307,27 @@ internal fun FederationStreamControlBar(
                 },
             )
         }
-        OutlinedButton(onClick = onClear) {
+        OutlinedButton(
+            onClick = onClear,
+            modifier = if (clearTag != null) {
+                Modifier.testableClickable(clearTag) { onClear() }
+            } else {
+                Modifier
+            },
+        ) {
             Text(localizedString("network.stream.clear"))
         }
         if (connectionState == FederationStreamConnectionState.ERROR ||
             connectionState == FederationStreamConnectionState.DISCONNECTED
         ) {
-            OutlinedButton(onClick = onReconnect) {
+            OutlinedButton(
+                onClick = onReconnect,
+                modifier = if (reconnectTag != null) {
+                    Modifier.testableClickable(reconnectTag) { onReconnect() }
+                } else {
+                    Modifier
+                },
+            ) {
                 Text(localizedString("network.stream.reconnect"))
             }
         }

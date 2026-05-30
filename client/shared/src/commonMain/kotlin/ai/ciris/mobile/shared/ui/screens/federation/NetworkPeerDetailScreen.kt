@@ -129,7 +129,7 @@ fun NetworkPeerDetailScreen(
                     IconButton(
                         onClick = { viewModel.refresh() },
                         enabled = !loading,
-                        modifier = Modifier.testableClickable("btn_peer_detail_refresh") { viewModel.refresh() },
+                        modifier = Modifier.testableClickable("btn_federation_peer_detail_refresh") { viewModel.refresh() },
                     ) {
                         Icon(
                             imageVector = CIRISIcons.refresh,
@@ -157,7 +157,7 @@ fun NetworkPeerDetailScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .testable("screen_peer_detail"),
+                        .testable("screen_federation_peer_detail"),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
@@ -251,12 +251,14 @@ private fun PeerHeader(peer: LocalPeerState) {
                         fontFamily = FontFamily.Monospace,
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.testable("text_peer_key_id"),
+                        modifier = Modifier.testable("text_peer_detail_key_id"),
                     )
                 }
                 IconButton(
                     onClick = { clipboard.setText(AnnotatedString(peer.keyId)) },
-                    modifier = Modifier.testable("btn_copy_peer_key_id"),
+                    modifier = Modifier.testableClickable("btn_copy_peer_key") {
+                        clipboard.setText(AnnotatedString(peer.keyId))
+                    },
                 ) {
                     Icon(
                         imageVector = CIRISMaterialIcons.Filled.ContentCopy,
@@ -298,7 +300,7 @@ private fun TrustStateSection(
                     selected = state == currentTrust,
                     onClick = { if (!inFlight) onTrustChange(state) },
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                    modifier = Modifier.testableClickable("seg_trust_${state.wire}") {
+                    modifier = Modifier.testableClickable("btn_trust_${state.wire}") {
                         if (!inFlight) onTrustChange(state)
                     },
                 ) {
@@ -345,7 +347,7 @@ private fun ReachabilityRow(medium: String, entry: EdgeReachabilityEntry) {
     val ratio = entry.ratio.coerceIn(0.0, 1.0)
     val pct = (ratio * 100).toInt()
 
-    Column(modifier = Modifier.testable("row_reachability_$medium")) {
+    Column(modifier = Modifier.testable("text_reachability_$medium")) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = medium,
@@ -516,7 +518,7 @@ private fun AppearanceSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testableClickable("row_appearance_toggle") { onToggle() },
+                    .testableClickable("btn_appearance_expand") { onToggle() },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(

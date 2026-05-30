@@ -101,7 +101,7 @@ fun NetworkPeersScreen(
                     IconButton(
                         onClick = { viewModel.refresh() },
                         enabled = !loading,
-                        modifier = Modifier.testableClickable("btn_network_peers_refresh") { viewModel.refresh() },
+                        modifier = Modifier.testableClickable("btn_federation_peers_refresh") { viewModel.refresh() },
                     ) {
                         Icon(
                             imageVector = CIRISIcons.refresh,
@@ -116,7 +116,7 @@ fun NetworkPeersScreen(
                 onClick = { viewModel.openAddPeerSheet() },
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                 text = { Text(localizedString("network.peers.add_peer_fab")) },
-                modifier = Modifier.testableClickable("fab_add_peer") { viewModel.openAddPeerSheet() },
+                modifier = Modifier.testableClickable("btn_add_peer") { viewModel.openAddPeerSheet() },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -125,7 +125,7 @@ fun NetworkPeersScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .testable("screen_network_peers"),
+                .testable("screen_federation_peers"),
         ) {
             FilterRow(
                 filter = filter,
@@ -238,7 +238,7 @@ private fun FilterEntry(
         selected = selected == target,
         onClick = { onSelect(target) },
         label = { Text(localizedString(key)) },
-        modifier = Modifier.testableClickable("chip_peer_filter_${target.name.lowercase()}") { onSelect(target) },
+        modifier = Modifier.testableClickable("btn_filter_${target.name.lowercase()}") { onSelect(target) },
     )
 }
 
@@ -252,7 +252,7 @@ private fun PeerRow(peer: LocalPeerState, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .testableClickable("row_peer_${peer.keyId.take(12)}") { onClick() },
+            .testableClickable("peer_row_${peer.keyId}") { onClick() },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         ),

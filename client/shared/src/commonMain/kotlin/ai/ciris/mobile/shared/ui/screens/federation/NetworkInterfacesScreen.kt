@@ -2,6 +2,8 @@ package ai.ciris.mobile.shared.ui.screens.federation
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.viewmodels.federation.NetworkInterfacesViewModel
 import ai.ciris.mobile.shared.viewmodels.federation.TransportRow
@@ -79,7 +81,10 @@ fun NetworkInterfacesScreen(
             TopAppBar(
                 title = { Text(localizedString("network.tiles.interfaces")) },
                 actions = {
-                    IconButton(onClick = { vm.refreshNow() }) {
+                    IconButton(
+                        onClick = { vm.refreshNow() },
+                        modifier = Modifier.testableClickable("btn_federation_interfaces_refresh") { vm.refreshNow() },
+                    ) {
                         Icon(
                             imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("network.interfaces.refresh"),
@@ -92,7 +97,8 @@ fun NetworkInterfacesScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .testable("screen_federation_interfaces"),
         ) {
             when {
                 rows.isEmpty() && loading -> {
@@ -170,7 +176,9 @@ private fun TransientError(message: String) {
 @Composable
 private fun TransportCard(row: TransportRow, status: TransportStatus) {
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testable("card_transport_${row.id}"),
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),

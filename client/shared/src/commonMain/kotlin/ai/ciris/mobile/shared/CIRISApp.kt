@@ -3125,9 +3125,12 @@ fun CIRISApp(
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkMap -> ai.ciris.mobile.shared.ui.screens.federation.NetworkMapScreen(
+                apiClient = apiClient,
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkTrustGraph -> ai.ciris.mobile.shared.ui.screens.federation.NetworkTrustGraphScreen(
+                apiClient = apiClient,
+                onPeerClick = { keyId -> currentScreen = Screen.NetworkPeerDetail(keyId) },
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
             Screen.NetworkPeers -> ai.ciris.mobile.shared.ui.screens.federation.NetworkPeersScreen(

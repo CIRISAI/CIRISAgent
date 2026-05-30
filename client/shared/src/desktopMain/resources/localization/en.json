@@ -2178,6 +2178,43 @@
       "diagnostics_description": "Recent errors, signature failures, policy blocks, transport churn — operator forensics.",
       "content_description": "Federation content store browser — cached locally, federated, hash-addressed retrieval."
     },
+    "trust_graph": {
+      "refresh": "Refresh",
+      "empty": "No peers to visualize.",
+      "summary": "{count} peers · {canonical} canonical",
+      "legend": {
+        "title": "Trust state",
+        "trusted": "Trusted",
+        "unknown": "Unknown",
+        "untrusted": "Untrusted",
+        "blocked": "Blocked",
+        "canonical_hint": "Thicker ring outline = canonical (ships with the agent).",
+        "edge_hint": "Edge opacity reflects per-medium reachability."
+      }
+    },
+    "map": {
+      "refresh": "Refresh",
+      "hero": {
+        "title": "Geographic view",
+        "subtitle": "Real map coming with the telemetry pipeline."
+      },
+      "explanation": {
+        "title": "No fabricated locations",
+        "body": "Peers will appear on a real map once we ship our telemetry pipeline. Until then, here's what you can see right now:"
+      },
+      "today": {
+        "title": "What we have today",
+        "canonical": "Canonical peers",
+        "trusted": "Trusted peers",
+        "other": "Other peers"
+      },
+      "future": {
+        "title": "What this will show later",
+        "bullet_locations": "Peer locations from telemetry",
+        "bullet_transport": "Transport-link overlay (TCP / LoRa / I2P / AX.25)",
+        "bullet_announces": "Real-time announces overlaid by region"
+      }
+    },
     "interfaces": {
       "refresh": "Refresh",
       "empty": "No transports configured.",

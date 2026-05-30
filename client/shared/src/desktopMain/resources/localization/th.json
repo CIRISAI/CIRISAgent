@@ -2055,5 +2055,68 @@
     "metrics": "Metrics",
     "services": "บริการs"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "เครือข่าย",
+    "identity_card": {
+      "title": "ตัวตนของสหพันธ์",
+      "copy_address": "คัดลอกที่อยู่",
+      "qr_label": "QR · ratchet / การหมุน"
+    },
+    "mode_card": {
+      "title": "โหมดเอเจนต์",
+      "subtitle": "เอเจนต์นี้มีส่วนร่วมในสหพันธ์อย่างไร Edge จะเริ่มใหม่เมื่อเปลี่ยน",
+      "client_label": "ไคลเอนต์",
+      "client_description": "เชื่อมต่อออกไปยังโหนดระยะไกล",
+      "proxy_label": "พร็อกซี",
+      "proxy_description": "เอเจนต์ท้องถิ่นที่มีพื้นผิวสหพันธ์พร็อกซี",
+      "proxy_default_marker": "(ค่าเริ่มต้น)",
+      "server_label": "เซิร์ฟเวอร์",
+      "server_description": "โหนดสหพันธ์เต็ม",
+      "server_disk_gate": "ต้องการดิสก์ว่าง ≥256 GB · ว่าง {available} จาก {required} ที่ต้องการ",
+      "confirm_change_title": "ต้องเริ่มใหม่",
+      "confirm_change_body": "การเปลี่ยนโหมดเอเจนต์ต้องเริ่ม Edge ใหม่ ดำเนินการต่อ?",
+      "confirm_change_button": "เริ่ม Edge ใหม่",
+      "cancel_button": "ยกเลิก",
+      "insufficient_disk_error": "ดิสก์ว่างไม่พอสำหรับโหมด SERVER ว่าง {available}, ต้องการ {required}"
+    },
+    "stats_strip": {
+      "peers": "พีร์",
+      "transports": "ทรานสปอร์ต",
+      "queue": "คิว",
+      "errors": "ข้อผิดพลาด",
+      "awaiting_edge_1_0": "รอ Edge 1.0"
+    },
+    "tiles": {
+      "identity": "ตัวตน",
+      "map": "แผนที่",
+      "trust_graph": "กราฟความเชื่อใจ",
+      "peers": "พีร์",
+      "interfaces": "อินเทอร์เฟซ",
+      "paths": "เส้นทาง",
+      "announces": "ประกาศ",
+      "queue": "คิว",
+      "diagnostics": "การวินิจฉัย",
+      "content": "เนื้อหา",
+      "coming_soon_badge": "เร็วๆ นี้"
+    },
+    "sub_screens": {
+      "identity_description": "ตัวตนสหพันธ์ — คีย์ผู้ลงนาม, ห่วงโซ่การยืนยันการดูแลฮาร์ดแวร์, สถานะ ratchet, ประวัติการหมุน",
+      "map_description": "ผืนผ้าใบที่กำกับโดยแรงของย่านสหพันธ์ท้องถิ่น — พีร์เป็นโหนด, ทรานสปอร์ตเป็นขอบสี",
+      "trust_graph_description": "มุมมองผู้ดำเนินการของโทโพโลยีความเชื่อใจของทรานสปอร์ต — การมอบโดยตรง, อำนาจที่ได้รับมอบ, ธงปฏิปักษ์",
+      "peers_description": "เมทริกซ์ที่จัดเรียงได้ของพีร์ × ความเข้าถึงได้ของทรานสปอร์ต — ทุกตัวตนสหพันธ์ที่สแต็กนี้เคยได้ยิน",
+      "interfaces_description": "สุขภาพ + การตั้งค่า + สถิติต่อทรานสปอร์ต (สไตล์ rnstatus) CRUD บนสิ่งเทียบเท่า reticulum.conf",
+      "paths_description": "ตาราง RNS path — ทุกปลายทางที่ Edge รู้วิธีไปถึง, ผ่านทรานสปอร์ตใด, hops, การหมดอายุ",
+      "announces_description": "สตรีมประกาศแบบสดและย้อนหลัง — ใคร, อินเทอร์เฟซใด, hops, การตรวจสอบลายเซ็น",
+      "queue_description": "คิวแพ็กเก็ตขาออกต่อทรานสปอร์ต: ความลึก, อายุ, จำนวนการลองใหม่, สถานะการแยกส่วน",
+      "diagnostics_description": "ข้อผิดพลาดล่าสุด, ความล้มเหลวของลายเซ็น, การบล็อกนโยบาย, การเปลี่ยนแปลงของทรานสปอร์ต — นิติเวชของผู้ดำเนินการ",
+      "content_description": "เบราว์เซอร์ที่เก็บเนื้อหาสหพันธ์ — แคชในเครื่อง, สหพันธ์, การดึงข้อมูลตามที่อยู่แฮช"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "โหมดเอเจนต์",
+      "subtitle": "เปลี่ยนวิธีที่เอเจนต์นี้มีส่วนร่วมในสหพันธ์ สะท้อนหน้าจอเครือข่าย"
+    }
+  }
 }

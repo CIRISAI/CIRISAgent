@@ -2055,5 +2055,68 @@
   "wa_resolve": "Resolver",
   "wa_service_status": "Status do Serviço",
   "wa_status": "Status",
-  "login_first_run_welcome": "Bem-vindo! Escolha como configurar seu assistente de IA."
+  "login_first_run_welcome": "Bem-vindo! Escolha como configurar seu assistente de IA.",
+  "network": {
+    "title": "Rede",
+    "identity_card": {
+      "title": "Identidade de federação",
+      "copy_address": "Copiar endereço",
+      "qr_label": "QR · ratchet / rotação"
+    },
+    "mode_card": {
+      "title": "Modo do agente",
+      "subtitle": "Como este agente participa da federação. O Edge será reiniciado ao alterar.",
+      "client_label": "Cliente",
+      "client_description": "Conectar-se para fora a um nó remoto.",
+      "proxy_label": "Proxy",
+      "proxy_description": "Agente local com superfície de federação proxy.",
+      "proxy_default_marker": "(padrão)",
+      "server_label": "Servidor",
+      "server_description": "Nó de federação completo.",
+      "server_disk_gate": "Requer ≥256 GB de disco livre · {available} livres de {required} necessários",
+      "confirm_change_title": "Reinício necessário",
+      "confirm_change_body": "Alterar o modo do agente requer reiniciar o Edge. Continuar?",
+      "confirm_change_button": "Reiniciar Edge",
+      "cancel_button": "Cancelar",
+      "insufficient_disk_error": "Sem disco livre suficiente para o modo SERVER. {available} livres, {required} necessários."
+    },
+    "stats_strip": {
+      "peers": "Pares",
+      "transports": "Transportes",
+      "queue": "Fila",
+      "errors": "Erros",
+      "awaiting_edge_1_0": "Aguardando Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Identidade",
+      "map": "Mapa",
+      "trust_graph": "Grafo de confiança",
+      "peers": "Pares",
+      "interfaces": "Interfaces",
+      "paths": "Caminhos",
+      "announces": "Anúncios",
+      "queue": "Fila",
+      "diagnostics": "Diagnósticos",
+      "content": "Conteúdo",
+      "coming_soon_badge": "Em breve"
+    },
+    "sub_screens": {
+      "identity_description": "Identidade de federação — chave de assinante, cadeia de atestação de custódia de hardware, estado do ratchet, histórico de rotação.",
+      "map_description": "Tela direcionada por força da vizinhança de federação local — pares como nós, transportes como arestas coloridas.",
+      "trust_graph_description": "Visão do operador da topologia de confiança de transporte — concessões diretas, autoridade delegada, sinalizações adversárias.",
+      "peers_description": "Matriz ordenável de par × alcançabilidade de transporte — cada identidade de federação que esta pilha já ouviu.",
+      "interfaces_description": "Saúde + config + estatísticas por transporte (estilo rnstatus). CRUD sobre o equivalente a reticulum.conf.",
+      "paths_description": "Tabela de caminhos RNS — cada destino que o Edge sabe alcançar, via qual transporte, saltos, expiração.",
+      "announces_description": "Fluxo de anúncios ao vivo + retrospectivo — quem, qual interface, saltos, validação de assinatura.",
+      "queue_description": "Fila de pacotes de saída por transporte: profundidade, idade, contagem de retentativas, estado de fragmentação.",
+      "diagnostics_description": "Erros recentes, falhas de assinatura, bloqueios de política, agitação de transporte — forense de operador.",
+      "content_description": "Navegador do armazenamento de conteúdo da federação — em cache local, federado, recuperação por hash."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Modo do agente",
+      "subtitle": "Alterar como este agente participa da federação. Espelha a tela de Rede."
+    }
+  }
 }

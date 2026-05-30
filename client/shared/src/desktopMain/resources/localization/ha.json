@@ -2055,5 +2055,68 @@
     "system_cognitive_state": "Matsayin Tunani",
     "system_queue_depth": "Zurfin Layi"
   },
-  "login_first_run_welcome": "Barka da zuwa! Zaɓi yadda za a saita mataimakin AI ɗinka."
+  "login_first_run_welcome": "Barka da zuwa! Zaɓi yadda za a saita mataimakin AI ɗinka.",
+  "network": {
+    "title": "Hanyar Sadarwa",
+    "identity_card": {
+      "title": "Asalin Federation",
+      "copy_address": "Kwafi adireshi",
+      "qr_label": "QR · ratchet / juyawa"
+    },
+    "mode_card": {
+      "title": "Yanayin wakili",
+      "subtitle": "Yadda wannan wakili ke shiga cikin federation. Edge zai sake farawa lokacin canji.",
+      "client_label": "Abokin ciniki",
+      "client_description": "Haɗa zuwa waje zuwa nesa node.",
+      "proxy_label": "Proxy",
+      "proxy_description": "Wakili na gida tare da fuskar proxy federation.",
+      "proxy_default_marker": "(asali)",
+      "server_label": "Sabar",
+      "server_description": "Cikakken node na federation.",
+      "server_disk_gate": "Yana buƙatar ≥256 GB faifai kyauta · {available} kyauta na {required} ana buƙata",
+      "confirm_change_title": "Ana buƙatar sake farawa",
+      "confirm_change_body": "Canza yanayin wakili yana buƙatar sake farawa na Edge. A ci gaba?",
+      "confirm_change_button": "Sake fara Edge",
+      "cancel_button": "Soke",
+      "insufficient_disk_error": "Babu isasshen faifai kyauta don yanayin SERVER. {available} kyauta, {required} ana buƙata."
+    },
+    "stats_strip": {
+      "peers": "Abokai",
+      "transports": "Sufuri",
+      "queue": "Layi",
+      "errors": "Kurakurai",
+      "awaiting_edge_1_0": "Ana jiran Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Asali",
+      "map": "Taswira",
+      "trust_graph": "Hoton amincewa",
+      "peers": "Abokai",
+      "interfaces": "Mahaɗa",
+      "paths": "Hanyoyi",
+      "announces": "Sanarwa",
+      "queue": "Layi",
+      "diagnostics": "Bincike",
+      "content": "Abun ciki",
+      "coming_soon_badge": "Yana zuwa nan ba da daɗewa ba"
+    },
+    "sub_screens": {
+      "identity_description": "Asalin federation — maɓallin sa hannu, sarƙar tabbatar da kulawa ta hardware, yanayin ratchet, tarihin juyawa.",
+      "map_description": "Zane mai jagora ƙarfi na unguwar federation ta gida — abokai a matsayin nodes, sufuri a matsayin gefuna masu launi.",
+      "trust_graph_description": "Ra'ayin mai gudanarwa na topology na amincewar sufuri — bayar da kai tsaye, hukuma da aka wakilta, alamomin masu hamayya.",
+      "peers_description": "Matsakaicin abokai × sufurin isa wanda za a iya tsara shi — kowane asalin federation da wannan stack ya ji.",
+      "interfaces_description": "Lafiyar kowane sufuri + config + ƙididdiga (salon rnstatus). CRUD akan daidai da reticulum.conf.",
+      "paths_description": "Tebur na hanyar RNS — kowane wurin zuwa wanda Edge ya san yadda zai kai, ta wace sufuri, hops, ƙarewa.",
+      "announces_description": "Yawo na sanarwa kai tsaye + na baya — wanene, wace mahaɗa, hops, tabbatarwar sa hannu.",
+      "queue_description": "Layin fakitin fita kowane sufuri: zurfi, shekaru, ƙidayar sake gwadawa, yanayin gutsattsarewa.",
+      "diagnostics_description": "Kurakurai na baya-bayan nan, gazawar sa hannu, toshe manufa, juyawar sufuri — bincike na mai gudanarwa.",
+      "content_description": "Mai bincike na ajiyar abun ciki na federation — an adana shi a cikin gida, federated, dawo da hash-adireshin."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Yanayin wakili",
+      "subtitle": "Canja yadda wannan wakili ke shiga cikin federation. Yana nuna allon Hanyar Sadarwa."
+    }
+  }
 }

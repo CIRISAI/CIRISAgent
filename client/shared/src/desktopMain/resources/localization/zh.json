@@ -2055,5 +2055,68 @@
   "wa_resolve": "解决",
   "wa_service_status": "服务状态",
   "wa_status": "状态",
-  "login_first_run_welcome": "欢迎！请选择如何设置您的AI助手。"
+  "login_first_run_welcome": "欢迎！请选择如何设置您的AI助手。",
+  "network": {
+    "title": "网络",
+    "identity_card": {
+      "title": "联邦身份",
+      "copy_address": "复制地址",
+      "qr_label": "QR · 棘轮 / 轮换"
+    },
+    "mode_card": {
+      "title": "代理模式",
+      "subtitle": "此代理如何参与联邦。更改时 Edge 将重新启动。",
+      "client_label": "客户端",
+      "client_description": "向外连接到远程节点。",
+      "proxy_label": "代理",
+      "proxy_description": "具有代理联邦表面的本地代理。",
+      "proxy_default_marker": "(默认)",
+      "server_label": "服务器",
+      "server_description": "完整联邦节点。",
+      "server_disk_gate": "需要 ≥256 GB 可用磁盘 · 可用 {available},需要 {required}",
+      "confirm_change_title": "需要重新启动",
+      "confirm_change_body": "切换代理模式需要重新启动 Edge。继续?",
+      "confirm_change_button": "重新启动 Edge",
+      "cancel_button": "取消",
+      "insufficient_disk_error": "SERVER 模式可用磁盘不足。可用 {available},需要 {required}。"
+    },
+    "stats_strip": {
+      "peers": "对等点",
+      "transports": "传输",
+      "queue": "队列",
+      "errors": "错误",
+      "awaiting_edge_1_0": "等待 Edge 1.0"
+    },
+    "tiles": {
+      "identity": "身份",
+      "map": "地图",
+      "trust_graph": "信任图",
+      "peers": "对等点",
+      "interfaces": "接口",
+      "paths": "路径",
+      "announces": "公告",
+      "queue": "队列",
+      "diagnostics": "诊断",
+      "content": "内容",
+      "coming_soon_badge": "即将推出"
+    },
+    "sub_screens": {
+      "identity_description": "联邦身份 — 签名者密钥、硬件托管认证链、棘轮状态、轮换历史。",
+      "map_description": "本地联邦邻域的力导向画布 — 对等点作为节点,传输作为彩色边。",
+      "trust_graph_description": "传输信任拓扑的运营商视图 — 直接授权、委托权限、对抗性标志。",
+      "peers_description": "可排序的对等点 × 传输可达性矩阵 — 此栈听过的每个联邦身份。",
+      "interfaces_description": "每个传输的健康 + 配置 + 统计 (rnstatus 风格)。reticulum.conf 等价物上的 CRUD。",
+      "paths_description": "RNS 路径表 — Edge 知道如何到达的每个目的地、通过哪个传输、跳数、过期。",
+      "announces_description": "实时 + 回溯公告流 — 谁、哪个接口、跳数、签名验证。",
+      "queue_description": "每个传输的出站数据包队列:深度、年龄、重试次数、分片状态。",
+      "diagnostics_description": "最近的错误、签名失败、策略阻止、传输波动 — 运营商取证。",
+      "content_description": "联邦内容存储浏览器 — 本地缓存、联邦化、哈希寻址检索。"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "代理模式",
+      "subtitle": "更改此代理参与联邦的方式。镜像网络屏幕。"
+    }
+  }
 }

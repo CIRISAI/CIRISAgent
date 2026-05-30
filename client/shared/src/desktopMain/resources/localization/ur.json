@@ -2055,5 +2055,68 @@
   "wa_resolve": "[EN] Resolve",
   "wa_service_status": "[EN] Service Status",
   "wa_status": "[EN] Status",
-  "login_first_run_welcome": "خوش آمدید! اپنے AI اسسٹنٹ کو سیٹ اپ کرنے کا طریقہ منتخب کریں۔"
+  "login_first_run_welcome": "خوش آمدید! اپنے AI اسسٹنٹ کو سیٹ اپ کرنے کا طریقہ منتخب کریں۔",
+  "network": {
+    "title": "نیٹ ورک",
+    "identity_card": {
+      "title": "فیڈریشن شناخت",
+      "copy_address": "پتہ کاپی کریں",
+      "qr_label": "QR · ریچٹ / گردش"
+    },
+    "mode_card": {
+      "title": "ایجنٹ موڈ",
+      "subtitle": "یہ ایجنٹ فیڈریشن میں کیسے حصہ لیتا ہے۔ تبدیلی پر Edge دوبارہ شروع ہو گا۔",
+      "client_label": "کلائنٹ",
+      "client_description": "دور دراز نوڈ سے باہر کنیکٹ کریں۔",
+      "proxy_label": "پراکسی",
+      "proxy_description": "پراکسی فیڈریشن سطح کے ساتھ مقامی ایجنٹ۔",
+      "proxy_default_marker": "(ڈیفالٹ)",
+      "server_label": "سرور",
+      "server_description": "مکمل فیڈریشن نوڈ۔",
+      "server_disk_gate": "≥256 GB خالی ڈسک درکار · {available} خالی، {required} درکار",
+      "confirm_change_title": "دوبارہ شروع کرنا درکار",
+      "confirm_change_body": "ایجنٹ موڈ تبدیل کرنے کے لیے Edge کو دوبارہ شروع کرنا ہوگا۔ جاری رکھیں؟",
+      "confirm_change_button": "Edge دوبارہ شروع کریں",
+      "cancel_button": "منسوخ کریں",
+      "insufficient_disk_error": "SERVER موڈ کے لیے کافی خالی ڈسک نہیں۔ {available} خالی، {required} درکار۔"
+    },
+    "stats_strip": {
+      "peers": "پیئرز",
+      "transports": "ٹرانسپورٹس",
+      "queue": "قطار",
+      "errors": "خرابیاں",
+      "awaiting_edge_1_0": "Edge 1.0 کا انتظار"
+    },
+    "tiles": {
+      "identity": "شناخت",
+      "map": "نقشہ",
+      "trust_graph": "اعتماد گراف",
+      "peers": "پیئرز",
+      "interfaces": "انٹرفیسز",
+      "paths": "راستے",
+      "announces": "اعلانات",
+      "queue": "قطار",
+      "diagnostics": "تشخیص",
+      "content": "مواد",
+      "coming_soon_badge": "جلد آرہا ہے"
+    },
+    "sub_screens": {
+      "identity_description": "فیڈریشن شناخت — دستخط کرنے والی کلید، ہارڈ ویئر-کسٹڈی تصدیق چین، ریچٹ حالت، گردش تاریخ۔",
+      "map_description": "مقامی فیڈریشن پڑوس کا قوت-ہدایت یافتہ کینوس — پیئرز نوڈز کے طور پر، ٹرانسپورٹس رنگین کنارے کے طور پر۔",
+      "trust_graph_description": "ٹرانسپورٹ-اعتماد ٹوپولوجی کا آپریٹر منظر — براہ راست عطایا، تفویض شدہ اختیار، دشمن جھنڈے۔",
+      "peers_description": "ترتیب دی جا سکنے والی پیئر × ٹرانسپورٹ رسائی میٹرکس — ہر فیڈریشن شناخت جسے اس اسٹیک نے سنا ہے۔",
+      "interfaces_description": "فی ٹرانسپورٹ صحت + کنفگ + اعداد و شمار (rnstatus-سٹائل)۔ reticulum.conf-مساوی پر CRUD۔",
+      "paths_description": "RNS پاتھ ٹیبل — ہر منزل جس تک Edge پہنچنا جانتا ہے، کس ٹرانسپورٹ کے ذریعے، ہاپس، میعاد۔",
+      "announces_description": "براہ راست + ماضی کا اعلان سٹریم — کون، کون سا انٹرفیس، ہاپس، دستخط کی تصدیق۔",
+      "queue_description": "فی ٹرانسپورٹ آؤٹ باؤنڈ پیکٹ قطار: گہرائی، عمر، دوبارہ کوشش کی گنتی، ٹکڑے ہونے کی حالت۔",
+      "diagnostics_description": "حالیہ خرابیاں، دستخط ناکامیاں، پالیسی بلاکس، ٹرانسپورٹ ہنگامہ — آپریٹر فرانزک۔",
+      "content_description": "فیڈریشن مواد اسٹور براؤزر — مقامی طور پر کیشڈ، فیڈریٹڈ، ہیش-ایڈریسڈ بازیافت۔"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "ایجنٹ موڈ",
+      "subtitle": "اس ایجنٹ کے فیڈریشن میں شامل ہونے کا طریقہ تبدیل کریں۔ نیٹ ورک اسکرین کی عکاسی کرتا ہے۔"
+    }
+  }
 }

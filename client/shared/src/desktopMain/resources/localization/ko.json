@@ -2055,5 +2055,68 @@
   "wa_resolve": "해결",
   "wa_service_status": "서비스 상태",
   "wa_status": "상태",
-  "login_first_run_welcome": "환영합니다! AI 어시스턴트 설정 방법을 선택하세요."
+  "login_first_run_welcome": "환영합니다! AI 어시스턴트 설정 방법을 선택하세요.",
+  "network": {
+    "title": "네트워크",
+    "identity_card": {
+      "title": "페더레이션 신원",
+      "copy_address": "주소 복사",
+      "qr_label": "QR · 래칫 / 회전"
+    },
+    "mode_card": {
+      "title": "에이전트 모드",
+      "subtitle": "이 에이전트가 페더레이션에 참여하는 방식. 변경 시 Edge가 재시작됩니다.",
+      "client_label": "클라이언트",
+      "client_description": "원격 노드로 외부 연결합니다.",
+      "proxy_label": "프록시",
+      "proxy_description": "프록시 페더레이션 표면을 가진 로컬 에이전트.",
+      "proxy_default_marker": "(기본값)",
+      "server_label": "서버",
+      "server_description": "전체 페더레이션 노드.",
+      "server_disk_gate": "≥256 GB 여유 디스크 필요 · {available} 여유 / {required} 필요",
+      "confirm_change_title": "재시작 필요",
+      "confirm_change_body": "에이전트 모드 전환에는 Edge 재시작이 필요합니다. 계속하시겠습니까?",
+      "confirm_change_button": "Edge 재시작",
+      "cancel_button": "취소",
+      "insufficient_disk_error": "SERVER 모드에 필요한 여유 디스크가 부족합니다. {available} 여유, {required} 필요."
+    },
+    "stats_strip": {
+      "peers": "피어",
+      "transports": "전송",
+      "queue": "큐",
+      "errors": "오류",
+      "awaiting_edge_1_0": "Edge 1.0 대기 중"
+    },
+    "tiles": {
+      "identity": "신원",
+      "map": "맵",
+      "trust_graph": "신뢰 그래프",
+      "peers": "피어",
+      "interfaces": "인터페이스",
+      "paths": "경로",
+      "announces": "공지",
+      "queue": "큐",
+      "diagnostics": "진단",
+      "content": "콘텐츠",
+      "coming_soon_badge": "곧 출시"
+    },
+    "sub_screens": {
+      "identity_description": "페더레이션 신원 — 서명자 키, 하드웨어 보관 증명 체인, 래칫 상태, 회전 이력.",
+      "map_description": "로컬 페더레이션 이웃의 힘 기반 캔버스 — 피어를 노드로, 전송을 색상이 있는 엣지로.",
+      "trust_graph_description": "전송 신뢰 토폴로지의 운영자 뷰 — 직접 부여, 위임된 권한, 적대적 플래그.",
+      "peers_description": "정렬 가능한 피어 × 전송 도달성 매트릭스 — 이 스택이 들은 모든 페더레이션 신원.",
+      "interfaces_description": "전송별 상태 + 구성 + 통계 (rnstatus 스타일). reticulum.conf 등가물에 대한 CRUD.",
+      "paths_description": "RNS 경로 테이블 — Edge가 도달 방법을 아는 모든 목적지, 어떤 전송 경유, 홉, 만료.",
+      "announces_description": "라이브 + 회고 공지 스트림 — 누가, 어떤 인터페이스, 홉, 서명 검증.",
+      "queue_description": "전송별 발신 패킷 큐: 깊이, 연령, 재시도 횟수, 단편화 상태.",
+      "diagnostics_description": "최근 오류, 서명 실패, 정책 차단, 전송 변동 — 운영자 포렌식.",
+      "content_description": "페더레이션 콘텐츠 저장소 브라우저 — 로컬 캐시, 페더레이션, 해시 주소 지정 검색."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "에이전트 모드",
+      "subtitle": "이 에이전트가 페더레이션에 참여하는 방식을 변경합니다. 네트워크 화면을 반영합니다."
+    }
+  }
 }

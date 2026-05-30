@@ -2064,5 +2064,68 @@
     "metrics": "Metrics",
     "services": "ဝန်ဆောင်မှုs"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "ကွန်ရက်",
+    "identity_card": {
+      "title": "Federation အထောက်အထား",
+      "copy_address": "လိပ်စာ ကူးယူ",
+      "qr_label": "QR · ratchet / လည်ပတ်မှု"
+    },
+    "mode_card": {
+      "title": "Agent မုဒ်",
+      "subtitle": "ဤ agent သည် federation တွင် မည်သို့ ပါဝင်သည်။ ပြောင်းလဲချိန်တွင် Edge ပြန်လည် စတင်မည်။",
+      "client_label": "Client",
+      "client_description": "အဝေး node သို့ အပြင်ဘက် ချိတ်ဆက်ပါ။",
+      "proxy_label": "Proxy",
+      "proxy_description": "Proxy federation မျက်နှာပြင်ပါသော ဒေသခံ agent။",
+      "proxy_default_marker": "(ပုံသေ)",
+      "server_label": "ဆာဗာ",
+      "server_description": "ပြည့်စုံသော federation node။",
+      "server_disk_gate": "≥256 GB အခမဲ့ disk လိုအပ်သည် · {available} အခမဲ့၊ {required} လိုအပ်သည်",
+      "confirm_change_title": "ပြန်လည် စတင်ရန် လိုအပ်သည်",
+      "confirm_change_body": "Agent မုဒ် ပြောင်းခြင်းသည် Edge ပြန်လည် စတင်ရန် လိုအပ်သည်။ ဆက်လုပ်မလား?",
+      "confirm_change_button": "Edge ပြန်လည် စတင်",
+      "cancel_button": "ပယ်ဖျက်",
+      "insufficient_disk_error": "SERVER မုဒ် အတွက် အခမဲ့ disk မလုံလောက်ပါ။ {available} အခမဲ့၊ {required} လိုအပ်သည်။"
+    },
+    "stats_strip": {
+      "peers": "Peers",
+      "transports": "Transports",
+      "queue": "တန်းစီ",
+      "errors": "အမှားများ",
+      "awaiting_edge_1_0": "Edge 1.0 ကို စောင့်ဆိုင်းနေသည်"
+    },
+    "tiles": {
+      "identity": "အထောက်အထား",
+      "map": "မြေပုံ",
+      "trust_graph": "ယုံကြည်မှု ဂရပ်",
+      "peers": "Peers",
+      "interfaces": "Interface များ",
+      "paths": "လမ်းကြောင်းများ",
+      "announces": "ကြေညာချက်များ",
+      "queue": "တန်းစီ",
+      "diagnostics": "စစ်ဆေးမှု",
+      "content": "အကြောင်းအရာ",
+      "coming_soon_badge": "မကြာမီ ရောက်ရှိမည်"
+    },
+    "sub_screens": {
+      "identity_description": "Federation အထောက်အထား — လက်မှတ်ထိုးသူ ကီး၊ ဟာ့ဒ်ဝဲ-ထိန်းသိမ်းမှု ထောက်ခံချက် ကွင်းဆက်၊ ratchet အခြေအနေ၊ လည်ပတ်မှု မှတ်တမ်း။",
+      "map_description": "ဒေသခံ federation အိမ်နီးချင်း၏ force-directed canvas — peers ကို node အဖြစ်၊ transport ကို အရောင်ခြယ် edge အဖြစ်။",
+      "trust_graph_description": "Transport-trust topology ၏ operator မြင်ကွင်း — တိုက်ရိုက် ပေးအပ်မှု၊ ကိုယ်စားလှယ်လွှဲအပ်ထားသော အာဏာ၊ ရန်ဖက် အလံများ။",
+      "peers_description": "စီစဥ်နိုင်သော peer × transport ဆက်သွယ်နိုင်မှု matrix — ဤ stack ကြားသိခဲ့သော federation အထောက်အထား တိုင်း။",
+      "interfaces_description": "Transport တစ်ခုစီ၏ ကျန်းမာရေး + config + စာရင်းအင်း (rnstatus ပုံစံ)။ reticulum.conf နှင့် ညီမျှသည့်အရာအပေါ် CRUD။",
+      "paths_description": "RNS path table — Edge ရောက်ရှိနိုင်ပုံ သိရှိသော ဦးတည်ရာ တိုင်း၊ မည်သည့် transport မှ၊ hops၊ သက်တမ်းကုန်။",
+      "announces_description": "Live + ပြန်လည် ကြည့်ရှု announce stream — မည်သူ၊ မည်သည့် interface၊ hops၊ လက်မှတ် အတည်ပြုခြင်း။",
+      "queue_description": "Transport တစ်ခုစီ၏ အပြင်သို့ packet တန်းစီ - အနက်၊ အသက်၊ ထပ်မံကြိုးစားမှု အရေအတွက်၊ ပိုင်းခြားမှု အခြေအနေ။",
+      "diagnostics_description": "မကြာသေးမီက အမှားများ၊ လက်မှတ် ပျက်ကွက်မှု၊ မူဝါဒ ပိတ်ဆို့မှု၊ transport လှည့်ပတ်မှု — operator forensics။",
+      "content_description": "Federation content store browser — ဒေသခံ cache၊ federated၊ hash-လိပ်စာ ပြန်လည် ထုတ်ယူခြင်း။"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Agent မုဒ်",
+      "subtitle": "ဤ agent သည် federation တွင် မည်သို့ ပါဝင်သည်ကို ပြောင်းပါ။ ကွန်ရက် မျက်နှာပြင်ကို ထင်ဟပ်စေသည်။"
+    }
+  }
 }

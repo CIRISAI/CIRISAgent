@@ -2064,5 +2064,68 @@
   "wa_resolve": "ፍታ",
   "wa_service_status": "የአገልግሎት ሁኔታ",
   "wa_status": "ሁኔታ",
-  "login_first_run_welcome": "እንኳን ደህና መጡ! የAI ረዳትዎን እንዴት ማቀናበር እንደሚፈልጉ ይምረጡ።"
+  "login_first_run_welcome": "እንኳን ደህና መጡ! የAI ረዳትዎን እንዴት ማቀናበር እንደሚፈልጉ ይምረጡ።",
+  "network": {
+    "title": "አውታረ መረብ",
+    "identity_card": {
+      "title": "ፌዴሬሽን ማንነት",
+      "copy_address": "አድራሻ ቅዳ",
+      "qr_label": "QR · ራቼት / ሽክርክሪት"
+    },
+    "mode_card": {
+      "title": "የወኪል ሁነታ",
+      "subtitle": "ይህ ወኪል በፌዴሬሽን ውስጥ እንዴት እንደሚሳተፍ። ሲቀየር Edge እንደገና ይጀምራል።",
+      "client_label": "ደንበኛ",
+      "client_description": "ወደ ሩቅ ኖድ ውጭ ይገናኝ።",
+      "proxy_label": "ፕሮክሲ",
+      "proxy_description": "የአካባቢ ወኪል ከፕሮክሲ ፌዴሬሽን ገጽ ጋር።",
+      "proxy_default_marker": "(ነባሪ)",
+      "server_label": "ሰርቨር",
+      "server_description": "ሙሉ የፌዴሬሽን ኖድ።",
+      "server_disk_gate": "≥256 GB ነጻ ዲስክ ይፈልጋል · {available} ነጻ ከ {required} ይፈልጋል",
+      "confirm_change_title": "እንደገና መጀመር ያስፈልጋል",
+      "confirm_change_body": "የወኪል ሁነታ መቀየር የ Edge እንደገና መጀመር ይፈልጋል። ይቀጥሉ?",
+      "confirm_change_button": "Edge እንደገና ጀምር",
+      "cancel_button": "ሰርዝ",
+      "insufficient_disk_error": "ለ SERVER ሁነታ በቂ ነጻ ዲስክ የለም። {available} ነጻ፣ {required} ይፈልጋል።"
+    },
+    "stats_strip": {
+      "peers": "አጋሮች",
+      "transports": "ማጓጓዣዎች",
+      "queue": "ወረፋ",
+      "errors": "ስህተቶች",
+      "awaiting_edge_1_0": "Edge 1.0 በመጠባበቅ ላይ"
+    },
+    "tiles": {
+      "identity": "ማንነት",
+      "map": "ካርታ",
+      "trust_graph": "የመተማመን ግራፍ",
+      "peers": "አጋሮች",
+      "interfaces": "በይነገጾች",
+      "paths": "መንገዶች",
+      "announces": "ማስታወቂያዎች",
+      "queue": "ወረፋ",
+      "diagnostics": "ምርመራዎች",
+      "content": "ይዘት",
+      "coming_soon_badge": "በቅርቡ ይመጣል"
+    },
+    "sub_screens": {
+      "identity_description": "ፌዴሬሽን ማንነት — የፈራሚ ቁልፍ፣ የሃርድዌር-ጥበቃ ማረጋገጫ ሰንሰለት፣ የራቼት ሁኔታ፣ የመሽከርከር ታሪክ።",
+      "map_description": "የአካባቢ ፌዴሬሽን ጎረቤት ኃይል-ተኮር ሸራ — አጋሮች እንደ ኖዶች፣ ማጓጓዣዎች እንደ ቀለማት ጠርዞች።",
+      "trust_graph_description": "የማጓጓዣ-መተማመን ቶፖሎጂ ኦፕሬተር እይታ — ቀጥተኛ ስጦታዎች፣ የተወከለ ስልጣን፣ ተቃራኒ ምልክቶች።",
+      "peers_description": "መደርደር የሚቻል አጋር × ማጓጓዣ ተደራሽነት ማትሪክስ — ይህ ስታክ ከሰማው እያንዳንዱ ፌዴሬሽን ማንነት።",
+      "interfaces_description": "በማጓጓዣ ጤና + ውቅር + ስታቲስቲክስ (rnstatus-ዓይነት)። በ reticulum.conf-equivalent ላይ CRUD።",
+      "paths_description": "RNS path table — Edge ለመድረስ የሚያውቀው እያንዳንዱ መድረሻ፣ በየትኛው ማጓጓዣ፣ ሆፖች፣ ማብቂያ።",
+      "announces_description": "ቀጥታ + የኋላ መለስ ማስታወቂያ ዥረት — ማን፣ የትኛው በይነገጽ፣ ሆፖች፣ የፊርማ ማረጋገጫ።",
+      "queue_description": "በማጓጓዣ የውጭ ፓኬት ወረፋ፦ ጥልቀት፣ ዕድሜ፣ ድጋሚ ሙከራ ቆጠራ፣ የመከፋፈል ሁኔታ።",
+      "diagnostics_description": "የቅርብ ጊዜ ስህተቶች፣ የፊርማ ውድቀቶች፣ የፖሊሲ ብሎኮች፣ የማጓጓዣ መለዋወጥ — የኦፕሬተር ምርመራ።",
+      "content_description": "የፌዴሬሽን ይዘት ማከማቻ አሳሽ — በአካባቢ የተከማቸ፣ የተፌዴሬት፣ በሃሽ-የተላከ ማግኘት።"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "የወኪል ሁነታ",
+      "subtitle": "ይህ ወኪል በፌዴሬሽን ውስጥ እንዴት እንደሚሳተፍ ይቀይሩ። የአውታረ መረብ ስክሪንን ያንጸባርቃል።"
+    }
+  }
 }

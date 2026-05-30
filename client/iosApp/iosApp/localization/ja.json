@@ -2064,5 +2064,68 @@
   "wa_resolve": "解決",
   "wa_service_status": "サービスステータス",
   "wa_status": "ステータス",
-  "login_first_run_welcome": "ようこそ！AIアシスタントのセットアップ方法を選択してください。"
+  "login_first_run_welcome": "ようこそ！AIアシスタントのセットアップ方法を選択してください。",
+  "network": {
+    "title": "ネットワーク",
+    "identity_card": {
+      "title": "フェデレーション ID",
+      "copy_address": "アドレスをコピー",
+      "qr_label": "QR · ラチェット / ローテーション"
+    },
+    "mode_card": {
+      "title": "エージェントモード",
+      "subtitle": "このエージェントがフェデレーションに参加する方法。変更時に Edge は再起動します。",
+      "client_label": "クライアント",
+      "client_description": "リモートノードに外向きに接続します。",
+      "proxy_label": "プロキシ",
+      "proxy_description": "プロキシフェデレーションサーフェスを持つローカルエージェント。",
+      "proxy_default_marker": "(デフォルト)",
+      "server_label": "サーバー",
+      "server_description": "完全なフェデレーションノード。",
+      "server_disk_gate": "≥256 GB の空きディスクが必要 · 空き {available}、必要 {required}",
+      "confirm_change_title": "再起動が必要です",
+      "confirm_change_body": "エージェントモードの切り替えには Edge の再起動が必要です。続行しますか?",
+      "confirm_change_button": "Edge を再起動",
+      "cancel_button": "キャンセル",
+      "insufficient_disk_error": "SERVER モードに必要な空きディスクが不足しています。空き {available}、必要 {required}。"
+    },
+    "stats_strip": {
+      "peers": "ピア",
+      "transports": "トランスポート",
+      "queue": "キュー",
+      "errors": "エラー",
+      "awaiting_edge_1_0": "Edge 1.0 待機中"
+    },
+    "tiles": {
+      "identity": "ID",
+      "map": "マップ",
+      "trust_graph": "信頼グラフ",
+      "peers": "ピア",
+      "interfaces": "インターフェース",
+      "paths": "パス",
+      "announces": "アナウンス",
+      "queue": "キュー",
+      "diagnostics": "診断",
+      "content": "コンテンツ",
+      "coming_soon_badge": "近日公開"
+    },
+    "sub_screens": {
+      "identity_description": "フェデレーション ID — 署名鍵、ハードウェアカストディ証明チェーン、ラチェット状態、ローテーション履歴。",
+      "map_description": "ローカルフェデレーション近傍の力指向キャンバス — ピアをノードとして、トランスポートを色付きエッジとして。",
+      "trust_graph_description": "トランスポート信頼トポロジのオペレータビュー — 直接付与、委任権限、敵対フラグ。",
+      "peers_description": "ソート可能なピア × トランスポート到達可能性マトリックス — このスタックが認識した全フェデレーション ID。",
+      "interfaces_description": "トランスポートごとのヘルス + 設定 + 統計 (rnstatus スタイル)。reticulum.conf 相当の CRUD。",
+      "paths_description": "RNS パステーブル — Edge が到達方法を知る各宛先、どのトランスポート経由、ホップ、有効期限。",
+      "announces_description": "ライブ + 振り返りアナウンスストリーム — 誰が、どのインターフェース、ホップ、署名検証。",
+      "queue_description": "トランスポートごとの送信パケットキュー: 深度、経過時間、再試行回数、フラグメンテーション状態。",
+      "diagnostics_description": "最近のエラー、署名失敗、ポリシーブロック、トランスポート変動 — オペレータフォレンジック。",
+      "content_description": "フェデレーションコンテンツストアブラウザ — ローカルキャッシュ、フェデレーション、ハッシュアドレス取得。"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "エージェントモード",
+      "subtitle": "このエージェントがフェデレーションに参加する方法を変更します。ネットワーク画面を反映します。"
+    }
+  }
 }

@@ -2070,5 +2070,68 @@
   "wa_resolve": "حل",
   "wa_service_status": "حالة الخدمة",
   "wa_status": "الحالة",
-  "login_first_run_welcome": "مرحباً! اختر كيفية إعداد مساعد الذكاء الاصطناعي الخاص بك."
+  "login_first_run_welcome": "مرحباً! اختر كيفية إعداد مساعد الذكاء الاصطناعي الخاص بك.",
+  "network": {
+    "title": "شبکه",
+    "identity_card": {
+      "title": "هویت فدراسیون",
+      "copy_address": "کپی آدرس",
+      "qr_label": "QR · رچت / چرخش"
+    },
+    "mode_card": {
+      "title": "حالت عامل",
+      "subtitle": "نحوه مشارکت این عامل در فدراسیون. Edge هنگام تغییر مجدداً راه‌اندازی می‌شود.",
+      "client_label": "کلاینت",
+      "client_description": "اتصال به بیرون به یک گره راه دور.",
+      "proxy_label": "پروکسی",
+      "proxy_description": "عامل محلی با سطح فدراسیون پروکسی.",
+      "proxy_default_marker": "(پیش‌فرض)",
+      "server_label": "سرور",
+      "server_description": "گره فدراسیون کامل.",
+      "server_disk_gate": "نیازمند ≥256 گیگابایت دیسک آزاد · {available} آزاد از {required} مورد نیاز",
+      "confirm_change_title": "راه‌اندازی مجدد لازم است",
+      "confirm_change_body": "تغییر حالت عامل نیازمند راه‌اندازی مجدد Edge است. ادامه می‌دهید؟",
+      "confirm_change_button": "راه‌اندازی مجدد Edge",
+      "cancel_button": "لغو",
+      "insufficient_disk_error": "دیسک آزاد کافی برای حالت SERVER وجود ندارد. {available} آزاد، {required} مورد نیاز."
+    },
+    "stats_strip": {
+      "peers": "همتاها",
+      "transports": "حمل‌ونقل‌ها",
+      "queue": "صف",
+      "errors": "خطاها",
+      "awaiting_edge_1_0": "در انتظار Edge 1.0"
+    },
+    "tiles": {
+      "identity": "هویت",
+      "map": "نقشه",
+      "trust_graph": "گراف اعتماد",
+      "peers": "همتاها",
+      "interfaces": "رابط‌ها",
+      "paths": "مسیرها",
+      "announces": "اعلانات",
+      "queue": "صف",
+      "diagnostics": "تشخیص‌ها",
+      "content": "محتوا",
+      "coming_soon_badge": "به‌زودی"
+    },
+    "sub_screens": {
+      "identity_description": "هویت فدراسیون — کلید امضاکننده، زنجیره گواهی نگهداری سخت‌افزاری، وضعیت رچت، تاریخچه چرخش.",
+      "map_description": "بوم نیرومحور همسایگی فدراسیون محلی — همتاها به‌عنوان گره‌ها، حمل‌ونقل‌ها به‌عنوان یال‌های رنگی.",
+      "trust_graph_description": "نمای اپراتور توپولوژی اعتماد حمل‌ونقل — اعطاهای مستقیم، اقتدار تفویض‌شده، پرچم‌های خصمانه.",
+      "peers_description": "ماتریس قابل مرتب‌سازی همتا × دسترسی‌پذیری حمل‌ونقل — هر هویت فدراسیون که این پشته شنیده است.",
+      "interfaces_description": "سلامت + پیکربندی + آمار به ازای هر حمل‌ونقل (سبک rnstatus). CRUD روی معادل reticulum.conf.",
+      "paths_description": "جدول مسیر RNS — هر مقصدی که Edge می‌داند چگونه به آن برسد، از طریق کدام حمل‌ونقل، پرش‌ها، انقضا.",
+      "announces_description": "جریان اعلان زنده + گذشته‌نگر — چه کسی، کدام رابط، پرش‌ها، تأیید امضا.",
+      "queue_description": "صف بسته خروجی به ازای هر حمل‌ونقل: عمق، سن، شمارش تلاش مجدد، وضعیت قطعه‌قطعه‌سازی.",
+      "diagnostics_description": "خطاهای اخیر، شکست‌های امضا، بلوک‌های خط‌مشی، تلاطم حمل‌ونقل — پزشکی قانونی اپراتور.",
+      "content_description": "مرورگر فروشگاه محتوای فدراسیون — کش محلی، فدراسیون‌شده، بازیابی هش-آدرس."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "حالت عامل",
+      "subtitle": "تغییر نحوه مشارکت این عامل در فدراسیون. صفحه شبکه را منعکس می‌کند."
+    }
+  }
 }

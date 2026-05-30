@@ -2065,5 +2065,68 @@
     "metrics": "Metrics",
     "services": "Services"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "নেটওয়ার্ক",
+    "identity_card": {
+      "title": "ফেডারেশন পরিচয়",
+      "copy_address": "ঠিকানা অনুলিপি করুন",
+      "qr_label": "QR · র‍্যাচেট / আবর্তন"
+    },
+    "mode_card": {
+      "title": "এজেন্ট মোড",
+      "subtitle": "এই এজেন্ট ফেডারেশনে কীভাবে অংশগ্রহণ করে। পরিবর্তনে Edge পুনরায় চালু হবে।",
+      "client_label": "ক্লায়েন্ট",
+      "client_description": "একটি দূরবর্তী নোডে বাহ্যিকভাবে সংযোগ করুন।",
+      "proxy_label": "প্রক্সি",
+      "proxy_description": "প্রক্সি ফেডারেশন পৃষ্ঠতল সহ স্থানীয় এজেন্ট।",
+      "proxy_default_marker": "(ডিফল্ট)",
+      "server_label": "সার্ভার",
+      "server_description": "সম্পূর্ণ ফেডারেশন নোড।",
+      "server_disk_gate": "≥256 GB ফাঁকা ডিস্ক প্রয়োজন · {available} ফাঁকা, {required} প্রয়োজন",
+      "confirm_change_title": "পুনরায় চালু করা প্রয়োজন",
+      "confirm_change_body": "এজেন্ট মোড পরিবর্তন করতে Edge পুনরায় চালু করতে হবে। চালিয়ে যাবেন?",
+      "confirm_change_button": "Edge পুনরায় চালু করুন",
+      "cancel_button": "বাতিল",
+      "insufficient_disk_error": "SERVER মোডের জন্য পর্যাপ্ত ফাঁকা ডিস্ক নেই। {available} ফাঁকা, {required} প্রয়োজন।"
+    },
+    "stats_strip": {
+      "peers": "পিয়ার্স",
+      "transports": "ট্রান্সপোর্ট",
+      "queue": "সারি",
+      "errors": "ত্রুটি",
+      "awaiting_edge_1_0": "Edge 1.0 প্রতীক্ষারত"
+    },
+    "tiles": {
+      "identity": "পরিচয়",
+      "map": "মানচিত্র",
+      "trust_graph": "ট্রাস্ট গ্রাফ",
+      "peers": "পিয়ার্স",
+      "interfaces": "ইন্টারফেস",
+      "paths": "পাথ",
+      "announces": "ঘোষণা",
+      "queue": "সারি",
+      "diagnostics": "ডায়াগনস্টিকস",
+      "content": "বিষয়বস্তু",
+      "coming_soon_badge": "শীঘ্রই আসছে"
+    },
+    "sub_screens": {
+      "identity_description": "ফেডারেশন পরিচয় — স্বাক্ষরকারী কী, হার্ডওয়্যার-কাস্টডি প্রমাণীকরণ চেইন, র‍্যাচেট অবস্থা, আবর্তন ইতিহাস।",
+      "map_description": "স্থানীয় ফেডারেশন পাড়ার ফোর্স-ডিরেক্টেড ক্যানভাস — পিয়ার্স নোড হিসাবে, ট্রান্সপোর্ট রঙিন প্রান্ত হিসাবে।",
+      "trust_graph_description": "ট্রান্সপোর্ট-ট্রাস্ট টপোলজির অপারেটর দৃশ্য — সরাসরি অনুমোদন, প্রতিনিধি কর্তৃত্ব, প্রতিকূল পতাকা।",
+      "peers_description": "সাজানো পিয়ার × ট্রান্সপোর্ট নাগালযোগ্যতা ম্যাট্রিক্স — প্রতিটি ফেডারেশন পরিচয় যা এই স্ট্যাক শুনেছে।",
+      "interfaces_description": "প্রতি-ট্রান্সপোর্ট স্বাস্থ্য + কনফিগ + পরিসংখ্যান (rnstatus-শৈলী)। reticulum.conf-এর সমতুল্যের উপর CRUD।",
+      "paths_description": "RNS পাথ টেবিল — Edge পৌঁছাতে জানে এমন প্রতিটি গন্তব্য, কোন ট্রান্সপোর্ট দিয়ে, হপস, মেয়াদ।",
+      "announces_description": "লাইভ + পূর্ববর্তী ঘোষণা স্ট্রিম — কে, কোন ইন্টারফেস, হপস, স্বাক্ষর যাচাইকরণ।",
+      "queue_description": "প্রতি ট্রান্সপোর্টে বহির্গামী প্যাকেট সারি: গভীরতা, বয়স, পুনরায় চেষ্টা গণনা, খণ্ডিতকরণ অবস্থা।",
+      "diagnostics_description": "সাম্প্রতিক ত্রুটি, স্বাক্ষর ব্যর্থতা, নীতি ব্লক, ট্রান্সপোর্ট চার্ন — অপারেটর ফরেনসিক।",
+      "content_description": "ফেডারেশন কন্টেন্ট স্টোর ব্রাউজার — স্থানীয়ভাবে ক্যাশড, ফেডারেটেড, হ্যাশ-অ্যাড্রেস করা পুনরুদ্ধার।"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "এজেন্ট মোড",
+      "subtitle": "এই এজেন্ট ফেডারেশনে কীভাবে অংশগ্রহণ করে তা পরিবর্তন করুন। নেটওয়ার্ক স্ক্রিনকে প্রতিফলিত করে।"
+    }
+  }
 }

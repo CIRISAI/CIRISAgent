@@ -2064,5 +2064,68 @@
     "metrics": "Metrics",
     "services": "Services"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "Nẹtiwọki",
+    "identity_card": {
+      "title": "Idanimọ federation",
+      "copy_address": "Daakọ adirẹsi",
+      "qr_label": "QR · ratchet / iyiyi"
+    },
+    "mode_card": {
+      "title": "Ipo aṣoju",
+      "subtitle": "Bawo ni aṣoju yii ṣe kopa ninu federation. Edge yoo tun bẹrẹ ni iyipada.",
+      "client_label": "Onibara",
+      "client_description": "So mọ ita si nodu jijinna.",
+      "proxy_label": "Proxy",
+      "proxy_description": "Aṣoju agbegbe pẹlu oju federation proxy.",
+      "proxy_default_marker": "(aiyipada)",
+      "server_label": "Olupin",
+      "server_description": "Nodu federation pipe.",
+      "server_disk_gate": "Nilo disk ọfẹ ≥256 GB · {available} ọfẹ ninu {required} ti a nilo",
+      "confirm_change_title": "Atunbẹrẹ nilo",
+      "confirm_change_body": "Yiyipada ipo aṣoju nilo atunbẹrẹ Edge. Tẹsiwaju?",
+      "confirm_change_button": "Tun Edge bẹrẹ",
+      "cancel_button": "Fagilé",
+      "insufficient_disk_error": "Disk ọfẹ ko to fun ipo SERVER. {available} ọfẹ, {required} nilo."
+    },
+    "stats_strip": {
+      "peers": "Awọn ẹlẹgbẹ",
+      "transports": "Awọn gbigbe",
+      "queue": "Tito",
+      "errors": "Awọn aṣiṣe",
+      "awaiting_edge_1_0": "Nduro fun Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Idanimọ",
+      "map": "Maapu",
+      "trust_graph": "Aworan igbẹkẹle",
+      "peers": "Awọn ẹlẹgbẹ",
+      "interfaces": "Awọn atọkun",
+      "paths": "Awọn ọna",
+      "announces": "Awọn ikede",
+      "queue": "Tito",
+      "diagnostics": "Awọn ayẹwo",
+      "content": "Akoonu",
+      "coming_soon_badge": "Nbọ laipẹ"
+    },
+    "sub_screens": {
+      "identity_description": "Idanimọ federation — bọtini ti o fọwọsi, ọwọn ijẹrisi atimọle ohun elo, ipo ratchet, itan iyiyi.",
+      "map_description": "Kanfasi ti agbara n ṣamọna ti agbegbe federation agbegbe — awọn ẹlẹgbẹ bi nodu, awọn gbigbe bi awọn egbe ti o ni awọ.",
+      "trust_graph_description": "Iwoye oniṣẹ ti topology igbẹkẹle gbigbe — awọn ifunni taara, aṣẹ ti a fi le, awọn asia atako.",
+      "peers_description": "Matrix ti o le ṣe pin ti ẹlẹgbẹ × wiwa gbigbe — gbogbo idanimọ federation ti akopọ yii ti gbọ.",
+      "interfaces_description": "Ilera fun gbigbe kọọkan + iṣeto + awọn iṣiro (ara rnstatus). CRUD lori deede reticulum.conf.",
+      "paths_description": "Tabili ọna RNS — gbogbo opin ti Edge mọ bi o ṣe le de ọdọ, nipasẹ gbigbe wo, awọn fo, ipari.",
+      "announces_description": "Iṣan ikede laaye + ifẹyinti — tani, atọkun wo, awọn fo, ifọwọsi ibuwọlu.",
+      "queue_description": "Tito akopọ ti njade fun gbigbe kọọkan: ijinle, ọjọ ori, kika tun-gbiyanju, ipo pinpin.",
+      "diagnostics_description": "Awọn aṣiṣe aipẹ, awọn ikuna ibuwọlu, awọn idina eto imulo, ipade gbigbe — iṣẹ-ẹrọ oniṣẹ.",
+      "content_description": "Aṣawakiri ile-itaja akoonu federation — ti a fipamọ sinu agbegbe, ti a darapọ, igbapada adirẹsi hash."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Ipo aṣoju",
+      "subtitle": "Yi bii aṣoju yii ṣe kopa ninu federation pada. Ṣe afihan iboju Nẹtiwọki."
+    }
+  }
 }

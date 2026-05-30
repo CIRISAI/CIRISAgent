@@ -25,6 +25,7 @@ from .routes import (
     dsar,
     dsar_multi_source,
     emergency,
+    federation,
     memory,
     my_data,
     partnership,
@@ -375,6 +376,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         partnership.router,
         transparency.router,
         wallet.router,
+        federation.router,
     ]
 
     for router in v1_routers:

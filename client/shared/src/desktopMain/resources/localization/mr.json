@@ -2055,5 +2055,68 @@
     "metrics": "Metrics",
     "services": "सेवाs"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "नेटवर्क",
+    "identity_card": {
+      "title": "फेडरेशन ओळख",
+      "copy_address": "पत्ता कॉपी करा",
+      "qr_label": "QR · रॅचेट / फिरवणे"
+    },
+    "mode_card": {
+      "title": "एजंट मोड",
+      "subtitle": "हा एजंट फेडरेशनमध्ये कसा भाग घेतो. बदलावर Edge पुन्हा सुरू होईल.",
+      "client_label": "क्लायंट",
+      "client_description": "दूरस्थ नोडशी बाहेरून कनेक्ट करा.",
+      "proxy_label": "प्रॉक्सी",
+      "proxy_description": "प्रॉक्सी फेडरेशन पृष्ठभागासह स्थानिक एजंट.",
+      "proxy_default_marker": "(डीफॉल्ट)",
+      "server_label": "सर्व्हर",
+      "server_description": "पूर्ण फेडरेशन नोड.",
+      "server_disk_gate": "≥256 GB मोकळी डिस्क आवश्यक · {available} मोकळी, {required} आवश्यक",
+      "confirm_change_title": "रीस्टार्ट आवश्यक",
+      "confirm_change_body": "एजंट मोड बदलण्यासाठी Edge रीस्टार्ट आवश्यक आहे. सुरू ठेवायचे?",
+      "confirm_change_button": "Edge रीस्टार्ट करा",
+      "cancel_button": "रद्द करा",
+      "insufficient_disk_error": "SERVER मोडसाठी पुरेशी मोकळी डिस्क नाही. {available} मोकळी, {required} आवश्यक."
+    },
+    "stats_strip": {
+      "peers": "पीयर्स",
+      "transports": "ट्रान्सपोर्ट",
+      "queue": "रांग",
+      "errors": "त्रुटी",
+      "awaiting_edge_1_0": "Edge 1.0 ची प्रतीक्षा"
+    },
+    "tiles": {
+      "identity": "ओळख",
+      "map": "नकाशा",
+      "trust_graph": "विश्वास आलेख",
+      "peers": "पीयर्स",
+      "interfaces": "इंटरफेस",
+      "paths": "मार्ग",
+      "announces": "घोषणा",
+      "queue": "रांग",
+      "diagnostics": "निदान",
+      "content": "सामग्री",
+      "coming_soon_badge": "लवकरच येत आहे"
+    },
+    "sub_screens": {
+      "identity_description": "फेडरेशन ओळख — स्वाक्षरीकर्ता की, हार्डवेअर-कस्टडी प्रमाणीकरण साखळी, रॅचेट स्थिती, फिरवणे इतिहास.",
+      "map_description": "स्थानिक फेडरेशन शेजारचा बल-निर्देशित कॅनव्हास — पीयर्स नोड्स म्हणून, ट्रान्सपोर्ट रंगीत किनार्‍या म्हणून.",
+      "trust_graph_description": "ट्रान्सपोर्ट-विश्वास टोपोलॉजीचे ऑपरेटर दृश्य — थेट अनुदाने, प्रत्यायोजित प्राधिकरण, विरोधी ध्वज.",
+      "peers_description": "क्रमबद्ध पीयर × ट्रान्सपोर्ट पोहोचयोग्यता मॅट्रिक्स — या स्टॅकने ऐकलेली प्रत्येक फेडरेशन ओळख.",
+      "interfaces_description": "प्रति-ट्रान्सपोर्ट आरोग्य + कॉन्फिग + आकडेवारी (rnstatus-शैली). reticulum.conf-समतुल्यवर CRUD.",
+      "paths_description": "RNS मार्ग सारणी — Edge ला पोहोचण्याचा मार्ग माहीत असलेले प्रत्येक गंतव्य, कोणत्या ट्रान्सपोर्टद्वारे, हॉप्स, मुदत.",
+      "announces_description": "थेट + पूर्वलक्षी घोषणा प्रवाह — कोण, कोणता इंटरफेस, हॉप्स, स्वाक्षरी प्रमाणीकरण.",
+      "queue_description": "प्रति ट्रान्सपोर्ट आउटबाउंड पॅकेट रांग: खोली, वय, पुन्हा प्रयत्न संख्या, खंडित स्थिती.",
+      "diagnostics_description": "अलीकडील त्रुटी, स्वाक्षरी अपयश, धोरण ब्लॉक्स, ट्रान्सपोर्ट मंथन — ऑपरेटर न्यायवैद्यक.",
+      "content_description": "फेडरेशन सामग्री संचय ब्राउझर — स्थानिकरित्या कॅश्ड, फेडरेटेड, हॅश-संबोधित पुनर्प्राप्ती."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "एजंट मोड",
+      "subtitle": "हा एजंट फेडरेशनमध्ये कसा भाग घेतो ते बदला. नेटवर्क स्क्रीन प्रतिबिंबित करते."
+    }
+  }
 }

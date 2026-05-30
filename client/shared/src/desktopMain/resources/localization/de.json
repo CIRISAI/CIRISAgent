@@ -2055,5 +2055,68 @@
   "wa_resolve": "Auflösen",
   "wa_service_status": "Dienststatus",
   "wa_status": "Status",
-  "login_first_run_welcome": "Willkommen! Wählen Sie, wie Sie Ihren KI-Assistenten einrichten möchten."
+  "login_first_run_welcome": "Willkommen! Wählen Sie, wie Sie Ihren KI-Assistenten einrichten möchten.",
+  "network": {
+    "title": "Netzwerk",
+    "identity_card": {
+      "title": "Föderationsidentität",
+      "copy_address": "Adresse kopieren",
+      "qr_label": "QR · Ratchet / Rotation"
+    },
+    "mode_card": {
+      "title": "Agentenmodus",
+      "subtitle": "Wie dieser Agent an der Föderation teilnimmt. Edge wird bei einer Änderung neu gestartet.",
+      "client_label": "Client",
+      "client_description": "Verbindung nach außen zu einem entfernten Knoten.",
+      "proxy_label": "Proxy",
+      "proxy_description": "Lokaler Agent mit Proxy-Föderationsoberfläche.",
+      "proxy_default_marker": "(Standard)",
+      "server_label": "Server",
+      "server_description": "Vollständiger Föderationsknoten.",
+      "server_disk_gate": "Erfordert ≥256 GB freien Speicher · {available} frei von {required} benötigt",
+      "confirm_change_title": "Neustart erforderlich",
+      "confirm_change_body": "Das Wechseln des Agentenmodus erfordert einen Neustart von Edge. Fortfahren?",
+      "confirm_change_button": "Edge neu starten",
+      "cancel_button": "Abbrechen",
+      "insufficient_disk_error": "Nicht genug freier Speicher für SERVER-Modus. {available} frei, {required} benötigt."
+    },
+    "stats_strip": {
+      "peers": "Peers",
+      "transports": "Transports",
+      "queue": "Warteschlange",
+      "errors": "Fehler",
+      "awaiting_edge_1_0": "Warte auf Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Identität",
+      "map": "Karte",
+      "trust_graph": "Vertrauensgraph",
+      "peers": "Peers",
+      "interfaces": "Schnittstellen",
+      "paths": "Pfade",
+      "announces": "Ankündigungen",
+      "queue": "Warteschlange",
+      "diagnostics": "Diagnose",
+      "content": "Inhalt",
+      "coming_soon_badge": "Demnächst"
+    },
+    "sub_screens": {
+      "identity_description": "Föderationsidentität — Signierschlüssel, Hardware-Verwahrungs-Attestierungskette, Ratchet-Status, Rotationshistorie.",
+      "map_description": "Kraftgerichtete Leinwand der lokalen Föderationsnachbarschaft — Peers als Knoten, Transports als farbige Kanten.",
+      "trust_graph_description": "Operator-Ansicht der Transport-Vertrauenstopologie — direkte Vergaben, delegierte Autorität, gegnerische Flags.",
+      "peers_description": "Sortierbare Peer × Transport-Erreichbarkeitsmatrix — jede Föderationsidentität, von der dieser Stack gehört hat.",
+      "interfaces_description": "Pro-Transport Gesundheit + Konfig + Statistiken (rnstatus-Stil). CRUD über das reticulum.conf-Äquivalent.",
+      "paths_description": "RNS-Pfadtabelle — jedes Ziel, das Edge zu erreichen weiß, über welchen Transport, Hops, Ablauf.",
+      "announces_description": "Live + retrospektiver Ankündigungsstrom — wer, welche Schnittstelle, Hops, Signaturvalidierung.",
+      "queue_description": "Ausgehende Paketwarteschlange pro Transport: Tiefe, Alter, Wiederholungsanzahl, Fragmentierungszustand.",
+      "diagnostics_description": "Aktuelle Fehler, Signaturfehler, Richtlinienblockaden, Transport-Churn — Operator-Forensik.",
+      "content_description": "Föderations-Inhaltsspeicher-Browser — lokal zwischengespeichert, föderiert, hash-adressierter Abruf."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Agentenmodus",
+      "subtitle": "Ändern, wie dieser Agent an der Föderation teilnimmt. Spiegelt den Netzwerk-Bildschirm wider."
+    }
+  }
 }

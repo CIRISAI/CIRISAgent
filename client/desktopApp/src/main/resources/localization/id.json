@@ -2064,5 +2064,68 @@
     "metrics": "Metrics",
     "services": "Services"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "Jaringan",
+    "identity_card": {
+      "title": "Identitas federasi",
+      "copy_address": "Salin alamat",
+      "qr_label": "QR · ratchet / rotasi"
+    },
+    "mode_card": {
+      "title": "Mode agen",
+      "subtitle": "Bagaimana agen ini berpartisipasi dalam federasi. Edge akan dimulai ulang saat perubahan.",
+      "client_label": "Klien",
+      "client_description": "Hubungkan ke luar ke simpul jarak jauh.",
+      "proxy_label": "Proxy",
+      "proxy_description": "Agen lokal dengan permukaan federasi proxy.",
+      "proxy_default_marker": "(default)",
+      "server_label": "Server",
+      "server_description": "Simpul federasi lengkap.",
+      "server_disk_gate": "Memerlukan disk kosong ≥256 GB · {available} kosong dari {required} diperlukan",
+      "confirm_change_title": "Diperlukan mulai ulang",
+      "confirm_change_body": "Mengubah mode agen memerlukan mulai ulang Edge. Lanjutkan?",
+      "confirm_change_button": "Mulai ulang Edge",
+      "cancel_button": "Batal",
+      "insufficient_disk_error": "Disk kosong tidak cukup untuk mode SERVER. {available} kosong, {required} diperlukan."
+    },
+    "stats_strip": {
+      "peers": "Peer",
+      "transports": "Transport",
+      "queue": "Antrean",
+      "errors": "Kesalahan",
+      "awaiting_edge_1_0": "Menunggu Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Identitas",
+      "map": "Peta",
+      "trust_graph": "Grafik kepercayaan",
+      "peers": "Peer",
+      "interfaces": "Antarmuka",
+      "paths": "Jalur",
+      "announces": "Pengumuman",
+      "queue": "Antrean",
+      "diagnostics": "Diagnostik",
+      "content": "Konten",
+      "coming_soon_badge": "Segera hadir"
+    },
+    "sub_screens": {
+      "identity_description": "Identitas federasi — kunci penandatangan, rantai atestasi penyimpanan perangkat keras, status ratchet, riwayat rotasi.",
+      "map_description": "Kanvas terarah-gaya dari lingkungan federasi lokal — peer sebagai simpul, transport sebagai tepi berwarna.",
+      "trust_graph_description": "Tampilan operator topologi kepercayaan transport — pemberian langsung, otoritas yang didelegasikan, bendera musuh.",
+      "peers_description": "Matriks peer × keterjangkauan transport yang dapat diurutkan — setiap identitas federasi yang pernah didengar stack ini.",
+      "interfaces_description": "Kesehatan + konfig + statistik per transport (gaya rnstatus). CRUD pada padanan reticulum.conf.",
+      "paths_description": "Tabel jalur RNS — setiap tujuan yang Edge tahu cara mencapainya, melalui transport mana, hop, kedaluwarsa.",
+      "announces_description": "Aliran pengumuman langsung + retrospektif — siapa, antarmuka mana, hop, validasi tanda tangan.",
+      "queue_description": "Antrean paket keluar per transport: kedalaman, usia, jumlah coba ulang, status fragmentasi.",
+      "diagnostics_description": "Kesalahan terbaru, kegagalan tanda tangan, blokir kebijakan, perubahan transport — forensik operator.",
+      "content_description": "Penjelajah penyimpanan konten federasi — di-cache lokal, federasi, pengambilan beralamat hash."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Mode agen",
+      "subtitle": "Ubah cara agen ini berpartisipasi dalam federasi. Mencerminkan layar Jaringan."
+    }
+  }
 }

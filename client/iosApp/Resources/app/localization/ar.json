@@ -2064,5 +2064,68 @@
   "wa_resolve": "حل",
   "wa_service_status": "حالة الخدمة",
   "wa_status": "الحالة",
-  "login_first_run_welcome": "مرحباً! اختر كيفية إعداد مساعد الذكاء الاصطناعي الخاص بك."
+  "login_first_run_welcome": "مرحباً! اختر كيفية إعداد مساعد الذكاء الاصطناعي الخاص بك.",
+  "network": {
+    "title": "الشبكة",
+    "identity_card": {
+      "title": "هوية الاتحاد",
+      "copy_address": "نسخ العنوان",
+      "qr_label": "QR · المفتاح المتقدم / التدوير"
+    },
+    "mode_card": {
+      "title": "وضع الوكيل",
+      "subtitle": "كيفية مشاركة هذا الوكيل في الاتحاد. ستتم إعادة تشغيل Edge عند التغيير.",
+      "client_label": "عميل",
+      "client_description": "الاتصال خارجياً بعقدة بعيدة.",
+      "proxy_label": "وسيط",
+      "proxy_description": "وكيل محلي بواجهة اتحاد وسيطة.",
+      "proxy_default_marker": "(افتراضي)",
+      "server_label": "خادم",
+      "server_description": "عقدة اتحاد كاملة.",
+      "server_disk_gate": "يتطلب ≥256 غ.ب من القرص الحر · {available} متاح من {required} مطلوب",
+      "confirm_change_title": "إعادة التشغيل مطلوبة",
+      "confirm_change_body": "يتطلب تبديل وضع الوكيل إعادة تشغيل Edge. متابعة؟",
+      "confirm_change_button": "إعادة تشغيل Edge",
+      "cancel_button": "إلغاء",
+      "insufficient_disk_error": "لا يوجد قرص حر كافٍ لوضع SERVER. {available} متاح، {required} مطلوب."
+    },
+    "stats_strip": {
+      "peers": "النظراء",
+      "transports": "وسائل النقل",
+      "queue": "قائمة الانتظار",
+      "errors": "أخطاء",
+      "awaiting_edge_1_0": "في انتظار Edge 1.0"
+    },
+    "tiles": {
+      "identity": "الهوية",
+      "map": "الخريطة",
+      "trust_graph": "رسم الثقة",
+      "peers": "النظراء",
+      "interfaces": "الواجهات",
+      "paths": "المسارات",
+      "announces": "الإعلانات",
+      "queue": "قائمة الانتظار",
+      "diagnostics": "التشخيصات",
+      "content": "المحتوى",
+      "coming_soon_badge": "قريباً"
+    },
+    "sub_screens": {
+      "identity_description": "هوية الاتحاد — مفتاح التوقيع، سلسلة شهادات حفظ الأجهزة، حالة المفتاح المتقدم، تاريخ التدوير.",
+      "map_description": "لوحة موجهة بالقوة لجوار الاتحاد المحلي — النظراء كعقد، وسائل النقل كحواف ملونة.",
+      "trust_graph_description": "عرض المشغل لطوبولوجيا ثقة النقل — منح مباشرة، سلطة مفوضة، علامات معادية.",
+      "peers_description": "مصفوفة قابلة للفرز للنظراء × إمكانية الوصول للنقل — كل هوية اتحاد سمعت بها هذه الحزمة.",
+      "interfaces_description": "صحة + تكوين + إحصاءات لكل نقل (نمط rnstatus). CRUD على ما يعادل reticulum.conf.",
+      "paths_description": "جدول مسارات RNS — كل وجهة يعرف Edge كيفية الوصول إليها، عبر أي نقل، القفزات، انتهاء الصلاحية.",
+      "announces_description": "تدفق إعلانات مباشر + بأثر رجعي — من، أي واجهة، القفزات، التحقق من التوقيع.",
+      "queue_description": "قائمة انتظار الحزم الصادرة لكل نقل: العمق، العمر، عدد إعادة المحاولة، حالة التجزئة.",
+      "diagnostics_description": "أخطاء حديثة، فشل التوقيع، حجب السياسة، اضطراب النقل — تحليل المشغل.",
+      "content_description": "متصفح مخزن محتوى الاتحاد — مخبأ محلياً، متحد، استرجاع بالعنونة بالتجزئة."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "وضع الوكيل",
+      "subtitle": "تغيير كيفية مشاركة هذا الوكيل في الاتحاد. يعكس شاشة الشبكة."
+    }
+  }
 }

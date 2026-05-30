@@ -2055,5 +2055,68 @@
     "metrics": "Metrics",
     "services": "Services"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "ਨੈੱਟਵਰਕ",
+    "identity_card": {
+      "title": "ਫੈਡਰੇਸ਼ਨ ਪਛਾਣ",
+      "copy_address": "ਪਤਾ ਕਾਪੀ ਕਰੋ",
+      "qr_label": "QR · ਰੈਚੇਟ / ਘੁੰਮਾਉਣਾ"
+    },
+    "mode_card": {
+      "title": "ਏਜੰਟ ਮੋਡ",
+      "subtitle": "ਇਹ ਏਜੰਟ ਫੈਡਰੇਸ਼ਨ ਵਿੱਚ ਕਿਵੇਂ ਹਿੱਸਾ ਲੈਂਦਾ ਹੈ। ਬਦਲਾਅ ਉੱਤੇ Edge ਮੁੜ ਚਾਲੂ ਹੋਵੇਗਾ।",
+      "client_label": "ਕਲਾਇੰਟ",
+      "client_description": "ਦੂਰ-ਦੁਰਾਡੇ ਨੋਡ ਨਾਲ ਬਾਹਰੀ ਤੌਰ 'ਤੇ ਕਨੈਕਟ ਕਰੋ।",
+      "proxy_label": "ਪ੍ਰੌਕਸੀ",
+      "proxy_description": "ਪ੍ਰੌਕਸੀ ਫੈਡਰੇਸ਼ਨ ਸਤ੍ਹਾ ਵਾਲਾ ਸਥਾਨਕ ਏਜੰਟ।",
+      "proxy_default_marker": "(ਡਿਫੌਲਟ)",
+      "server_label": "ਸਰਵਰ",
+      "server_description": "ਪੂਰਾ ਫੈਡਰੇਸ਼ਨ ਨੋਡ।",
+      "server_disk_gate": "≥256 GB ਖਾਲੀ ਡਿਸਕ ਦੀ ਲੋੜ · {available} ਖਾਲੀ, {required} ਲੋੜੀਂਦੀ",
+      "confirm_change_title": "ਮੁੜ ਚਾਲੂ ਕਰਨਾ ਲੋੜੀਂਦਾ",
+      "confirm_change_body": "ਏਜੰਟ ਮੋਡ ਬਦਲਣ ਲਈ Edge ਨੂੰ ਮੁੜ ਚਾਲੂ ਕਰਨਾ ਪਵੇਗਾ। ਜਾਰੀ ਰੱਖਣਾ?",
+      "confirm_change_button": "Edge ਮੁੜ ਚਾਲੂ ਕਰੋ",
+      "cancel_button": "ਰੱਦ ਕਰੋ",
+      "insufficient_disk_error": "SERVER ਮੋਡ ਲਈ ਕਾਫ਼ੀ ਖਾਲੀ ਡਿਸਕ ਨਹੀਂ। {available} ਖਾਲੀ, {required} ਲੋੜੀਂਦੀ।"
+    },
+    "stats_strip": {
+      "peers": "ਪੀਅਰਜ਼",
+      "transports": "ਟਰਾਂਸਪੋਰਟ",
+      "queue": "ਕਤਾਰ",
+      "errors": "ਗਲਤੀਆਂ",
+      "awaiting_edge_1_0": "Edge 1.0 ਦੀ ਉਡੀਕ"
+    },
+    "tiles": {
+      "identity": "ਪਛਾਣ",
+      "map": "ਨਕਸ਼ਾ",
+      "trust_graph": "ਭਰੋਸੇ ਦਾ ਗ੍ਰਾਫ",
+      "peers": "ਪੀਅਰਜ਼",
+      "interfaces": "ਇੰਟਰਫੇਸ",
+      "paths": "ਰਾਹ",
+      "announces": "ਘੋਸ਼ਣਾਵਾਂ",
+      "queue": "ਕਤਾਰ",
+      "diagnostics": "ਨਿਦਾਨ",
+      "content": "ਸਮੱਗਰੀ",
+      "coming_soon_badge": "ਜਲਦੀ ਆ ਰਿਹਾ ਹੈ"
+    },
+    "sub_screens": {
+      "identity_description": "ਫੈਡਰੇਸ਼ਨ ਪਛਾਣ — ਹਸਤਾਖਰਕਰਤਾ ਕੁੰਜੀ, ਹਾਰਡਵੇਅਰ-ਕਸਟਡੀ ਪ੍ਰਮਾਣੀਕਰਨ ਚੇਨ, ਰੈਚੇਟ ਸਥਿਤੀ, ਘੁੰਮਾਉਣ ਇਤਿਹਾਸ।",
+      "map_description": "ਸਥਾਨਕ ਫੈਡਰੇਸ਼ਨ ਆਂਢ-ਗੁਆਂਢ ਦਾ ਫੋਰਸ-ਡਾਇਰੈਕਟਿਡ ਕੈਨਵਸ — ਪੀਅਰਜ਼ ਨੋਡ ਵਜੋਂ, ਟਰਾਂਸਪੋਰਟ ਰੰਗਦਾਰ ਕਿਨਾਰਿਆਂ ਵਜੋਂ।",
+      "trust_graph_description": "ਟਰਾਂਸਪੋਰਟ-ਭਰੋਸੇ ਟੋਪੋਲੋਜੀ ਦਾ ਆਪਰੇਟਰ ਦ੍ਰਿਸ਼ — ਸਿੱਧੀਆਂ ਮਨਜ਼ੂਰੀਆਂ, ਡੈਲੀਗੇਟ ਅਥਾਰਟੀ, ਵਿਰੋਧੀ ਝੰਡੇ।",
+      "peers_description": "ਕ੍ਰਮਬੱਧ ਪੀਅਰ × ਟਰਾਂਸਪੋਰਟ ਪਹੁੰਚਯੋਗਤਾ ਮੈਟਰਿਕਸ — ਹਰ ਫੈਡਰੇਸ਼ਨ ਪਛਾਣ ਜੋ ਇਸ ਸਟੈਕ ਨੇ ਸੁਣੀ ਹੈ।",
+      "interfaces_description": "ਪ੍ਰਤੀ-ਟਰਾਂਸਪੋਰਟ ਸਿਹਤ + ਕੌਨਫਿਗ + ਅੰਕੜੇ (rnstatus-ਸ਼ੈਲੀ)। reticulum.conf-ਸਮਾਨ ਉੱਤੇ CRUD।",
+      "paths_description": "RNS ਪਾਥ ਟੇਬਲ — ਹਰ ਮੰਜ਼ਿਲ ਜਿੱਥੇ Edge ਪਹੁੰਚਣਾ ਜਾਣਦਾ ਹੈ, ਕਿਸ ਟਰਾਂਸਪੋਰਟ ਰਾਹੀਂ, ਹੌਪਸ, ਮਿਆਦ।",
+      "announces_description": "ਲਾਈਵ + ਪਿਛਾਖੜੀ ਘੋਸ਼ਣਾ ਸਟ੍ਰੀਮ — ਕੌਣ, ਕਿਹੜਾ ਇੰਟਰਫੇਸ, ਹੌਪਸ, ਹਸਤਾਖਰ ਪੁਸ਼ਟੀਕਰਨ।",
+      "queue_description": "ਪ੍ਰਤੀ ਟਰਾਂਸਪੋਰਟ ਆਊਟਬਾਉਂਡ ਪੈਕੇਟ ਕਤਾਰ: ਡੂੰਘਾਈ, ਉਮਰ, ਮੁੜ-ਕੋਸ਼ਿਸ਼ ਗਿਣਤੀ, ਟੁਕੜਾਕਰਨ ਸਥਿਤੀ।",
+      "diagnostics_description": "ਹਾਲੀਆ ਗਲਤੀਆਂ, ਹਸਤਾਖਰ ਅਸਫਲਤਾਵਾਂ, ਨੀਤੀ ਬਲਾਕ, ਟਰਾਂਸਪੋਰਟ ਮੰਥਨ — ਆਪਰੇਟਰ ਫੋਰੈਂਸਿਕ।",
+      "content_description": "ਫੈਡਰੇਸ਼ਨ ਸਮੱਗਰੀ ਸਟੋਰ ਬਰਾਊਜ਼ਰ — ਸਥਾਨਕ ਤੌਰ 'ਤੇ ਕੈਸ਼, ਫੈਡਰੇਟਿਡ, ਹੈਸ਼-ਪਤਾ ਪ੍ਰਾਪਤੀ।"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "ਏਜੰਟ ਮੋਡ",
+      "subtitle": "ਇਹ ਏਜੰਟ ਫੈਡਰੇਸ਼ਨ ਵਿੱਚ ਕਿਵੇਂ ਹਿੱਸਾ ਲੈਂਦਾ ਹੈ ਉਹ ਬਦਲੋ। ਨੈੱਟਵਰਕ ਸਕਰੀਨ ਨੂੰ ਦਰਸਾਉਂਦਾ ਹੈ।"
+    }
+  }
 }

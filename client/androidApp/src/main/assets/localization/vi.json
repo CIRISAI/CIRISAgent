@@ -2064,5 +2064,68 @@
     "login_reset_device_confirm_title": "Reset device?",
     "login_reset_device_confirm_body": "This wipes CIRIS local state on this device and returns you to the setup wizard. Conversation history stays on the agent. Continue?",
     "login_reset_device_cancel": "Cancel"
+  },
+  "network": {
+    "title": "Mạng",
+    "identity_card": {
+      "title": "Danh tính liên bang",
+      "copy_address": "Sao chép địa chỉ",
+      "qr_label": "QR · ratchet / xoay"
+    },
+    "mode_card": {
+      "title": "Chế độ tác nhân",
+      "subtitle": "Cách tác nhân này tham gia vào liên bang. Edge sẽ khởi động lại khi thay đổi.",
+      "client_label": "Máy khách",
+      "client_description": "Kết nối ra ngoài đến một nút từ xa.",
+      "proxy_label": "Proxy",
+      "proxy_description": "Tác nhân cục bộ với bề mặt liên bang proxy.",
+      "proxy_default_marker": "(mặc định)",
+      "server_label": "Máy chủ",
+      "server_description": "Nút liên bang đầy đủ.",
+      "server_disk_gate": "Yêu cầu ≥256 GB đĩa trống · {available} trống trong {required} cần thiết",
+      "confirm_change_title": "Cần khởi động lại",
+      "confirm_change_body": "Chuyển đổi chế độ tác nhân yêu cầu khởi động lại Edge. Tiếp tục?",
+      "confirm_change_button": "Khởi động lại Edge",
+      "cancel_button": "Hủy",
+      "insufficient_disk_error": "Không đủ đĩa trống cho chế độ SERVER. {available} trống, {required} cần thiết."
+    },
+    "stats_strip": {
+      "peers": "Đồng đẳng",
+      "transports": "Vận chuyển",
+      "queue": "Hàng đợi",
+      "errors": "Lỗi",
+      "awaiting_edge_1_0": "Đang chờ Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Danh tính",
+      "map": "Bản đồ",
+      "trust_graph": "Đồ thị tin cậy",
+      "peers": "Đồng đẳng",
+      "interfaces": "Giao diện",
+      "paths": "Đường dẫn",
+      "announces": "Thông báo",
+      "queue": "Hàng đợi",
+      "diagnostics": "Chẩn đoán",
+      "content": "Nội dung",
+      "coming_soon_badge": "Sắp ra mắt"
+    },
+    "sub_screens": {
+      "identity_description": "Danh tính liên bang — khóa người ký, chuỗi chứng thực giữ phần cứng, trạng thái ratchet, lịch sử xoay.",
+      "map_description": "Canvas định hướng lực của khu vực liên bang địa phương — đồng đẳng là nút, vận chuyển là cạnh có màu.",
+      "trust_graph_description": "Chế độ xem của người vận hành về cấu trúc liên kết tin cậy vận chuyển — cấp trực tiếp, quyền được ủy quyền, cờ đối nghịch.",
+      "peers_description": "Ma trận có thể sắp xếp đồng đẳng × khả năng tiếp cận vận chuyển — mọi danh tính liên bang mà ngăn xếp này đã nghe.",
+      "interfaces_description": "Sức khỏe + cấu hình + thống kê theo vận chuyển (kiểu rnstatus). CRUD trên tương đương reticulum.conf.",
+      "paths_description": "Bảng đường dẫn RNS — mọi đích đến mà Edge biết cách tới, qua vận chuyển nào, hops, hết hạn.",
+      "announces_description": "Luồng thông báo trực tiếp + hồi tưởng — ai, giao diện nào, hops, xác thực chữ ký.",
+      "queue_description": "Hàng đợi gói tin gửi đi theo vận chuyển: độ sâu, tuổi, số lần thử lại, trạng thái phân mảnh.",
+      "diagnostics_description": "Lỗi gần đây, lỗi chữ ký, chặn chính sách, biến động vận chuyển — pháp y người vận hành.",
+      "content_description": "Trình duyệt kho nội dung liên bang — bộ nhớ đệm cục bộ, liên bang, truy xuất có địa chỉ hash."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Chế độ tác nhân",
+      "subtitle": "Thay đổi cách tác nhân này tham gia vào liên bang. Phản chiếu màn hình Mạng."
+    }
   }
 }

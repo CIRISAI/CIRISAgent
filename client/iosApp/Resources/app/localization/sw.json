@@ -2064,5 +2064,68 @@
   "wa_resolve": "Funga",
   "wa_service_status": "Hali ya Huduma",
   "wa_status": "Hali",
-  "login_first_run_welcome": "Karibu! Chagua jinsi ya kusanidi msaidizi wako wa AI."
+  "login_first_run_welcome": "Karibu! Chagua jinsi ya kusanidi msaidizi wako wa AI.",
+  "network": {
+    "title": "Mtandao",
+    "identity_card": {
+      "title": "Utambulisho wa shirikisho",
+      "copy_address": "Nakili anwani",
+      "qr_label": "QR · ratchet / mzunguko"
+    },
+    "mode_card": {
+      "title": "Hali ya wakala",
+      "subtitle": "Jinsi wakala huyu anavyoshiriki katika shirikisho. Edge itaanza upya kwenye mabadiliko.",
+      "client_label": "Mteja",
+      "client_description": "Unganisha nje kwa nodi ya mbali.",
+      "proxy_label": "Proksi",
+      "proxy_description": "Wakala wa ndani na uso wa shirikisho la proksi.",
+      "proxy_default_marker": "(chaguo-msingi)",
+      "server_label": "Seva",
+      "server_description": "Nodi kamili ya shirikisho.",
+      "server_disk_gate": "Inahitaji diski huru ≥256 GB · {available} huru kati ya {required} inavyohitajika",
+      "confirm_change_title": "Inahitaji kuanza upya",
+      "confirm_change_body": "Kubadilisha hali ya wakala kunahitaji kuanza upya kwa Edge. Endelea?",
+      "confirm_change_button": "Anza upya Edge",
+      "cancel_button": "Ghairi",
+      "insufficient_disk_error": "Hakuna diski huru ya kutosha kwa hali ya SERVER. {available} huru, {required} inavyohitajika."
+    },
+    "stats_strip": {
+      "peers": "Wenza",
+      "transports": "Usafirishaji",
+      "queue": "Foleni",
+      "errors": "Hitilafu",
+      "awaiting_edge_1_0": "Inangoja Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Utambulisho",
+      "map": "Ramani",
+      "trust_graph": "Grafu ya uaminifu",
+      "peers": "Wenza",
+      "interfaces": "Miingiliano",
+      "paths": "Njia",
+      "announces": "Matangazo",
+      "queue": "Foleni",
+      "diagnostics": "Uchunguzi",
+      "content": "Yaliyomo",
+      "coming_soon_badge": "Inakuja hivi karibuni"
+    },
+    "sub_screens": {
+      "identity_description": "Utambulisho wa shirikisho — funguo ya mtia saini, mlolongo wa uthibitisho wa ulinzi wa vifaa, hali ya ratchet, historia ya mzunguko.",
+      "map_description": "Turubai ya nguvu ya jirani la shirikisho la ndani — wenza kama nodi, usafirishaji kama kingo za rangi.",
+      "trust_graph_description": "Mtazamo wa opereta wa topologia ya uaminifu wa usafirishaji — ruzuku za moja kwa moja, mamlaka iliyokabidhiwa, bendera za uadui.",
+      "peers_description": "Matriki inayoweza kupangwa ya mwenza × ufikiaji wa usafirishaji — kila utambulisho wa shirikisho ambao stak hii imesikia.",
+      "interfaces_description": "Afya + usanidi + takwimu kwa kila usafirishaji (mtindo wa rnstatus). CRUD juu ya sawa na reticulum.conf.",
+      "paths_description": "Jedwali la njia za RNS — kila lengwa ambalo Edge inajua jinsi ya kufikia, kupitia usafirishaji upi, hops, mwisho.",
+      "announces_description": "Mkondo wa matangazo wa moja kwa moja + wa nyuma — nani, mwingiliano upi, hops, uthibitisho wa saini.",
+      "queue_description": "Foleni ya pakiti za nje kwa kila usafirishaji: kina, umri, hesabu ya kujaribu tena, hali ya kugawanyika.",
+      "diagnostics_description": "Hitilafu za hivi karibuni, kushindwa kwa saini, vizuizi vya sera, mabadiliko ya usafirishaji — uchunguzi wa opereta.",
+      "content_description": "Kivinjari cha hifadhi ya maudhui ya shirikisho — iliyohifadhiwa ndani, iliyoshirikiwa, urejeshaji wa anwani ya hash."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Hali ya wakala",
+      "subtitle": "Badilisha jinsi wakala huyu anavyoshiriki katika shirikisho. Inaonyesha skrini ya Mtandao."
+    }
+  }
 }

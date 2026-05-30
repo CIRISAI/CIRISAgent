@@ -2064,5 +2064,68 @@
   "wa_resolve": "Çöz",
   "wa_service_status": "Hizmet Durumu",
   "wa_status": "Durum",
-  "login_first_run_welcome": "Hoş geldiniz! Yapay zeka asistanınızı nasıl kuracağınızı seçin."
+  "login_first_run_welcome": "Hoş geldiniz! Yapay zeka asistanınızı nasıl kuracağınızı seçin.",
+  "network": {
+    "title": "Ağ",
+    "identity_card": {
+      "title": "Federasyon kimliği",
+      "copy_address": "Adresi kopyala",
+      "qr_label": "QR · ratchet / rotasyon"
+    },
+    "mode_card": {
+      "title": "Ajan modu",
+      "subtitle": "Bu ajanın federasyona nasıl katıldığı. Değişiklikte Edge yeniden başlatılır.",
+      "client_label": "İstemci",
+      "client_description": "Uzak bir düğüme dışa bağlan.",
+      "proxy_label": "Vekil",
+      "proxy_description": "Vekil federasyon yüzeyine sahip yerel ajan.",
+      "proxy_default_marker": "(varsayılan)",
+      "server_label": "Sunucu",
+      "server_description": "Tam federasyon düğümü.",
+      "server_disk_gate": "≥256 GB boş disk gerekir · {available} boş / {required} gerekli",
+      "confirm_change_title": "Yeniden başlatma gerekli",
+      "confirm_change_body": "Ajan modunu değiştirmek Edge'in yeniden başlatılmasını gerektirir. Devam edilsin mi?",
+      "confirm_change_button": "Edge'i yeniden başlat",
+      "cancel_button": "İptal",
+      "insufficient_disk_error": "SERVER modu için yeterli boş disk yok. {available} boş, {required} gerekli."
+    },
+    "stats_strip": {
+      "peers": "Eşler",
+      "transports": "Taşıyıcılar",
+      "queue": "Kuyruk",
+      "errors": "Hatalar",
+      "awaiting_edge_1_0": "Edge 1.0 bekleniyor"
+    },
+    "tiles": {
+      "identity": "Kimlik",
+      "map": "Harita",
+      "trust_graph": "Güven grafiği",
+      "peers": "Eşler",
+      "interfaces": "Arayüzler",
+      "paths": "Yollar",
+      "announces": "Duyurular",
+      "queue": "Kuyruk",
+      "diagnostics": "Tanılama",
+      "content": "İçerik",
+      "coming_soon_badge": "Çok yakında"
+    },
+    "sub_screens": {
+      "identity_description": "Federasyon kimliği — imzalayan anahtar, donanım vesayet onay zinciri, ratchet durumu, rotasyon geçmişi.",
+      "map_description": "Yerel federasyon mahallesinin kuvvet yönlendirmeli tuvali — eşler düğüm olarak, taşıyıcılar renkli kenar olarak.",
+      "trust_graph_description": "Taşıyıcı güven topolojisinin operatör görünümü — doğrudan tahsisler, devredilen yetki, rakip bayrakları.",
+      "peers_description": "Sıralanabilir eş × taşıyıcı erişilebilirlik matrisi — bu yığının duyduğu her federasyon kimliği.",
+      "interfaces_description": "Taşıyıcı başına sağlık + yapılandırma + istatistikler (rnstatus stili). reticulum.conf eşdeğeri üzerinde CRUD.",
+      "paths_description": "RNS yol tablosu — Edge'in nasıl ulaşacağını bildiği her hedef, hangi taşıyıcı üzerinden, sıçramalar, son kullanma.",
+      "announces_description": "Canlı + geriye dönük duyuru akışı — kim, hangi arayüz, sıçramalar, imza doğrulama.",
+      "queue_description": "Taşıyıcı başına giden paket kuyruğu: derinlik, yaş, yeniden deneme sayısı, parçalanma durumu.",
+      "diagnostics_description": "Son hatalar, imza başarısızlıkları, politika engelleri, taşıyıcı çalkantı — operatör adli incelemesi.",
+      "content_description": "Federasyon içerik mağazası tarayıcısı — yerel önbellek, federe, hash-adresli alma."
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Ajan modu",
+      "subtitle": "Bu ajanın federasyona katılma şeklini değiştir. Ağ ekranını yansıtır."
+    }
+  }
 }

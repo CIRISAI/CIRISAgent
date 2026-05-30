@@ -142,6 +142,31 @@ fun NetworkTrustGraphScreen(
                 .padding(padding)
                 .testable("screen_federation_trust_graph"),
         ) {
+            // Always compose the Column + TrustGraphCanvas + Legend so that
+            // `canvas_trust_graph` (the testable tag inside TrustGraphCanvas)
+            // is reachable by the QA walk-test even on a fresh agent with no
+            // peers. Loading/empty/error states overlay the same canvas so
+            // the test-automation tree stays stable across state transitions
+            // — matches the rendering-eagerness pattern T-T2 used on the hub.
+            Column(modifier = Modifier.fillMaxSize()) {
+                error?.let { msg -> InlineError(msg) }
+                TrustGraphCanvas(
+                    peers = peers,
+                    selectedPeerId = selectedPeerId,
+                    onPeerTap = { keyId ->
+                        vm.selectPeer(keyId)
+                        onPeerClick(keyId)
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                )
+                TrustGraphLegend()
+            }
+            // Overlay loading or empty-state hints when there are no peers.
+            // These don't suppress the canvas; they sit on top so the testTag
+            // tree (canvas_trust_graph, screen_federation_trust_graph) is
+            // unconditionally present.
             when {
                 peers.isEmpty() && loading -> {
                     Box(
@@ -154,23 +179,7 @@ fun NetworkTrustGraphScreen(
                 peers.isEmpty() -> {
                     EmptyOrErrorState(error = error)
                 }
-                else -> {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        error?.let { msg -> InlineError(msg) }
-                        TrustGraphCanvas(
-                            peers = peers,
-                            selectedPeerId = selectedPeerId,
-                            onPeerTap = { keyId ->
-                                vm.selectPeer(keyId)
-                                onPeerClick(keyId)
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                        )
-                        TrustGraphLegend()
-                    }
-                }
+                else -> Unit
             }
         }
     }

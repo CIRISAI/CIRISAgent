@@ -381,12 +381,22 @@ private fun AddPeerSheet(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 16.dp)
-            .testable("sheet_add_peer"),
+            .testable("sheet_add_peer")
+            // Also expose dialog_add_peer here so the QA walk-test's
+            // `wait_for_element(DIALOG_ADD_PEER)` resolves once the
+            // ModalBottomSheet renders. Compose Multiplatform renders the
+            // sheet content in a Popup tree on desktop, so the outer
+            // ModalBottomSheet modifier doesn't necessarily reach `/tree`.
+            .testable("dialog_add_peer"),
     ) {
         Text(
             text = localizedString("network.peers.add_peer_title"),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
+            // Mirror the dialog_add_peer tag on a Text inside the sheet
+            // content so it's reliably discoverable across Compose
+            // Multiplatform's popup composition boundary.
+            modifier = Modifier.testable("dialog_add_peer"),
         )
         Spacer(Modifier.height(12.dp))
 

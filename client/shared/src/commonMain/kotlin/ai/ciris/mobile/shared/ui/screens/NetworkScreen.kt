@@ -80,7 +80,20 @@ fun NetworkScreen(
         AlertDialog(
             onDismissRequest = { pendingMode = null },
             modifier = Modifier.testable("dialog_mode_confirm"),
-            title = { Text(localizedString("network.mode_card.confirm_change_title")) },
+            // Also tag the title Text inside the dialog content with the same
+            // dialog_mode_confirm tag. Compose Multiplatform renders AlertDialog
+            // content inside a separate Popup/Window on desktop, and the
+            // TestAutomationServer's `/tree` walker doesn't reliably traverse
+            // outer Modifier tags down into popup composition trees. Mirroring
+            // the tag onto a Text element inside the popup content guarantees
+            // QA's `wait_for_element(DIALOG_MODE_CONFIRM)` resolves after the
+            // mode-button click trigger.
+            title = {
+                Text(
+                    text = localizedString("network.mode_card.confirm_change_title"),
+                    modifier = Modifier.testable("dialog_mode_confirm"),
+                )
+            },
             text = { Text(localizedString("network.mode_card.confirm_change_body")) },
             confirmButton = {
                 TextButton(

@@ -166,19 +166,30 @@ private fun IdentityHeaderCard(identity: FederationIdentity?) {
                         modifier = Modifier.testable("text_signer_key_id"),
                     )
                 }
-                if (!keyId.isNullOrBlank()) {
+                // Always render the copy IconButton — `enabled` gates the
+                // actual copy/state change. Wrapping in `if (!keyId.isNullOrBlank())`
+                // hid `btn_copy_signer_key` from the QA walk-test during the
+                // brief pre-seed window (same composition-timing race as the
+                // hub IdentityCard fix in T-T2 / 868ad9226).
+                run {
+                    val hasKey = !keyId.isNullOrBlank()
                     IconButton(
                         onClick = {
-                            clipboard.setText(AnnotatedString(keyId))
-                            copied = true
-                            scope.launch {
-                                delay(1500)
-                                copied = false
+                            if (hasKey) {
+                                clipboard.setText(AnnotatedString(keyId!!))
+                                copied = true
+                                scope.launch {
+                                    delay(1500)
+                                    copied = false
+                                }
                             }
                         },
+                        enabled = hasKey,
                         modifier = Modifier.testableClickable("btn_copy_signer_key") {
-                            clipboard.setText(AnnotatedString(keyId))
-                            copied = true
+                            if (hasKey) {
+                                clipboard.setText(AnnotatedString(keyId!!))
+                                copied = true
+                            }
                         },
                     ) {
                         Icon(

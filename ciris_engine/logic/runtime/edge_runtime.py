@@ -75,7 +75,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         import ciris_edge  # type: ignore[import-not-found]
     except ImportError as e:
         raise RuntimeError(
-            "ciris-edge not importable but is REQUIRED for 2.9.4+. " "Pin ciris-edge>=0.9.1,<1.0.0 in requirements.txt."
+            "ciris-edge not importable but is REQUIRED for 2.9.4+. Pin ciris-edge>=1.0.0,<2.0.0 in requirements.txt."
         ) from e
 
     identity_dir.mkdir(parents=True, exist_ok=True)
@@ -85,12 +85,17 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     bootstrap_peers_raw = os.environ.get("CIRIS_EDGE_BOOTSTRAP_PEERS", "")
     bootstrap_peers = [p.strip() for p in bootstrap_peers_raw.split(",") if p.strip()]
 
+    from ciris_engine.logic.utils.agent_mode_broker import get_agent_mode_broker
+
+    agent_mode_value = get_agent_mode_broker().current_mode().value
+
     try:
         edge = ciris_edge.ciris_edge.init_edge_runtime(
             engine,
             str(identity_path),
             listen_addr=listen_addr,
             bootstrap_peers=bootstrap_peers,
+            agent_mode=agent_mode_value,
         )
     except TypeError as e:
         # PyO3 cross-crate PyClass identity failure — Edge v0.9.1's bundled

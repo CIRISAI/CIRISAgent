@@ -727,9 +727,21 @@ class CIRISRuntime(ServicePropertyMixin):
         unset. When the Edge team ships v0.9.2+ with the fix (tracked at
         CIRISEdge#22 issuecomment-4560383149), flip the register_step
         above to critical=True.
+
+        Before invoking ``initialize_edge_runtime``, seed the
+        ``AgentModeBroker`` from ``EssentialConfig.agent_mode``. The broker
+        defaults to ``AgentMode.PROXY`` at module import; without this seed
+        the ``AGENT_MODE`` env var (parsed into EssentialConfig.agent_mode
+        by ``load_env_vars``) would be ignored by Edge, which reads the
+        mode through ``get_agent_mode_broker().current_mode()``. Use the
+        sync setter because ConfigService is not yet wired at this phase.
         """
         from ciris_engine.logic.runtime import edge_runtime
+        from ciris_engine.logic.utils.agent_mode_broker import get_agent_mode_broker
         from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        config = self._ensure_config()
+        get_agent_mode_broker().set_mode_sync(config.agent_mode)
 
         identity_dir = get_data_dir() / "edge"
         edge_runtime.initialize_edge_runtime(identity_dir)

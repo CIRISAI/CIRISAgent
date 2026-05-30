@@ -263,11 +263,17 @@ async def init_edge_runtime(runtime: Any) -> None:
     Engine; one keyring identity per host. Must run AFTER init_database.
 
     Test escape: PYTEST_CURRENT_TEST or CIRIS_EDGE_DISABLED=true.
+
+    Before invoking ``initialize_edge_runtime``, seed the AgentModeBroker
+    from EssentialConfig.agent_mode (which honors the AGENT_MODE env var)
+    so Edge sees the configured mode instead of the broker's PROXY default.
     """
     from ciris_engine.logic.runtime import edge_runtime
+    from ciris_engine.logic.utils.agent_mode_broker import get_agent_mode_broker
     from ciris_engine.logic.utils.path_resolution import get_data_dir
 
     config = _ensure_config(runtime)
+    get_agent_mode_broker().set_mode_sync(config.agent_mode)
     # Reticulum identity lives in the agent's data dir, NOT per-occurrence —
     # multi-occurrence agents share the same federation identity.
     identity_dir = get_data_dir() / "edge"

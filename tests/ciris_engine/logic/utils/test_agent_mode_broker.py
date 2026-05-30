@@ -161,6 +161,66 @@ class TestLockSafety:
         assert not errors
 
 
+class TestSetModeSync:
+    """Boot-time sync setter: no persistence, broadcast still fires."""
+
+    def test_sync_updates_in_memory_mode(self, broker: AgentModeBroker) -> None:
+        assert broker.current_mode() is AgentMode.PROXY
+        event = broker.set_mode_sync(AgentMode.SERVER)
+        assert broker.current_mode() is AgentMode.SERVER
+        assert event.previous_mode is AgentMode.PROXY
+        assert event.new_mode is AgentMode.SERVER
+
+    def test_sync_skips_config_service_persistence(self, broker: AgentModeBroker) -> None:
+        config_service = AsyncMock()
+        broker.attach_config_service(config_service)
+
+        broker.set_mode_sync(AgentMode.SERVER)
+
+        # ConfigService MUST NOT be touched — sync path is for boot before
+        # the service is wired.
+        config_service.set_config.assert_not_called()
+
+    def test_sync_broadcasts_to_subscribers(self, broker: AgentModeBroker) -> None:
+        received: List[AgentModeChangedEvent] = []
+        broker.subscribe(received.append)
+
+        broker.set_mode_sync(AgentMode.CLIENT)
+
+        assert len(received) == 1
+        assert received[0].previous_mode is AgentMode.PROXY
+        assert received[0].new_mode is AgentMode.CLIENT
+
+    def test_sync_raising_subscriber_does_not_block_others(self, broker: AgentModeBroker) -> None:
+        survived: List[AgentModeChangedEvent] = []
+
+        def bad(_e: AgentModeChangedEvent) -> None:
+            raise RuntimeError("boom")
+
+        broker.subscribe(bad)
+        broker.subscribe(survived.append)
+
+        broker.set_mode_sync(AgentMode.SERVER)
+        assert len(survived) == 1
+
+    @pytest.mark.asyncio
+    async def test_sync_then_async_persistence_resumes(self, broker: AgentModeBroker) -> None:
+        # Simulate the boot sequence: sync seed at start, then later
+        # async set_mode (e.g. via /v1/system/agent-mode) with a wired
+        # ConfigService — that call must persist normally.
+        broker.set_mode_sync(AgentMode.SERVER)
+        assert broker.current_mode() is AgentMode.SERVER
+
+        config_service = AsyncMock()
+        broker.attach_config_service(config_service)
+        await broker.set_mode(AgentMode.CLIENT)
+
+        config_service.set_config.assert_awaited_once()
+        kwargs = config_service.set_config.await_args.kwargs
+        assert kwargs["key"] == AGENT_MODE_CONFIG_KEY
+        assert kwargs["value"] == "client"
+
+
 class TestSingletonHelper:
     def test_get_agent_mode_broker_returns_module_singleton(self) -> None:
         from ciris_engine.logic.utils.agent_mode_broker import agent_mode_broker, get_agent_mode_broker

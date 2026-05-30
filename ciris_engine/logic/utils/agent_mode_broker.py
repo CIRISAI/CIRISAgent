@@ -155,6 +155,51 @@ class AgentModeBroker:
 
         return event
 
+    def set_mode_sync(self, mode: AgentMode) -> AgentModeChangedEvent:
+        """Boot-time synchronous mode setter (no persistence).
+
+        Mirrors :meth:`set_mode` but skips the async ``GraphConfigService``
+        persistence step. Intended for use at runtime startup — BEFORE
+        ConfigService is constructed — so the broker can be seeded from
+        :class:`EssentialConfig.agent_mode` (which honors the ``AGENT_MODE``
+        env var) and Edge can read the correct value via
+        ``current_mode()`` during ``init_edge_runtime``.
+
+        Updates in-memory state under the lock and broadcasts to
+        subscribers outside the lock, identical to the async path. A
+        raising subscriber is logged and skipped.
+
+        Returns the broadcast event.
+        """
+        # 1) Capture transition under lock.
+        with self._lock:
+            previous_mode = self._mode
+            self._mode = mode
+            subscribers_snapshot = list(self._subscribers)
+
+        event = AgentModeChangedEvent(
+            previous_mode=previous_mode,
+            new_mode=mode,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+        # 2) Broadcast outside the lock. A raising subscriber must not block
+        #    the others. Persistence is intentionally skipped — ConfigService
+        #    is not yet wired at boot.
+        for subscriber in subscribers_snapshot:
+            try:
+                subscriber(event)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.error(
+                    "AgentModeBroker: subscriber %r raised on %s -> %s: %s",
+                    subscriber,
+                    previous_mode.value,
+                    mode.value,
+                    exc,
+                )
+
+        return event
+
     # ------------------------------------------------------------------ #
     # Test / boot helpers
     # ------------------------------------------------------------------ #

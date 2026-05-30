@@ -1,6 +1,23 @@
 package ai.ciris.mobile.shared.api
 
 import ai.ciris.mobile.shared.models.*
+import ai.ciris.mobile.shared.models.federation.EdgePeerReachability
+import ai.ciris.mobile.shared.models.federation.EdgeReachabilityEntry
+import ai.ciris.mobile.shared.models.federation.FederationContentRequest
+import ai.ciris.mobile.shared.models.federation.FederationContentResponse
+import ai.ciris.mobile.shared.models.federation.FederationIdentity
+import ai.ciris.mobile.shared.models.federation.FederationMetricsResponse
+import ai.ciris.mobile.shared.models.federation.FederationPeerAppearanceUpdateRequest
+import ai.ciris.mobile.shared.models.federation.FederationPeerDetailResponse
+import ai.ciris.mobile.shared.models.federation.FederationPeerListResponse
+import ai.ciris.mobile.shared.models.federation.FederationPeerSASResponse
+import ai.ciris.mobile.shared.models.federation.FederationPeerTrustUpdateRequest
+import ai.ciris.mobile.shared.models.federation.LocalPeerState
+import ai.ciris.mobile.shared.models.federation.NodeCodeAddRequest
+import ai.ciris.mobile.shared.models.federation.NodeCodeAddResponse
+import ai.ciris.mobile.shared.models.federation.NodeCodeShareResponse
+import ai.ciris.mobile.shared.models.federation.PeerAppearance
+import ai.ciris.mobile.shared.models.federation.PeerTrustState
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
 import ai.ciris.mobile.shared.viewmodels.CheckDetail
@@ -711,6 +728,360 @@ class CIRISApiClient(
             serverEligible = eligible,
             dataDir = dataDir,
         )
+    }
+
+    // ─── Federation surface (/v1/federation/*) ───────────────────────────────
+    //
+    // Hand-rolled rather than via the generated SDK because (a) the federation
+    // routes ship faster than the SDK regen cadence, and (b) the response
+    // envelope (SuccessResponse{data: ...}) is uniform across every route here
+    // — one helper unwraps them all. SSE for /v1/federation/events/{channel}
+    // lives in [FederationEventStream] so the streaming concerns don't bleed
+    // into the request/response client.
+
+    /**
+     * Short-lived Ktor client for one direct-HTTP request. Mirrors the
+     * pattern used by [getAgentMode] / [getSystemStatus] — created per-call
+     * so a stuck request never poisons unrelated traffic.
+     */
+    private fun federationHttpClient(): io.ktor.client.HttpClient =
+        io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 30_000
+                connectTimeoutMillis = 10_000
+                socketTimeoutMillis = 30_000
+            }
+        }
+
+    /**
+     * Decode the ``{"data": <T>}`` envelope used by every federation
+     * route. Tolerates an unwrapped ``<T>`` for resilience the same way
+     * [parseAgentModeStatus] does.
+     */
+    private inline fun <reified T> decodeFederationEnvelope(
+        rawBody: String,
+        deserializer: kotlinx.serialization.KSerializer<T>,
+    ): T {
+        val root = Json.parseToJsonElement(rawBody).jsonObject
+        val dataElement = root["data"] ?: root
+        return jsonConfig.decodeFromString(deserializer, dataElement.toString())
+    }
+
+    /**
+     * Federation identity card — local agent's signer_key_id, crate
+     * version, peer counts, and advertised capabilities.
+     *
+     * Hits ``GET /v1/federation/identity``.
+     */
+    suspend fun getFederationIdentity(): FederationIdentity {
+        val method = "getFederationIdentity"
+        logDebug(method, "GET $baseUrl/v1/federation/identity")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$baseUrl/v1/federation/identity") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Federation identity fetch failed: ${response.status}")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), FederationIdentity.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * List local peers (canonical + organic). Optional filters:
+     *  - [canonicalOnly]: restrict to canonical (rock-solid) peers.
+     *  - [trust]: restrict to one [PeerTrustState] vocabulary value.
+     *
+     * Hits ``GET /v1/federation/peers``.
+     */
+    suspend fun listFederationPeers(
+        canonicalOnly: Boolean? = null,
+        trust: PeerTrustState? = null,
+    ): FederationPeerListResponse {
+        val method = "listFederationPeers"
+        logDebug(method, "GET /v1/federation/peers canonicalOnly=$canonicalOnly trust=${trust?.wire}")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$baseUrl/v1/federation/peers") {
+                authHeader()?.let { header("Authorization", it) }
+                if (canonicalOnly != null) parameter("canonical_only", canonicalOnly.toString())
+                if (trust != null) parameter("trust", trust.wire)
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Federation peer list failed: ${response.status}")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), FederationPeerListResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Fetch one peer's [LocalPeerState] plus [EdgePeerReachability].
+     *
+     * Hits ``GET /v1/federation/peers/{keyId}``. Surfaces 404 (peer
+     * unknown locally) and 503 (Edge unavailable) as exceptions; the
+     * caller decides whether to retry or render a not-found shell.
+     */
+    suspend fun getFederationPeer(keyId: String): FederationPeerDetailResponse {
+        val method = "getFederationPeer"
+        logDebug(method, "GET /v1/federation/peers/$keyId")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$baseUrl/v1/federation/peers/$keyId") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Federation peer fetch failed: ${response.status} for $keyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), FederationPeerDetailResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "keyId=$keyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Fetch the Signal-style SAS (5 words + 6 digits) for verifying a
+     * peer's pubkey out-of-band. Both sides of the call see the same
+     * value because Edge sorts the ``(local_pub, peer_pub)`` tuple
+     * deterministically before deriving.
+     *
+     * Hits ``GET /v1/federation/peers/{keyId}/sas``.
+     */
+    suspend fun getFederationPeerSAS(keyId: String): FederationPeerSASResponse {
+        val method = "getFederationPeerSAS"
+        logDebug(method, "GET /v1/federation/peers/$keyId/sas")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$baseUrl/v1/federation/peers/$keyId/sas") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Federation peer SAS fetch failed: ${response.status} for $keyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), FederationPeerSASResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "keyId=$keyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Update the [PeerTrustState] on a known peer. SYSTEM_ADMIN only
+     * server-side; the client surfaces 403 as a regular exception.
+     *
+     * Hits ``PUT /v1/federation/peers/{keyId}/trust``.
+     */
+    suspend fun setFederationPeerTrust(
+        keyId: String,
+        trust: PeerTrustState,
+    ): LocalPeerState {
+        val method = "setFederationPeerTrust"
+        logInfo(method, "PUT /v1/federation/peers/$keyId/trust → ${trust.wire}")
+        val client = federationHttpClient()
+        return try {
+            val response = client.put("$baseUrl/v1/federation/peers/$keyId/trust") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(
+                    FederationPeerTrustUpdateRequest.serializer(),
+                    FederationPeerTrustUpdateRequest(trust = trust),
+                ))
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Federation peer trust update failed: ${response.status} for $keyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), LocalPeerState.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "keyId=$keyId, trust=${trust.wire}")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Update the local-user [PeerAppearance] on a known peer.
+     *
+     * Hits ``PUT /v1/federation/peers/{keyId}/appearance``.
+     */
+    suspend fun setFederationPeerAppearance(
+        keyId: String,
+        appearance: PeerAppearance,
+    ): LocalPeerState {
+        val method = "setFederationPeerAppearance"
+        logInfo(method, "PUT /v1/federation/peers/$keyId/appearance")
+        val client = federationHttpClient()
+        return try {
+            val response = client.put("$baseUrl/v1/federation/peers/$keyId/appearance") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(
+                    FederationPeerAppearanceUpdateRequest.serializer(),
+                    FederationPeerAppearanceUpdateRequest(appearance = appearance),
+                ))
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Federation peer appearance update failed: ${response.status} for $keyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), LocalPeerState.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "keyId=$keyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Edge metrics snapshot — counters and gauges for envelopes,
+     * verify failures, queue depths, transport bytes, and peer
+     * reachability ratios.
+     *
+     * Hits ``GET /v1/federation/metrics``.
+     */
+    suspend fun getFederationMetrics(): FederationMetricsResponse {
+        val method = "getFederationMetrics"
+        logDebug(method, "GET /v1/federation/metrics")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$baseUrl/v1/federation/metrics") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Federation metrics fetch failed: ${response.status}")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), FederationMetricsResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Fetch federation content by SHA-256 [contentId] from [peerKeyId].
+     *
+     * The backend requires ``peer_key_id`` — there is no global
+     * content directory today, the caller must know a candidate
+     * holder. [timeoutMs] is per-fetch and clamped server-side to
+     * ``[1, 300_000]`` ms; defaults to 5_000 ms here so the typical
+     * user-driven case doesn't block the UI for 30s on miss.
+     *
+     * Hits ``POST /v1/federation/content/{contentId}``. SHA-256
+     * integrity (``sha256(decode(payload_base64)) == content_id``) is
+     * enforced Edge-side — the mobile client does not re-verify.
+     */
+    suspend fun fetchFederationContent(
+        contentId: String,
+        peerKeyId: String,
+        timeoutMs: Int = 5_000,
+    ): FederationContentResponse {
+        val method = "fetchFederationContent"
+        logInfo(method, "POST /v1/federation/content/$contentId from peer=$peerKeyId timeout=${timeoutMs}ms")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$baseUrl/v1/federation/content/$contentId") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(
+                    FederationContentRequest.serializer(),
+                    FederationContentRequest(peerKeyId = peerKeyId, timeoutMs = timeoutMs),
+                ))
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Federation content fetch failed: ${response.status} for $contentId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), FederationContentResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "contentId=$contentId, peer=$peerKeyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── NodeCode share/add (/v1/system/peers/*) ─────────────────────────────
+    //
+    // NodeCode is the BOOTSTRAP UX for adding a peer; SAS verification
+    // (above) is the post-add step that promotes UNKNOWN → TRUSTED.
+
+    /**
+     * Get a shareable NodeCode for the local agent's federation
+     * identity. OBSERVER+ readable.
+     *
+     * Hits ``GET /v1/system/peers/my-node-code``.
+     */
+    suspend fun getMyNodeCode(
+        transportHint: String? = null,
+        aliasHint: String? = null,
+    ): NodeCodeShareResponse {
+        val method = "getMyNodeCode"
+        logDebug(method, "GET /v1/system/peers/my-node-code aliasHint=$aliasHint")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$baseUrl/v1/system/peers/my-node-code") {
+                authHeader()?.let { header("Authorization", it) }
+                if (transportHint != null) parameter("transport_hint", transportHint)
+                if (aliasHint != null) parameter("alias_hint", aliasHint)
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("NodeCode share failed: ${response.status}")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), NodeCodeShareResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Add a peer from a NodeCode string. Whitespace and dashes are
+     * tolerated server-side. SYSTEM_ADMIN required.
+     *
+     * Hits ``POST /v1/system/peers/add-from-code``.
+     */
+    suspend fun addPeerFromNodeCode(code: String): NodeCodeAddResponse {
+        val method = "addPeerFromNodeCode"
+        logInfo(method, "POST /v1/system/peers/add-from-code code='${code.take(20)}...'")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$baseUrl/v1/system/peers/add-from-code") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(
+                    NodeCodeAddRequest.serializer(),
+                    NodeCodeAddRequest(code = code),
+                ))
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("NodeCode add failed: ${response.status}")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), NodeCodeAddResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "code='${code.take(20)}...'")
+            throw e
+        } finally {
+            client.close()
+        }
     }
 
     // System Status (from /v1/system/health)

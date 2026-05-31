@@ -2070,7 +2070,17 @@
     "identity_card": {
       "title": "ตัวตนของสหพันธ์",
       "copy_address": "คัดลอกที่อยู่",
-      "qr_label": "QR · ratchet / การหมุน"
+      "qr_label": "QR · ratchet / การหมุน",
+      "capabilities_title": "ความสามารถ",
+      "copied": "คัดลอกแล้ว",
+      "copy_node_code": "คัดลอกรหัสโหนด",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "แชร์รหัสนี้กับพีร์เพื่อเชิญ พวกเขาสามารถวางหรือสแกนได้",
+      "node_code_title": "รหัสโหนดของฉัน",
+      "peers_canonical": "Canonical",
+      "peers_total": "พีร์ทั้งหมด",
+      "qr_placeholder_label": "รหัส QR",
+      "signer_key_label": "คีย์ผู้ลงนาม"
     },
     "mode_card": {
       "title": "โหมดเอเจนต์",
@@ -2120,6 +2130,205 @@
       "queue_description": "คิวแพ็กเก็ตขาออกต่อทรานสปอร์ต: ความลึก, อายุ, จำนวนการลองใหม่, สถานะการแยกส่วน",
       "diagnostics_description": "ข้อผิดพลาดล่าสุด, ความล้มเหลวของลายเซ็น, การบล็อกนโยบาย, การเปลี่ยนแปลงของทรานสปอร์ต — นิติเวชของผู้ดำเนินการ",
       "content_description": "เบราว์เซอร์ที่เก็บเนื้อหาสหพันธ์ — แคชในเครื่อง, สหพันธ์, การดึงข้อมูลตามที่อยู่แฮช"
+    },
+    "announces": {
+      "empty": "ยังไม่มีการประกาศ กำลังรอเหตุการณ์สหพันธ์…",
+      "no_message": "(ไม่มีข้อความ)",
+      "title": "การประกาศสด"
+    },
+    "content": {
+      "back": "ย้อนกลับ",
+      "error": {
+        "edge_unavailable": "Edge ไม่พร้อมใช้งาน",
+        "not_found": "ไม่พบเนื้อหาที่พีร์นี้ ลองพีร์อื่น"
+      },
+      "fetch": {
+        "button": "ดึง",
+        "content_id_label": "รหัสเนื้อหา (SHA-256)",
+        "content_id_placeholder": "ไดเจสต์ hex 64 อักขระ",
+        "invalid_id": "รหัสเนื้อหาต้องเป็นอักขระเลขฐาน 16 จำนวน 64 ตัว",
+        "timeout_label": "หมดเวลา"
+      },
+      "peer": {
+        "change": "เปลี่ยนพีร์",
+        "empty": "ไม่มีพีร์ที่ใช้งานได้ เพิ่มพีร์ก่อน",
+        "search": "ค้นหาพีร์"
+      },
+      "refresh": "รีเฟรช",
+      "result": {
+        "content_type": "ประเภทเนื้อหา",
+        "fetched_at": "ดึงเมื่อ",
+        "preview": "ตัวอย่างเพย์โหลด (200 ไบต์แรก)",
+        "size": "ขนาด",
+        "title": "ผลลัพธ์"
+      },
+      "step1": {
+        "title": "เลือกพีร์เพื่อสืบค้น"
+      },
+      "step2": {
+        "title": "ดึงเนื้อหาจากพีร์"
+      }
+    },
+    "diagnostics": {
+      "empty": "ไม่มีเหตุการณ์ที่ตรงกัน ปรับตัวกรองหรือรอ",
+      "more": "แตะเพื่อขยาย",
+      "no_summary": "(ไม่มีบทสรุปเพย์โหลด)",
+      "search_hint": "กรองตามข้อความหรือ event_type",
+      "title": "การวินิจฉัย"
+    },
+    "interfaces": {
+      "empty": "ไม่มีทรานสปอร์ตที่กำหนดค่า",
+      "not_measured": "ยังไม่ได้วัด",
+      "peers": "พีร์",
+      "refresh": "รีเฟรช",
+      "row": {
+        "bytes_in": "ไบต์เข้า",
+        "bytes_out": "ไบต์ออก",
+        "reach": "การเข้าถึง %",
+        "status": "สถานะ"
+      },
+      "status": {
+        "active": "ใช้งาน",
+        "degraded": "ลดลง",
+        "idle": "ว่าง",
+        "unknown": "ไม่ทราบ"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "พีร์จะปรากฏบนแผนที่จริงเมื่อเราเปิดตัวไปป์ไลน์เทเลเมทรี จนกว่าจะถึงเวลานั้น นี่คือสิ่งที่คุณสามารถเห็นได้ตอนนี้:",
+        "title": "ไม่มีตำแหน่งที่กุขึ้น"
+      },
+      "future": {
+        "bullet_announces": "การประกาศแบบเรียลไทม์ทับซ้อนตามภูมิภาค",
+        "bullet_locations": "ตำแหน่งพีร์จากเทเลเมทรี",
+        "bullet_transport": "ทับซ้อนลิงก์ทรานสปอร์ต (TCP / LoRa / I2P / AX.25)",
+        "title": "สิ่งที่จะแสดงในภายหลัง"
+      },
+      "hero": {
+        "subtitle": "แผนที่จริงจะมาพร้อมกับไปป์ไลน์เทเลเมทรี",
+        "title": "มุมมองทางภูมิศาสตร์"
+      },
+      "refresh": "รีเฟรช",
+      "today": {
+        "canonical": "พีร์ canonical",
+        "other": "พีร์อื่น ๆ",
+        "title": "สิ่งที่เรามีในวันนี้",
+        "trusted": "พีร์ที่เชื่อถือได้"
+      }
+    },
+    "paths": {
+      "empty": "ยังไม่มีเหตุการณ์เส้นทาง",
+      "kind_added": "เพิ่มแล้ว",
+      "kind_changed": "เปลี่ยนแล้ว",
+      "kind_lost": "สูญหาย",
+      "kind_other": "เหตุการณ์",
+      "no_static_table_note": "Edge 1.0 ไม่เปิดเผยตารางเส้นทางแบบสถิต หน้าจอนี้แสดงเฉพาะการเปลี่ยนแปลงสด การปรับใช้ใหม่อาจรีเซ็ตสถานะ",
+      "section_recent": "เหตุการณ์เส้นทางล่าสุด",
+      "title": "เส้นทางสด"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "พื้นหลัง (hex)",
+      "appearance_fg_label": "ส่วนหน้า (hex)",
+      "appearance_icon_label": "ไอคอน",
+      "appearance_save": "บันทึกลักษณะ",
+      "appearance_title": "ลักษณะ",
+      "cancel_button": "ยกเลิก",
+      "confirm_block_body": "การบล็อกจะปฏิเสธทราฟฟิกทั้งหมดจากพีร์นี้ คุณสามารถเลิกบล็อกได้ภายหลัง",
+      "confirm_block_button": "บล็อก",
+      "confirm_block_title": "บล็อกพีร์นี้?",
+      "copy_key_id": "คัดลอก id คีย์",
+      "last_ok_days_ago": "{n} วันที่แล้ว",
+      "last_ok_hours_ago": "{n} ชม. ที่แล้ว",
+      "last_ok_just_now": "เมื่อกี้นี้",
+      "last_ok_min_ago": "{n} นาทีที่แล้ว",
+      "last_ok_never": "ไม่เคย",
+      "not_found": "ไม่พบพีร์",
+      "notes_empty": "ไม่มีบันทึก",
+      "notes_title": "บันทึก",
+      "reachability_empty": "ยังไม่ได้วัด",
+      "reachability_title": "ความสามารถในการเข้าถึง",
+      "sas_close": "ปิด",
+      "sas_digits_label": "ตัวเลข",
+      "sas_instructions": "เปรียบเทียบสิ่งเหล่านี้กับพีร์ผ่านช่องที่เชื่อถือได้ (เสียง/วิดีโอ/พบหน้า) หากทั้งสองฝ่ายตรงกัน พีร์ได้รับการยืนยัน — เปลี่ยนความเชื่อถือเป็น TRUSTED",
+      "sas_modal_title": "สตริงการยืนยันตัวตนสั้น",
+      "sas_show_button": "แสดงรหัส SAS",
+      "sas_title": "ยืนยันตัวตน (SAS)",
+      "sas_words_label": "คำ",
+      "title": "รายละเอียดพีร์",
+      "trust_state_title": "สถานะความเชื่อถือ"
+    },
+    "peers": {
+      "add_peer_cancel": "ยกเลิก",
+      "add_peer_fab": "เพิ่มพีร์",
+      "add_peer_paste_label": "วางรหัสโหนด",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "สแกน QR",
+      "add_peer_scan_qr_unavailable": "การสแกน QR เร็ว ๆ นี้",
+      "add_peer_submit": "เพิ่ม",
+      "add_peer_title": "เพิ่มพีร์",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "แชร์รหัสโหนดของคุณเพื่อเชิญ หรือเพิ่มรหัสของพีร์",
+      "empty_title": "ยังไม่มีพีร์",
+      "filter_all": "ทั้งหมด",
+      "filter_blocked": "ถูกบล็อก",
+      "filter_canonical": "Canonical",
+      "filter_trusted": "เชื่อถือได้",
+      "filter_unknown": "ไม่ทราบ",
+      "filter_untrusted": "ไม่เชื่อถือ",
+      "show_infra": "แสดงโครงสร้างพื้นฐาน CIRIS",
+      "title": "พีร์",
+      "trust_blocked": "ถูกบล็อก",
+      "trust_trusted": "เชื่อถือได้",
+      "trust_unknown": "ไม่ทราบ",
+      "trust_untrusted": "ไม่เชื่อถือ"
+    },
+    "queue": {
+      "failures": {
+        "send": "การส่งล้มเหลว",
+        "title": "ความล้มเหลว",
+        "verify": "การยืนยันล้มเหลว"
+      },
+      "refresh": "รีเฟรช",
+      "stats": {
+        "depth": "ความลึกของคิว",
+        "received": "ได้รับ",
+        "sent": "ส่งแล้ว",
+        "title": "สถิติคิว"
+      },
+      "throughput": {
+        "bytes_in": "ไบต์เข้า",
+        "bytes_out": "ไบต์ออก",
+        "received": "ได้รับ",
+        "sent": "ส่งแล้ว",
+        "session": "รวมเซสชันนี้",
+        "title": "ทรูพุต"
+      }
+    },
+    "stream": {
+      "clear": "ล้าง",
+      "dismiss": "ปิด",
+      "event_count": "{count} เหตุการณ์",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "หยุดชั่วคราว",
+      "reconnect": "เชื่อมต่อใหม่",
+      "resume": "ดำเนินการต่อ",
+      "resume_notice": "เชื่อมต่อใหม่แล้ว เหตุการณ์บางอย่างอาจขาดหายไป",
+      "retry": "ลองอีกครั้ง"
+    },
+    "trust_graph": {
+      "empty": "ไม่มีพีร์ที่จะแสดง",
+      "legend": {
+        "blocked": "ถูกบล็อก",
+        "canonical_hint": "เส้นรอบวงแหวนหนากว่า = canonical (มาพร้อมกับเอเจนต์)",
+        "edge_hint": "ความทึบของขอบสะท้อนการเข้าถึงต่อสื่อ",
+        "title": "สถานะความเชื่อถือ",
+        "trusted": "เชื่อถือได้",
+        "unknown": "ไม่ทราบ",
+        "untrusted": "ไม่เชื่อถือ"
+      },
+      "refresh": "รีเฟรช",
+      "summary": "พีร์ {count} · canonical {canonical}"
     }
   },
   "settings": {

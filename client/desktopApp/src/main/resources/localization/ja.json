@@ -2070,7 +2070,17 @@
     "identity_card": {
       "title": "フェデレーション ID",
       "copy_address": "アドレスをコピー",
-      "qr_label": "QR · ラチェット / ローテーション"
+      "qr_label": "QR · ラチェット / ローテーション",
+      "capabilities_title": "機能",
+      "copied": "コピーしました",
+      "copy_node_code": "ノードコードをコピー",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "ピアを招待するためにこのコードを共有してください。貼り付けまたはスキャンできます。",
+      "node_code_title": "私のノードコード",
+      "peers_canonical": "標準",
+      "peers_total": "ピア合計",
+      "qr_placeholder_label": "QR コード",
+      "signer_key_label": "署名キー"
     },
     "mode_card": {
       "title": "エージェントモード",
@@ -2120,6 +2130,205 @@
       "queue_description": "トランスポートごとの送信パケットキュー: 深度、経過時間、再試行回数、フラグメンテーション状態。",
       "diagnostics_description": "最近のエラー、署名失敗、ポリシーブロック、トランスポート変動 — オペレータフォレンジック。",
       "content_description": "フェデレーションコンテンツストアブラウザ — ローカルキャッシュ、フェデレーション、ハッシュアドレス取得。"
+    },
+    "announces": {
+      "empty": "まだアナウンスはありません。フェデレーションイベントを待機中…",
+      "no_message": "(メッセージなし)",
+      "title": "ライブアナウンス"
+    },
+    "content": {
+      "back": "戻る",
+      "error": {
+        "edge_unavailable": "Edge は利用できません。",
+        "not_found": "このピアでコンテンツが見つかりません。別のピアを試してください。"
+      },
+      "fetch": {
+        "button": "取得",
+        "content_id_label": "コンテンツ ID (SHA-256)",
+        "content_id_placeholder": "64 文字の hex ダイジェスト",
+        "invalid_id": "コンテンツ ID は 64 文字の 16 進数である必要があります。",
+        "timeout_label": "タイムアウト"
+      },
+      "peer": {
+        "change": "ピアを変更",
+        "empty": "利用可能なピアがありません。まずピアを追加してください。",
+        "search": "ピアを検索"
+      },
+      "refresh": "更新",
+      "result": {
+        "content_type": "コンテンツタイプ",
+        "fetched_at": "取得日時",
+        "preview": "ペイロードプレビュー (最初の 200 バイト)",
+        "size": "サイズ",
+        "title": "結果"
+      },
+      "step1": {
+        "title": "クエリするピアを選択"
+      },
+      "step2": {
+        "title": "ピアからコンテンツを取得"
+      }
+    },
+    "diagnostics": {
+      "empty": "一致するイベントがありません。フィルターを調整するか待機してください。",
+      "more": "タップして展開",
+      "no_summary": "(ペイロード概要なし)",
+      "search_hint": "メッセージテキストまたは event_type でフィルター",
+      "title": "診断"
+    },
+    "interfaces": {
+      "empty": "トランスポートが構成されていません。",
+      "not_measured": "まだ測定されていません",
+      "peers": "ピア",
+      "refresh": "更新",
+      "row": {
+        "bytes_in": "受信バイト",
+        "bytes_out": "送信バイト",
+        "reach": "到達率 %",
+        "status": "ステータス"
+      },
+      "status": {
+        "active": "アクティブ",
+        "degraded": "劣化",
+        "idle": "アイドル",
+        "unknown": "不明"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "テレメトリーパイプラインを出荷すると、ピアが実際のマップに表示されます。それまでは、現在表示できるものは次のとおりです:",
+        "title": "捏造された場所はありません"
+      },
+      "future": {
+        "bullet_announces": "地域別にオーバーレイされたリアルタイムアナウンス",
+        "bullet_locations": "テレメトリーからのピアの場所",
+        "bullet_transport": "トランスポートリンクオーバーレイ (TCP / LoRa / I2P / AX.25)",
+        "title": "後で表示される内容"
+      },
+      "hero": {
+        "subtitle": "実際のマップはテレメトリーパイプラインと共に登場します。",
+        "title": "地理ビュー"
+      },
+      "refresh": "更新",
+      "today": {
+        "canonical": "標準ピア",
+        "other": "その他のピア",
+        "title": "現在あるもの",
+        "trusted": "信頼済みピア"
+      }
+    },
+    "paths": {
+      "empty": "まだパスイベントがありません。",
+      "kind_added": "追加されました",
+      "kind_changed": "変更されました",
+      "kind_lost": "失われました",
+      "kind_other": "イベント",
+      "no_static_table_note": "Edge 1.0 は静的パステーブルを公開しません。この画面はライブの変更のみを表示します。再デプロイで状態がリセットされる場合があります。",
+      "section_recent": "最近のパスイベント",
+      "title": "ライブパス"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "背景 (hex)",
+      "appearance_fg_label": "前景 (hex)",
+      "appearance_icon_label": "アイコン",
+      "appearance_save": "外観を保存",
+      "appearance_title": "外観",
+      "cancel_button": "キャンセル",
+      "confirm_block_body": "ブロックすると、このピアからのすべてのトラフィックが拒否されます。後でブロックを解除できます。",
+      "confirm_block_button": "ブロック",
+      "confirm_block_title": "このピアをブロックしますか?",
+      "copy_key_id": "キー ID をコピー",
+      "last_ok_days_ago": "{n} 日前",
+      "last_ok_hours_ago": "{n} 時間前",
+      "last_ok_just_now": "たった今",
+      "last_ok_min_ago": "{n} 分前",
+      "last_ok_never": "なし",
+      "not_found": "ピアが見つかりません",
+      "notes_empty": "メモがありません",
+      "notes_title": "メモ",
+      "reachability_empty": "まだ測定されていません",
+      "reachability_title": "到達可能性",
+      "sas_close": "閉じる",
+      "sas_digits_label": "数字",
+      "sas_instructions": "信頼できるチャネル (音声/ビデオ/対面) でこれらをピアと比較してください。両側が一致すれば、ピアは検証されます — 信頼を TRUSTED に切り替えてください。",
+      "sas_modal_title": "短い認証文字列",
+      "sas_show_button": "SAS コードを表示",
+      "sas_title": "ID の検証 (SAS)",
+      "sas_words_label": "単語",
+      "title": "ピア詳細",
+      "trust_state_title": "信頼状態"
+    },
+    "peers": {
+      "add_peer_cancel": "キャンセル",
+      "add_peer_fab": "ピアを追加",
+      "add_peer_paste_label": "ノードコードを貼り付け",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR をスキャン",
+      "add_peer_scan_qr_unavailable": "QR スキャンは近日公開",
+      "add_peer_submit": "追加",
+      "add_peer_title": "ピアを追加",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "招待するためにノードコードを共有するか、ピアのコードを追加してください。",
+      "empty_title": "ピアがまだいません",
+      "filter_all": "すべて",
+      "filter_blocked": "ブロック済み",
+      "filter_canonical": "標準",
+      "filter_trusted": "信頼済み",
+      "filter_unknown": "不明",
+      "filter_untrusted": "未信頼",
+      "show_infra": "CIRIS インフラストラクチャを表示",
+      "title": "ピア",
+      "trust_blocked": "ブロック済み",
+      "trust_trusted": "信頼済み",
+      "trust_unknown": "不明",
+      "trust_untrusted": "未信頼"
+    },
+    "queue": {
+      "failures": {
+        "send": "送信失敗",
+        "title": "失敗",
+        "verify": "検証失敗"
+      },
+      "refresh": "更新",
+      "stats": {
+        "depth": "キューの深さ",
+        "received": "受信",
+        "sent": "送信",
+        "title": "キュー統計"
+      },
+      "throughput": {
+        "bytes_in": "受信バイト",
+        "bytes_out": "送信バイト",
+        "received": "受信",
+        "sent": "送信",
+        "session": "このセッションの合計",
+        "title": "スループット"
+      }
+    },
+    "stream": {
+      "clear": "クリア",
+      "dismiss": "閉じる",
+      "event_count": "{count} イベント",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "一時停止",
+      "reconnect": "再接続",
+      "resume": "再開",
+      "resume_notice": "再接続しました。一部のイベントが失われている可能性があります。",
+      "retry": "再試行"
+    },
+    "trust_graph": {
+      "empty": "可視化するピアがありません。",
+      "legend": {
+        "blocked": "ブロック済み",
+        "canonical_hint": "太いリング輪郭 = 標準 (エージェントに同梱)。",
+        "edge_hint": "エッジの不透明度はメディアごとの到達可能性を反映します。",
+        "title": "信頼状態",
+        "trusted": "信頼済み",
+        "unknown": "不明",
+        "untrusted": "未信頼"
+      },
+      "refresh": "更新",
+      "summary": "{count} ピア · {canonical} 標準"
     }
   },
   "settings": {

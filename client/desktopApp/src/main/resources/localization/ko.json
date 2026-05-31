@@ -2070,7 +2070,17 @@
     "identity_card": {
       "title": "페더레이션 신원",
       "copy_address": "주소 복사",
-      "qr_label": "QR · 래칫 / 회전"
+      "qr_label": "QR · 래칫 / 회전",
+      "capabilities_title": "기능",
+      "copied": "복사됨",
+      "copy_node_code": "노드 코드 복사",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "피어를 초대하려면 이 코드를 공유하세요. 붙여넣거나 스캔할 수 있습니다.",
+      "node_code_title": "내 노드 코드",
+      "peers_canonical": "정규",
+      "peers_total": "전체 피어",
+      "qr_placeholder_label": "QR 코드",
+      "signer_key_label": "서명자 키"
     },
     "mode_card": {
       "title": "에이전트 모드",
@@ -2120,6 +2130,205 @@
       "queue_description": "전송별 발신 패킷 큐: 깊이, 연령, 재시도 횟수, 단편화 상태.",
       "diagnostics_description": "최근 오류, 서명 실패, 정책 차단, 전송 변동 — 운영자 포렌식.",
       "content_description": "페더레이션 콘텐츠 저장소 브라우저 — 로컬 캐시, 페더레이션, 해시 주소 지정 검색."
+    },
+    "announces": {
+      "empty": "아직 알림이 없습니다. 페더레이션 이벤트 대기 중…",
+      "no_message": "(메시지 없음)",
+      "title": "실시간 알림"
+    },
+    "content": {
+      "back": "뒤로",
+      "error": {
+        "edge_unavailable": "Edge를 사용할 수 없습니다.",
+        "not_found": "이 피어에서 콘텐츠를 찾을 수 없습니다. 다른 피어를 시도해 보세요."
+      },
+      "fetch": {
+        "button": "가져오기",
+        "content_id_label": "콘텐츠 ID (SHA-256)",
+        "content_id_placeholder": "64자 hex 다이제스트",
+        "invalid_id": "콘텐츠 ID는 64개의 16진수 문자여야 합니다.",
+        "timeout_label": "시간 초과"
+      },
+      "peer": {
+        "change": "피어 변경",
+        "empty": "사용 가능한 피어가 없습니다. 먼저 피어를 추가하세요.",
+        "search": "피어 검색"
+      },
+      "refresh": "새로고침",
+      "result": {
+        "content_type": "콘텐츠 유형",
+        "fetched_at": "가져온 시간",
+        "preview": "페이로드 미리보기 (처음 200바이트)",
+        "size": "크기",
+        "title": "결과"
+      },
+      "step1": {
+        "title": "쿼리할 피어 선택"
+      },
+      "step2": {
+        "title": "피어에서 콘텐츠 가져오기"
+      }
+    },
+    "diagnostics": {
+      "empty": "일치하는 이벤트가 없습니다. 필터를 조정하거나 기다리세요.",
+      "more": "확장하려면 탭",
+      "no_summary": "(페이로드 요약 없음)",
+      "search_hint": "메시지 텍스트 또는 event_type으로 필터링",
+      "title": "진단"
+    },
+    "interfaces": {
+      "empty": "구성된 전송이 없습니다.",
+      "not_measured": "아직 측정되지 않음",
+      "peers": "피어",
+      "refresh": "새로고침",
+      "row": {
+        "bytes_in": "수신 바이트",
+        "bytes_out": "송신 바이트",
+        "reach": "도달 %",
+        "status": "상태"
+      },
+      "status": {
+        "active": "활성",
+        "degraded": "저하됨",
+        "idle": "유휴",
+        "unknown": "알 수 없음"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "텔레메트리 파이프라인을 배포하면 피어가 실제 지도에 표시됩니다. 그때까지는 지금 볼 수 있는 항목입니다:",
+        "title": "조작된 위치 없음"
+      },
+      "future": {
+        "bullet_announces": "지역별로 오버레이된 실시간 알림",
+        "bullet_locations": "텔레메트리의 피어 위치",
+        "bullet_transport": "전송 링크 오버레이 (TCP / LoRa / I2P / AX.25)",
+        "title": "나중에 표시될 내용"
+      },
+      "hero": {
+        "subtitle": "실제 지도는 텔레메트리 파이프라인과 함께 제공됩니다.",
+        "title": "지리적 보기"
+      },
+      "refresh": "새로고침",
+      "today": {
+        "canonical": "정규 피어",
+        "other": "기타 피어",
+        "title": "현재 보유한 것",
+        "trusted": "신뢰할 수 있는 피어"
+      }
+    },
+    "paths": {
+      "empty": "아직 경로 이벤트가 없습니다.",
+      "kind_added": "추가됨",
+      "kind_changed": "변경됨",
+      "kind_lost": "손실됨",
+      "kind_other": "이벤트",
+      "no_static_table_note": "Edge 1.0은 정적 경로 테이블을 노출하지 않습니다. 이 화면은 라이브 변경만 표시합니다. 재배포 시 상태가 재설정될 수 있습니다.",
+      "section_recent": "최근 경로 이벤트",
+      "title": "실시간 경로"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "배경 (hex)",
+      "appearance_fg_label": "전경 (hex)",
+      "appearance_icon_label": "아이콘",
+      "appearance_save": "외관 저장",
+      "appearance_title": "외관",
+      "cancel_button": "취소",
+      "confirm_block_body": "차단하면 이 피어의 모든 트래픽이 거부됩니다. 나중에 차단을 해제할 수 있습니다.",
+      "confirm_block_button": "차단",
+      "confirm_block_title": "이 피어를 차단할까요?",
+      "copy_key_id": "키 ID 복사",
+      "last_ok_days_ago": "{n}일 전",
+      "last_ok_hours_ago": "{n}시간 전",
+      "last_ok_just_now": "방금 전",
+      "last_ok_min_ago": "{n}분 전",
+      "last_ok_never": "없음",
+      "not_found": "피어를 찾을 수 없습니다",
+      "notes_empty": "메모 없음",
+      "notes_title": "메모",
+      "reachability_empty": "아직 측정되지 않음",
+      "reachability_title": "도달 가능성",
+      "sas_close": "닫기",
+      "sas_digits_label": "숫자",
+      "sas_instructions": "신뢰할 수 있는 채널 (음성/비디오/대면)을 통해 피어와 이를 비교하세요. 양쪽이 일치하면 피어가 검증된 것입니다 — 신뢰를 TRUSTED로 전환하세요.",
+      "sas_modal_title": "짧은 인증 문자열",
+      "sas_show_button": "SAS 코드 표시",
+      "sas_title": "신원 확인 (SAS)",
+      "sas_words_label": "단어",
+      "title": "피어 세부정보",
+      "trust_state_title": "신뢰 상태"
+    },
+    "peers": {
+      "add_peer_cancel": "취소",
+      "add_peer_fab": "피어 추가",
+      "add_peer_paste_label": "노드 코드 붙여넣기",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR 스캔",
+      "add_peer_scan_qr_unavailable": "QR 스캔 곧 제공 예정",
+      "add_peer_submit": "추가",
+      "add_peer_title": "피어 추가",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "초대하려면 노드 코드를 공유하거나 피어의 코드를 추가하세요.",
+      "empty_title": "아직 피어가 없습니다",
+      "filter_all": "전체",
+      "filter_blocked": "차단됨",
+      "filter_canonical": "정규",
+      "filter_trusted": "신뢰함",
+      "filter_unknown": "알 수 없음",
+      "filter_untrusted": "신뢰하지 않음",
+      "show_infra": "CIRIS 인프라 표시",
+      "title": "피어",
+      "trust_blocked": "차단됨",
+      "trust_trusted": "신뢰함",
+      "trust_unknown": "알 수 없음",
+      "trust_untrusted": "신뢰하지 않음"
+    },
+    "queue": {
+      "failures": {
+        "send": "전송 실패",
+        "title": "실패",
+        "verify": "검증 실패"
+      },
+      "refresh": "새로고침",
+      "stats": {
+        "depth": "큐 깊이",
+        "received": "받음",
+        "sent": "보냄",
+        "title": "큐 통계"
+      },
+      "throughput": {
+        "bytes_in": "수신 바이트",
+        "bytes_out": "송신 바이트",
+        "received": "받음",
+        "sent": "보냄",
+        "session": "이 세션 합계",
+        "title": "처리량"
+      }
+    },
+    "stream": {
+      "clear": "지우기",
+      "dismiss": "닫기",
+      "event_count": "{count}개 이벤트",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "일시 정지",
+      "reconnect": "재연결",
+      "resume": "재개",
+      "resume_notice": "재연결되었습니다. 일부 이벤트가 누락되었을 수 있습니다.",
+      "retry": "다시 시도"
+    },
+    "trust_graph": {
+      "empty": "시각화할 피어가 없습니다.",
+      "legend": {
+        "blocked": "차단됨",
+        "canonical_hint": "두꺼운 링 윤곽 = 정규 (에이전트와 함께 제공).",
+        "edge_hint": "Edge 불투명도는 매체별 도달 가능성을 반영합니다.",
+        "title": "신뢰 상태",
+        "trusted": "신뢰함",
+        "unknown": "알 수 없음",
+        "untrusted": "신뢰하지 않음"
+      },
+      "refresh": "새로고침",
+      "summary": "{count}개 피어 · {canonical}개 정규"
     }
   },
   "settings": {

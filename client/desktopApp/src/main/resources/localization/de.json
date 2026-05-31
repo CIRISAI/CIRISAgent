@@ -2070,7 +2070,17 @@
     "identity_card": {
       "title": "Föderationsidentität",
       "copy_address": "Adresse kopieren",
-      "qr_label": "QR · Ratchet / Rotation"
+      "qr_label": "QR · Ratchet / Rotation",
+      "capabilities_title": "Fähigkeiten",
+      "copied": "Kopiert",
+      "copy_node_code": "Knotencode kopieren",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Teile diesen Code mit einem Peer, um ihn einzuladen. Er kann ihn einfügen oder scannen.",
+      "node_code_title": "Mein Knotencode",
+      "peers_canonical": "Kanonisch",
+      "peers_total": "Peers insgesamt",
+      "qr_placeholder_label": "QR-Code",
+      "signer_key_label": "Signierschlüssel"
     },
     "mode_card": {
       "title": "Agentenmodus",
@@ -2120,6 +2130,205 @@
       "queue_description": "Ausgehende Paketwarteschlange pro Transport: Tiefe, Alter, Wiederholungsanzahl, Fragmentierungszustand.",
       "diagnostics_description": "Aktuelle Fehler, Signaturfehler, Richtlinienblockaden, Transport-Churn — Operator-Forensik.",
       "content_description": "Föderations-Inhaltsspeicher-Browser — lokal zwischengespeichert, föderiert, hash-adressierter Abruf."
+    },
+    "announces": {
+      "empty": "Noch keine Ankündigungen. Warte auf Föderationsereignisse…",
+      "no_message": "(keine Nachricht)",
+      "title": "Live-Ankündigungen"
+    },
+    "content": {
+      "back": "Zurück",
+      "error": {
+        "edge_unavailable": "Edge nicht verfügbar.",
+        "not_found": "Inhalt bei diesem Peer nicht gefunden. Versuche einen anderen Peer."
+      },
+      "fetch": {
+        "button": "Abrufen",
+        "content_id_label": "Inhalts-ID (SHA-256)",
+        "content_id_placeholder": "64-stellige Hex-Prüfsumme",
+        "invalid_id": "Inhalts-ID muss 64 hexadezimale Zeichen lang sein.",
+        "timeout_label": "Zeitüberschreitung"
+      },
+      "peer": {
+        "change": "Peer wechseln",
+        "empty": "Keine Peers verfügbar. Füge zuerst Peers hinzu.",
+        "search": "Peers suchen"
+      },
+      "refresh": "Aktualisieren",
+      "result": {
+        "content_type": "Inhaltstyp",
+        "fetched_at": "Abgerufen um",
+        "preview": "Payload-Vorschau (erste 200 Bytes)",
+        "size": "Größe",
+        "title": "Ergebnis"
+      },
+      "step1": {
+        "title": "Wähle einen Peer zur Abfrage"
+      },
+      "step2": {
+        "title": "Inhalt vom Peer abrufen"
+      }
+    },
+    "diagnostics": {
+      "empty": "Keine passenden Ereignisse. Filter anpassen oder warten.",
+      "more": "tippen zum Erweitern",
+      "no_summary": "(keine Payload-Zusammenfassung)",
+      "search_hint": "Filtern nach Nachrichtentext oder event_type",
+      "title": "Diagnose"
+    },
+    "interfaces": {
+      "empty": "Keine Transporte konfiguriert.",
+      "not_measured": "Noch nicht gemessen",
+      "peers": "Peers",
+      "refresh": "Aktualisieren",
+      "row": {
+        "bytes_in": "Bytes ein",
+        "bytes_out": "Bytes aus",
+        "reach": "Erreichbarkeit %",
+        "status": "Status"
+      },
+      "status": {
+        "active": "Aktiv",
+        "degraded": "Beeinträchtigt",
+        "idle": "Inaktiv",
+        "unknown": "Unbekannt"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Peers werden auf einer echten Karte erscheinen, sobald wir unsere Telemetrie-Pipeline ausliefern. Bis dahin siehst du Folgendes:",
+        "title": "Keine erfundenen Standorte"
+      },
+      "future": {
+        "bullet_announces": "Echtzeit-Ankündigungen nach Region überlagert",
+        "bullet_locations": "Peer-Standorte aus Telemetrie",
+        "bullet_transport": "Transport-Link-Overlay (TCP / LoRa / I2P / AX.25)",
+        "title": "Was dies später zeigen wird"
+      },
+      "hero": {
+        "subtitle": "Echte Karte kommt mit der Telemetrie-Pipeline.",
+        "title": "Geografische Ansicht"
+      },
+      "refresh": "Aktualisieren",
+      "today": {
+        "canonical": "Kanonische Peers",
+        "other": "Andere Peers",
+        "title": "Was wir heute haben",
+        "trusted": "Vertrauenswürdige Peers"
+      }
+    },
+    "paths": {
+      "empty": "Noch keine Pfadereignisse.",
+      "kind_added": "hinzugefügt",
+      "kind_changed": "geändert",
+      "kind_lost": "verloren",
+      "kind_other": "Ereignis",
+      "no_static_table_note": "Edge 1.0 stellt keine statische Pfadtabelle bereit; dieser Bildschirm zeigt nur Live-Änderungen. Erneutes Deployment kann den Zustand zurücksetzen.",
+      "section_recent": "Aktuelle Pfadereignisse",
+      "title": "Live-Pfade"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Hintergrund (hex)",
+      "appearance_fg_label": "Vordergrund (hex)",
+      "appearance_icon_label": "Symbol",
+      "appearance_save": "Aussehen speichern",
+      "appearance_title": "Aussehen",
+      "cancel_button": "Abbrechen",
+      "confirm_block_body": "Das Blockieren verweigert allen Verkehr von diesem Peer. Du kannst später entsperren.",
+      "confirm_block_button": "Blockieren",
+      "confirm_block_title": "Diesen Peer blockieren?",
+      "copy_key_id": "Schlüssel-ID kopieren",
+      "last_ok_days_ago": "vor {n}T",
+      "last_ok_hours_ago": "vor {n}h",
+      "last_ok_just_now": "Gerade eben",
+      "last_ok_min_ago": "vor {n} Min",
+      "last_ok_never": "Nie",
+      "not_found": "Peer nicht gefunden",
+      "notes_empty": "Keine Notizen",
+      "notes_title": "Notizen",
+      "reachability_empty": "Noch nicht gemessen",
+      "reachability_title": "Erreichbarkeit",
+      "sas_close": "Schließen",
+      "sas_digits_label": "Ziffern",
+      "sas_instructions": "Vergleiche diese mit dem Peer über einen vertrauenswürdigen Kanal (Sprache/Video/persönlich). Wenn beide Seiten übereinstimmen, ist der Peer verifiziert — setze Vertrauen auf TRUSTED.",
+      "sas_modal_title": "Kurze Authentifizierungszeichenfolge",
+      "sas_show_button": "SAS-Code anzeigen",
+      "sas_title": "Identität verifizieren (SAS)",
+      "sas_words_label": "Wörter",
+      "title": "Peer-Details",
+      "trust_state_title": "Vertrauensstatus"
+    },
+    "peers": {
+      "add_peer_cancel": "Abbrechen",
+      "add_peer_fab": "Peer hinzufügen",
+      "add_peer_paste_label": "Knotencode einfügen",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR scannen",
+      "add_peer_scan_qr_unavailable": "QR-Scannen kommt bald",
+      "add_peer_submit": "Hinzufügen",
+      "add_peer_title": "Peer hinzufügen",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Teile deinen Knotencode zur Einladung oder füge einen Peer-Code hinzu.",
+      "empty_title": "Noch keine Peers",
+      "filter_all": "Alle",
+      "filter_blocked": "Blockiert",
+      "filter_canonical": "Kanonisch",
+      "filter_trusted": "Vertrauenswürdig",
+      "filter_unknown": "Unbekannt",
+      "filter_untrusted": "Nicht vertraut",
+      "show_infra": "CIRIS-Infrastruktur anzeigen",
+      "title": "Peers",
+      "trust_blocked": "blockiert",
+      "trust_trusted": "vertrauenswürdig",
+      "trust_unknown": "unbekannt",
+      "trust_untrusted": "nicht vertraut"
+    },
+    "queue": {
+      "failures": {
+        "send": "Sendefehler",
+        "title": "Fehler",
+        "verify": "Verifizierungsfehler"
+      },
+      "refresh": "Aktualisieren",
+      "stats": {
+        "depth": "Warteschlangentiefe",
+        "received": "Empfangen",
+        "sent": "Gesendet",
+        "title": "Warteschlangenstatistik"
+      },
+      "throughput": {
+        "bytes_in": "Bytes ein",
+        "bytes_out": "Bytes aus",
+        "received": "Empfangen",
+        "sent": "Gesendet",
+        "session": "Gesamt diese Sitzung",
+        "title": "Durchsatz"
+      }
+    },
+    "stream": {
+      "clear": "Löschen",
+      "dismiss": "Verwerfen",
+      "event_count": "{count} Ereignisse",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Pause",
+      "reconnect": "Neu verbinden",
+      "resume": "Fortsetzen",
+      "resume_notice": "Erneut verbunden. Einige Ereignisse könnten verpasst worden sein.",
+      "retry": "Wiederholen"
+    },
+    "trust_graph": {
+      "empty": "Keine Peers zum Visualisieren.",
+      "legend": {
+        "blocked": "Blockiert",
+        "canonical_hint": "Dickerer Ringumriss = kanonisch (wird mit dem Agenten ausgeliefert).",
+        "edge_hint": "Kanten-Transparenz spiegelt Erreichbarkeit pro Medium wider.",
+        "title": "Vertrauensstatus",
+        "trusted": "Vertrauenswürdig",
+        "unknown": "Unbekannt",
+        "untrusted": "Nicht vertraut"
+      },
+      "refresh": "Aktualisieren",
+      "summary": "{count} Peers · {canonical} kanonisch"
     }
   },
   "settings": {

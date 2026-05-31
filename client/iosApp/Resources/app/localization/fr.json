@@ -2070,7 +2070,17 @@
     "identity_card": {
       "title": "Identité de fédération",
       "copy_address": "Copier l'adresse",
-      "qr_label": "QR · ratchet / rotation"
+      "qr_label": "QR · ratchet / rotation",
+      "capabilities_title": "Capacités",
+      "copied": "Copié",
+      "copy_node_code": "Copier le code de nœud",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Partagez ce code avec un pair pour l'inviter. Il peut le coller ou le scanner.",
+      "node_code_title": "Mon code de nœud",
+      "peers_canonical": "Canonique",
+      "peers_total": "Total des pairs",
+      "qr_placeholder_label": "Code QR",
+      "signer_key_label": "Clé de signature"
     },
     "mode_card": {
       "title": "Mode agent",
@@ -2120,6 +2130,205 @@
       "queue_description": "File de paquets sortants par transport : profondeur, âge, nombre de réessais, état de fragmentation.",
       "diagnostics_description": "Erreurs récentes, échecs de signature, blocages de politique, agitation de transport — forensique opérateur.",
       "content_description": "Navigateur de magasin de contenu de fédération — mis en cache localement, fédéré, récupération par hachage."
+    },
+    "announces": {
+      "empty": "Pas encore d'annonces. En attente d'événements de fédération…",
+      "no_message": "(aucun message)",
+      "title": "Annonces en direct"
+    },
+    "content": {
+      "back": "Retour",
+      "error": {
+        "edge_unavailable": "Edge indisponible.",
+        "not_found": "Contenu introuvable sur ce pair. Essayez un autre pair."
+      },
+      "fetch": {
+        "button": "Récupérer",
+        "content_id_label": "ID de contenu (SHA-256)",
+        "content_id_placeholder": "Empreinte hex de 64 caractères",
+        "invalid_id": "L'ID de contenu doit comporter 64 caractères hexadécimaux.",
+        "timeout_label": "Délai"
+      },
+      "peer": {
+        "change": "Changer de pair",
+        "empty": "Aucun pair disponible. Ajoutez d'abord des pairs.",
+        "search": "Rechercher des pairs"
+      },
+      "refresh": "Actualiser",
+      "result": {
+        "content_type": "Type de contenu",
+        "fetched_at": "Récupéré à",
+        "preview": "Aperçu de la charge utile (premiers 200 octets)",
+        "size": "Taille",
+        "title": "Résultat"
+      },
+      "step1": {
+        "title": "Sélectionnez un pair à interroger"
+      },
+      "step2": {
+        "title": "Récupérer le contenu du pair"
+      }
+    },
+    "diagnostics": {
+      "empty": "Aucun événement correspondant. Ajustez les filtres ou attendez.",
+      "more": "appuyez pour développer",
+      "no_summary": "(aucun résumé de charge utile)",
+      "search_hint": "Filtrer par texte de message ou event_type",
+      "title": "Diagnostics"
+    },
+    "interfaces": {
+      "empty": "Aucun transport configuré.",
+      "not_measured": "Pas encore mesuré",
+      "peers": "pairs",
+      "refresh": "Actualiser",
+      "row": {
+        "bytes_in": "Octets entrants",
+        "bytes_out": "Octets sortants",
+        "reach": "Portée %",
+        "status": "Statut"
+      },
+      "status": {
+        "active": "Actif",
+        "degraded": "Dégradé",
+        "idle": "Inactif",
+        "unknown": "Inconnu"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Les pairs apparaîtront sur une vraie carte une fois notre pipeline de télémétrie déployé. D'ici là, voici ce que vous pouvez voir maintenant :",
+        "title": "Aucun emplacement inventé"
+      },
+      "future": {
+        "bullet_announces": "Annonces en temps réel superposées par région",
+        "bullet_locations": "Emplacements des pairs depuis la télémétrie",
+        "bullet_transport": "Superposition des liaisons de transport (TCP / LoRa / I2P / AX.25)",
+        "title": "Ce que cela montrera plus tard"
+      },
+      "hero": {
+        "subtitle": "Carte réelle arrive avec le pipeline de télémétrie.",
+        "title": "Vue géographique"
+      },
+      "refresh": "Actualiser",
+      "today": {
+        "canonical": "Pairs canoniques",
+        "other": "Autres pairs",
+        "title": "Ce que nous avons aujourd'hui",
+        "trusted": "Pairs de confiance"
+      }
+    },
+    "paths": {
+      "empty": "Aucun événement de chemin pour l'instant.",
+      "kind_added": "ajouté",
+      "kind_changed": "modifié",
+      "kind_lost": "perdu",
+      "kind_other": "événement",
+      "no_static_table_note": "Edge 1.0 n'expose pas de table de chemins statique ; cet écran ne montre que les changements en direct. Le redéploiement peut réinitialiser l'état.",
+      "section_recent": "Événements de chemin récents",
+      "title": "Chemins en direct"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Arrière-plan (hex)",
+      "appearance_fg_label": "Premier plan (hex)",
+      "appearance_icon_label": "Icône",
+      "appearance_save": "Enregistrer l'apparence",
+      "appearance_title": "Apparence",
+      "cancel_button": "Annuler",
+      "confirm_block_body": "Le blocage refusera tout le trafic de ce pair. Vous pouvez débloquer plus tard.",
+      "confirm_block_button": "Bloquer",
+      "confirm_block_title": "Bloquer ce pair ?",
+      "copy_key_id": "Copier l'ID de clé",
+      "last_ok_days_ago": "il y a {n}j",
+      "last_ok_hours_ago": "il y a {n}h",
+      "last_ok_just_now": "À l'instant",
+      "last_ok_min_ago": "il y a {n} min",
+      "last_ok_never": "Jamais",
+      "not_found": "Pair introuvable",
+      "notes_empty": "Aucune note",
+      "notes_title": "Notes",
+      "reachability_empty": "Pas encore mesuré",
+      "reachability_title": "Accessibilité",
+      "sas_close": "Fermer",
+      "sas_digits_label": "Chiffres",
+      "sas_instructions": "Comparez-les avec le pair via un canal de confiance (voix/vidéo/en personne). Si les deux côtés correspondent, le pair est vérifié — basculez la confiance sur TRUSTED.",
+      "sas_modal_title": "Chaîne d'authentification courte",
+      "sas_show_button": "Afficher le code SAS",
+      "sas_title": "Vérifier l'identité (SAS)",
+      "sas_words_label": "Mots",
+      "title": "Détail du pair",
+      "trust_state_title": "État de confiance"
+    },
+    "peers": {
+      "add_peer_cancel": "Annuler",
+      "add_peer_fab": "Ajouter un pair",
+      "add_peer_paste_label": "Coller le code de nœud",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "Scanner QR",
+      "add_peer_scan_qr_unavailable": "Scan QR bientôt disponible",
+      "add_peer_submit": "Ajouter",
+      "add_peer_title": "Ajouter un pair",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Partagez votre code de nœud pour inviter, ou ajoutez le code d'un pair.",
+      "empty_title": "Aucun pair pour l'instant",
+      "filter_all": "Tous",
+      "filter_blocked": "Bloqués",
+      "filter_canonical": "Canoniques",
+      "filter_trusted": "De confiance",
+      "filter_unknown": "Inconnus",
+      "filter_untrusted": "Non fiables",
+      "show_infra": "Afficher l'infrastructure CIRIS",
+      "title": "Pairs",
+      "trust_blocked": "bloqué",
+      "trust_trusted": "de confiance",
+      "trust_unknown": "inconnu",
+      "trust_untrusted": "non fiable"
+    },
+    "queue": {
+      "failures": {
+        "send": "Échecs d'envoi",
+        "title": "Échecs",
+        "verify": "Échecs de vérification"
+      },
+      "refresh": "Actualiser",
+      "stats": {
+        "depth": "Profondeur de file",
+        "received": "Reçus",
+        "sent": "Envoyés",
+        "title": "Statistiques de file"
+      },
+      "throughput": {
+        "bytes_in": "Octets entrants",
+        "bytes_out": "Octets sortants",
+        "received": "Reçus",
+        "sent": "Envoyés",
+        "session": "Total cette session",
+        "title": "Débit"
+      }
+    },
+    "stream": {
+      "clear": "Effacer",
+      "dismiss": "Ignorer",
+      "event_count": "{count} événements",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Pause",
+      "reconnect": "Reconnecter",
+      "resume": "Reprendre",
+      "resume_notice": "Reconnecté. Certains événements ont pu être manqués.",
+      "retry": "Réessayer"
+    },
+    "trust_graph": {
+      "empty": "Aucun pair à visualiser.",
+      "legend": {
+        "blocked": "Bloqué",
+        "canonical_hint": "Contour d'anneau plus épais = canonique (livré avec l'agent).",
+        "edge_hint": "L'opacité des arêtes reflète l'accessibilité par média.",
+        "title": "État de confiance",
+        "trusted": "De confiance",
+        "unknown": "Inconnu",
+        "untrusted": "Non fiable"
+      },
+      "refresh": "Actualiser",
+      "summary": "{count} pairs · {canonical} canoniques"
     }
   },
   "settings": {

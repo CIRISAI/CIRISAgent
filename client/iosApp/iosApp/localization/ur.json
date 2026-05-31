@@ -2070,7 +2070,17 @@
     "identity_card": {
       "title": "فیڈریشن شناخت",
       "copy_address": "پتہ کاپی کریں",
-      "qr_label": "QR · ریچٹ / گردش"
+      "qr_label": "QR · ریچٹ / گردش",
+      "capabilities_title": "صلاحیتیں",
+      "copied": "کاپی ہو گیا",
+      "copy_node_code": "نوڈ کوڈ کاپی کریں",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "پیئر کو مدعو کرنے کے لیے یہ کوڈ شیئر کریں۔ وہ پیسٹ یا اسکین کر سکتے ہیں۔",
+      "node_code_title": "میرا نوڈ کوڈ",
+      "peers_canonical": "کینونیکل",
+      "peers_total": "کل پیئرز",
+      "qr_placeholder_label": "QR کوڈ",
+      "signer_key_label": "دستخط کنندہ کلید"
     },
     "mode_card": {
       "title": "ایجنٹ موڈ",
@@ -2120,6 +2130,205 @@
       "queue_description": "فی ٹرانسپورٹ آؤٹ باؤنڈ پیکٹ قطار: گہرائی، عمر، دوبارہ کوشش کی گنتی، ٹکڑے ہونے کی حالت۔",
       "diagnostics_description": "حالیہ خرابیاں، دستخط ناکامیاں، پالیسی بلاکس، ٹرانسپورٹ ہنگامہ — آپریٹر فرانزک۔",
       "content_description": "فیڈریشن مواد اسٹور براؤزر — مقامی طور پر کیشڈ، فیڈریٹڈ، ہیش-ایڈریسڈ بازیافت۔"
+    },
+    "announces": {
+      "empty": "ابھی تک کوئی اعلان نہیں۔ فیڈریشن واقعات کا انتظار کر رہا ہے…",
+      "no_message": "(کوئی پیغام نہیں)",
+      "title": "براہ راست اعلانات"
+    },
+    "content": {
+      "back": "واپس",
+      "error": {
+        "edge_unavailable": "Edge دستیاب نہیں۔",
+        "not_found": "اس پیئر پر مواد نہیں ملا۔ مختلف پیئر آزمائیں۔"
+      },
+      "fetch": {
+        "button": "حاصل کریں",
+        "content_id_label": "مواد کی شناخت (SHA-256)",
+        "content_id_placeholder": "64-حروف کا hex ڈائجسٹ",
+        "invalid_id": "مواد کی شناخت 64 ہیکساڈیسیمل حروف ہونی چاہیے۔",
+        "timeout_label": "ٹائم آؤٹ"
+      },
+      "peer": {
+        "change": "پیئر تبدیل کریں",
+        "empty": "کوئی پیئر دستیاب نہیں۔ پہلے پیئر شامل کریں۔",
+        "search": "پیئر تلاش کریں"
+      },
+      "refresh": "تازہ کریں",
+      "result": {
+        "content_type": "مواد کی قسم",
+        "fetched_at": "حاصل کیا گیا",
+        "preview": "Payload پیش نظارہ (پہلے 200 بائٹس)",
+        "size": "سائز",
+        "title": "نتیجہ"
+      },
+      "step1": {
+        "title": "استفسار کے لیے پیئر منتخب کریں"
+      },
+      "step2": {
+        "title": "پیئر سے مواد حاصل کریں"
+      }
+    },
+    "diagnostics": {
+      "empty": "کوئی مماثل واقعات نہیں۔ فلٹرز ایڈجسٹ کریں یا انتظار کریں۔",
+      "more": "وسیع کرنے کے لیے ٹیپ کریں",
+      "no_summary": "(کوئی payload خلاصہ نہیں)",
+      "search_hint": "پیغام متن یا event_type سے فلٹر کریں",
+      "title": "تشخیص"
+    },
+    "interfaces": {
+      "empty": "کوئی ٹرانسپورٹ ترتیب نہیں دیا گیا۔",
+      "not_measured": "ابھی تک ناپا نہیں گیا",
+      "peers": "پیئرز",
+      "refresh": "تازہ کریں",
+      "row": {
+        "bytes_in": "آنے والے بائٹس",
+        "bytes_out": "جانے والے بائٹس",
+        "reach": "رسائی %",
+        "status": "حیثیت"
+      },
+      "status": {
+        "active": "فعال",
+        "degraded": "کم تر",
+        "idle": "بیکار",
+        "unknown": "نامعلوم"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "جب ہم اپنی ٹیلیمیٹری پائپ لائن جاری کریں گے تو پیئرز اصلی نقشے پر ظاہر ہوں گے۔ تب تک، یہاں ہے کہ آپ ابھی کیا دیکھ سکتے ہیں:",
+        "title": "کوئی من گھڑت مقامات نہیں"
+      },
+      "future": {
+        "bullet_announces": "علاقے کے لحاظ سے اوور لے کیے گئے ریئل ٹائم اعلانات",
+        "bullet_locations": "ٹیلیمیٹری سے پیئر مقامات",
+        "bullet_transport": "ٹرانسپورٹ-لنک اوور لے (TCP / LoRa / I2P / AX.25)",
+        "title": "یہ بعد میں کیا دکھائے گا"
+      },
+      "hero": {
+        "subtitle": "اصلی نقشہ ٹیلیمیٹری پائپ لائن کے ساتھ آ رہا ہے۔",
+        "title": "جغرافیائی منظر"
+      },
+      "refresh": "تازہ کریں",
+      "today": {
+        "canonical": "کینونیکل پیئرز",
+        "other": "دیگر پیئرز",
+        "title": "آج ہمارے پاس کیا ہے",
+        "trusted": "قابل اعتماد پیئرز"
+      }
+    },
+    "paths": {
+      "empty": "ابھی تک کوئی راستہ واقعات نہیں۔",
+      "kind_added": "شامل کیا گیا",
+      "kind_changed": "تبدیل ہوا",
+      "kind_lost": "ضائع ہو گیا",
+      "kind_other": "واقعہ",
+      "no_static_table_note": "Edge 1.0 جامد راستہ ٹیبل ظاہر نہیں کرتا؛ یہ اسکرین صرف براہ راست تبدیلیاں دکھاتی ہے۔ دوبارہ تعیناتی حالت کو ری سیٹ کر سکتی ہے۔",
+      "section_recent": "حالیہ راستہ واقعات",
+      "title": "براہ راست راستے"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "پس منظر (hex)",
+      "appearance_fg_label": "پیش منظر (hex)",
+      "appearance_icon_label": "آئیکن",
+      "appearance_save": "ظاہری شکل محفوظ کریں",
+      "appearance_title": "ظاہری شکل",
+      "cancel_button": "منسوخ کریں",
+      "confirm_block_body": "بلاک کرنے سے اس پیئر سے تمام ٹریفک مسترد ہو جائے گا۔ آپ بعد میں ان بلاک کر سکتے ہیں۔",
+      "confirm_block_button": "بلاک کریں",
+      "confirm_block_title": "اس پیئر کو بلاک کریں؟",
+      "copy_key_id": "کلید ID کاپی کریں",
+      "last_ok_days_ago": "{n} دن پہلے",
+      "last_ok_hours_ago": "{n} گھنٹے پہلے",
+      "last_ok_just_now": "ابھی",
+      "last_ok_min_ago": "{n} منٹ پہلے",
+      "last_ok_never": "کبھی نہیں",
+      "not_found": "پیئر نہیں ملا",
+      "notes_empty": "کوئی نوٹس نہیں",
+      "notes_title": "نوٹس",
+      "reachability_empty": "ابھی تک ناپا نہیں گیا",
+      "reachability_title": "رسائی پذیری",
+      "sas_close": "بند کریں",
+      "sas_digits_label": "ہندسے",
+      "sas_instructions": "قابل اعتماد چینل (آواز/ویڈیو/بالمشافہ) کے ذریعے پیئر کے ساتھ ان کا موازنہ کریں۔ اگر دونوں اطراف مماثل ہوں تو پیئر کی تصدیق ہو گئی ہے — اعتماد کو TRUSTED پر تبدیل کریں۔",
+      "sas_modal_title": "مختصر تصدیقی سٹرنگ",
+      "sas_show_button": "SAS کوڈ دکھائیں",
+      "sas_title": "شناخت کی تصدیق کریں (SAS)",
+      "sas_words_label": "الفاظ",
+      "title": "پیئر کی تفصیل",
+      "trust_state_title": "اعتماد کی حالت"
+    },
+    "peers": {
+      "add_peer_cancel": "منسوخ کریں",
+      "add_peer_fab": "پیئر شامل کریں",
+      "add_peer_paste_label": "نوڈ کوڈ پیسٹ کریں",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR اسکین کریں",
+      "add_peer_scan_qr_unavailable": "QR اسکیننگ جلد آ رہی ہے",
+      "add_peer_submit": "شامل کریں",
+      "add_peer_title": "پیئر شامل کریں",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "مدعو کرنے کے لیے اپنا نوڈ کوڈ شیئر کریں، یا پیئر کا کوڈ شامل کریں۔",
+      "empty_title": "ابھی تک کوئی پیئر نہیں",
+      "filter_all": "سب",
+      "filter_blocked": "بلاک شدہ",
+      "filter_canonical": "کینونیکل",
+      "filter_trusted": "قابل اعتماد",
+      "filter_unknown": "نامعلوم",
+      "filter_untrusted": "ناقابل اعتماد",
+      "show_infra": "CIRIS انفراسٹرکچر دکھائیں",
+      "title": "پیئرز",
+      "trust_blocked": "بلاک شدہ",
+      "trust_trusted": "قابل اعتماد",
+      "trust_unknown": "نامعلوم",
+      "trust_untrusted": "ناقابل اعتماد"
+    },
+    "queue": {
+      "failures": {
+        "send": "بھیجنے میں ناکامیاں",
+        "title": "ناکامیاں",
+        "verify": "تصدیقی ناکامیاں"
+      },
+      "refresh": "تازہ کریں",
+      "stats": {
+        "depth": "قطار کی گہرائی",
+        "received": "موصول",
+        "sent": "بھیجا گیا",
+        "title": "قطار کے اعداد و شمار"
+      },
+      "throughput": {
+        "bytes_in": "آنے والے بائٹس",
+        "bytes_out": "جانے والے بائٹس",
+        "received": "موصول",
+        "sent": "بھیجا گیا",
+        "session": "اس سیشن کا کل",
+        "title": "تھرو پٹ"
+      }
+    },
+    "stream": {
+      "clear": "صاف کریں",
+      "dismiss": "خارج کریں",
+      "event_count": "{count} واقعات",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "روکیں",
+      "reconnect": "دوبارہ منسلک کریں",
+      "resume": "دوبارہ شروع کریں",
+      "resume_notice": "دوبارہ منسلک ہو گیا۔ کچھ واقعات کھو گئے ہو سکتے ہیں۔",
+      "retry": "دوبارہ کوشش کریں"
+    },
+    "trust_graph": {
+      "empty": "ظاہر کرنے کے لیے کوئی پیئر نہیں۔",
+      "legend": {
+        "blocked": "بلاک شدہ",
+        "canonical_hint": "موٹا حلقے کا خاکہ = کینونیکل (ایجنٹ کے ساتھ آتا ہے)۔",
+        "edge_hint": "Edge شفافیت ہر-میڈیم رسائی کی عکاسی کرتی ہے۔",
+        "title": "اعتماد کی حالت",
+        "trusted": "قابل اعتماد",
+        "unknown": "نامعلوم",
+        "untrusted": "ناقابل اعتماد"
+      },
+      "refresh": "تازہ کریں",
+      "summary": "{count} پیئرز · {canonical} کینونیکل"
     }
   },
   "settings": {

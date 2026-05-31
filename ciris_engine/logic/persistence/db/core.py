@@ -908,6 +908,25 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             logger.debug("Could not chmod local signing seed (non-fatal): %s", e)
         logger.info("Bootstrapped local signing seed at %s", local_seed_path)
 
+    # PQC (post-quantum) seed for hybrid signing. Persist 3.x's
+    # `Engine::sign_hybrid` (used by `audit_record_entry` on Postgres for
+    # the Merkle chain) refuses to sign without a local PQC key — the
+    # Ed25519-only path SQLite uses doesn't suffice. The Postgres backend
+    # raises `ciris_persist.Permanent: merkle: sign_hybrid: PQC local not
+    # configured (set pqc_key_id + pqc_key_path)` and the agent then can't
+    # write to the audit chain, which cascades into "Hash chain data not
+    # generated" handler errors and missing ACTION_RESULT events. Bootstrap
+    # a 32-byte seed matching the LocalSigner contract so the persist 3.x
+    # hybrid path has a key to sign with on both backends.
+    local_pqc_seed_path = data_dir / "local_pqc_signing.seed"
+    if not local_pqc_seed_path.exists():
+        local_pqc_seed_path.write_bytes(os.urandom(32))
+        try:
+            local_pqc_seed_path.chmod(0o600)
+        except OSError as e:  # noqa: BLE001 - chmod is best-effort on platforms (Windows)
+            logger.debug("Could not chmod local PQC signing seed (non-fatal): %s", e)
+        logger.info("Bootstrapped local PQC signing seed at %s", local_pqc_seed_path)
+
     # Test isolation only: under pytest, fixtures routinely bootstrap a
     # fresh per-test engine, and a single test may invoke more than one
     # engine-wiring fixture. ciris-persist's process-singleton rejects a
@@ -934,6 +953,8 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             signing_key_id,
             local_key_id=signing_key_id,
             local_key_path=str(local_seed_path),
+            local_pqc_key_id=signing_key_id,
+            local_pqc_key_path=str(local_pqc_seed_path),
         )
     except Exception as e:
         # iOS: flock() returns EPERM in the sandbox. Single-process mobile app

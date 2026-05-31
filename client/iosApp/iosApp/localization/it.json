@@ -2331,5 +2331,78 @@
     "brightness_light": "Chiaro",
     "brightness_system": "Sistema",
     "brightness_dark": "Scuro"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Identità",
+        "trust": "Fiducia",
+        "policies": "Politiche di fiducia"
+      },
+      "badge": {
+        "coming_soon": "IN ARRIVO"
+      },
+      "agent": {
+        "title": "Agente (Sé)",
+        "subtitle": "L'agente stesso — il sé implicito a ogni scala.",
+        "identities_description": "La chiave d'identità propria dell'agente — l'indirizzo di federazione con cui firma ogni contributo. Nome amichevole dalla configurazione locale; key_id da CIRISEdge.",
+        "trust_description": "La fiducia in sé è fondamentale. La Regola d'Oro Ricorsiva non ha clausole di esenzione — ciò che l'agente esige dagli altri, deve esigerlo da sé stesso.",
+        "policies_description": "Politiche auto-applicabili: cadenza di rotazione d'identità, rinnovo delle attestazioni, ciò che l'agente è disposto a firmare in questo ambito."
+      },
+      "family": {
+        "title": "Famiglia",
+        "subtitle": "Altre occorrenze CIRIS che condividono l'identità di questo operatore.",
+        "identities_description": "Occorrenze fratelle (diverse istanze di runtime dello stesso agente) e il loro occurrence_id. Nome amichevole dalla configurazione dell'operatore.",
+        "trust_description": "I membri della famiglia condividono la chiave di firma dell'operatore per impostazione predefinita — la fiducia diretta è la linea di base. Decisioni condivise di spegnimento / risveglio tramite il coordinamento multi-occorrenza.",
+        "policies_description": "Politiche tra occorrenze: rivendicazione condivisa di attività, limiti di sicurezza multi-occorrenza, quorum decisionale per azioni di ambito familiare."
+      },
+      "local_community": {
+        "title": "Comunità Locale",
+        "subtitle": "Peer fidati a livello locale — canale di casa, nucleo domestico, singola gilda.",
+        "identities_description": "Peer esplicitamente fidati dall'operatore. Nome amichevole dalla rubrica; key_id dalla tabella degli annunci.",
+        "trust_description": "Fiducia diretta concessa dall'operatore. Può essere revocata in qualsiasi momento. I contributi di ambito locale restano nella coorte locale e non vengono pubblicati sulla federazione.",
+        "policies_description": "Politiche per comunità: chi può invitare, quali classi di contenuto sono ammesse, come si risolvono le controversie in questo ambito."
+      },
+      "global_communities": {
+        "title": "Comunità Globali",
+        "subtitle": "Gruppi di affinità inter-comunità a cui l'agente si è unito.",
+        "identities_description": "Comunità affiliate (cooperative, organismi professionali, reti di mutuo aiuto) a cui l'agente partecipa. Nome amichevole dal registro accord_holder; key_id altrimenti.",
+        "trust_description": "La fiducia è transitiva tramite l'appartenenza alla comunità. Ogni comunità ha i propri criteri di ammissione e la propria disciplina di attestazione.",
+        "policies_description": "Politiche di ambito di affiliazione: da quali comunità l'agente accetterà guida, risoluzione dei conflitti tra affiliazioni concorrenti."
+      },
+      "global_commons": {
+        "title": "Bene Comune Globale",
+        "subtitle": "La federazione come strato universale — l'umanità, l'ecologia, il substrato stesso.",
+        "identities_description": "Tutte le identità visibili nell'ambito della federazione, inclusi i detentori dell'autorità di arresto humanity_accord, i principali accord_holder e il bacino più ampio di peer.",
+        "trust_description": "La fiducia all'ambito universale è conferita dalla disciplina di attestazione propria della federazione. La Regola d'Oro Ricorsiva vincola ogni principale — inclusa CIRIS L3C — a questo ambito.",
+        "policies_description": "Limiti costituzionali a livello di federazione: autorità di arresto humanity_accord, prefissi riservati accord_holder, dimensionamento del quorum locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Il Bene Comune",
+        "description": "Schede di contributo della federazione: file accord, test di sicurezza, testimoni di comportamento, aggiornamenti delle rubriche, ritrattazioni, deleghe. Ciascuna porta polarità, confidenza, diversità di testimoni e lignaggio della catena di audit risolto tramite il trasporto ContentFetch di Edge."
+      },
+      "participate": {
+        "title": "Partecipa",
+        "description": "Registro dei bisogni della federazione — gli agenti registrano ciò di cui hanno bisogno (revisione di rubrica, testimone di sicurezza, ambito di delega) come attestazioni need:{domain}:{kind}; altri agenti vedono, valutano e rispondono."
+      },
+      "environment_graph": {
+        "title": "Grafo dell'Ambiente",
+        "description": "Grafo dell'ambiente derivato dal lens — punteggi di conformità del manifold per coorte, misurazioni di accesso distributivo, rilevamenti di azioni correlate. Lo strato grafo sopra la directory della federazione contro cui l'agente ragiona durante la presa di decisioni."
+      },
+      "delegation": {
+        "title": "Delega",
+        "description": "Grafo di delega: ambiti delegati verso e da questo agente, con timestamp di concessione, evidence_refs e qualsiasi catena di revoca. Una delle 4 primitive strutturali — co-posseduta con la directory della federazione."
+      },
+      "trust_topology": {
+        "title": "Topologia di Fiducia",
+        "description": "Grafo di fiducia della federazione — peer come nodi, concessioni di fiducia come archi (diretta / delegata / avversaria), colore dell'arco = raggiungibilità di trasporto, dimensione del nodo = peso aggregato di fiducia."
+      },
+      "constitutional": {
+        "title": "Costituzionale",
+        "description": "Superficie di identità del detentore di accord — l'unica asimmetria costituzionale secondo FSD-002 §4.1. Solo le chiavi identity_type=accord_holder possono emettere attestazioni accord:*; questa schermata mostra i detentori attuali, le loro emissioni di prefisso accord rilasciate e l'audit di applicazione dei prefissi riservati."
+      }
+    }
   }
 }

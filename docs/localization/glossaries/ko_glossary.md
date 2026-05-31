@@ -138,11 +138,35 @@ This glossary defines the canonical translations for key CIRIS terms in Korean. 
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## Commons / Cohort-Scope Vocabulary (2.9.4)
+
+| English | Korean | Romanization | Notes |
+|---------|--------|--------------|-------|
+| Cohort scope | 코호트 범위 | kohoteu beomwi | CEG 0.6 wire-format term; keep `cohort_scope` verbatim in code |
+| Layer | 계층 | gyecheung | UX surface representing a cohort scope |
+| Self | 자신 | jasin | Reflexive identity; used with Agent as 에이전트(자신) |
+| Family | 패밀리 | paemilli | Sibling occurrences sharing operator identity (NOT 가족/nuclear family) |
+| Local Community | 로컬 커뮤니티 | rokeol keomyuniti | Locally-trusted peers — home channel, household, single guild |
+| Global Communities | 글로벌 커뮤니티 | geullobeol keomyuniti | Cross-community affinity groups (CEG: affiliations); treat as plural |
+| Global Commons | 글로벌 공유지 | geullobeol gongyuji | Universal federation layer (CEG species + planet + federation) |
+| Federation | 페더레이션 | pedeoreisyeon | CIRIS federation as peer network |
+| The Commons | 공유지 기여 | gongyuji giyeo | Federation contribution cards screen (distinct from Global Commons layer) |
+| Constitutional | 헌장적 | heonjangjeok | Accord-holder identity surface (FSD-002 §4.1); NOT national constitutional law |
+| Delegation | 위임 | wiim | Granting authority to act on one's behalf |
+| Trust Topology | 신뢰 토폴로지 | sinloe topolloji | Federation trust graph — peers as nodes, trust grants as edges |
+| Participate | 참여 | chamyeo | Federation needs registry — register needs, others respond |
+| Affiliations | 소속 관계 | sosok gwangye | CEG term for cross-community memberships |
+| Identities | 신원 목록 | sinwon mongnok | Section: list of known entities at a scope |
+| Trust | 신뢰 | sinloe | Section: trust state per identity |
+| Trust policies | 신뢰 정책 | sinloe jeongchaek | Section: policies governing automatic trust at a scope |
+| Coming Soon | 곧 출시 | got chulsi | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-03-27 | Initial glossary |
+| 1.1 | 2026-05-31 | Added Commons / Cohort-Scope vocabulary (2.9.4) |
 
 ---
 

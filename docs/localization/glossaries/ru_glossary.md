@@ -181,11 +181,34 @@ This glossary defines the canonical translations for key CIRIS terms in Russian.
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## Commons / Cohort-Scope UX (CEG 0.6)
+
+| English | Russian | Transliteration | Notes |
+|---------|---------|-----------------|-------|
+| Cohort scope | Охват когорты | Okhvat kogorty | Технический термин CIRIS; в коде остаётся `cohort_scope` |
+| Layer | Слой | Sloy | UX-поверхность одного охвата когорты |
+| Agent (Self) | Агент (Я) | Agent (Ya) | Агент остаётся «Агент»; Self — «Я» как рефлексивное самоопределение |
+| Family | Семья | Sem'ya | Родственные экземпляры — «братья и сёстры» одного агента, не нуклеарная семья |
+| Local Community | Локальное сообщество | Lokal'noye soobshchestvo | Сообщество географической / непосредственной близости |
+| Global Communities | Глобальные сообщества | Global'nyye soobshchestva | Множественное число — аффилиации поверх границ |
+| Global Commons | Глобальное достояние | Global'noye dostoyaniye | Самый широкий охват; универсальная федеративная поверхность |
+| Federation | Федерация | Federatsiya | Уже в глоссарии — сеть равноправных узлов |
+| The Commons | Лента достояния | Lenta dostoyaniya | Экран карточек вкладов федерации — отличать от «Глобального достояния» как охвата |
+| Constitutional | Конституциональный | Konstitutsional'nyy | Конституциональная структура федерации, не государственное право |
+| Delegation | Делегирование | Delegirovaniye | Граф делегирования: переданные и полученные полномочия |
+| Trust Topology | Топология доверия | Topologiya doveriya | Граф доверия: узлы — пиры, рёбра — выдачи доверия |
+| Participate | Участвовать | Uchastvovat' | Глагол: участвовать / вносить вклад в реестр потребностей |
+| Identities | Идентичности | Identichnosti | Список известных сущностей в данном охвате |
+| Trust | Доверие | Doveriye | Состояние доверия по каждой идентичности |
+| Trust policies | Политики доверия | Politiki doveriya | Правила автоматического доверия в данном охвате |
+| Coming Soon | Скоро | Skoro | Заглушка для непоставленных функций |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-03-27 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope / Commons UX vocabulary |
 
 ---
 

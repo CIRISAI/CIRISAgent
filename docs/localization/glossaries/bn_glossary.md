@@ -117,11 +117,43 @@ Bengali uses the Bengali script (বাংলা লিপি), which is written
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## Commons / Cohort-Scope UX (2.9.4)
+
+CEG 0.6 cohort-scope vocabulary used by the new Commons hub.
+
+### Core Concepts (cohort scope)
+
+| English | Bengali | Transliteration | Notes |
+|---------|---------|-----------------|-------|
+| Cohort scope | কোহোর্ট পরিসর (অবদানের পরিধি) | Cohort poriśor (obodaaner poridhi) | Technical CIRIS term; keep "cohort scope" recognizable |
+| Layer | স্তর | Stor | UX surface for one cohort scope |
+| Self | স্বয়ং | Swayong | Reflexive identity; "agent itself" |
+| Family | পরিবার | Poribar | Sibling occurrences (not nuclear family) |
+| Local Community | স্থানীয় সম্প্রদায় | Sthaaniyo Somprodaay | Locally-trusted peers |
+| Global Communities | বৈশ্বিক সম্প্রদায়সমূহ | Boishik Somprodaay-somuho | Cross-community affinity groups (plural) |
+| Global Commons | বৈশ্বিক যৌথ ক্ষেত্র | Boishik Joutho Kshetro | Universal federation layer |
+| The Commons | যৌথ অবদান | Joutho Obodaan | Federation contribution feed |
+| Constitutional | সাংবিধানিক | Saangbidhaanik | Accord-holder identity surface; federation constitution |
+| Delegation | অর্পণ | Orpon | Granting authority to act on one's behalf |
+| Trust Topology | বিশ্বাস কাঠামো | Bishwaas Kathaamo | Trust graph |
+| Participate | অংশগ্রহণ করুন | Ongshogrohon korun | Federation needs registry |
+| Affiliations | অধিভুক্তি | Odhibhukti | Joined communities (CEG term) |
+
+### UI Labels (Commons sections)
+
+| English | Bengali | Notes |
+|---------|---------|-------|
+| Identities | পরিচয়সমূহ | Plural; list of known entities at a scope |
+| Trust | বিশ্বাস | Trust state per identity |
+| Trust policies | বিশ্বাস নীতি | Automatic-trust policies |
+| Coming Soon | শীঘ্রই আসছে | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-04-07 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary for 2.9.4 Commons hub |
 
 ---
 

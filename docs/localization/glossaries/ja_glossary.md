@@ -184,11 +184,35 @@ This glossary defines the canonical translations for key CIRIS terms in Japanese
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## Commons / Cohort-Scope Vocabulary (2.9.4)
+
+| English | Japanese | Romaji | Notes |
+|---------|----------|--------|-------|
+| Cohort scope | コホート範囲 | Kohōto Han'i | CEG 0.6 wire-format term; keep `cohort_scope` verbatim in code |
+| Layer | レイヤー | Reiyā | UX surface representing a cohort scope |
+| Self | 自己 | Jiko | Reflexive identity; used with Agent as エージェント（自己） |
+| Family | ファミリー | Famirī | Sibling occurrences sharing operator identity (NOT 家族/nuclear family) |
+| Local Community | ローカルコミュニティ | Rōkaru Komyuniti | Locally-trusted peers — home channel, household, single guild |
+| Global Communities | グローバルコミュニティ | Gurōbaru Komyuniti | Cross-community affinity groups (CEG: affiliations); treat as plural |
+| Global Commons | グローバルコモンズ | Gurōbaru Komonzu | Universal federation layer (CEG species + planet + federation) |
+| Federation | フェデレーション | Federēshon | CIRIS federation as peer network |
+| The Commons | コモンズ貢献 | Komonzu Kōken | Federation contribution cards screen (distinct from Global Commons layer) |
+| Constitutional | 憲章的 | Kenshōteki | Accord-holder identity surface (FSD-002 §4.1); NOT national constitutional law |
+| Delegation | 委任 | Inin | Granting authority to act on one's behalf |
+| Trust Topology | 信頼トポロジ | Shinrai Toporoji | Federation trust graph — peers as nodes, trust grants as edges |
+| Participate | 参加 | Sanka | Federation needs registry — register needs, others respond |
+| Affiliations | 所属 | Shozoku | CEG term for cross-community memberships |
+| Identities | アイデンティティ一覧 | Aidentiti Ichiran | Section: list of known entities at a scope |
+| Trust | 信頼 | Shinrai | Section: trust state per identity |
+| Trust policies | 信頼ポリシー | Shinrai Porishī | Section: policies governing automatic trust at a scope |
+| Coming Soon | 近日公開 | Kinjitsu Kōkai | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-01-XX | Initial glossary |
+| 1.1 | 2026-05-31 | Added Commons / Cohort-Scope vocabulary (2.9.4) |
 
 ---
 

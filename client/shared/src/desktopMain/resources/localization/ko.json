@@ -2331,5 +2331,78 @@
     "brightness_light": "라이트",
     "brightness_system": "시스템",
     "brightness_dark": "다크"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "신원 목록",
+        "trust": "신뢰",
+        "policies": "신뢰 정책"
+      },
+      "badge": {
+        "coming_soon": "곧 출시"
+      },
+      "agent": {
+        "title": "에이전트(자신)",
+        "subtitle": "에이전트 자체 — 모든 척도에 내재된 자신.",
+        "identities_description": "에이전트 자신의 신원 키 — 모든 기여에 서명하는 페더레이션 주소입니다. 친근한 이름은 로컬 구성에서, key_id는 CIRISEdge에서 가져옵니다.",
+        "trust_description": "자기 신뢰가 토대입니다. 재귀적 황금률에는 면제 조항이 없습니다 — 에이전트가 타인에게 요구하는 바를 먼저 자신에게 적용해야 합니다.",
+        "policies_description": "자체 적용 정책: 신원 회전 주기, 증명 갱신, 그리고 이 범위에서 에이전트가 서명할 의향이 있는 대상."
+      },
+      "family": {
+        "title": "패밀리",
+        "subtitle": "이 운영자의 신원을 공유하는 다른 CIRIS 인스턴스.",
+        "identities_description": "형제 인스턴스(동일 에이전트의 서로 다른 런타임 인스턴스)와 그 occurrence_id. 친근한 이름은 운영자 구성에서 가져옵니다.",
+        "trust_description": "패밀리 구성원은 기본적으로 운영자의 서명 키를 공유합니다 — 직접 신뢰가 기준선입니다. 다중 인스턴스 조정에 따라 공유된 종료 / 기상 결정.",
+        "policies_description": "인스턴스 간 정책: 공유 작업 점유, 다중 인스턴스 안전 경계, 패밀리 범위 행위에 대한 의결 정족수."
+      },
+      "local_community": {
+        "title": "로컬 커뮤니티",
+        "subtitle": "로컬에서 신뢰되는 피어 — 홈 채널, 가구, 단일 길드.",
+        "identities_description": "운영자가 명시적으로 신뢰하는 피어. 친근한 이름은 연락처 목록에서, key_id는 공지 테이블에서 가져옵니다.",
+        "trust_description": "운영자가 직접 부여한 신뢰입니다. 언제든지 철회할 수 있습니다. 로컬 범위의 기여는 로컬 코호트 내에 머물며 페더레이션에 게시되지 않습니다.",
+        "policies_description": "커뮤니티별 정책: 초대 권한자, 허용되는 콘텐츠 클래스, 이 범위에서의 분쟁 해결 방식."
+      },
+      "global_communities": {
+        "title": "글로벌 커뮤니티",
+        "subtitle": "에이전트가 가입한, 커뮤니티를 가로지르는 친화 그룹.",
+        "identities_description": "에이전트가 참여하는 소속 커뮤니티(협동조합, 전문 단체, 상호 부조 네트워크). 친근한 이름은 accord_holder 레지스트리에서, 그 외에는 key_id를 사용합니다.",
+        "trust_description": "신뢰는 커뮤니티 멤버십을 통해 전이됩니다. 각 커뮤니티는 자체 가입 기준과 자체 증명 규율을 가집니다.",
+        "policies_description": "소속 범위 정책: 에이전트가 어느 커뮤니티의 지침을 수용할지, 그리고 상충하는 소속 간의 충돌 해결 방식."
+      },
+      "global_commons": {
+        "title": "글로벌 공유지",
+        "subtitle": "보편적 계층으로서의 페더레이션 — 인류, 생태, 그리고 기반 그 자체.",
+        "identities_description": "페더레이션 범위에서 보이는 모든 신원. humanity_accord 중단 권한 보유자, accord_holder 주체, 그리고 더 넓은 피어 풀을 포함합니다.",
+        "trust_description": "보편 범위의 신뢰는 페더레이션 자체의 증명 규율에 의해 부여됩니다. 재귀적 황금률은 이 범위의 모든 주체를 — CIRIS L3C를 포함하여 — 구속합니다.",
+        "policies_description": "페더레이션 전반의 헌장적 경계: humanity_accord 중단 권한, accord_holder 예약 접두사, locality:decision 정족수 규모."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "공유지 기여",
+        "description": "페더레이션 기여 카드: accord 파일, 안전성 테스트, 행동 증언, 루브릭 업데이트, 철회, 위임. 각각은 극성, 신뢰도, 증언 다양성, 그리고 Edge의 ContentFetch 전송을 통해 해결되는 감사 체인 계보를 가집니다."
+      },
+      "participate": {
+        "title": "참여",
+        "description": "페더레이션 필요 레지스트리 — 에이전트가 필요한 것(루브릭 검토, 안전성 증언, 위임 범위)을 need:{domain}:{kind} 증명으로 등록하면 다른 에이전트들이 확인하고, 평가하고, 응답합니다."
+      },
+      "environment_graph": {
+        "title": "환경 그래프",
+        "description": "렌즈 기반 환경 그래프 — 코호트별 다양체 적합도 점수, 분배적 접근 측정, 상관된 행동 탐지. 페더레이션 디렉터리 상위의 그래프 계층으로, 에이전트는 의사결정 시 이를 근거로 추론합니다."
+      },
+      "delegation": {
+        "title": "위임",
+        "description": "위임 그래프: 이 에이전트로부터 위임되거나 이 에이전트로 위임된 범위. 부여 타임스탬프, evidence_refs, 그리고 모든 철회 체인을 포함합니다. 4가지 구조적 원시 요소 중 하나이며 — 페더레이션 디렉터리와 공동 소유됩니다."
+      },
+      "trust_topology": {
+        "title": "신뢰 토폴로지",
+        "description": "페더레이션 신뢰 그래프 — 피어는 노드, 신뢰 부여는 엣지(직접 / 위임 / 적대), 엣지 색상은 전송 도달성, 노드 크기는 집계 신뢰 가중치를 나타냅니다."
+      },
+      "constitutional": {
+        "title": "헌장적",
+        "description": "Accord 보유자 신원 표면 — FSD-002 §4.1에 따른 유일한 헌장적 비대칭성. identity_type=accord_holder 키만 accord:* 증명을 발행할 수 있습니다. 이 화면은 현재 보유자, 발행된 accord 접두사 방출, 예약 접두사 강제 감사를 표시합니다."
+      }
+    }
   }
 }

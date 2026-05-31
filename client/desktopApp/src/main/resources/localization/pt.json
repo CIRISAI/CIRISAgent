@@ -2331,5 +2331,78 @@
     "brightness_light": "Claro",
     "brightness_system": "Sistema",
     "brightness_dark": "Escuro"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Identidades",
+        "trust": "Confiança",
+        "policies": "Políticas de confiança"
+      },
+      "badge": {
+        "coming_soon": "EM BREVE"
+      },
+      "agent": {
+        "title": "Agente (Eu)",
+        "subtitle": "O próprio agente — o eu implícito em cada escala.",
+        "identities_description": "A própria chave de identidade do agente — o endereço de federação com o qual assina cada contribuição. Nome amigável da configuração local; key_id do CIRISEdge.",
+        "trust_description": "A confiança em si mesmo é fundamental. A Regra de Ouro Recursiva não tem cláusulas de isenção — o que o agente exige dos outros, deve exigir de si mesmo.",
+        "policies_description": "Políticas autoaplicáveis: cadência de rotação de identidade, renovação de atestação, o que o agente está disposto a assinar neste escopo."
+      },
+      "family": {
+        "title": "Família",
+        "subtitle": "Outras ocorrências do CIRIS que compartilham a identidade deste operador.",
+        "identities_description": "Ocorrências irmãs (diferentes instâncias de runtime do mesmo agente) e seu occurrence_id. Nome amigável da configuração do operador.",
+        "trust_description": "Os membros da família compartilham a chave de assinatura do operador por padrão — a confiança direta é a linha de base. Decisões compartilhadas de desligamento / despertar via coordenação multi-ocorrência.",
+        "policies_description": "Políticas entre ocorrências: reivindicação compartilhada de tarefas, limites de segurança multi-ocorrência, quórum de decisão para ações de escopo familiar."
+      },
+      "local_community": {
+        "title": "Comunidade Local",
+        "subtitle": "Pares confiáveis localmente — canal de origem, lar, guilda única.",
+        "identities_description": "Pares explicitamente confiáveis pelo operador. Nome amigável da agenda de contatos; key_id da tabela de anúncios.",
+        "trust_description": "Confiança direta concedida pelo operador. Pode ser revogada a qualquer momento. As contribuições de escopo local permanecem na coorte local e não são publicadas na federação.",
+        "policies_description": "Políticas por comunidade: quem pode convidar, quais classes de conteúdo são admitidas, como disputas são resolvidas neste escopo."
+      },
+      "global_communities": {
+        "title": "Comunidades Globais",
+        "subtitle": "Grupos de afinidade entre comunidades aos quais o agente se uniu.",
+        "identities_description": "Comunidades afiliadas (cooperativas, órgãos profissionais, redes de ajuda mútua) das quais o agente participa. Nome amigável do registro accord_holder; key_id caso contrário.",
+        "trust_description": "A confiança é transitiva através da participação na comunidade. Cada comunidade tem seus próprios critérios de admissão e sua própria disciplina de atestação.",
+        "policies_description": "Políticas de escopo de afiliação: de quais comunidades o agente aceitará orientação, resolução de conflitos entre afiliações concorrentes."
+      },
+      "global_commons": {
+        "title": "Bem Comum Global",
+        "subtitle": "A federação como a camada universal — a humanidade, a ecologia, o próprio substrato.",
+        "identities_description": "Todas as identidades visíveis no escopo da federação, incluindo detentores da autoridade de interrupção humanity_accord, principais accord_holder e o pool mais amplo de pares.",
+        "trust_description": "A confiança no escopo universal é conferida pela própria disciplina de atestação da federação. A Regra de Ouro Recursiva vincula todo principal — incluindo a CIRIS L3C — neste escopo.",
+        "policies_description": "Limites constitucionais em toda a federação: autoridade de interrupção humanity_accord, prefixos reservados accord_holder, dimensionamento do quórum locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "O Bem Comum",
+        "description": "Cartões de contribuição da federação: arquivos accord, testes de segurança, testemunhas de comportamento, atualizações de rubricas, retratações, delegações. Cada um carrega polaridade, confiança, diversidade de testemunhas e linhagem da cadeia de auditoria resolvida pelo transporte ContentFetch do Edge."
+      },
+      "participate": {
+        "title": "Participar",
+        "description": "Registro de necessidades da federação — os agentes registram o que precisam (revisão de rubrica, testemunha de segurança, escopo de delegação) como atestações need:{domain}:{kind}; outros agentes veem, pontuam e respondem."
+      },
+      "environment_graph": {
+        "title": "Grafo do Ambiente",
+        "description": "Grafo do ambiente derivado do lens — pontuações de conformidade do manifold por coorte, medições de acesso distributivo, detecções de ações correlacionadas. A camada de grafo acima do diretório da federação contra a qual o agente raciocina durante a tomada de decisão."
+      },
+      "delegation": {
+        "title": "Delegação",
+        "description": "Grafo de delegação: escopos delegados de e para este agente, com carimbos de tempo de concessão, evidence_refs e quaisquer cadeias de revogação. Uma das 4 primitivas estruturais — copossuída com o diretório da federação."
+      },
+      "trust_topology": {
+        "title": "Topologia de Confiança",
+        "description": "Grafo de confiança da federação — pares como nós, concessões de confiança como arestas (direta / delegada / adversária), cor da aresta = alcançabilidade de transporte, tamanho do nó = peso agregado de confiança."
+      },
+      "constitutional": {
+        "title": "Constitucional",
+        "description": "Superfície de identidade de titular de accord — a única assimetria constitucional segundo FSD-002 §4.1. Apenas chaves com identity_type=accord_holder podem emitir atestações accord:*; esta tela mostra os titulares atuais, suas emissões de prefixo accord emitidas e a auditoria de aplicação de prefixos reservados."
+      }
+    }
   }
 }

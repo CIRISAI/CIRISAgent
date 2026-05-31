@@ -203,11 +203,34 @@ Amharic plurals typically add -ዎች (-očč) or -ች (-čč):
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort-Scope Vocabulary (2.9.4 Commons hub)
+
+| English | Amharic | Transliteration | Definition / Guidance |
+|---------|---------|-----------------|------------------------|
+| Cohort scope | የቡድን ሽፋን | Ye-Budin Shifan | CEG 0.6 wire-format term; "scope" as coverage/reach of a contribution |
+| Layer | ሽፋን | Shifan | UX surface for one cohort scope |
+| Self | ራስ | Ras | Reflexive — the agent itself |
+| Family | ቤተሰብ | Beteseb | Sibling occurrences of the same agent — kin in the agent sense, not nuclear family |
+| Local Community | የአካባቢ ማህበረሰብ | Ye-Akababi Mahibereseb | Locally-trusted peers — home channel, single guild |
+| Global Communities | ዓለም አቀፍ ማህበረሰቦች | Alem Aḳef Mahibereseboč | Cross-community affinity groups (plural — multiple) |
+| Global Commons | ዓለም አቀፍ የጋራ መድረክ | Alem Aḳef Ye-Gara Medrek | The universal federation layer (humanity + ecology + substrate) |
+| The Commons | የጋራ መድረክ | Ye-Gara Medrek | Federation contribution-cards feed — distinct from the "Global" layer |
+| Constitutional | ሕገ መንግሥታዊ | Hige Mengistawi | Accord-holder identity surface (FSD-002 §4.1) — federation constitutional structure |
+| Delegation | ውክልና | Wikilina | Granting scope/authority to act on one's behalf |
+| Trust Topology | የመተማመን ቶፖሎጂ | Ye-Metemamen Ṭopoloji | Federation trust graph — peers as nodes, trust as edges |
+| Participate | ይሳተፉ | Yisatefu | Federation needs registry — verb: take part / contribute |
+| Affiliations | አባልነቶች | Abalinetočč | Cross-community memberships (CEG term for global-communities cohort) |
+| Identities | ማንነቶች | Maninetočč | Known entities at a scope, with friendly names where available |
+| Trust | መተማመን | Metemamen | Trust state per identity (use same root as glossary's existing "Trust Graph" → መተማመን ግራፍ) |
+| Trust policies | የመተማመን ፖሊሲዎች | Ye-Metemamen Policiwočč | Policies governing automatic trust at a scope |
+| Coming Soon | በቅርቡ ይመጣል | Be-Ḳirbu Yimeṭal | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-03-27 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary for 2.9.4 Commons hub |
 
 ---
 

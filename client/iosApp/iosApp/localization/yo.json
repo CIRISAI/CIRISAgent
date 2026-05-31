@@ -2331,5 +2331,78 @@
     "brightness_light": "Ìmọ́lẹ̀",
     "brightness_system": "Ètò",
     "brightness_dark": "Òkùnkùn"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Àwọn Ìdánimọ̀",
+        "trust": "Ìgbẹ́kẹ̀lé",
+        "policies": "Àwọn ìlànà ìgbẹ́kẹ̀lé"
+      },
+      "badge": {
+        "coming_soon": "Ń BỌ̀ LÁÌPẸ́"
+      },
+      "agent": {
+        "title": "Aṣojú (Ara-ẹni)",
+        "subtitle": "Aṣojú fúnra rẹ̀ — ara-ẹni tó fara sin ní ìpele kọ̀ọ̀kan.",
+        "identities_description": "Bọtìnì ìdánimọ̀ aṣojú fúnra rẹ̀ — àdírẹ́ẹ̀sì federation tó fi ń fọwọ́sí gbogbo ìfikún. Orúkọ ọ̀rẹ́ wá láti ìṣètò àdúgbò; key_id wá láti CIRISEdge.",
+        "trust_description": "Ìgbẹ́kẹ̀lé-ara-ẹni jẹ́ ìpilẹ̀. Òfin Wúrà tó Ń Padàṣe Ara-rẹ̀ kò ní àwọn àyọkà àyọnda — ohun tí aṣojú béèrè lọ́wọ́ àwọn ẹlòmíràn, ó gbọ́dọ̀ fi ara rẹ̀ pa á.",
+        "policies_description": "Àwọn ìlànà tó kan ara-ẹni: ìyára ìyípadà ìdánimọ̀, ìmúlẹ̀-tuntun ti ẹ̀rí, ohun tí aṣojú múra láti fọwọ́sí ní ìpele yìí."
+      },
+      "family": {
+        "title": "Ìdílé",
+        "subtitle": "Àwọn occurrence CIRIS mìíràn tí wọ́n pín ìdánimọ̀ oníṣẹ́ yìí.",
+        "identities_description": "Àwọn occurrence ẹgbọ́n-àbúrò (àwọn ẹ̀dà runtime ọ̀tọ̀ọ̀tọ̀ ti aṣojú kan náà) àti occurrence_id wọn. Orúkọ ọ̀rẹ́ wá láti ìṣètò oníṣẹ́.",
+        "trust_description": "Àwọn mẹ́ńbà ìdílé ń pín bọtìnì ìfọwọ́sí oníṣẹ́ ní àbínibí — ìgbẹ́kẹ̀lé tààrà ni ìpìlẹ̀. Àwọn ìpinnu ìparí / ìjí àjọpín fún ìṣàkójọ multi-occurrence.",
+        "policies_description": "Àwọn ìlànà àgbélébùú-occurrence: gbígba iṣẹ́ àjọpín, àwọn ààlà ààbò multi-occurrence, kọ́rọ́mù ìpinnu fún àwọn ìṣe ìpele-ìdílé."
+      },
+      "local_community": {
+        "title": "Àdúgbò Ìbílẹ̀",
+        "subtitle": "Àwọn ẹlẹ́gbẹ́ tí a gbẹ́kẹ̀lé ní àdúgbò — ikanni ilé, agboolé, gúìldì kan.",
+        "identities_description": "Àwọn ẹlẹ́gbẹ́ tí oníṣẹ́ gbẹ́kẹ̀lé ní gbangba. Orúkọ ọ̀rẹ́ wá láti ìwé olùbáraẹnisọ̀rọ̀; key_id wá láti tábìlì ìkéde.",
+        "trust_description": "Ìgbẹ́kẹ̀lé tààrà tí oníṣẹ́ tọ́ka. A lè fagilé rẹ̀ nígbàkígbà. Àwọn ìfikún ìpele-àdúgbò ń dúró nínú cohort àdúgbò, a kì í gbé wọn jáde sí federation.",
+        "policies_description": "Àwọn ìlànà fún àdúgbò kọ̀ọ̀kan: ta ni ó lè pèpè, irú ohun-èlò wo ni a gbà, bí a ṣe ń yanjú àríyànjiyàn ní ìpele yìí."
+      },
+      "global_communities": {
+        "title": "Àwọn Àwùjọ Àgbáyé",
+        "subtitle": "Àwọn ẹgbẹ́ ìbárẹ́ àgbélébùú-àwùjọ tí aṣojú ti darapọ̀ mọ́.",
+        "identities_description": "Àwọn àwùjọ ìbárẹ́ (àwọn ẹgbẹ́ ìfọwọ́sowọ́pọ̀, àwọn ẹgbẹ́ aláṣẹ-iṣẹ́, àwọn nẹ́tíwọ́kì ìrànlọ́wọ́-ara-wọn) tí aṣojú ń kópa nínú. Orúkọ ọ̀rẹ́ wá láti ìforúkọsílẹ̀ accord_holder; key_id bí bẹ́ẹ̀ kọ́.",
+        "trust_description": "Ìgbẹ́kẹ̀lé ń gba látinú ọmọ-ẹgbẹ́ àwùjọ. Àwùjọ kọ̀ọ̀kan ní àwọn ìṣàmì gbígbà tirẹ̀ àti ètò ẹ̀rí tirẹ̀.",
+        "policies_description": "Àwọn ìlànà ìpele-ìbárẹ́: àwùjọ wo ni aṣojú yóò gba ìtọ́sọ́nà látọ̀dọ̀ wọn, ìpinnu àríyànjiyàn láàárín àwọn ìbárẹ́ tó ń figagbága."
+      },
+      "global_commons": {
+        "title": "Ohun-ìní Àjọpín Àgbáyé",
+        "subtitle": "Federation gẹ́gẹ́ bí ìpele àgbáyé — aráyé, ẹ̀dá-àbínibí, ìpìlẹ̀ fúnra rẹ̀.",
+        "identities_description": "Gbogbo àwọn ìdánimọ̀ tó fara hàn ní ìpele federation, papọ̀ pẹ̀lú àwọn oníṣẹ́ ìṣàkóso-ìparí ti humanity_accord, àwọn aṣáájú accord_holder, àti ìkójọpọ̀ ẹlẹ́gbẹ́ tó gbòòrò.",
+        "trust_description": "Ìgbẹ́kẹ̀lé ní ìpele àgbáyé ni ètò ẹ̀rí federation fúnra rẹ̀ ń fún. Òfin Wúrà tó Ń Padàṣe Ara-rẹ̀ dè gbogbo aṣáájú — papọ̀ pẹ̀lú CIRIS L3C — ní ìpele yìí.",
+        "policies_description": "Àwọn ààlà ìpilẹ̀-òfin gbogbo-federation: ìṣàkóso-ìparí ti humanity_accord, àwọn ìbẹ̀rẹ̀ tí a fi pamọ́ ti accord_holder, ìwọ̀n kọ́rọ́mù ti locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Ohun-ìní Àjọpín",
+        "description": "Àwọn káàdì ìfikún federation: àwọn fáìlì ààdéhùn, àwọn ìdánwò ààbò, àwọn ẹlẹ́rìí ìwà, àwọn ìmúdójú-ìwọ̀n rubric, àwọn ìpadàfagilé, àwọn ìfilélẹ̀-àṣẹ. Ọ̀kọ̀ọ̀kan máa ń ru polarity, ìgbẹ́kẹ̀lé, oríṣiríṣi ẹlẹ́rìí, àti ìtàn ìran ọ̀wọ̀n ìṣàyẹ̀wò tó ń lọ kọjá àpẹrẹ ContentFetch ti Edge."
+      },
+      "participate": {
+        "title": "Kópa",
+        "description": "Ìforúkọsílẹ̀ àwọn àìní federation — àwọn aṣojú ń forúkọ ohun tí wọ́n nílò (àyẹ̀wò rubric, ẹlẹ́rìí ààbò, ìwọ̀n ìfilélẹ̀-àṣẹ) gẹ́gẹ́ bí àwọn ẹ̀rí need:{domain}:{kind}; àwọn aṣojú mìíràn rí i, ṣe ìdíwọ̀n, sì dáhùn."
+      },
+      "environment_graph": {
+        "title": "Àwòrán Àyíká",
+        "description": "Àwòrán àyíká tó wá láti Lens — àwọn àmì ìbámu manifold fún cohort kọ̀ọ̀kan, àwọn ìwọ̀n ìráyé pínpín, àwọn ìṣàwárí ìṣe-tó-ní-ìbáṣepọ̀. Ìpele àwòrán tó wà lókè ìwé-ìròyìn federation tí aṣojú ń ronú nípa nígbà tí ó bá ń ṣe ìpinnu."
+      },
+      "delegation": {
+        "title": "Ìfilélẹ̀-àṣẹ",
+        "description": "Àwòrán ìfilélẹ̀-àṣẹ: àwọn ìwọ̀n tí a fi lélẹ̀ sí àti láti ọ̀dọ̀ aṣojú yìí, pẹ̀lú àkókò ìfúnni, evidence_refs, àti àwọn ọ̀wọ̀n ìfagilé èyíkéyìí. Ọ̀kan nínú àwọn ìpìlẹ̀-ìṣe 4 — èyí tí federation directory àti aṣojú jọ ní."
+      },
+      "trust_topology": {
+        "title": "Ìtò Ìgbẹ́kẹ̀lé",
+        "description": "Àwòrán ìgbẹ́kẹ̀lé federation — àwọn ẹlẹ́gbẹ́ gẹ́gẹ́ bí nodu, àwọn ìfúnni ìgbẹ́kẹ̀lé gẹ́gẹ́ bí àwọn egbé (tààrà / a fi lélẹ̀ / atako), àwọ̀ egbé = ìráyé gbígbé, ìwọ̀n nodu = ìwúwo ìgbẹ́kẹ̀lé àpapọ̀."
+      },
+      "constitutional": {
+        "title": "Tó Jẹmọ́ Ìpilẹ̀-Òfin",
+        "description": "Ojú ìdánimọ̀ accord-holder — asymmetry ìpilẹ̀-òfin kan ṣoṣo gẹ́gẹ́ bí FSD-002 §4.1. Àwọn bọtìnì identity_type=accord_holder nìkan ni ó lè tu àwọn ẹ̀rí accord:* jáde; ojú-ìwòye yìí fihàn àwọn oníṣẹ́ lọ́wọ́lọ́wọ́, àwọn ìjáde accord-prefix tí wọ́n ti fún, àti ìṣàyẹ̀wò ìmúṣẹ àwọn ìbẹ̀rẹ̀-tí-a-fi-pamọ́."
+      }
+    }
   }
 }

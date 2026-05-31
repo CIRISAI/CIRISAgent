@@ -2331,5 +2331,78 @@
     "brightness_light": "浅色",
     "brightness_system": "系统",
     "brightness_dark": "深色"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "身份列表",
+        "trust": "信任",
+        "policies": "信任策略"
+      },
+      "badge": {
+        "coming_soon": "即将推出"
+      },
+      "agent": {
+        "title": "智能体（自身）",
+        "subtitle": "智能体本身 — 每个尺度上隐含的自身。",
+        "identities_description": "智能体自己的身份密钥 — 它用于签署每项贡献的联邦地址。友好名称来自本地配置；key_id 来自 CIRISEdge。",
+        "trust_description": "自我信任是根基。递归黄金法则没有豁免条款 — 智能体对他人的要求，必须先用于约束自身。",
+        "policies_description": "自我适用的策略：身份轮换节奏、证明刷新，以及智能体在此范围内愿意签署的内容。"
+      },
+      "family": {
+        "title": "家族",
+        "subtitle": "共享此运营者身份的其他 CIRIS 实例。",
+        "identities_description": "同源实例（同一智能体的不同运行时实例）及其 occurrence_id。友好名称来自运营者配置。",
+        "trust_description": "家族成员默认共享运营者的签名密钥 — 直接信任是基线。多实例协调下共享关机 / 唤醒决策。",
+        "policies_description": "跨实例策略：共享任务认领、多实例安全边界、家族范围操作的决策法定人数。"
+      },
+      "local_community": {
+        "title": "本地社区",
+        "subtitle": "本地受信任的对等节点 — 主频道、家庭、单一公会。",
+        "identities_description": "运营者明确信任的对等节点。友好名称来自联系簿；key_id 来自公告表。",
+        "trust_description": "由运营者直接授予的信任。可随时撤销。本地范围的贡献仅保留在本地群体内，不会发布到联邦。",
+        "policies_description": "每个社区的策略：谁可以邀请、允许哪些内容类别、此范围内如何解决争议。"
+      },
+      "global_communities": {
+        "title": "全球社区",
+        "subtitle": "智能体加入的跨社区亲和团体。",
+        "identities_description": "智能体参与的隶属社区（合作社、专业组织、互助网络）。友好名称来自 accord_holder 注册表；否则使用 key_id。",
+        "trust_description": "信任通过社区成员资格传递。每个社区都有自己的准入标准和自己的证明纪律。",
+        "policies_description": "隶属范围策略：智能体将接受哪些社区的指导，以及在相互冲突的隶属关系之间如何解决冲突。"
+      },
+      "global_commons": {
+        "title": "全球公域",
+        "subtitle": "作为通用层的联邦 — 人类、生态以及基底本身。",
+        "identities_description": "在联邦范围内可见的所有身份，包括 humanity_accord 暂停权持有者、accord_holder 主体以及更广泛的对等池。",
+        "trust_description": "通用范围的信任由联邦自身的证明纪律授予。递归黄金法则在此范围内约束每一个主体 — 包括 CIRIS L3C。",
+        "policies_description": "联邦范围的章程性边界：humanity_accord 暂停权、accord_holder 保留前缀、locality:decision 法定人数规模。"
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "公域贡献",
+        "description": "联邦贡献卡片：accord 文件、安全测试、行为见证、评分准则更新、撤回、委派。每一项都携带极性、置信度、见证多样性以及通过 Edge 的 ContentFetch 传输解析的审计链谱系。"
+      },
+      "participate": {
+        "title": "参与",
+        "description": "联邦需求注册表 — 智能体将其所需（评分准则审查、安全见证、委派范围）注册为 need:{domain}:{kind} 证明；其他智能体看到、评分并响应。"
+      },
+      "environment_graph": {
+        "title": "环境图",
+        "description": "镜头导出的环境图 — 每个群体的流形符合度评分、分配性访问度量、相关动作检测。位于联邦目录之上的图层，智能体在决策时基于此进行推理。"
+      },
+      "delegation": {
+        "title": "委派",
+        "description": "委派图：此智能体委派出去和接受委派的范围，带授权时间戳、evidence_refs 以及任何撤回链。四项结构性原语之一 — 与联邦目录共同拥有。"
+      },
+      "trust_topology": {
+        "title": "信任拓扑",
+        "description": "联邦信任图 — 对等节点作为节点，信任授权作为边（直接 / 委托 / 对抗），边颜色表示传输可达性，节点大小表示聚合信任权重。"
+      },
+      "constitutional": {
+        "title": "章程性",
+        "description": "Accord 持有者身份界面 — 根据 FSD-002 §4.1 唯一的章程性不对称。只有 identity_type=accord_holder 的密钥才能发出 accord:* 证明；此屏显示当前持有者、其已发出的 accord 前缀以及保留前缀执行审计。"
+      }
+    }
   }
 }

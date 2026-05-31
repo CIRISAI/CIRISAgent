@@ -149,11 +149,43 @@ This glossary provides both scripts where practical, with Gurmukhi as the defaul
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## Commons / Cohort-Scope UX (2.9.4)
+
+CEG 0.6 cohort-scope vocabulary used by the new Commons hub. Gurmukhi is the default; Shahmukhi additions can be derived from Urdu glossary.
+
+### Core Concepts (cohort scope)
+
+| English | Gurmukhi | Notes |
+|---------|----------|-------|
+| Cohort scope | ਕੋਹੋਰਟ ਸਕੋਪ (ਯੋਗਦਾਨ ਦਾ ਘੇਰਾ) | Technical CIRIS term; keep "cohort scope" recognizable |
+| Layer | ਪਰਤ | UX surface for one cohort scope |
+| Self | ਆਪਾ | Reflexive identity; "agent itself" |
+| Family | ਪਰਿਵਾਰ | Sibling occurrences sharing operator identity |
+| Local Community | ਸਥਾਨਕ ਭਾਈਚਾਰਾ | Locally-trusted peers |
+| Global Communities | ਵਿਸ਼ਵ ਭਾਈਚਾਰੇ | Cross-community affinity groups (plural) |
+| Global Commons | ਵਿਸ਼ਵ ਸਾਂਝਾ ਖੇਤਰ | Universal federation layer; "commons of all" |
+| The Commons | ਸਾਂਝਾ ਯੋਗਦਾਨ | Federation contribution feed |
+| Constitutional | ਸੰਵਿਧਾਨਕ | Accord-holder identity surface; federation constitution |
+| Delegation | ਅਧਿਕਾਰ ਸੌਂਪਣਾ | Granting authority to act on one's behalf |
+| Trust Topology | ਭਰੋਸਾ ਢਾਂਚਾ | Trust graph |
+| Participate | ਹਿੱਸਾ ਲਓ | Federation needs registry |
+| Affiliations | ਸੰਬੰਧ | Joined communities (CEG term) |
+
+### UI Labels (Commons sections)
+
+| English | Gurmukhi | Notes |
+|---------|----------|-------|
+| Identities | ਪਛਾਣਾਂ | Plural; list of known entities at a scope |
+| Trust | ਭਰੋਸਾ | Trust state per identity |
+| Trust policies | ਭਰੋਸਾ ਨੀਤੀਆਂ | Automatic-trust policies |
+| Coming Soon | ਜਲਦੀ ਆ ਰਿਹਾ ਹੈ | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-04-07 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary for 2.9.4 Commons hub |
 
 ---
 

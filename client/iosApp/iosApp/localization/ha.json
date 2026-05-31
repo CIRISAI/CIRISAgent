@@ -2331,5 +2331,78 @@
     "brightness_light": "Haske",
     "brightness_system": "Tsarin",
     "brightness_dark": "Duhu"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Asalai",
+        "trust": "Amincewa",
+        "policies": "Manufofin amincewa"
+      },
+      "badge": {
+        "coming_soon": "YANA ZUWA"
+      },
+      "agent": {
+        "title": "Wakili (Kai)",
+        "subtitle": "Wakilin da kansa — kai a kowane sikeli.",
+        "identities_description": "Maɓallin asalin wakilin da kansa — adireshin federation da yake sa hannu a kowane gudunmawa. Sunan abokantaka daga config na gida; key_id daga CIRISEdge.",
+        "trust_description": "Amincewa da kai ita ce tushe. Dokar Zinariya Mai Sake Maimaitawa ba ta da banbanci — abin da wakili ke buƙata daga wasu, dole ne shi da kansa ya bi.",
+        "policies_description": "Manufofin da ke aiki da kai: yawan juyawar asali, sabunta tabbatarwa, abin da wakili yake a shirye ya sa hannu a wannan sikeli."
+      },
+      "family": {
+        "title": "Iyali",
+        "subtitle": "Sauran abubuwan da suka faru na CIRIS waɗanda suke raba asalin mai gudanarwa.",
+        "identities_description": "Abubuwan da suka faru na ƴan'uwa (misalan runtime daban-daban na wakili guda) da occurrence_id nasu. Sunan abokantaka daga config na mai gudanarwa.",
+        "trust_description": "Membobin iyali suna raba maɓallin sa hannu na mai gudanarwa ta tsohuwa — amincewa kai tsaye ita ce tushe. Hukunce-hukuncen kashewa / farkawa ana raba su gwargwadon haɗin gwiwa na abubuwan da suka faru.",
+        "policies_description": "Manufofin abubuwan da suka faru: ɗaukar ayyukan da aka raba, iyakokin tsaro na abubuwan da suka faru, ƙididdigar yanke shawara don ayyukan sikelin iyali."
+      },
+      "local_community": {
+        "title": "Al'umma ta gida",
+        "subtitle": "Abokai amintattu na gida — tashar gida, gida, guild ɗaya.",
+        "identities_description": "Abokan da mai gudanarwa ya amince da su a fili. Sunan abokantaka daga littafin lambobi; key_id daga teburin sanarwa.",
+        "trust_description": "Amincewa kai tsaye da mai gudanarwa ya bayar. Ana iya soke ta a kowane lokaci. Gudunmawar sikelin gida tana zaman a cikin ƙungiyar gida kuma ba a buga ta a federation ba.",
+        "policies_description": "Manufofin kowace al'umma: wanene zai iya gayyata, waɗanne ajin abun ciki ake karɓa, yadda ake warware rikice-rikice a wannan sikeli."
+      },
+      "global_communities": {
+        "title": "Al'ummomi na duniya",
+        "subtitle": "Ƙungiyoyin haɗin kai na duniya da wakili ya shiga.",
+        "identities_description": "Al'ummomin da suka haɗu (haɗin kai, ƙungiyoyin sana'a, hanyoyin sadaka) waɗanda wakili ke shiga. Sunan abokantaka daga rejistar accord_holder; in ba haka ba key_id.",
+        "trust_description": "Amincewa tana wucewa ta hanyar membobinta na al'umma. Kowace al'umma tana da nata sharuɗɗan shiga da nata tsarin tabbatarwa.",
+        "policies_description": "Manufofin sikelin haɗi: waɗanne al'ummomi wakili zai karɓi jagora daga gare su, warware rikici tsakanin haɗi masu hamayya."
+      },
+      "global_commons": {
+        "title": "Filin gama-gari na duniya",
+        "subtitle": "Federation a matsayin sikelin sararin samaniya — bil'adama, muhalli, tushe da kansa.",
+        "identities_description": "Duk asalai da ake gani a sikelin federation, gami da masu hukuncin tsayarwa na humanity_accord, manyan accord_holder, da kuma faɗin tafkin abokai.",
+        "trust_description": "A sikelin sararin samaniya, ana bayar da amincewa ta hanyar tsarin tabbatarwa na federation. Dokar Zinariya Mai Sake Maimaitawa tana ɗaurin kowane shugaba — gami da CIRIS L3C — a wannan sikeli.",
+        "policies_description": "Iyakokin tsarin mulki na duk federation: hukuncin tsayarwa na humanity_accord, kalmomin farko da aka ajiye ga accord_holder, girman ƙididdigar yanke shawara na locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Filin gama-gari",
+        "description": "Katunan gudunmawar federation: fayilolin accord, gwajin tsaro, shaidun ɗabi'a, sabunta rubric, jujjuyawa, wakilci. Kowane yana ɗauke da iyaka, tabbaci, bambancin shaidu, da jerin binciken da aka warware ta cikin sufurin ContentFetch na Edge."
+      },
+      "participate": {
+        "title": "Shiga",
+        "description": "Rejistar buƙatun federation — wakilai sun yi rejista abin da suke buƙata (binciken rubric, shaidar tsaro, ikon wakilci) a matsayin tabbatarwar need:{domain}:{kind}; sauran wakilai suna gani, suna kima, suna amsawa."
+      },
+      "environment_graph": {
+        "title": "Zane na muhalli",
+        "description": "Zane na muhalli da aka samo daga lens — ƙididdigar daidaiton manifold a kowane ƙungiya, ma'aunin samun damar rabawa, gano ayyukan haɗin kai. Shimfiɗar zane sama da ƙididdigar federation wanda wakili ke yin tunani a kanta lokacin yanke shawara."
+      },
+      "delegation": {
+        "title": "Wakilci",
+        "description": "Zane na wakilci: sikelolin da aka wakilta zuwa kuma daga wannan wakili, tare da alamomin lokacin bayarwa, evidence_refs, da kowane jerin janyewa. Ɗaya daga cikin tushe 4 na tsari — ana mallaka tare da ƙididdigar federation."
+      },
+      "trust_topology": {
+        "title": "Tsarin amincewa",
+        "description": "Zane na amincewar federation — abokai a matsayin nodes, bayar da amincewa a matsayin gefuna (kai tsaye / wakilta / hamayya), launin gefe = samun damar sufuri, girman node = nauyin amincewa gabaɗaya."
+      },
+      "constitutional": {
+        "title": "Tsarin mulki",
+        "description": "Filin asalin accord-holder — rashin daidaito na tsarin mulki guda ɗaya gwargwadon FSD-002 §4.1. Maɓallan identity_type=accord_holder kawai za su iya fitar da tabbatarwar accord:*; wannan allon yana nuna masu rikon yanzu, fitar da kalmomin farko na accord da suka yi, da binciken aiwatar da kalmomin farko da aka ajiye."
+      }
+    }
   }
 }

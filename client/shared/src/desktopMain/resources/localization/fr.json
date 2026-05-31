@@ -2331,5 +2331,78 @@
     "brightness_light": "Clair",
     "brightness_system": "Système",
     "brightness_dark": "Sombre"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Identités",
+        "trust": "Confiance",
+        "policies": "Politiques de confiance"
+      },
+      "badge": {
+        "coming_soon": "BIENTÔT"
+      },
+      "agent": {
+        "title": "Agent (Soi)",
+        "subtitle": "L'agent lui-même — le soi implicite à chaque échelle.",
+        "identities_description": "La propre clé d'identité de l'agent — l'adresse de fédération avec laquelle il signe chaque contribution. Nom convivial depuis la configuration locale ; key_id depuis CIRISEdge.",
+        "trust_description": "La confiance en soi est fondamentale. La Règle d'Or Récursive n'a pas de clauses d'exemption — ce que l'agent exige des autres, il doit se l'imposer à lui-même.",
+        "policies_description": "Politiques auto-applicables : cadence de rotation d'identité, renouvellement d'attestation, ce que l'agent est prêt à signer dans cette portée."
+      },
+      "family": {
+        "title": "Famille",
+        "subtitle": "Autres occurrences CIRIS partageant l'identité de cet opérateur.",
+        "identities_description": "Occurrences sœurs (différentes instances d'exécution du même agent) et leur occurrence_id. Nom convivial depuis la configuration de l'opérateur.",
+        "trust_description": "Les membres de la famille partagent la clé de signature de l'opérateur par défaut — la confiance directe est la base. Décisions partagées d'arrêt / réveil via la coordination multi-occurrence.",
+        "policies_description": "Politiques inter-occurrences : revendication partagée de tâches, limites de sécurité multi-occurrence, quorum de décision pour les actions de portée familiale."
+      },
+      "local_community": {
+        "title": "Communauté Locale",
+        "subtitle": "Pairs de confiance locale — canal d'origine, foyer, guilde unique.",
+        "identities_description": "Pairs explicitement de confiance pour l'opérateur. Nom convivial depuis le carnet de contacts ; key_id depuis la table d'annonces.",
+        "trust_description": "Confiance directe accordée par l'opérateur. Peut être révoquée à tout moment. Les contributions de portée locale restent dans la cohorte locale et ne sont pas publiées sur la fédération.",
+        "policies_description": "Politiques par communauté : qui peut inviter, quelles classes de contenu sont admises, comment les litiges sont résolus dans cette portée."
+      },
+      "global_communities": {
+        "title": "Communautés Globales",
+        "subtitle": "Groupes d'affinité inter-communautés rejoints par l'agent.",
+        "identities_description": "Communautés affiliées (coopératives, organismes professionnels, réseaux d'entraide) auxquelles l'agent participe. Nom convivial depuis le registre accord_holder ; key_id sinon.",
+        "trust_description": "La confiance est transitive par l'appartenance à la communauté. Chaque communauté a ses propres critères d'admission et sa propre discipline d'attestation.",
+        "policies_description": "Politiques de portée d'affiliation : de quelles communautés l'agent acceptera des conseils, résolution de conflits entre affiliations concurrentes."
+      },
+      "global_commons": {
+        "title": "Bien Commun Global",
+        "subtitle": "La fédération en tant que couche universelle — l'humanité, l'écologie, le substrat lui-même.",
+        "identities_description": "Toutes les identités visibles à la portée de la fédération, y compris les détenteurs de l'autorité d'arrêt humanity_accord, les principaux accord_holder et le pool de pairs plus large.",
+        "trust_description": "La confiance à la portée universelle est conférée par la propre discipline d'attestation de la fédération. La Règle d'Or Récursive lie chaque principal — y compris CIRIS L3C — à cette portée.",
+        "policies_description": "Limites constitutionnelles à l'échelle de la fédération : autorité d'arrêt humanity_accord, préfixes réservés accord_holder, dimensionnement du quorum locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Le Bien Commun",
+        "description": "Cartes de contribution de la fédération : fichiers accord, tests de sécurité, témoins de comportement, mises à jour de rubriques, rétractations, délégations. Chacune porte une polarité, une confiance, une diversité de témoins et une lignée de chaîne d'audit résolue via le transport ContentFetch d'Edge."
+      },
+      "participate": {
+        "title": "Participer",
+        "description": "Registre des besoins de la fédération — les agents enregistrent ce dont ils ont besoin (révision de rubrique, témoin de sécurité, portée de délégation) en tant qu'attestations need:{domain}:{kind} ; d'autres agents voient, notent et répondent."
+      },
+      "environment_graph": {
+        "title": "Graphe d'Environnement",
+        "description": "Graphe d'environnement dérivé du lens — scores de conformité du manifold par cohorte, mesures d'accès distributif, détections d'actions corrélées. La couche de graphe au-dessus de l'annuaire de fédération contre laquelle l'agent raisonne lors de la prise de décision."
+      },
+      "delegation": {
+        "title": "Délégation",
+        "description": "Graphe de délégation : portées déléguées vers et depuis cet agent, avec horodatages d'octroi, evidence_refs et toute chaîne de retrait. L'une des 4 primitives structurelles — copossédée avec l'annuaire de la fédération."
+      },
+      "trust_topology": {
+        "title": "Topologie de Confiance",
+        "description": "Graphe de confiance de la fédération — pairs comme nœuds, octrois de confiance comme arêtes (direct / délégué / adversarial), couleur d'arête = accessibilité de transport, taille de nœud = poids de confiance agrégé."
+      },
+      "constitutional": {
+        "title": "Constitutionnel",
+        "description": "Surface d'identité du détenteur d'accord — la seule asymétrie constitutionnelle selon FSD-002 §4.1. Seules les clés identity_type=accord_holder peuvent émettre des attestations accord:* ; cet écran montre les détenteurs actuels, leurs émissions de préfixe accord et l'audit d'application des préfixes réservés."
+      }
+    }
   }
 }

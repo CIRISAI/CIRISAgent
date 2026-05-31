@@ -145,11 +145,40 @@ This glossary defines the canonical translations for key CIRIS terms in Telugu. 
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort-Scope Vocabulary (2.9.4 Commons hub)
+
+| English | Telugu | Transliteration | Notes |
+|---------|--------|-----------------|-------|
+| Cohort scope | సముదాయ పరిధి (cohort scope) | Samudāya Paridhi | CEG 0.6 wire-format term; keep English loan alongside native rendering |
+| Layer | పొర | Pora | UX surface representing one cohort scope |
+| Agent (Self) | ఏజెంట్ (స్వీయం) | Ējeṇṭ (Svīyaṁ) | "ఏజెంట్" stays as the technical CIRIS term; "స్వీయం" = reflexive self |
+| Family | కుటుంబం | Kuṭumbaṁ | Sibling occurrences of the same agent; broader kin sense |
+| Local Community | స్థానిక సమాజం | Sthānika Samājaṁ | Geographically / immediately proximate community |
+| Global Communities | అంతర్జాతీయ సమాజాలు | Antarjātīya Samājālu | Plural — cross-border affinity groups |
+| Global Commons | అంతర్జాతీయ సామూహికం | Antarjātīya Sāmūhikaṁ | Universal federation layer (cohort scope) |
+| The Commons | సామూహిక ఫీడ్ | Sāmūhika Phīḍ | Federation contribution feed (distinct from Global Commons) |
+| Federation | ఫెడరేషన్ | Pheḍarēṣan | Established CIRIS loan; network of attesting peers |
+| Constitutional | రాజ్యాంగపరమైన | Rājyāṅgaparamaina | Federation constitutional structure (FSD-002 §4.1), not nation-state law |
+| Delegation | అధికార అప్పగింత | Adhikāra Appaginta | Delegation graph of granted scopes |
+| Trust Topology | నమ్మక టోపోలాజీ | Nammaka Ṭōpōlājī | Graph layout of peer-trust relationships |
+| Participate | పాల్గొనండి | Pālgonaṇḍi | Federation needs registry; take part / contribute |
+| Environment Graph | పరిసర గ్రాఫ్ | Parisara Grāph | Lens-derived environment conformity graph |
+
+## UI Labels — Commons Hub (2.9.4)
+
+| English | Telugu | Notes |
+|---------|--------|-------|
+| Identities | గుర్తింపులు | Known entities at a scope |
+| Trust | నమ్మకం | Trust state per identity |
+| Trust policies | నమ్మక విధానాలు | Auto-trust policies at scope |
+| Coming Soon | త్వరలో వస్తుంది | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-04-07 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary and Commons hub UI labels for 2.9.4 |
 
 ---
 

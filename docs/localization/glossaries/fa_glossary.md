@@ -149,11 +149,43 @@ This glossary defines the canonical translations for key CIRIS terms in Persian 
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## Commons / Cohort-Scope UX (2.9.4)
+
+CEG 0.6 cohort-scope vocabulary used by the new Commons hub.
+
+### Core Concepts (cohort scope)
+
+| English | Persian | Transliteration | Notes |
+|---------|---------|-----------------|-------|
+| Cohort scope | محدوده کوهورت (دامنه مشارکت) | Mahdude Cohort (Daamane Mosharekat) | Technical CIRIS term; keep "cohort scope" recognizable |
+| Layer | لایه | Laaye | UX surface for one cohort scope |
+| Self | خود | Khod | Reflexive identity; "agent itself" |
+| Family | خانواده | Khaanevaade | Sibling occurrences (not nuclear family) |
+| Local Community | اجتماع محلی | Ejtemaa-e Mahalli | Locally-trusted peers |
+| Global Communities | اجتماعات جهانی | Ejtemaa'aat-e Jahaani | Cross-community affinity groups (plural) |
+| Global Commons | میدان مشترک جهانی | Meydaan-e Moshtarak-e Jahaani | Universal federation layer |
+| The Commons | مشارکت‌های مشترک | Mosharekat-haa-ye Moshtarak | Federation contribution feed |
+| Constitutional | بنیادین | Bonyaadin | Accord-holder identity surface; federation constitution |
+| Delegation | تفویض اختیار | Tafviz-e Ekhtiyaar | Granting authority to act on one's behalf |
+| Trust Topology | توپولوژی اعتماد | Topoloji-ye E'temaad | Trust graph |
+| Participate | مشارکت کنید | Mosharekat Konid | Federation needs registry |
+| Affiliations | وابستگی‌ها | Vaabastegi-haa | Joined communities (CEG term) |
+
+### UI Labels (Commons sections)
+
+| English | Persian | Notes |
+|---------|---------|-------|
+| Identities | هویت‌ها | Plural; list of known entities at a scope |
+| Trust | اعتماد | Trust state per identity |
+| Trust policies | سیاست‌های اعتماد | Automatic-trust policies |
+| Coming Soon | به‌زودی | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-04-07 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary for 2.9.4 Commons hub |
 
 ---
 

@@ -2331,5 +2331,78 @@
     "brightness_light": "Sáng",
     "brightness_system": "Hệ thống",
     "brightness_dark": "Tối"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Danh tính",
+        "trust": "Tin cậy",
+        "policies": "Chính sách tin cậy"
+      },
+      "badge": {
+        "coming_soon": "SẮP RA MẮT"
+      },
+      "agent": {
+        "title": "Tác nhân (Bản thân)",
+        "subtitle": "Chính tác nhân — bản thân ngầm định ở mọi quy mô.",
+        "identities_description": "Khóa danh tính của chính tác nhân — địa chỉ liên bang dùng để ký mọi đóng góp. Tên thân thiện từ cấu hình cục bộ; key_id từ CIRISEdge.",
+        "trust_description": "Tin cậy bản thân là nền tảng. Recursive Golden Rule không có điều khoản miễn trừ — những gì tác nhân đòi hỏi ở người khác, tác nhân phải tự ràng buộc mình.",
+        "policies_description": "Chính sách tự áp dụng: nhịp xoay danh tính, làm mới chứng thực, những gì tác nhân sẵn lòng ký ở phạm vi này."
+      },
+      "family": {
+        "title": "Gia đình",
+        "subtitle": "Các phiên bản CIRIS khác cùng chia sẻ danh tính của người vận hành này.",
+        "identities_description": "Các phiên bản anh em (các thực thể runtime khác nhau của cùng một tác nhân) và occurrence_id của chúng. Tên thân thiện từ cấu hình của người vận hành.",
+        "trust_description": "Các thành viên gia đình mặc định chia sẻ khóa ký của người vận hành — tin cậy trực tiếp là cơ sở. Các quyết định tắt máy / thức dậy được chia sẻ theo điều phối đa phiên bản.",
+        "policies_description": "Chính sách liên phiên bản: yêu cầu nhiệm vụ chia sẻ, ranh giới an toàn đa phiên bản, túc số quyết định cho các hành động phạm vi gia đình."
+      },
+      "local_community": {
+        "title": "Cộng đồng địa phương",
+        "subtitle": "Đồng đẳng tin cậy địa phương — kênh nhà, hộ gia đình, một guild duy nhất.",
+        "identities_description": "Các đồng đẳng được người vận hành tin cậy rõ ràng. Tên thân thiện từ sổ liên lạc; key_id từ bảng thông báo.",
+        "trust_description": "Tin cậy trực tiếp do người vận hành mở rộng. Có thể bị thu hồi bất cứ lúc nào. Các đóng góp phạm vi địa phương ở lại trong nhóm địa phương và không được công bố ra liên bang.",
+        "policies_description": "Chính sách theo cộng đồng: ai có thể mời, các lớp nội dung nào được nhận vào, các tranh chấp được giải quyết ra sao ở phạm vi này."
+      },
+      "global_communities": {
+        "title": "Cộng đồng toàn cầu",
+        "subtitle": "Các nhóm thân hữu xuyên cộng đồng mà tác nhân đã tham gia.",
+        "identities_description": "Các cộng đồng liên kết (hợp tác xã, hội nghề nghiệp, mạng lưới tương trợ) mà tác nhân tham gia. Tên thân thiện từ tổ chức accord_holder; key_id nếu không có.",
+        "trust_description": "Tin cậy mang tính bắc cầu qua tư cách thành viên cộng đồng. Mỗi cộng đồng có tiêu chí kết nạp riêng và kỷ luật chứng thực riêng.",
+        "policies_description": "Chính sách phạm vi liên kết: tác nhân sẽ chấp nhận hướng dẫn từ các cộng đồng nào, giải quyết xung đột giữa các liên kết cạnh tranh."
+      },
+      "global_commons": {
+        "title": "Tài sản chung toàn cầu",
+        "subtitle": "Liên bang như lớp phổ quát — nhân loại, sinh thái, chính nền tảng.",
+        "identities_description": "Tất cả danh tính hiển thị ở phạm vi liên bang, bao gồm những người nắm quyền dừng humanity_accord, các principals accord_holder, và bể đồng đẳng rộng hơn.",
+        "trust_description": "Tin cậy ở phạm vi phổ quát được trao bởi chính kỷ luật chứng thực của liên bang. Recursive Golden Rule ràng buộc mọi principal — bao gồm CIRIS L3C — ở phạm vi này.",
+        "policies_description": "Ranh giới hiến chế toàn liên bang: quyền dừng humanity_accord, các tiền tố dành riêng cho accord_holder, kích thước túc số quyết định theo locality."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Tài sản chung",
+        "description": "Thẻ đóng góp liên bang: accord files, safety tests, behavior witnesses, rubric updates, recantations, delegations. Mỗi thẻ mang cực, độ tin cậy, sự đa dạng nhân chứng, và phả hệ chuỗi kiểm toán được giải quyết qua phương tiện ContentFetch của Edge."
+      },
+      "participate": {
+        "title": "Tham gia",
+        "description": "Sổ đăng ký nhu cầu liên bang — các tác nhân đăng ký những gì họ cần (rubric review, safety witness, delegation scope) dưới dạng các chứng thực need:{domain}:{kind}; các tác nhân khác xem, chấm điểm và phản hồi."
+      },
+      "environment_graph": {
+        "title": "Đồ thị môi trường",
+        "description": "Đồ thị môi trường suy ra từ lens — điểm phù hợp manifold theo từng nhóm, các phép đo truy cập phân phối, các phát hiện hành động tương quan. Lớp đồ thị bên trên thư mục liên bang mà tác nhân suy luận dựa vào trong quá trình ra quyết định."
+      },
+      "delegation": {
+        "title": "Ủy quyền",
+        "description": "Đồ thị ủy quyền: các phạm vi được ủy quyền đến và từ tác nhân này, với dấu thời gian cấp, evidence_refs, và mọi chuỗi thu hồi. Một trong 4 nguyên thủy cấu trúc — đồng sở hữu với thư mục liên bang."
+      },
+      "trust_topology": {
+        "title": "Cấu trúc tin cậy",
+        "description": "Đồ thị tin cậy liên bang — các đồng đẳng là nút, các lần cấp tin cậy là cạnh (trực tiếp / được ủy quyền / đối nghịch), màu cạnh = khả năng tiếp cận vận chuyển, kích thước nút = trọng số tin cậy tổng hợp."
+      },
+      "constitutional": {
+        "title": "Hiến chế",
+        "description": "Bề mặt danh tính Accord-holder — bất đối xứng hiến chế duy nhất theo FSD-002 §4.1. Chỉ các khóa identity_type=accord_holder mới có thể phát hành chứng thực accord:*; màn hình này hiển thị các holder hiện tại, các phát hành tiền tố accord đã cấp, và kiểm toán việc thực thi tiền tố dành riêng."
+      }
+    }
   }
 }

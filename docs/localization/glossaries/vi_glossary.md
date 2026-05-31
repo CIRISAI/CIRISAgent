@@ -144,6 +144,27 @@ This glossary defines the canonical translations for key CIRIS terms in Vietname
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort Scope Vocabulary (2.9.4 Commons UX)
+
+| English | Vietnamese | Definition |
+|---------|------------|------------|
+| Cohort scope | Phạm vi đồng nhóm (cohort scope) | CEG 0.6 wire term — scale at which a contribution applies |
+| Layer | Lớp | UX surface for one cohort scope |
+| Agent (Self) | Tác nhân (Bản thân) | The agent itself; first layer |
+| Family | Gia đình | Sibling occurrences of the same agent |
+| Local Community | Cộng đồng địa phương | Locally-trusted peers |
+| Global Communities | Cộng đồng toàn cầu | Cross-community affinity groups (affiliations) |
+| Global Commons | Tài sản chung toàn cầu | Universal federation layer |
+| The Commons | Tài sản chung (luồng đóng góp) | Federation contribution cards screen |
+| Constitutional | Hiến chế (liên bang) | Accord-holder identity surface per FSD-002 §4.1 |
+| Delegation | Ủy quyền | Delegation graph |
+| Trust Topology | Cấu trúc tin cậy | Federation trust graph |
+| Participate | Tham gia | Federation needs registry |
+| Identities | Danh tính | List of known entities at a scope |
+| Trust | Tin cậy | Trust state per identity |
+| Trust policies | Chính sách tin cậy | Policies governing automatic trust |
+| Coming Soon | Sắp ra mắt | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |

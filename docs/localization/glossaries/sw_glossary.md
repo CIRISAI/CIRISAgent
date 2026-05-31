@@ -193,11 +193,39 @@ This glossary defines the canonical translations for key CIRIS terms in Swahili.
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort Scope Vocabulary (2.9.4 Commons UX)
+
+| English | Swahili | Notes |
+|---------|---------|-------|
+| Cohort scope | Upeo wa kundi (cohort scope) | Technical CIRIS term — keep loan-word recognizable |
+| Layer | Tabaka | Natural Swahili word for level/tier |
+| Agent (Self) | Wakala (Nafsi) | Wakala stays per glossary; Nafsi = self/being |
+| Family | Familia | Sibling occurrences of same agent |
+| Local Community | Jamii ya Karibu | Locally-trusted peers; geographic proximity |
+| Global Communities | Jumuiya za Kimataifa | Plural — cross-border affinity groups |
+| Global Commons | Mali ya Pamoja ya Kimataifa | Universal federation layer; shared public space |
+| Federation | Shirikisho | Per existing network glossary usage |
+| The Commons | Mali ya Pamoja | Federation contribution feed (distinguished from Global Commons cohort scope) |
+| Constitutional | Kikatiba | Refers to federation constitutional structure, not state law |
+| Delegation | Ukabidhi | Act of granting authority on one's behalf |
+| Trust Topology | Topolojia ya Uaminifu | Graph structure of trust grants |
+| Participate | Shiriki | Verb: take part / engage |
+| Affiliations | Mahusiano | Cross-community memberships |
+| Identities | Vitambulisho | List of known entities at a scope |
+| Trust | Uaminifu | Trust state per identity |
+| Trust policies | Sera za uaminifu | Policies governing automatic trust |
+| Coming Soon | Inakuja Hivi Karibuni | Placeholder for unshipped features |
+| Recursive Golden Rule | Kanuni ya Dhahabu ya Kujirudia | Self-applying ethical principle |
+| Attestation | Ushuhuda | Signed claim/witness |
+| Peer | Mwenza | Per existing network glossary |
+| Witness | Shahidi | Behavior witness |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-03-27 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort scope vocabulary for 2.9.4 Commons UX |
 
 ---
 

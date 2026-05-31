@@ -2331,5 +2331,78 @@
     "brightness_light": "Terang",
     "brightness_system": "Sistem",
     "brightness_dark": "Gelap"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Identitas",
+        "trust": "Kepercayaan",
+        "policies": "Kebijakan kepercayaan"
+      },
+      "badge": {
+        "coming_soon": "SEGERA HADIR"
+      },
+      "agent": {
+        "title": "Agen (Diri)",
+        "subtitle": "Agen itu sendiri — diri yang tersirat di setiap skala.",
+        "identities_description": "Kunci identitas agen sendiri — alamat federasi yang digunakan untuk menandatangani setiap kontribusi. Nama ramah dari konfigurasi lokal; key_id dari CIRISEdge.",
+        "trust_description": "Kepercayaan diri adalah fondasi. Recursive Golden Rule tidak memiliki klausa pengecualian — apa yang agen tuntut dari pihak lain, harus ia pegang juga pada dirinya sendiri.",
+        "policies_description": "Kebijakan yang berlaku pada diri sendiri: irama rotasi identitas, penyegaran atestasi, apa yang bersedia ditandatangani agen pada cakupan ini."
+      },
+      "family": {
+        "title": "Keluarga",
+        "subtitle": "Instansi CIRIS lain yang berbagi identitas operator ini.",
+        "identities_description": "Instansi saudara (instansi runtime berbeda dari agen yang sama) dan occurrence_id mereka. Nama ramah dari konfigurasi operator.",
+        "trust_description": "Anggota keluarga berbagi kunci penandatangan operator secara default — kepercayaan langsung adalah dasar. Keputusan shutdown / wakeup dibagikan sesuai koordinasi multi-instansi.",
+        "policies_description": "Kebijakan lintas-instansi: klaim tugas bersama, batas keamanan multi-instansi, kuorum keputusan untuk tindakan berskala keluarga."
+      },
+      "local_community": {
+        "title": "Komunitas lokal",
+        "subtitle": "Peer terpercaya lokal — kanal utama, rumah tangga, guild tunggal.",
+        "identities_description": "Peer yang dipercaya secara eksplisit oleh operator. Nama ramah dari buku kontak; key_id dari tabel pengumuman.",
+        "trust_description": "Kepercayaan langsung yang diberikan oleh operator. Dapat dicabut kapan saja. Kontribusi berskala lokal tetap dalam kohort lokal dan tidak dipublikasikan ke federasi.",
+        "policies_description": "Kebijakan per-komunitas: siapa yang boleh mengundang, kelas konten apa yang diterima, bagaimana sengketa diselesaikan pada cakupan ini."
+      },
+      "global_communities": {
+        "title": "Komunitas global",
+        "subtitle": "Kelompok afinitas lintas-komunitas yang telah diikuti agen.",
+        "identities_description": "Komunitas berafiliasi (koperasi, badan profesi, jaringan saling-bantu) tempat agen berpartisipasi. Nama ramah dari registry accord_holder; jika tidak ada gunakan key_id.",
+        "trust_description": "Kepercayaan bersifat transitif melalui keanggotaan komunitas. Setiap komunitas memiliki kriteria penerimaan sendiri dan disiplin atestasi sendiri.",
+        "policies_description": "Kebijakan berskala afiliasi: komunitas mana yang akan agen terima panduannya, penyelesaian konflik antar afiliasi yang bersaing."
+      },
+      "global_commons": {
+        "title": "Ranah bersama global",
+        "subtitle": "Federasi sebagai lapisan universal — kemanusiaan, ekologi, substrat itu sendiri.",
+        "identities_description": "Semua identitas yang terlihat pada cakupan federasi, termasuk pemegang otoritas-henti humanity_accord, principals accord_holder, dan kolam peer yang lebih luas.",
+        "trust_description": "Kepercayaan pada cakupan universal diberikan oleh disiplin atestasi federasi sendiri. Recursive Golden Rule mengikat setiap principal — termasuk CIRIS L3C — pada cakupan ini.",
+        "policies_description": "Batas konstitusional seluruh-federasi: otoritas-henti humanity_accord, prefiks yang dicadangkan untuk accord_holder, penentuan ukuran kuorum keputusan menurut locality."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Ranah bersama",
+        "description": "Kartu kontribusi federasi: accord files, safety tests, behavior witnesses, rubric updates, recantations, delegations. Masing-masing membawa polaritas, kepercayaan, keberagaman saksi, dan silsilah rantai audit yang diselesaikan melalui transport ContentFetch milik Edge."
+      },
+      "participate": {
+        "title": "Berpartisipasi",
+        "description": "Registry kebutuhan federasi — para agen mendaftarkan apa yang mereka butuhkan (rubric review, safety witness, delegation scope) sebagai atestasi need:{domain}:{kind}; agen lain melihat, menilai, dan menanggapi."
+      },
+      "environment_graph": {
+        "title": "Grafik lingkungan",
+        "description": "Grafik lingkungan turunan-lens — skor konformitas manifold per kohort, pengukuran akses distributif, deteksi aksi terkorelasi. Lapisan grafik di atas direktori federasi yang dipakai agen untuk bernalar selama pengambilan keputusan."
+      },
+      "delegation": {
+        "title": "Delegasi",
+        "description": "Grafik delegasi: cakupan yang didelegasikan ke dan dari agen ini, dengan stempel waktu pemberian, evidence_refs, dan setiap rantai penarikan. Salah satu dari 4 primitif struktural — dimiliki bersama dengan direktori federasi."
+      },
+      "trust_topology": {
+        "title": "Topologi kepercayaan",
+        "description": "Grafik kepercayaan federasi — peer sebagai simpul, pemberian kepercayaan sebagai tepi (langsung / didelegasikan / adversarial), warna tepi = keterjangkauan transport, ukuran simpul = bobot kepercayaan agregat."
+      },
+      "constitutional": {
+        "title": "Konstitusional",
+        "description": "Permukaan identitas Accord-holder — satu-satunya asimetri konstitusional menurut FSD-002 §4.1. Hanya kunci identity_type=accord_holder yang boleh memancarkan atestasi accord:*; layar ini menampilkan pemegang saat ini, pancaran prefiks accord yang mereka terbitkan, dan audit penegakan prefiks-tercadangkan."
+      }
+    }
   }
 }

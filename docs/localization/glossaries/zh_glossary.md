@@ -214,11 +214,35 @@ This glossary defines the canonical translations for key CIRIS terms in Simplifi
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## Commons / Cohort-Scope Vocabulary (2.9.4)
+
+| English | Chinese | Pinyin | Notes |
+|---------|---------|--------|-------|
+| Cohort scope | 群体范围 | qúntǐ fànwéi | CEG 0.6 wire-format term; keep `cohort_scope` verbatim in code |
+| Layer | 层级 | céngjí | UX surface representing a cohort scope |
+| Self | 自身 | zìshēn | Reflexive identity; used with Agent as 智能体（自身） |
+| Family | 家族 | jiāzú | Sibling occurrences sharing operator identity (NOT 家庭/nuclear family) |
+| Local Community | 本地社区 | běndì shèqū | Locally-trusted peers — home channel, household, single guild |
+| Global Communities | 全球社区 | quánqiú shèqū | Cross-community affinity groups (CEG: affiliations); plural |
+| Global Commons | 全球公域 | quánqiú gōngyù | Universal federation layer (CEG species + planet + federation) |
+| Federation | 联邦 | liánbāng | CIRIS federation as peer network |
+| The Commons | 公域贡献 | gōngyù gòngxiàn | Federation contribution cards screen (distinct from Global Commons layer) |
+| Constitutional | 章程性 | zhāngchéngxìng | Accord-holder identity surface (FSD-002 §4.1); NOT national constitutional law |
+| Delegation | 委派 | wěipài | Granting authority to act on one's behalf |
+| Trust Topology | 信任拓扑 | xìnrèn tuòpū | Federation trust graph — peers as nodes, trust grants as edges |
+| Participate | 参与 | cānyù | Federation needs registry — register needs, others respond |
+| Affiliations | 隶属关系 | lìshǔ guānxì | CEG term for cross-community memberships |
+| Identities | 身份列表 | shēnfèn lièbiǎo | Section: list of known entities at a scope |
+| Trust | 信任 | xìnrèn | Section: trust state per identity |
+| Trust policies | 信任策略 | xìnrèn cèlüè | Section: policies governing automatic trust at a scope |
+| Coming Soon | 即将推出 | jíjiāng tuīchū | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-01-XX | Initial glossary |
+| 1.1 | 2026-05-31 | Added Commons / Cohort-Scope vocabulary (2.9.4) |
 
 ---
 

@@ -127,3 +127,24 @@ This glossary defines the canonical translations for key CIRIS terms in Thai. Al
 | secondary_need_categories | secondary_need_categories | JSON key; keep in English |
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
+
+## CEG 0.6 Cohort Scope Vocabulary (2.9.4 Commons UX)
+
+| English | Thai | Transliteration | Definition |
+|---------|------|-----------------|------------|
+| Cohort scope | ขอบเขตคลัสเตอร์ (cohort scope) | Khòp-khèt-khlàt-dtêr | CEG 0.6 wire term — scale at which a contribution applies |
+| Layer | เลเยอร์ | Leh-yêr | UX surface for one cohort scope |
+| Agent (Self) | เอเจนต์ (ตัวเอง) | Eh-jen (dtua-eng) | The agent itself; first layer |
+| Family | ครอบครัว | Khrôp-khrua | Sibling occurrences of the same agent |
+| Local Community | ชุมชนท้องถิ่น | Chum-chon-thóng-thìn | Locally-trusted peers |
+| Global Communities | ชุมชนระดับโลก | Chum-chon-rá-dàp-lôhk | Cross-community affinity groups (affiliations) |
+| Global Commons | คอมมอนส์ระดับโลก | Khom-mon-rá-dàp-lôhk | Universal federation layer |
+| The Commons | คอมมอนส์ (ฟีดการมีส่วนร่วม) | Khom-mon | Federation contribution cards screen |
+| Constitutional | รัฐธรรมนูญ (สหพันธ์) | Rát-thà-tham-má-noon | Accord-holder identity surface per FSD-002 §4.1 |
+| Delegation | การมอบหมาย | Gaan-môp-mǎai | Delegation graph |
+| Trust Topology | โทโพโลยีความเชื่อใจ | Toh-poh-loh-yee-khwaam-chêua-jai | Federation trust graph |
+| Participate | มีส่วนร่วม | Mee-sùan-rûam | Federation needs registry |
+| Identities | ตัวตน | Dtua-dton | List of known entities at a scope |
+| Trust | ความเชื่อใจ | Khwaam-chêua-jai | Trust state per identity |
+| Trust policies | นโยบายความเชื่อใจ | Ná-yoh-baai-khwaam-chêua-jai | Policies governing automatic trust |
+| Coming Soon | เร็วๆ นี้ | Reo-reo-née | Placeholder for unshipped features |

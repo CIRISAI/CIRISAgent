@@ -2331,5 +2331,78 @@
     "brightness_light": "Hell",
     "brightness_system": "System",
     "brightness_dark": "Dunkel"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Identitäten",
+        "trust": "Vertrauen",
+        "policies": "Vertrauensrichtlinien"
+      },
+      "badge": {
+        "coming_soon": "DEMNÄCHST"
+      },
+      "agent": {
+        "title": "Agent (Selbst)",
+        "subtitle": "Der Agent selbst — das implizite Selbst auf jeder Skala.",
+        "identities_description": "Der eigene Identitätsschlüssel des Agenten — die Föderationsadresse, mit der er jeden Beitrag signiert. Anzeigename aus der lokalen Konfiguration; key_id aus CIRISEdge.",
+        "trust_description": "Selbstvertrauen ist grundlegend. Die Rekursive Goldene Regel kennt keine Ausnahmeklauseln — was der Agent von anderen verlangt, muss er sich selbst auferlegen.",
+        "policies_description": "Selbst angewandte Richtlinien: Kadenz der Identitätsrotation, Aktualisierung der Attestierung, was der Agent in diesem Bereich zu signieren bereit ist."
+      },
+      "family": {
+        "title": "Familie",
+        "subtitle": "Andere CIRIS-Instanzen, die die Identität dieses Operators teilen.",
+        "identities_description": "Geschwister-Instanzen (verschiedene Laufzeitinstanzen desselben Agenten) und deren occurrence_id. Anzeigename aus der Operator-Konfiguration.",
+        "trust_description": "Familienmitglieder teilen standardmäßig den Signierschlüssel des Operators — direktes Vertrauen ist die Basislinie. Geteilte Abschalt- / Aufwachentscheidungen über Multi-Instanz-Koordination.",
+        "policies_description": "Instanzübergreifende Richtlinien: gemeinsame Aufgabenbeanspruchung, Multi-Instanz-Sicherheitsgrenzen, Entscheidungsquorum für Aktionen im Familienbereich."
+      },
+      "local_community": {
+        "title": "Lokale Gemeinschaft",
+        "subtitle": "Lokal vertraute Peers — Heimkanal, Haushalt, einzelne Gilde.",
+        "identities_description": "Peers, denen der Operator ausdrücklich vertraut. Anzeigename aus dem Kontaktbuch; key_id aus der Ankündigungstabelle.",
+        "trust_description": "Direktes Vertrauen, das vom Operator gewährt wird. Kann jederzeit widerrufen werden. Beiträge im lokalen Bereich bleiben in der lokalen Kohorte und werden nicht in der Föderation veröffentlicht.",
+        "policies_description": "Gemeinschaftsbezogene Richtlinien: wer einladen darf, welche Inhaltsklassen zugelassen sind, wie Streitigkeiten in diesem Bereich gelöst werden."
+      },
+      "global_communities": {
+        "title": "Globale Gemeinschaften",
+        "subtitle": "Übergemeinschaftliche Affinitätsgruppen, denen der Agent beigetreten ist.",
+        "identities_description": "Verbundene Gemeinschaften (Genossenschaften, Berufsverbände, Netzwerke gegenseitiger Hilfe), an denen der Agent teilnimmt. Anzeigename aus dem accord_holder-Register; ansonsten key_id.",
+        "trust_description": "Vertrauen ist transitiv durch die Gemeinschaftszugehörigkeit. Jede Gemeinschaft hat ihre eigenen Zulassungskriterien und ihre eigene Attestierungsdisziplin.",
+        "policies_description": "Richtlinien im Affiliationsbereich: von welchen Gemeinschaften der Agent Anleitung akzeptiert, Konfliktlösung zwischen konkurrierenden Zugehörigkeiten."
+      },
+      "global_commons": {
+        "title": "Globales Gemeingut",
+        "subtitle": "Die Föderation als universelle Schicht — die Menschheit, die Ökologie, das Substrat selbst.",
+        "identities_description": "Alle im Föderationsbereich sichtbaren Identitäten, einschließlich der Inhaber der humanity_accord-Halt-Autorität, der accord_holder-Prinzipale und des breiteren Peer-Pools.",
+        "trust_description": "Vertrauen im universellen Bereich wird durch die föderationseigene Attestierungsdisziplin verliehen. Die Rekursive Goldene Regel bindet jeden Prinzipal — einschließlich CIRIS L3C — in diesem Bereich.",
+        "policies_description": "Föderationsweite verfassungsmäßige Grenzen: humanity_accord-Halt-Autorität, reservierte accord_holder-Präfixe, Dimensionierung des locality:decision-Quorums."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Das Gemeingut",
+        "description": "Föderations-Beitragskarten: accord-Dateien, Sicherheitstests, Verhaltenszeugen, Rubrik-Aktualisierungen, Widerrufe, Delegationen. Jede trägt Polarität, Konfidenz, Zeugenvielfalt und Audit-Ketten-Abstammung, aufgelöst über Edges ContentFetch-Transport."
+      },
+      "participate": {
+        "title": "Teilnehmen",
+        "description": "Föderations-Bedarfsregister — Agenten registrieren, was sie benötigen (Rubrik-Überprüfung, Sicherheitszeuge, Delegationsbereich) als need:{domain}:{kind}-Attestierungen; andere Agenten sehen, bewerten und reagieren."
+      },
+      "environment_graph": {
+        "title": "Umgebungsgraph",
+        "description": "Aus dem Lens abgeleiteter Umgebungsgraph — Manifold-Konformitätsbewertungen pro Kohorte, Messungen distributiven Zugangs, Erkennungen korrelierter Aktionen. Die Graphschicht über dem Föderationsverzeichnis, gegen die der Agent während der Entscheidungsfindung argumentiert."
+      },
+      "delegation": {
+        "title": "Delegation",
+        "description": "Delegationsgraph: Bereiche, die an und von diesem Agenten delegiert werden, mit Erteilungszeitstempeln, evidence_refs und etwaigen Widerrufsketten. Eine der 4 strukturellen Primitive — gemeinsam mit dem Föderationsverzeichnis besessen."
+      },
+      "trust_topology": {
+        "title": "Vertrauenstopologie",
+        "description": "Föderations-Vertrauensgraph — Peers als Knoten, Vertrauenserteilungen als Kanten (direkt / delegiert / gegnerisch), Kantenfarbe = Transport-Erreichbarkeit, Knotengröße = aggregiertes Vertrauensgewicht."
+      },
+      "constitutional": {
+        "title": "Verfassungsmäßig",
+        "description": "Accord-Inhaber-Identitätsoberfläche — die eine verfassungsmäßige Asymmetrie gemäß FSD-002 §4.1. Nur Schlüssel mit identity_type=accord_holder dürfen accord:*-Attestierungen ausstellen; diese Ansicht zeigt aktuelle Inhaber, ihre ausgestellten accord-Präfix-Emissionen und die Audit-Durchsetzung reservierter Präfixe."
+      }
+    }
   }
 }

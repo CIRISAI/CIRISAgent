@@ -162,11 +162,34 @@ This glossary defines the canonical translations for key CIRIS terms in Arabic. 
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort-Scope Vocabulary (2.9.4 Commons hub)
+
+| English | Arabic | Transliteration | Definition / Guidance |
+|---------|--------|-----------------|------------------------|
+| Cohort scope | نطاق المجموعة (cohort scope) | Niṭāq al-Majmū'ah | CEG 0.6 wire-format term; keep English in parentheses when used in technical text |
+| Layer | طبقة | Ṭabaqah | UX surface for one cohort scope |
+| Self | الذات | Adh-Dhāt | Reflexive "self" referring to the agent itself |
+| Family | العائلة | Al-'Ā'ilah | Sibling occurrences of the same agent — not nuclear-family connotation |
+| Local Community | المجتمع المحلي | Al-Mujtama' al-Maḥalliy | Locally-trusted peers — home channel, household, single guild |
+| Global Communities | المجتمعات العالمية | Al-Mujtama'āt al-'Ālamiyyah | Cross-community affinity groups (CEG: affiliations) |
+| Global Commons | المشاع العالمي | Al-Mushā' al-'Ālamiy | The universal federation layer (species + planet + federation) |
+| The Commons | المشاع | Al-Mushā' | Federation contribution-cards screen — distinct from "Global Commons" the layer |
+| Constitutional | الدستوري | Ad-Dustūriy | Accord-holder identity surface (FSD-002 §4.1) — refers to federation constitutional structure |
+| Delegation | التفويض | At-Tafwīḍ | Granting authority/scope to act on one's behalf |
+| Trust Topology | طوبولوجيا الثقة | Ṭūbūlūjiyā ath-Thiqah | Federation trust graph — peers as nodes, trust grants as edges |
+| Participate | المشاركة | Al-Mushārakah | Federation needs registry — verb form: take part / contribute |
+| Affiliations | الانتسابات | Al-Intisābāt | Cross-community memberships (CEG term for global-communities cohort) |
+| Identities | الهويات | Al-Huwiyyāt | Known entities at a scope, with friendly names where available |
+| Trust | الثقة | Ath-Thiqah | Trust state per identity |
+| Trust policies | سياسات الثقة | Siyāsāt ath-Thiqah | Policies governing automatic trust at a scope |
+| Coming Soon | قريباً | Qarīban | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-03-27 | Initial glossary extracted from ar.json |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary for 2.9.4 Commons hub |
 
 ---
 

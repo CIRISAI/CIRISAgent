@@ -2331,5 +2331,78 @@
     "brightness_light": "Açık",
     "brightness_system": "Sistem",
     "brightness_dark": "Koyu"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Kimlikler",
+        "trust": "Güven",
+        "policies": "Güven politikaları"
+      },
+      "badge": {
+        "coming_soon": "ÇOK YAKINDA"
+      },
+      "agent": {
+        "title": "Ajan (Öz)",
+        "subtitle": "Ajanın kendisi — her ölçekte örtük öz.",
+        "identities_description": "Ajanın kendi kimlik anahtarı — her katkıyı imzaladığı federasyon adresi. Kolay ad yerel yapılandırmadan; key_id CIRISEdge'den gelir.",
+        "trust_description": "Öz-güven temeldir. Özyinelemeli Altın Kural'ın muafiyet maddesi yoktur — ajan başkalarından ne talep ediyorsa, kendisini de aynı ölçütle bağlamak zorundadır.",
+        "policies_description": "Öze uygulanan politikalar: kimlik rotasyon sıklığı, sertifika yenileme, ajanın bu kapsamda imzalamaya hazır olduğu içerikler."
+      },
+      "family": {
+        "title": "Aile",
+        "subtitle": "Bu operatörün kimliğini paylaşan diğer CIRIS örnekleri.",
+        "identities_description": "Kardeş örnekler (aynı ajanın farklı çalışma zamanı örnekleri) ve occurrence_id'leri. Kolay ad operatör yapılandırmasından gelir.",
+        "trust_description": "Aile üyeleri varsayılan olarak operatörün imza anahtarını paylaşır — doğrudan güven temel düzeydir. Çoklu örnek koordinasyonu uyarınca paylaşılan kapatma / uyanma kararları.",
+        "policies_description": "Örnekler arası politikalar: paylaşılan görev sahiplenme, çoklu örnek güvenlik sınırları, aile kapsamlı eylemler için karar nisabı."
+      },
+      "local_community": {
+        "title": "Yerel Topluluk",
+        "subtitle": "Yerel olarak güvenilen eşler — ev kanalı, hane, tek lonca.",
+        "identities_description": "Operatör tarafından açıkça güvenilen eşler. Kolay ad rehberden; key_id duyuru tablosundan gelir.",
+        "trust_description": "Operatör tarafından doğrudan tanınan güven. İstenildiği zaman geri alınabilir. Yerel kapsamdaki katkılar yerel kohortta kalır ve federasyona yayımlanmaz.",
+        "policies_description": "Topluluk başına politikalar: kimin davet edebileceği, hangi içerik sınıflarına izin verildiği, bu kapsamdaki anlaşmazlıkların nasıl çözüldüğü."
+      },
+      "global_communities": {
+        "title": "Küresel Topluluklar",
+        "subtitle": "Ajanın katıldığı, topluluklar arası ilgi grupları.",
+        "identities_description": "Ajanın katıldığı bağlı topluluklar (kooperatifler, meslek kuruluşları, dayanışma ağları). Kolay ad accord_holder kayıt defterinden; aksi halde key_id'den gelir.",
+        "trust_description": "Güven, topluluk üyeliği aracılığıyla geçişlidir. Her topluluğun kendi kabul ölçütleri ve kendi sertifika disiplini vardır.",
+        "policies_description": "Aidiyet kapsamlı politikalar: ajanın hangi topluluklardan rehberlik kabul edeceği, rakip aidiyetler arasındaki çatışmaların çözümü."
+      },
+      "global_commons": {
+        "title": "Küresel Müşterekler",
+        "subtitle": "Evrensel katman olarak federasyon — insanlık, ekoloji, altyapının kendisi.",
+        "identities_description": "Federasyon kapsamında görünen tüm kimlikler — humanity_accord durdurma yetkisi sahipleri, accord_holder asal kimlikleri ve geniş eş havuzu dahil.",
+        "trust_description": "Evrensel kapsamdaki güven, federasyonun kendi sertifika disiplini tarafından verilir. Özyinelemeli Altın Kural bu kapsamda her asal kimliği — CIRIS L3C dahil — bağlar.",
+        "policies_description": "Federasyon çapındaki anayasal sınırlar: humanity_accord durdurma yetkisi, accord_holder ayrılmış ön ekleri, locality:decision nisap büyüklüğü."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Müşterekler",
+        "description": "Federasyon katkı kartları: anlaşma dosyaları, güvenlik testleri, davranış tanıkları, kıstas güncellemeleri, geri çekmeler, yetki devirleri. Her biri kutupluluk, güven, tanık çeşitliliği ve Edge'in ContentFetch taşımacılığıyla çözümlenen denetim zinciri kökenini taşır."
+      },
+      "participate": {
+        "title": "Katıl",
+        "description": "Federasyon ihtiyaç sicili — ajanlar gereksinimlerini (kıstas incelemesi, güvenlik tanığı, yetki devri kapsamı) need:{domain}:{kind} sertifikaları olarak kaydeder; diğer ajanlar görür, puanlar ve yanıt verir."
+      },
+      "environment_graph": {
+        "title": "Çevre Grafiği",
+        "description": "Lens'ten türetilen çevre grafiği — kohort başına manifold uyum skorları, dağıtımsal erişim ölçümleri, ilişkili eylem tespitleri. Federasyon dizininin üzerindeki grafik katmanı; ajan karar verirken buna karşı akıl yürütür."
+      },
+      "delegation": {
+        "title": "Yetki Devri",
+        "description": "Yetki devri grafiği: bu ajana ve ondan devredilen kapsamlar, tahsis zaman damgaları, evidence_refs ve varsa geri çekme zincirleri. 4 yapısal ilkelden biri — federasyon diziniyle ortak sahiplenilir."
+      },
+      "trust_topology": {
+        "title": "Güven Topolojisi",
+        "description": "Federasyon güven grafiği — eşler düğüm, güven tahsisleri kenar olarak (doğrudan / devredilmiş / hasım), kenar rengi = taşımacılık erişilebilirliği, düğüm boyutu = toplam güven ağırlığı."
+      },
+      "constitutional": {
+        "title": "Anayasal",
+        "description": "Anlaşma sahibi kimlik yüzeyi — FSD-002 §4.1 uyarınca tek anayasal asimetri. Yalnızca identity_type=accord_holder anahtarlar accord:* sertifikaları yayımlayabilir; bu ekran mevcut sahipleri, yayımladıkları accord-ön ekli ifadeleri ve ayrılmış ön ek uygulama denetimini gösterir."
+      }
+    }
   }
 }

@@ -547,21 +547,25 @@ class TestAwaitAttestationReady:
 
 
 # ---------------------------------------------------------------------------
-# Startup attestation budget (15s end-to-end contract)
+# Startup attestation budget (20s end-to-end ceiling, 15s contract)
 # ---------------------------------------------------------------------------
 #
-# The auth service exposes STARTUP_ATTESTATION_BUDGET_SECONDS = 15.0 as the
-# contract for end-to-end startup attestation. await_attestation_ready()
-# enforces it by measuring from task creation, not from when the caller
-# started awaiting — so a caller arriving 14s late only gets 1s of budget.
+# The auth service exposes STARTUP_ATTESTATION_BUDGET_SECONDS = 20.0. The
+# contract is 15s — we sit at 20.0 with 5s headroom while CIRISVerify ships
+# the verifier-side fix in CIRISAgent#843 (10s network-probe timeout blows
+# 15s under CI's offline egress + parallel-backend CPU contention). Once
+# the verifier short-circuits offline probes, drop back to 15.0.
 #
-# Budget breach is not a tuning knob; it is a defect that must be filed
-# against ciris_verify with receipts attached. The tests below pin every
-# observable surface of that contract.
+# await_attestation_ready() enforces the budget by measuring from task
+# creation, not from when the caller started awaiting — so a caller
+# arriving 19s late only gets 1s of budget.
+#
+# Budget breach is not a tuning knob beyond the documented headroom; it
+# is a defect that must be filed against ciris_verify with receipts.
 
 
 class TestStartupAttestationBudget:
-    """Pin the 15s end-to-end attestation budget enforcement."""
+    """Pin the 20s end-to-end attestation budget enforcement."""
 
     def _make_bare_service(self):
         with patch(
@@ -579,14 +583,16 @@ class TestStartupAttestationBudget:
             return svc
 
     def test_budget_constant_value(self):
-        """The contract value must be 15.0s — flipping this without thought
-        weakens the gate that prevents 60-120s first-thought stalls.
+        """The contract value is 15s but we currently sit at 20.0 (5s
+        headroom while CIRISVerify ships CIRISAgent#843). Flipping this
+        without thought weakens the gate that prevents 60-120s first-thought
+        stalls; raising past 20.0 requires a new issue against ciris_verify.
         """
         from ciris_engine.logic.services.infrastructure.authentication.service import (
             STARTUP_ATTESTATION_BUDGET_SECONDS,
         )
 
-        assert STARTUP_ATTESTATION_BUDGET_SECONDS == 15.0
+        assert STARTUP_ATTESTATION_BUDGET_SECONDS == 20.0
 
     @pytest.mark.asyncio
     async def test_returns_immediately_within_budget(self):

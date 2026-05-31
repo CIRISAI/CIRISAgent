@@ -20,7 +20,7 @@ Federation transport release — CIRISEdge 1.0 GA wired through. Adds the **Netw
 
 ### Changed
 
-- **Substrate pin**: ciris-edge `1.0.1` / ciris-persist `3.6.4` / ciris-verify `>=4.4.2` — closes the 0.15.x cohabitation regression (CIRISEdge#43) and consumes the full Edge 1.0 PyO3+UniFFI surface.
+- **Substrate pin**: ciris-edge `>=1.0.1` / ciris-persist `>=3.6.9` / ciris-verify `>=4.4.3` — closes the 0.15.x cohabitation regression (CIRISEdge#43) and consumes the full Edge 1.0 PyO3+UniFFI surface. Android JNI bundles refreshed to verify 4.4.3 via `python -m tools.update_ciris_verify`.
 
 ### Fixed
 

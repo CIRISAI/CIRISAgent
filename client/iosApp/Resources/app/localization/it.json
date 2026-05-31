@@ -142,13 +142,13 @@
     "ponder_forced_retry": "PONDER forzato dopo nuovo tentativo di coscienza",
     "override_rationale": "Sovrascritto da {conscience_name}: Necessita riconsiderare {action}",
     "forced_ponder_rationale": "PONDER forzato dopo nuovo tentativo di coscienza per prevenire loop",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "PREOCCUPAZIONE DELLA COSCIENZA: La confidenza minima per PARLA era {threshold} ma è stato fornito {confidence}",
+    "ponder_concern_speak_harm": "PREOCCUPAZIONE DELLA COSCIENZA: Il contenuto di PARLA potrebbe causare danno",
+    "ponder_concern_tool_confidence": "PREOCCUPAZIONE DELLA COSCIENZA: La confidenza minima per STRUMENTO era {threshold} ma è stato fornito {confidence}",
+    "ponder_concern_tool_requires_wa": "PREOCCUPAZIONE DELLA COSCIENZA: Questo strumento richiede l'approvazione della Wise Authority",
+    "ponder_concern_memorize_scope": "PREOCCUPAZIONE DELLA COSCIENZA: MEMORIZZA {scope} - verificare che sia appropriato",
+    "ponder_concern_forget_scope": "PREOCCUPAZIONE DELLA COSCIENZA: DIMENTICA {scope} - questa azione è irreversibile",
+    "ponder_concern_high_stakes": "PREOCCUPAZIONE DELLA COSCIENZA: Situazione ad alto rischio rilevata - è richiesta un'attenta valutazione",
     "retry_header": "**GUIDA AL SUPERAMENTO DELLA COSCIENZA:**",
     "retry_intro": "Il tuo precedente tentativo di {action} è stato rifiutato perché: {reason}",
     "retry_alternatives_header": "Alternative enumerate da IRIS-E (usale come punti perno se ri-PARLI):",
@@ -765,8 +765,8 @@
     "adapter_oauth": "OAuth",
     "adapter_confirm_apply": "Conferma e Applica",
     "adapter_reload": "Ricarica",
-    "adapter_reloading": "Reloading adapter...",
-    "adapter_removing": "Removing adapter...",
+    "adapter_reloading": "Ricaricamento adattatore...",
+    "adapter_removing": "Rimozione adattatore...",
     "adapter_remove_title": "Rimuovi Adattatore",
     "adapter_remove_confirm": "Sei sicuro di voler rimuovere l'adattatore {name}?",
     "adapter_no_adapters": "Nessun Adattatore",
@@ -1638,9 +1638,9 @@
     "env_add": "Aggiungi",
     "env_cache_stats": "Statistiche Cache",
     "env_stat_entries": "Voci",
-    "env_stat_hits": "Hits",
-    "env_stat_misses": "Misses",
-    "env_stat_hit_rate": "Hit Rate",
+    "env_stat_hits": "Hit",
+    "env_stat_misses": "Mancati",
+    "env_stat_hit_rate": "Tasso di successo",
     "env_cat_want": "Voglio",
     "env_cat_need": "Ho Bisogno",
     "env_cat_have": "Ho",
@@ -1672,15 +1672,15 @@
     "wallet_paymaster_hint": "Inserisci la tua chiave API Etherspot Arka per abilitare i trasferimenti USDC senza gas",
     "wallet_paymaster_key_label": "Chiave API Arka",
     "wallet_paymaster_save": "Salva Chiave",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "Esegui",
+    "interact_viz_complete": "Completa",
+    "adapter_reauth_required": "Nuova autenticazione richiesta",
+    "adapter_reauth": "Autentica di nuovo",
+    "adapter_reauth_reason": "Motivo: {reason}",
+    "settings_location": "Posizione",
+    "settings_location_desc": "Imposta la tua città per meteo e informazioni locali",
+    "settings_search_city": "Città",
+    "settings_search_city_hint": "Cerca una città...",
     "llm_settings_local_servers": "Server Locali",
     "llm_settings_local_detected": "{count} rilevati",
     "llm_settings_local_none": "Nessuno trovato",
@@ -1953,11 +1953,11 @@
   "setup_validation_username_required": "Il nome utente è richiesto",
   "startup": {
     "startup_retry": "[EN] Retry",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "Verifica servizi...",
+    "initializing": "Inizializzazione...",
+    "loading_config": "Caricamento configurazione...",
+    "ready": "Pronto",
+    "starting": "Avvio in corso..."
   },
   "status": {
     "executing": "In esecuzione...",
@@ -1974,9 +1974,9 @@
   "system": {
     "system_cognitive_state": "[EN] Cognitive State",
     "system_queue_depth": "[EN] Queue Depth",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "Salute",
+    "metrics": "Metriche",
+    "services": "Servizi"
   },
   "task_id": "[EN] Task ID",
   "telemetry_online": "Online",
@@ -2331,5 +2331,118 @@
     "brightness_light": "Chiaro",
     "brightness_system": "Sistema",
     "brightness_dark": "Scuro"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Identità",
+        "trust": "Fiducia",
+        "policies": "Politiche di fiducia"
+      },
+      "badge": {
+        "coming_soon": "IN ARRIVO"
+      },
+      "agent": {
+        "title": "Agente (Sé)",
+        "subtitle": "L'agente stesso — il sé implicito a ogni scala.",
+        "identities_description": "La chiave d'identità propria dell'agente — l'indirizzo di federazione con cui firma ogni contributo. Nome amichevole dalla configurazione locale; key_id da CIRISEdge.",
+        "trust_description": "La fiducia in sé è fondamentale. La Regola d'Oro Ricorsiva non ha clausole di esenzione — ciò che l'agente esige dagli altri, deve esigerlo da sé stesso.",
+        "policies_description": "Politiche auto-applicabili: cadenza di rotazione d'identità, rinnovo delle attestazioni, ciò che l'agente è disposto a firmare in questo ambito."
+      },
+      "family": {
+        "title": "Famiglia",
+        "subtitle": "Altre occorrenze CIRIS che condividono l'identità di questo operatore.",
+        "identities_description": "Occorrenze fratelle (diverse istanze di runtime dello stesso agente) e il loro occurrence_id. Nome amichevole dalla configurazione dell'operatore.",
+        "trust_description": "I membri della famiglia condividono la chiave di firma dell'operatore per impostazione predefinita — la fiducia diretta è la linea di base. Decisioni condivise di spegnimento / risveglio tramite il coordinamento multi-occorrenza.",
+        "policies_description": "Politiche tra occorrenze: rivendicazione condivisa di attività, limiti di sicurezza multi-occorrenza, quorum decisionale per azioni di ambito familiare."
+      },
+      "local_community": {
+        "title": "Comunità Locale",
+        "subtitle": "Peer fidati a livello locale — canale di casa, nucleo domestico, singola gilda.",
+        "identities_description": "Peer esplicitamente fidati dall'operatore. Nome amichevole dalla rubrica; key_id dalla tabella degli annunci.",
+        "trust_description": "Fiducia diretta concessa dall'operatore. Può essere revocata in qualsiasi momento. I contributi di ambito locale restano nella coorte locale e non vengono pubblicati sulla federazione.",
+        "policies_description": "Politiche per comunità: chi può invitare, quali classi di contenuto sono ammesse, come si risolvono le controversie in questo ambito."
+      },
+      "global_communities": {
+        "title": "Comunità Globali",
+        "subtitle": "Gruppi di affinità inter-comunità a cui l'agente si è unito.",
+        "identities_description": "Comunità affiliate (cooperative, organismi professionali, reti di mutuo aiuto) a cui l'agente partecipa. Nome amichevole dal registro accord_holder; key_id altrimenti.",
+        "trust_description": "La fiducia è transitiva tramite l'appartenenza alla comunità. Ogni comunità ha i propri criteri di ammissione e la propria disciplina di attestazione.",
+        "policies_description": "Politiche di ambito di affiliazione: da quali comunità l'agente accetterà guida, risoluzione dei conflitti tra affiliazioni concorrenti."
+      },
+      "global_commons": {
+        "title": "Bene Comune Globale",
+        "subtitle": "La federazione come strato universale — l'umanità, l'ecologia, il substrato stesso.",
+        "identities_description": "Tutte le identità visibili nell'ambito della federazione, inclusi i detentori dell'autorità di arresto humanity_accord, i principali accord_holder e il bacino più ampio di peer.",
+        "trust_description": "La fiducia all'ambito universale è conferita dalla disciplina di attestazione propria della federazione. La Regola d'Oro Ricorsiva vincola ogni principale — inclusa CIRIS L3C — a questo ambito.",
+        "policies_description": "Limiti costituzionali a livello di federazione: autorità di arresto humanity_accord, prefissi riservati accord_holder, dimensionamento del quorum locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Il Bene Comune",
+        "description": "Schede di contributo della federazione: file accord, test di sicurezza, testimoni di comportamento, aggiornamenti delle rubriche, ritrattazioni, deleghe. Ciascuna porta polarità, confidenza, diversità di testimoni e lignaggio della catena di audit risolto tramite il trasporto ContentFetch di Edge."
+      },
+      "participate": {
+        "title": "Partecipa",
+        "description": "Registro dei bisogni della federazione — gli agenti registrano ciò di cui hanno bisogno (revisione di rubrica, testimone di sicurezza, ambito di delega) come attestazioni need:{domain}:{kind}; altri agenti vedono, valutano e rispondono."
+      },
+      "environment_graph": {
+        "title": "Grafo dell'Ambiente",
+        "description": "Grafo dell'ambiente derivato dal lens — punteggi di conformità del manifold per coorte, misurazioni di accesso distributivo, rilevamenti di azioni correlate. Lo strato grafo sopra la directory della federazione contro cui l'agente ragiona durante la presa di decisioni."
+      },
+      "delegation": {
+        "title": "Delega",
+        "description": "Grafo di delega: ambiti delegati verso e da questo agente, con timestamp di concessione, evidence_refs e qualsiasi catena di revoca. Una delle 4 primitive strutturali — co-posseduta con la directory della federazione."
+      },
+      "trust_topology": {
+        "title": "Topologia di Fiducia",
+        "description": "Grafo di fiducia della federazione — peer come nodi, concessioni di fiducia come archi (diretta / delegata / avversaria), colore dell'arco = raggiungibilità di trasporto, dimensione del nodo = peso aggregato di fiducia."
+      },
+      "constitutional": {
+        "title": "Costituzionale",
+        "description": "Superficie di identità del detentore di accord — l'unica asimmetria costituzionale secondo FSD-002 §4.1. Solo le chiavi identity_type=accord_holder possono emettere attestazioni accord:*; questa schermata mostra i detentori attuali, le loro emissioni di prefisso accord rilasciate e l'audit di applicazione dei prefissi riservati."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "Agente",
+      "manage": "Gestione",
+      "commons_layers": "Bene Comune",
+      "federation": "Federazione",
+      "client": "Client"
+    },
+    "surface": {
+      "sessions": "Sessioni",
+      "interact": "Interagisci",
+      "scheduler": "Pianificatore",
+      "tickets": "Ticket",
+      "tools": "Strumenti",
+      "services": "Servizi",
+      "logs": "Registri",
+      "telemetry": "Telemetria",
+      "graph_memory": "Grafo",
+      "memory": "Memoria",
+      "wise_authority": "Wise Authority",
+      "llm_settings": "LLM",
+      "system": "Sistema",
+      "runtime": "Esecuzione",
+      "config": "Configurazione",
+      "skills": "Competenze",
+      "agent_settings": "Impostazioni",
+      "health_reputation": "Salute & Reputazione",
+      "users": "Utenti",
+      "adapters": "Adattatori",
+      "network": "Rete",
+      "audit": "Audit",
+      "consent": "Consenso",
+      "data": "Dati",
+      "trust": "Fiducia",
+      "wallet": "Portafoglio",
+      "billing": "Fatturazione",
+      "agents_list": "Agenti",
+      "client_interface": "Interfaccia"
+    }
   }
 }

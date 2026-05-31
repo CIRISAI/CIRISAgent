@@ -142,13 +142,13 @@
     "ponder_forced_retry": "Erzwungenes PONDER nach Gewissenswiederholung",
     "override_rationale": "Überschrieben durch {conscience_name}: {action} muss neu überdacht werden",
     "forced_ponder_rationale": "Erzwungenes PONDER nach Gewissenswiederholung zur Vermeidung von Schleifen",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "GEWISSENSBEDENKEN: Mindestvertrauen für SPEAK war {threshold}, aber {confidence} wurde angegeben",
+    "ponder_concern_speak_harm": "GEWISSENSBEDENKEN: SPEAK-Inhalt könnte Schaden verursachen",
+    "ponder_concern_tool_confidence": "GEWISSENSBEDENKEN: Mindestvertrauen für TOOL war {threshold}, aber {confidence} wurde angegeben",
+    "ponder_concern_tool_requires_wa": "GEWISSENSBEDENKEN: Dieses Werkzeug erfordert die Genehmigung des Menschlichen Beraters",
+    "ponder_concern_memorize_scope": "GEWISSENSBEDENKEN: MERKEN {scope} – stellen Sie sicher, dass dies angemessen ist",
+    "ponder_concern_forget_scope": "GEWISSENSBEDENKEN: VERGESSEN {scope} – diese Aktion ist unwiderruflich",
+    "ponder_concern_high_stakes": "GEWISSENSBEDENKEN: Situation mit hohem Risiko erkannt – sorgfältige Abwägung erforderlich",
     "retry_header": "**LEITLINIEN ZUR GEWISSENSÜBERSCHREIBUNG:**",
     "retry_intro": "Ihr früherer Versuch, {action} auszuführen, wurde abgelehnt, da: {reason}",
     "retry_alternatives_header": "Alternativen, die IRIS-E aufgezählt hat (nutzen Sie diese als Pivot-Ziele, wenn Sie erneut SPRECHEN):",
@@ -205,7 +205,7 @@
     "field_created": "Erstellt",
     "field_subtasks": "Unteraufgaben",
     "field_actor": "Akteur",
-    "field_service": "Service",
+    "field_service": "Dienst",
     "field_time": "Zeit",
     "field_result": "Ergebnis",
     "field_operation": "Vorgang",
@@ -742,14 +742,14 @@
     "sessions_error_not_supported": "Zustandsübergang nicht unterstützt",
     "sessions_error_failed": "Übergang fehlgeschlagen: {error}",
     "sessions_error_fetch_failed": "Zustand konnte nicht abgerufen werden: {error}",
-    "status_shutdown_initiated": "Shutdown initiated",
-    "status_server_already_shutting_down": "Server already shutting down",
-    "status_server_initializing_waiting": "Server initializing... waiting ({elapsed}s)",
-    "status_shutdown_successful": "Shutdown successful",
-    "status_auth_failed_no_token": "Auth failed - no valid token",
-    "status_shutdown_forbidden": "Shutdown forbidden",
-    "status_shutdown_failed": "Shutdown failed",
-    "status_shutdown_error": "Shutdown error: {error}",
+    "status_shutdown_initiated": "Herunterfahren eingeleitet",
+    "status_server_already_shutting_down": "Server fährt bereits herunter",
+    "status_server_initializing_waiting": "Server wird initialisiert... bitte warten ({elapsed}s)",
+    "status_shutdown_successful": "Herunterfahren erfolgreich",
+    "status_auth_failed_no_token": "Authentifizierung fehlgeschlagen – kein gültiges Token",
+    "status_shutdown_forbidden": "Herunterfahren nicht erlaubt",
+    "status_shutdown_failed": "Herunterfahren fehlgeschlagen",
+    "status_shutdown_error": "Fehler beim Herunterfahren: {error}",
     "adapter_add": "Adapter hinzufügen",
     "adapter_configure": "{type} konfigurieren",
     "adapter_select_type": "Adaptertyp auswählen",
@@ -890,7 +890,7 @@
     "wallet_recipient": "Empfängeradresse",
     "wallet_amount": "Betrag ({currency})",
     "wallet_max": "Max: {amount} {currency}",
-    "wallet_memo": "Memo (optional)",
+    "wallet_memo": "Verwendungszweck (optional)",
     "wallet_memo_placeholder": "Zahlungsnotiz...",
     "wallet_sending": "Wird gesendet...",
     "wallet_irreversible": "Überweisungen sind unumkehrbar. Überprüfen Sie die Empfängeradresse doppelt.",
@@ -967,7 +967,7 @@
     "memory_scope_local": "LOKAL",
     "memory_scope_identity": "IDENTITÄT",
     "memory_scope_environment": "UMGEBUNG",
-    "memory_scope_community": "COMMUNITY",
+    "memory_scope_community": "GEMEINSCHAFT",
     "runtime_active_tasks": "Aktive Aufgaben",
     "runtime_pipeline_control": "Pipeline-Steuerung",
     "runtime_pipeline_status": "Pipeline-Status",
@@ -1672,15 +1672,15 @@
     "wallet_paymaster_hint": "Geben Sie Ihren Etherspot Arka API-Schlüssel ein, um gaslose USDC-Überweisungen zu aktivieren",
     "wallet_paymaster_key_label": "Arka API Key",
     "wallet_paymaster_save": "Schlüssel speichern",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "Aktion ausführen",
+    "interact_viz_complete": "Abgeschlossen",
+    "adapter_reauth_required": "Erneute Authentifizierung erforderlich",
+    "adapter_reauth": "Erneut authentifizieren",
+    "adapter_reauth_reason": "Grund: {reason}",
+    "settings_location": "Standort",
+    "settings_location_desc": "Geben Sie Ihre Stadt für Wetter- und lokale Informationen an",
+    "settings_search_city": "Stadt",
+    "settings_search_city_hint": "Stadt suchen...",
     "llm_settings_local_servers": "Lokale Server",
     "llm_settings_local_detected": "{count} erkannt",
     "llm_settings_local_none": "Keine gefunden",
@@ -1953,11 +1953,11 @@
   "setup_validation_username_required": "Benutzername erforderlich",
   "startup": {
     "startup_retry": "Wiederholen",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "Dienste werden überprüft...",
+    "initializing": "Wird initialisiert...",
+    "loading_config": "Konfiguration wird geladen...",
+    "ready": "Bereit",
+    "starting": "Wird gestartet..."
   },
   "status": {
     "executing": "Wird ausgeführt...",
@@ -1974,9 +1974,9 @@
   "system": {
     "system_cognitive_state": "Kognitiver Zustand",
     "system_queue_depth": "Warteschlangentiefe",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "Gesundheit",
+    "metrics": "Metriken",
+    "services": "Dienste"
   },
   "task_id": "Aufgaben-ID",
   "telemetry_online": "Online",
@@ -2331,5 +2331,118 @@
     "brightness_light": "Hell",
     "brightness_system": "System",
     "brightness_dark": "Dunkel"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Identitäten",
+        "trust": "Vertrauen",
+        "policies": "Vertrauensrichtlinien"
+      },
+      "badge": {
+        "coming_soon": "DEMNÄCHST"
+      },
+      "agent": {
+        "title": "Agent (Selbst)",
+        "subtitle": "Der Agent selbst — das implizite Selbst auf jeder Skala.",
+        "identities_description": "Der eigene Identitätsschlüssel des Agenten — die Föderationsadresse, mit der er jeden Beitrag signiert. Anzeigename aus der lokalen Konfiguration; key_id aus CIRISEdge.",
+        "trust_description": "Selbstvertrauen ist grundlegend. Die Rekursive Goldene Regel kennt keine Ausnahmeklauseln — was der Agent von anderen verlangt, muss er sich selbst auferlegen.",
+        "policies_description": "Selbst angewandte Richtlinien: Kadenz der Identitätsrotation, Aktualisierung der Attestierung, was der Agent in diesem Bereich zu signieren bereit ist."
+      },
+      "family": {
+        "title": "Familie",
+        "subtitle": "Andere CIRIS-Instanzen, die die Identität dieses Operators teilen.",
+        "identities_description": "Geschwister-Instanzen (verschiedene Laufzeitinstanzen desselben Agenten) und deren occurrence_id. Anzeigename aus der Operator-Konfiguration.",
+        "trust_description": "Familienmitglieder teilen standardmäßig den Signierschlüssel des Operators — direktes Vertrauen ist die Basislinie. Geteilte Abschalt- / Aufwachentscheidungen über Multi-Instanz-Koordination.",
+        "policies_description": "Instanzübergreifende Richtlinien: gemeinsame Aufgabenbeanspruchung, Multi-Instanz-Sicherheitsgrenzen, Entscheidungsquorum für Aktionen im Familienbereich."
+      },
+      "local_community": {
+        "title": "Lokale Gemeinschaft",
+        "subtitle": "Lokal vertraute Peers — Heimkanal, Haushalt, einzelne Gilde.",
+        "identities_description": "Peers, denen der Operator ausdrücklich vertraut. Anzeigename aus dem Kontaktbuch; key_id aus der Ankündigungstabelle.",
+        "trust_description": "Direktes Vertrauen, das vom Operator gewährt wird. Kann jederzeit widerrufen werden. Beiträge im lokalen Bereich bleiben in der lokalen Kohorte und werden nicht in der Föderation veröffentlicht.",
+        "policies_description": "Gemeinschaftsbezogene Richtlinien: wer einladen darf, welche Inhaltsklassen zugelassen sind, wie Streitigkeiten in diesem Bereich gelöst werden."
+      },
+      "global_communities": {
+        "title": "Globale Gemeinschaften",
+        "subtitle": "Übergemeinschaftliche Affinitätsgruppen, denen der Agent beigetreten ist.",
+        "identities_description": "Verbundene Gemeinschaften (Genossenschaften, Berufsverbände, Netzwerke gegenseitiger Hilfe), an denen der Agent teilnimmt. Anzeigename aus dem accord_holder-Register; ansonsten key_id.",
+        "trust_description": "Vertrauen ist transitiv durch die Gemeinschaftszugehörigkeit. Jede Gemeinschaft hat ihre eigenen Zulassungskriterien und ihre eigene Attestierungsdisziplin.",
+        "policies_description": "Richtlinien im Affiliationsbereich: von welchen Gemeinschaften der Agent Anleitung akzeptiert, Konfliktlösung zwischen konkurrierenden Zugehörigkeiten."
+      },
+      "global_commons": {
+        "title": "Globales Gemeingut",
+        "subtitle": "Die Föderation als universelle Schicht — die Menschheit, die Ökologie, das Substrat selbst.",
+        "identities_description": "Alle im Föderationsbereich sichtbaren Identitäten, einschließlich der Inhaber der humanity_accord-Halt-Autorität, der accord_holder-Prinzipale und des breiteren Peer-Pools.",
+        "trust_description": "Vertrauen im universellen Bereich wird durch die föderationseigene Attestierungsdisziplin verliehen. Die Rekursive Goldene Regel bindet jeden Prinzipal — einschließlich CIRIS L3C — in diesem Bereich.",
+        "policies_description": "Föderationsweite verfassungsmäßige Grenzen: humanity_accord-Halt-Autorität, reservierte accord_holder-Präfixe, Dimensionierung des locality:decision-Quorums."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Das Gemeingut",
+        "description": "Föderations-Beitragskarten: accord-Dateien, Sicherheitstests, Verhaltenszeugen, Rubrik-Aktualisierungen, Widerrufe, Delegationen. Jede trägt Polarität, Konfidenz, Zeugenvielfalt und Audit-Ketten-Abstammung, aufgelöst über Edges ContentFetch-Transport."
+      },
+      "participate": {
+        "title": "Teilnehmen",
+        "description": "Föderations-Bedarfsregister — Agenten registrieren, was sie benötigen (Rubrik-Überprüfung, Sicherheitszeuge, Delegationsbereich) als need:{domain}:{kind}-Attestierungen; andere Agenten sehen, bewerten und reagieren."
+      },
+      "environment_graph": {
+        "title": "Umgebungsgraph",
+        "description": "Aus dem Lens abgeleiteter Umgebungsgraph — Manifold-Konformitätsbewertungen pro Kohorte, Messungen distributiven Zugangs, Erkennungen korrelierter Aktionen. Die Graphschicht über dem Föderationsverzeichnis, gegen die der Agent während der Entscheidungsfindung argumentiert."
+      },
+      "delegation": {
+        "title": "Delegation",
+        "description": "Delegationsgraph: Bereiche, die an und von diesem Agenten delegiert werden, mit Erteilungszeitstempeln, evidence_refs und etwaigen Widerrufsketten. Eine der 4 strukturellen Primitive — gemeinsam mit dem Föderationsverzeichnis besessen."
+      },
+      "trust_topology": {
+        "title": "Vertrauenstopologie",
+        "description": "Föderations-Vertrauensgraph — Peers als Knoten, Vertrauenserteilungen als Kanten (direkt / delegiert / gegnerisch), Kantenfarbe = Transport-Erreichbarkeit, Knotengröße = aggregiertes Vertrauensgewicht."
+      },
+      "constitutional": {
+        "title": "Verfassungsmäßig",
+        "description": "Accord-Inhaber-Identitätsoberfläche — die eine verfassungsmäßige Asymmetrie gemäß FSD-002 §4.1. Nur Schlüssel mit identity_type=accord_holder dürfen accord:*-Attestierungen ausstellen; diese Ansicht zeigt aktuelle Inhaber, ihre ausgestellten accord-Präfix-Emissionen und die Audit-Durchsetzung reservierter Präfixe."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "Agent",
+      "manage": "Verwaltung",
+      "commons_layers": "Gemeingut",
+      "federation": "Föderation",
+      "client": "Client"
+    },
+    "surface": {
+      "sessions": "Sitzungen",
+      "interact": "Interagieren",
+      "scheduler": "Planer",
+      "tickets": "Tickets",
+      "tools": "Werkzeuge",
+      "services": "Dienste",
+      "logs": "Protokolle",
+      "telemetry": "Telemetrie",
+      "graph_memory": "Graph",
+      "memory": "Speicher",
+      "wise_authority": "Menschlicher Berater",
+      "llm_settings": "LLM",
+      "system": "System",
+      "runtime": "Laufzeit",
+      "config": "Konfiguration",
+      "skills": "Fähigkeiten",
+      "agent_settings": "Einstellungen",
+      "health_reputation": "Gesundheit & Ruf",
+      "users": "Benutzer",
+      "adapters": "Adapter",
+      "network": "Netzwerk",
+      "audit": "Prüfung",
+      "consent": "Einwilligung",
+      "data": "Daten",
+      "trust": "Vertrauen",
+      "wallet": "Wallet",
+      "billing": "Abrechnung",
+      "agents_list": "Agenten",
+      "client_interface": "Oberfläche"
+    }
   }
 }

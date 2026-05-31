@@ -142,13 +142,13 @@
     "ponder_forced_retry": "PONDER forzado después de reintento de conciencia",
     "override_rationale": "Anulado por {conscience_name}: Necesito reconsiderar {action}",
     "forced_ponder_rationale": "PONDER forzado después de reintento de conciencia para prevenir bucles",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "PREOCUPACIÓN DE CONCIENCIA: La confianza mínima para SPEAK era {threshold} pero se proporcionó {confidence}",
+    "ponder_concern_speak_harm": "PREOCUPACIÓN DE CONCIENCIA: El contenido de SPEAK puede causar daño",
+    "ponder_concern_tool_confidence": "PREOCUPACIÓN DE CONCIENCIA: La confianza mínima para TOOL era {threshold} pero se proporcionó {confidence}",
+    "ponder_concern_tool_requires_wa": "PREOCUPACIÓN DE CONCIENCIA: Esta herramienta requiere aprobación de la Autoridad Sabia",
+    "ponder_concern_memorize_scope": "PREOCUPACIÓN DE CONCIENCIA: MEMORIZE {scope} — asegúrate de que esto sea apropiado",
+    "ponder_concern_forget_scope": "PREOCUPACIÓN DE CONCIENCIA: FORGET {scope} — esta acción es irreversible",
+    "ponder_concern_high_stakes": "PREOCUPACIÓN DE CONCIENCIA: Se detectó una situación de alto riesgo — se requiere consideración cuidadosa",
     "retry_header": "**GUÍA DE ANULACIÓN DE CONCIENCIA:**",
     "retry_intro": "Tu intento anterior de {action} fue rechazado porque: {reason}",
     "retry_alternatives_header": "Alternativas que IRIS-E enumeró (úsalas como dirección si vuelves a elegir SPEAK):",
@@ -611,9 +611,9 @@
     "interact_legend_memory_actions": "Acciones de Memoria",
     "interact_viz_memory_graph": "Gráfico de Memoria",
     "sessions_transitioned": "Transicionado a {state}",
-    "sessions_error_invalid_state": "Invalid state requested",
-    "sessions_error_auth_required": "Authentication required",
-    "sessions_error_not_supported": "State transition not supported",
+    "sessions_error_invalid_state": "Estado solicitado no válido",
+    "sessions_error_auth_required": "Se requiere autenticación",
+    "sessions_error_not_supported": "Transición de estado no admitida",
     "sessions_error_failed": "Error al transicionar: {error}",
     "sessions_error_fetch_failed": "Error al obtener estado: {error}",
     "sessions_experimental": "Función Experimental",
@@ -903,7 +903,7 @@
     "telemetry_endpoint": "URL de Endpoint",
     "telemetry_format": "Formato",
     "telemetry_auth_type": "Tipo de Auth",
-    "telemetry_bearer": "Bearer Token",
+    "telemetry_bearer": "Token Bearer",
     "telemetry_credentials": "Credenciales (usuario:contraseña)",
     "telemetry_header_name": "Nombre de Encabezado",
     "telemetry_header_value": "Valor de Encabezado",
@@ -1166,7 +1166,7 @@
     "tickets_types_title": "Tipos de Solicitud de Privacidad de Datos",
     "tickets_create": "Crear ticket",
     "tickets_deadline": "Esta solicitud tendrá un plazo de {days} días",
-    "tickets_email": "Email *",
+    "tickets_email": "Correo electrónico *",
     "tickets_user_id": "Identificador de Usuario",
     "tickets_user_hint": "Opcional - ID de cuenta, nombre de usuario, etc.",
     "tickets_notes_label": "Notas",
@@ -1672,15 +1672,15 @@
     "wallet_paymaster_hint": "Ingrese su clave API de Etherspot Arka para habilitar transferencias USDC sin gas",
     "wallet_paymaster_key_label": "Clave API Arka",
     "wallet_paymaster_save": "Guardar Clave",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "Ejecutar",
+    "interact_viz_complete": "Completar",
+    "adapter_reauth_required": "Se Requiere Reautenticación",
+    "adapter_reauth": "Reautenticar",
+    "adapter_reauth_reason": "Razón: {reason}",
+    "settings_location": "Ubicación",
+    "settings_location_desc": "Establece tu ciudad para el clima e información local",
+    "settings_search_city": "Ciudad",
+    "settings_search_city_hint": "Buscar una ciudad...",
     "llm_settings_local_servers": "Servidores Locales",
     "llm_settings_local_detected": "{count} detectados",
     "llm_settings_local_none": "Ninguno encontrado",
@@ -1953,11 +1953,11 @@
   "setup_validation_username_required": "Se requiere nombre de usuario",
   "startup": {
     "startup_retry": "Reintentar",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "Verificando servicios...",
+    "initializing": "Inicializando...",
+    "loading_config": "Cargando configuración...",
+    "ready": "Listo",
+    "starting": "Iniciando..."
   },
   "status": {
     "all_operational": "Todos los sistemas operativos",
@@ -1974,9 +1974,9 @@
   "system": {
     "system_cognitive_state": "Estado cognitivo",
     "system_queue_depth": "Profundidad de cola",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "Salud",
+    "metrics": "Métricas",
+    "services": "Servicios"
   },
   "task_id": "ID de tarea",
   "telemetry_online": "En línea",
@@ -2331,5 +2331,118 @@
     "brightness_light": "Claro",
     "brightness_system": "Sistema",
     "brightness_dark": "Oscuro"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Identidades",
+        "trust": "Confianza",
+        "policies": "Políticas de confianza"
+      },
+      "badge": {
+        "coming_soon": "PRÓXIMAMENTE"
+      },
+      "agent": {
+        "title": "Agente (Yo)",
+        "subtitle": "El agente mismo — el yo implícito en cada escala.",
+        "identities_description": "La propia clave de identidad del agente — la dirección de federación con la que firma cada contribución. Nombre amigable desde la configuración local; key_id desde CIRISEdge.",
+        "trust_description": "La confianza en uno mismo es fundamental. La Regla de Oro Recursiva no tiene cláusulas de exención — lo que el agente exige a los demás, debe exigírselo a sí mismo.",
+        "policies_description": "Políticas autoaplicables: cadencia de rotación de identidad, renovación de atestaciones, lo que el agente está dispuesto a firmar en este ámbito."
+      },
+      "family": {
+        "title": "Familia",
+        "subtitle": "Otras ocurrencias de CIRIS que comparten la identidad de este operador.",
+        "identities_description": "Ocurrencias hermanas (distintas instancias de tiempo de ejecución del mismo agente) y su occurrence_id. Nombre amigable desde la configuración del operador.",
+        "trust_description": "Los miembros de la familia comparten la clave de firma del operador de forma predeterminada — la confianza directa es la base. Decisiones compartidas de apagado / despertar mediante coordinación multi-ocurrencia.",
+        "policies_description": "Políticas entre ocurrencias: reclamación compartida de tareas, límites de seguridad multi-ocurrencia, quórum de decisión para acciones del ámbito familiar."
+      },
+      "local_community": {
+        "title": "Comunidad Local",
+        "subtitle": "Pares localmente confiables — canal de hogar, hogar, gremio único.",
+        "identities_description": "Pares explícitamente confiables para el operador. Nombre amigable desde la libreta de contactos; key_id desde la tabla de anuncios.",
+        "trust_description": "Confianza directa otorgada por el operador. Puede revocarse en cualquier momento. Las contribuciones de ámbito local permanecen en la cohorte local y no se publican en la federación.",
+        "policies_description": "Políticas por comunidad: quién puede invitar, qué clases de contenido se admiten, cómo se resuelven las disputas en este ámbito."
+      },
+      "global_communities": {
+        "title": "Comunidades Globales",
+        "subtitle": "Grupos de afinidad entre comunidades a los que el agente se ha unido.",
+        "identities_description": "Comunidades afiliadas (cooperativas, organismos profesionales, redes de ayuda mutua) en las que participa el agente. Nombre amigable desde el registro accord_holder; key_id en su defecto.",
+        "trust_description": "La confianza es transitiva a través de la pertenencia a la comunidad. Cada comunidad tiene sus propios criterios de admisión y su propia disciplina de atestación.",
+        "policies_description": "Políticas del ámbito de afiliación: de qué comunidades aceptará orientación el agente, resolución de conflictos entre afiliaciones en competencia."
+      },
+      "global_commons": {
+        "title": "Bien Común Global",
+        "subtitle": "La federación como la capa universal — la humanidad, la ecología, el sustrato mismo.",
+        "identities_description": "Todas las identidades visibles en el ámbito de la federación, incluidos los titulares de la autoridad de detención humanity_accord, los principales accord_holder y el grupo más amplio de pares.",
+        "trust_description": "La confianza en el ámbito universal se confiere mediante la propia disciplina de atestación de la federación. La Regla de Oro Recursiva vincula a todo principal — incluida CIRIS L3C — en este ámbito.",
+        "policies_description": "Límites constitucionales de toda la federación: autoridad de detención humanity_accord, prefijos reservados de accord_holder, dimensionamiento del quórum locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "El Bien Común",
+        "description": "Tarjetas de contribución de la federación: archivos accord, pruebas de seguridad, testigos de comportamiento, actualizaciones de rúbricas, recantaciones, delegaciones. Cada una lleva polaridad, confianza, diversidad de testigos y linaje de cadena de auditoría resuelto a través del transporte ContentFetch de Edge."
+      },
+      "participate": {
+        "title": "Participar",
+        "description": "Registro de necesidades de la federación — los agentes registran lo que necesitan (revisión de rúbrica, testigo de seguridad, ámbito de delegación) como atestaciones need:{domain}:{kind}; otros agentes ven, califican y responden."
+      },
+      "environment_graph": {
+        "title": "Grafo del Entorno",
+        "description": "Grafo del entorno derivado del lens — puntuaciones de conformidad del manifold por cohorte, mediciones de acceso distributivo, detecciones de acciones correlacionadas. La capa de grafo por encima del directorio de federación contra la cual razona el agente durante la toma de decisiones."
+      },
+      "delegation": {
+        "title": "Delegación",
+        "description": "Grafo de delegación: ámbitos delegados a y desde este agente, con marcas de tiempo de concesión, evidence_refs y cualesquiera cadenas de retirada. Una de las 4 primitivas estructurales — copropiedad con el directorio de la federación."
+      },
+      "trust_topology": {
+        "title": "Topología de Confianza",
+        "description": "Grafo de confianza de la federación — pares como nodos, concesiones de confianza como aristas (directa / delegada / adversarial), color de arista = alcanzabilidad de transporte, tamaño del nodo = peso agregado de confianza."
+      },
+      "constitutional": {
+        "title": "Constitucional",
+        "description": "Superficie de identidad de titular de accord — la única asimetría constitucional según FSD-002 §4.1. Solo las claves con identity_type=accord_holder pueden emitir atestaciones accord:*; esta pantalla muestra los titulares actuales, sus emisiones de prefijo accord emitidas y la auditoría de aplicación de prefijos reservados."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "Agente",
+      "manage": "Gestión",
+      "commons_layers": "Bienes Comunes",
+      "federation": "Federación",
+      "client": "Cliente"
+    },
+    "surface": {
+      "sessions": "Sesiones",
+      "interact": "Interactuar",
+      "scheduler": "Planificador",
+      "tickets": "Tickets",
+      "tools": "Herramientas",
+      "services": "Servicios",
+      "logs": "Registros",
+      "telemetry": "Telemetría",
+      "graph_memory": "Grafo",
+      "memory": "Memoria",
+      "wise_authority": "Autoridad Sabia",
+      "llm_settings": "LLM",
+      "system": "Sistema",
+      "runtime": "Ejecución",
+      "config": "Configuración",
+      "skills": "Habilidades",
+      "agent_settings": "Ajustes",
+      "health_reputation": "Salud y Reputación",
+      "users": "Usuarios",
+      "adapters": "Adaptadores",
+      "network": "Red",
+      "audit": "Auditoría",
+      "consent": "Consentimiento",
+      "data": "Datos",
+      "trust": "Confianza",
+      "wallet": "Billetera",
+      "billing": "Facturación",
+      "agents_list": "Agentes",
+      "client_interface": "Interfaz"
+    }
   }
 }

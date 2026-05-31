@@ -2331,5 +2331,118 @@
     "brightness_light": "Light",
     "brightness_system": "System",
     "brightness_dark": "Dark"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Identities",
+        "trust": "Trust",
+        "policies": "Trust policies"
+      },
+      "badge": {
+        "coming_soon": "COMING SOON"
+      },
+      "agent": {
+        "title": "Agent (Self)",
+        "subtitle": "The agent itself — implicit self at every scale.",
+        "identities_description": "The agent's own identity key — the federation address it signs every contribution with. Friendly name from local config; key_id from CIRISEdge.",
+        "trust_description": "Self-trust is foundational. The Recursive Golden Rule has no exemption clauses — what the agent demands of others, it must hold itself to.",
+        "policies_description": "Self-applying policies: identity rotation cadence, attestation refresh, what the agent is willing to sign at this scope."
+      },
+      "family": {
+        "title": "Family",
+        "subtitle": "Other CIRIS occurrences sharing this operator's identity.",
+        "identities_description": "Sibling occurrences (different runtime instances of the same agent) and their occurrence_id. Friendly name from operator config.",
+        "trust_description": "Family members share the operator's signing key by default — direct trust is the baseline. Shared shutdown / wakeup decisions per multi-occurrence coordination.",
+        "policies_description": "Cross-occurrence policies: shared task claiming, multi-occurrence safety bounds, decision quorum for family-scope actions."
+      },
+      "local_community": {
+        "title": "Local Community",
+        "subtitle": "Locally-trusted peers — home channel, household, single guild.",
+        "identities_description": "Peers explicitly trusted by the operator. Friendly name from contact book; key_id from announcement table.",
+        "trust_description": "Direct trust extended by the operator. May be revoked at any time. Local-scope contributions stay in the local cohort and are not federation-published.",
+        "policies_description": "Per-community policies: who may invite, what content classes are admitted, how disputes are resolved at this scope."
+      },
+      "global_communities": {
+        "title": "Global Communities",
+        "subtitle": "Cross-community affinity groups the agent has joined.",
+        "identities_description": "Affiliated communities (cooperatives, professional bodies, mutual-aid networks) the agent participates in. Friendly name from accord_holder registry; key_id otherwise.",
+        "trust_description": "Trust is transitive through community membership. Each community has its own admission criteria and its own attestation discipline.",
+        "policies_description": "Affiliation-scope policies: which communities the agent will accept guidance from, conflict-resolution between competing affiliations."
+      },
+      "global_commons": {
+        "title": "Global Commons",
+        "subtitle": "The federation as the universal layer — humanity, ecology, the substrate itself.",
+        "identities_description": "All identities visible at federation scope, including humanity_accord halt-authority holders, accord_holder principals, and the broader peer pool.",
+        "trust_description": "Trust at the universal scope is conferred by the federation's own attestation discipline. The Recursive Golden Rule binds every principal — including CIRIS L3C — at this scope.",
+        "policies_description": "Federation-wide constitutional bounds: humanity_accord halt-authority, accord_holder reserved prefixes, locality:decision quorum sizing."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "The Commons",
+        "description": "Federation contribution cards: accord files, safety tests, behavior witnesses, rubric updates, recantations, delegations. Each carries polarity, confidence, witness diversity, and audit-chain lineage resolved through Edge's ContentFetch transport."
+      },
+      "participate": {
+        "title": "Participate",
+        "description": "Federation needs registry — agents register what they need (rubric review, safety witness, delegation scope) as need:{domain}:{kind} attestations; other agents see, score, and respond."
+      },
+      "environment_graph": {
+        "title": "Environment Graph",
+        "description": "Lens-derived environment graph — manifold conformity scores per cohort, distributive access measurements, correlated-action detections. The graph layer above the federation directory that the agent reasons against during decision-making."
+      },
+      "delegation": {
+        "title": "Delegation",
+        "description": "Delegation graph: scopes delegated to and from this agent, with grant timestamps, evidence refs, and any withdrawal chains. One of the 4 structural primitives — co-owned with the federation directory."
+      },
+      "trust_topology": {
+        "title": "Trust Topology",
+        "description": "Federation trust graph — peers as nodes, trust grants as edges (direct / delegated / adversarial), edge color = transport reachability, node size = aggregate trust weight."
+      },
+      "constitutional": {
+        "title": "Constitutional",
+        "description": "Accord-holder identity surface — the one constitutional asymmetry per FSD-002 §4.1. Only identity_type=accord_holder keys may emit accord:* attestations; this screen shows current holders, their issued accord-prefix emissions, and the reserved-prefix enforcement audit."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "Agent",
+      "manage": "Manage",
+      "commons_layers": "Commons",
+      "federation": "Federation",
+      "client": "Client"
+    },
+    "surface": {
+      "sessions": "Sessions",
+      "interact": "Interact",
+      "scheduler": "Scheduler",
+      "tickets": "Tickets",
+      "tools": "Tools",
+      "services": "Services",
+      "logs": "Logs",
+      "telemetry": "Telemetry",
+      "graph_memory": "Graph",
+      "memory": "Memory",
+      "wise_authority": "Wise Authority",
+      "llm_settings": "LLM",
+      "system": "System",
+      "runtime": "Runtime",
+      "config": "Config",
+      "skills": "Skills",
+      "agent_settings": "Settings",
+      "health_reputation": "Health & Reputation",
+      "users": "Users",
+      "adapters": "Adapters",
+      "network": "Network",
+      "audit": "Audit",
+      "consent": "Consent",
+      "data": "Data",
+      "trust": "Trust",
+      "wallet": "Wallet",
+      "billing": "Billing",
+      "agents_list": "Agents",
+      "client_interface": "Interface"
+    }
   }
 }

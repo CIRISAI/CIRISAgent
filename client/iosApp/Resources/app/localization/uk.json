@@ -142,13 +142,13 @@
     "ponder_forced_retry": "Принудительное PONDER після повторной попытки совести",
     "override_rationale": "Переопределено {conscience_name}: Необходимо пересмотреть {action}",
     "forced_ponder_rationale": "Принудительное PONDER після повторной попытки совести для предотвращения циклов",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "ЗАНЕПОКОЄННЯ СОВІСТІ: Мінімальна впевненість для ГОВОРИ становила {threshold}, але надано {confidence}",
+    "ponder_concern_speak_harm": "ЗАНЕПОКОЄННЯ СОВІСТІ: Зміст ГОВОРИ може завдати шкоди",
+    "ponder_concern_tool_confidence": "ЗАНЕПОКОЄННЯ СОВІСТІ: Мінімальна впевненість для ІНСТРУМЕНТ становила {threshold}, але надано {confidence}",
+    "ponder_concern_tool_requires_wa": "ЗАНЕПОКОЄННЯ СОВІСТІ: Цей інструмент потребує схвалення Мудрого Авторитету",
+    "ponder_concern_memorize_scope": "ЗАНЕПОКОЄННЯ СОВІСТІ: ЗАПАМ'ЯТАЙ {scope} — переконайтеся, що це доречно",
+    "ponder_concern_forget_scope": "ЗАНЕПОКОЄННЯ СОВІСТІ: ЗАБУДЬ {scope} — ця дія незворотна",
+    "ponder_concern_high_stakes": "ЗАНЕПОКОЄННЯ СОВІСТІ: Виявлено ситуацію з високими ставками — необхідно ретельно зважити",
     "retry_header": "**РЕКОМЕНДАЦІЇ З ПЕРЕОПИСУ СОВІСТІ:**",
     "retry_intro": "Ваша попередня спроба {action} була відхилена, оскільки: {reason}",
     "retry_alternatives_header": "Альтернативи, перелічені IRIS-E (використовуйте їх як опорні напрямки, якщо ви знову ГОВОРИТЕ):",
@@ -955,17 +955,17 @@
     "runtime_pause": "Пауза",
     "runtime_resume": "Возобновить",
     "runtime_step": "Шаг",
-    "runtime_current_step": "Current Step",
-    "runtime_step_time": "Step Time",
-    "runtime_tokens_label": "Tokens",
-    "runtime_updates": "{count} updates",
-    "runtime_conditional": "conditional",
-    "runtime_task_info": "{count} thoughts | Updated: {updated}",
-    "runtime_instruction_1": "Real-time Stream: Connects to reasoning stream for live updates",
-    "runtime_instruction_2": "H3ERE Pipeline: 11 step points (0-10) with conditional recursive steps",
-    "runtime_instruction_3": "Pause/Resume: Control processing while maintaining stream connection",
-    "runtime_instruction_4": "Single Step: Execute one pipeline step (when paused)",
-    "runtime_instruction_5": "Live Visualization: See reasoning process in real-time",
+    "runtime_current_step": "Поточний крок",
+    "runtime_step_time": "Час кроку",
+    "runtime_tokens_label": "Токени",
+    "runtime_updates": "{count} оновлень",
+    "runtime_conditional": "умовний",
+    "runtime_task_info": "{count} думок | Оновлено: {updated}",
+    "runtime_instruction_1": "Потік у реальному часі: підключається до потоку міркувань для живих оновлень",
+    "runtime_instruction_2": "Конвеєр H3ERE: 11 точок (0–10) з умовними рекурсивними кроками",
+    "runtime_instruction_3": "Пауза/Відновлення: керування обробкою зі збереженням підключення до потоку",
+    "runtime_instruction_4": "Один крок: виконати один крок конвеєра (у стані паузи)",
+    "runtime_instruction_5": "Живе візуалізування: спостерігайте за процесом міркування в реальному часі",
     "step_start_round": "0. Начало раунда",
     "step_gather_context": "1. Сбор контекста",
     "step_perform_dmas": "2. Выполнение DMA",
@@ -983,13 +983,13 @@
     "logs_auto_scroll_on": "Автопрокрутка ВКЛ",
     "logs_entries": "Логи ({count} записей)",
     "logs_search_placeholder": "Поиск за логам...",
-    "logs_hide_filters": "Hide",
-    "logs_show_filters": "Filter",
-    "logs_level_label": "Level:",
-    "logs_service_label": "Service:",
-    "logs_limit_label": "Limit:",
-    "logs_collapse": "Collapse",
-    "logs_expand": "Expand",
+    "logs_hide_filters": "Сховати",
+    "logs_show_filters": "Фільтр",
+    "logs_level_label": "Рівень:",
+    "logs_service_label": "Сервіс:",
+    "logs_limit_label": "Ліміт:",
+    "logs_collapse": "Згорнути",
+    "logs_expand": "Розгорнути",
     "trust_learn_more": "Узнать больше о CIRISVerify",
     "trust_running": "Выполнение проверок аттестации...",
     "trust_failed": "Аттестация не удалась",
@@ -1249,7 +1249,7 @@
     "tickets_types_title": "Типы запросов о конфиденциальности данных",
     "tickets_create": "Создать {type}",
     "tickets_deadline": "Этот запит будет иметь срок {days} дней",
-    "tickets_email": "Email *",
+    "tickets_email": "Електронна пошта *",
     "tickets_user_id": "Идентификатор пользователя",
     "tickets_user_hint": "Необязательно — ID аккаунта, имя пользователя і т.д.",
     "tickets_notes_label": "Заметки",
@@ -1672,15 +1672,15 @@
     "wallet_paymaster_hint": "Введите ваш Etherspot Arka API ключ для включения переводов USDC без газа",
     "wallet_paymaster_key_label": "Arka API Key",
     "wallet_paymaster_save": "Сохранить ключ",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "Виконати",
+    "interact_viz_complete": "Завершено",
+    "adapter_reauth_required": "Потрібна повторна автентифікація",
+    "adapter_reauth": "Повторна автентифікація",
+    "adapter_reauth_reason": "Причина: {reason}",
+    "settings_location": "Місцезнаходження",
+    "settings_location_desc": "Вкажіть ваше місто для отримання погоди та місцевої інформації",
+    "settings_search_city": "Місто",
+    "settings_search_city_hint": "Знайти місто...",
     "llm_settings_title": "Конфігурація LLM",
     "llm_settings_status": "Огляд стану",
     "llm_settings_providers": "Провайдери",
@@ -1953,11 +1953,11 @@
   "setup_validation_username_required": "Требуется имя пользователя",
   "startup": {
     "startup_retry": "Повторить",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "Перевірка сервісів...",
+    "initializing": "Ініціалізація...",
+    "loading_config": "Завантаження конфігурації...",
+    "ready": "Готово",
+    "starting": "Запуск..."
   },
   "status": {
     "executing": "Выполняется...",
@@ -1974,9 +1974,9 @@
   "system": {
     "system_cognitive_state": "Когнитивное стан",
     "system_queue_depth": "Глубина очереди",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "Здоров'я системи",
+    "metrics": "Метрики",
+    "services": "Сервіси"
   },
   "task_id": "ID задачи",
   "telemetry_online": "Онлайн",
@@ -2331,5 +2331,118 @@
     "brightness_light": "Світла",
     "brightness_system": "Система",
     "brightness_dark": "Темна"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Ідентичності",
+        "trust": "Довіра",
+        "policies": "Політики довіри"
+      },
+      "badge": {
+        "coming_soon": "НЕЗАБАРОМ"
+      },
+      "agent": {
+        "title": "Агент (Я)",
+        "subtitle": "Сам агент — неявне «я» на кожному рівні.",
+        "identities_description": "Власний ключ ідентичності агента — федеративна адреса, якою він підписує кожен внесок. Зручне ім'я береться з локальної конфігурації; key_id — з CIRISEdge.",
+        "trust_description": "Довіра до себе — фундамент усього. Рекурсивне Золоте правило не має застережень про винятки: чого агент вимагає від інших, того він мусить дотримуватися сам.",
+        "policies_description": "Політики, що застосовуються до самого себе: періодичність ротації ідентичності, оновлення атестацій, що агент готовий підписувати в цьому охопленні."
+      },
+      "family": {
+        "title": "Родина",
+        "subtitle": "Інші екземпляри CIRIS, що поділяють ідентичність цього оператора.",
+        "identities_description": "Споріднені екземпляри (різні середовища виконання того самого агента) та їхні occurrence_id. Зручне ім'я береться з конфігурації оператора.",
+        "trust_description": "Члени родини за замовчуванням використовують спільний підписувальний ключ оператора — пряма довіра тут є базовою лінією. Спільні рішення про вимкнення та пробудження приймаються в рамках координації між екземплярами.",
+        "policies_description": "Політики між екземплярами: спільне захоплення завдань, межі безпеки для кількох екземплярів, кворум рішень для дій у рамках родини."
+      },
+      "local_community": {
+        "title": "Локальна спільнота",
+        "subtitle": "Локально довірені пiри — домашній канал, домогосподарство, окрема гільдія.",
+        "identities_description": "Пiри, яким оператор довіряє явно. Зручне ім'я береться з контактної книги; key_id — з таблиці анонсів.",
+        "trust_description": "Пряма довіра, надана оператором. Може бути відкликана будь-коли. Внески локального охоплення залишаються в локальній когорті та не публікуються у федерації.",
+        "policies_description": "Політики кожної спільноти: хто може запрошувати, які класи контенту допускаються, як розв'язуються суперечки в цьому охопленні."
+      },
+      "global_communities": {
+        "title": "Глобальні спільноти",
+        "subtitle": "Міжспільнотні групи за інтересами, до яких приєднався агент.",
+        "identities_description": "Афілійовані спільноти (кооперативи, професійні об'єднання, мережі взаємодопомоги), у яких бере участь агент. Зручне ім'я береться з реєстру accord_holder; інакше — key_id.",
+        "trust_description": "Довіра транзитивна через членство у спільноті. Кожна спільнота має власні критерії прийому та власну дисципліну атестацій.",
+        "policies_description": "Політики рівня афіліації: від яких спільнот агент приймає настанови, як розв'язуються конфлікти між конкуруючими афіліаціями."
+      },
+      "global_commons": {
+        "title": "Глобальне надбання",
+        "subtitle": "Федерація як універсальний шар — людство, екологія, сам субстрат.",
+        "identities_description": "Усі ідентичності, видимі в охопленні федерації, включно з тримачами halt-повноважень humanity_accord, принципалами accord_holder та ширшим пулом пiрів.",
+        "trust_description": "Довіра в універсальному охопленні забезпечується власною дисципліною атестацій федерації. Рекурсивне Золоте правило зв'язує кожного принципала — включно з CIRIS L3C — у цьому охопленні.",
+        "policies_description": "Конституційні межі федерації: halt-повноваження humanity_accord, зарезервовані префікси accord_holder, розміри кворуму locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Стрічка надбання",
+        "description": "Картки внесків федерації: accord-файли, тести безпеки, свідчення поведінки, оновлення рубрик, відкликання, делегування. Кожна несе полярність, упевненість, різноманітність свідків та походження за аудит-ланцюгом, що розв'язується через транспорт ContentFetch у Edge."
+      },
+      "participate": {
+        "title": "Брати участь",
+        "description": "Реєстр потреб федерації — агенти реєструють те, що їм потрібно (рецензія рубрики, свідок безпеки, охоплення делегування) як атестації need:{domain}:{kind}; інші агенти бачать їх, оцінюють і відгукуються."
+      },
+      "environment_graph": {
+        "title": "Граф середовища",
+        "description": "Граф середовища, похідний від лінзи — оцінки конформності до різноманіття по кожній когорті, вимірювання розподільного доступу, виявлення корельованих дій. Шар графа над директорією федерації, спираючись на який агент розмірковує під час прийняття рішень."
+      },
+      "delegation": {
+        "title": "Делегування",
+        "description": "Граф делегування: охоплення, делеговані цим агентом та йому, з мітками часу надання, evidence_refs та ланцюгами відкликань. Один із 4 структурних примітивів — співволодіється з директорією федерації."
+      },
+      "trust_topology": {
+        "title": "Топологія довіри",
+        "description": "Граф довіри федерації — пiри як вузли, надання довіри як ребра (прямі / делеговані / змагальні), колір ребра — транспортна досяжність, розмір вузла — сукупна вага довіри."
+      },
+      "constitutional": {
+        "title": "Конституційний",
+        "description": "Поверхня ідентичності accord-holder — єдина конституційна асиметрія згідно з FSD-002 §4.1. Лише ключі з identity_type=accord_holder можуть емітувати атестації accord:*; цей екран показує поточних тримачів, випущені ними емісії з accord-префіксом та аудит контролю зарезервованих префіксів."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "Агент",
+      "manage": "Управління",
+      "commons_layers": "Надбання",
+      "federation": "Федерація",
+      "client": "Клієнт"
+    },
+    "surface": {
+      "sessions": "Сеанси",
+      "interact": "Спілкування",
+      "scheduler": "Планувальник",
+      "tickets": "Тікети",
+      "tools": "Інструменти",
+      "services": "Сервіси",
+      "logs": "Журнали",
+      "telemetry": "Телеметрія",
+      "graph_memory": "Граф",
+      "memory": "Пам'ять",
+      "wise_authority": "Мудрий Авторитет",
+      "llm_settings": "LLM",
+      "system": "Система",
+      "runtime": "Середовище виконання",
+      "config": "Конфігурація",
+      "skills": "Навички",
+      "agent_settings": "Налаштування",
+      "health_reputation": "Здоров'я та репутація",
+      "users": "Користувачі",
+      "adapters": "Адаптери",
+      "network": "Мережа",
+      "audit": "Аудит",
+      "consent": "Згода",
+      "data": "Дані",
+      "trust": "Довіра",
+      "wallet": "Гаманець",
+      "billing": "Оплата",
+      "agents_list": "Агенти",
+      "client_interface": "Інтерфейс"
+    }
   }
 }

@@ -443,11 +443,34 @@ class DesktopAppHelper:
                 return True
             return False
 
-        # Input credentials
+        # iOS/Android Login is a landing page with sign-in-method tiles
+        # (btn_apple_signin, btn_local_login). The username/password fields
+        # are revealed only after btn_local_login is tapped. Desktop's Login
+        # shows input_username directly. Detect by probing for input_username;
+        # if absent, click btn_local_login first.
+        is_mobile_login = False
+        if not await self.is_element_visible("input_username"):
+            if await self.is_element_visible("btn_local_login"):
+                is_mobile_login = True
+                await self.click("btn_local_login")
+                # Wait briefly for the local-credentials panel to render
+                await self.wait_for_element("input_username", timeout=3000)
+
+        # Input credentials. On iOS/Android, KMP TextField uses a StateFlow
+        # for the bound value — text entered via /input doesn't reach the
+        # view model synchronously, and back-to-back inputs race the
+        # StateFlow commit (documented in client/iosApp/CLAUDE.md as
+        # "Text input needs 2-second delay between fields"). Insert that
+        # delay only on mobile; desktop's Compose state updates are
+        # synchronous and don't need it.
         if not await self.input_text("input_username", username):
             return False
+        if is_mobile_login:
+            await asyncio.sleep(2.0)
         if not await self.input_text("input_password", password):
             return False
+        if is_mobile_login:
+            await asyncio.sleep(2.0)
 
         # Click login and wait for Interact screen
         return await self.click_and_wait_for_screen("btn_login_submit", "Interact", timeout_ms=timeout_ms)

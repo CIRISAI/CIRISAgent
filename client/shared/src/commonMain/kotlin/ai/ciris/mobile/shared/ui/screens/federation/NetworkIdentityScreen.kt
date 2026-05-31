@@ -6,6 +6,8 @@ import ai.ciris.mobile.shared.models.federation.FederationIdentity
 import ai.ciris.mobile.shared.models.federation.NodeCodeShareResponse
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
+import androidx.compose.runtime.CompositionLocalProvider
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.icons.*
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
@@ -69,14 +71,20 @@ fun NetworkIdentityScreen(
             TopAppBar(
                 title = { Text(localizedString("network.identity_card.title")) },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier.testableClickable("btn_network_identity_back") { onNavigateBack() },
-                    ) {
-                        Icon(
-                            imageVector = CIRISIcons.arrowBack,
-                            contentDescription = localizedString("mobile.common_back"),
-                        )
+                    // Suppressed on compact viewports — the global 3-state
+                    // overlay button in CIRISApp handles back navigation
+                    // there to avoid the prior "back arrow + signet stacked"
+                    // bug. Wider viewports (tablet/desktop) keep this arrow.
+                    if (!LocalIsCompactWindow.current) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier.testableClickable("btn_network_identity_back") { onNavigateBack() },
+                        ) {
+                            Icon(
+                                imageVector = CIRISIcons.arrowBack,
+                                contentDescription = localizedString("mobile.common_back"),
+                            )
+                        }
                     }
                 },
                 actions = {

@@ -3218,30 +3218,77 @@ fun CIRISApp(
                         androidx.compose.foundation.layout.Box(
                             modifier = androidx.compose.ui.Modifier.fillMaxSize(),
                         ) {
-                            mainScreenContent(androidx.compose.ui.Modifier.fillMaxSize())
-                            // Top-left CIRIS signet — IS the hamburger on
-                            // mobile. The same signet inside the drawer header
-                            // closes it (see EpistemicSidebar onCloseRequest),
-                            // so the affordance is consistent: "tap the CIRIS
-                            // signet to toggle the drawer, always and
-                            // everywhere". testableClickable tag
-                            // `btn_nav_drawer_open` is what the federation
-                            // walk-test and any future UI tests dispatch
-                            // against to switch surfaces on Android.
+                            // Federation screens read this to suppress their
+                            // own top-bar back arrow on compact viewports —
+                            // the global overlay below handles back here.
+                            CompositionLocalProvider(
+                                ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow provides true,
+                            ) {
+                                mainScreenContent(androidx.compose.ui.Modifier.fillMaxSize())
+                            }
+                            // ─── 3-state global nav icon ───────────────────
+                            // ONE button at the top-left, three states:
+                            //   1. Drawer OPEN              → hamburger (closes drawer)
+                            //   2. Drawer closed, sub-screen → back arrow (back to parent)
+                            //   3. Drawer closed, top-level → larger CIRIS signet (opens drawer)
+                            // Eliminates the prior "stacked back-arrow + signet"
+                            // problem (Samsung-reported) where each federation
+                            // Scaffold also rendered its own back arrow. The
+                            // federation screens now suppress THEIR back arrow
+                            // on compact viewports via `LocalIsCompactWindow`;
+                            // this button is the single source of truth.
+                            val backTarget: Screen? = when (currentScreen) {
+                                Screen.NetworkIdentity,
+                                Screen.NetworkMap,
+                                Screen.NetworkTrustGraph,
+                                Screen.NetworkPeers,
+                                Screen.NetworkInterfaces,
+                                Screen.NetworkPaths,
+                                Screen.NetworkAnnounces,
+                                Screen.NetworkQueue,
+                                Screen.NetworkDiagnostics,
+                                Screen.NetworkContent -> Screen.Network
+                                is Screen.NetworkPeerDetail -> Screen.NetworkPeers
+                                else -> null
+                            }
+                            val isDrawerOpen = drawerState.currentValue == DrawerValue.Open
+                            val iconTestTag = when {
+                                isDrawerOpen -> "btn_nav_drawer_close"
+                                backTarget != null -> "btn_nav_back"
+                                else -> "btn_nav_drawer_open"
+                            }
                             Box(
                                 modifier = androidx.compose.ui.Modifier
                                     .align(androidx.compose.ui.Alignment.TopStart)
                                     .padding(top = 12.dp, start = 12.dp)
-                                    .size(40.dp)
-                                    .testableClickable("btn_nav_drawer_open") {
-                                        drawerScope.launch { drawerState.open() }
+                                    .size(48.dp)
+                                    .testableClickable(iconTestTag) {
+                                        when {
+                                            isDrawerOpen -> drawerScope.launch { drawerState.close() }
+                                            backTarget != null -> { currentScreen = backTarget }
+                                            else -> drawerScope.launch { drawerState.open() }
+                                        }
                                     },
                                 contentAlignment = androidx.compose.ui.Alignment.Center,
                             ) {
-                                ai.ciris.mobile.shared.ui.components.CIRISSignet(
-                                    modifier = androidx.compose.ui.Modifier.size(28.dp),
-                                    tintColor = MaterialTheme.colorScheme.primary,
-                                )
+                                when {
+                                    isDrawerOpen -> Icon(
+                                        imageVector = Icons.Filled.Menu,
+                                        contentDescription = "Close navigation",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = androidx.compose.ui.Modifier.size(28.dp),
+                                    )
+                                    backTarget != null -> Icon(
+                                        imageVector = ai.ciris.mobile.shared.ui.components.CIRISIcons.arrowBack,
+                                        contentDescription = "Go back",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = androidx.compose.ui.Modifier.size(28.dp),
+                                    )
+                                    else -> ai.ciris.mobile.shared.ui.components.CIRISSignet(
+                                        modifier = androidx.compose.ui.Modifier.size(36.dp),
+                                        tintColor = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
                             }
                         }
                     }

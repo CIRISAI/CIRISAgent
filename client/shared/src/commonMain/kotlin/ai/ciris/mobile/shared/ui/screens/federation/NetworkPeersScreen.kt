@@ -6,6 +6,8 @@ import ai.ciris.mobile.shared.models.federation.LocalPeerState
 import ai.ciris.mobile.shared.models.federation.PeerTrustState
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
+import androidx.compose.runtime.CompositionLocalProvider
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.icons.*
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
@@ -87,14 +89,18 @@ fun NetworkPeersScreen(
             TopAppBar(
                 title = { Text(localizedString("network.peers.title")) },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier.testableClickable("btn_network_peers_back") { onNavigateBack() },
-                    ) {
-                        Icon(
-                            imageVector = CIRISIcons.arrowBack,
-                            contentDescription = localizedString("mobile.common_back"),
-                        )
+                    // Suppressed on compact viewports — global 3-state
+                    // overlay handles back there.
+                    if (!LocalIsCompactWindow.current) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier.testableClickable("btn_network_peers_back") { onNavigateBack() },
+                        ) {
+                            Icon(
+                                imageVector = CIRISIcons.arrowBack,
+                                contentDescription = localizedString("mobile.common_back"),
+                            )
+                        }
                     }
                 },
                 actions = {

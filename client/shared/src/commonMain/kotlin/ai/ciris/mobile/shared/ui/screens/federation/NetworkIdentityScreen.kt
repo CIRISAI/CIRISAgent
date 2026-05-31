@@ -139,7 +139,7 @@ private fun IdentityHeaderCard(identity: FederationIdentity?) {
             .fillMaxWidth()
             .testable("card_identity_header"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -305,7 +305,7 @@ private fun CapabilitiesCard(identity: FederationIdentity?) {
             .fillMaxWidth()
             .testable("card_identity_capabilities"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -379,7 +379,7 @@ private fun NodeCodeCard(nodeCode: NodeCodeShareResponse?) {
             .fillMaxWidth()
             .testable("card_node_code"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {

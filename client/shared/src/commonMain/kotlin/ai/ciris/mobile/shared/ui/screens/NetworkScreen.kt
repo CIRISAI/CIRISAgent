@@ -236,7 +236,7 @@ private fun IdentityCard(address: String?) {
             .fillMaxWidth()
             .testable("card_network_identity"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -359,7 +359,7 @@ private fun ModeCard(
             .fillMaxWidth()
             .testable("card_network_mode"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -403,7 +403,7 @@ private fun StatsStrip() {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Row(
@@ -578,7 +578,7 @@ private fun NavTile(
             .clickable { onClick() }
             .testableClickable("tile_federation_${spec.tile.name.lowercase()}") { onClick() },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Column(

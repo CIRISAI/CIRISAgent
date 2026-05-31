@@ -180,7 +180,7 @@ private fun TransportCard(row: TransportRow, status: TransportStatus) {
             .fillMaxWidth()
             .testable("card_transport_${row.id}"),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {

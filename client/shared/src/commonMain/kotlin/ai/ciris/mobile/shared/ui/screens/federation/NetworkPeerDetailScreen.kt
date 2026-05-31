@@ -205,7 +205,7 @@ private fun PeerHeader(peer: LocalPeerState) {
             .fillMaxWidth()
             .testable("card_peer_header"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -511,7 +511,7 @@ private fun AppearanceSection(
             .fillMaxWidth()
             .testable("card_appearance"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -624,7 +624,7 @@ private fun SectionCard(titleKey: String, content: @Composable ColumnScope.() ->
             .fillMaxWidth()
             .testable("card_section_${titleKey.substringAfterLast('.')}"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {

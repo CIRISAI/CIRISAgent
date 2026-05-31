@@ -254,7 +254,7 @@ private fun PeerRow(peer: LocalPeerState, onClick: () -> Unit) {
             .fillMaxWidth()
             .testableClickable("peer_row_${peer.keyId}") { onClick() },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
         onClick = onClick,
     ) {
@@ -484,7 +484,7 @@ private fun EmptyState() {
     ) {
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                containerColor = MaterialTheme.colorScheme.surface,
             ),
         ) {
             Column(

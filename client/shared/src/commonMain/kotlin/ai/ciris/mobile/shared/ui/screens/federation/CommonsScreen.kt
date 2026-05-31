@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens.federation
 
 import androidx.compose.runtime.Composable
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.components.ComingSoonPlaceholder
 import ai.ciris.mobile.shared.ui.nav.NavSurface
 import ai.ciris.mobile.shared.ui.nav.SubstrateGate
@@ -19,11 +20,9 @@ import ai.ciris.mobile.shared.ui.nav.SubstrateGate
 @Composable
 fun CommonsScreen(onIssueClick: (String) -> Unit = {}) {
     ComingSoonPlaceholder(
-        title = NavSurface.Commons.label,
+        title = localizedString("commons.federation.commons.title").ifEmpty { NavSurface.Commons.label },
         icon = NavSurface.Commons.icon,
-        description = "Federation contribution cards: accord files, safety tests, behavior witnesses, rubric " +
-            "updates, recantations, delegations. Each carries polarity, confidence, witness diversity, and " +
-            "audit-chain lineage resolved through Edge's ContentFetch transport.",
+        description = localizedString("commons.federation.commons.description"),
         gate = SubstrateGate.EDGE_PEERRESOLVER,
         onIssueClick = onIssueClick,
     )

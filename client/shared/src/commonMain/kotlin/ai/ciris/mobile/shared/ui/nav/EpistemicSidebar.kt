@@ -417,7 +417,14 @@ private fun NavSurfaceRow(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = surface.label,
+                // Phase-wrap (2.9.4): resolve labelKey via localizer when set;
+                // fall back to the hardcoded English label if the locale lacks
+                // an entry. NavSurfaces without a labelKey (most non-Commons
+                // surfaces) stay on raw label until they're touched.
+                text = surface.labelKey
+                    ?.let { localizedString(it) }
+                    ?.takeIf { it.isNotEmpty() && it != surface.labelKey }
+                    ?: surface.label,
                 color = labelColor,
                 fontSize = 11.sp,
                 fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,

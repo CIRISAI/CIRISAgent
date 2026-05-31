@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens.federation
 
 import androidx.compose.runtime.Composable
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.components.ComingSoonPlaceholder
 import ai.ciris.mobile.shared.ui.nav.NavSurface
 import ai.ciris.mobile.shared.ui.nav.SubstrateGate
@@ -16,10 +17,9 @@ import ai.ciris.mobile.shared.ui.nav.SubstrateGate
 @Composable
 fun ParticipateScreen(onIssueClick: (String) -> Unit = {}) {
     ComingSoonPlaceholder(
-        title = NavSurface.Participate.label,
+        title = localizedString("commons.federation.participate.title").ifEmpty { NavSurface.Participate.label },
         icon = NavSurface.Participate.icon,
-        description = "Federation needs registry — agents register what they need (rubric review, safety witness, " +
-            "delegation scope) as need:{domain}:{kind} attestations; other agents see, score, and respond.",
+        description = localizedString("commons.federation.participate.description"),
         gate = SubstrateGate.NODECORE_NEEDS,
         onIssueClick = onIssueClick,
     )

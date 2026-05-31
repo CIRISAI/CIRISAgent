@@ -2377,6 +2377,32 @@
         "trust_description": "Trust at the universal scope is conferred by the federation's own attestation discipline. The Recursive Golden Rule binds every principal — including CIRIS L3C — at this scope.",
         "policies_description": "Federation-wide constitutional bounds: humanity_accord halt-authority, accord_holder reserved prefixes, locality:decision quorum sizing."
       }
+    },
+    "federation": {
+      "commons": {
+        "title": "The Commons",
+        "description": "Federation contribution cards: accord files, safety tests, behavior witnesses, rubric updates, recantations, delegations. Each carries polarity, confidence, witness diversity, and audit-chain lineage resolved through Edge's ContentFetch transport."
+      },
+      "participate": {
+        "title": "Participate",
+        "description": "Federation needs registry — agents register what they need (rubric review, safety witness, delegation scope) as need:{domain}:{kind} attestations; other agents see, score, and respond."
+      },
+      "environment_graph": {
+        "title": "Environment Graph",
+        "description": "Lens-derived environment graph — manifold conformity scores per cohort, distributive access measurements, correlated-action detections. The graph layer above the federation directory that the agent reasons against during decision-making."
+      },
+      "delegation": {
+        "title": "Delegation",
+        "description": "Delegation graph: scopes delegated to and from this agent, with grant timestamps, evidence refs, and any withdrawal chains. One of the 4 structural primitives — co-owned with the federation directory."
+      },
+      "trust_topology": {
+        "title": "Trust Topology",
+        "description": "Federation trust graph — peers as nodes, trust grants as edges (direct / delegated / adversarial), edge color = transport reachability, node size = aggregate trust weight."
+      },
+      "constitutional": {
+        "title": "Constitutional",
+        "description": "Accord-holder identity surface — the one constitutional asymmetry per FSD-002 §4.1. Only identity_type=accord_holder keys may emit accord:* attestations; this screen shows current holders, their issued accord-prefix emissions, and the reserved-prefix enforcement audit."
+      }
     }
   }
 }

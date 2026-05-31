@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens.federation
 
 import androidx.compose.runtime.Composable
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.components.ComingSoonPlaceholder
 import ai.ciris.mobile.shared.ui.nav.NavSurface
 import ai.ciris.mobile.shared.ui.nav.SubstrateGate
@@ -17,10 +18,9 @@ import ai.ciris.mobile.shared.ui.nav.SubstrateGate
 @Composable
 fun TrustTopologyScreen(onIssueClick: (String) -> Unit = {}) {
     ComingSoonPlaceholder(
-        title = NavSurface.TrustTopology.label,
+        title = localizedString("commons.federation.trust_topology.title").ifEmpty { NavSurface.TrustTopology.label },
         icon = NavSurface.TrustTopology.icon,
-        description = "Federation trust graph — peers as nodes, trust grants as edges (direct / delegated / " +
-            "adversarial), edge color = transport reachability, node size = aggregate trust weight.",
+        description = localizedString("commons.federation.trust_topology.description"),
         gate = SubstrateGate.EDGE_PEERRESOLVER,
         onIssueClick = onIssueClick,
     )

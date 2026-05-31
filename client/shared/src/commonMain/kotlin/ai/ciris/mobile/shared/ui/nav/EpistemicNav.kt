@@ -35,12 +35,26 @@ import ai.ciris.mobile.shared.ui.components.CIRISIcons
  */
 sealed class NavSurface(
     val id: String,
+    /**
+     * English fallback label. Used as the sidebar display when [labelKey] is
+     * null OR the localizer has no entry for that key. Always provide a
+     * sensible English string — the localizer is best-effort.
+     */
     val label: String,
     val icon: ImageVector,
     /** Substrate issue blocking this surface, or null if it ships today. */
     val gate: SubstrateGate? = null,
     /** Nested sub-surfaces, in display order. Empty = leaf. */
     val children: List<NavSurface> = emptyList(),
+    /**
+     * Optional localization key for the sidebar / card title. When set the
+     * sidebar resolves `localizedString(labelKey)` and falls back to [label]
+     * if the locale lacks an entry. Per 2.9.4 release-prep: every NavSurface
+     * that ships a Commons-group / Federation-group card carries a labelKey
+     * so the 28-locale fanout lands cleanly. Other surfaces stay on raw
+     * [label] until they're touched.
+     */
+    val labelKey: String? = null,
 ) {
     // ═══════════════════════════════════════════════════════════════════════════
     // Agent group — runtime interaction surfaces
@@ -143,30 +157,35 @@ sealed class NavSurface(
     object LayerAgent : NavSurface(
         id = "layer-agent", label = "Agent (Self)", icon = CIRISIcons.person,
         gate = SubstrateGate.EDGE_PEERRESOLVER,
+        labelKey = "commons.layer.agent.title",
     )
 
     /** Other CIRIS occurrences sharing the operator's identity. */
     object LayerFamily : NavSurface(
         id = "layer-family", label = "Family", icon = CIRISIcons.home,
         gate = SubstrateGate.EDGE_PEERRESOLVER,
+        labelKey = "commons.layer.family.title",
     )
 
     /** One home channel / Discord guild / household — locally-trusted peers. */
     object LayerLocalCommunity : NavSurface(
         id = "layer-local-community", label = "Local Community", icon = CIRISIcons.location,
         gate = SubstrateGate.EDGE_PEERRESOLVER,
+        labelKey = "commons.layer.local_community.title",
     )
 
     /** Cross-community affinity groups the agent has joined (CEG affiliations). */
     object LayerGlobalCommunities : NavSurface(
         id = "layer-global-communities", label = "Global Communities", icon = CIRISIcons.shield,
         gate = SubstrateGate.EDGE_PEERRESOLVER,
+        labelKey = "commons.layer.global_communities.title",
     )
 
     /** The federation as the universal layer (folds species + planet + federation). */
     object LayerGlobalCommons : NavSurface(
         id = "layer-global-commons", label = "Global Commons", icon = CIRISIcons.globe,
         gate = SubstrateGate.EDGE_PEERRESOLVER,
+        labelKey = "commons.layer.global_commons.title",
     )
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -176,27 +195,33 @@ sealed class NavSurface(
     object Commons : NavSurface(
         id = "commons", label = "The Commons", icon = CIRISIcons.globe,
         gate = SubstrateGate.EDGE_PEERRESOLVER,
+        labelKey = "commons.federation.commons.title",
     )
     object Participate : NavSurface(
         id = "participate", label = "Participate", icon = CIRISIcons.add,
         gate = SubstrateGate.NODECORE_NEEDS,
+        labelKey = "commons.federation.participate.title",
     )
     object EnvironmentGraph : NavSurface(
         // EnvironmentInfoScreen partially covers; extension is gated.
         id = "environment-graph", label = "Environment Graph", icon = CIRISIcons.snapshot,
         gate = SubstrateGate.LENSCORE_COHORT,
+        labelKey = "commons.federation.environment_graph.title",
     )
     object Delegation : NavSurface(
         id = "delegation", label = "Delegation", icon = CIRISIcons.send,
         gate = SubstrateGate.PERSIST_DELEGATES_TO,
+        labelKey = "commons.federation.delegation.title",
     )
     object TrustTopology : NavSurface(
         id = "trust-topology", label = "Trust Topology", icon = CIRISIcons.welcome,
         gate = SubstrateGate.EDGE_PEERRESOLVER,
+        labelKey = "commons.federation.trust_topology.title",
     )
     object Constitutional : NavSurface(
         id = "constitutional", label = "Constitutional", icon = CIRISIcons.instructions,
         gate = SubstrateGate.REGISTRY_ACCORD_HOLDER,
+        labelKey = "commons.federation.constitutional.title",
     )
 
     // ═══════════════════════════════════════════════════════════════════════════

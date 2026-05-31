@@ -80,6 +80,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Info
@@ -1053,24 +1054,22 @@ fun CIRISApp(
             // context.
             val capacityForCard by interactViewModel.cellVizState.collectAsState()
             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-            androidx.compose.foundation.layout.Row(
-                modifier = androidx.compose.ui.Modifier.fillMaxSize(),
-            ) {
-                if (showSidebar) {
-                    ai.ciris.mobile.shared.ui.nav.EpistemicSidebar(
-                        activeSurface = activeSurface,
-                        onSurfaceSelected = { surf ->
-                            currentScreen = surfaceToScreen(surf)
-                        },
-                        onIssueClick = { url -> uriHandler.openUri(url) },
-                        appVersion = "v2.9.4",
-                    )
-                }
-                androidx.compose.foundation.layout.Box(
-                    modifier = androidx.compose.ui.Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                ) {
+
+            // Mobile-aware nav chrome. On narrow viewports (Material 3 compact
+            // window class, <600.dp wide) the EpistemicSidebar is dismissed by
+            // default and surfaced through a `ModalNavigationDrawer` — slides
+            // in from the left, scrims the content, dismisses on tap-outside,
+            // and self-closes when the user selects a destination. A persistent
+            // top-left hamburger button (`btn_nav_drawer_open`) overlays the
+            // content as the affordance to open the drawer. On wider viewports
+            // the sidebar stays permanently in a `Row` alongside content — the
+            // existing desktop / tablet layout. The 600.dp breakpoint matches
+            // Material 3's WindowWidthSizeClass.Compact boundary.
+            val drawerState = rememberDrawerState(DrawerValue.Closed)
+            val drawerScope = rememberCoroutineScope()
+
+            val mainScreenContent: @Composable (androidx.compose.ui.Modifier) -> Unit = { contentModifier ->
+                androidx.compose.foundation.layout.Box(modifier = contentModifier) {
             when (currentScreen) {
             Screen.Startup -> {
                 StartupScreen(viewModel = startupViewModel)
@@ -3169,8 +3168,79 @@ fun CIRISApp(
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
         }
-                } // close Box(weight=1f)
-            } // close Row
+                } // close Box(modifier = contentModifier)
+            } // close mainScreenContent lambda
+
+            androidx.compose.foundation.layout.BoxWithConstraints(
+                modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+            ) {
+                val isCompactWindow = maxWidth < 600.dp
+
+                val sidebarComposable: @Composable () -> Unit = {
+                    ai.ciris.mobile.shared.ui.nav.EpistemicSidebar(
+                        activeSurface = activeSurface,
+                        onSurfaceSelected = { surf ->
+                            currentScreen = surfaceToScreen(surf)
+                            // Auto-close the drawer on mobile after a
+                            // destination is picked so the user lands on the
+                            // chosen screen instead of staring at the open
+                            // drawer they just used.
+                            if (isCompactWindow) {
+                                drawerScope.launch { drawerState.close() }
+                            }
+                        },
+                        onIssueClick = { url -> uriHandler.openUri(url) },
+                        appVersion = "v2.9.4",
+                    )
+                }
+
+                if (showSidebar && isCompactWindow) {
+                    ModalNavigationDrawer(
+                        drawerState = drawerState,
+                        drawerContent = {
+                            ModalDrawerSheet { sidebarComposable() }
+                        },
+                    ) {
+                        androidx.compose.foundation.layout.Box(
+                            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+                        ) {
+                            mainScreenContent(androidx.compose.ui.Modifier.fillMaxSize())
+                            // Top-left hamburger overlay — the only affordance
+                            // to open the drawer on mobile. testableClickable
+                            // tag `btn_nav_drawer_open` is what the federation
+                            // walk-test and any future UI tests dispatch
+                            // against to switch surfaces on Android.
+                            IconButton(
+                                onClick = { drawerScope.launch { drawerState.open() } },
+                                modifier = androidx.compose.ui.Modifier
+                                    .align(androidx.compose.ui.Alignment.TopStart)
+                                    .padding(top = 8.dp, start = 8.dp)
+                                    .testableClickable("btn_nav_drawer_open") {
+                                        drawerScope.launch { drawerState.open() }
+                                    },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Menu,
+                                    contentDescription = "Open navigation menu",
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    androidx.compose.foundation.layout.Row(
+                        modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+                    ) {
+                        if (showSidebar) {
+                            sidebarComposable()
+                        }
+                        mainScreenContent(
+                            androidx.compose.ui.Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                        )
+                    }
+                }
+            } // close BoxWithConstraints
         } // close MaterialTheme
     } // CompositionLocalProvider
 }

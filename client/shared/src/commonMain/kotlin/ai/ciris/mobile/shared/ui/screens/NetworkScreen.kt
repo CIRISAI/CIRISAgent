@@ -12,9 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import ai.ciris.mobile.shared.ui.icons.*
@@ -116,63 +115,61 @@ fun NetworkScreen(
         )
     }
 
-    LazyColumn(
+    // Bounded hub content (one identity card + mode card + stats strip + ~10
+    // tiles) — uses `Column.verticalScroll` instead of `LazyColumn` so every
+    // section composes eagerly regardless of viewport width. T-T2 / T-T3
+    // wrapped the rows in a single `LazyColumn item { … }` for desktop, but
+    // T-Q5 surfaced that the wrapper itself falls below the fold on Android's
+    // narrower viewport (1080×2400 with sidebar consuming the left half), so
+    // the LazyColumn skips composing the stats strip + tiles grid and 14
+    // testTags don't appear in the test-automation tree. A bounded Column +
+    // verticalScroll has the same UX (scrollable, padded, spaced) but
+    // composes everything eagerly — testTags reach `/tree` on Android and
+    // desktop alike.
+    Column(
         modifier = modifier
             .fillMaxSize()
-            .testable("screen_network_hub"),
-        contentPadding = PaddingValues(16.dp),
+            .testable("screen_network_hub")
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item {
-            ScreenTitle()
-        }
+        ScreenTitle()
 
         // ── Identity card ────────────────────────────────────────────────────
-        item {
-            IdentityCard(address = federationAddress)
-        }
+        IdentityCard(address = federationAddress)
 
         // ── Mode selector card ───────────────────────────────────────────────
-        item {
-            ModeCard(
-                mode = mode,
-                status = status,
-                loading = loading,
-                onModeSelected = { target ->
-                    if (target != mode) pendingMode = target
-                },
-            )
-        }
+        ModeCard(
+            mode = mode,
+            status = status,
+            loading = loading,
+            onModeSelected = { target ->
+                if (target != mode) pendingMode = target
+            },
+        )
 
         // ── Live stats strip ─────────────────────────────────────────────────
-        item {
-            StatsStrip()
-        }
+        StatsStrip()
 
         // ── Inline error banner ──────────────────────────────────────────────
         if (insufficientDisk != null) {
-            item {
-                ErrorBanner(
-                    message = localizedString(
-                        "network.mode_card.insufficient_disk_error",
-                        mapOf(
-                            "available" to humanGiB(insufficientDisk!!.availableBytes),
-                            "required" to humanGiB(insufficientDisk!!.requiredBytes),
-                        ),
+            ErrorBanner(
+                message = localizedString(
+                    "network.mode_card.insufficient_disk_error",
+                    mapOf(
+                        "available" to humanGiB(insufficientDisk!!.availableBytes),
+                        "required" to humanGiB(insufficientDisk!!.requiredBytes),
                     ),
-                    onDismiss = { viewModel.clearInsufficientDisk() },
-                )
-            }
+                ),
+                onDismiss = { viewModel.clearInsufficientDisk() },
+            )
         }
         if (restartPending) {
-            item {
-                RestartBanner(onDismiss = { viewModel.clearRestartPending() })
-            }
+            RestartBanner(onDismiss = { viewModel.clearRestartPending() })
         }
         if (error != null) {
-            item {
-                ErrorBanner(message = error!!, onDismiss = { viewModel.clearError() })
-            }
+            ErrorBanner(message = error!!, onDismiss = { viewModel.clearError() })
         }
 
         // ── 10 navigation tiles in a 2-column grid ───────────────────────────
@@ -540,31 +537,29 @@ private val TILE_ROW_5 = listOf(
     TileSpec(NetworkTile.CONTENT, "network.tiles.content", CIRISIcons.pkg),
 )
 
-private fun LazyListScope.tilesGrid(onTileClick: (NetworkTile) -> Unit) {
+@Composable
+private fun tilesGrid(onTileClick: (NetworkTile) -> Unit) {
     val rows = listOf(TILE_ROW_1, TILE_ROW_2, TILE_ROW_3, TILE_ROW_4, TILE_ROW_5)
-    // All 5 rows are wrapped in a SINGLE LazyColumn item so every tile is
-    // composed eagerly (and `testableClickable` calls `onGloballyPositioned`
-    // for every tile, not just the rows above the fold). Without this, the
-    // QA federation walk-test sees rows 3–5 as MISSING_TAG because their
-    // `testable` registrations never fire — LazyColumn skips composition for
-    // off-screen items by design.
-    item(key = "federation_tiles_grid") {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            for (row in rows) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    for (spec in row) {
-                        NavTile(
-                            spec = spec,
-                            onClick = { onTileClick(spec.tile) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+    // Post-T-T4: hub is a Column + verticalScroll (was LazyColumn), so the
+    // tiles grid is a bare Composable rather than a LazyListScope extension.
+    // Every row + tile composes eagerly regardless of viewport width — see
+    // the call-site comment in `NetworkScreen` for the T-Q5 Android viewport
+    // diagnostic that motivated the LazyColumn → Column conversion.
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        for (row in rows) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                for (spec in row) {
+                    NavTile(
+                        spec = spec,
+                        onClick = { onTileClick(spec.tile) },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }

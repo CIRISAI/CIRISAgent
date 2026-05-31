@@ -185,8 +185,11 @@ SCREENS: Dict[str, FederationScreen] = {
         nav_tile=TILE_FEDERATION_CONTENT,
         root="screen_federation_content",
         refresh=None,
-        clickable_targets=["input_peer_search"],
-        text_probes=[],
+        clickable_targets=[],
+        # `input_peer_search` is an OutlinedTextField (focus-only target,
+        # uses `testable` not `testableClickable` per Compose convention).
+        # Probe its visibility rather than treating it as a click target.
+        text_probes=["input_peer_search"],
     ),
     "trust_graph": FederationScreen(
         name="Network Trust Graph",

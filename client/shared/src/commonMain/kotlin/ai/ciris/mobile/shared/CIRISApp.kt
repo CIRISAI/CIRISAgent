@@ -3268,11 +3268,18 @@ fun CIRISApp(
                                 backTarget != null -> "btn_nav_back"
                                 else -> "btn_nav_drawer_open"
                             }
+                            // Container sized to match the status-bar badge row
+                            // height (badges ~56dp tall after padding). Top pad
+                            // shifted down to vertically center on that row, so
+                            // the signet doesn't read as floating above the
+                            // badges. Inner glyphs sized to nearly fill (4dp
+                            // breathing room) — the prior 36dp signet in a 48dp
+                            // box looked under-sized.
                             Box(
                                 modifier = androidx.compose.ui.Modifier
                                     .align(androidx.compose.ui.Alignment.TopStart)
-                                    .padding(top = 12.dp, start = 12.dp)
-                                    .size(48.dp)
+                                    .padding(top = 8.dp, start = 8.dp)
+                                    .size(56.dp)
                                     .testableClickable(iconTestTag) {
                                         when {
                                             isDrawerOpen -> drawerScope.launch { drawerState.close() }
@@ -3287,16 +3294,16 @@ fun CIRISApp(
                                         imageVector = Icons.Filled.Menu,
                                         contentDescription = "Close navigation",
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = androidx.compose.ui.Modifier.size(28.dp),
+                                        modifier = androidx.compose.ui.Modifier.size(40.dp),
                                     )
                                     backTarget != null -> Icon(
                                         imageVector = ai.ciris.mobile.shared.ui.components.CIRISIcons.arrowBack,
                                         contentDescription = "Go back",
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = androidx.compose.ui.Modifier.size(28.dp),
+                                        modifier = androidx.compose.ui.Modifier.size(40.dp),
                                     )
                                     else -> ai.ciris.mobile.shared.ui.components.CIRISSignet(
-                                        modifier = androidx.compose.ui.Modifier.size(36.dp),
+                                        modifier = androidx.compose.ui.Modifier.size(52.dp),
                                         tintColor = MaterialTheme.colorScheme.primary,
                                     )
                                 }

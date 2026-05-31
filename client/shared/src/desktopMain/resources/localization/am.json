@@ -2061,7 +2061,17 @@
     "identity_card": {
       "title": "ፌዴሬሽን ማንነት",
       "copy_address": "አድራሻ ቅዳ",
-      "qr_label": "QR · ራቼት / ሽክርክሪት"
+      "qr_label": "QR · ራቼት / ሽክርክሪት",
+      "capabilities_title": "ችሎታዎች",
+      "copied": "ተቀዳ",
+      "copy_node_code": "የኖድ ኮድ ቅዳ",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "ይህን ኮድ ከአጋር ጋር ይጋሩ ለመጋበዝ። ሊለጥፉ ወይም ሊቃኙ ይችላሉ።",
+      "node_code_title": "የእኔ ኖድ ኮድ",
+      "peers_canonical": "ቀኖናዊ",
+      "peers_total": "ጠቅላላ አጋሮች",
+      "qr_placeholder_label": "QR ኮድ",
+      "signer_key_label": "የፈራሚ ቁልፍ"
     },
     "mode_card": {
       "title": "የወኪል ሁነታ",
@@ -2111,6 +2121,205 @@
       "queue_description": "በማጓጓዣ የውጭ ፓኬት ወረፋ፦ ጥልቀት፣ ዕድሜ፣ ድጋሚ ሙከራ ቆጠራ፣ የመከፋፈል ሁኔታ።",
       "diagnostics_description": "የቅርብ ጊዜ ስህተቶች፣ የፊርማ ውድቀቶች፣ የፖሊሲ ብሎኮች፣ የማጓጓዣ መለዋወጥ — የኦፕሬተር ምርመራ።",
       "content_description": "የፌዴሬሽን ይዘት ማከማቻ አሳሽ — በአካባቢ የተከማቸ፣ የተፌዴሬት፣ በሃሽ-የተላከ ማግኘት።"
+    },
+    "announces": {
+      "empty": "ገና ምንም ማስታወቂያዎች የሉም። የፌዴሬሽን ክስተቶችን በመጠባበቅ ላይ…",
+      "no_message": "(መልዕክት የለም)",
+      "title": "ቀጥታ ማስታወቂያዎች"
+    },
+    "content": {
+      "back": "ተመለስ",
+      "error": {
+        "edge_unavailable": "Edge አይገኝም።",
+        "not_found": "ይዘት በዚህ አጋር ላይ አልተገኘም። ሌላ አጋር ይሞክሩ።"
+      },
+      "fetch": {
+        "button": "አምጣ",
+        "content_id_label": "የይዘት መለያ (SHA-256)",
+        "content_id_placeholder": "64-ቁምፊ ሄክስ ዳይጀስት",
+        "invalid_id": "የይዘት መለያ 64 ሄክሳዴሲማል ቁምፊዎች መሆን አለበት።",
+        "timeout_label": "የጊዜ ገደብ"
+      },
+      "peer": {
+        "change": "አጋር ይቀይሩ",
+        "empty": "ምንም አጋር አይገኝም። መጀመሪያ አጋሮችን ይጨምሩ።",
+        "search": "አጋሮችን ይፈልጉ"
+      },
+      "refresh": "አድስ",
+      "result": {
+        "content_type": "የይዘት ዓይነት",
+        "fetched_at": "የተገኘ በ",
+        "preview": "የክፍያ መጠን ቅድመ እይታ (የመጀመሪያው 200 ባይት)",
+        "size": "መጠን",
+        "title": "ውጤት"
+      },
+      "step1": {
+        "title": "ለመጠየቅ አጋር ይምረጡ"
+      },
+      "step2": {
+        "title": "ከአጋር ይዘት አምጣ"
+      }
+    },
+    "diagnostics": {
+      "empty": "ምንም የሚዛመዱ ክስተቶች የሉም። ማጣሪያዎችን ይቀይሩ ወይም ይጠብቁ።",
+      "more": "ለማስፋት ይንኩ",
+      "no_summary": "(የክፍያ መጠን ማጠቃለያ የለም)",
+      "search_hint": "በመልዕክት ጽሁፍ ወይም event_type ያጣሩ",
+      "title": "ምርመራዎች"
+    },
+    "interfaces": {
+      "empty": "ምንም ማጓጓዣዎች አልተዋቀሩም።",
+      "not_measured": "ገና አልተለካም",
+      "peers": "አጋሮች",
+      "refresh": "አድስ",
+      "row": {
+        "bytes_in": "የገቡ ባይቶች",
+        "bytes_out": "የወጡ ባይቶች",
+        "reach": "የመድረስ %",
+        "status": "ሁኔታ"
+      },
+      "status": {
+        "active": "ንቁ",
+        "degraded": "የተዳከመ",
+        "idle": "ስራ ፈት",
+        "unknown": "ያልታወቀ"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "የቴሌሜትሪ ፓይፕላይናችንን ስናስተላልፍ አጋሮች በእውነተኛ ካርታ ላይ ይታያሉ። እስከዚያ ድረስ አሁን ማየት የሚችሉት ይህ ነው፦",
+        "title": "ምንም የተፈበረኩ ቦታዎች የሉም"
+      },
+      "future": {
+        "bullet_announces": "በክልል የተደራረቡ የእውነተኛ ጊዜ ማስታወቂያዎች",
+        "bullet_locations": "ከቴሌሜትሪ የተገኙ የአጋር ቦታዎች",
+        "bullet_transport": "የማጓጓዣ-አገናኝ ሽፋን (TCP / LoRa / I2P / AX.25)",
+        "title": "ይህ በኋላ የሚያሳየው"
+      },
+      "hero": {
+        "subtitle": "እውነተኛ ካርታ ከቴሌሜትሪ ፓይፕላይን ጋር ይመጣል።",
+        "title": "ጂኦግራፊያዊ እይታ"
+      },
+      "refresh": "አድስ",
+      "today": {
+        "canonical": "ቀኖናዊ አጋሮች",
+        "other": "ሌሎች አጋሮች",
+        "title": "አሁን ያለን",
+        "trusted": "የታመነ አጋሮች"
+      }
+    },
+    "paths": {
+      "empty": "ገና ምንም የመንገድ ክስተቶች የሉም።",
+      "kind_added": "ተጨምሯል",
+      "kind_changed": "ተቀይሯል",
+      "kind_lost": "ጠፍቷል",
+      "kind_other": "ክስተት",
+      "no_static_table_note": "Edge 1.0 የማይንቀሳቀስ የመንገድ ሰንጠረዥ አያቀርብም፤ ይህ ስክሪን የቀጥታ ለውጦችን ብቻ ያሳያል። እንደገና ማሰማራት ሁኔታን ሊጥስ ይችላል።",
+      "section_recent": "የቅርብ ጊዜ የመንገድ ክስተቶች",
+      "title": "ቀጥታ መንገዶች"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "ዳራ (hex)",
+      "appearance_fg_label": "ፊት (hex)",
+      "appearance_icon_label": "አዶ",
+      "appearance_save": "ገጽታ አስቀምጥ",
+      "appearance_title": "ገጽታ",
+      "cancel_button": "ሰርዝ",
+      "confirm_block_body": "ማገድ ከዚህ አጋር ሁሉንም ትራፊክ ይከለክላል። በኋላ ላይ መከፈት ይችላሉ።",
+      "confirm_block_button": "አግድ",
+      "confirm_block_title": "ይህን አጋር አግድ?",
+      "copy_key_id": "የቁልፍ መለያ ቅዳ",
+      "last_ok_days_ago": "ከ{n} ቀን በፊት",
+      "last_ok_hours_ago": "ከ{n} ሰዓት በፊት",
+      "last_ok_just_now": "አሁን",
+      "last_ok_min_ago": "ከ{n} ደቂቃ በፊት",
+      "last_ok_never": "በፍጹም",
+      "not_found": "አጋር አልተገኘም",
+      "notes_empty": "ምንም ማስታወሻዎች የሉም",
+      "notes_title": "ማስታወሻዎች",
+      "reachability_empty": "ገና አልተለካም",
+      "reachability_title": "የመድረስ ችሎታ",
+      "sas_close": "ዝጋ",
+      "sas_digits_label": "አሃዞች",
+      "sas_instructions": "እነዚህን ከአጋር ጋር በታመነ ቻናል (ድምጽ/ቪዲዮ/በአካል) ያወዳድሩ። ሁለቱም ጎኖች ከተዛመዱ አጋሩ ተረጋግጧል — መተማመንን ወደ TRUSTED ይቀይሩ።",
+      "sas_modal_title": "አጭር የማረጋገጥ ሕብረቁምፊ",
+      "sas_show_button": "የSAS ኮድ አሳይ",
+      "sas_title": "ማንነት ያረጋግጡ (SAS)",
+      "sas_words_label": "ቃላት",
+      "title": "የአጋር ዝርዝር",
+      "trust_state_title": "የመተማመን ሁኔታ"
+    },
+    "peers": {
+      "add_peer_cancel": "ሰርዝ",
+      "add_peer_fab": "አጋር አክል",
+      "add_peer_paste_label": "የኖድ ኮድ ለጥፍ",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR ቃኝ",
+      "add_peer_scan_qr_unavailable": "የQR ቃኝ በቅርቡ ይመጣል",
+      "add_peer_submit": "አክል",
+      "add_peer_title": "አጋር ጨምር",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "ለመጋበዝ የኖድ ኮድዎን ያጋሩ፣ ወይም የአጋር ኮድ ይጨምሩ።",
+      "empty_title": "ገና አጋሮች የሉም",
+      "filter_all": "ሁሉም",
+      "filter_blocked": "የታገዱ",
+      "filter_canonical": "ቀኖናዊ",
+      "filter_trusted": "የታመነ",
+      "filter_unknown": "ያልታወቀ",
+      "filter_untrusted": "ያልታመነ",
+      "show_infra": "CIRIS መሰረተ ልማት አሳይ",
+      "title": "አጋሮች",
+      "trust_blocked": "የታገደ",
+      "trust_trusted": "የታመነ",
+      "trust_unknown": "ያልታወቀ",
+      "trust_untrusted": "ያልታመነ"
+    },
+    "queue": {
+      "failures": {
+        "send": "የመላክ ውድቀቶች",
+        "title": "ውድቀቶች",
+        "verify": "የማረጋገጥ ውድቀቶች"
+      },
+      "refresh": "አድስ",
+      "stats": {
+        "depth": "የወረፋ ጥልቀት",
+        "received": "የተቀበሉ",
+        "sent": "የተላኩ",
+        "title": "የወረፋ ስታቲስቲክስ"
+      },
+      "throughput": {
+        "bytes_in": "የገቡ ባይቶች",
+        "bytes_out": "የወጡ ባይቶች",
+        "received": "የተቀበሉ",
+        "sent": "የተላኩ",
+        "session": "የዚህ ክፍለ ጊዜ ጠቅላላ",
+        "title": "የውጭ ፍሰት"
+      }
+    },
+    "stream": {
+      "clear": "አጽዳ",
+      "dismiss": "አሰናብት",
+      "event_count": "{count} ክስተቶች",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "ለአፍታ አቁም",
+      "reconnect": "እንደገና ይገናኙ",
+      "resume": "ቀጥል",
+      "resume_notice": "እንደገና ተገናኝቷል። አንዳንድ ክስተቶች ሊጎድሉ ይችላሉ።",
+      "retry": "እንደገና ሞክር"
+    },
+    "trust_graph": {
+      "empty": "ምንም ለማየት አጋሮች የሉም።",
+      "legend": {
+        "blocked": "የታገዱ",
+        "canonical_hint": "ወፍራም የቀለበት ዙሪያ = ቀኖናዊ (ከወኪሉ ጋር ይላካል)።",
+        "edge_hint": "የጠርዝ ግልጽነት የእያንዳንዱን-መካከለኛ ተደራሽነት ያንጸባርቃል።",
+        "title": "የመተማመን ሁኔታ",
+        "trusted": "የታመነ",
+        "unknown": "ያልታወቀ",
+        "untrusted": "ያልታመነ"
+      },
+      "refresh": "አድስ",
+      "summary": "{count} አጋሮች · {canonical} ቀኖናዊ"
     }
   },
   "settings": {

@@ -2061,7 +2061,17 @@
     "identity_card": {
       "title": "Ідентичність федерації",
       "copy_address": "Копіювати адресу",
-      "qr_label": "QR · хропник / ротація"
+      "qr_label": "QR · хропник / ротація",
+      "capabilities_title": "Можливості",
+      "copied": "Скопійовано",
+      "copy_node_code": "Копіювати код вузла",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Поділіться цим кодом з пiром, щоб запросити його. Він може вставити або сканувати.",
+      "node_code_title": "Мій код вузла",
+      "peers_canonical": "Канонічний",
+      "peers_total": "Всього пiрів",
+      "qr_placeholder_label": "QR-код",
+      "signer_key_label": "Ключ підпису"
     },
     "mode_card": {
       "title": "Режим агента",
@@ -2111,6 +2121,205 @@
       "queue_description": "Черга вихідних пакетів на транспорт: глибина, вік, кількість повторів, стан фрагментації.",
       "diagnostics_description": "Нещодавні помилки, збої підпису, блокування політики, текучість транспорту — операторська криміналістика.",
       "content_description": "Браузер сховища контенту федерації — кешовано локально, федеровано, отримання за хешем."
+    },
+    "announces": {
+      "empty": "Поки немає оголошень. Очікування подій федерації…",
+      "no_message": "(немає повідомлення)",
+      "title": "Живі оголошення"
+    },
+    "content": {
+      "back": "Назад",
+      "error": {
+        "edge_unavailable": "Edge недоступний.",
+        "not_found": "Вміст не знайдено в цього пiра. Спробуйте іншого пiра."
+      },
+      "fetch": {
+        "button": "Отримати",
+        "content_id_label": "ID вмісту (SHA-256)",
+        "content_id_placeholder": "Hex-дайджест з 64 символів",
+        "invalid_id": "ID вмісту має містити 64 шістнадцяткові символи.",
+        "timeout_label": "Тайм-аут"
+      },
+      "peer": {
+        "change": "Змінити пiра",
+        "empty": "Немає доступних пiрів. Спочатку додайте пiрів.",
+        "search": "Пошук пiрів"
+      },
+      "refresh": "Оновити",
+      "result": {
+        "content_type": "Тип вмісту",
+        "fetched_at": "Отримано о",
+        "preview": "Попередній перегляд payload (перші 200 байт)",
+        "size": "Розмір",
+        "title": "Результат"
+      },
+      "step1": {
+        "title": "Виберіть пiра для запиту"
+      },
+      "step2": {
+        "title": "Отримати вміст від пiра"
+      }
+    },
+    "diagnostics": {
+      "empty": "Немає відповідних подій. Налаштуйте фільтри або зачекайте.",
+      "more": "торкніться, щоб розгорнути",
+      "no_summary": "(немає резюме payload)",
+      "search_hint": "Фільтр за текстом повідомлення або event_type",
+      "title": "Діагностика"
+    },
+    "interfaces": {
+      "empty": "Транспорти не налаштовано.",
+      "not_measured": "Ще не виміряно",
+      "peers": "пiрів",
+      "refresh": "Оновити",
+      "row": {
+        "bytes_in": "Вхідних байтів",
+        "bytes_out": "Вихідних байтів",
+        "reach": "Досяжність %",
+        "status": "Статус"
+      },
+      "status": {
+        "active": "Активний",
+        "degraded": "Погіршений",
+        "idle": "Бездіяльний",
+        "unknown": "Невідомо"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Пiри з'являться на справжній мапі, як тільки ми випустимо конвеєр телеметрії. Доти ось що ви можете побачити зараз:",
+        "title": "Без вигаданих місць"
+      },
+      "future": {
+        "bullet_announces": "Оголошення в реальному часі накладені за регіоном",
+        "bullet_locations": "Місця пiрів із телеметрії",
+        "bullet_transport": "Накладення транспортних посилань (TCP / LoRa / I2P / AX.25)",
+        "title": "Що це покаже пізніше"
+      },
+      "hero": {
+        "subtitle": "Справжня мапа з'явиться разом із конвеєром телеметрії.",
+        "title": "Географічний вигляд"
+      },
+      "refresh": "Оновити",
+      "today": {
+        "canonical": "Канонічні пiри",
+        "other": "Інші пiри",
+        "title": "Що ми маємо сьогодні",
+        "trusted": "Довірені пiри"
+      }
+    },
+    "paths": {
+      "empty": "Поки немає подій шляху.",
+      "kind_added": "додано",
+      "kind_changed": "змінено",
+      "kind_lost": "втрачено",
+      "kind_other": "подія",
+      "no_static_table_note": "Edge 1.0 не надає статичну таблицю шляхів; цей екран показує лише живі зміни. Повторне розгортання може скинути стан.",
+      "section_recent": "Нещодавні події шляху",
+      "title": "Живі шляхи"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Фон (hex)",
+      "appearance_fg_label": "Передній план (hex)",
+      "appearance_icon_label": "Іконка",
+      "appearance_save": "Зберегти вигляд",
+      "appearance_title": "Вигляд",
+      "cancel_button": "Скасувати",
+      "confirm_block_body": "Блокування відмовить у всьому трафіку від цього пiра. Ви можете розблокувати пізніше.",
+      "confirm_block_button": "Заблокувати",
+      "confirm_block_title": "Заблокувати цього пiра?",
+      "copy_key_id": "Копіювати id ключа",
+      "last_ok_days_ago": "{n} д. тому",
+      "last_ok_hours_ago": "{n} г. тому",
+      "last_ok_just_now": "Щойно",
+      "last_ok_min_ago": "{n} хв. тому",
+      "last_ok_never": "Ніколи",
+      "not_found": "Пiра не знайдено",
+      "notes_empty": "Немає нотаток",
+      "notes_title": "Нотатки",
+      "reachability_empty": "Ще не виміряно",
+      "reachability_title": "Досяжність",
+      "sas_close": "Закрити",
+      "sas_digits_label": "Цифри",
+      "sas_instructions": "Порівняйте це з пiром через довірений канал (голос/відео/особисто). Якщо обидві сторони збігаються, пiра перевірено — змініть довіру на TRUSTED.",
+      "sas_modal_title": "Коротка автентифікаційна стрічка",
+      "sas_show_button": "Показати SAS-код",
+      "sas_title": "Перевірити особу (SAS)",
+      "sas_words_label": "Слова",
+      "title": "Деталі пiра",
+      "trust_state_title": "Стан довіри"
+    },
+    "peers": {
+      "add_peer_cancel": "Скасувати",
+      "add_peer_fab": "Додати пiра",
+      "add_peer_paste_label": "Вставити код вузла",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "Сканувати QR",
+      "add_peer_scan_qr_unavailable": "Сканування QR скоро",
+      "add_peer_submit": "Додати",
+      "add_peer_title": "Додати пiра",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Поділіться кодом свого вузла, щоб запросити, або додайте код пiра.",
+      "empty_title": "Поки немає пiрів",
+      "filter_all": "Усі",
+      "filter_blocked": "Заблоковані",
+      "filter_canonical": "Канонічні",
+      "filter_trusted": "Довірені",
+      "filter_unknown": "Невідомі",
+      "filter_untrusted": "Недовірені",
+      "show_infra": "Показати інфраструктуру CIRIS",
+      "title": "Пiри",
+      "trust_blocked": "заблокований",
+      "trust_trusted": "довірений",
+      "trust_unknown": "невідомо",
+      "trust_untrusted": "недовірений"
+    },
+    "queue": {
+      "failures": {
+        "send": "Помилки надсилання",
+        "title": "Помилки",
+        "verify": "Помилки перевірки"
+      },
+      "refresh": "Оновити",
+      "stats": {
+        "depth": "Глибина черги",
+        "received": "Отримано",
+        "sent": "Надіслано",
+        "title": "Статистика черги"
+      },
+      "throughput": {
+        "bytes_in": "Вхідних байтів",
+        "bytes_out": "Вихідних байтів",
+        "received": "Отримано",
+        "sent": "Надіслано",
+        "session": "Всього за цю сесію",
+        "title": "Пропускна здатність"
+      }
+    },
+    "stream": {
+      "clear": "Очистити",
+      "dismiss": "Відхилити",
+      "event_count": "{count} подій",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Пауза",
+      "reconnect": "Перепідключити",
+      "resume": "Відновити",
+      "resume_notice": "Перепідключено. Деякі події могли бути пропущені.",
+      "retry": "Повторити"
+    },
+    "trust_graph": {
+      "empty": "Немає пiрів для візуалізації.",
+      "legend": {
+        "blocked": "Заблокований",
+        "canonical_hint": "Товщий контур кільця = канонічний (постачається з агентом).",
+        "edge_hint": "Прозорість ребра відображає досяжність на кожен носій.",
+        "title": "Стан довіри",
+        "trusted": "Довірений",
+        "unknown": "Невідомо",
+        "untrusted": "Недовірений"
+      },
+      "refresh": "Оновити",
+      "summary": "{count} пiрів · {canonical} канонічних"
     }
   },
   "settings": {

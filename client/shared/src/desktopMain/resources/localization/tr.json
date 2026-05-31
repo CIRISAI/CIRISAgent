@@ -2061,7 +2061,17 @@
     "identity_card": {
       "title": "Federasyon kimliği",
       "copy_address": "Adresi kopyala",
-      "qr_label": "QR · ratchet / rotasyon"
+      "qr_label": "QR · ratchet / rotasyon",
+      "capabilities_title": "Yetenekler",
+      "copied": "Kopyalandı",
+      "copy_node_code": "Düğüm kodunu kopyala",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Davet etmek için bu kodu bir eşle paylaşın. Yapıştırabilir veya tarayabilirler.",
+      "node_code_title": "Düğüm kodum",
+      "peers_canonical": "Kanonik",
+      "peers_total": "Toplam eş",
+      "qr_placeholder_label": "QR kodu",
+      "signer_key_label": "İmzalayan anahtarı"
     },
     "mode_card": {
       "title": "Ajan modu",
@@ -2111,6 +2121,205 @@
       "queue_description": "Taşıyıcı başına giden paket kuyruğu: derinlik, yaş, yeniden deneme sayısı, parçalanma durumu.",
       "diagnostics_description": "Son hatalar, imza başarısızlıkları, politika engelleri, taşıyıcı çalkantı — operatör adli incelemesi.",
       "content_description": "Federasyon içerik mağazası tarayıcısı — yerel önbellek, federe, hash-adresli alma."
+    },
+    "announces": {
+      "empty": "Henüz duyuru yok. Federasyon olayları bekleniyor…",
+      "no_message": "(mesaj yok)",
+      "title": "Canlı duyurular"
+    },
+    "content": {
+      "back": "Geri",
+      "error": {
+        "edge_unavailable": "Edge kullanılamıyor.",
+        "not_found": "Bu eşte içerik bulunamadı. Başka bir eşi deneyin."
+      },
+      "fetch": {
+        "button": "Getir",
+        "content_id_label": "İçerik kimliği (SHA-256)",
+        "content_id_placeholder": "64 karakter hex özet",
+        "invalid_id": "İçerik kimliği 64 onaltılık karakter olmalıdır.",
+        "timeout_label": "Zaman aşımı"
+      },
+      "peer": {
+        "change": "Eşi değiştir",
+        "empty": "Kullanılabilir eş yok. Önce eş ekleyin.",
+        "search": "Eş ara"
+      },
+      "refresh": "Yenile",
+      "result": {
+        "content_type": "İçerik türü",
+        "fetched_at": "Getirildi",
+        "preview": "Yük önizlemesi (ilk 200 bayt)",
+        "size": "Boyut",
+        "title": "Sonuç"
+      },
+      "step1": {
+        "title": "Sorgu için bir eş seçin"
+      },
+      "step2": {
+        "title": "Eşten içerik getir"
+      }
+    },
+    "diagnostics": {
+      "empty": "Eşleşen olay yok. Filtreleri ayarlayın veya bekleyin.",
+      "more": "genişletmek için dokunun",
+      "no_summary": "(yük özeti yok)",
+      "search_hint": "Mesaj metni veya event_type ile filtrele",
+      "title": "Tanılama"
+    },
+    "interfaces": {
+      "empty": "Yapılandırılmış taşıyıcı yok.",
+      "not_measured": "Henüz ölçülmedi",
+      "peers": "eş",
+      "refresh": "Yenile",
+      "row": {
+        "bytes_in": "Gelen bayt",
+        "bytes_out": "Giden bayt",
+        "reach": "Erişim %",
+        "status": "Durum"
+      },
+      "status": {
+        "active": "Etkin",
+        "degraded": "Bozulmuş",
+        "idle": "Boşta",
+        "unknown": "Bilinmiyor"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Telemetri pipeline'ımızı yayınladığımızda eşler gerçek bir haritada görünecek. O zamana kadar şu anda görebilecekleriniz:",
+        "title": "Uydurulmuş konum yok"
+      },
+      "future": {
+        "bullet_announces": "Bölgeye göre kaplanmış gerçek zamanlı duyurular",
+        "bullet_locations": "Telemetriden eş konumları",
+        "bullet_transport": "Taşıyıcı-bağlantı kaplaması (TCP / LoRa / I2P / AX.25)",
+        "title": "Bunun daha sonra göstereceği"
+      },
+      "hero": {
+        "subtitle": "Gerçek harita telemetri pipeline ile geliyor.",
+        "title": "Coğrafi görünüm"
+      },
+      "refresh": "Yenile",
+      "today": {
+        "canonical": "Kanonik eşler",
+        "other": "Diğer eşler",
+        "title": "Bugün elimizdekiler",
+        "trusted": "Güvenilir eşler"
+      }
+    },
+    "paths": {
+      "empty": "Henüz yol olayı yok.",
+      "kind_added": "eklendi",
+      "kind_changed": "değişti",
+      "kind_lost": "kayboldu",
+      "kind_other": "olay",
+      "no_static_table_note": "Edge 1.0 statik bir yol tablosu sunmuyor; bu ekran yalnızca canlı değişiklikleri gösterir. Yeniden dağıtım durumu sıfırlayabilir.",
+      "section_recent": "Son yol olayları",
+      "title": "Canlı yollar"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Arka plan (hex)",
+      "appearance_fg_label": "Ön plan (hex)",
+      "appearance_icon_label": "Simge",
+      "appearance_save": "Görünümü kaydet",
+      "appearance_title": "Görünüm",
+      "cancel_button": "İptal",
+      "confirm_block_body": "Engelleme, bu eşten tüm trafiği reddedecek. Daha sonra engellemeyi kaldırabilirsiniz.",
+      "confirm_block_button": "Engelle",
+      "confirm_block_title": "Bu eşi engellensin mi?",
+      "copy_key_id": "Anahtar kimliğini kopyala",
+      "last_ok_days_ago": "{n}g önce",
+      "last_ok_hours_ago": "{n}sa önce",
+      "last_ok_just_now": "Az önce",
+      "last_ok_min_ago": "{n} dk önce",
+      "last_ok_never": "Asla",
+      "not_found": "Eş bulunamadı",
+      "notes_empty": "Not yok",
+      "notes_title": "Notlar",
+      "reachability_empty": "Henüz ölçülmedi",
+      "reachability_title": "Erişilebilirlik",
+      "sas_close": "Kapat",
+      "sas_digits_label": "Rakamlar",
+      "sas_instructions": "Bunları güvenilir bir kanalla (ses/video/yüz yüze) eşle karşılaştırın. Her iki taraf eşleşirse, eş doğrulanır — güveni TRUSTED olarak değiştirin.",
+      "sas_modal_title": "Kısa kimlik doğrulama dizisi",
+      "sas_show_button": "SAS kodunu göster",
+      "sas_title": "Kimlik doğrula (SAS)",
+      "sas_words_label": "Kelimeler",
+      "title": "Eş ayrıntısı",
+      "trust_state_title": "Güven durumu"
+    },
+    "peers": {
+      "add_peer_cancel": "İptal",
+      "add_peer_fab": "Eş ekle",
+      "add_peer_paste_label": "Düğüm kodunu yapıştır",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR tara",
+      "add_peer_scan_qr_unavailable": "QR tarama yakında",
+      "add_peer_submit": "Ekle",
+      "add_peer_title": "Eş ekle",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Davet etmek için düğüm kodunuzu paylaşın veya bir eşin kodunu ekleyin.",
+      "empty_title": "Henüz eş yok",
+      "filter_all": "Tümü",
+      "filter_blocked": "Engellenenler",
+      "filter_canonical": "Kanonik",
+      "filter_trusted": "Güvenilir",
+      "filter_unknown": "Bilinmeyen",
+      "filter_untrusted": "Güvenilmez",
+      "show_infra": "CIRIS altyapısını göster",
+      "title": "Eşler",
+      "trust_blocked": "engellenmiş",
+      "trust_trusted": "güvenilir",
+      "trust_unknown": "bilinmiyor",
+      "trust_untrusted": "güvenilmez"
+    },
+    "queue": {
+      "failures": {
+        "send": "Gönderme hataları",
+        "title": "Hatalar",
+        "verify": "Doğrulama hataları"
+      },
+      "refresh": "Yenile",
+      "stats": {
+        "depth": "Kuyruk derinliği",
+        "received": "Alındı",
+        "sent": "Gönderildi",
+        "title": "Kuyruk istatistikleri"
+      },
+      "throughput": {
+        "bytes_in": "Gelen bayt",
+        "bytes_out": "Giden bayt",
+        "received": "Alındı",
+        "sent": "Gönderildi",
+        "session": "Bu oturumun toplamı",
+        "title": "Verim"
+      }
+    },
+    "stream": {
+      "clear": "Temizle",
+      "dismiss": "Kapat",
+      "event_count": "{count} olay",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Duraklat",
+      "reconnect": "Yeniden bağlan",
+      "resume": "Devam et",
+      "resume_notice": "Yeniden bağlandı. Bazı olaylar kaçırılmış olabilir.",
+      "retry": "Yeniden dene"
+    },
+    "trust_graph": {
+      "empty": "Görselleştirilecek eş yok.",
+      "legend": {
+        "blocked": "Engellenmiş",
+        "canonical_hint": "Daha kalın halka çizgisi = kanonik (ajanla birlikte gelir).",
+        "edge_hint": "Kenar opaklığı, ortam başına erişilebilirliği yansıtır.",
+        "title": "Güven durumu",
+        "trusted": "Güvenilir",
+        "unknown": "Bilinmiyor",
+        "untrusted": "Güvenilmez"
+      },
+      "refresh": "Yenile",
+      "summary": "{count} eş · {canonical} kanonik"
     }
   },
   "settings": {

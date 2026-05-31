@@ -2061,7 +2061,17 @@
     "identity_card": {
       "title": "Idanimọ federation",
       "copy_address": "Daakọ adirẹsi",
-      "qr_label": "QR · ratchet / iyiyi"
+      "qr_label": "QR · ratchet / iyiyi",
+      "capabilities_title": "Àwọn agbára",
+      "copied": "Ti dà",
+      "copy_node_code": "Dà koodu node",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Pín koodu yìí pẹ̀lú ẹlẹ́gbẹ́ láti pè wọ́n. Wọ́n lè lẹ̀ tàbí scan.",
+      "node_code_title": "Koodu node mi",
+      "peers_canonical": "Canonical",
+      "peers_total": "Àpapọ̀ ẹlẹ́gbẹ́",
+      "qr_placeholder_label": "Koodu QR",
+      "signer_key_label": "Bọtìnì agbátẹ́nu"
     },
     "mode_card": {
       "title": "Ipo aṣoju",
@@ -2111,6 +2121,205 @@
       "queue_description": "Tito akopọ ti njade fun gbigbe kọọkan: ijinle, ọjọ ori, kika tun-gbiyanju, ipo pinpin.",
       "diagnostics_description": "Awọn aṣiṣe aipẹ, awọn ikuna ibuwọlu, awọn idina eto imulo, ipade gbigbe — iṣẹ-ẹrọ oniṣẹ.",
       "content_description": "Aṣawakiri ile-itaja akoonu federation — ti a fipamọ sinu agbegbe, ti a darapọ, igbapada adirẹsi hash."
+    },
+    "announces": {
+      "empty": "Kò sí ìkéde sí bẹ́ẹ̀. Ń dúró fún àwọn ìṣẹ̀lẹ̀ federation…",
+      "no_message": "(kò sí ìṣẹ̀rọ̀)",
+      "title": "Àwọn ìkéde tààrà"
+    },
+    "content": {
+      "back": "Padà",
+      "error": {
+        "edge_unavailable": "Edge kò sí.",
+        "not_found": "Ohun-èlò kò sí ní ẹlẹ́gbẹ́ yìí. Gbìyànjú ẹlẹ́gbẹ́ mìíràn."
+      },
+      "fetch": {
+        "button": "Gba",
+        "content_id_label": "ID ohun-èlò (SHA-256)",
+        "content_id_placeholder": "Hex digest tí ó ní lẹ́tà 64",
+        "invalid_id": "ID ohun-èlò gbọ́dọ̀ jẹ́ lẹ́tà hexadecimal 64.",
+        "timeout_label": "Àkókò pípé"
+      },
+      "peer": {
+        "change": "Yí ẹlẹ́gbẹ́ padà",
+        "empty": "Kò sí ẹlẹ́gbẹ́ tó wà. Fi àwọn ẹlẹ́gbẹ́ kún ní àkọ́kọ́.",
+        "search": "Wá àwọn ẹlẹ́gbẹ́"
+      },
+      "refresh": "Tún ṣe",
+      "result": {
+        "content_type": "Irú ohun-èlò",
+        "fetched_at": "Gba ní",
+        "preview": "Àkójọpọ̀ payload (200 bytes àkọ́kọ́)",
+        "size": "Ìwọ̀n",
+        "title": "Èsì"
+      },
+      "step1": {
+        "title": "Yan ẹlẹ́gbẹ́ láti béèrè"
+      },
+      "step2": {
+        "title": "Gba ohun-èlò láti ẹlẹ́gbẹ́"
+      }
+    },
+    "diagnostics": {
+      "empty": "Kò sí àwọn ìṣẹ̀lẹ̀ tó bámu. Ṣàtúnṣe àwọn àwẹ́ tàbí dúró.",
+      "more": "tẹ̀ láti fẹ̀",
+      "no_summary": "(kò sí àkójọpọ̀ payload)",
+      "search_hint": "Yẹ wò nípasẹ̀ ọ̀rọ̀ ìṣẹ̀rọ̀ tàbí event_type",
+      "title": "Àyẹ̀wò"
+    },
+    "interfaces": {
+      "empty": "Kò sí transport tí a ṣètò.",
+      "not_measured": "Kò tíì wọ́n",
+      "peers": "ẹlẹ́gbẹ́",
+      "refresh": "Tún ṣe",
+      "row": {
+        "bytes_in": "Bytes tó ń wọlé",
+        "bytes_out": "Bytes tó ń jáde",
+        "reach": "Ìdé %",
+        "status": "Ipò"
+      },
+      "status": {
+        "active": "Ń ṣiṣẹ́",
+        "degraded": "Tó bàjẹ́",
+        "idle": "Kò ṣiṣẹ́",
+        "unknown": "Aímọ̀"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Àwọn ẹlẹ́gbẹ́ yóò fara hàn lórí àwòrán gidi nígbà tí a bá ti tu ila telemetry wa sílẹ̀. Títí di ìgbà yẹn, èyí ni ohun tí o lè rí báyìí:",
+        "title": "Kò sí àwọn ipò tí a fọ́ọ̀nù"
+      },
+      "future": {
+        "bullet_announces": "Àwọn ìkéde àkókò gidi tí a fi sí orí nípasẹ̀ agbègbè",
+        "bullet_locations": "Ipò àwọn ẹlẹ́gbẹ́ láti telemetry",
+        "bullet_transport": "Ìbòmọ́lẹ̀ transport-link (TCP / LoRa / I2P / AX.25)",
+        "title": "Ohun tí èyí yóò fihàn lẹ́yìn"
+      },
+      "hero": {
+        "subtitle": "Àwòrán gidi ń bọ̀ pẹ̀lú ila telemetry.",
+        "title": "Ìwòye ilẹ̀-aye"
+      },
+      "refresh": "Tún ṣe",
+      "today": {
+        "canonical": "Àwọn ẹlẹ́gbẹ́ canonical",
+        "other": "Àwọn ẹlẹ́gbẹ́ mìíràn",
+        "title": "Ohun tí a ní lónìí",
+        "trusted": "Àwọn ẹlẹ́gbẹ́ ìgbẹ́kẹ̀lé"
+      }
+    },
+    "paths": {
+      "empty": "Kò sí ìṣẹ̀lẹ̀ ọ̀nà sí bẹ́ẹ̀.",
+      "kind_added": "fi kún",
+      "kind_changed": "yí padà",
+      "kind_lost": "sọnù",
+      "kind_other": "ìṣẹ̀lẹ̀",
+      "no_static_table_note": "Edge 1.0 kò fihàn tabili ọ̀nà tó dúró ṣinṣin; ojú ìwòye yìí fihàn àwọn ìyípadà tààrà nìkan. Ìmúsẹ-lẹ̀ẹ̀kan-si lè ṣe àtúnṣe ipò.",
+      "section_recent": "Àwọn ìṣẹ̀lẹ̀ ọ̀nà tó ṣẹ̀ṣẹ̀ ṣẹlẹ̀",
+      "title": "Àwọn ọ̀nà tààrà"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Ẹ̀yìn (hex)",
+      "appearance_fg_label": "Iwájú (hex)",
+      "appearance_icon_label": "Àmì",
+      "appearance_save": "Pa ìrísí mọ́",
+      "appearance_title": "Ìrísí",
+      "cancel_button": "Fagilé",
+      "confirm_block_body": "Dídí yóò kọ ọkọ̀ ojú-ọ̀nà gbogbo láti ẹlẹ́gbẹ́ yìí. O lè ṣí padà lẹ́yìn.",
+      "confirm_block_button": "Dí",
+      "confirm_block_title": "Dí ẹlẹ́gbẹ́ yìí?",
+      "copy_key_id": "Dà id bọtìnì",
+      "last_ok_days_ago": "ọjọ́ {n} sẹ́yìn",
+      "last_ok_hours_ago": "wákàtí {n} sẹ́yìn",
+      "last_ok_just_now": "Báyìí gan-an",
+      "last_ok_min_ago": "ìṣẹ́jú {n} sẹ́yìn",
+      "last_ok_never": "Láé",
+      "not_found": "Kò rí ẹlẹ́gbẹ́",
+      "notes_empty": "Kò sí àkíyèsí",
+      "notes_title": "Àwọn àkíyèsí",
+      "reachability_empty": "Kò tíì wọ́n",
+      "reachability_title": "Ìdé",
+      "sas_close": "Tì",
+      "sas_digits_label": "Àwọn nọ́mbà",
+      "sas_instructions": "Fi àwọn wọ̀nyí wéra pẹ̀lú ẹlẹ́gbẹ́ nípasẹ̀ ikanni ìgbẹ́kẹ̀lé (ohùn/fídíò/ojú-sí-ojú). Tí ẹ̀gbẹ́ méjèèjì bá bámu, ẹlẹ́gbẹ́ ti fọwọ́ sí — yí ìgbẹ́kẹ̀lé sí TRUSTED.",
+      "sas_modal_title": "Okùn ìfọwọ́sí kúkúrú",
+      "sas_show_button": "Fi koodu SAS hàn",
+      "sas_title": "Fọwọ́sí ìdánimọ̀ (SAS)",
+      "sas_words_label": "Àwọn ọ̀rọ̀",
+      "title": "Ìsọfúnni ẹlẹ́gbẹ́",
+      "trust_state_title": "Ipò ìgbẹ́kẹ̀lé"
+    },
+    "peers": {
+      "add_peer_cancel": "Fagilé",
+      "add_peer_fab": "Fi ẹlẹ́gbẹ́ kún",
+      "add_peer_paste_label": "Lẹ̀ koodu node",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "Scan QR",
+      "add_peer_scan_qr_unavailable": "Scan QR ń bọ̀ láìpẹ́",
+      "add_peer_submit": "Fi kún",
+      "add_peer_title": "Fi ẹlẹ́gbẹ́ kún",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Pín koodu node rẹ láti pè, tàbí fi koodu ẹlẹ́gbẹ́ kún.",
+      "empty_title": "Kò sí ẹlẹ́gbẹ́ sí bẹ́ẹ̀",
+      "filter_all": "Gbogbo",
+      "filter_blocked": "Tó dí",
+      "filter_canonical": "Canonical",
+      "filter_trusted": "Ìgbẹ́kẹ̀lé",
+      "filter_unknown": "Aímọ̀",
+      "filter_untrusted": "Aigbẹ́kẹ̀lé",
+      "show_infra": "Fi àbátẹlẹ̀ CIRIS hàn",
+      "title": "Àwọn ẹlẹ́gbẹ́",
+      "trust_blocked": "tó dí",
+      "trust_trusted": "ìgbẹ́kẹ̀lé",
+      "trust_unknown": "aímọ̀",
+      "trust_untrusted": "aigbẹ́kẹ̀lé"
+    },
+    "queue": {
+      "failures": {
+        "send": "Àìṣàṣeyọrí fífiránṣẹ́",
+        "title": "Àwọn àìṣàṣeyọrí",
+        "verify": "Àìṣàṣeyọrí ìfọwọ́sí"
+      },
+      "refresh": "Tún ṣe",
+      "stats": {
+        "depth": "Ìjìnlẹ̀ ìlà",
+        "received": "Gbà",
+        "sent": "Fíránṣẹ́",
+        "title": "Àwọn ìṣirò ìlà"
+      },
+      "throughput": {
+        "bytes_in": "Bytes tó ń wọlé",
+        "bytes_out": "Bytes tó ń jáde",
+        "received": "Gbà",
+        "sent": "Fíránṣẹ́",
+        "session": "Àpapọ̀ ìpàdé yìí",
+        "title": "Throughput"
+      }
+    },
+    "stream": {
+      "clear": "Pa rẹ́",
+      "dismiss": "Lé jáde",
+      "event_count": "{count} ìṣẹ̀lẹ̀",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Dáwọ́dúró",
+      "reconnect": "Tún sopọ̀",
+      "resume": "Tẹ̀síwájú",
+      "resume_notice": "Tún sopọ̀. Àwọn ìṣẹ̀lẹ̀ kan lè ti sọnù.",
+      "retry": "Tún gbìyànjú"
+    },
+    "trust_graph": {
+      "empty": "Kò sí ẹlẹ́gbẹ́ láti fihàn.",
+      "legend": {
+        "blocked": "Tó dí",
+        "canonical_hint": "Ìlà òrùnká tó nípọn = canonical (ó wá pẹ̀lú aṣojú).",
+        "edge_hint": "Ìmọ́lẹ̀ Edge ṣàfihàn ìdé fún ohun-èlò kọ̀ọ̀kan.",
+        "title": "Ipò ìgbẹ́kẹ̀lé",
+        "trusted": "Ìgbẹ́kẹ̀lé",
+        "unknown": "Aímọ̀",
+        "untrusted": "Aigbẹ́kẹ̀lé"
+      },
+      "refresh": "Tún ṣe",
+      "summary": "{count} ẹlẹ́gbẹ́ · {canonical} canonical"
     }
   },
   "settings": {

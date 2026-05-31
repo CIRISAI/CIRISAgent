@@ -2061,7 +2061,17 @@
     "identity_card": {
       "title": "Identidade de federação",
       "copy_address": "Copiar endereço",
-      "qr_label": "QR · ratchet / rotação"
+      "qr_label": "QR · ratchet / rotação",
+      "capabilities_title": "Capacidades",
+      "copied": "Copiado",
+      "copy_node_code": "Copiar código do nó",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Compartilhe este código com um par para convidá-lo. Ele pode colar ou escanear.",
+      "node_code_title": "Meu código de nó",
+      "peers_canonical": "Canônico",
+      "peers_total": "Total de pares",
+      "qr_placeholder_label": "Código QR",
+      "signer_key_label": "Chave do assinante"
     },
     "mode_card": {
       "title": "Modo do agente",
@@ -2111,6 +2121,205 @@
       "queue_description": "Fila de pacotes de saída por transporte: profundidade, idade, contagem de retentativas, estado de fragmentação.",
       "diagnostics_description": "Erros recentes, falhas de assinatura, bloqueios de política, agitação de transporte — forense de operador.",
       "content_description": "Navegador do armazenamento de conteúdo da federação — em cache local, federado, recuperação por hash."
+    },
+    "announces": {
+      "empty": "Ainda sem anúncios. Aguardando eventos de federação…",
+      "no_message": "(sem mensagem)",
+      "title": "Anúncios ao vivo"
+    },
+    "content": {
+      "back": "Voltar",
+      "error": {
+        "edge_unavailable": "Edge indisponível.",
+        "not_found": "Conteúdo não encontrado neste par. Tente outro par."
+      },
+      "fetch": {
+        "button": "Buscar",
+        "content_id_label": "ID de conteúdo (SHA-256)",
+        "content_id_placeholder": "Resumo hex de 64 caracteres",
+        "invalid_id": "O ID de conteúdo deve ter 64 caracteres hexadecimais.",
+        "timeout_label": "Tempo limite"
+      },
+      "peer": {
+        "change": "Mudar par",
+        "empty": "Nenhum par disponível. Adicione pares primeiro.",
+        "search": "Pesquisar pares"
+      },
+      "refresh": "Atualizar",
+      "result": {
+        "content_type": "Tipo de conteúdo",
+        "fetched_at": "Buscado em",
+        "preview": "Pré-visualização do payload (primeiros 200 bytes)",
+        "size": "Tamanho",
+        "title": "Resultado"
+      },
+      "step1": {
+        "title": "Selecione um par para consultar"
+      },
+      "step2": {
+        "title": "Buscar conteúdo do par"
+      }
+    },
+    "diagnostics": {
+      "empty": "Nenhum evento correspondente. Ajuste filtros ou aguarde.",
+      "more": "toque para expandir",
+      "no_summary": "(sem resumo do payload)",
+      "search_hint": "Filtrar por texto da mensagem ou event_type",
+      "title": "Diagnósticos"
+    },
+    "interfaces": {
+      "empty": "Nenhum transporte configurado.",
+      "not_measured": "Ainda não medido",
+      "peers": "pares",
+      "refresh": "Atualizar",
+      "row": {
+        "bytes_in": "Bytes entrantes",
+        "bytes_out": "Bytes saindo",
+        "reach": "Alcance %",
+        "status": "Estado"
+      },
+      "status": {
+        "active": "Ativo",
+        "degraded": "Degradado",
+        "idle": "Inativo",
+        "unknown": "Desconhecido"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Os pares aparecerão em um mapa real assim que enviarmos nosso pipeline de telemetria. Até lá, eis o que você pode ver agora:",
+        "title": "Sem localizações inventadas"
+      },
+      "future": {
+        "bullet_announces": "Anúncios em tempo real sobrepostos por região",
+        "bullet_locations": "Localizações de pares a partir da telemetria",
+        "bullet_transport": "Sobreposição de links de transporte (TCP / LoRa / I2P / AX.25)",
+        "title": "O que isso mostrará mais tarde"
+      },
+      "hero": {
+        "subtitle": "Mapa real virá com o pipeline de telemetria.",
+        "title": "Visão geográfica"
+      },
+      "refresh": "Atualizar",
+      "today": {
+        "canonical": "Pares canônicos",
+        "other": "Outros pares",
+        "title": "O que temos hoje",
+        "trusted": "Pares confiáveis"
+      }
+    },
+    "paths": {
+      "empty": "Sem eventos de caminho ainda.",
+      "kind_added": "adicionado",
+      "kind_changed": "alterado",
+      "kind_lost": "perdido",
+      "kind_other": "evento",
+      "no_static_table_note": "Edge 1.0 não expõe uma tabela de caminhos estática; esta tela mostra apenas mudanças ao vivo. O redeploy pode redefinir o estado.",
+      "section_recent": "Eventos de caminho recentes",
+      "title": "Caminhos ao vivo"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Fundo (hex)",
+      "appearance_fg_label": "Primeiro plano (hex)",
+      "appearance_icon_label": "Ícone",
+      "appearance_save": "Salvar aparência",
+      "appearance_title": "Aparência",
+      "cancel_button": "Cancelar",
+      "confirm_block_body": "Bloquear recusará todo o tráfego deste par. Você pode desbloquear depois.",
+      "confirm_block_button": "Bloquear",
+      "confirm_block_title": "Bloquear este par?",
+      "copy_key_id": "Copiar id da chave",
+      "last_ok_days_ago": "há {n}d",
+      "last_ok_hours_ago": "há {n}h",
+      "last_ok_just_now": "Agora mesmo",
+      "last_ok_min_ago": "há {n} min",
+      "last_ok_never": "Nunca",
+      "not_found": "Par não encontrado",
+      "notes_empty": "Sem notas",
+      "notes_title": "Notas",
+      "reachability_empty": "Ainda não medido",
+      "reachability_title": "Alcançabilidade",
+      "sas_close": "Fechar",
+      "sas_digits_label": "Dígitos",
+      "sas_instructions": "Compare estes com o par por um canal confiável (voz/vídeo/pessoalmente). Se ambos os lados corresponderem, o par está verificado — mude a confiança para TRUSTED.",
+      "sas_modal_title": "Cadeia curta de autenticação",
+      "sas_show_button": "Mostrar código SAS",
+      "sas_title": "Verificar identidade (SAS)",
+      "sas_words_label": "Palavras",
+      "title": "Detalhe do par",
+      "trust_state_title": "Estado de confiança"
+    },
+    "peers": {
+      "add_peer_cancel": "Cancelar",
+      "add_peer_fab": "Adicionar par",
+      "add_peer_paste_label": "Colar código do nó",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "Escanear QR",
+      "add_peer_scan_qr_unavailable": "Leitura QR em breve",
+      "add_peer_submit": "Adicionar",
+      "add_peer_title": "Adicionar um par",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Compartilhe seu código de nó para convidar ou adicione o código de um par.",
+      "empty_title": "Sem pares ainda",
+      "filter_all": "Todos",
+      "filter_blocked": "Bloqueados",
+      "filter_canonical": "Canônicos",
+      "filter_trusted": "Confiáveis",
+      "filter_unknown": "Desconhecidos",
+      "filter_untrusted": "Não confiáveis",
+      "show_infra": "Mostrar infraestrutura CIRIS",
+      "title": "Pares",
+      "trust_blocked": "bloqueado",
+      "trust_trusted": "confiável",
+      "trust_unknown": "desconhecido",
+      "trust_untrusted": "não confiável"
+    },
+    "queue": {
+      "failures": {
+        "send": "Falhas de envio",
+        "title": "Falhas",
+        "verify": "Falhas de verificação"
+      },
+      "refresh": "Atualizar",
+      "stats": {
+        "depth": "Profundidade da fila",
+        "received": "Recebidos",
+        "sent": "Enviados",
+        "title": "Estatísticas da fila"
+      },
+      "throughput": {
+        "bytes_in": "Bytes entrantes",
+        "bytes_out": "Bytes saindo",
+        "received": "Recebidos",
+        "sent": "Enviados",
+        "session": "Total desta sessão",
+        "title": "Taxa de transferência"
+      }
+    },
+    "stream": {
+      "clear": "Limpar",
+      "dismiss": "Descartar",
+      "event_count": "{count} eventos",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Pausar",
+      "reconnect": "Reconectar",
+      "resume": "Retomar",
+      "resume_notice": "Reconectado. Alguns eventos podem ter sido perdidos.",
+      "retry": "Tentar novamente"
+    },
+    "trust_graph": {
+      "empty": "Sem pares para visualizar.",
+      "legend": {
+        "blocked": "Bloqueado",
+        "canonical_hint": "Contorno do anel mais grosso = canônico (enviado com o agente).",
+        "edge_hint": "A opacidade da aresta reflete a alcançabilidade por meio.",
+        "title": "Estado de confiança",
+        "trusted": "Confiável",
+        "unknown": "Desconhecido",
+        "untrusted": "Não confiável"
+      },
+      "refresh": "Atualizar",
+      "summary": "{count} pares · {canonical} canônicos"
     }
   },
   "settings": {

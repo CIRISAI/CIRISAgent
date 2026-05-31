@@ -2067,7 +2067,17 @@
     "identity_card": {
       "title": "هویت فدراسیون",
       "copy_address": "کپی آدرس",
-      "qr_label": "QR · رچت / چرخش"
+      "qr_label": "QR · رچت / چرخش",
+      "capabilities_title": "قابلیت‌ها",
+      "copied": "کپی شد",
+      "copy_node_code": "کپی کد گره",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "این کد را با یک همتا برای دعوت به اشتراک بگذارید. می‌تواند آن را بچسباند یا اسکن کند.",
+      "node_code_title": "کد گره من",
+      "peers_canonical": "متعارف",
+      "peers_total": "مجموع همتاها",
+      "qr_placeholder_label": "کد QR",
+      "signer_key_label": "کلید امضا"
     },
     "mode_card": {
       "title": "حالت عامل",
@@ -2117,6 +2127,205 @@
       "queue_description": "صف بسته خروجی به ازای هر حمل‌ونقل: عمق، سن، شمارش تلاش مجدد، وضعیت قطعه‌قطعه‌سازی.",
       "diagnostics_description": "خطاهای اخیر، شکست‌های امضا، بلوک‌های خط‌مشی، تلاطم حمل‌ونقل — پزشکی قانونی اپراتور.",
       "content_description": "مرورگر فروشگاه محتوای فدراسیون — کش محلی، فدراسیون‌شده، بازیابی هش-آدرس."
+    },
+    "announces": {
+      "empty": "هنوز اعلانی نیست. در انتظار رویدادهای فدراسیون…",
+      "no_message": "(پیامی نیست)",
+      "title": "اعلان‌های زنده"
+    },
+    "content": {
+      "back": "بازگشت",
+      "error": {
+        "edge_unavailable": "Edge در دسترس نیست.",
+        "not_found": "محتوا در این همتا یافت نشد. همتای دیگری را امتحان کنید."
+      },
+      "fetch": {
+        "button": "دریافت",
+        "content_id_label": "شناسه محتوا (SHA-256)",
+        "content_id_placeholder": "خلاصه هگز ۶۴ کاراکتری",
+        "invalid_id": "شناسه محتوا باید ۶۴ کاراکتر هگزادسیمال باشد.",
+        "timeout_label": "مهلت زمانی"
+      },
+      "peer": {
+        "change": "تغییر همتا",
+        "empty": "همتایی در دسترس نیست. ابتدا همتا اضافه کنید.",
+        "search": "جستجوی همتاها"
+      },
+      "refresh": "تازه‌سازی",
+      "result": {
+        "content_type": "نوع محتوا",
+        "fetched_at": "دریافت در",
+        "preview": "پیش‌نمایش بار (۲۰۰ بایت اول)",
+        "size": "اندازه",
+        "title": "نتیجه"
+      },
+      "step1": {
+        "title": "همتایی برای پرس‌وجو انتخاب کنید"
+      },
+      "step2": {
+        "title": "دریافت محتوا از همتا"
+      }
+    },
+    "diagnostics": {
+      "empty": "رویداد منطبقی نیست. فیلترها را تنظیم کنید یا منتظر بمانید.",
+      "more": "برای گسترش بزنید",
+      "no_summary": "(خلاصه باری نیست)",
+      "search_hint": "بر اساس متن پیام یا event_type فیلتر کنید",
+      "title": "تشخیص"
+    },
+    "interfaces": {
+      "empty": "هیچ حمل‌ونقلی پیکربندی نشده است.",
+      "not_measured": "هنوز اندازه‌گیری نشده",
+      "peers": "همتاها",
+      "refresh": "تازه‌سازی",
+      "row": {
+        "bytes_in": "بایت‌های ورودی",
+        "bytes_out": "بایت‌های خروجی",
+        "reach": "دسترسی %",
+        "status": "وضعیت"
+      },
+      "status": {
+        "active": "فعال",
+        "degraded": "تخریب شده",
+        "idle": "بی‌کار",
+        "unknown": "ناشناخته"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "پس از راه‌اندازی خط لوله تله‌متری ما، همتاها روی نقشه واقعی نمایش داده می‌شوند. تا آن زمان، این چیزی است که اکنون می‌توانید ببینید:",
+        "title": "بدون مکان‌های جعلی"
+      },
+      "future": {
+        "bullet_announces": "اعلان‌های لحظه‌ای پوشانده شده بر اساس منطقه",
+        "bullet_locations": "مکان‌های همتا از تله‌متری",
+        "bullet_transport": "پوشش پیوند حمل‌ونقل (TCP / LoRa / I2P / AX.25)",
+        "title": "آنچه این بعداً نشان خواهد داد"
+      },
+      "hero": {
+        "subtitle": "نقشه واقعی با خط لوله تله‌متری می‌آید.",
+        "title": "نمای جغرافیایی"
+      },
+      "refresh": "تازه‌سازی",
+      "today": {
+        "canonical": "همتاهای متعارف",
+        "other": "همتاهای دیگر",
+        "title": "آنچه امروز داریم",
+        "trusted": "همتاهای مورد اعتماد"
+      }
+    },
+    "paths": {
+      "empty": "هنوز رویداد مسیری نیست.",
+      "kind_added": "اضافه شد",
+      "kind_changed": "تغییر یافت",
+      "kind_lost": "از دست رفت",
+      "kind_other": "رویداد",
+      "no_static_table_note": "Edge 1.0 جدول مسیر ایستا را در دسترس قرار نمی‌دهد؛ این صفحه فقط تغییرات زنده را نشان می‌دهد. استقرار مجدد ممکن است حالت را بازنشانی کند.",
+      "section_recent": "رویدادهای مسیر اخیر",
+      "title": "مسیرهای زنده"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "پس‌زمینه (hex)",
+      "appearance_fg_label": "پیش‌زمینه (hex)",
+      "appearance_icon_label": "نماد",
+      "appearance_save": "ذخیره ظاهر",
+      "appearance_title": "ظاهر",
+      "cancel_button": "لغو",
+      "confirm_block_body": "مسدودسازی تمام ترافیک از این همتا را رد می‌کند. می‌توانید بعداً رفع مسدودی کنید.",
+      "confirm_block_button": "مسدود کردن",
+      "confirm_block_title": "این همتا را مسدود کنید؟",
+      "copy_key_id": "کپی شناسه کلید",
+      "last_ok_days_ago": "{n} روز پیش",
+      "last_ok_hours_ago": "{n} ساعت پیش",
+      "last_ok_just_now": "همین الان",
+      "last_ok_min_ago": "{n} دقیقه پیش",
+      "last_ok_never": "هرگز",
+      "not_found": "همتا یافت نشد",
+      "notes_empty": "بدون یادداشت",
+      "notes_title": "یادداشت‌ها",
+      "reachability_empty": "هنوز اندازه‌گیری نشده",
+      "reachability_title": "دسترسی‌پذیری",
+      "sas_close": "بستن",
+      "sas_digits_label": "ارقام",
+      "sas_instructions": "این‌ها را با همتا از طریق کانال مورد اعتماد (صوتی/تصویری/حضوری) مقایسه کنید. اگر هر دو طرف مطابقت داشتند، همتا تأیید شده است — اعتماد را به TRUSTED تغییر دهید.",
+      "sas_modal_title": "رشته احراز هویت کوتاه",
+      "sas_show_button": "نمایش کد SAS",
+      "sas_title": "تأیید هویت (SAS)",
+      "sas_words_label": "کلمات",
+      "title": "جزئیات همتا",
+      "trust_state_title": "وضعیت اعتماد"
+    },
+    "peers": {
+      "add_peer_cancel": "لغو",
+      "add_peer_fab": "افزودن همتا",
+      "add_peer_paste_label": "چسباندن کد گره",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "اسکن QR",
+      "add_peer_scan_qr_unavailable": "اسکن QR به‌زودی",
+      "add_peer_submit": "افزودن",
+      "add_peer_title": "افزودن یک همتا",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "کد گره خود را برای دعوت به اشتراک بگذارید، یا کد یک همتا را اضافه کنید.",
+      "empty_title": "هنوز همتایی نیست",
+      "filter_all": "همه",
+      "filter_blocked": "مسدود",
+      "filter_canonical": "متعارف",
+      "filter_trusted": "مورد اعتماد",
+      "filter_unknown": "ناشناخته",
+      "filter_untrusted": "غیرقابل اعتماد",
+      "show_infra": "نمایش زیرساخت CIRIS",
+      "title": "همتاها",
+      "trust_blocked": "مسدود",
+      "trust_trusted": "مورد اعتماد",
+      "trust_unknown": "ناشناخته",
+      "trust_untrusted": "غیرقابل اعتماد"
+    },
+    "queue": {
+      "failures": {
+        "send": "خرابی‌های ارسال",
+        "title": "خرابی‌ها",
+        "verify": "خرابی‌های تأیید"
+      },
+      "refresh": "تازه‌سازی",
+      "stats": {
+        "depth": "عمق صف",
+        "received": "دریافت شده",
+        "sent": "ارسال شده",
+        "title": "آمار صف"
+      },
+      "throughput": {
+        "bytes_in": "بایت‌های ورودی",
+        "bytes_out": "بایت‌های خروجی",
+        "received": "دریافت شده",
+        "sent": "ارسال شده",
+        "session": "مجموع این جلسه",
+        "title": "گذردهی"
+      }
+    },
+    "stream": {
+      "clear": "پاک کردن",
+      "dismiss": "رد کردن",
+      "event_count": "{count} رویداد",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "مکث",
+      "reconnect": "اتصال مجدد",
+      "resume": "از سرگیری",
+      "resume_notice": "دوباره متصل شد. ممکن است برخی رویدادها از دست رفته باشند.",
+      "retry": "تلاش مجدد"
+    },
+    "trust_graph": {
+      "empty": "همتایی برای نمایش نیست.",
+      "legend": {
+        "blocked": "مسدود",
+        "canonical_hint": "خط حلقه ضخیم‌تر = متعارف (با عامل ارائه می‌شود).",
+        "edge_hint": "شفافیت لبه نشان‌دهنده دسترسی‌پذیری در هر واسط است.",
+        "title": "وضعیت اعتماد",
+        "trusted": "مورد اعتماد",
+        "unknown": "ناشناخته",
+        "untrusted": "غیرقابل اعتماد"
+      },
+      "refresh": "تازه‌سازی",
+      "summary": "{count} همتا · {canonical} متعارف"
     }
   },
   "settings": {

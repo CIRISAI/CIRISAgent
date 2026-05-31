@@ -1605,50 +1605,61 @@ fun CIRISApp(
                 val cellVizConfig by settingsViewModel.cellVizConfig.collectAsState()
                 platformLog(TAG, "[CIRISApp] >>> liveBackgroundEnabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
 
+                // On compact viewports the dropdown-menu top bar is fully
+                // redundant with the left-nav drawer (every category routes
+                // through the same surfaces). Drop the entire top bar there
+                // so the screen content (signet overlay + badges + state +
+                // emergency-stop button — all already rendered inside
+                // `InteractScreen`) becomes the visible top chrome. On
+                // tablet/desktop where the sidebar is permanent and there's
+                // no overlay button, keep the full CIRISTopBar for now.
+                val showTopBar = !ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow.current
                 Scaffold(
                     topBar = {
-                        CIRISTopBar(
-                            onSettingsClick = { currentScreen = Screen.Settings },
-                            onLLMSettingsClick = { currentScreen = Screen.LLMSettings },
-                            onBillingClick = { currentScreen = Screen.Billing },
-                            onTelemetryClick = { currentScreen = Screen.Telemetry },
-                            onSessionsClick = { currentScreen = Screen.Sessions },
-                            onAdaptersClick = { currentScreen = Screen.Adapters },
-                            onWiseAuthorityClick = { currentScreen = Screen.WiseAuthority },
-                            onServicesClick = { currentScreen = Screen.Services },
-                            onAuditClick = { currentScreen = Screen.Audit },
-                            onLogsClick = { currentScreen = Screen.Logs },
-                            onMemoryClick = { currentScreen = Screen.GraphMemory },  // Default to 3D cylinder view
-                            onConfigClick = { currentScreen = Screen.Config },
-                            onConsentClick = { currentScreen = Screen.Consent },
-                            onDataManagementClick = { currentScreen = Screen.DataManagement },
-                            onSystemClick = { currentScreen = Screen.System },
-                            onRuntimeClick = { currentScreen = Screen.Runtime },
-                            onUsersClick = { currentScreen = Screen.Users },
-                            onTicketsClick = { currentScreen = Screen.Tickets },
-                            onSchedulerClick = { currentScreen = Screen.Scheduler },
-                            onToolsClick = { currentScreen = Screen.Tools },
-                            onEnvironmentInfoClick = { currentScreen = Screen.EnvironmentInfo },
-                            onHelpClick = { currentScreen = Screen.Help },
-                            onLogoutClick = {
-                                PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout from nav bar")
-                                // Cancel InteractViewModel polling first — otherwise it keeps polling
-                                // against the about-to-be-revoked token, fires a 401, and
-                                // TokenManager.on401Error races the user's next Sign-In tap → bounce.
-                                interactViewModel.resetState()
-                                settingsViewModel.logout {
-                                    PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Login")
-                                    currentAccessToken = null
-                                    currentScreen = Screen.Login
-                                }
-                            },
-                            darkMode = isDarkMode,
-                            // Theme picker
-                            colorTheme = colorTheme,
-                            brightnessPreference = brightnessPreference,
-                            onColorThemeChange = { settingsViewModel.setColorTheme(it) },
-                            onBrightnessChange = { settingsViewModel.setBrightnessPreference(it) }
-                        )
+                        if (showTopBar) {
+                            CIRISTopBar(
+                                onSettingsClick = { currentScreen = Screen.Settings },
+                                onLLMSettingsClick = { currentScreen = Screen.LLMSettings },
+                                onBillingClick = { currentScreen = Screen.Billing },
+                                onTelemetryClick = { currentScreen = Screen.Telemetry },
+                                onSessionsClick = { currentScreen = Screen.Sessions },
+                                onAdaptersClick = { currentScreen = Screen.Adapters },
+                                onWiseAuthorityClick = { currentScreen = Screen.WiseAuthority },
+                                onServicesClick = { currentScreen = Screen.Services },
+                                onAuditClick = { currentScreen = Screen.Audit },
+                                onLogsClick = { currentScreen = Screen.Logs },
+                                onMemoryClick = { currentScreen = Screen.GraphMemory },  // Default to 3D cylinder view
+                                onConfigClick = { currentScreen = Screen.Config },
+                                onConsentClick = { currentScreen = Screen.Consent },
+                                onDataManagementClick = { currentScreen = Screen.DataManagement },
+                                onSystemClick = { currentScreen = Screen.System },
+                                onRuntimeClick = { currentScreen = Screen.Runtime },
+                                onUsersClick = { currentScreen = Screen.Users },
+                                onTicketsClick = { currentScreen = Screen.Tickets },
+                                onSchedulerClick = { currentScreen = Screen.Scheduler },
+                                onToolsClick = { currentScreen = Screen.Tools },
+                                onEnvironmentInfoClick = { currentScreen = Screen.EnvironmentInfo },
+                                onHelpClick = { currentScreen = Screen.Help },
+                                onLogoutClick = {
+                                    PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout from nav bar")
+                                    // Cancel InteractViewModel polling first — otherwise it keeps polling
+                                    // against the about-to-be-revoked token, fires a 401, and
+                                    // TokenManager.on401Error races the user's next Sign-In tap → bounce.
+                                    interactViewModel.resetState()
+                                    settingsViewModel.logout {
+                                        PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Login")
+                                        currentAccessToken = null
+                                        currentScreen = Screen.Login
+                                    }
+                                },
+                                darkMode = isDarkMode,
+                                // Theme picker
+                                colorTheme = colorTheme,
+                                brightnessPreference = brightnessPreference,
+                                onColorThemeChange = { settingsViewModel.setColorTheme(it) },
+                                onBrightnessChange = { settingsViewModel.setBrightnessPreference(it) }
+                            )
+                        }
                     }
                 ) { paddingValues ->
                     // Only apply top padding from Scaffold - InteractScreen handles

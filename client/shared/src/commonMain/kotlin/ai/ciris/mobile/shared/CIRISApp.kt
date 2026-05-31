@@ -3413,13 +3413,23 @@ private fun CIRISTopBar(
     val contentColor = if (darkMode) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
     val accentColor = if (darkMode) Color(0xFF7DD3FC) else MaterialTheme.colorScheme.primary
 
+    // Suppress the title-slot CIRIS signet on compact viewports — the global
+    // 3-state overlay button at the top-left already shows the signet, and
+    // rendering it again here produces the "stacked signets" Samsung bug
+    // (one at top-left from CIRISApp's overlay, another in the TopAppBar
+    // title slot here). On tablet/desktop where the overlay button isn't
+    // shown, keep the title signet as the brand mark.
+    val showTitleSignet = !ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow.current
+
     TopAppBar(
         title = {
-            // CIRIS Signet - geometric brand mark
-            CIRISSignet(
-                modifier = Modifier.size(32.dp),
-                tintColor = if (darkMode) Color.White else MaterialTheme.colorScheme.primary
-            )
+            if (showTitleSignet) {
+                // CIRIS Signet - geometric brand mark
+                CIRISSignet(
+                    modifier = Modifier.size(32.dp),
+                    tintColor = if (darkMode) Color.White else MaterialTheme.colorScheme.primary
+                )
+            }
         },
         actions = {
             // Category 1: Adapters & Tools

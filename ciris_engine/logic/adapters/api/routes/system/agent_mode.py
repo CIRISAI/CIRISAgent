@@ -88,6 +88,7 @@ async def get_agent_mode(
     "/agent-mode",
     responses={
         400: {"description": "Cannot switch to SERVER without sufficient free disk"},
+        500: {"description": "Mode transition failed (persist or broadcast error)"},
     },
 )
 async def put_agent_mode(
@@ -135,8 +136,8 @@ async def put_agent_mode(
     try:
         await broker.set_mode(target_mode)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error("AgentMode transition failed: %s", exc)
-        raise HTTPException(status_code=500, detail=f"Failed to set agent mode: {exc}")
+        logger.exception("AgentMode transition failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Failed to set agent mode: {exc}") from exc
 
     status = _build_status(request)
     return JSONResponse(

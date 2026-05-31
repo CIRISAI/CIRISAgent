@@ -249,7 +249,7 @@ class BootstrapPeerSeeder:
 
         try:
             body = resp.json()
-        except (ValueError, json.JSONDecodeError) as exc:
+        except ValueError as exc:
             logger.warning(
                 "Federation-directory returned invalid JSON (%s); falling back to constants",
                 exc,
@@ -380,7 +380,7 @@ class BootstrapPeerSeeder:
         canonical: dict[str, LocalPeerState] = {}
         organic: dict[str, LocalPeerState] = {}
         for node in rows:
-            if not (node.id.startswith(f"{_CANONICAL_NS}/") or node.id.startswith(f"{_ORGANIC_NS}/")):
+            if not node.id.startswith((f"{_CANONICAL_NS}/", f"{_ORGANIC_NS}/")):
                 continue
             state = _state_from_node(node)
             if state is None:

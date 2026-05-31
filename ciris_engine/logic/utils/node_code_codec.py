@@ -171,7 +171,7 @@ def _build_payload(node_code: NodeCode) -> bytes:
 
     try:
         pubkey_raw = base64.b64decode(node_code.pubkey_ed25519_base64, validate=True)
-    except (ValueError, Exception) as exc:
+    except Exception as exc:
         raise MalformedNodeCodeError(f"pubkey_ed25519_base64 is not valid base64: {exc}") from exc
 
     if len(pubkey_raw) != _PUBKEY_RAW_LEN:
@@ -208,7 +208,7 @@ def _b32_no_pad_decode(text: str) -> bytes:
     padded = text + ("=" * pad_len)
     try:
         return base64.b32decode(padded, casefold=False)
-    except (ValueError, Exception) as exc:
+    except Exception as exc:
         raise MalformedNodeCodeError(f"Invalid base32 payload: {exc}") from exc
 
 

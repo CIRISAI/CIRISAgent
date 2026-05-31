@@ -134,8 +134,8 @@ class AgentModeBroker:
                     updated_by=AGENT_MODE_UPDATER,
                 )
             except Exception as exc:  # pragma: no cover - defensive
-                logger.error(
-                    "AgentModeBroker: failed to persist mode transition " "%s -> %s: %s",
+                logger.exception(
+                    "AgentModeBroker: failed to persist mode transition %s -> %s: %s",
                     previous_mode.value,
                     mode.value,
                     exc,
@@ -147,7 +147,7 @@ class AgentModeBroker:
             try:
                 subscriber(event)
             except Exception as exc:  # pragma: no cover - defensive
-                logger.error(
+                logger.exception(
                     "AgentModeBroker: subscriber %r raised on %s -> %s: %s",
                     subscriber,
                     previous_mode.value,
@@ -192,7 +192,7 @@ class AgentModeBroker:
             try:
                 subscriber(event)
             except Exception as exc:  # pragma: no cover - defensive
-                logger.error(
+                logger.exception(
                     "AgentModeBroker: subscriber %r raised on %s -> %s: %s",
                     subscriber,
                     previous_mode.value,

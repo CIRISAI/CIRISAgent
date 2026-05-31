@@ -30,6 +30,7 @@ from ciris_engine.logic.adapters.api.sse.federation_sse_bridge import (
     stream_federation_channel,
 )
 from ciris_engine.logic.runtime import edge_runtime
+from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
 from ciris_engine.schemas.runtime.federation_events import (
     VALID_CHANNELS,
     FederationEventErrorEnvelope,
@@ -110,16 +111,16 @@ async def federation_events_stream(
     if channel not in VALID_CHANNELS:
         logger.info(
             "federation events: rejected unknown channel=%r from user_id=%s",
-            channel,
-            getattr(auth, "user_id", "?"),
+            sanitize_for_log(channel),
+            sanitize_for_log(getattr(auth, "user_id", None)),
         )
         return _unknown_channel_response(channel)
 
     if not edge_runtime.is_available():
         logger.info(
             "federation events: Edge unavailable, rejecting channel=%s user_id=%s",
-            channel,
-            getattr(auth, "user_id", "?"),
+            sanitize_for_log(channel),
+            sanitize_for_log(getattr(auth, "user_id", None)),
         )
         return _edge_unavailable_response(
             "Edge runtime is not initialized or is in degraded state. "

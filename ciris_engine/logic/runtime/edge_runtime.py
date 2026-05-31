@@ -184,7 +184,7 @@ def register_organic_announce_subscriber(seeder: Optional[Any]) -> None:
     ``seeder.record_organic_peer()``.
     """
     logger.debug(
-        "TODO CIRISEdge#46 — subscribe to recent_events ANNOUNCE stream when Edge 1.0 lands " "(stub no-op, seeder=%s)",
+        "TODO CIRISEdge#46 — subscribe to recent_events ANNOUNCE stream when Edge 1.0 lands (stub no-op, seeder=%s)",
         type(seeder).__name__ if seeder is not None else "None",
     )
 

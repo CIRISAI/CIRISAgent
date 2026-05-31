@@ -72,7 +72,7 @@ class EdgeCommunicationService(BaseService, CommunicationServiceProtocol):
             )
             logger.info("EdgeCommunicationService registered inline-text handler")
         except Exception as e:
-            logger.error("Failed to register inline-text handler: %s", e)
+            logger.exception("Failed to register inline-text handler: %s", e)
 
     async def stop(self) -> None:
         """Unsubscribe from inline-text handler."""
@@ -123,7 +123,7 @@ class EdgeCommunicationService(BaseService, CommunicationServiceProtocol):
         try:
             handle = edge.send_durable_inline_text(key_id, content)
         except Exception as e:
-            logger.error("Edge.send_durable_inline_text(%s) failed: %s", key_id, e)
+            logger.exception("Edge.send_durable_inline_text(%s) failed: %s", key_id, e)
             return False
 
         # Persist the body_sha256 so callers can correlate ACK later.

@@ -23,6 +23,7 @@ from ciris_engine.logic.adapters.api.dependencies.auth import (
     require_observer,
 )
 from ciris_engine.logic.runtime.edge_runtime import try_get_edge
+from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.runtime.federation_api import FederationPeerSASResponse
 
@@ -61,7 +62,7 @@ async def get_federation_peer_sas(
         # Treat the former as 404, the latter as 503 — we can't
         # distinguish without parsing the message, so default to 404
         # which is the user-actionable case.
-        logger.info("edge.peer_sas(%s) ValueError: %s", key_id, exc)
+        logger.info("edge.peer_sas(%s) ValueError: %s", sanitize_for_log(key_id), exc)
         return JSONResponse(
             status_code=404,
             content={
@@ -71,7 +72,7 @@ async def get_federation_peer_sas(
             },
         )
     except Exception as exc:
-        logger.warning("edge.peer_sas(%s) failed: %s", key_id, exc)
+        logger.warning("edge.peer_sas(%s) failed: %s", sanitize_for_log(key_id), exc)
         return JSONResponse(status_code=503, content=EDGE_UNAVAILABLE_BODY)
 
     # Normalize ``words`` to a list[str]. Edge returns a list-like; be

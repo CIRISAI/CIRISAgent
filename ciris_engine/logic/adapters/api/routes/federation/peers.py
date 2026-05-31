@@ -26,6 +26,7 @@ from ciris_engine.logic.adapters.api.dependencies.auth import (
     require_system_admin,
 )
 from ciris_engine.logic.runtime.edge_runtime import try_get_edge
+from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.runtime.canonical_peer import PeerTrustState
 from ciris_engine.schemas.runtime.federation_api import (
@@ -126,7 +127,7 @@ async def get_federation_peer(
     try:
         raw_reach = edge.peer_reachability(key_id)
     except Exception as exc:
-        logger.warning("edge.peer_reachability(%s) failed: %s", key_id, exc)
+        logger.warning("edge.peer_reachability(%s) failed: %s", sanitize_for_log(key_id), exc)
         return JSONResponse(status_code=503, content=EDGE_UNAVAILABLE_BODY)
 
     reachability = parse_edge_reachability(raw_reach)

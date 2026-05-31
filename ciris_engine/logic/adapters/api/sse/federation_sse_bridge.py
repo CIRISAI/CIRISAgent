@@ -57,6 +57,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Final, Optional
 
+from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
 from ciris_engine.schemas.runtime.federation_events import (
     CHANNEL_ANNOUNCES,
     CHANNEL_FEED,
@@ -215,7 +216,7 @@ async def _drain_subscription_into_queue(
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # pragma: no cover — surface Edge errors as terminal
-        logger.warning("federation SSE: producer error on channel=%s: %s", channel, exc)
+        logger.warning("federation SSE: producer error on channel=%s: %s", sanitize_for_log(channel), exc)
         # Sentinel — generator translates this into a terminal SSE error frame
         await queue.put(_ProducerError(exc))
 
@@ -320,7 +321,7 @@ async def stream_federation_channel(
             # stack frames, file paths, or Edge-side state to OBSERVER
             # callers. The channel name is already user-supplied, so
             # echoing it costs nothing.
-            logger.warning("federation SSE: subscription factory failed for channel=%s: %s", channel, exc)
+            logger.warning("federation SSE: subscription factory failed for channel=%s: %s", sanitize_for_log(channel), exc)
             yield _format_sse_event(
                 "error",
                 {
@@ -401,7 +402,7 @@ async def stream_federation_channel(
                 )
             except Exception as exc:  # pragma: no cover — project_event is defensive
                 logger.warning(
-                    "federation SSE: projection failed on channel=%s: %s", channel, exc
+                    "federation SSE: projection failed on channel=%s: %s", sanitize_for_log(channel), exc
                 )
                 yield _format_sse_event(
                     "error",

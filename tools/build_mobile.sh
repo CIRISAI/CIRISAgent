@@ -87,16 +87,19 @@ ok "Build secrets in iOS Resources"
 # ============================================================================
 step "Syncing localization files"
 
-LANG_COUNT=$(ls localization/*.json 2>/dev/null | wc -l | tr -d ' ')
-[[ "$LANG_COUNT" -gt 0 ]] || fail "No localization JSON files found in localization/"
+# Canonical source moved from <root>/localization/ to ciris_engine/data/localized/
+# at some point; the old root path no longer exists.
+LOCALIZED_SRC="ciris_engine/data/localized"
+LANG_COUNT=$(ls "$LOCALIZED_SRC"/*.json 2>/dev/null | wc -l | tr -d ' ')
+[[ "$LANG_COUNT" -gt 0 ]] || fail "No localization JSON files found in $LOCALIZED_SRC/"
 
-cp localization/*.json client/iosApp/iosApp/localization/
-cp localization/*.json client/iosApp/Resources/app/localization/
-cp localization/*.json client/desktopApp/src/main/resources/localization/
-cp localization/*.json client/shared/src/desktopMain/resources/localization/
-cp localization/*.json client/androidApp/src/main/assets/localization/
+cp "$LOCALIZED_SRC"/*.json client/iosApp/iosApp/localization/
+cp "$LOCALIZED_SRC"/*.json client/iosApp/Resources/app/localization/
+cp "$LOCALIZED_SRC"/*.json client/desktopApp/src/main/resources/localization/
+cp "$LOCALIZED_SRC"/*.json client/shared/src/desktopMain/resources/localization/
+cp "$LOCALIZED_SRC"/*.json client/androidApp/src/main/assets/localization/
 
-ok "$LANG_COUNT language files synced to 5 targets"
+ok "$LANG_COUNT language files synced from $LOCALIZED_SRC to 5 targets"
 
 # ============================================================================
 # 5. Rebuild Resources.zip
@@ -135,7 +138,8 @@ cd "$PROJECT_ROOT"
 # ============================================================================
 # 6. Build KMP frameworks
 # ============================================================================
-cd mobile
+# Repo layout moved mobile/ → client/ — gradlew lives at client/gradlew
+cd client
 
 if [[ "$MODE" == "all" || "$MODE" == "debug" || "$MODE" == "ios-deploy" ]]; then
     step "Building debug iOS framework"

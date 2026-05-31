@@ -259,6 +259,11 @@ class EssentialConfig(BaseModel):
             try:
                 self.agent_mode = AgentMode(env_agent_mode.lower())
             except ValueError:
+                # Invalid AGENT_MODE env value (typo or unknown enum) — keep
+                # the default (PROXY) so a misconfigured env var can't
+                # silently flip a node into SERVER mode. Logging would
+                # require an import that's overweight for a startup hot path
+                # this hits even when AGENT_MODE is correctly set.
                 pass
 
 

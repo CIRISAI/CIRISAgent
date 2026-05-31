@@ -76,7 +76,6 @@ CIRIS_NODE_CODE_VERSION = 0x01
 """Current NodeCode binary-format version."""
 
 _PREFIX = "CIRIS-V1-"
-_PREFIX_NODASH = "CIRISV1"
 _GROUP_SIZE = 4
 
 # Per-field maximum (1-byte length field).

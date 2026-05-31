@@ -93,7 +93,9 @@ class AgentModeBroker:
             try:
                 self._subscribers.remove(callback)
             except ValueError:
-                pass
+                # Idempotent unsubscribe — absence is a legitimate "already gone"
+                # state, not an error worth surfacing or logging at INFO.
+                logger.debug("AgentModeBroker.unsubscribe: callback not registered (no-op)")
 
     # ------------------------------------------------------------------ #
     # State mutation

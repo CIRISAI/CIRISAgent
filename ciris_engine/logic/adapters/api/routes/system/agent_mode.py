@@ -121,6 +121,16 @@ async def put_agent_mode(
                 },
             )
 
+    # Attach the runtime's GraphConfigService to the broker (idempotent)
+    # so set_mode actually persists. Without this, the in-memory transition
+    # works but the next boot re-seeds the broker from EssentialConfig and
+    # Edge reads the OLD mode (CIRISAgent#841 review — Codex P1).
+    # The broker's `attach_config_service` is a single-attribute set under
+    # the broker's lock; safe to call on every PUT.
+    config_service = getattr(request.app.state, "config_service", None)
+    if config_service is not None:
+        broker.attach_config_service(config_service)
+
     # Perform the transition (persists + broadcasts).
     try:
         await broker.set_mode(target_mode)

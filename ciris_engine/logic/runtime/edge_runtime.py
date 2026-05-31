@@ -29,7 +29,6 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 _edge: Optional[Any] = None
-_identity_path: Optional[Path] = None
 
 
 def _edge_disabled() -> bool:
@@ -52,7 +51,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             construction fails (port bind error, identity load failure).
             This is a hard boot blocker — same treatment as persist.
     """
-    global _edge, _identity_path
+    global _edge
 
     if _edge_disabled():
         logger.info("Edge runtime init skipped (PYTEST_CURRENT_TEST or CIRIS_EDGE_DISABLED set)")
@@ -128,7 +127,6 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         ) from e
 
     _edge = edge
-    _identity_path = identity_path
 
     try:
         key_id = edge.signer_key_id()
@@ -230,6 +228,5 @@ def get_federation_address() -> Optional[str]:
 
 def reset_edge_runtime() -> None:
     """Test-only: clear the singleton. Production code MUST NOT call this."""
-    global _edge, _identity_path
+    global _edge
     _edge = None
-    _identity_path = None

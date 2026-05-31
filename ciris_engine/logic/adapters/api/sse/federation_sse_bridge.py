@@ -313,12 +313,19 @@ async def stream_federation_channel(
         try:
             subscription = await factory(edge, channel)
         except Exception as exc:
+            # Log full exception detail server-side; surface ONLY the
+            # channel name to the client. CodeQL flagged interpolating
+            # `{exc}` into the SSE frame as information exposure
+            # (CIRISAgent#841 review) — raw exception strings can leak
+            # stack frames, file paths, or Edge-side state to OBSERVER
+            # callers. The channel name is already user-supplied, so
+            # echoing it costs nothing.
             logger.warning("federation SSE: subscription factory failed for channel=%s: %s", channel, exc)
             yield _format_sse_event(
                 "error",
                 {
                     "error": "EDGE_SUBSCRIPTION_FAILED",
-                    "detail": f"Edge rejected subscribe_{channel}: {exc}",
+                    "detail": f"Edge rejected subscribe_{channel} — see server logs",
                 },
             )
             return

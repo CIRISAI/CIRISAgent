@@ -127,3 +127,37 @@ This glossary defines the canonical translations for key CIRIS terms in Yoruba. 
 | secondary_need_categories | secondary_need_categories | JSON key; keep in English |
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
+
+## CEG 0.6 Cohort Scope Vocabulary (2.9.4 Commons UX)
+
+| English | Yoruba | Notes |
+|---------|--------|-------|
+| Cohort scope | Òṣùwọ̀n ẹgbẹ́ (cohort scope) | Technical CIRIS term — keep loan-word |
+| Layer | Ìpele | Natural word for level/tier |
+| Agent (Self) | Aṣojú (Ara-ẹni) | Aṣojú stays per glossary; Ara-ẹni = self |
+| Family | Ìdílé | Sibling occurrences of same agent |
+| Local Community | Àdúgbò Ìbílẹ̀ | Locally-trusted peers; geographic proximity |
+| Global Communities | Àwọn Àwùjọ Àgbáyé | Plural — cross-border affinity groups |
+| Global Commons | Ohun-ìní Àjọpín Àgbáyé | Universal federation layer; shared space |
+| Federation | Ìṣọ̀kan-Àjùmọ̀ṣe (federation) | Federation of peers; keep loan-word for technical clarity |
+| The Commons | Ohun-ìní Àjọpín | Federation contribution feed |
+| Constitutional | Tó Jẹmọ́ Ìpilẹ̀-Òfin | Federation constitutional structure, not state law |
+| Delegation | Ìfilélẹ̀-àṣẹ | Act of granting authority on one's behalf |
+| Trust Topology | Ìtò Ìgbẹ́kẹ̀lé | Graph structure of trust grants |
+| Participate | Kópa | Verb: take part / engage |
+| Affiliations | Àwọn Ìbárẹ́ | Cross-community memberships |
+| Identities | Àwọn Ìdánimọ̀ | List of known entities at a scope |
+| Trust | Ìgbẹ́kẹ̀lé | Trust state per identity |
+| Trust policies | Àwọn ìlànà ìgbẹ́kẹ̀lé | Policies governing automatic trust |
+| Coming Soon | Ń Bọ̀ Láìpẹ́ | Placeholder for unshipped features |
+| Recursive Golden Rule | Òfin Wúrà tó Ń Padàṣe Ara-rẹ̀ | Self-applying ethical principle |
+| Attestation | Ẹ̀rí | Signed claim/witness |
+| Peer | Ẹlẹ́gbẹ́ | Per existing network glossary |
+| Witness | Ẹlẹ́rìí | Behavior witness |
+
+## Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-03-27 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort scope vocabulary for 2.9.4 Commons UX |

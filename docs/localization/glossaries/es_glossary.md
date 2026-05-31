@@ -255,11 +255,39 @@ This glossary defines the canonical translations for key CIRIS terms in Spanish.
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort-Scope Vocabulary (Commons hub — 2.9.4)
+
+| English | Spanish | Notes |
+|---------|---------|-------|
+| Cohort scope | Ámbito de cohorte | CEG 0.6 wire-format term; technical CIRIS term. Wire key `cohort_scope` stays in English |
+| Layer | Capa | UX surface representing one cohort scope |
+| Agent (Self) | Agente (Yo) | First layer; "Agente" stays per glossary, "Yo" = reflexive self |
+| Family | Familia | "Siblings of the same agent" — sharing operator identity, not nuclear-family |
+| Local Community | Comunidad Local | Locally-trusted peers — home channel, household, single guild |
+| Global Communities | Comunidades Globales | Plural — affinity groups spanning across borders (CEG affiliations) |
+| Global Commons | Bien Común Global | Universal federation layer (CEG species + planet + federation folded) |
+| Federation | Federación | The CIRIS federation as network of peers |
+| The Commons | El Bien Común | Federation contribution cards screen (distinct from Global Commons layer) |
+| Constitutional | Constitucional | Accord-holder identity surface per FSD-002 §4.1 |
+| Delegation | Delegación | Delegation graph — scopes delegated to/from this agent |
+| Trust Topology | Topología de Confianza | Federation trust graph — peers as nodes, trust grants as edges |
+| Participate | Participar | Federation needs registry — verb form (take part / contribute) |
+
+## Commons UI Labels (2.9.4)
+
+| English | Spanish | Notes |
+|---------|---------|-------|
+| Identities | Identidades | List of known entities at a scope |
+| Trust | Confianza | Trust state per identity |
+| Trust policies | Políticas de confianza | Policies that govern automatic trust at this scope |
+| Coming Soon | Próximamente | Placeholder for unshipped features (matches existing `network.tiles.coming_soon_badge`) |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-03-27 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary and Commons UI labels for 2.9.4 Commons hub |
 
 ---
 

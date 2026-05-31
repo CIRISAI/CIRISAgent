@@ -173,6 +173,23 @@ class TestAutomationServer(
                     val request = call.receive<ClickRequest>()
                     val element = elements[request.testTag]
 
+                    // Try the programmatic click handler FIRST. `testableClickable`
+                    // registers handlers the moment its modifier composes, so dialog /
+                    // sheet buttons that live inside a Compose Popup (AlertDialog,
+                    // ModalBottomSheet) ARE dispatchable from the main process even
+                    // though their layout positions never reach this server's element
+                    // map — the popup's layout pass happens in a separate window.
+                    val clicked = TestAutomation.triggerClick(request.testTag)
+                    if (clicked) {
+                        call.respond(ActionResponse(
+                            success = true,
+                            element = request.testTag,
+                            action = "click",
+                            coordinates = element?.let { "${it.centerX},${it.centerY}" }
+                        ))
+                        return@post
+                    }
+
                     if (element == null) {
                         call.respond(
                             HttpStatusCode.NotFound,
@@ -181,21 +198,10 @@ class TestAutomationServer(
                         return@post
                     }
 
-                    // Try programmatic click first (fastest, works for testableClickable)
-                    val clicked = TestAutomation.triggerClick(request.testTag)
-
-                    if (clicked) {
-                        call.respond(ActionResponse(
-                            success = true,
-                            element = element.testTag,
-                            action = "click",
-                            coordinates = "${element.centerX},${element.centerY}"
-                        ))
-                        return@post
-                    }
-
-                    // Fallback: use Robot mouse click (works for dropdowns, ExposedDropdownMenuBox, etc.)
-                    println("[TestAutomation] Programmatic click failed for ${request.testTag}, falling back to mouse click at (${element.centerX}, ${element.centerY})")
+                    // Element is positioned but has no programmatic handler (e.g. a plain
+                    // `testable()` or a dropdown that handles clicks via AWT). Fall back
+                    // to Robot mouse click at the element's center.
+                    println("[TestAutomation] No programmatic handler for ${request.testTag}, falling back to mouse click at (${element.centerX}, ${element.centerY})")
                     performMouseClick(element.centerX, element.centerY)
 
                     call.respond(ActionResponse(
@@ -265,7 +271,15 @@ class TestAutomationServer(
                     val timeoutMs = request.timeoutMs ?: 5000
 
                     while (System.currentTimeMillis() - startTime < timeoutMs) {
-                        if (elements.containsKey(request.testTag)) {
+                        // Position OR click-handler is a positive signal. Dialog buttons
+                        // register their click handler when their `testableClickable`
+                        // modifier composes inside the popup content; the layout pass
+                        // for the popup window doesn't deliver a position event back to
+                        // the main window, so accepting the handler signal lets
+                        // `wait_for_element("btn_mode_confirm")` resolve as soon as the
+                        // confirm-button is composed and ready to click.
+                        if (elements.containsKey(request.testTag)
+                            || TestAutomation.hasClickHandler(request.testTag)) {
                             call.respond(ActionResponse(
                                 success = true,
                                 element = request.testTag,
@@ -362,22 +376,24 @@ class TestAutomationServer(
                     val actionResult: ai.ciris.mobile.shared.testing.ActionResponse = when (request.action.lowercase()) {
                         "click" -> {
                             val element = elements[request.testTag]
-                            if (element == null) {
-                                ai.ciris.mobile.shared.testing.ActionResponse(
+                            // Try the programmatic click handler FIRST (same reasoning as
+                            // the /click route — popup / dialog buttons register handlers
+                            // when their modifier composes, even though the popup's layout
+                            // pass never delivers a position event back to this server).
+                            val clicked = TestAutomation.triggerClick(request.testTag)
+                            when {
+                                clicked -> ai.ciris.mobile.shared.testing.ActionResponse(
+                                    success = true,
+                                    element = request.testTag,
+                                    action = "click",
+                                    coordinates = element?.let { "${it.centerX},${it.centerY}" }
+                                )
+                                element == null -> ai.ciris.mobile.shared.testing.ActionResponse(
                                     success = false,
                                     error = "Element not found: ${request.testTag}"
                                 )
-                            } else {
-                                val clicked = TestAutomation.triggerClick(request.testTag)
-                                if (clicked) {
-                                    ai.ciris.mobile.shared.testing.ActionResponse(
-                                        success = true,
-                                        element = request.testTag,
-                                        action = "click",
-                                        coordinates = "${element.centerX},${element.centerY}"
-                                    )
-                                } else {
-                                    // Fallback to mouse click
+                                else -> {
+                                    // Element is positioned but has no programmatic handler.
                                     performMouseClick(element.centerX, element.centerY)
                                     ai.ciris.mobile.shared.testing.ActionResponse(
                                         success = true,

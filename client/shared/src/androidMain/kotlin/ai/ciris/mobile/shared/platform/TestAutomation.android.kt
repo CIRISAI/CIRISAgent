@@ -3,7 +3,9 @@ package ai.ciris.mobile.shared.platform
 import ai.ciris.mobile.shared.testing.AndroidTestAutomationServer
 import ai.ciris.mobile.shared.testing.TestAutomationState
 import androidx.compose.foundation.clickable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
@@ -74,9 +76,17 @@ actual object TestAutomation {
 
 /**
  * Android implementation — tracks position when test mode enabled, otherwise just testTag.
+ *
+ * Wrapped in `composed { DisposableEffect }` so the registry entry is removed
+ * when the modifier leaves the composition. Without that, dialog / sheet
+ * elements remain "visible" forever after dismiss, and walk-tests that wait
+ * for an element to disappear loop until timeout.
  */
-actual fun Modifier.testable(tag: String, text: String?): Modifier {
-    return if (TestAutomation.isEnabled()) {
+actual fun Modifier.testable(tag: String, text: String?): Modifier = composed {
+    if (TestAutomation.isEnabled()) {
+        DisposableEffect(tag) {
+            onDispose { TestAutomation.unregisterElement(tag) }
+        }
         this.testTag(tag).onGloballyPositioned { coords ->
             val bounds = coords.boundsInWindow()
             TestAutomation.registerElement(
@@ -93,10 +103,21 @@ actual fun Modifier.testable(tag: String, text: String?): Modifier {
 
 /**
  * Android implementation — tracks position + registers click handler when test mode enabled.
+ *
+ * Registers the click handler from a `DisposableEffect` so it unregisters on
+ * dispose. Dialog / sheet buttons live inside a Popup composition tree that
+ * dismisses when the dialog closes; without dispose-time unregistration the
+ * handler outlives the visible button.
  */
-actual fun Modifier.testableClickable(tag: String, text: String?, onClick: () -> Unit): Modifier {
-    return if (TestAutomation.isEnabled()) {
-        TestAutomation.registerClickHandler(tag, onClick)
+actual fun Modifier.testableClickable(tag: String, text: String?, onClick: () -> Unit): Modifier = composed {
+    if (TestAutomation.isEnabled()) {
+        DisposableEffect(tag) {
+            TestAutomation.registerClickHandler(tag, onClick)
+            onDispose {
+                TestAutomation.unregisterClickHandler(tag)
+                TestAutomation.unregisterElement(tag)
+            }
+        }
         this.testTag(tag)
             .clickable { onClick() }
             .onGloballyPositioned { coords ->
@@ -115,10 +136,17 @@ actual fun Modifier.testableClickable(tag: String, text: String?, onClick: () ->
 
 /**
  * Android implementation — registers click handler without adding clickable.
+ *
+ * Same DisposableEffect pattern as `testableClickable` so handlers attached
+ * to internally-clickable widgets (e.g. switches, sliders) unregister on
+ * dispose.
  */
-actual fun Modifier.testableWithHandler(tag: String, onClick: () -> Unit): Modifier {
+actual fun Modifier.testableWithHandler(tag: String, onClick: () -> Unit): Modifier = composed {
     if (TestAutomation.isEnabled()) {
-        TestAutomation.registerClickHandler(tag, onClick)
+        DisposableEffect(tag) {
+            TestAutomation.registerClickHandler(tag, onClick)
+            onDispose { TestAutomation.unregisterClickHandler(tag) }
+        }
     }
-    return this.testTag(tag)
+    this.testTag(tag)
 }

@@ -145,11 +145,43 @@ This glossary defines the canonical translations for key CIRIS terms in Hindi. A
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## Commons / Cohort-Scope UX (2.9.4)
+
+CEG 0.6 cohort-scope vocabulary used by the new Commons hub.
+
+### Core Concepts (cohort scope)
+
+| English | Hindi | Transliteration | Notes |
+|---------|-------|-----------------|-------|
+| Cohort scope | कोहोर्ट स्कोप (योगदान का दायरा) | Cohort scope (yogdan ka daayra) | Technical CIRIS term; keep "cohort scope" recognizable, gloss as "scope of contribution" |
+| Layer | परत | Parat | UX surface for one cohort scope |
+| Self | स्वयं | Svayam | Reflexive identity; "agent itself" |
+| Family | परिवार | Parivaar | Sibling occurrences sharing operator identity (not nuclear family) |
+| Local Community | स्थानीय समुदाय | Sthaaneey Samudaay | Locally-trusted peers |
+| Global Communities | वैश्विक समुदाय | Vaishvik Samudaay | Cross-community affinity groups (plural) |
+| Global Commons | वैश्विक साझा क्षेत्र | Vaishvik Saajha Kshetra | Universal federation layer; "shared commons of all" |
+| The Commons | साझा योगदान | Saajha Yogdaan | Federation contribution feed (distinct from "Global Commons") |
+| Constitutional | संवैधानिक | Sanvaidhanik | Accord-holder identity surface; refers to federation constitution, not nation-state |
+| Delegation | प्रत्यायोजन | Pratyaayojan | Granting authority to act on one's behalf |
+| Trust Topology | विश्वास संरचना | Vishvaas Sanrachna | Trust graph: peers as nodes, trust grants as edges |
+| Participate | भाग लें | Bhaag Len | Federation needs registry — register and respond |
+| Affiliations | संबद्धताएं | Sambaddhtaaen | Communities the agent has joined (CEG term) |
+
+### UI Labels (Commons sections)
+
+| English | Hindi | Notes |
+|---------|-------|-------|
+| Identities | पहचानें | Plural; list of known entities at a scope |
+| Trust | विश्वास | Trust state per identity |
+| Trust policies | विश्वास नीतियां | Automatic-trust policies at a scope |
+| Coming Soon | जल्द आ रहा है | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-03-27 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary for 2.9.4 Commons hub |
 
 ---
 

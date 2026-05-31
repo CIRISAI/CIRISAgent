@@ -14,8 +14,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 140
-        versionName "2.9.3"
+        versionCode 141
+        versionName "2.9.4"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -29,19 +29,24 @@ android {
             buildPython "/usr/bin/python3.10"
             // Extract packages to real filesystem so they can be scanned for code integrity
             // ciris_engine MUST be included for startup hash verification to work!
-            extractPackages "pydantic_core", "ciris_persist", "ciris_engine", "ciris_adapters"
+            // ciris_edge added in 2.9.4 — Edge is the third leg of the
+            // substrate triple and must be import-able from Python at boot.
+            extractPackages "pydantic_core", "ciris_persist", "ciris_edge", "ciris_engine", "ciris_adapters"
 
             pip {
                 options "--find-links", "wheels"  // Local wheels directory
 
-                // 2.9.0 persist substrate — Chaquopy-shaped wheels live in
-                // wheels/ (dropped by tools/update_android_libs.py from the
-                // *-android-wheels.tar.gz release asset). Required because
-                // ciris_engine.logic.persistence.models.graph imports
-                // `from ciris_persist import Engine, NotFound` at module
-                // load; without this line the Python runtime fails with
-                // ModuleNotFoundError before A0a/A0b migrations can run.
-                install "ciris-persist==2.0.7"
+                // 2.9.4 substrate triple — persist 3.6.x / verify 4.x / edge
+                // 1.x. All three ship Chaquopy-shaped Android wheels under
+                // `{prefix}-v{ver}-android-wheels.tar.gz` and are dropped
+                // into wheels/ by `tools/update_android_libs.py --lib X V`.
+                // Pins MUST match requirements.txt — version skew breaks
+                // cohabitation (CIRISEdge#16/#43 etc.). Without these three
+                // installs the Android-bundled Python raises ModuleNotFound
+                // on `from ciris_persist import …` / `import ciris_edge` at
+                // boot, and `/v1/federation/identity` 503s the UI.
+                install "ciris-persist==3.8.0"
+                install "ciris-edge==1.1.5"
 
                 // Core dependencies (same as original android/app/build.gradle)
                 install "pydantic-core==2.23.4"

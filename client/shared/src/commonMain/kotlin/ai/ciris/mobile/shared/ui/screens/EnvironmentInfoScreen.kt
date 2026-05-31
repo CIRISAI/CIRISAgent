@@ -1180,16 +1180,18 @@ private data class EntityInfo(
 private fun parseEntities(json: String): Map<String, List<EntityInfo>> {
     val entities = mutableListOf<EntityInfo>()
 
-    // Simple regex-based parsing for entity objects
+    // Simple regex-based parsing for entity objects.
+    // Use inline `(?s)` flag instead of RegexOption.DOT_MATCHES_ALL —
+    // the latter is not exposed on every Kotlin/KMP target (was JVM-only
+    // through Kotlin 2.0.x). The inline flag is portable across all
+    // commonMain targets including wasmjs / native / iOS / Android.
     val entityPattern = Regex(
-        "\\{[^{}]*\"entity_id\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"state\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"friendly_name\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"domain\"\\s*:\\s*\"([^\"]+)\"[^{}]*\\}",
-        RegexOption.DOT_MATCHES_ALL
+        "(?s)\\{[^{}]*\"entity_id\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"state\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"friendly_name\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"domain\"\\s*:\\s*\"([^\"]+)\"[^{}]*\\}"
     )
 
     // Also try alternate field order
     val altPattern = Regex(
-        "\\{[^{}]*\"entity_id\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"friendly_name\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"state\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"domain\"\\s*:\\s*\"([^\"]+)\"[^{}]*\\}",
-        RegexOption.DOT_MATCHES_ALL
+        "(?s)\\{[^{}]*\"entity_id\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"friendly_name\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"state\"\\s*:\\s*\"([^\"]+)\"[^{}]*\"domain\"\\s*:\\s*\"([^\"]+)\"[^{}]*\\}"
     )
 
     entityPattern.findAll(json).forEach { match ->

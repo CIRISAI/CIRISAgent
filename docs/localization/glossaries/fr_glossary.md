@@ -259,11 +259,39 @@ This glossary defines the canonical translations for key CIRIS terms in French. 
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort-Scope Vocabulary (Commons hub — 2.9.4)
+
+| English | French | Notes |
+|---------|--------|-------|
+| Cohort scope | Portée de cohorte | CEG 0.6 wire-format term; technical CIRIS term. Wire key `cohort_scope` stays in English |
+| Layer | Couche | UX surface representing one cohort scope |
+| Agent (Self) | Agent (Soi) | First layer; "Agent" stays per glossary, "Soi" = reflexive self |
+| Family | Famille | "Siblings of the same agent" — sharing operator identity, not nuclear-family |
+| Local Community | Communauté Locale | Locally-trusted peers — home channel, household, single guild |
+| Global Communities | Communautés Globales | Plural — affinity groups spanning across borders (CEG affiliations) |
+| Global Commons | Bien Commun Global | Universal federation layer (CEG species + planet + federation folded) |
+| Federation | Fédération | The CIRIS federation as network of peers (matches existing `network.*` usage) |
+| The Commons | Le Bien Commun | Federation contribution cards screen (distinct from Global Commons layer) |
+| Constitutional | Constitutionnel | Accord-holder identity surface per FSD-002 §4.1 |
+| Delegation | Délégation | Delegation graph — scopes delegated to/from this agent |
+| Trust Topology | Topologie de Confiance | Federation trust graph — peers as nodes, trust grants as edges |
+| Participate | Participer | Federation needs registry — verb form (take part / contribute) |
+
+## Commons UI Labels (2.9.4)
+
+| English | French | Notes |
+|---------|--------|-------|
+| Identities | Identités | List of known entities at a scope |
+| Trust | Confiance | Trust state per identity |
+| Trust policies | Politiques de confiance | Policies that govern automatic trust at this scope |
+| Coming Soon | Bientôt | Placeholder for unshipped features (matches existing `network.tiles.coming_soon_badge`) |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2024-03-27 | Initial glossary created from fr.json translations |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary and Commons UI labels for 2.9.4 Commons hub |
 
 ---
 

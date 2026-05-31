@@ -68,6 +68,7 @@ import ai.ciris.mobile.shared.platform.platformImePadding
 import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
@@ -714,104 +715,56 @@ private fun EnhancedStatusBar(
     theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
+    // J7 (smallest supported, ~360dp wide) — collapse the two-row layout into a
+    // single row pinned beside the signet overlay. On compact viewports the
+    // CIRISApp draws a 56dp signet at start=8dp,top=8dp (64dp total footprint);
+    // inset the bar's start padding so badges sit beside the signet, not under it.
+    val isCompact = LocalIsCompactWindow.current
     Surface(
         color = theme.surface,
         shadowElevation = if (theme.isDark) 0.dp else 2.dp,
         modifier = modifier.fillMaxWidth()
     ) {
-        Column {
-            // Main status row - compact, modern layout without dot separators
+        Row(
+            modifier = Modifier
+                .padding(
+                    start = if (isCompact) 64.dp else 6.dp,
+                    end = 6.dp,
+                    top = 4.dp,
+                    bottom = 4.dp,
+                )
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Scrollable badge strip — capacity, trust, wallet, credits(CIRIS), viz.
+            // horizontalScroll keeps state+STOP pinned to the right on narrow
+            // screens without truncating any badge.
             Row(
                 modifier = Modifier
-                    .padding(horizontal = 6.dp, vertical = 4.dp)
-                    .fillMaxWidth(),
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Connection status - minimal tap target
-                Row(
-                    modifier = Modifier
-                        .testableClickable("btn_connection_status") { onLocalClick() }
-                        .padding(2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .background(
-                                color = if (isConnected) theme.statusConnected else theme.statusDisconnected,
-                                shape = CircleShape
-                            )
-                    )
-                    Text(
-                        text = if (isConnected) "Local" else "Off",
-                        fontSize = 10.sp,
-                        color = if (isConnected) theme.statusConnected else theme.statusDisconnected
-                    )
-                }
-
-                // LLM health indicator - compact, 6-char max
-                LlmHealthIndicator(health = llmHealth, onClick = onLLMSettingsClick, theme = theme)
-
-                // Credits indicator (only if CIRIS proxy)
+                CapacityBadge(state = cellVizState, theme = theme)
+                TrustShield(
+                    trustStatus = trustStatus,
+                    onClick = onTrustShieldClick,
+                    theme = theme
+                )
+                WalletBadge(
+                    walletStatus = walletStatus,
+                    onClick = onWalletClick,
+                    theme = theme
+                )
                 if (llmHealth.isCirisProxy && creditStatus.isLoaded) {
-                    CreditsIndicator(credits = creditStatus, onClick = onCreditsClick, theme = theme)
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Right-aligned badges in a tight row
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    // Wallet badge
-                    WalletBadge(
-                        walletStatus = walletStatus,
-                        onClick = onWalletClick,
-                        theme = theme
-                    )
-
-                    // CIRIS capacity badge
-                    CapacityBadge(
-                        state = cellVizState,
-                        theme = theme
-                    )
-
-                    // Trust shield - forced horizontal
-                    TrustShield(
-                        trustStatus = trustStatus,
-                        onClick = onTrustShieldClick,
+                    CreditsIndicator(
+                        credits = creditStatus,
+                        onClick = onCreditsClick,
                         theme = theme
                     )
                 }
-            }
-
-            // Shutdown controls row (collapsed by default, could be expandable)
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 8.dp)
-                    .padding(bottom = 6.dp)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Cognitive state - clickable to go to Sessions
-                Surface(
-                    onClick = onSessionsClick,
-                    shape = RoundedCornerShape(4.dp),
-                    color = Color.Transparent
-                ) {
-                    Text(
-                        text = localizedCognitiveState(status),
-                        fontSize = 10.sp,
-                        color = theme.textSecondary,
-                        modifier = Modifier.padding(4.dp)
-                    )
-                }
-
-                // Visualization mode toggle button
                 Surface(
                     onClick = onVisualizationToggle,
                     shape = RoundedCornerShape(4.dp),
@@ -855,38 +808,33 @@ private fun EnhancedStatusBar(
                         )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Shutdown button
-                OutlinedButton(
-                    onClick = onShutdown,
-                    modifier = Modifier
-                        .height(26.dp)
-                        .testableClickable("btn_shutdown") { onShutdown() },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = theme.shutdownOutline
-                    ),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                ) {
-                    Text(localizedString("mobile.interact_shutdown"), fontSize = 9.sp)
-                }
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                // Emergency stop button
-                Button(
-                    onClick = onEmergencyStop,
-                    modifier = Modifier
-                        .height(26.dp)
-                        .testableClickable("btn_emergency_stop") { onEmergencyStop() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFEF4444)
-                    ),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                ) {
-                    Text(localizedString("mobile.interact_stop"), fontSize = 9.sp, color = Color.White)
-                }
+            // Pinned right: cognitive state + STOP. Shutdown removed (redundant
+            // with emergency-stop per Samsung field test).
+            Surface(
+                onClick = onSessionsClick,
+                shape = RoundedCornerShape(4.dp),
+                color = Color.Transparent
+            ) {
+                Text(
+                    text = localizedCognitiveState(status),
+                    fontSize = 10.sp,
+                    color = theme.textSecondary,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+                )
+            }
+            Button(
+                onClick = onEmergencyStop,
+                modifier = Modifier
+                    .height(26.dp)
+                    .testableClickable("btn_emergency_stop") { onEmergencyStop() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFEF4444)
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+            ) {
+                Text(localizedString("mobile.interact_stop"), fontSize = 9.sp, color = Color.White)
             }
         }
     }

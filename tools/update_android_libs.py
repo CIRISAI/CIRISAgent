@@ -112,8 +112,27 @@ LIBS: Dict[str, AndroidLib] = {
         # containing the Chaquopy-shaped wheels for that purpose.
         has_android_wheels=True,
     ),
+    "edge": AndroidLib(
+        name="edge",
+        github_repo="CIRISAI/CIRISEdge",
+        pypi_package="ciris-edge",
+        tarball_prefix="ciris-edge",
+        so_filename="libciris_edge.so",
+        bindings_package="ciris_edge",
+        # CIRISEdge 1.0+ ships all three Android ABIs in the wheels tarball.
+        abis=["arm64-v8a", "x86_64", "armeabi-v7a"],
+        is_pyo3=True,
+        has_adapter=False,
+        # Edge is the third leg of the 2.9.4 substrate triple (persist 3.6.x
+        # + verify 4.x + edge 1.x). The agent's `init_edge_runtime` imports
+        # `ciris_edge` directly, so the Chaquopy-shaped wheels MUST land in
+        # client/androidApp/wheels/ — otherwise the Android-bundled Python
+        # raises "ciris-edge not importable but is REQUIRED for 2.9.4+" at
+        # boot and `/v1/federation/identity` returns 503 to the UI.
+        # The release publishes `ciris-edge-v{ver}-android-wheels.tar.gz`.
+        has_android_wheels=True,
+    ),
     # Future:
-    # "edge": AndroidLib(...),
     # "lenscore": AndroidLib(...),
     # "nodecore": AndroidLib(...),
 }

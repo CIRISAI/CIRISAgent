@@ -192,7 +192,13 @@ nohup.out
 # Ad-hoc screenshots dropped at repo root during design work
 /ciris_interact_cell_*.png
 startup_python_hashes.json
-mobile/
+# Repo-root `mobile/` only — legacy BeeWare scratch dir.
+# IMPORTANT: anchor with leading slash so this does NOT match
+# `client/shared/src/commonMain/kotlin/ai/ciris/mobile/` (the unified
+# KMP shared module's Java package path). Without the anchor, every
+# new file under that package required `git add -f` to bypass the
+# accidental ignore.
+/mobile/
 mobile_qa_reports/
 
 # Downloaded CI fixture artifacts (DBs from CI runs, regenerable)

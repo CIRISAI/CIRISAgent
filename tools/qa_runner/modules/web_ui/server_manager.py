@@ -121,6 +121,13 @@ class ServerManager:
         """
         print("🗑️  Wiping data for clean slate...")
 
+        # Wipe BOTH potential data-dir locations. CIRIS_HOME is pinned to
+        # project_root via start_env (avoids the drift that left admin
+        # in DB-1 while restart queried DB-2), but defensively wipe the
+        # legacy ~/ciris/data path too in case the operator ran the
+        # backend outside the qa_runner between sessions.
+        home_data_dir = os.path.join(os.path.expanduser("~"), "ciris", "data")
+        home_dot_env = os.path.join(os.path.expanduser("~"), "ciris", ".env")
         data_paths = [
             self.config.data_dir,
             os.path.join(self.config.project_root, "ciris_engine.db"),
@@ -131,6 +138,11 @@ class ServerManager:
             # Also remove .env to reset first-run state (both locations checked in dev mode)
             os.path.join(self.config.project_root, ".env"),
             os.path.join(self.config.project_root, "ciris", ".env"),  # Dev mode first-priority path
+            # Belt-and-suspenders: clear ~/ciris/ data + .env so a
+            # stale ambient state from a prior non-qa_runner agent
+            # boot can't seed the auth probe with the wrong admin set.
+            home_data_dir,
+            home_dot_env,
         ]
 
         for path in data_paths:
@@ -273,6 +285,24 @@ class ServerManager:
         # Set up environment variables like the regular QA runner
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+
+        # Force deterministic data path across BOTH the first-run and
+        # configured-mode backend invocations. Without this:
+        #   - First run (CIRIS_FORCE_FIRST_RUN=1): path_resolution falls
+        #     to dev-mode → Path.cwd()/data → <project_root>/data
+        #   - Restart (configured mode): path_resolution may resolve
+        #     differently and write to ~/ciris/data
+        # The two runs end up using DIFFERENT SQLite databases. Admin
+        # user created in run 1 lives in DB-1; auth probe in run 2
+        # queries DB-2 (no SYSTEM_ADMIN) → setup_required stays True →
+        # desktop stuck on Setup wizard → walk-test login cascades to
+        # SKIP. Pinning CIRIS_HOME to project_root makes both runs land
+        # on the same data dir deterministically.
+        env["CIRIS_HOME"] = self.config.project_root
+        # CIRIS_AGENT_ID stabilizes the signer_key_id across runs so
+        # persist's process-singleton Engine guardrail (3.6.3+) doesn't
+        # see EngineConfigMismatch on the restart.
+        env.setdefault("CIRIS_AGENT_ID", "qa-runner-ciris-agent")
 
         # For first-run mode, set the environment variable to force first-run detection
         if self.config.first_run_mode:

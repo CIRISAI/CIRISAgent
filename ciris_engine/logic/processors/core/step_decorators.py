@@ -14,6 +14,7 @@ Architecture:
 
 import asyncio
 import logging
+from contextvars import ContextVar
 from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
@@ -46,6 +47,21 @@ from ciris_engine.schemas.types import JSONDict
 F = TypeVar("F", bound=Callable[..., Any])
 
 logger = logging.getLogger(__name__)
+
+
+# Tracks whether the current async-context is inside a RECURSIVE_CONSCIENCE
+# step. The recursive-conscience handler legitimately calls
+# `_conscience_execution_step` internally to reuse the conscience evaluator;
+# without this flag, the nested CONSCIENCE_EXECUTION step would broadcast an
+# `aspdma_result` event with `is_recursive=False`, colliding with the outer
+# RECURSIVE_CONSCIENCE step's broadcast and producing two un-flagged
+# duplicates per recursive retry. The streaming verifier flags those as a
+# real failure (CIRISAgent#772). Setting this ContextVar in the outer
+# streaming_step wrapper and reading it in `_create_event_for_step` ensures
+# every recursive-path emission carries `is_recursive=True`, which the
+# verifier tolerates as a legitimate retry. Defaults to False so non-
+# recursive flows behave exactly as before.
+_in_recursive_conscience: ContextVar[bool] = ContextVar("in_recursive_conscience", default=False)
 
 # Global registry for paused thought coroutines
 _paused_thoughts: Dict[str, asyncio.Event] = {}
@@ -279,6 +295,16 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
             # broadcast helper's warning log.
             parent_event = _resolve_parent_event_for_step(step)
 
+            # Mark recursive-conscience scope so the nested
+            # `_conscience_execution_step` call (which internally re-uses
+            # the conscience evaluator) emits its aspdma_result event with
+            # `is_recursive=True`. Without this token, the nested
+            # CONSCIENCE_EXECUTION's broadcast collides with the initial
+            # one as an un-flagged duplicate (CIRISAgent#772).
+            recursive_token = (
+                _in_recursive_conscience.set(True) if step == StepPoint.RECURSIVE_CONSCIENCE else None
+            )
+
             try:
                 # Execute the original function
                 if parent_event is not None:
@@ -318,6 +344,9 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
 
                 # Don't broadcast errors as reasoning events - handled at higher level
                 raise
+            finally:
+                if recursive_token is not None:
+                    _in_recursive_conscience.reset(recursive_token)
 
         return cast(F, wrapper)
 
@@ -1200,7 +1229,14 @@ def _create_event_for_step(
         logger.debug("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
         return _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event, thought_item)
     if step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
-        is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE
+        # The recursive-conscience handler internally calls
+        # `_conscience_execution_step` to reuse the evaluator; that nested
+        # CONSCIENCE_EXECUTION fires inside an outer RECURSIVE_CONSCIENCE
+        # streaming context. Reading `_in_recursive_conscience` lets the
+        # nested broadcast carry `is_recursive=True` so the streaming
+        # verifier tolerates it as a retry instead of flagging it as a
+        # duplicate of the initial CONSCIENCE_EXECUTION (CIRISAgent#772).
+        is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE or _in_recursive_conscience.get()
         return _create_aspdma_result_event(step_data, timestamp, is_recursive_step, create_reasoning_event)
     if step == StepPoint.FINALIZE_ACTION:
         return _create_conscience_result_event(step_data, timestamp, create_reasoning_event)
@@ -1254,10 +1290,44 @@ def enable_single_step_mode() -> None:
 
 
 def disable_single_step_mode() -> None:
-    """Disable single-step mode - thoughts run normally."""
-    global _single_step_mode
+    """Disable single-step mode and drain any currently-paused thoughts.
+
+    Flipping `_single_step_mode = False` alone is not sufficient: thoughts
+    that already crossed into `_pause_thought_execution(thought_id)` are
+    waiting on per-thought `asyncio.Event`s that nothing else signals.
+    Without draining those events here, those coroutines stay blocked
+    forever even after the caller has "resumed" the processor — which
+    pins the work_processor batch on whichever thought is currently
+    paused and starves every subsequent task. The QA AIR-smoke flake
+    on 2026-05-29 (run 26611381137) was a direct consequence: the
+    `comprehensive_single_step` module paused a thought at
+    `gather_context`, the cleanup test called `/v1/system/runtime/resume`,
+    `_single_step_mode` went False, but the paused thought stayed waiting
+    on its Event for 5+ minutes — blocking the AIR test message behind
+    it until the AIR test's own 180s `interact()` timeout fired.
+
+    Setting every pending `_paused_thoughts[*]` event lets those
+    coroutines fall through `event.wait()`, hit the `event.clear()` line
+    below in `_pause_thought_execution`, and continue their natural step
+    execution. We keep the entries in the dict — `execute_step`'s contract
+    is "set the event, the wrapper clears it for the next pause" — so
+    matching that contract here keeps the per-thought map consistent.
+    """
+    global _single_step_mode, _paused_thoughts
     _single_step_mode = False
-    logger.info("Single-step mode disabled")
+    pending = list(_paused_thoughts.items())
+    drained = 0
+    for thought_id, event in pending:
+        try:
+            if not event.is_set():
+                event.set()
+                drained += 1
+        except Exception as e:
+            logger.warning(f"Failed to signal resume for paused thought {thought_id}: {e}")
+    if drained:
+        logger.info(f"Single-step mode disabled; drained {drained} paused thought(s)")
+    else:
+        logger.info("Single-step mode disabled")
 
 
 def is_single_step_mode() -> bool:

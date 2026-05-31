@@ -48,6 +48,7 @@ import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
 import ai.ciris.mobile.shared.viewmodels.StartupPhase
 import ai.ciris.mobile.shared.viewmodels.StartupViewModel
+import ai.ciris.mobile.shared.viewmodels.NetworkViewModel
 import ai.ciris.mobile.shared.viewmodels.SystemViewModel
 import ai.ciris.mobile.shared.viewmodels.TelemetryViewModel
 import ai.ciris.mobile.shared.viewmodels.UsersViewModel
@@ -79,6 +80,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Info
@@ -412,6 +414,22 @@ fun CIRISApp(
             is Screen.LLMSettings -> Screen.Interact
             is Screen.VizSettings -> Screen.Settings
 
+            // Federation sub-screens (reached from Global Commons hub tiles) go
+            // back to the Global Commons layer hub. Phase B (2026-05-31): retarget
+            // from Screen.Network → Screen.LayerGlobalCommons.
+            is Screen.NetworkIdentity,
+            is Screen.NetworkMap,
+            is Screen.NetworkTrustGraph,
+            is Screen.NetworkPeers,
+            is Screen.NetworkInterfaces,
+            is Screen.NetworkPaths,
+            is Screen.NetworkAnnounces,
+            is Screen.NetworkQueue,
+            is Screen.NetworkDiagnostics,
+            is Screen.NetworkContent -> Screen.LayerGlobalCommons
+            // Peer detail (parameterised) goes back to the peer list, not the hub
+            is Screen.NetworkPeerDetail -> Screen.NetworkPeers
+
             // All other screens go back to Interact (main screen)
             else -> Screen.Interact
         }
@@ -636,6 +654,9 @@ fun CIRISApp(
     }
     val dataManagementViewModel: DataManagementViewModel = viewModel {
         DataManagementViewModel(apiClient, secureStorage, envFileUpdater)
+    }
+    val networkViewModel: NetworkViewModel = viewModel {
+        NetworkViewModel(apiClient)
     }
 
     // Set up purchase result callback — routes through handlePurchaseResult for typed error handling
@@ -1018,6 +1039,39 @@ fun CIRISApp(
         LocalCurrency provides currencyManager
     ) {
         MaterialTheme(colorScheme = colorScheme) {
+            // ─── 2.9.4 — Epistemic Commons sidebar shell ─────────────────────
+            // Pre-login screens (Startup/Login/Setup/ServerConnection) and the
+            // Help utility have no NavSurface; for those the sidebar is hidden
+            // and content fills the screen. After login, the sidebar replaces
+            // the old top-bar dropdown nav as the SOLE navigation chrome.
+            val activeSurface = screenToSurface(currentScreen)
+            val showSidebar = currentScreen !is Screen.Startup &&
+                currentScreen !is Screen.Login &&
+                currentScreen !is Screen.Setup &&
+                currentScreen !is Screen.ServerConnection
+            // CIRIS Capacity Score state — hoisted from InteractViewModel so
+            // HealthReputationScreen renders the same StateFlow that drives
+            // the cell-viz dials. Anti-Goodhart constraint per FSD-002 §4.7:
+            // operator-facing render only; never re-injected into the agent
+            // context.
+            val capacityForCard by interactViewModel.cellVizState.collectAsState()
+            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+
+            // Mobile-aware nav chrome. On narrow viewports (Material 3 compact
+            // window class, <600.dp wide) the EpistemicSidebar is dismissed by
+            // default and surfaced through a `ModalNavigationDrawer` — slides
+            // in from the left, scrims the content, dismisses on tap-outside,
+            // and self-closes when the user selects a destination. A persistent
+            // top-left hamburger button (`btn_nav_drawer_open`) overlays the
+            // content as the affordance to open the drawer. On wider viewports
+            // the sidebar stays permanently in a `Row` alongside content — the
+            // existing desktop / tablet layout. The 600.dp breakpoint matches
+            // Material 3's WindowWidthSizeClass.Compact boundary.
+            val drawerState = rememberDrawerState(DrawerValue.Closed)
+            val drawerScope = rememberCoroutineScope()
+
+            val mainScreenContent: @Composable (androidx.compose.ui.Modifier) -> Unit = { contentModifier ->
+                androidx.compose.foundation.layout.Box(modifier = contentModifier) {
             when (currentScreen) {
             Screen.Startup -> {
                 StartupScreen(viewModel = startupViewModel)
@@ -1553,50 +1607,61 @@ fun CIRISApp(
                 val cellVizConfig by settingsViewModel.cellVizConfig.collectAsState()
                 platformLog(TAG, "[CIRISApp] >>> liveBackgroundEnabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
 
+                // On compact viewports the dropdown-menu top bar is fully
+                // redundant with the left-nav drawer (every category routes
+                // through the same surfaces). Drop the entire top bar there
+                // so the screen content (signet overlay + badges + state +
+                // emergency-stop button — all already rendered inside
+                // `InteractScreen`) becomes the visible top chrome. On
+                // tablet/desktop where the sidebar is permanent and there's
+                // no overlay button, keep the full CIRISTopBar for now.
+                val showTopBar = !ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow.current
                 Scaffold(
                     topBar = {
-                        CIRISTopBar(
-                            onSettingsClick = { currentScreen = Screen.Settings },
-                            onLLMSettingsClick = { currentScreen = Screen.LLMSettings },
-                            onBillingClick = { currentScreen = Screen.Billing },
-                            onTelemetryClick = { currentScreen = Screen.Telemetry },
-                            onSessionsClick = { currentScreen = Screen.Sessions },
-                            onAdaptersClick = { currentScreen = Screen.Adapters },
-                            onWiseAuthorityClick = { currentScreen = Screen.WiseAuthority },
-                            onServicesClick = { currentScreen = Screen.Services },
-                            onAuditClick = { currentScreen = Screen.Audit },
-                            onLogsClick = { currentScreen = Screen.Logs },
-                            onMemoryClick = { currentScreen = Screen.GraphMemory },  // Default to 3D cylinder view
-                            onConfigClick = { currentScreen = Screen.Config },
-                            onConsentClick = { currentScreen = Screen.Consent },
-                            onDataManagementClick = { currentScreen = Screen.DataManagement },
-                            onSystemClick = { currentScreen = Screen.System },
-                            onRuntimeClick = { currentScreen = Screen.Runtime },
-                            onUsersClick = { currentScreen = Screen.Users },
-                            onTicketsClick = { currentScreen = Screen.Tickets },
-                            onSchedulerClick = { currentScreen = Screen.Scheduler },
-                            onToolsClick = { currentScreen = Screen.Tools },
-                            onEnvironmentInfoClick = { currentScreen = Screen.EnvironmentInfo },
-                            onHelpClick = { currentScreen = Screen.Help },
-                            onLogoutClick = {
-                                PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout from nav bar")
-                                // Cancel InteractViewModel polling first — otherwise it keeps polling
-                                // against the about-to-be-revoked token, fires a 401, and
-                                // TokenManager.on401Error races the user's next Sign-In tap → bounce.
-                                interactViewModel.resetState()
-                                settingsViewModel.logout {
-                                    PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Login")
-                                    currentAccessToken = null
-                                    currentScreen = Screen.Login
-                                }
-                            },
-                            darkMode = isDarkMode,
-                            // Theme picker
-                            colorTheme = colorTheme,
-                            brightnessPreference = brightnessPreference,
-                            onColorThemeChange = { settingsViewModel.setColorTheme(it) },
-                            onBrightnessChange = { settingsViewModel.setBrightnessPreference(it) }
-                        )
+                        if (showTopBar) {
+                            CIRISTopBar(
+                                onSettingsClick = { currentScreen = Screen.Settings },
+                                onLLMSettingsClick = { currentScreen = Screen.LLMSettings },
+                                onBillingClick = { currentScreen = Screen.Billing },
+                                onTelemetryClick = { currentScreen = Screen.Telemetry },
+                                onSessionsClick = { currentScreen = Screen.Sessions },
+                                onAdaptersClick = { currentScreen = Screen.Adapters },
+                                onWiseAuthorityClick = { currentScreen = Screen.WiseAuthority },
+                                onServicesClick = { currentScreen = Screen.Services },
+                                onAuditClick = { currentScreen = Screen.Audit },
+                                onLogsClick = { currentScreen = Screen.Logs },
+                                onMemoryClick = { currentScreen = Screen.GraphMemory },  // Default to 3D cylinder view
+                                onConfigClick = { currentScreen = Screen.Config },
+                                onConsentClick = { currentScreen = Screen.Consent },
+                                onDataManagementClick = { currentScreen = Screen.DataManagement },
+                                onSystemClick = { currentScreen = Screen.System },
+                                onRuntimeClick = { currentScreen = Screen.Runtime },
+                                onUsersClick = { currentScreen = Screen.Users },
+                                onTicketsClick = { currentScreen = Screen.Tickets },
+                                onSchedulerClick = { currentScreen = Screen.Scheduler },
+                                onToolsClick = { currentScreen = Screen.Tools },
+                                onEnvironmentInfoClick = { currentScreen = Screen.EnvironmentInfo },
+                                onHelpClick = { currentScreen = Screen.Help },
+                                onLogoutClick = {
+                                    PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout from nav bar")
+                                    // Cancel InteractViewModel polling first — otherwise it keeps polling
+                                    // against the about-to-be-revoked token, fires a 401, and
+                                    // TokenManager.on401Error races the user's next Sign-In tap → bounce.
+                                    interactViewModel.resetState()
+                                    settingsViewModel.logout {
+                                        PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Login")
+                                        currentAccessToken = null
+                                        currentScreen = Screen.Login
+                                    }
+                                },
+                                darkMode = isDarkMode,
+                                // Theme picker
+                                colorTheme = colorTheme,
+                                brightnessPreference = brightnessPreference,
+                                onColorThemeChange = { settingsViewModel.setColorTheme(it) },
+                                onBrightnessChange = { settingsViewModel.setBrightnessPreference(it) }
+                            )
+                        }
                     }
                 ) { paddingValues ->
                     // Only apply top padding from Scaffold - InteractScreen handles
@@ -3004,8 +3069,287 @@ fun CIRISApp(
                     onSetPreviewTab = { skillStudioViewModel.setPreviewTab(it) }
                 )
             }
+
+            // ─── 2.9.4 — New Epistemic Commons surfaces ──────────────────────
+            Screen.HealthReputation -> {
+                ai.ciris.mobile.shared.ui.screens.HealthReputationScreen(
+                    state = capacityForCard,
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.Commons -> {
+                ai.ciris.mobile.shared.ui.screens.federation.CommonsScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.Participate -> {
+                ai.ciris.mobile.shared.ui.screens.federation.ParticipateScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.Delegation -> {
+                ai.ciris.mobile.shared.ui.screens.federation.DelegationScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.TrustTopology -> {
+                ai.ciris.mobile.shared.ui.screens.federation.TrustTopologyScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.Constitutional -> {
+                ai.ciris.mobile.shared.ui.screens.federation.ConstitutionalScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            Screen.AgentsList -> {
+                ai.ciris.mobile.shared.ui.screens.AgentsListScreen(
+                    onIssueClick = { url -> uriHandler.openUri(url) },
+                )
+            }
+            // Phase B (2026-05-31): Screen.Network is now a backward-compat
+            // alias for Screen.LayerGlobalCommons — both render the federation
+            // transport hub. User-facing path is Screen.LayerGlobalCommons via
+            // the Commons sidebar group; Screen.Network kept so any internal
+            // routing through it (deep links, federation sub-screen back-nav
+            // pre-Phase-B) still lands somewhere coherent.
+            Screen.Network,
+            Screen.LayerGlobalCommons -> {
+                ai.ciris.mobile.shared.ui.screens.NetworkScreen(
+                    viewModel = networkViewModel,
+                    onTileClick = { tile ->
+                        currentScreen = when (tile) {
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.IDENTITY -> Screen.NetworkIdentity
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.MAP -> Screen.NetworkMap
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.TRUST_GRAPH -> Screen.NetworkTrustGraph
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.PEERS -> Screen.NetworkPeers
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.INTERFACES -> Screen.NetworkInterfaces
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.PATHS -> Screen.NetworkPaths
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.ANNOUNCES -> Screen.NetworkAnnounces
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.QUEUE -> Screen.NetworkQueue
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.DIAGNOSTICS -> Screen.NetworkDiagnostics
+                            ai.ciris.mobile.shared.ui.screens.NetworkTile.CONTENT -> Screen.NetworkContent
+                        }
+                    },
+                )
+            }
+            // ── Federation sub-screens (reached from NetworkScreen tiles) ──
+            Screen.NetworkIdentity -> ai.ciris.mobile.shared.ui.screens.federation.NetworkIdentityScreen(
+                apiClient = apiClient,
+                onNavigateBack = { currentScreen = Screen.LayerGlobalCommons },
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkMap -> ai.ciris.mobile.shared.ui.screens.federation.NetworkMapScreen(
+                apiClient = apiClient,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkTrustGraph -> ai.ciris.mobile.shared.ui.screens.federation.NetworkTrustGraphScreen(
+                apiClient = apiClient,
+                onPeerClick = { keyId -> currentScreen = Screen.NetworkPeerDetail(keyId) },
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkPeers -> ai.ciris.mobile.shared.ui.screens.federation.NetworkPeersScreen(
+                apiClient = apiClient,
+                onNavigateBack = { currentScreen = Screen.LayerGlobalCommons },
+                onPeerClick = { keyId -> currentScreen = Screen.NetworkPeerDetail(keyId) },
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            is Screen.NetworkPeerDetail -> ai.ciris.mobile.shared.ui.screens.federation.NetworkPeerDetailScreen(
+                apiClient = apiClient,
+                keyId = (currentScreen as Screen.NetworkPeerDetail).keyId,
+                onNavigateBack = { currentScreen = Screen.NetworkPeers },
+            )
+            Screen.NetworkInterfaces -> ai.ciris.mobile.shared.ui.screens.federation.NetworkInterfacesScreen(
+                apiClient = apiClient,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkPaths -> ai.ciris.mobile.shared.ui.screens.federation.NetworkPathsScreen(
+                apiClient = apiClient,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkAnnounces -> ai.ciris.mobile.shared.ui.screens.federation.NetworkAnnouncesScreen(
+                apiClient = apiClient,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkQueue -> ai.ciris.mobile.shared.ui.screens.federation.NetworkQueueScreen(
+                apiClient = apiClient,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkDiagnostics -> ai.ciris.mobile.shared.ui.screens.federation.NetworkDiagnosticsScreen(
+                apiClient = apiClient,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.NetworkContent -> ai.ciris.mobile.shared.ui.screens.federation.NetworkContentScreen(
+                apiClient = apiClient,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            // ── 2.9.4 — CEG 0.6 layer hubs (Identities · Trust · Policies) ──
+            Screen.LayerAgent -> ai.ciris.mobile.shared.ui.screens.commons.LayerHubScreen(
+                scope = ai.ciris.mobile.shared.ui.nav.CohortScope.AGENT,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.LayerFamily -> ai.ciris.mobile.shared.ui.screens.commons.LayerHubScreen(
+                scope = ai.ciris.mobile.shared.ui.nav.CohortScope.FAMILY,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.LayerLocalCommunity -> ai.ciris.mobile.shared.ui.screens.commons.LayerHubScreen(
+                scope = ai.ciris.mobile.shared.ui.nav.CohortScope.LOCAL_COMMUNITY,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.LayerGlobalCommunities -> ai.ciris.mobile.shared.ui.screens.commons.LayerHubScreen(
+                scope = ai.ciris.mobile.shared.ui.nav.CohortScope.GLOBAL_COMMUNITIES,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            // Screen.LayerGlobalCommons handled above alongside Screen.Network —
+            // renders the federation transport NetworkScreen.
         }
-    }
+                } // close Box(modifier = contentModifier)
+            } // close mainScreenContent lambda
+
+            androidx.compose.foundation.layout.BoxWithConstraints(
+                modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+            ) {
+                val isCompactWindow = maxWidth < 600.dp
+
+                val sidebarComposable: @Composable () -> Unit = {
+                    ai.ciris.mobile.shared.ui.nav.EpistemicSidebar(
+                        activeSurface = activeSurface,
+                        onSurfaceSelected = { surf ->
+                            currentScreen = surfaceToScreen(surf)
+                            // Auto-close the drawer on mobile after a
+                            // destination is picked so the user lands on the
+                            // chosen screen instead of staring at the open
+                            // drawer they just used.
+                            if (isCompactWindow) {
+                                drawerScope.launch { drawerState.close() }
+                            }
+                        },
+                        onIssueClick = { url -> uriHandler.openUri(url) },
+                        appVersion = "v2.9.4",
+                        // Theme strip at the bottom of the drawer — Light /
+                        // System / Dark segmented control. Wired straight to
+                        // SettingsViewModel so the user can flip themes from
+                        // the global nav surface (matches Material 3 nav
+                        // drawer guidance for global affordances).
+                        brightnessPreference = brightnessPreference,
+                        onBrightnessChange = { settingsViewModel.setBrightnessPreference(it) },
+                        // CIRIS signet at the top of the drawer doubles as the
+                        // close button — matches the open affordance (also a
+                        // CIRIS signet) so the icon contract is "tap the CIRIS
+                        // signet to toggle the drawer, always and everywhere".
+                        onCloseRequest = if (isCompactWindow) {
+                            { drawerScope.launch { drawerState.close() } }
+                        } else null,
+                    )
+                }
+
+                if (showSidebar && isCompactWindow) {
+                    ModalNavigationDrawer(
+                        drawerState = drawerState,
+                        drawerContent = {
+                            ModalDrawerSheet { sidebarComposable() }
+                        },
+                    ) {
+                        androidx.compose.foundation.layout.Box(
+                            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+                        ) {
+                            // Federation screens read this to suppress their
+                            // own top-bar back arrow on compact viewports —
+                            // the global overlay below handles back here.
+                            CompositionLocalProvider(
+                                ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow provides true,
+                            ) {
+                                mainScreenContent(androidx.compose.ui.Modifier.fillMaxSize())
+                            }
+                            // ─── 3-state global nav icon ───────────────────
+                            // ONE button at the top-left, three states:
+                            //   1. Drawer OPEN              → hamburger (closes drawer)
+                            //   2. Drawer closed, sub-screen → back arrow (back to parent)
+                            //   3. Drawer closed, top-level → larger CIRIS signet (opens drawer)
+                            // Eliminates the prior "stacked back-arrow + signet"
+                            // problem (Samsung-reported) where each federation
+                            // Scaffold also rendered its own back arrow. The
+                            // federation screens now suppress THEIR back arrow
+                            // on compact viewports via `LocalIsCompactWindow`;
+                            // this button is the single source of truth.
+                            val backTarget: Screen? = when (currentScreen) {
+                                Screen.NetworkIdentity,
+                                Screen.NetworkMap,
+                                Screen.NetworkTrustGraph,
+                                Screen.NetworkPeers,
+                                Screen.NetworkInterfaces,
+                                Screen.NetworkPaths,
+                                Screen.NetworkAnnounces,
+                                Screen.NetworkQueue,
+                                Screen.NetworkDiagnostics,
+                                Screen.NetworkContent -> Screen.LayerGlobalCommons
+                                is Screen.NetworkPeerDetail -> Screen.NetworkPeers
+                                else -> null
+                            }
+                            val isDrawerOpen = drawerState.currentValue == DrawerValue.Open
+                            val iconTestTag = when {
+                                isDrawerOpen -> "btn_nav_drawer_close"
+                                backTarget != null -> "btn_nav_back"
+                                else -> "btn_nav_drawer_open"
+                            }
+                            // Container sized to match the status-bar badge row
+                            // height (badges ~56dp tall after padding). Top pad
+                            // shifted down to vertically center on that row, so
+                            // the signet doesn't read as floating above the
+                            // badges. Inner glyphs sized to nearly fill (4dp
+                            // breathing room) — the prior 36dp signet in a 48dp
+                            // box looked under-sized.
+                            Box(
+                                modifier = androidx.compose.ui.Modifier
+                                    .align(androidx.compose.ui.Alignment.TopStart)
+                                    .padding(top = 8.dp, start = 8.dp)
+                                    .size(56.dp)
+                                    .testableClickable(iconTestTag) {
+                                        when {
+                                            isDrawerOpen -> drawerScope.launch { drawerState.close() }
+                                            backTarget != null -> { currentScreen = backTarget }
+                                            else -> drawerScope.launch { drawerState.open() }
+                                        }
+                                    },
+                                contentAlignment = androidx.compose.ui.Alignment.Center,
+                            ) {
+                                when {
+                                    isDrawerOpen -> Icon(
+                                        imageVector = Icons.Filled.Menu,
+                                        contentDescription = "Close navigation",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = androidx.compose.ui.Modifier.size(40.dp),
+                                    )
+                                    backTarget != null -> Icon(
+                                        imageVector = ai.ciris.mobile.shared.ui.components.CIRISIcons.arrowBack,
+                                        contentDescription = "Go back",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = androidx.compose.ui.Modifier.size(40.dp),
+                                    )
+                                    else -> ai.ciris.mobile.shared.ui.components.CIRISSignet(
+                                        modifier = androidx.compose.ui.Modifier.size(52.dp),
+                                        tintColor = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    androidx.compose.foundation.layout.Row(
+                        modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+                    ) {
+                        if (showSidebar) {
+                            sidebarComposable()
+                        }
+                        mainScreenContent(
+                            androidx.compose.ui.Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                        )
+                    }
+                }
+            } // close BoxWithConstraints
+        } // close MaterialTheme
     } // CompositionLocalProvider
 }
 
@@ -3111,13 +3455,23 @@ private fun CIRISTopBar(
     val contentColor = if (darkMode) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
     val accentColor = if (darkMode) Color(0xFF7DD3FC) else MaterialTheme.colorScheme.primary
 
+    // Suppress the title-slot CIRIS signet on compact viewports — the global
+    // 3-state overlay button at the top-left already shows the signet, and
+    // rendering it again here produces the "stacked signets" Samsung bug
+    // (one at top-left from CIRISApp's overlay, another in the TopAppBar
+    // title slot here). On tablet/desktop where the overlay button isn't
+    // shown, keep the title signet as the brand mark.
+    val showTitleSignet = !ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow.current
+
     TopAppBar(
         title = {
-            // CIRIS Signet - geometric brand mark
-            CIRISSignet(
-                modifier = Modifier.size(32.dp),
-                tintColor = if (darkMode) Color.White else MaterialTheme.colorScheme.primary
-            )
+            if (showTitleSignet) {
+                // CIRIS Signet - geometric brand mark
+                CIRISSignet(
+                    modifier = Modifier.size(32.dp),
+                    tintColor = if (darkMode) Color.White else MaterialTheme.colorScheme.primary
+                )
+            }
         },
         actions = {
             // Category 1: Adapters & Tools
@@ -3452,6 +3806,168 @@ private sealed class Screen {
     object VizSettings : Screen()
     object Help : Screen()
     object ServerConnection : Screen()
+
+    // 2.9.4 — new Epistemic Commons surfaces.
+    // HealthReputation ships with a real card (CellVizState-backed).
+    // The other six are Coming Soon placeholders pinned to their substrate issue.
+    object HealthReputation : Screen()
+    object Commons : Screen()
+    object Participate : Screen()
+    object Delegation : Screen()
+    object TrustTopology : Screen()
+    object Constitutional : Screen()
+    object AgentsList : Screen()
+    object Network : Screen()
+
+    // 2.9.4 — Network hub federation sub-screens. Each is a ComingSoonScreen
+    // wrapper pinned to the Edge PeerResolver substrate issue until Edge 1.0
+    // wires in the corresponding PyEdge FFI surface. Reached via the 10-tile
+    // grid on NetworkScreen; not sidebar-navigable.
+    object NetworkIdentity : Screen()
+    object NetworkMap : Screen()
+    object NetworkTrustGraph : Screen()
+    object NetworkPeers : Screen()
+    object NetworkInterfaces : Screen()
+    object NetworkPaths : Screen()
+    object NetworkAnnounces : Screen()
+    object NetworkQueue : Screen()
+    object NetworkDiagnostics : Screen()
+    object NetworkContent : Screen()
+
+    /**
+     * Parameterised peer-detail route (2.9.4 T-E-UI Batch A). The only
+     * federation sub-screen that takes runtime state; rendered via the
+     * existing `is Screen.NetworkPeerDetail` arm in the `when` dispatch.
+     */
+    data class NetworkPeerDetail(val keyId: String) : Screen()
+
+    // 2.9.4 — 5 CEG 0.6 cohort-scope layer hubs (Identities · Trust · Policies).
+    // Phase A: each renders LayerHubScreen with the appropriate CohortScope.
+    // Phase B: LayerGlobalCommons absorbs the existing NetworkScreen federation
+    // hub. Per CEG §02 grammar:137 and `CohortScope.kt` for the 7 → 5 fold.
+    object LayerAgent : Screen()
+    object LayerFamily : Screen()
+    object LayerLocalCommunity : Screen()
+    object LayerGlobalCommunities : Screen()
+    object LayerGlobalCommons : Screen()
+}
+
+/**
+ * Bidirectional bridge between the legacy [Screen] sealed class and the
+ * 2.9.4 [NavSurface] taxonomy. The sidebar drives `onSurfaceSelected`;
+ * we translate to a Screen and assign `currentScreen`. The active surface
+ * is computed back from the Screen so the sidebar's highlight state stays
+ * in sync.
+ *
+ * Pre-login screens (Startup / Login / Setup / ServerConnection) and the
+ * Help utility have no NavSurface (they're [FLOW_ONLY_SURFACES]); the
+ * function returns null and the sidebar is hidden by the shell.
+ */
+private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface? = when (s) {
+    Screen.Interact -> ai.ciris.mobile.shared.ui.nav.NavSurface.Interact
+    Screen.Sessions -> ai.ciris.mobile.shared.ui.nav.NavSurface.Sessions
+    Screen.Tickets -> ai.ciris.mobile.shared.ui.nav.NavSurface.Tickets
+    Screen.Scheduler -> ai.ciris.mobile.shared.ui.nav.NavSurface.Scheduler
+    Screen.Services -> ai.ciris.mobile.shared.ui.nav.NavSurface.Services
+    Screen.Tools -> ai.ciris.mobile.shared.ui.nav.NavSurface.Tools
+    Screen.Telemetry -> ai.ciris.mobile.shared.ui.nav.NavSurface.Telemetry
+    Screen.Logs -> ai.ciris.mobile.shared.ui.nav.NavSurface.Logs
+    Screen.Memory -> ai.ciris.mobile.shared.ui.nav.NavSurface.Memory
+    Screen.GraphMemory -> ai.ciris.mobile.shared.ui.nav.NavSurface.GraphMemory
+    Screen.WiseAuthority -> ai.ciris.mobile.shared.ui.nav.NavSurface.WiseAuthority
+    Screen.Settings -> ai.ciris.mobile.shared.ui.nav.NavSurface.AgentSettings
+    Screen.LLMSettings -> ai.ciris.mobile.shared.ui.nav.NavSurface.LLMSettings
+    Screen.System -> ai.ciris.mobile.shared.ui.nav.NavSurface.System
+    Screen.Runtime -> ai.ciris.mobile.shared.ui.nav.NavSurface.Runtime
+    Screen.Config -> ai.ciris.mobile.shared.ui.nav.NavSurface.Config
+    Screen.SkillStudio, Screen.SkillImport -> ai.ciris.mobile.shared.ui.nav.NavSurface.Skills
+    Screen.HealthReputation -> ai.ciris.mobile.shared.ui.nav.NavSurface.HealthReputation
+    Screen.Users -> ai.ciris.mobile.shared.ui.nav.NavSurface.Users
+    Screen.Adapters -> ai.ciris.mobile.shared.ui.nav.NavSurface.Adapters
+    // Phase B (2026-05-31): Screen.Network + federation sub-screens highlight
+    // LayerGlobalCommons in the sidebar (the new home of the federation hub).
+    Screen.Network -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons
+    Screen.NetworkIdentity,
+    Screen.NetworkMap,
+    Screen.NetworkTrustGraph,
+    Screen.NetworkPeers,
+    Screen.NetworkInterfaces,
+    Screen.NetworkPaths,
+    Screen.NetworkAnnounces,
+    Screen.NetworkQueue,
+    Screen.NetworkDiagnostics,
+    Screen.NetworkContent -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons
+    is Screen.NetworkPeerDetail -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons
+    Screen.DataManagement -> ai.ciris.mobile.shared.ui.nav.NavSurface.Data
+    Screen.Audit -> ai.ciris.mobile.shared.ui.nav.NavSurface.Audit
+    Screen.Consent -> ai.ciris.mobile.shared.ui.nav.NavSurface.Consent
+    Screen.Trust -> ai.ciris.mobile.shared.ui.nav.NavSurface.Trust
+    Screen.Billing -> ai.ciris.mobile.shared.ui.nav.NavSurface.Billing
+    Screen.Wallet -> ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet
+    Screen.Commons -> ai.ciris.mobile.shared.ui.nav.NavSurface.Commons
+    Screen.Participate -> ai.ciris.mobile.shared.ui.nav.NavSurface.Participate
+    Screen.EnvironmentInfo -> ai.ciris.mobile.shared.ui.nav.NavSurface.EnvironmentGraph
+    Screen.Delegation -> ai.ciris.mobile.shared.ui.nav.NavSurface.Delegation
+    Screen.TrustTopology -> ai.ciris.mobile.shared.ui.nav.NavSurface.TrustTopology
+    Screen.Constitutional -> ai.ciris.mobile.shared.ui.nav.NavSurface.Constitutional
+    Screen.AgentsList -> ai.ciris.mobile.shared.ui.nav.NavSurface.AgentsList
+    Screen.VizSettings -> ai.ciris.mobile.shared.ui.nav.NavSurface.ClientInterface
+    // CEG 0.6 layer hubs (2.9.4 Phase A)
+    Screen.LayerAgent -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerAgent
+    Screen.LayerFamily -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerFamily
+    Screen.LayerLocalCommunity -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerLocalCommunity
+    Screen.LayerGlobalCommunities -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommunities
+    Screen.LayerGlobalCommons -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons
+    // Flow-only / no sidebar
+    Screen.Startup, Screen.Login, Screen.Setup, Screen.ServerConnection, Screen.Help -> null
+}
+
+private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen = when (s) {
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Interact -> Screen.Interact
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Sessions -> Screen.Sessions
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Tickets -> Screen.Tickets
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Scheduler -> Screen.Scheduler
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Services -> Screen.Services
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Tools -> Screen.Tools
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Telemetry -> Screen.Telemetry
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Logs -> Screen.Logs
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Memory -> Screen.Memory
+    ai.ciris.mobile.shared.ui.nav.NavSurface.GraphMemory -> Screen.GraphMemory
+    ai.ciris.mobile.shared.ui.nav.NavSurface.WiseAuthority -> Screen.WiseAuthority
+    ai.ciris.mobile.shared.ui.nav.NavSurface.AgentSettings -> Screen.Settings
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LLMSettings -> Screen.LLMSettings
+    ai.ciris.mobile.shared.ui.nav.NavSurface.System -> Screen.System
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Runtime -> Screen.Runtime
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Config -> Screen.Config
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Skills -> Screen.SkillStudio
+    ai.ciris.mobile.shared.ui.nav.NavSurface.HealthReputation -> Screen.HealthReputation
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Users -> Screen.Users
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Adapters -> Screen.Adapters
+    // Phase B (2026-05-31): NavSurface.Network forwards to LayerGlobalCommons.
+    // The Network surface object is retained for backward compat (walk-tests +
+    // any caller that still hard-references it), but it no longer appears in
+    // any sidebar group — the user-facing path is LayerGlobalCommons.
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Network -> Screen.LayerGlobalCommons
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Data -> Screen.DataManagement
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Audit -> Screen.Audit
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Consent -> Screen.Consent
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Trust -> Screen.Trust
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Billing -> Screen.Billing
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet -> Screen.Wallet
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Commons -> Screen.Commons
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Participate -> Screen.Participate
+    ai.ciris.mobile.shared.ui.nav.NavSurface.EnvironmentGraph -> Screen.EnvironmentInfo
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Delegation -> Screen.Delegation
+    ai.ciris.mobile.shared.ui.nav.NavSurface.TrustTopology -> Screen.TrustTopology
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Constitutional -> Screen.Constitutional
+    ai.ciris.mobile.shared.ui.nav.NavSurface.AgentsList -> Screen.AgentsList
+    ai.ciris.mobile.shared.ui.nav.NavSurface.ClientInterface -> Screen.VizSettings
+    // CEG 0.6 layer hubs (2.9.4 Phase A)
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LayerAgent -> Screen.LayerAgent
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LayerFamily -> Screen.LayerFamily
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LayerLocalCommunity -> Screen.LayerLocalCommunity
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommunities -> Screen.LayerGlobalCommunities
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons -> Screen.LayerGlobalCommons
 }
 
 /**

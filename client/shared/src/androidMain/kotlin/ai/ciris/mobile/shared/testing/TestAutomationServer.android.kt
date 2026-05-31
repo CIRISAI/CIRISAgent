@@ -11,7 +11,6 @@ import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 
 private const val TAG = "TestAutomation.android"
@@ -103,6 +102,39 @@ class AndroidTestAutomationServer(private val port: Int = 9091) {
                     } else {
                         call.respond(HttpStatusCode.NotFound, mapOf("error" to "Element not found"))
                     }
+                }
+
+                // Combined action + view (preferred for automation)
+                // Mirrors desktop /act — performs action, waits, then returns
+                // the updated UI state. Request: {action, testTag, text?, clearFirst?,
+                // waitMs?, filterTags?}. Response: {actionResult, screen, elements,
+                // elementCount}.
+                post("/act") {
+                    val request = call.receive<ActAndViewRequest>()
+                    val resp = TestAutomationHandler.handleActAndView(request)
+                    call.respond(resp)
+                }
+
+                // Navigate to a screen. On Android the EpistemicSidebar is the
+                // canonical post-login nav surface, so the Python helper drives
+                // navigation by clicking nav rows directly. /navigate is here
+                // for desktop API parity. Unlike desktop, no navigation
+                // callback is currently wired on Android, so this endpoint
+                // returns 503 — same shape desktop returns when its callback
+                // is unset — and the helper falls back to click-driven
+                // navigation (which is what the federation walk-test already
+                // does on both platforms).
+                post("/navigate") {
+                    val request = call.receive<NavigateRequest>()
+                    call.respond(
+                        HttpStatusCode.ServiceUnavailable,
+                        ActionResponse(
+                            success = false,
+                            action = "navigate",
+                            screen = request.screen,
+                            error = "Navigation callback not configured on Android — drive nav via /click on nav_epistemic_<slug>"
+                        )
+                    )
                 }
             }
         }

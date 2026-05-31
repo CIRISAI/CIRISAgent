@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.platform
 
 import androidx.compose.foundation.clickable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -91,6 +92,16 @@ actual object TestAutomation {
         }
     }
 
+    /**
+     * Whether a click handler is currently registered for [testTag].
+     * Mirrors `TestAutomationState.hasClickHandler` for desktop's local
+     * handler map. Used by the desktop test server's `/click` and `/wait`
+     * routes to surface popup / dialog buttons whose handlers are live but
+     * whose layout positions never reached the main-window
+     * `onGloballyPositioned` callback.
+     */
+    fun hasClickHandler(testTag: String): Boolean = clickHandlers.containsKey(testTag)
+
     actual fun requestTextInput(testTag: String, text: String, clearFirst: Boolean) {
         _textInputRequests.value = TextInputRequest(testTag, text, clearFirst)
     }
@@ -116,9 +127,18 @@ actual object TestAutomation {
 /**
  * Desktop implementation of testable modifier.
  * When test mode is enabled, tracks element position for automation.
+ *
+ * Wrapped in `DisposableEffect` so the registry entry is removed when the
+ * modifier leaves the composition — popup / dialog content registers when
+ * the popup opens and unregisters when it dismisses. Without that, dialog
+ * elements stay "visible" forever and walk-tests that wait for an element
+ * to disappear loop until timeout.
  */
 actual fun Modifier.testable(tag: String, text: String?): Modifier = composed {
     if (TestAutomation.isEnabled()) {
+        DisposableEffect(tag) {
+            onDispose { TestAutomation.unregisterElement(tag) }
+        }
         this
             .testTag(tag)
             .onGloballyPositioned { coordinates ->
@@ -141,15 +161,22 @@ actual fun Modifier.testable(tag: String, text: String?): Modifier = composed {
 
 /**
  * Desktop implementation of testableClickable modifier.
- * Registers click handler for programmatic triggering by test server.
+ *
+ * Registers click handler from a `DisposableEffect` so it unregisters on
+ * dispose. Dialog / sheet buttons live inside a Popup composition tree that
+ * dismisses when the dialog closes; without dispose-time unregistration the
+ * handler outlives the visible button (and walk-tests can dispatch clicks
+ * to handlers whose UI is gone).
  */
 actual fun Modifier.testableClickable(tag: String, text: String?, onClick: () -> Unit): Modifier = composed {
-    // Register click handler when test mode enabled
     if (TestAutomation.isEnabled()) {
-        TestAutomation.registerClickHandler(tag, onClick)
-    }
-
-    if (TestAutomation.isEnabled()) {
+        DisposableEffect(tag) {
+            TestAutomation.registerClickHandler(tag, onClick)
+            onDispose {
+                TestAutomation.unregisterClickHandler(tag)
+                TestAutomation.unregisterElement(tag)
+            }
+        }
         this
             .testTag(tag)
             .clickable { onClick() }
@@ -176,14 +203,20 @@ actual fun Modifier.testableClickable(tag: String, text: String?, onClick: () ->
 /**
  * Desktop implementation of testableWithHandler modifier.
  * Registers click handler WITHOUT adding clickable - for components that handle clicks internally.
+ *
+ * Same DisposableEffect pattern as `testableClickable` so handlers attached
+ * to internally-clickable widgets (switches, sliders, etc.) unregister on
+ * dispose.
  */
 actual fun Modifier.testableWithHandler(tag: String, onClick: () -> Unit): Modifier = composed {
-    // Register click handler when test mode enabled
     if (TestAutomation.isEnabled()) {
-        TestAutomation.registerClickHandler(tag, onClick)
-    }
-
-    if (TestAutomation.isEnabled()) {
+        DisposableEffect(tag) {
+            TestAutomation.registerClickHandler(tag, onClick)
+            onDispose {
+                TestAutomation.unregisterClickHandler(tag)
+                TestAutomation.unregisterElement(tag)
+            }
+        }
         this
             .testTag(tag)
             .onGloballyPositioned { coordinates ->

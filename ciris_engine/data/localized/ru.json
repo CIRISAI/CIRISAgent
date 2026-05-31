@@ -142,13 +142,13 @@
     "ponder_forced_retry": "Принудительное PONDER после повторной попытки совести",
     "override_rationale": "Переопределено {conscience_name}: Необходимо пересмотреть {action}",
     "forced_ponder_rationale": "Принудительное PONDER после повторной попытки совести для предотвращения циклов",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "ПРЕДУПРЕЖДЕНИЕ СОВЕСТИ: минимальная уверенность для ГОВОРИТЬ равна {threshold}, но было указано {confidence}",
+    "ponder_concern_speak_harm": "ПРЕДУПРЕЖДЕНИЕ СОВЕСТИ: содержимое ГОВОРИТЬ может причинить вред",
+    "ponder_concern_tool_confidence": "ПРЕДУПРЕЖДЕНИЕ СОВЕСТИ: минимальная уверенность для ИНСТРУМЕНТА равна {threshold}, но было указано {confidence}",
+    "ponder_concern_tool_requires_wa": "ПРЕДУПРЕЖДЕНИЕ СОВЕСТИ: для использования этого инструмента требуется одобрение Мудрого Авторитета",
+    "ponder_concern_memorize_scope": "ПРЕДУПРЕЖДЕНИЕ СОВЕСТИ: ЗАПОМНИТЬ {scope} — убедитесь, что это уместно",
+    "ponder_concern_forget_scope": "ПРЕДУПРЕЖДЕНИЕ СОВЕСТИ: ЗАБЫТЬ {scope} — это действие необратимо",
+    "ponder_concern_high_stakes": "ПРЕДУПРЕЖДЕНИЕ СОВЕСТИ: обнаружена ситуация с высокими ставками — требуется тщательное осмысление",
     "retry_header": "**РЕКОМЕНДАЦИИ ПО ПЕРЕОПРЕДЕЛЕНИЮ СОВЕСТИ:**",
     "retry_intro": "Ваша предыдущая попытка {action} была отклонена, потому что: {reason}",
     "retry_alternatives_header": "Альтернативы, перечисленные IRIS-E (используйте их как опорные направления, если вы снова ГОВОРИТЕ):",
@@ -955,17 +955,17 @@
     "runtime_pause": "Пауза",
     "runtime_resume": "Возобновить",
     "runtime_step": "Шаг",
-    "runtime_current_step": "Current Step",
-    "runtime_step_time": "Step Time",
-    "runtime_tokens_label": "Tokens",
-    "runtime_updates": "{count} updates",
-    "runtime_conditional": "conditional",
-    "runtime_task_info": "{count} thoughts | Updated: {updated}",
-    "runtime_instruction_1": "Real-time Stream: Connects to reasoning stream for live updates",
-    "runtime_instruction_2": "H3ERE Pipeline: 11 step points (0-10) with conditional recursive steps",
-    "runtime_instruction_3": "Pause/Resume: Control processing while maintaining stream connection",
-    "runtime_instruction_4": "Single Step: Execute one pipeline step (when paused)",
-    "runtime_instruction_5": "Live Visualization: See reasoning process in real-time",
+    "runtime_current_step": "Текущий шаг",
+    "runtime_step_time": "Время шага",
+    "runtime_tokens_label": "Токены",
+    "runtime_updates": "{count} обновлений",
+    "runtime_conditional": "условный",
+    "runtime_task_info": "{count} мыслей | Обновлено: {updated}",
+    "runtime_instruction_1": "Поток в реальном времени: подключается к потоку рассуждений для живых обновлений",
+    "runtime_instruction_2": "Конвейер H3ERE: 11 точек шагов (0–10) с условными рекурсивными шагами",
+    "runtime_instruction_3": "Пауза/Возобновление: управление обработкой при сохранении подключения к потоку",
+    "runtime_instruction_4": "Один шаг: выполнить один шаг конвейера (в режиме паузы)",
+    "runtime_instruction_5": "Живая визуализация: наблюдайте процесс рассуждения в реальном времени",
     "step_start_round": "0. Начало раунда",
     "step_gather_context": "1. Сбор контекста",
     "step_perform_dmas": "2. Выполнение DMA",
@@ -983,13 +983,13 @@
     "logs_auto_scroll_on": "Автопрокрутка ВКЛ",
     "logs_entries": "Логи ({count} записей)",
     "logs_search_placeholder": "Поиск по логам...",
-    "logs_hide_filters": "Hide",
-    "logs_show_filters": "Filter",
-    "logs_level_label": "Level:",
-    "logs_service_label": "Service:",
-    "logs_limit_label": "Limit:",
-    "logs_collapse": "Collapse",
-    "logs_expand": "Expand",
+    "logs_hide_filters": "Скрыть",
+    "logs_show_filters": "Фильтр",
+    "logs_level_label": "Уровень:",
+    "logs_service_label": "Сервис:",
+    "logs_limit_label": "Лимит:",
+    "logs_collapse": "Свернуть",
+    "logs_expand": "Развернуть",
     "trust_learn_more": "Узнать больше о CIRISVerify",
     "trust_running": "Выполнение проверок аттестации...",
     "trust_failed": "Аттестация не удалась",
@@ -1672,15 +1672,15 @@
     "wallet_paymaster_hint": "Введите ваш Etherspot Arka API ключ для включения переводов USDC без газа",
     "wallet_paymaster_key_label": "Arka API Key",
     "wallet_paymaster_save": "Сохранить ключ",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "Выполнить",
+    "interact_viz_complete": "Завершить",
+    "adapter_reauth_required": "Требуется повторная аутентификация",
+    "adapter_reauth": "Повторная аутентификация",
+    "adapter_reauth_reason": "Причина: {reason}",
+    "settings_location": "Местоположение",
+    "settings_location_desc": "Укажите ваш город для получения погоды и местной информации",
+    "settings_search_city": "Город",
+    "settings_search_city_hint": "Найти город...",
     "llm_settings_title": "Конфигурация LLM",
     "llm_settings_status": "Обзор состояния",
     "llm_settings_providers": "Провайдеры",
@@ -1953,11 +1953,11 @@
   "setup_validation_username_required": "Требуется имя пользователя",
   "startup": {
     "startup_retry": "Повторить",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "Проверка сервисов...",
+    "initializing": "Инициализация...",
+    "loading_config": "Загрузка конфигурации...",
+    "ready": "Готово",
+    "starting": "Запуск..."
   },
   "status": {
     "executing": "Выполняется...",
@@ -1974,9 +1974,9 @@
   "system": {
     "system_cognitive_state": "Когнитивное состояние",
     "system_queue_depth": "Глубина очереди",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "Состояние",
+    "metrics": "Метрики",
+    "services": "Сервисы"
   },
   "task_id": "ID задачи",
   "telemetry_online": "Онлайн",
@@ -2055,5 +2055,394 @@
   "wa_resolve": "Разрешить",
   "wa_service_status": "Статус сервиса",
   "wa_status": "Статус",
-  "login_first_run_welcome": "Добро пожаловать! Выберите способ настройки вашего ИИ-ассистента."
+  "login_first_run_welcome": "Добро пожаловать! Выберите способ настройки вашего ИИ-ассистента.",
+  "network": {
+    "title": "Сеть",
+    "identity_card": {
+      "title": "Идентичность федерации",
+      "copy_address": "Копировать адрес",
+      "qr_label": "QR · храповик / ротация",
+      "capabilities_title": "Возможности",
+      "copied": "Скопировано",
+      "copy_node_code": "Копировать код узла",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Поделитесь этим кодом с пиром, чтобы пригласить его. Он может вставить или сканировать.",
+      "node_code_title": "Мой код узла",
+      "peers_canonical": "Канонический",
+      "peers_total": "Всего пиров",
+      "qr_placeholder_label": "QR-код",
+      "signer_key_label": "Ключ подписи"
+    },
+    "mode_card": {
+      "title": "Режим агента",
+      "subtitle": "Как этот агент участвует в федерации. Edge перезапустится при изменении.",
+      "client_label": "Клиент",
+      "client_description": "Подключиться наружу к удалённому узлу.",
+      "proxy_label": "Прокси",
+      "proxy_description": "Локальный агент с поверхностью прокси-федерации.",
+      "proxy_default_marker": "(по умолчанию)",
+      "server_label": "Сервер",
+      "server_description": "Полный узел федерации.",
+      "server_disk_gate": "Требуется ≥256 ГБ свободного диска · {available} свободно из {required} требуется",
+      "confirm_change_title": "Требуется перезапуск",
+      "confirm_change_body": "Переключение режима агента требует перезапуска Edge. Продолжить?",
+      "confirm_change_button": "Перезапустить Edge",
+      "cancel_button": "Отмена",
+      "insufficient_disk_error": "Недостаточно свободного диска для режима SERVER. {available} свободно, {required} требуется."
+    },
+    "stats_strip": {
+      "peers": "Пиры",
+      "transports": "Транспорты",
+      "queue": "Очередь",
+      "errors": "Ошибки",
+      "awaiting_edge_1_0": "Ожидание Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Идентичность",
+      "map": "Карта",
+      "trust_graph": "Граф доверия",
+      "peers": "Пиры",
+      "interfaces": "Интерфейсы",
+      "paths": "Пути",
+      "announces": "Объявления",
+      "queue": "Очередь",
+      "diagnostics": "Диагностика",
+      "content": "Содержимое",
+      "coming_soon_badge": "Скоро"
+    },
+    "sub_screens": {
+      "identity_description": "Идентичность федерации — ключ подписанта, цепочка аттестации аппаратного хранения, состояние храповика, история ротации.",
+      "map_description": "Силовой холст локального соседства федерации — пиры как узлы, транспорты как цветные рёбра.",
+      "trust_graph_description": "Операторский вид топологии доверия транспорта — прямые предоставления, делегированные полномочия, враждебные флаги.",
+      "peers_description": "Сортируемая матрица пир × достижимость транспорта — каждая идентичность федерации, которую слышал этот стек.",
+      "interfaces_description": "Здоровье + конфиг + статистика по транспорту (стиль rnstatus). CRUD над эквивалентом reticulum.conf.",
+      "paths_description": "Таблица путей RNS — каждое назначение, которое Edge знает как достичь, через какой транспорт, прыжки, истечение.",
+      "announces_description": "Поток объявлений в прямом эфире + ретроспективный — кто, какой интерфейс, прыжки, проверка подписи.",
+      "queue_description": "Очередь исходящих пакетов на транспорт: глубина, возраст, количество повторов, состояние фрагментации.",
+      "diagnostics_description": "Недавние ошибки, сбои подписи, блокировки политики, текучесть транспорта — операторская криминалистика.",
+      "content_description": "Браузер хранилища контента федерации — кэшировано локально, федерировано, извлечение по хешу."
+    },
+    "announces": {
+      "empty": "Анонсов пока нет. Ожидание событий федерации…",
+      "no_message": "(нет сообщения)",
+      "title": "Живые анонсы"
+    },
+    "content": {
+      "back": "Назад",
+      "error": {
+        "edge_unavailable": "Edge недоступен.",
+        "not_found": "Содержимое не найдено у этого пира. Попробуйте другого пира."
+      },
+      "fetch": {
+        "button": "Получить",
+        "content_id_label": "ID содержимого (SHA-256)",
+        "content_id_placeholder": "Hex-дайджест из 64 символов",
+        "invalid_id": "ID содержимого должен содержать 64 шестнадцатеричных символа.",
+        "timeout_label": "Таймаут"
+      },
+      "peer": {
+        "change": "Сменить пира",
+        "empty": "Нет доступных пиров. Сначала добавьте пиров.",
+        "search": "Поиск пиров"
+      },
+      "refresh": "Обновить",
+      "result": {
+        "content_type": "Тип содержимого",
+        "fetched_at": "Получено в",
+        "preview": "Предпросмотр полезной нагрузки (первые 200 байт)",
+        "size": "Размер",
+        "title": "Результат"
+      },
+      "step1": {
+        "title": "Выберите пира для запроса"
+      },
+      "step2": {
+        "title": "Получить содержимое от пира"
+      }
+    },
+    "diagnostics": {
+      "empty": "Совпадающих событий нет. Настройте фильтры или подождите.",
+      "more": "коснитесь, чтобы развернуть",
+      "no_summary": "(нет сводки полезной нагрузки)",
+      "search_hint": "Фильтр по тексту сообщения или event_type",
+      "title": "Диагностика"
+    },
+    "interfaces": {
+      "empty": "Транспорты не настроены.",
+      "not_measured": "Ещё не измерено",
+      "peers": "пиров",
+      "refresh": "Обновить",
+      "row": {
+        "bytes_in": "Входящих байт",
+        "bytes_out": "Исходящих байт",
+        "reach": "Достижимость %",
+        "status": "Статус"
+      },
+      "status": {
+        "active": "Активен",
+        "degraded": "Ухудшен",
+        "idle": "Простой",
+        "unknown": "Неизвестно"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Пиры появятся на настоящей карте, когда мы выпустим конвейер телеметрии. До тех пор вот что вы можете увидеть прямо сейчас:",
+        "title": "Никаких выдуманных местоположений"
+      },
+      "future": {
+        "bullet_announces": "Анонсы в реальном времени, наложенные по регионам",
+        "bullet_locations": "Местоположения пиров из телеметрии",
+        "bullet_transport": "Слой транспортных каналов (TCP / LoRa / I2P / AX.25)",
+        "title": "Что это покажет позже"
+      },
+      "hero": {
+        "subtitle": "Настоящая карта появится вместе с конвейером телеметрии.",
+        "title": "Географический вид"
+      },
+      "refresh": "Обновить",
+      "today": {
+        "canonical": "Канонические пиры",
+        "other": "Другие пиры",
+        "title": "Что у нас есть сегодня",
+        "trusted": "Доверенные пиры"
+      }
+    },
+    "paths": {
+      "empty": "Событий путей пока нет.",
+      "kind_added": "добавлен",
+      "kind_changed": "изменён",
+      "kind_lost": "потерян",
+      "kind_other": "событие",
+      "no_static_table_note": "Edge 1.0 не предоставляет статическую таблицу путей; этот экран показывает только живые изменения. Повторное развёртывание может сбросить состояние.",
+      "section_recent": "Недавние события путей",
+      "title": "Живые пути"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Фон (hex)",
+      "appearance_fg_label": "Передний план (hex)",
+      "appearance_icon_label": "Иконка",
+      "appearance_save": "Сохранить внешний вид",
+      "appearance_title": "Внешний вид",
+      "cancel_button": "Отмена",
+      "confirm_block_body": "Блокировка отклонит весь трафик от этого пира. Вы можете разблокировать позже.",
+      "confirm_block_button": "Заблокировать",
+      "confirm_block_title": "Заблокировать этого пира?",
+      "copy_key_id": "Копировать id ключа",
+      "last_ok_days_ago": "{n} д. назад",
+      "last_ok_hours_ago": "{n} ч. назад",
+      "last_ok_just_now": "Только что",
+      "last_ok_min_ago": "{n} мин. назад",
+      "last_ok_never": "Никогда",
+      "not_found": "Пир не найден",
+      "notes_empty": "Заметок нет",
+      "notes_title": "Заметки",
+      "reachability_empty": "Ещё не измерено",
+      "reachability_title": "Достижимость",
+      "sas_close": "Закрыть",
+      "sas_digits_label": "Цифры",
+      "sas_instructions": "Сравните это с пиром по доверенному каналу (голос/видео/лично). Если обе стороны совпадают, пир проверен — переключите доверие на TRUSTED.",
+      "sas_modal_title": "Короткая строка аутентификации",
+      "sas_show_button": "Показать SAS-код",
+      "sas_title": "Проверить идентичность (SAS)",
+      "sas_words_label": "Слова",
+      "title": "Детали пира",
+      "trust_state_title": "Состояние доверия"
+    },
+    "peers": {
+      "add_peer_cancel": "Отмена",
+      "add_peer_fab": "Добавить пира",
+      "add_peer_paste_label": "Вставить код узла",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "Сканировать QR",
+      "add_peer_scan_qr_unavailable": "Сканирование QR скоро",
+      "add_peer_submit": "Добавить",
+      "add_peer_title": "Добавить пира",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Поделитесь своим кодом узла для приглашения или добавьте код пира.",
+      "empty_title": "Пиров пока нет",
+      "filter_all": "Все",
+      "filter_blocked": "Заблокированные",
+      "filter_canonical": "Канонические",
+      "filter_trusted": "Доверенные",
+      "filter_unknown": "Неизвестные",
+      "filter_untrusted": "Недоверенные",
+      "show_infra": "Показать инфраструктуру CIRIS",
+      "title": "Пиры",
+      "trust_blocked": "заблокирован",
+      "trust_trusted": "доверенный",
+      "trust_unknown": "неизвестно",
+      "trust_untrusted": "недоверенный"
+    },
+    "queue": {
+      "failures": {
+        "send": "Сбои отправки",
+        "title": "Сбои",
+        "verify": "Сбои проверки"
+      },
+      "refresh": "Обновить",
+      "stats": {
+        "depth": "Глубина очереди",
+        "received": "Получено",
+        "sent": "Отправлено",
+        "title": "Статистика очереди"
+      },
+      "throughput": {
+        "bytes_in": "Входящих байт",
+        "bytes_out": "Исходящих байт",
+        "received": "Получено",
+        "sent": "Отправлено",
+        "session": "Всего за эту сессию",
+        "title": "Пропускная способность"
+      }
+    },
+    "stream": {
+      "clear": "Очистить",
+      "dismiss": "Закрыть",
+      "event_count": "{count} событий",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Пауза",
+      "reconnect": "Переподключить",
+      "resume": "Возобновить",
+      "resume_notice": "Переподключено. Некоторые события могли быть пропущены.",
+      "retry": "Повторить"
+    },
+    "trust_graph": {
+      "empty": "Нет пиров для визуализации.",
+      "legend": {
+        "blocked": "Заблокирован",
+        "canonical_hint": "Более толстый контур кольца = канонический (поставляется с агентом).",
+        "edge_hint": "Непрозрачность ребра отражает достижимость по каждому медиа.",
+        "title": "Состояние доверия",
+        "trusted": "Доверенный",
+        "unknown": "Неизвестно",
+        "untrusted": "Недоверенный"
+      },
+      "refresh": "Обновить",
+      "summary": "{count} пиров · {canonical} канонических"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Режим агента",
+      "subtitle": "Изменить, как этот агент участвует в федерации. Отражает экран Сети."
+    },
+    "brightness": "Яркость",
+    "brightness_light": "Светлая",
+    "brightness_system": "Система",
+    "brightness_dark": "Тёмная"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Идентичности",
+        "trust": "Доверие",
+        "policies": "Политики доверия"
+      },
+      "badge": {
+        "coming_soon": "СКОРО"
+      },
+      "agent": {
+        "title": "Агент (Я)",
+        "subtitle": "Сам агент — неявное «я» на каждом уровне.",
+        "identities_description": "Собственный ключ идентичности агента — адрес в федерации, которым он подписывает каждый вклад. Удобное имя берётся из локальной конфигурации; key_id — из CIRISEdge.",
+        "trust_description": "Доверие к себе — основа основ. У Рекурсивного Золотого правила нет оговорок об исключениях: чего агент требует от других, тому он должен соответствовать сам.",
+        "policies_description": "Политики, применяемые к самому себе: частота ротации идентичности, обновление аттестаций, что агент готов подписывать в этом охвате."
+      },
+      "family": {
+        "title": "Семья",
+        "subtitle": "Другие экземпляры CIRIS, разделяющие идентичность этого оператора.",
+        "identities_description": "Родственные экземпляры (разные среды выполнения одного и того же агента) и их occurrence_id. Удобное имя берётся из конфигурации оператора.",
+        "trust_description": "Члены семьи по умолчанию используют общий подписной ключ оператора — прямое доверие здесь является базовым уровнем. Совместные решения о выключении и пробуждении принимаются в рамках координации между экземплярами.",
+        "policies_description": "Политики между экземплярами: совместный захват задач, границы безопасности для нескольких экземпляров, кворум решений для действий на уровне семьи."
+      },
+      "local_community": {
+        "title": "Локальное сообщество",
+        "subtitle": "Локально доверенные пиры — домашний канал, домохозяйство, отдельная гильдия.",
+        "identities_description": "Пиры, которым оператор доверяет явно. Удобное имя берётся из контактной книги; key_id — из таблицы анонсов.",
+        "trust_description": "Прямое доверие, выданное оператором. Может быть отозвано в любой момент. Вклады локального охвата остаются в локальной когорте и не публикуются в федерации.",
+        "policies_description": "Политики каждого сообщества: кто может приглашать, какие классы контента допускаются, как разрешаются споры в этом охвате."
+      },
+      "global_communities": {
+        "title": "Глобальные сообщества",
+        "subtitle": "Межсообщественные группы по интересам, к которым присоединился агент.",
+        "identities_description": "Аффилированные сообщества (кооперативы, профессиональные объединения, сети взаимопомощи), в которых участвует агент. Удобное имя берётся из реестра accord_holder; иначе — key_id.",
+        "trust_description": "Доверие транзитивно через членство в сообществе. У каждого сообщества свои критерии приёма и своя дисциплина аттестаций.",
+        "policies_description": "Политики уровня аффилиации: от каких сообществ агент принимает указания, как разрешаются конфликты между конкурирующими аффилиациями."
+      },
+      "global_commons": {
+        "title": "Глобальное достояние",
+        "subtitle": "Федерация как универсальный слой — человечество, экология, сама субстратная среда.",
+        "identities_description": "Все идентичности, видимые в охвате федерации, включая держателей halt-полномочий humanity_accord, принципалов accord_holder и более широкий пул пиров.",
+        "trust_description": "Доверие в универсальном охвате обеспечивается собственной дисциплиной аттестаций федерации. Рекурсивное Золотое правило связывает каждого принципала — включая CIRIS L3C — в этом охвате.",
+        "policies_description": "Конституциональные границы федерации: halt-полномочия humanity_accord, зарезервированные префиксы accord_holder, размеры кворума locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Лента достояния",
+        "description": "Карточки вкладов федерации: accord-файлы, тесты безопасности, свидетельства поведения, обновления рубрик, отзывы, делегирования. Каждая несёт полярность, уверенность, разнообразие свидетелей и происхождение по аудит-цепочке, разрешаемое через транспорт ContentFetch в Edge."
+      },
+      "participate": {
+        "title": "Участвовать",
+        "description": "Реестр потребностей федерации — агенты регистрируют то, что им нужно (рецензия рубрики, свидетель безопасности, охват делегирования) как аттестации need:{domain}:{kind}; другие агенты видят их, оценивают и откликаются."
+      },
+      "environment_graph": {
+        "title": "Граф среды",
+        "description": "Граф среды, производный от линзы — оценки конформности к многообразию по каждой когорте, измерения распределительного доступа, обнаружение коррелированных действий. Слой графа над директорией федерации, опираясь на который агент рассуждает при принятии решений."
+      },
+      "delegation": {
+        "title": "Делегирование",
+        "description": "Граф делегирования: охваты, делегированные этим агентом и ему, с метками времени выдачи, evidence_refs и цепочками отзывов. Один из 4 структурных примитивов — совладеется с директорией федерации."
+      },
+      "trust_topology": {
+        "title": "Топология доверия",
+        "description": "Граф доверия федерации — пиры как узлы, выдачи доверия как рёбра (прямые / делегированные / противоборствующие), цвет ребра — транспортная достижимость, размер узла — совокупный вес доверия."
+      },
+      "constitutional": {
+        "title": "Конституциональный",
+        "description": "Поверхность идентичности accord-holder — единственная конституциональная асимметрия согласно FSD-002 §4.1. Только ключи с identity_type=accord_holder могут эмитировать аттестации accord:*; этот экран показывает текущих держателей, выпущенные ими эмиссии с accord-префиксом и аудит контроля зарезервированных префиксов."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "Агент",
+      "manage": "Управление",
+      "commons_layers": "Достояние",
+      "federation": "Федерация",
+      "client": "Клиент"
+    },
+    "surface": {
+      "sessions": "Сеансы",
+      "interact": "Общение",
+      "scheduler": "Планировщик",
+      "tickets": "Тикеты",
+      "tools": "Инструменты",
+      "services": "Сервисы",
+      "logs": "Журналы",
+      "telemetry": "Телеметрия",
+      "graph_memory": "Граф",
+      "memory": "Память",
+      "wise_authority": "Мудрый Авторитет",
+      "llm_settings": "LLM",
+      "system": "Система",
+      "runtime": "Среда выполнения",
+      "config": "Конфигурация",
+      "skills": "Навыки",
+      "agent_settings": "Настройки",
+      "health_reputation": "Здоровье и репутация",
+      "users": "Пользователи",
+      "adapters": "Адаптеры",
+      "network": "Сеть",
+      "audit": "Аудит",
+      "consent": "Согласие",
+      "data": "Данные",
+      "trust": "Доверие",
+      "wallet": "Кошелёк",
+      "billing": "Оплата",
+      "agents_list": "Агенты",
+      "client_interface": "Интерфейс"
+    }
+  }
 }

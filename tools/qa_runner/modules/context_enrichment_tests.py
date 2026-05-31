@@ -264,11 +264,26 @@ class ContextEnrichmentTests:
             try:
                 headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
 
+                # requests `timeout=N` on a streaming GET is read-between-bytes,
+                # not total — `(connect_timeout, read_timeout)` lets us keep a
+                # tight connect budget while allowing long gaps between real
+                # events. The `/v1/system/runtime/reasoning-stream` endpoint
+                # sends a `keepalive` SSE every 30s when idle (see
+                # `routes/system_extensions.py:_process_stream_event`); a flat
+                # `timeout=5` raises `ReadTimeout` BEFORE that keepalive lands
+                # whenever real events stop firing for >5s, which is normal in
+                # the parallel-backends matrix once the queue backs up behind
+                # follow-up thoughts from prior modules. The monitor thread
+                # then exits silently and the main loop times out at 240s
+                # waiting for an event that can never arrive. Allow up to 60s
+                # between bytes — twice the server's keepalive cadence — so
+                # the stream survives any idle gap shorter than two missed
+                # keepalives.
                 response = requests.get(
                     f"{self._base_url}/v1/system/runtime/reasoning-stream",
                     headers=headers,
                     stream=True,
-                    timeout=5,
+                    timeout=(5, 60),
                 )
 
                 if response.status_code != 200:

@@ -148,8 +148,21 @@ def create_env_file(
         # Must match ios_main.py / android_main.py CIRIS_DATA_DIR setting
         data_dir = str(get_ciris_home())
     else:
-        # Use absolute expanded path - Rust FFI treats "~" as literal
-        data_dir = str(Path.home() / "ciris" / "data")
+        # Desktop: honor CIRIS_HOME via get_data_dir() instead of
+        # hardcoding ~/ciris/data. Previously this was literal
+        # `Path.home() / "ciris" / "data"`, which baked
+        # CIRIS_DB_PATH=~/ciris/data/... into the wizard-generated
+        # .env regardless of CIRIS_HOME. A multi-process test harness
+        # (qa_runner desktop module) pinning CIRIS_HOME=<project_root>
+        # would see runtime paths honor that, but the SAME wizard
+        # would write a .env that overrode it on the next run —
+        # splitting auth WAs across two SQLite databases and leaving
+        # setup_required=true forever. Rust FFI treats "~" as literal
+        # so we still want an absolute expanded path; get_data_dir()
+        # gives that, anchored at get_ciris_home().
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        data_dir = str(get_data_dir())
 
     # Log what we received for debugging
     logger.info(f"[create_env_file] Received llm_provider='{llm_provider}', llm_base_url='{llm_base_url}'")

@@ -118,17 +118,25 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     db_path_obj = Path(db_path)
     db_path_obj.parent.mkdir(parents=True, exist_ok=True)
 
+    # Post-2.9.4: the prior implementation pre-constructed
+    # `Engine(dsn, "ciris-agent-bootstrap")` as a probe, then `del`'d it.
+    # That was safe in early persist 3.x but breaks persist 3.6.3+ because
+    # the Engine is a process-singleton (CIRISPersist#88 `reset_engine` is
+    # the only release path) — the probe pinned a bootstrap-keyed Engine
+    # in-process, then the real `initialize_database` hit
+    # `EngineConfigMismatch` with the agent's actual signing_key_id at
+    # boot. See CIRISConformance/tests/test_030_cohabitation_init.py for
+    # the canonical "one Engine per process" pattern.
+    #
+    # Lock detection is preserved end-to-end: persist's `Engine()` call
+    # in `_bootstrap_persist_engine` opens the DSN via sqlx and raises
+    # "database is locked" naturally when another process holds the file
+    # — the lock-error mapping below still fires; it just runs against
+    # the real Engine construction instead of a separate probe.
     try:
-        from ciris_persist import Engine  # type: ignore[import-untyped]
-
-        signing_key_id = os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
-        abs_path = db_path_obj.resolve()
-        dsn = f"sqlite:///{abs_path}"
-        # Persist's Engine is heavyweight (runs migrations). Construct once
-        # and drop. If another process holds the file, sqlx raises here.
-        _probe = Engine(dsn, signing_key_id)
-        del _probe
-        print(f"✓ Database exclusive access confirmed: {db_path}")
+        if not os.access(db_path_obj.parent, os.W_OK):
+            raise PermissionError(f"Database parent dir not writable: {db_path_obj.parent}")
+        print(f"✓ Database parent dir ready: {db_path}")
 
     except Exception as e:
         msg = str(e).lower()

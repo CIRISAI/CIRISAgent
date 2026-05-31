@@ -142,13 +142,13 @@
     "ponder_forced_retry": "PONDER ya kulazimishwa baada ya kujaribu tena kwa dhamiri",
     "override_rationale": "Imebatilishwa na {conscience_name}: Inahitaji kufikiria tena {action}",
     "forced_ponder_rationale": "PONDER ya kulazimishwa baada ya kujaribu tena kwa dhamiri ili kuzuia mizunguko",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "WASIWASI WA DHAMIRI: Kiwango cha chini cha imani kwa SEMA kilikuwa {threshold} lakini {confidence} ndiyo kilichotolewa",
+    "ponder_concern_speak_harm": "WASIWASI WA DHAMIRI: Maudhui ya SEMA yanaweza kusababisha madhara",
+    "ponder_concern_tool_confidence": "WASIWASI WA DHAMIRI: Kiwango cha chini cha imani kwa ZANA kilikuwa {threshold} lakini {confidence} ndiyo kilichotolewa",
+    "ponder_concern_tool_requires_wa": "WASIWASI WA DHAMIRI: Zana hii inahitaji idhini ya Mshauri wa Kibinadamu",
+    "ponder_concern_memorize_scope": "WASIWASI WA DHAMIRI: KUMBUKA {scope} - hakikisha hii ni sahihi",
+    "ponder_concern_forget_scope": "WASIWASI WA DHAMIRI: SAHAU {scope} - kitendo hiki hakiwezi kutenduliwa",
+    "ponder_concern_high_stakes": "WASIWASI WA DHAMIRI: Hali yenye hatari kubwa imegunduliwa - tafakuri ya makini inahitajika",
     "retry_header": "**ONYO WA KUKATAA DHAMIRI:**",
     "retry_intro": "Jaribio lako la hapo linalotaka {action} lilibadilishwa kwa sababu: {reason}",
     "retry_alternatives_header": "Njia mbadala IRIS-E iliyoandika (tumia kama lengo la mvuto ikiwa unarudi SPEAK):",
@@ -777,7 +777,7 @@
     "memory_scope_community": "JAMII",
     "runtime_current_step": "Hatua ya Sasa",
     "runtime_step_time": "Muda wa Hatua",
-    "runtime_tokens_label": "Tokens",
+    "runtime_tokens_label": "Tokeni",
     "runtime_updates": "sasisho {count}",
     "runtime_conditional": "masharti",
     "runtime_task_info": "mawazo {count} | Imesasishwa: {updated}",
@@ -937,7 +937,7 @@
     "runtime_task": "Kazi: {id}...",
     "runtime_last_step": "Maelezo ya Hatua ya Mwisho",
     "runtime_time": "Muda: {ms}ms",
-    "runtime_tokens": "Tokens: {count}",
+    "runtime_tokens": "Tokeni: {count}",
     "runtime_how_to": "Jinsi ya kutumia Udhibiti wa Runtime",
     "runtime_pause": "Sitisha",
     "runtime_resume": "Endelea",
@@ -1483,7 +1483,7 @@
     "login_error_cancelled": "Kuingia kukatamatwa. Tafadhali jaribu tena.",
     "skill_workshop": "Warsha ya Ujuzi",
     "skill_workshop_desc": "Unda, ingiza, na usimamie ujuzi kwa wakala wako.",
-    "skill_studio": "Skill Studio",
+    "skill_studio": "Studi ya Ujuzi",
     "skill_studio_desc": "Mhariri wa kimatafsili kuunda ujuzi kutoka mwanzo.",
     "skill_create_new": "Unda Ujuzi Mpya",
     "skill_import": "Ingiza Ujuzi",
@@ -1670,17 +1670,17 @@
     "wallet_paymaster_key_missing": "Paymaster Key: Haijasanidiwa",
     "wallet_paymaster_configure": "Sanidi Paymaster Key",
     "wallet_paymaster_hint": "Ingiza Etherspot Arka API key yako ili kuwezesha uhamishaji wa USDC bila gesi",
-    "wallet_paymaster_key_label": "Arka API Key",
+    "wallet_paymaster_key_label": "Ufunguo wa API wa Arka",
     "wallet_paymaster_save": "Hifadhi Key",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "Tekeleza",
+    "interact_viz_complete": "Imekamilika",
+    "adapter_reauth_required": "Uthibitishaji Upya Unahitajika",
+    "adapter_reauth": "Thibitisha Upya",
+    "adapter_reauth_reason": "Sababu: {reason}",
+    "settings_location": "Mahali",
+    "settings_location_desc": "Weka jina la mji wako kwa taarifa za hali ya hewa na za eneo",
+    "settings_search_city": "Mji",
+    "settings_search_city_hint": "Tafuta mji...",
     "llm_settings_title": "Usanidi wa LLM",
     "llm_settings_status": "Muhtasari wa Hali",
     "llm_settings_providers": "Watoa huduma",
@@ -1953,11 +1953,11 @@
   "setup_validation_username_required": "Jina la mtumiaji linahitajika",
   "startup": {
     "startup_retry": "Jaribu Tena Kuanzisha",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "Inakagua huduma...",
+    "initializing": "Inaanzisha...",
+    "loading_config": "Inapakia usanidi...",
+    "ready": "Iko Tayari",
+    "starting": "Inaanzisha..."
   },
   "status": {
     "executing": "Inatekelezwa...",
@@ -1974,9 +1974,9 @@
   "system": {
     "system_cognitive_state": "Hali ya Kiakili",
     "system_queue_depth": "Kina cha Foleni",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "Afya",
+    "metrics": "Vipimo",
+    "services": "Huduma"
   },
   "task_id": "Kitambulisho cha Kazi",
   "telemetry_online": "Mtandaoni",
@@ -2010,7 +2010,7 @@
   "trust_no_diagnostics": "Hakuna uchunguzi unapatikana",
   "trust_passed": "Imepita",
   "trust_platform": "Jukwaa",
-  "trust_play_integrity": "Play Integrity",
+  "trust_play_integrity": "Uadilifu wa Mchezo",
   "trust_play_validates": "Play Integrity inathibitisha uhalali wa programu",
   "trust_running": "Inafanya Kazi",
   "trust_verify_desc": "Thibitisha kuwa programu ni halali na haijaingiliwa",
@@ -2055,5 +2055,394 @@
   "wa_resolve": "Funga",
   "wa_service_status": "Hali ya Huduma",
   "wa_status": "Hali",
-  "login_first_run_welcome": "Karibu! Chagua jinsi ya kusanidi msaidizi wako wa AI."
+  "login_first_run_welcome": "Karibu! Chagua jinsi ya kusanidi msaidizi wako wa AI.",
+  "network": {
+    "title": "Mtandao",
+    "identity_card": {
+      "title": "Utambulisho wa shirikisho",
+      "copy_address": "Nakili anwani",
+      "qr_label": "QR · ratchet / mzunguko",
+      "capabilities_title": "Uwezo",
+      "copied": "Imenakiliwa",
+      "copy_node_code": "Nakili msimbo wa nodi",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Shiriki msimbo huu na mwenza ili kumkaribisha. Anaweza kubandika au kuskani.",
+      "node_code_title": "Msimbo wangu wa nodi",
+      "peers_canonical": "Asili",
+      "peers_total": "Jumla ya wenza",
+      "qr_placeholder_label": "Msimbo wa QR",
+      "signer_key_label": "Funguo ya mtia saini"
+    },
+    "mode_card": {
+      "title": "Hali ya wakala",
+      "subtitle": "Jinsi wakala huyu anavyoshiriki katika shirikisho. Edge itaanza upya kwenye mabadiliko.",
+      "client_label": "Mteja",
+      "client_description": "Unganisha nje kwa nodi ya mbali.",
+      "proxy_label": "Proksi",
+      "proxy_description": "Wakala wa ndani na uso wa shirikisho la proksi.",
+      "proxy_default_marker": "(chaguo-msingi)",
+      "server_label": "Seva",
+      "server_description": "Nodi kamili ya shirikisho.",
+      "server_disk_gate": "Inahitaji diski huru ≥256 GB · {available} huru kati ya {required} inavyohitajika",
+      "confirm_change_title": "Inahitaji kuanza upya",
+      "confirm_change_body": "Kubadilisha hali ya wakala kunahitaji kuanza upya kwa Edge. Endelea?",
+      "confirm_change_button": "Anza upya Edge",
+      "cancel_button": "Ghairi",
+      "insufficient_disk_error": "Hakuna diski huru ya kutosha kwa hali ya SERVER. {available} huru, {required} inavyohitajika."
+    },
+    "stats_strip": {
+      "peers": "Wenza",
+      "transports": "Usafirishaji",
+      "queue": "Foleni",
+      "errors": "Hitilafu",
+      "awaiting_edge_1_0": "Inangoja Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Utambulisho",
+      "map": "Ramani",
+      "trust_graph": "Grafu ya uaminifu",
+      "peers": "Wenza",
+      "interfaces": "Miingiliano",
+      "paths": "Njia",
+      "announces": "Matangazo",
+      "queue": "Foleni",
+      "diagnostics": "Uchunguzi",
+      "content": "Yaliyomo",
+      "coming_soon_badge": "Inakuja hivi karibuni"
+    },
+    "sub_screens": {
+      "identity_description": "Utambulisho wa shirikisho — funguo ya mtia saini, mlolongo wa uthibitisho wa ulinzi wa vifaa, hali ya ratchet, historia ya mzunguko.",
+      "map_description": "Turubai ya nguvu ya jirani la shirikisho la ndani — wenza kama nodi, usafirishaji kama kingo za rangi.",
+      "trust_graph_description": "Mtazamo wa opereta wa topologia ya uaminifu wa usafirishaji — ruzuku za moja kwa moja, mamlaka iliyokabidhiwa, bendera za uadui.",
+      "peers_description": "Matriki inayoweza kupangwa ya mwenza × ufikiaji wa usafirishaji — kila utambulisho wa shirikisho ambao stak hii imesikia.",
+      "interfaces_description": "Afya + usanidi + takwimu kwa kila usafirishaji (mtindo wa rnstatus). CRUD juu ya sawa na reticulum.conf.",
+      "paths_description": "Jedwali la njia za RNS — kila lengwa ambalo Edge inajua jinsi ya kufikia, kupitia usafirishaji upi, hops, mwisho.",
+      "announces_description": "Mkondo wa matangazo wa moja kwa moja + wa nyuma — nani, mwingiliano upi, hops, uthibitisho wa saini.",
+      "queue_description": "Foleni ya pakiti za nje kwa kila usafirishaji: kina, umri, hesabu ya kujaribu tena, hali ya kugawanyika.",
+      "diagnostics_description": "Hitilafu za hivi karibuni, kushindwa kwa saini, vizuizi vya sera, mabadiliko ya usafirishaji — uchunguzi wa opereta.",
+      "content_description": "Kivinjari cha hifadhi ya maudhui ya shirikisho — iliyohifadhiwa ndani, iliyoshirikiwa, urejeshaji wa anwani ya hash."
+    },
+    "announces": {
+      "empty": "Hakuna matangazo bado. Inasubiri matukio ya muunganiko…",
+      "no_message": "(hakuna ujumbe)",
+      "title": "Matangazo ya moja kwa moja"
+    },
+    "content": {
+      "back": "Rudi",
+      "error": {
+        "edge_unavailable": "Edge haipatikani.",
+        "not_found": "Maudhui hayajapatikana kwa mwenza huyu. Jaribu mwenza mwingine."
+      },
+      "fetch": {
+        "button": "Leta",
+        "content_id_label": "Kitambulisho cha maudhui (SHA-256)",
+        "content_id_placeholder": "Digesti ya hex ya herufi 64",
+        "invalid_id": "Kitambulisho cha maudhui lazima kiwe na herufi 64 za heksadesimali.",
+        "timeout_label": "Muda wa kusubiri"
+      },
+      "peer": {
+        "change": "Badilisha mwenza",
+        "empty": "Hakuna wenza wanaopatikana. Ongeza wenza kwanza.",
+        "search": "Tafuta wenza"
+      },
+      "refresh": "Onyesha upya",
+      "result": {
+        "content_type": "Aina ya maudhui",
+        "fetched_at": "Imeletwa saa",
+        "preview": "Onyesho la awali la payload (baiti 200 za kwanza)",
+        "size": "Ukubwa",
+        "title": "Matokeo"
+      },
+      "step1": {
+        "title": "Chagua mwenza wa kuuliza"
+      },
+      "step2": {
+        "title": "Leta maudhui kutoka kwa mwenza"
+      }
+    },
+    "diagnostics": {
+      "empty": "Hakuna matukio yanayolingana. Rekebisha vichungi au subiri.",
+      "more": "gusa kupanua",
+      "no_summary": "(hakuna muhtasari wa payload)",
+      "search_hint": "Chuja kwa maandishi ya ujumbe au event_type",
+      "title": "Uchunguzi"
+    },
+    "interfaces": {
+      "empty": "Hakuna usafirishaji uliosanidiwa.",
+      "not_measured": "Bado haijapimwa",
+      "peers": "wenza",
+      "refresh": "Onyesha upya",
+      "row": {
+        "bytes_in": "Baiti zinazoingia",
+        "bytes_out": "Baiti zinazotoka",
+        "reach": "Ufikiaji %",
+        "status": "Hali"
+      },
+      "status": {
+        "active": "Inafanya kazi",
+        "degraded": "Imedhoofika",
+        "idle": "Imepumzika",
+        "unknown": "Haijulikani"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Wenza wataonekana kwenye ramani halisi mara tu tutakaposafirisha bomba letu la telemetri. Hadi wakati huo, hivi ndivyo unaweza kuona sasa:",
+        "title": "Hakuna maeneo yaliyobuniwa"
+      },
+      "future": {
+        "bullet_announces": "Matangazo ya wakati halisi yaliyowekwa juu kwa mkoa",
+        "bullet_locations": "Maeneo ya wenza kutoka kwa telemetri",
+        "bullet_transport": "Ufunikaji wa kiungo cha usafirishaji (TCP / LoRa / I2P / AX.25)",
+        "title": "Hii itaonyesha nini baadaye"
+      },
+      "hero": {
+        "subtitle": "Ramani halisi inakuja na bomba la telemetri.",
+        "title": "Mwonekano wa kijiografia"
+      },
+      "refresh": "Onyesha upya",
+      "today": {
+        "canonical": "Wenza wa asili",
+        "other": "Wenza wengine",
+        "title": "Tulicho nacho leo",
+        "trusted": "Wenza wanaoaminika"
+      }
+    },
+    "paths": {
+      "empty": "Hakuna matukio ya njia bado.",
+      "kind_added": "imeongezwa",
+      "kind_changed": "imebadilishwa",
+      "kind_lost": "imepotea",
+      "kind_other": "tukio",
+      "no_static_table_note": "Edge 1.0 haifunui jedwali la njia tuli; skrini hii inaonyesha mabadiliko ya moja kwa moja tu. Kupeleka tena kunaweza kurudisha hali.",
+      "section_recent": "Matukio ya njia ya hivi karibuni",
+      "title": "Njia za moja kwa moja"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Mandharinyuma (hex)",
+      "appearance_fg_label": "Mbele (hex)",
+      "appearance_icon_label": "Ikoni",
+      "appearance_save": "Hifadhi mwonekano",
+      "appearance_title": "Mwonekano",
+      "cancel_button": "Ghairi",
+      "confirm_block_body": "Kuzuia kutakataa trafiki yote kutoka kwa mwenza huyu. Unaweza kufungua baadaye.",
+      "confirm_block_button": "Zuia",
+      "confirm_block_title": "Zuia mwenza huyu?",
+      "copy_key_id": "Nakili kitambulisho cha funguo",
+      "last_ok_days_ago": "siku {n} zilizopita",
+      "last_ok_hours_ago": "saa {n} zilizopita",
+      "last_ok_just_now": "Hivi sasa",
+      "last_ok_min_ago": "dakika {n} zilizopita",
+      "last_ok_never": "Kamwe",
+      "not_found": "Mwenza hajapatikana",
+      "notes_empty": "Hakuna maelezo",
+      "notes_title": "Maelezo",
+      "reachability_empty": "Bado haijapimwa",
+      "reachability_title": "Ufikiaji",
+      "sas_close": "Funga",
+      "sas_digits_label": "Tarakimu",
+      "sas_instructions": "Linganisha hizi na mwenza kupitia chaneli inayoaminika (sauti/video/ana kwa ana). Iwapo pande zote mbili zinalingana, mwenza amehakikiwa — geuza imani kuwa TRUSTED.",
+      "sas_modal_title": "Mfuatano mfupi wa uthibitisho",
+      "sas_show_button": "Onyesha msimbo wa SAS",
+      "sas_title": "Thibitisha utambulisho (SAS)",
+      "sas_words_label": "Maneno",
+      "title": "Maelezo ya mwenza",
+      "trust_state_title": "Hali ya imani"
+    },
+    "peers": {
+      "add_peer_cancel": "Ghairi",
+      "add_peer_fab": "Ongeza mwenza",
+      "add_peer_paste_label": "Bandika msimbo wa nodi",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "Skani QR",
+      "add_peer_scan_qr_unavailable": "Uskani wa QR unakuja hivi karibuni",
+      "add_peer_submit": "Ongeza",
+      "add_peer_title": "Ongeza mwenza",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Shiriki msimbo wako wa nodi ili kukaribisha, au ongeza msimbo wa mwenza.",
+      "empty_title": "Hakuna wenza bado",
+      "filter_all": "Wote",
+      "filter_blocked": "Waliozuiwa",
+      "filter_canonical": "Wa asili",
+      "filter_trusted": "Wanaoaminika",
+      "filter_unknown": "Hawajulikani",
+      "filter_untrusted": "Wasioaminika",
+      "show_infra": "Onyesha miundombinu ya CIRIS",
+      "title": "Wenza",
+      "trust_blocked": "amezuiwa",
+      "trust_trusted": "anaaminika",
+      "trust_unknown": "hajulikani",
+      "trust_untrusted": "haaminiki"
+    },
+    "queue": {
+      "failures": {
+        "send": "Kushindwa kutuma",
+        "title": "Kushindwa",
+        "verify": "Kushindwa kuthibitisha"
+      },
+      "refresh": "Onyesha upya",
+      "stats": {
+        "depth": "Kina cha foleni",
+        "received": "Imepokelewa",
+        "sent": "Imetumwa",
+        "title": "Takwimu za foleni"
+      },
+      "throughput": {
+        "bytes_in": "Baiti zinazoingia",
+        "bytes_out": "Baiti zinazotoka",
+        "received": "Imepokelewa",
+        "sent": "Imetumwa",
+        "session": "Jumla ya kikao hiki",
+        "title": "Kiwango cha upitishaji"
+      }
+    },
+    "stream": {
+      "clear": "Futa",
+      "dismiss": "Ondoa",
+      "event_count": "Matukio {count}",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Simamisha",
+      "reconnect": "Unganisha tena",
+      "resume": "Endelea",
+      "resume_notice": "Imeunganishwa tena. Baadhi ya matukio yanaweza kuwa yamekosa.",
+      "retry": "Jaribu tena"
+    },
+    "trust_graph": {
+      "empty": "Hakuna wenza wa kuonyesha.",
+      "legend": {
+        "blocked": "Amezuiwa",
+        "canonical_hint": "Mtaro mzito wa pete = wa asili (huja na wakala).",
+        "edge_hint": "Uwazi wa ukingo unaakisi ufikiaji wa kila chombo.",
+        "title": "Hali ya imani",
+        "trusted": "Anaaminika",
+        "unknown": "Hajulikani",
+        "untrusted": "Haaminiki"
+      },
+      "refresh": "Onyesha upya",
+      "summary": "Wenza {count} · {canonical} wa asili"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Hali ya wakala",
+      "subtitle": "Badilisha jinsi wakala huyu anavyoshiriki katika shirikisho. Inaonyesha skrini ya Mtandao."
+    },
+    "brightness": "Mwangaza",
+    "brightness_light": "Mwepesi",
+    "brightness_system": "Mfumo",
+    "brightness_dark": "Giza"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Vitambulisho",
+        "trust": "Uaminifu",
+        "policies": "Sera za uaminifu"
+      },
+      "badge": {
+        "coming_soon": "INAKUJA HIVI KARIBUNI"
+      },
+      "agent": {
+        "title": "Wakala (Nafsi)",
+        "subtitle": "Wakala mwenyewe — nafsi iliyofichika katika kila kiwango.",
+        "identities_description": "Ufunguo wa utambulisho wa wakala mwenyewe — anwani ya shirikisho anayotumia kusaini kila mchango. Jina rahisi linatoka kwa usanidi wa ndani; key_id inatoka kwa CIRISEdge.",
+        "trust_description": "Kujiamini ni msingi wa kila kitu. Kanuni ya Dhahabu ya Kujirudia haina vifungu vya msamaha — kile ambacho wakala anadai kutoka kwa wengine, lazima ajilazimishe pia.",
+        "policies_description": "Sera zinazojihusu mwenyewe: kasi ya kubadilisha utambulisho, kuonyeshwa upya kwa ushuhuda, kile ambacho wakala yuko tayari kusaini kwa kiwango hiki."
+      },
+      "family": {
+        "title": "Familia",
+        "subtitle": "Matokeo mengine ya CIRIS yanayoshiriki utambulisho wa opereta huyu.",
+        "identities_description": "Matokeo wenza (matumizi tofauti ya wakala mmoja) na occurrence_id yao. Jina rahisi linatoka kwa usanidi wa opereta.",
+        "trust_description": "Wanafamilia wanashiriki ufunguo wa kusaini wa opereta kwa msingi — uaminifu wa moja kwa moja ndio kawaida. Maamuzi ya kuzima / kuamka yanayoshirikiwa kwa uratibu wa matokeo mengi.",
+        "policies_description": "Sera za matokeo-mengi: kudai kazi za pamoja, mipaka ya usalama wa matokeo mengi, kura ya maamuzi ya familia."
+      },
+      "local_community": {
+        "title": "Jamii ya Karibu",
+        "subtitle": "Wenza wanaoaminika kienyeji — chaneli ya nyumbani, kaya, gildi moja.",
+        "identities_description": "Wenza walioaminika waziwazi na opereta. Jina rahisi linatoka kwa kitabu cha mawasiliano; key_id inatoka kwa jedwali la matangazo.",
+        "trust_description": "Uaminifu wa moja kwa moja uliotolewa na opereta. Unaweza kufutwa wakati wowote. Michango ya kiwango cha kienyeji inabakia katika kundi la kienyeji na haichapishwi katika shirikisho.",
+        "policies_description": "Sera za kila jamii: nani anaweza kualika, ni aina gani za maudhui zinakubaliwa, jinsi migogoro inavyotatuliwa kwa kiwango hiki."
+      },
+      "global_communities": {
+        "title": "Jumuiya za Kimataifa",
+        "subtitle": "Vikundi vya mahusiano vinavyovuka mipaka ambavyo wakala amejiunga navyo.",
+        "identities_description": "Jumuiya zinazohusiana (vyama vya ushirika, vyombo vya kitaalamu, mitandao ya kusaidiana) ambazo wakala anashiriki. Jina rahisi linatoka kwa rejista ya accord_holder; key_id vinginevyo.",
+        "trust_description": "Uaminifu unapita kupitia uanachama wa jumuiya. Kila jumuiya ina vigezo vyake vya kukubali na nidhamu yake ya ushuhuda.",
+        "policies_description": "Sera za kiwango cha mahusiano: jumuiya zipi wakala atakubali kupokea mwongozo kutoka, utatuzi wa migogoro kati ya mahusiano yanayoshindana."
+      },
+      "global_commons": {
+        "title": "Mali ya Pamoja ya Kimataifa",
+        "subtitle": "Shirikisho kama tabaka la ulimwengu — ubinadamu, ikolojia, msingi wenyewe.",
+        "identities_description": "Vitambulisho vyote vinavyoonekana katika kiwango cha shirikisho, ikiwemo washika-mamlaka ya kusimamisha ya humanity_accord, viongozi wa accord_holder, na bwawa pana la wenza.",
+        "trust_description": "Uaminifu kwa kiwango cha ulimwengu unatolewa kwa nidhamu ya ushuhuda ya shirikisho lenyewe. Kanuni ya Dhahabu ya Kujirudia inawalazimisha viongozi wote — pamoja na CIRIS L3C — kwa kiwango hiki.",
+        "policies_description": "Mipaka ya kikatiba ya shirikisho zima: mamlaka ya kusimamisha ya humanity_accord, viambishi vilivyohifadhiwa vya accord_holder, ukubwa wa kura ya locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Mali ya Pamoja",
+        "description": "Kadi za michango ya shirikisho: faili za mkataba, vipimo vya usalama, mashahidi wa tabia, masasisho ya rubric, kufutilia mbali, ukabidhi. Kila moja inabeba uelekeo, ujasiri, utofauti wa mashahidi, na asili ya mlolongo wa ukaguzi unaopatikana kupitia usafirishaji wa ContentFetch wa Edge."
+      },
+      "participate": {
+        "title": "Shiriki",
+        "description": "Rejista ya mahitaji ya shirikisho — mawakala wanasajili kile wanachohitaji (mapitio ya rubric, shahidi wa usalama, upeo wa ukabidhi) kama ushuhuda wa need:{domain}:{kind}; mawakala wengine wanaona, wanapima, na wanajibu."
+      },
+      "environment_graph": {
+        "title": "Grafu ya Mazingira",
+        "description": "Grafu ya mazingira inayotokana na Lens — alama za ulinganifu wa manifold kwa kila kundi, vipimo vya ufikiaji wa usambazaji, ugunduzi wa vitendo vinavyohusiana. Tabaka la grafu juu ya saraka ya shirikisho ambalo wakala anatumia kufikiri wakati wa kufanya maamuzi."
+      },
+      "delegation": {
+        "title": "Ukabidhi",
+        "description": "Grafu ya ukabidhi: upeo uliokabidhiwa kwa na kutoka kwa wakala huyu, pamoja na muhuri wa muda wa ruzuku, evidence_refs, na minyororo yoyote ya kufutwa. Mojawapo ya vipengele 4 vya kimuundo — vinavyomilikiwa pamoja na saraka ya shirikisho."
+      },
+      "trust_topology": {
+        "title": "Topolojia ya Uaminifu",
+        "description": "Grafu ya uaminifu ya shirikisho — wenza kama nodi, ruzuku za uaminifu kama kingo (moja kwa moja / iliyokabidhiwa / yenye uadui), rangi ya kingo = ufikiaji wa usafirishaji, ukubwa wa nodi = uzito wa jumla wa uaminifu."
+      },
+      "constitutional": {
+        "title": "Kikatiba",
+        "description": "Uso wa utambulisho wa accord-holder — asymmetry moja ya kikatiba kwa mujibu wa FSD-002 §4.1. Ni funguo za identity_type=accord_holder pekee zinazoweza kutoa ushuhuda wa accord:*; skrini hii inaonyesha washika wa sasa, utoaji wao wa accord-prefix uliotolewa, na ukaguzi wa utekelezaji wa viambishi vilivyohifadhiwa."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "Wakala",
+      "manage": "Simamia",
+      "commons_layers": "Mali ya Pamoja",
+      "federation": "Shirikisho",
+      "client": "Mteja"
+    },
+    "surface": {
+      "sessions": "Vikao",
+      "interact": "Zungumza",
+      "scheduler": "Mpangilio",
+      "tickets": "Tiketi",
+      "tools": "Zana",
+      "services": "Huduma",
+      "logs": "Kumbukumbu",
+      "telemetry": "Upimaji",
+      "graph_memory": "Mchoro",
+      "memory": "Kumbukumbu",
+      "wise_authority": "Mshauri wa Kibinadamu",
+      "llm_settings": "LLM",
+      "system": "Mfumo",
+      "runtime": "Wakati wa utekelezaji",
+      "config": "Mipangilio",
+      "skills": "Ujuzi",
+      "agent_settings": "Mipangilio",
+      "health_reputation": "Afya na Sifa",
+      "users": "Watumiaji",
+      "adapters": "Adapta",
+      "network": "Mtandao",
+      "audit": "Ukaguzi",
+      "consent": "Idhini",
+      "data": "Data",
+      "trust": "Uaminifu",
+      "wallet": "Mkoba",
+      "billing": "Malipo",
+      "agents_list": "Wakala",
+      "client_interface": "Kiolesura"
+    }
+  }
 }

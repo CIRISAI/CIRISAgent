@@ -100,7 +100,15 @@ class StreamingVerificationModule:
 
                 logger.debug("SSE client connecting to reasoning-stream endpoint")
                 response = requests.get(
-                    f"{base_url}/v1/system/runtime/reasoning-stream", headers=headers, stream=True, timeout=5
+                    f"{base_url}/v1/system/runtime/reasoning-stream",
+                    headers=headers,
+                    stream=True,
+                    # (connect, read). Flat `timeout=5` raises ReadTimeout
+                    # whenever real events stop firing for >5s — the server's
+                    # `keepalive` SSE only lands every 30s, so the connection
+                    # drops between idle gaps. 60s read budget survives any
+                    # gap shorter than two missed keepalives.
+                    timeout=(5, 60),
                 )
 
                 if response.status_code != 200:
@@ -1798,7 +1806,15 @@ class StreamingVerificationModule:
 
                 logger.debug("SSE client connecting to reasoning-stream endpoint")
                 response = requests.get(
-                    f"{base_url}/v1/system/runtime/reasoning-stream", headers=headers, stream=True, timeout=5
+                    f"{base_url}/v1/system/runtime/reasoning-stream",
+                    headers=headers,
+                    stream=True,
+                    # (connect, read). Flat `timeout=5` raises ReadTimeout
+                    # whenever real events stop firing for >5s — the server's
+                    # `keepalive` SSE only lands every 30s, so the connection
+                    # drops between idle gaps. 60s read budget survives any
+                    # gap shorter than two missed keepalives.
+                    timeout=(5, 60),
                 )
 
                 if response.status_code != 200:

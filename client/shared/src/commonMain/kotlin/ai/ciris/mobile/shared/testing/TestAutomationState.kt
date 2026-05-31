@@ -67,6 +67,19 @@ object TestAutomationState {
         return true
     }
 
+    /**
+     * Whether a click handler is currently registered for [testTag].
+     *
+     * Used to surface popup / dialog buttons whose `testableClickable` modifier
+     * has composed (registering the handler) but whose `onGloballyPositioned`
+     * callback hasn't fired yet — Compose Multiplatform's AlertDialog and
+     * ModalBottomSheet render content in a separate Popup window, and the main
+     * window's layout pass doesn't reliably deliver position events into that
+     * tree. Element-by-position lookups miss those buttons; click-handler
+     * lookups don't.
+     */
+    fun hasClickHandler(testTag: String): Boolean = clickHandlers.containsKey(testTag)
+
     // Text input
     private val _textInputRequests = MutableStateFlow<TextInputRequest?>(null)
     val textInputRequests: StateFlow<TextInputRequest?> = _textInputRequests

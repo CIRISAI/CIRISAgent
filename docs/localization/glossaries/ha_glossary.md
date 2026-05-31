@@ -149,11 +149,34 @@ This glossary defines the canonical translations for key CIRIS terms in Hausa. A
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort-Scope Vocabulary (2.9.4 Commons hub)
+
+| English | Hausa | Definition / Guidance |
+|---------|-------|------------------------|
+| Cohort scope | Ikon ƙungiyar (cohort scope) | CEG 0.6 wire-format term; keep English in parens for technical context |
+| Layer | Shimfiɗa | UX surface for one cohort scope (also: "saiti" — tier/level) |
+| Self | Kai | Reflexive — the agent itself |
+| Family | Iyali | Sibling occurrences of the same agent — kin in the agent sense |
+| Local Community | Al'umma ta gida | Locally-trusted peers — home channel, single guild |
+| Global Communities | Al'ummomi na duniya | Cross-community affinity groups (plural) |
+| Global Commons | Filin gama-gari na duniya | The universal federation layer (species + planet + federation) |
+| The Commons | Filin gama-gari | Federation contribution-cards feed — distinct from the "duniya" (Global) layer |
+| Constitutional | Tsarin mulki | Accord-holder identity surface (FSD-002 §4.1) — federation constitutional structure |
+| Delegation | Wakilci | Granting scope/authority to act on one's behalf |
+| Trust Topology | Tsarin amincewa | Federation trust graph — peers as nodes, trust as edges |
+| Participate | Shiga | Federation needs registry — verb: take part / contribute |
+| Affiliations | Mambobi | Cross-community memberships (CEG term for global-communities cohort) |
+| Identities | Asalai | Known entities at a scope (plural of "Asali") |
+| Trust | Amincewa | Trust state per identity |
+| Trust policies | Manufofin amincewa | Policies governing automatic trust at a scope |
+| Coming Soon | Yana zuwa nan ba da daɗewa ba | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-04-07 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary for 2.9.4 Commons hub |
 
 ---
 

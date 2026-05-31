@@ -239,11 +239,39 @@ This glossary defines the canonical translations for key CIRIS terms in German. 
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort-Scope Vocabulary (Commons hub — 2.9.4)
+
+| English | German | Notes |
+|---------|--------|-------|
+| Cohort scope | Kohortenbereich | CEG 0.6 wire-format term; technical CIRIS term. Wire key `cohort_scope` stays in English |
+| Layer | Schicht | UX surface representing one cohort scope |
+| Agent (Self) | Agent (Selbst) | First layer; "Agent" stays per glossary, "Selbst" = reflexive self |
+| Family | Familie | "Siblings of the same agent" — sharing operator identity, not nuclear-family |
+| Local Community | Lokale Gemeinschaft | Locally-trusted peers — home channel, household, single guild |
+| Global Communities | Globale Gemeinschaften | Plural — affinity groups spanning across borders (CEG affiliations) |
+| Global Commons | Globales Gemeingut | Universal federation layer (CEG species + planet + federation folded) |
+| Federation | Föderation | The CIRIS federation as network of peers (matches existing `network.*` usage) |
+| The Commons | Das Gemeingut | Federation contribution cards screen (distinct from Global Commons layer) |
+| Constitutional | Verfassungsmäßig | Accord-holder identity surface per FSD-002 §4.1 |
+| Delegation | Delegation | Delegation graph — scopes delegated to/from this agent |
+| Trust Topology | Vertrauenstopologie | Federation trust graph — peers as nodes, trust grants as edges |
+| Participate | Teilnehmen | Federation needs registry — verb form (take part / contribute) |
+
+## Commons UI Labels (2.9.4)
+
+| English | German | Notes |
+|---------|--------|-------|
+| Identities | Identitäten | List of known entities at a scope |
+| Trust | Vertrauen | Trust state per identity |
+| Trust policies | Vertrauensrichtlinien | Policies that govern automatic trust at this scope |
+| Coming Soon | Demnächst | Placeholder for unshipped features (matches existing `network.tiles.coming_soon_badge`) |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-03-27 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary and Commons UI labels for 2.9.4 Commons hub |
 
 ---
 

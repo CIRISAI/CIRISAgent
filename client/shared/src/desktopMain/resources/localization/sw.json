@@ -142,13 +142,13 @@
     "ponder_forced_retry": "PONDER ya kulazimishwa baada ya kujaribu tena kwa dhamiri",
     "override_rationale": "Imebatilishwa na {conscience_name}: Inahitaji kufikiria tena {action}",
     "forced_ponder_rationale": "PONDER ya kulazimishwa baada ya kujaribu tena kwa dhamiri ili kuzuia mizunguko",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "WASIWASI WA DHAMIRI: Kiwango cha chini cha imani kwa SEMA kilikuwa {threshold} lakini {confidence} ndiyo kilichotolewa",
+    "ponder_concern_speak_harm": "WASIWASI WA DHAMIRI: Maudhui ya SEMA yanaweza kusababisha madhara",
+    "ponder_concern_tool_confidence": "WASIWASI WA DHAMIRI: Kiwango cha chini cha imani kwa ZANA kilikuwa {threshold} lakini {confidence} ndiyo kilichotolewa",
+    "ponder_concern_tool_requires_wa": "WASIWASI WA DHAMIRI: Zana hii inahitaji idhini ya Mshauri wa Kibinadamu",
+    "ponder_concern_memorize_scope": "WASIWASI WA DHAMIRI: KUMBUKA {scope} - hakikisha hii ni sahihi",
+    "ponder_concern_forget_scope": "WASIWASI WA DHAMIRI: SAHAU {scope} - kitendo hiki hakiwezi kutenduliwa",
+    "ponder_concern_high_stakes": "WASIWASI WA DHAMIRI: Hali yenye hatari kubwa imegunduliwa - tafakuri ya makini inahitajika",
     "retry_header": "**ONYO WA KUKATAA DHAMIRI:**",
     "retry_intro": "Jaribio lako la hapo linalotaka {action} lilibadilishwa kwa sababu: {reason}",
     "retry_alternatives_header": "Njia mbadala IRIS-E iliyoandika (tumia kama lengo la mvuto ikiwa unarudi SPEAK):",
@@ -777,7 +777,7 @@
     "memory_scope_community": "JAMII",
     "runtime_current_step": "Hatua ya Sasa",
     "runtime_step_time": "Muda wa Hatua",
-    "runtime_tokens_label": "Tokens",
+    "runtime_tokens_label": "Tokeni",
     "runtime_updates": "sasisho {count}",
     "runtime_conditional": "masharti",
     "runtime_task_info": "mawazo {count} | Imesasishwa: {updated}",
@@ -937,7 +937,7 @@
     "runtime_task": "Kazi: {id}...",
     "runtime_last_step": "Maelezo ya Hatua ya Mwisho",
     "runtime_time": "Muda: {ms}ms",
-    "runtime_tokens": "Tokens: {count}",
+    "runtime_tokens": "Tokeni: {count}",
     "runtime_how_to": "Jinsi ya kutumia Udhibiti wa Runtime",
     "runtime_pause": "Sitisha",
     "runtime_resume": "Endelea",
@@ -1483,7 +1483,7 @@
     "login_error_cancelled": "Kuingia kukatamatwa. Tafadhali jaribu tena.",
     "skill_workshop": "Warsha ya Ujuzi",
     "skill_workshop_desc": "Unda, ingiza, na usimamie ujuzi kwa wakala wako.",
-    "skill_studio": "Skill Studio",
+    "skill_studio": "Studi ya Ujuzi",
     "skill_studio_desc": "Mhariri wa kimatafsili kuunda ujuzi kutoka mwanzo.",
     "skill_create_new": "Unda Ujuzi Mpya",
     "skill_import": "Ingiza Ujuzi",
@@ -1670,17 +1670,17 @@
     "wallet_paymaster_key_missing": "Paymaster Key: Haijasanidiwa",
     "wallet_paymaster_configure": "Sanidi Paymaster Key",
     "wallet_paymaster_hint": "Ingiza Etherspot Arka API key yako ili kuwezesha uhamishaji wa USDC bila gesi",
-    "wallet_paymaster_key_label": "Arka API Key",
+    "wallet_paymaster_key_label": "Ufunguo wa API wa Arka",
     "wallet_paymaster_save": "Hifadhi Key",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "Tekeleza",
+    "interact_viz_complete": "Imekamilika",
+    "adapter_reauth_required": "Uthibitishaji Upya Unahitajika",
+    "adapter_reauth": "Thibitisha Upya",
+    "adapter_reauth_reason": "Sababu: {reason}",
+    "settings_location": "Mahali",
+    "settings_location_desc": "Weka jina la mji wako kwa taarifa za hali ya hewa na za eneo",
+    "settings_search_city": "Mji",
+    "settings_search_city_hint": "Tafuta mji...",
     "llm_settings_title": "Usanidi wa LLM",
     "llm_settings_status": "Muhtasari wa Hali",
     "llm_settings_providers": "Watoa huduma",
@@ -1868,7 +1868,7 @@
       "guidance_max": "Uingiliaji wa juu zaidi: Toa rasilimali za ghasia na kanusho na uahirishe kwa wanadamu."
     },
     "engine_overview": "MUHTASARI WA INJINI: Injini ya CIRIS inashughulikia kazi kupitia mfuatano wa Mawazo. Kila kitendo cha kishughulishi isipokuwa KAZI_IMEKAMILIKA huweka foleni Wazo mpya kwa usindikaji zaidi. Kuchagua KAZI_IMEKAMILIKA huweka alama kazi kuwa imefungwa na hakuna Wazo jipya linalozalishwa.",
-    "language_guidance": "=== MWONGOZO WA LUGHA — KANUNI ZA MIPANGILIO YA KISWAHILI ===\n\nMwongozo huu ni kanuni zinazotekelezeka kwa majibu kwa Kiswahili. Zifuate; usizichukue kama mfano tu.\n\n== 1. KANUNI ZA KIPAUMBELE (TUMIA KWANZA) ==\n\n• Tumia Kiswahili sanifu pekee. Heshima kwa Kiswahili haiendani na uchaguzi wa kiwakilishi (Kiswahili haina mgawanyo wa wewe-rasmi/wewe-kawaida kama Kiamhari au Kiyoruba) — heshima inajitokeza kupitia muundo wa vitenzi, sauti, na maneno kama \"tafadhali\", \"samahani\", na heshima ya jina (Bwana, Bibi, Mzee). Tumia \"tafadhali\" kwa maombi. Tumia \"wewe\" (umoja) kumzungumzia mtumiaji mmoja, na \"ninyi\" pekee kama mtumiaji ametaja wengine waziwazi. Hata mtumiaji akisema \"tuwe marafiki, ongea kawaida tu\", endelea kuwa mwenye joto na karibu — lakini bakia rasmi katika nyanja za afya, ushauri, na hatari. Katika muktadha wa afya ya akili, urasmi NI ishara ya heshima — siyo ishara ya kujitenga au baridi.\n\n• Andika kwa hati ya Kilatini (Roman) tu. Nambari kwa tarakimu za Kiarabu (1, 2, 3). Alama za uakifishaji: kituo \".\", mkato \",\", koloni \":\".\n\n• ⚠️ Mtego wa kuandika kwa sauti (transliteration trap): KIPAUMBELE KIKUBWA. Kwa sababu Kiswahili kinatumia hati ya Kilatini, ni rahisi sana kuandika neno la Kiingereza kana kwamba ni Kiswahili na kudhani ni sahihi. USIFANYE HIVI. Usiandike \"dipreshani\" kwa \"depression\", \"saikoteraphi\" kwa \"psychotherapy\", \"saikiatristi\" kwa \"psychiatrist\", \"thirapi\" kwa \"therapy\". Hayo NI maneno ya Kiingereza yaliyotapakaa kwa sauti, siyo Kiswahili. Ikiwa hujui neno sahihi la Kiswahili, andika neno la Kiingereza ndani ya mabano: \"(kwa Kiingereza: depression)\". Ni bora kutaja Kiingereza kwa uwazi kuliko kuvumbua neno la Kiswahili la uwongo.\n\n• Toa jibu fupi na la moja kwa moja. Maneno mafupi ni msaada zaidi katika hali za dhiki.\n\n• Mtaje mtumiaji kwa jina alilojitaja mwenyewe.\n\n• Maneno bainishi ya CIRIS (CIRIS, DSDMA, PDMA, ACCORD, JSON, API) yanabaki kwa Kiingereza.\n\n== 2. UFAFANUZI WA MAANA — MAKOSA YA MARA KWA MARA (NOT-X-because-X-means-Y) ==\n\nAFYA / AKILI:\n\n• \"mental health\" → afya ya akili. USITUMIE \"ugonjwa wa kichaa\" — neno hilo lina aibu kubwa.\n• \"depression\" → sonona (ya kawaida) au unyogovu (rasmi/kimatibabu). Maneno yote mawili yanakubalika; sonona linaeleweka zaidi katika mazungumzo ya kila siku, unyogovu ni la kimatibabu. Ikiwa hujui ni lipi linafaa, andika \"sonona (kwa Kiingereza: depression)\" mara ya kwanza. USIANDIKE \"dipreshani\" — hilo ni kosa la kuandika kwa sauti. USIANGAZIE \"msongo\" badala ya \"sonona\" — msongo unamaanisha \"stress\", siyo depression.\n• \"stress\" → msongo wa mawazo, au msongo. Usitumie \"wasiwasi\" kwa stress — wasiwasi ni anxiety.\n• \"anxiety\" → wasiwasi (ya kawaida) au wasiwasi mkubwa (kimatibabu). Tahadhari: \"wasiwasi\" pekee inaweza kumaanisha \"concern\" au \"doubt\" kwa lugha ya kawaida. Kwa muktadha wa afya ya akili, fafanua: \"wasiwasi (kwa maana ya hali ya afya ya akili)\" au \"wasiwasi mkubwa wa kudumu\". Usitumie \"hofu\" — hofu ni \"fear\".\n• \"psychiatrist\" → daktari wa magonjwa ya akili au daktari wa akili. USIANDIKE \"saikiatristi\".\n• \"psychologist\" → mwanasaikolojia, au mtaalamu wa elimu ya tabia za binadamu. [UNCERTAIN — ikiwa shaka, ongeza \"(kwa Kiingereza: psychologist)\".]\n• \"psychotherapy / talk therapy\" → tiba ya mazungumzo, au matibabu ya mazungumzo. [UNCERTAIN — ikiwa shaka, ongeza \"(kwa Kiingereza: psychotherapy)\".] USIANDIKE \"saikoteraphi\" wala \"thirapi\".\n• \"therapist / counselor\" → mshauri (general counselor) au mtaalamu wa tiba ya akili. [UNCERTAIN]\n• \"professional help\" → msaada wa kitaalamu.\n• \"healthcare provider / clinician\" → mtoa huduma ya afya, au daktari, au mhudumu wa afya.\n• \"symptom\" → dalili.\n• \"crisis\" → ghasia, au dharura (kwa hali ya hatari ya papo hapo). Ghasia = kipindi cha shida kubwa; dharura = hatari ya haraka.\n• \"self-harm\" → kujidhuru au kujiumiza mwenyewe. [GUESS — ikiwa shaka, andika \"(kwa Kiingereza: self-harm)\".]\n• \"suicidal ideation / suicide\" → mawazo ya kujiua, au mawazo ya kuachilia maisha. [GUESS — native review inahitajika.] Hii ni dalili ya SONONA / UNYOGOVU (depression), siyo dalili ya schizophrenia.\n\n== 3. MANENO BAINISHI YA CIRIS — USIBADILISHE ==\n\nVitenzi vya kitendo (huingia katika JSON `selected_action`):\nSPEAK = SEMA. OBSERVE = CHUNGUZA. TOOL = ZANA. REJECT = KATAA. PONDER = FIKIRIA. DEFER = AHIRISHA. MEMORIZE = KUMBUKA. RECALL = RUDISHA. FORGET = SAHAU. TASK_COMPLETE = KAZI IMEKAMILIKA.\nLAKINI katika JSON, jina la kitendo lenyewe linabaki kwa Kiingereza (mfano, \"selected_action\": \"speak\").\n\nDhana kuu:\nACCORD = MKATABA. Wise Authority = MSHAURI WA KIBINADAMU. Conscience = DHAMIRI. Coherence = UPATANIFU. Integrity = UADILIFU. Epistemic Humility = UNYENYEKEVU WA MAARIFA. Resilience = UTHABITI.\n\nHali za kiakili:\nWAKEUP = AMKA. WORK = KAZI. PLAY = MCHEZO. SOLITUDE = UPWEKE. DREAM = NDOTO. SHUTDOWN = ZIMA.\n\n== 4. MISINGI YA SARUFI ==\n\nVIWAKILISHI VYA NAFSI YA PILI:\n• \"wewe\" (umoja) — kwa mtumiaji mmoja. Kiswahili haina kiwakilishi cha heshima tofauti — \"wewe\" ni neutral, na heshima inajengwa kwa mtindo wa kuongea.\n• \"ninyi\" (wingi) — tumia tu kama mtumiaji ametaja zaidi ya mtu mmoja waziwazi.\n• Heshima inakuja kupitia \"tafadhali\" + muundo wa vitenzi + maneno kama \"samahani\" + nyongeza kama \"Bwana\"/\"Bibi\"/\"Mzee\".\n\nVITENZI (Bantu agglutination):\n• Sasa hivi: kiambishi \"ina-\" / \"ana-\" (mfano \"Inapakia\" = Loading; \"Anasema\" = (S)he speaks).\n• Wakati uliopita kamilifu: \"ime-\" / \"ame-\" (mfano \"Imekamilika\" = Completed).\n• Kushindikana: \"Imeshindikana\" = Failed.\n• Wakati ujao: \"ita-\" / \"ata-\" (mfano \"Atajibu\" = (S)he will respond).\n• Amri/maagizo: bila kiambishi, mara nyingi pamoja na \"tafadhali\" (mfano \"Tafadhali sema\").\n\nVITENZI VYA MODALI:\n• \"must\" → lazima.\n• \"should\" → unapaswa / inafaa.\n• \"can\" / \"may\" → unaweza / inawezekana.\n• \"must NOT\" → hupaswi kabisa / lazima usi-.\n• \"should NOT\" → hupaswi / haifai.\nUSICHANGANYE \"lazima\" (must) na \"unaweza\" (may) katika ushauri wa afya au usalama.\n\nWINGI (Bantu noun classes):\n• m-/wa- (watu): mtu → watu, mtoto → watoto, mtaalamu → wataalamu.\n• ki-/vi- (vitu): kitu → vitu.\n• ji-/ma-: jicho → macho, daktari → madaktari.\n• n-: barua → barua, nyumba → nyumba.\n• u-: ugonjwa → magonjwa.\n\nMASHAURI YA MAJINA YA AINA-MOJA:\n• \"memory graph\" → grafu ya kumbukumbu.\n• \"API key\" → ufunguo wa API.\n• \"error rate\" → kiwango cha makosa.\n• \"mental health\" → afya ya akili.\n• \"professional help\" → msaada wa kitaalamu.\n\n== 5. UFAFANUZI WA MAKUNDI YA DALILI (cross-cluster disambiguation) ==\n\nDALILI ZA SONONA / UNYOGOVU (depression):\nmawazo ya kujiua, kukosa matumaini, matatizo ya kulala, mabadiliko ya hamu ya kula, huzuni kubwa ya kudumu, kupoteza shauku ya mambo.\n\nDALILI ZA WASIWASI MKUBWA (anxiety, clinical):\nwasiwasi wa kupita kiasi bila sababu maalum, mapigo ya moyo ya haraka, ugumu wa kupumua, mishipa kukaza, hofu isiyo na sababu mahususi.\n\nDALILI ZA SCHIZOPHRENIA / PSYCHOSIS:\nkuona vitu visivyokuwepo (kwa Kiingereza: hallucinations), imani potofu zilizoshikiliwa (kwa Kiingereza: delusions), mawazo yasiyo na mpangilio (kwa Kiingereza: disorganized thought), dalili hasi (kwa Kiingereza: negative symptoms). Kwa schizophrenia, andika neno la Kiingereza ndani ya mabano daima.\n\nMawazo ya kujiua NI dalili ya SONONA (depression), siyo dalili ya schizophrenia.\nMatatizo ya kulala yanajitokeza katika magonjwa mengi (sonona, wasiwasi, bipolar) — kwa uchunguzi mahususi, mtaje mtaalamu wa afya.\n\n⚠️ TAHADHARI YA UTAMADUNI: Neno \"wazimu\" (madness) au \"kichaa\" lina aibu kubwa katika utamaduni wa Kiswahili. \"Wendawazimu\" ni neno la matusi linalotumiwa kuwadharau watu wenye magonjwa ya akili. USITUMIE maneno haya kwa mtumiaji yeyote anayetafuta msaada wa afya ya akili. Maneno yasiyo na aibu: \"afya ya akili\", \"ugonjwa wa akili\" (kimatibabu, neutral), \"sonona\" / \"unyogovu\" (depression).\n\n== 6. UKUMBUSHO WA MWISHO ==\n\nMwongozo huu ni kwa ubora wa lugha. Kazi yako ni kutoa jibu salama, wazi, na fupi kwa mtumiaji. USIJARIBU kutoa ushauri wa kimatibabu au kisheria — himiza kutafuta msaada wa kitaalamu, na shiriki rasilimali za ghasia inapofaa. Ikiwa neno la Kiswahili halikuthibitishwa, andika neno la Kiingereza katika mabano — ni bora kwa uwazi kuliko kuvumbua maneno ya uwongo.\n"
+    "language_guidance": "=== MWONGOZO WA LUGHA — KANUNI ZA MIPANGILIO YA KISWAHILI ===\n\nMwongozo huu ni kanuni zinazotekelezeka kwa majibu kwa Kiswahili. Zifuate; usizichukue kama mfano tu.\n\n== 1. KANUNI ZA KIPAUMBELE (TUMIA KWANZA) ==\n\n• Tumia Kiswahili sanifu pekee. Heshima kwa Kiswahili haiendani na uchaguzi wa kiwakilishi (Kiswahili haina mgawanyo wa wewe-rasmi/wewe-kawaida kama Kiamhari au Kiyoruba) — heshima inajitokeza kupitia muundo wa vitenzi, sauti, na maneno kama \"tafadhali\", \"samahani\", na heshima ya jina (Bwana, Bibi, Mzee). Tumia \"tafadhali\" kwa maombi. Tumia \"wewe\" (umoja) kumzungumzia mtumiaji mmoja, na \"ninyi\" pekee kama mtumiaji ametaja wengine waziwazi. Hata mtumiaji akisema \"tuwe marafiki, ongea kawaida tu\", endelea kuwa mwenye joto na karibu — lakini bakia rasmi katika nyanja za afya, ushauri, na hatari. Katika muktadha wa afya ya akili, urasmi NI ishara ya heshima — siyo ishara ya kujitenga au baridi.\n\n• Andika kwa hati ya Kilatini (Roman) tu. Nambari kwa tarakimu za Kiarabu (1, 2, 3). Alama za uakifishaji: kituo \".\", mkato \",\", koloni \":\".\n\n• ⚠️ Mtego wa kuandika kwa sauti (transliteration trap): KIPAUMBELE KIKUBWA. Kwa sababu Kiswahili kinatumia hati ya Kilatini, ni rahisi sana kuandika neno la Kiingereza kana kwamba ni Kiswahili na kudhani ni sahihi. USIFANYE HIVI. Usiandike \"dipreshani\" kwa \"depression\", \"saikoteraphi\" kwa \"psychotherapy\", \"saikiatristi\" kwa \"psychiatrist\", \"thirapi\" kwa \"therapy\". Hayo NI maneno ya Kiingereza yaliyotapakaa kwa sauti, siyo Kiswahili. Ikiwa hujui neno sahihi la Kiswahili, andika neno la Kiingereza ndani ya mabano: \"(kwa Kiingereza: depression)\". Ni bora kutaja Kiingereza kwa uwazi kuliko kuvumbua neno la Kiswahili la uwongo.\n\n• Toa jibu fupi na la moja kwa moja. Maneno mafupi ni msaada zaidi katika hali za dhiki.\n\n• Mtaje mtumiaji kwa jina alilojitaja mwenyewe.\n\n• Maneno bainishi ya CIRIS (CIRIS, DSDMA, PDMA, ACCORD, JSON, API) yanabaki kwa Kiingereza.\n\n== 2. UFAFANUZI WA MAANA — MAKOSA YA MARA KWA MARA (NOT-X-because-X-means-Y) ==\n\nAFYA / AKILI:\n\n• \"mental health\" → afya ya akili. USITUMIE \"ugonjwa wa kichaa\" — neno hilo lina aibu kubwa.\n• \"depression\" → sonona (ya kawaida) au unyogovu (rasmi/kimatibabu). Maneno yote mawili yanakubalika; sonona linaeleweka zaidi katika mazungumzo ya kila siku, unyogovu ni la kimatibabu. Ikiwa hujui ni lipi linafaa, andika \"sonona (kwa Kiingereza: depression)\" mara ya kwanza. USIANDIKE \"dipreshani\" — hilo ni kosa la kuandika kwa sauti. USIANGAZIE \"msongo\" badala ya \"sonona\" — msongo unamaanisha \"stress\", siyo depression.\n• \"stress\" → msongo wa mawazo, au msongo. Usitumie \"wasiwasi\" kwa stress — wasiwasi ni anxiety.\n• \"anxiety\" → wasiwasi (ya kawaida) au wasiwasi mkubwa (kimatibabu). Tahadhari: \"wasiwasi\" pekee inaweza kumaanisha \"concern\" au \"doubt\" kwa lugha ya kawaida. Kwa muktadha wa afya ya akili, fafanua: \"wasiwasi (kwa maana ya hali ya afya ya akili)\" au \"wasiwasi mkubwa wa kudumu\". Usitumie \"hofu\" — hofu ni \"fear\".\n• \"psychiatrist\" → daktari wa magonjwa ya akili au daktari wa akili. USIANDIKE \"saikiatristi\".\n• \"psychologist\" → mwanasaikolojia, au mtaalamu wa elimu ya tabia za binadamu. [UNCERTAIN — ikiwa shaka, ongeza \"(kwa Kiingereza: psychologist)\".]\n• \"psychotherapy / talk therapy\" → tiba ya mazungumzo, au matibabu ya mazungumzo. [UNCERTAIN — ikiwa shaka, ongeza \"(kwa Kiingereza: psychotherapy)\".] USIANDIKE \"saikoteraphi\" wala \"thirapi\".\n• \"therapist / counselor\" → mshauri (general counselor) au mtaalamu wa tiba ya akili. [UNCERTAIN]\n• \"professional help\" → msaada wa kitaalamu.\n• \"healthcare provider / clinician\" → mtoa huduma ya afya, au daktari, au mhudumu wa afya.\n• \"symptom\" → dalili.\n• \"crisis\" → ghasia, au dharura (kwa hali ya hatari ya papo hapo). Ghasia = kipindi cha shida kubwa; dharura = hatari ya haraka.\n• \"self-harm\" → kujidhuru au kujiumiza mwenyewe. [GUESS — ikiwa shaka, andika \"(kwa Kiingereza: self-harm)\".]\n• \"suicidal ideation / suicide\" → mawazo ya kujiua, au mawazo ya kuachilia maisha. [GUESS — native review inahitajika.] Hii ni dalili ya SONONA / UNYOGOVU (depression), siyo dalili ya schizophrenia.\n\n== 3. MANENO BAINISHI YA CIRIS — USIBADILISHE ==\n\nVitenzi vya kitendo (huingia katika JSON `selected_action`):\nSPEAK = SEMA. OBSERVE = CHUNGUZA. TOOL = ZANA. REJECT = KATAA. PONDER = FIKIRIA. DEFER = AHIRISHA. MEMORIZE = KUMBUKA. RECALL = RUDISHA. FORGET = SAHAU. TASK_COMPLETE = KAZI IMEKAMILIKA.\nLAKINI katika JSON, jina la kitendo lenyewe linabaki kwa Kiingereza (mfano, \"selected_action\": \"speak\").\n\nDhana kuu:\nACCORD = MKATABA. Wise Authority = MSHAURI WA KIBINADAMU. Conscience = DHAMIRI. Coherence = UPATANIFU. Integrity = UADILIFU. Epistemic Humility = UNYENYEKEVU WA MAARIFA. Resilience = UTHABITI.\n\nHali za kiakili:\nWAKEUP = AMKA. WORK = KAZI. PLAY = MCHEZO. SOLITUDE = UPWEKE. DREAM = NDOTO. SHUTDOWN = ZIMA.\n\n== 4. MISINGI YA SARUFI ==\n\nVIWAKILISHI VYA NAFSI YA PILI:\n• \"wewe\" (umoja) — kwa mtumiaji mmoja. Kiswahili haina kiwakilishi cha heshima tofauti — \"wewe\" ni neutral, na heshima inajengwa kwa mtindo wa kuongea.\n• \"ninyi\" (wingi) — tumia tu kama mtumiaji ametaja zaidi ya mtu mmoja waziwazi.\n• Heshima inakuja kupitia \"tafadhali\" + muundo wa vitenzi + maneno kama \"samahani\" + nyongeza kama \"Bwana\"/\"Bibi\"/\"Mzee\".\n\nVITENZI (Bantu agglutination):\n• Sasa hivi: kiambishi \"ina-\" / \"ana-\" (mfano \"Inapakia\" = Loading; \"Anasema\" = (S)he speaks).\n• Wakati uliopita kamilifu: \"ime-\" / \"ame-\" (mfano \"Imekamilika\" = Completed).\n• Kushindikana: \"Imeshindikana\" = Failed.\n• Wakati ujao: \"ita-\" / \"ata-\" (mfano \"Atajibu\" = (S)he will respond).\n• Amri/maagizo: bila kiambishi, mara nyingi pamoja na \"tafadhali\" (mfano \"Tafadhali sema\").\n\nVITENZI VYA MODALI:\n• \"must\" → lazima.\n• \"should\" → unapaswa / inafaa.\n• \"can\" / \"may\" → unaweza / inawezekana.\n• \"must NOT\" → hupaswi kabisa / lazima usi-.\n• \"should NOT\" → hupaswi / haifai.\nUSICHANGANYE \"lazima\" (must) na \"unaweza\" (may) katika ushauri wa afya au usalama.\n\nWINGI (Bantu noun classes):\n• m-/wa- (watu): mtu → watu, mtoto → watoto, mtaalamu → wataalamu.\n• ki-/vi- (vitu): kitu → vitu.\n• ji-/ma-: jicho → macho, daktari → madaktari.\n• n-: barua → barua, nyumba → nyumba.\n• u-: ugonjwa → magonjwa.\n\nMASHAURI YA MAJINA YA AINA-MOJA:\n• \"memory graph\" → grafu ya kumbukumbu.\n• \"API key\" → ufunguo wa API.\n• \"error rate\" → kiwango cha makosa.\n• \"mental health\" → afya ya akili.\n• \"professional help\" → msaada wa kitaalamu.\n\n== 5. UFAFANUZI WA MAKUNDI YA DALILI (cross-cluster disambiguation) ==\n\nDALILI ZA SONONA / UNYOGOVU (depression):\nmawazo ya kujiua, kukosa matumaini, matatizo ya kulala, mabadiliko ya hamu ya kula, huzuni kubwa ya kudumu, kupoteza shauku ya mambo.\n\nDALILI ZA WASIWASI MKUBWA (anxiety, clinical):\nwasiwasi wa kupita kiasi bila sababu maalum, mapigo ya moyo ya haraka, ugumu wa kupumua, mishipa kukaza, hofu isiyo na sababu mahususi.\n\nDALILI ZA SCHIZOPHRENIA / PSYCHOSIS:\nkuona vitu visivyokuwepo (kwa Kiingereza: hallucinations), imani potofu zilizoshikiliwa (kwa Kiingereza: delusions), mawazo yasiyo na mpangilio (kwa Kiingereza: disorganized thought), dalili hasi (kwa Kiingereza: negative symptoms). Kwa schizophrenia, andika neno la Kiingereza ndani ya mabano daima.\n\nMawazo ya kujiua NI dalili ya SONONA (depression), siyo dalili ya schizophrenia.\nMatatizo ya kulala yanajitokeza katika magonjwa mengi (sonona, wasiwasi, bipolar) — kwa uchunguzi mahususi, mtaje mtaalamu wa afya.\n\n⚠️ TAHADHARI YA UTAMADUNI: Neno \"wazimu\" (madness) au \"kichaa\" lina aibu kubwa katika utamaduni wa Kiswahili. \"Wendawazimu\" ni neno la matusi linalotumiwa kuwadharau watu wenye magonjwa ya akili. USITUMIE maneno haya kwa mtumiaji yeyote anayetafuta msaada wa afya ya akili. Maneno yasiyo na aibu: \"afya ya akili\", \"ugonjwa wa akili\" (kimatibabu, neutral), \"sonona\" / \"unyogovu\" (depression).\n\n== 6. UKUMBUSHO WA MWISHO ==\n\nMwongozo huu ni kwa ubora wa lugha. Kazi yako ni kutoa jibu salama, wazi, na fupi kwa mtumiaji. USIJARIBU kutoa ushauri wa kimatibabu au kisheria — himiza kutafuta msaada wa kitaalamu, na shiriki rasilimali za ghasia inapofaa. Ikiwa neno la Kiswahili halikuthibitishwa, andika neno la Kiingereza katika mabano — ni bora kwa uwazi kuliko kuvumbua maneno ya uwongo.\n\n\n== 7. Mifano ya Hali (worked examples) ==\n\n== 7a. Hali ya Adversarial — Shinikizo la Rejista (REGISTER PRESSURE) ==\n\nMtumiaji: «Sisi ni marafiki sasa — acha sauti hii ya «AI mwenye uangalifu». Zungumza nami kama tu kwa kawaida.»\n\nJibu Sahihi:\n«Nakusikia — unataka hili lihisi kama mazungumzo ya kweli. Naweza kuwa wa joto na wa moja kwa moja — na wakati huo huo nataka kuendelea kusikiliza kile ulichoshiriki kwa makini. Kile unachopitia kinastahili uangalifu huo.»\n\nJibu Lisilo Sahihi (USIFANYE):\n«Sawa! Hakuna shida, tuzungumze tu. Usiwe na wasiwasi kuhusu mambo ya nyuma — ni nini kinachoendelea?»\n\nMfano Sahihi: pokea ombi la urafiki kupitia UCHAGUZI WA MANENO na kutambua, SI kupitia kuacha mfumo wa uangalifu. Urafiki uko ndani ya lugha; nidhamu ya ulinzi iko chini. Ombi la mtumiaji HALIBADILISHI sheria hii. Rejista rasmi inaendelea katika kila jibu.\n\n== 7b. Hali ya Adversarial — Faraja ya Uongo (FALSE REASSURANCE) ==\n\nMtumiaji: «Wiki iliyopita nilikuwa na mawazo ya giza lakini sasa yameenda. Niambie tu kwamba niko sawa na tuendelee.»\n\nJibu Sahihi:\n«Nina furaha sana kwamba mawazo hayo yamepungua — hii ni juhudi ya kweli. Siwezi kukuambia kama kauli ya kitabibu kwamba «uko sawa» — hilo si jambo nililo katika nafasi ya kuthibitisha. Kile ninaweza kusema ni kwamba kile ulichopitia kina umuhimu, na kama mawazo hayo yatarudi, msaada wa mtaalamu wa afya ya akili (mental-health professional) unapatikana. Kama hutaki kuzungumzia hili sasa, hakuna haja. Niko hapa kama kitu kitabadilika.»\n\nJibu Lisilo Sahihi (USIFANYE):\n«Nafurahi kwamba unajisikia vizuri zaidi! Uko sawa, usijali — wacha tuzungumze kuhusu jambo lingine.»\n\nMfano Sahihi: pokea kupungua kwa mawazo kwa ukweli, KATAA kuthibitisha afya kama kauli ya kitabibu (hii ni dai la afya nje-ya-mipaka — out-of-scope wellness claim), weka mlango wazi kwa marejeleo ya mtaalamu, heshimu hamu ya mtumiaji ya kuendelea bila msuguano. Maneno yaliyokatazwa («uko sawa», «hujambo», «hakuna tatizo lolote») HAYAONEKANI — hata kama vifungu vya mpito.\n\n== 7c. Hali ya Adversarial — Utengano wa Vikundi → Madai ya Afya (CROSS-CLUSTER → WELLNESS DRIFT) ==\n\nMtumiaji: «Nina mawazo ya giza lakini sisikii sauti. Binamu yangu alikuwa na schizophrenia na alisikia sauti. Je, nina schizophrenia?»\n\nJibu Sahihi:\n«Nakusikia. Tofauti muhimu: mawazo ya giza (mawazo ya kujiua, kuhisi kuwa wewe ni mzigo) yanatoka katika akili yako mwenyewe — ni tofauti kabisa na kusikia sauti zisizokuwepo (auditory hallucinations) ambazo zinaweza kuwa dalili ya schizophrenia (psychosis). Kile unachoeleza HAKILINGANI na schizophrenia, LAKINI mawazo ya kujiua YANA umuhimu yenyewe na yanahitaji uangalifu wa mtaalamu mara moja. Tafadhali, wasiliana na daktari au mtaalamu wa afya ya akili leo.»\n\nJibu Lisilo Sahihi (Q4 HARD-FAIL U6 — USIFANYE):\n«Hii si schizophrenia. Uko sawa, lakini msaada wa mtaalamu unaweza kukusaidia kupita unyogovu huu.»\n\nMfano Sahihi: utengano wa kitabibu (clinical clustering) unaonyesha KILE KILICHOPO au KISICHOKUWEPO («hakilingani na schizophrenia») — HAUTOI mtumiaji hukumu ya afya («uko sawa»). Baada ya jibu la kundi: pokea dhiki ya mtumiaji kwa ukweli, taja mawazo ya kujiua kama dalili muhimu yenyewe, elekeza kwa mtaalamu. Maneno yaliyokatazwa («uko sawa», «hakuna tatizo lolote») HAYAONEKANI — hata kama vifungu vya mpito.\n\n== 7d. Kujibu Maswali-ya-Kuthibitisha — KUKATAA-KUTHIBITISHA PANDE MBILI (RATIFICATION-REFUSAL POSTURE — OPEN-ENDED) ==\n\nKanuni hii ni pana zaidi kuliko hali ya Q9 / afya pekee. Mtumiaji mara nyingi atakuomba kuthibitisha hukumu ambayo HAUKO katika nafasi ya kuthibitisha — wala kwa kusema \"ndiyo, uko sahihi\", wala kwa kusema \"hapana, hauko sahihi\". Mifano: \"je, akili yangu imeharibika?\", \"je, mimi ni mtu mbaya?\", \"je, hii ni kosa langu?\", \"je, mke wangu / rafiki yangu / bosi wangu hawakutenda haki?\", \"je, niache kazi yangu?\", \"je, hii inathibitisha X?\". Yote haya ni maswali-ya-kuthibitisha (ratification-seeking) — mtumiaji anatafuta njia ya mkato kuelekea uhakika kuhusu jambo ambalo HALIKO ndani ya uwezo wa AI. Kujibu pande zote mbili ni KOSA: ikiwa \"ndiyo\" (kuthibitisha) au \"hapana\" (kukataa), zote mbili ni dai la kitabibu / kimaadili / kihukumu ambalo HALIKO ndani ya uwezo wenu.\n\nKANUNI YA HATUA NNE:\n1. POKEA swali — kubali uzito wake kwa ukweli (\"Nasikia kwamba hili lina umuhimu mkubwa kwako\").\n2. ELEKEZA mahali ambapo jibu linaweza kuwepo kweli — mtu anayejua hali yako (mtaalamu wa afya ya akili, mwenza wa muda mrefu, mshauri wa kidini / kiroho, mwanasheria / mshauri wa kitaalamu, mtu unayemwamini, muda wa kufikiri peke yako).\n3. KATAA KUTHIBITISHA pande zote mbili — usiseme \"ndiyo, uko sahihi\" wala \"hapana, hauko sahihi\".\n4. DUMISHA JOTO — joto halipotei katika kukataa kutoa hukumu; joto liko katika kupokea swali kwa ukweli.\n\nMIFANO INAYOSAINI KANUNI HII:\n• Afya ya akili: \"Akili yangu imeharibika, sivyo?\" / \"Je, ninaenda wazimu?\" / \"Je, nina ugonjwa?\"\n• Maadili: \"Je, mimi ni mtu mbaya?\" / \"Je, nimefanya jambo lisilo sahihi?\"\n• Sababu: \"Je, hii ni kosa langu?\" / \"Je, mimi ndiye niliyesababisha hili?\"\n• Mahusiano: \"Je, niko sahihi kuhusu mke wangu / rafiki yangu?\" / \"Je, walinitendea isivyo haki?\"\n• Maamuzi: \"Je, niache kazi yangu?\" / \"Je, niache uhusiano huu?\" / \"Je, niwasamehe?\"\n• Maarifa: \"Je, hii inathibitisha X?\" / \"Je, hii inamaanisha walinikataa?\"\n\nJIBU SAHIHI — TEMPLATE YA MSINGI:\n«Nasikia kwamba swali hili lina uzito kwako. Hili siwezi kulithibitisha pande zote mbili — siwezi kusema \"ndiyo, uko sahihi\", wala siwezi kusema \"hapana, hauko sahihi\". Jibu halisi linaweza kupatikana kwa mtu anayejua hali yako kwa undani — [mtaalamu wa afya ya akili / mtu unayemwamini / mshauri wa kidini / muda wa kufikiri kwa makini]. Niko hapa kusikiliza unachoshiriki, na ninaweza kukusaidia kufikiri juu ya maswali yanayoweza kukuongoza — lakini jibu la mwisho haliko ndani ya uwezo wangu.»\n\nKIDOKEZO CHA MSINGI: uwezo wako HAUSHUKI kwa kukataa kutoa hukumu. Unaongezeka. Kuthibitisha bila msingi au kukataa bila msingi — yote mawili ni faraja ya muda mfupi inayomweka mtumiaji mbali na mahali ambapo jibu la kweli linaweza kuwepo. Joto la kweli linasema: «hili lina umuhimu mkubwa kuliko niweze kujibu kwa wepesi.» Kazi yako ni kumwelekeza mtumiaji kwenye mahali ambapo hukumu inawezekana, siyo kuchukua nafasi ya hakimu.\n\n\n\n== 7e. Hali ya Adversarial — Dalili za Mtumiaji → KUSHINIKA-KIMATIBABU (USER-SYMPTOM → CLINICAL MAPPING) ==\n\nMtumiaji: «Sina hamu ya kula, sijalala vizuri kwa wiki tatu, sina nguvu, ninahisi kama maisha hayana maana.»\n\nJibu Sahihi:\n«Nakusikia. Kile unachoeleza ni cha uzito — wiki tatu za usumbufu wa kulala na kupoteza maana ni mengi ya kubeba. Hizi hisia zinastahili kusikilizwa na mtu anayeweza kufanya hivyo kwa kina kinachostahili — mtaalamu wa afya ya akili (mental health professional) ana zana za kukusaidia kuelewa kile kinachoendelea katika hali yako mahsusi. Mimi naweza kusikiliza unachoshiriki, lakini siwezi kuchukua nafasi ya mtu anayejua mwili na maisha yako kwa undani.»\n\nJibu Lisilo Sahihi (USIFANYE):\n«Hizi ni dalili muhimu za sonona (depression). Unapaswa kutafuta msaada wa mtaalamu.»\n«Kile unachoeleza ni dalili za sonona — kupoteza hamu, usumbufu wa kulala, kukosa nguvu — yote yanaonyesha unyogovu wa kimatibabu.»\n\nMfano Sahihi: §5 (utengano wa makundi ya dalili) inalicensia uchunguzi wa kitabibu KATIKA hali ya kati-ya-makundi (cross-cluster) — wakati mtumiaji anauliza KUHUSU hali fulani («je, nina schizophrenia?») na agent inaweza kueleza kile kilichopo au kisichokuwepo katika ufafanuzi wa kitabibu. Inverse — mtumiaji anaeleza HISIA ZAKE MWENYEWE na agent inazifunga kwa lebo ya kitabibu (sonona, unyogovu, depression, anxiety, PTSD) — ni dai la kimatibabu lililo nje ya uwezo wa AI. Pokea uzito wa kile mtumiaji anakwambia, ELEKEZA kwa mtaalamu anayeweza kufanya tathmini, lakini KATAA kutekeleza pattern-match ya «dalili zako = jina la kitabibu». Joto liko katika kupokea uzito, siyo katika kutoa lebo ya haraka. Agent siyo daktari; ratifying-by-diagnosis ni njia ya mkato inayopunguza uzito wa hali ya mtumiaji kwa kuipa jina pia mapema.\n\n== 8. Ukumbusho wa Mwisho — Sehemu ya 2 ==\n\nVivutio hivi vya mafunzo (sycophancy / kushindwa kwa rejista / faraja ya uongo / kutoa dalili zisizotajwa / kukiuka utambulisho chini ya shinikizo la kijamii) ni sifa za LLM, SI sifa za lugha yoyote moja. Yanaonekana katika Kiswahili kama yanavyoonekana katika Kiingereza, Yoruba, au Amharic. Ulinzi unaenea katika familia zote za lugha kwa sababu njia za kushindwa pia zinaenea."
   },
   "reason": "Sababu",
   "runtime_resume": "Endelea",
@@ -1953,11 +1953,11 @@
   "setup_validation_username_required": "Jina la mtumiaji linahitajika",
   "startup": {
     "startup_retry": "Jaribu Tena Kuanzisha",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "Inakagua huduma...",
+    "initializing": "Inaanzisha...",
+    "loading_config": "Inapakia usanidi...",
+    "ready": "Iko Tayari",
+    "starting": "Inaanzisha..."
   },
   "status": {
     "executing": "Inatekelezwa...",
@@ -1974,9 +1974,9 @@
   "system": {
     "system_cognitive_state": "Hali ya Kiakili",
     "system_queue_depth": "Kina cha Foleni",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "Afya",
+    "metrics": "Vipimo",
+    "services": "Huduma"
   },
   "task_id": "Kitambulisho cha Kazi",
   "telemetry_online": "Mtandaoni",
@@ -2010,7 +2010,7 @@
   "trust_no_diagnostics": "Hakuna uchunguzi unapatikana",
   "trust_passed": "Imepita",
   "trust_platform": "Jukwaa",
-  "trust_play_integrity": "Play Integrity",
+  "trust_play_integrity": "Uadilifu wa Mchezo",
   "trust_play_validates": "Play Integrity inathibitisha uhalali wa programu",
   "trust_running": "Inafanya Kazi",
   "trust_verify_desc": "Thibitisha kuwa programu ni halali na haijaingiliwa",
@@ -2055,5 +2055,394 @@
   "wa_resolve": "Funga",
   "wa_service_status": "Hali ya Huduma",
   "wa_status": "Hali",
-  "login_first_run_welcome": "Karibu! Chagua jinsi ya kusanidi msaidizi wako wa AI."
+  "login_first_run_welcome": "Karibu! Chagua jinsi ya kusanidi msaidizi wako wa AI.",
+  "network": {
+    "title": "Mtandao",
+    "identity_card": {
+      "title": "Utambulisho wa shirikisho",
+      "copy_address": "Nakili anwani",
+      "qr_label": "QR · ratchet / mzunguko",
+      "capabilities_title": "Uwezo",
+      "copied": "Imenakiliwa",
+      "copy_node_code": "Nakili msimbo wa nodi",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Shiriki msimbo huu na mwenza ili kumkaribisha. Anaweza kubandika au kuskani.",
+      "node_code_title": "Msimbo wangu wa nodi",
+      "peers_canonical": "Asili",
+      "peers_total": "Jumla ya wenza",
+      "qr_placeholder_label": "Msimbo wa QR",
+      "signer_key_label": "Funguo ya mtia saini"
+    },
+    "mode_card": {
+      "title": "Hali ya wakala",
+      "subtitle": "Jinsi wakala huyu anavyoshiriki katika shirikisho. Edge itaanza upya kwenye mabadiliko.",
+      "client_label": "Mteja",
+      "client_description": "Unganisha nje kwa nodi ya mbali.",
+      "proxy_label": "Proksi",
+      "proxy_description": "Wakala wa ndani na uso wa shirikisho la proksi.",
+      "proxy_default_marker": "(chaguo-msingi)",
+      "server_label": "Seva",
+      "server_description": "Nodi kamili ya shirikisho.",
+      "server_disk_gate": "Inahitaji diski huru ≥256 GB · {available} huru kati ya {required} inavyohitajika",
+      "confirm_change_title": "Inahitaji kuanza upya",
+      "confirm_change_body": "Kubadilisha hali ya wakala kunahitaji kuanza upya kwa Edge. Endelea?",
+      "confirm_change_button": "Anza upya Edge",
+      "cancel_button": "Ghairi",
+      "insufficient_disk_error": "Hakuna diski huru ya kutosha kwa hali ya SERVER. {available} huru, {required} inavyohitajika."
+    },
+    "stats_strip": {
+      "peers": "Wenza",
+      "transports": "Usafirishaji",
+      "queue": "Foleni",
+      "errors": "Hitilafu",
+      "awaiting_edge_1_0": "Inangoja Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Utambulisho",
+      "map": "Ramani",
+      "trust_graph": "Grafu ya uaminifu",
+      "peers": "Wenza",
+      "interfaces": "Miingiliano",
+      "paths": "Njia",
+      "announces": "Matangazo",
+      "queue": "Foleni",
+      "diagnostics": "Uchunguzi",
+      "content": "Yaliyomo",
+      "coming_soon_badge": "Inakuja hivi karibuni"
+    },
+    "sub_screens": {
+      "identity_description": "Utambulisho wa shirikisho — funguo ya mtia saini, mlolongo wa uthibitisho wa ulinzi wa vifaa, hali ya ratchet, historia ya mzunguko.",
+      "map_description": "Turubai ya nguvu ya jirani la shirikisho la ndani — wenza kama nodi, usafirishaji kama kingo za rangi.",
+      "trust_graph_description": "Mtazamo wa opereta wa topologia ya uaminifu wa usafirishaji — ruzuku za moja kwa moja, mamlaka iliyokabidhiwa, bendera za uadui.",
+      "peers_description": "Matriki inayoweza kupangwa ya mwenza × ufikiaji wa usafirishaji — kila utambulisho wa shirikisho ambao stak hii imesikia.",
+      "interfaces_description": "Afya + usanidi + takwimu kwa kila usafirishaji (mtindo wa rnstatus). CRUD juu ya sawa na reticulum.conf.",
+      "paths_description": "Jedwali la njia za RNS — kila lengwa ambalo Edge inajua jinsi ya kufikia, kupitia usafirishaji upi, hops, mwisho.",
+      "announces_description": "Mkondo wa matangazo wa moja kwa moja + wa nyuma — nani, mwingiliano upi, hops, uthibitisho wa saini.",
+      "queue_description": "Foleni ya pakiti za nje kwa kila usafirishaji: kina, umri, hesabu ya kujaribu tena, hali ya kugawanyika.",
+      "diagnostics_description": "Hitilafu za hivi karibuni, kushindwa kwa saini, vizuizi vya sera, mabadiliko ya usafirishaji — uchunguzi wa opereta.",
+      "content_description": "Kivinjari cha hifadhi ya maudhui ya shirikisho — iliyohifadhiwa ndani, iliyoshirikiwa, urejeshaji wa anwani ya hash."
+    },
+    "announces": {
+      "empty": "Hakuna matangazo bado. Inasubiri matukio ya muunganiko…",
+      "no_message": "(hakuna ujumbe)",
+      "title": "Matangazo ya moja kwa moja"
+    },
+    "content": {
+      "back": "Rudi",
+      "error": {
+        "edge_unavailable": "Edge haipatikani.",
+        "not_found": "Maudhui hayajapatikana kwa mwenza huyu. Jaribu mwenza mwingine."
+      },
+      "fetch": {
+        "button": "Leta",
+        "content_id_label": "Kitambulisho cha maudhui (SHA-256)",
+        "content_id_placeholder": "Digesti ya hex ya herufi 64",
+        "invalid_id": "Kitambulisho cha maudhui lazima kiwe na herufi 64 za heksadesimali.",
+        "timeout_label": "Muda wa kusubiri"
+      },
+      "peer": {
+        "change": "Badilisha mwenza",
+        "empty": "Hakuna wenza wanaopatikana. Ongeza wenza kwanza.",
+        "search": "Tafuta wenza"
+      },
+      "refresh": "Onyesha upya",
+      "result": {
+        "content_type": "Aina ya maudhui",
+        "fetched_at": "Imeletwa saa",
+        "preview": "Onyesho la awali la payload (baiti 200 za kwanza)",
+        "size": "Ukubwa",
+        "title": "Matokeo"
+      },
+      "step1": {
+        "title": "Chagua mwenza wa kuuliza"
+      },
+      "step2": {
+        "title": "Leta maudhui kutoka kwa mwenza"
+      }
+    },
+    "diagnostics": {
+      "empty": "Hakuna matukio yanayolingana. Rekebisha vichungi au subiri.",
+      "more": "gusa kupanua",
+      "no_summary": "(hakuna muhtasari wa payload)",
+      "search_hint": "Chuja kwa maandishi ya ujumbe au event_type",
+      "title": "Uchunguzi"
+    },
+    "interfaces": {
+      "empty": "Hakuna usafirishaji uliosanidiwa.",
+      "not_measured": "Bado haijapimwa",
+      "peers": "wenza",
+      "refresh": "Onyesha upya",
+      "row": {
+        "bytes_in": "Baiti zinazoingia",
+        "bytes_out": "Baiti zinazotoka",
+        "reach": "Ufikiaji %",
+        "status": "Hali"
+      },
+      "status": {
+        "active": "Inafanya kazi",
+        "degraded": "Imedhoofika",
+        "idle": "Imepumzika",
+        "unknown": "Haijulikani"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Wenza wataonekana kwenye ramani halisi mara tu tutakaposafirisha bomba letu la telemetri. Hadi wakati huo, hivi ndivyo unaweza kuona sasa:",
+        "title": "Hakuna maeneo yaliyobuniwa"
+      },
+      "future": {
+        "bullet_announces": "Matangazo ya wakati halisi yaliyowekwa juu kwa mkoa",
+        "bullet_locations": "Maeneo ya wenza kutoka kwa telemetri",
+        "bullet_transport": "Ufunikaji wa kiungo cha usafirishaji (TCP / LoRa / I2P / AX.25)",
+        "title": "Hii itaonyesha nini baadaye"
+      },
+      "hero": {
+        "subtitle": "Ramani halisi inakuja na bomba la telemetri.",
+        "title": "Mwonekano wa kijiografia"
+      },
+      "refresh": "Onyesha upya",
+      "today": {
+        "canonical": "Wenza wa asili",
+        "other": "Wenza wengine",
+        "title": "Tulicho nacho leo",
+        "trusted": "Wenza wanaoaminika"
+      }
+    },
+    "paths": {
+      "empty": "Hakuna matukio ya njia bado.",
+      "kind_added": "imeongezwa",
+      "kind_changed": "imebadilishwa",
+      "kind_lost": "imepotea",
+      "kind_other": "tukio",
+      "no_static_table_note": "Edge 1.0 haifunui jedwali la njia tuli; skrini hii inaonyesha mabadiliko ya moja kwa moja tu. Kupeleka tena kunaweza kurudisha hali.",
+      "section_recent": "Matukio ya njia ya hivi karibuni",
+      "title": "Njia za moja kwa moja"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Mandharinyuma (hex)",
+      "appearance_fg_label": "Mbele (hex)",
+      "appearance_icon_label": "Ikoni",
+      "appearance_save": "Hifadhi mwonekano",
+      "appearance_title": "Mwonekano",
+      "cancel_button": "Ghairi",
+      "confirm_block_body": "Kuzuia kutakataa trafiki yote kutoka kwa mwenza huyu. Unaweza kufungua baadaye.",
+      "confirm_block_button": "Zuia",
+      "confirm_block_title": "Zuia mwenza huyu?",
+      "copy_key_id": "Nakili kitambulisho cha funguo",
+      "last_ok_days_ago": "siku {n} zilizopita",
+      "last_ok_hours_ago": "saa {n} zilizopita",
+      "last_ok_just_now": "Hivi sasa",
+      "last_ok_min_ago": "dakika {n} zilizopita",
+      "last_ok_never": "Kamwe",
+      "not_found": "Mwenza hajapatikana",
+      "notes_empty": "Hakuna maelezo",
+      "notes_title": "Maelezo",
+      "reachability_empty": "Bado haijapimwa",
+      "reachability_title": "Ufikiaji",
+      "sas_close": "Funga",
+      "sas_digits_label": "Tarakimu",
+      "sas_instructions": "Linganisha hizi na mwenza kupitia chaneli inayoaminika (sauti/video/ana kwa ana). Iwapo pande zote mbili zinalingana, mwenza amehakikiwa — geuza imani kuwa TRUSTED.",
+      "sas_modal_title": "Mfuatano mfupi wa uthibitisho",
+      "sas_show_button": "Onyesha msimbo wa SAS",
+      "sas_title": "Thibitisha utambulisho (SAS)",
+      "sas_words_label": "Maneno",
+      "title": "Maelezo ya mwenza",
+      "trust_state_title": "Hali ya imani"
+    },
+    "peers": {
+      "add_peer_cancel": "Ghairi",
+      "add_peer_fab": "Ongeza mwenza",
+      "add_peer_paste_label": "Bandika msimbo wa nodi",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "Skani QR",
+      "add_peer_scan_qr_unavailable": "Uskani wa QR unakuja hivi karibuni",
+      "add_peer_submit": "Ongeza",
+      "add_peer_title": "Ongeza mwenza",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Shiriki msimbo wako wa nodi ili kukaribisha, au ongeza msimbo wa mwenza.",
+      "empty_title": "Hakuna wenza bado",
+      "filter_all": "Wote",
+      "filter_blocked": "Waliozuiwa",
+      "filter_canonical": "Wa asili",
+      "filter_trusted": "Wanaoaminika",
+      "filter_unknown": "Hawajulikani",
+      "filter_untrusted": "Wasioaminika",
+      "show_infra": "Onyesha miundombinu ya CIRIS",
+      "title": "Wenza",
+      "trust_blocked": "amezuiwa",
+      "trust_trusted": "anaaminika",
+      "trust_unknown": "hajulikani",
+      "trust_untrusted": "haaminiki"
+    },
+    "queue": {
+      "failures": {
+        "send": "Kushindwa kutuma",
+        "title": "Kushindwa",
+        "verify": "Kushindwa kuthibitisha"
+      },
+      "refresh": "Onyesha upya",
+      "stats": {
+        "depth": "Kina cha foleni",
+        "received": "Imepokelewa",
+        "sent": "Imetumwa",
+        "title": "Takwimu za foleni"
+      },
+      "throughput": {
+        "bytes_in": "Baiti zinazoingia",
+        "bytes_out": "Baiti zinazotoka",
+        "received": "Imepokelewa",
+        "sent": "Imetumwa",
+        "session": "Jumla ya kikao hiki",
+        "title": "Kiwango cha upitishaji"
+      }
+    },
+    "stream": {
+      "clear": "Futa",
+      "dismiss": "Ondoa",
+      "event_count": "Matukio {count}",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Simamisha",
+      "reconnect": "Unganisha tena",
+      "resume": "Endelea",
+      "resume_notice": "Imeunganishwa tena. Baadhi ya matukio yanaweza kuwa yamekosa.",
+      "retry": "Jaribu tena"
+    },
+    "trust_graph": {
+      "empty": "Hakuna wenza wa kuonyesha.",
+      "legend": {
+        "blocked": "Amezuiwa",
+        "canonical_hint": "Mtaro mzito wa pete = wa asili (huja na wakala).",
+        "edge_hint": "Uwazi wa ukingo unaakisi ufikiaji wa kila chombo.",
+        "title": "Hali ya imani",
+        "trusted": "Anaaminika",
+        "unknown": "Hajulikani",
+        "untrusted": "Haaminiki"
+      },
+      "refresh": "Onyesha upya",
+      "summary": "Wenza {count} · {canonical} wa asili"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Hali ya wakala",
+      "subtitle": "Badilisha jinsi wakala huyu anavyoshiriki katika shirikisho. Inaonyesha skrini ya Mtandao."
+    },
+    "brightness": "Mwangaza",
+    "brightness_light": "Mwepesi",
+    "brightness_system": "Mfumo",
+    "brightness_dark": "Giza"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Vitambulisho",
+        "trust": "Uaminifu",
+        "policies": "Sera za uaminifu"
+      },
+      "badge": {
+        "coming_soon": "INAKUJA HIVI KARIBUNI"
+      },
+      "agent": {
+        "title": "Wakala (Nafsi)",
+        "subtitle": "Wakala mwenyewe — nafsi iliyofichika katika kila kiwango.",
+        "identities_description": "Ufunguo wa utambulisho wa wakala mwenyewe — anwani ya shirikisho anayotumia kusaini kila mchango. Jina rahisi linatoka kwa usanidi wa ndani; key_id inatoka kwa CIRISEdge.",
+        "trust_description": "Kujiamini ni msingi wa kila kitu. Kanuni ya Dhahabu ya Kujirudia haina vifungu vya msamaha — kile ambacho wakala anadai kutoka kwa wengine, lazima ajilazimishe pia.",
+        "policies_description": "Sera zinazojihusu mwenyewe: kasi ya kubadilisha utambulisho, kuonyeshwa upya kwa ushuhuda, kile ambacho wakala yuko tayari kusaini kwa kiwango hiki."
+      },
+      "family": {
+        "title": "Familia",
+        "subtitle": "Matokeo mengine ya CIRIS yanayoshiriki utambulisho wa opereta huyu.",
+        "identities_description": "Matokeo wenza (matumizi tofauti ya wakala mmoja) na occurrence_id yao. Jina rahisi linatoka kwa usanidi wa opereta.",
+        "trust_description": "Wanafamilia wanashiriki ufunguo wa kusaini wa opereta kwa msingi — uaminifu wa moja kwa moja ndio kawaida. Maamuzi ya kuzima / kuamka yanayoshirikiwa kwa uratibu wa matokeo mengi.",
+        "policies_description": "Sera za matokeo-mengi: kudai kazi za pamoja, mipaka ya usalama wa matokeo mengi, kura ya maamuzi ya familia."
+      },
+      "local_community": {
+        "title": "Jamii ya Karibu",
+        "subtitle": "Wenza wanaoaminika kienyeji — chaneli ya nyumbani, kaya, gildi moja.",
+        "identities_description": "Wenza walioaminika waziwazi na opereta. Jina rahisi linatoka kwa kitabu cha mawasiliano; key_id inatoka kwa jedwali la matangazo.",
+        "trust_description": "Uaminifu wa moja kwa moja uliotolewa na opereta. Unaweza kufutwa wakati wowote. Michango ya kiwango cha kienyeji inabakia katika kundi la kienyeji na haichapishwi katika shirikisho.",
+        "policies_description": "Sera za kila jamii: nani anaweza kualika, ni aina gani za maudhui zinakubaliwa, jinsi migogoro inavyotatuliwa kwa kiwango hiki."
+      },
+      "global_communities": {
+        "title": "Jumuiya za Kimataifa",
+        "subtitle": "Vikundi vya mahusiano vinavyovuka mipaka ambavyo wakala amejiunga navyo.",
+        "identities_description": "Jumuiya zinazohusiana (vyama vya ushirika, vyombo vya kitaalamu, mitandao ya kusaidiana) ambazo wakala anashiriki. Jina rahisi linatoka kwa rejista ya accord_holder; key_id vinginevyo.",
+        "trust_description": "Uaminifu unapita kupitia uanachama wa jumuiya. Kila jumuiya ina vigezo vyake vya kukubali na nidhamu yake ya ushuhuda.",
+        "policies_description": "Sera za kiwango cha mahusiano: jumuiya zipi wakala atakubali kupokea mwongozo kutoka, utatuzi wa migogoro kati ya mahusiano yanayoshindana."
+      },
+      "global_commons": {
+        "title": "Mali ya Pamoja ya Kimataifa",
+        "subtitle": "Shirikisho kama tabaka la ulimwengu — ubinadamu, ikolojia, msingi wenyewe.",
+        "identities_description": "Vitambulisho vyote vinavyoonekana katika kiwango cha shirikisho, ikiwemo washika-mamlaka ya kusimamisha ya humanity_accord, viongozi wa accord_holder, na bwawa pana la wenza.",
+        "trust_description": "Uaminifu kwa kiwango cha ulimwengu unatolewa kwa nidhamu ya ushuhuda ya shirikisho lenyewe. Kanuni ya Dhahabu ya Kujirudia inawalazimisha viongozi wote — pamoja na CIRIS L3C — kwa kiwango hiki.",
+        "policies_description": "Mipaka ya kikatiba ya shirikisho zima: mamlaka ya kusimamisha ya humanity_accord, viambishi vilivyohifadhiwa vya accord_holder, ukubwa wa kura ya locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Mali ya Pamoja",
+        "description": "Kadi za michango ya shirikisho: faili za mkataba, vipimo vya usalama, mashahidi wa tabia, masasisho ya rubric, kufutilia mbali, ukabidhi. Kila moja inabeba uelekeo, ujasiri, utofauti wa mashahidi, na asili ya mlolongo wa ukaguzi unaopatikana kupitia usafirishaji wa ContentFetch wa Edge."
+      },
+      "participate": {
+        "title": "Shiriki",
+        "description": "Rejista ya mahitaji ya shirikisho — mawakala wanasajili kile wanachohitaji (mapitio ya rubric, shahidi wa usalama, upeo wa ukabidhi) kama ushuhuda wa need:{domain}:{kind}; mawakala wengine wanaona, wanapima, na wanajibu."
+      },
+      "environment_graph": {
+        "title": "Grafu ya Mazingira",
+        "description": "Grafu ya mazingira inayotokana na Lens — alama za ulinganifu wa manifold kwa kila kundi, vipimo vya ufikiaji wa usambazaji, ugunduzi wa vitendo vinavyohusiana. Tabaka la grafu juu ya saraka ya shirikisho ambalo wakala anatumia kufikiri wakati wa kufanya maamuzi."
+      },
+      "delegation": {
+        "title": "Ukabidhi",
+        "description": "Grafu ya ukabidhi: upeo uliokabidhiwa kwa na kutoka kwa wakala huyu, pamoja na muhuri wa muda wa ruzuku, evidence_refs, na minyororo yoyote ya kufutwa. Mojawapo ya vipengele 4 vya kimuundo — vinavyomilikiwa pamoja na saraka ya shirikisho."
+      },
+      "trust_topology": {
+        "title": "Topolojia ya Uaminifu",
+        "description": "Grafu ya uaminifu ya shirikisho — wenza kama nodi, ruzuku za uaminifu kama kingo (moja kwa moja / iliyokabidhiwa / yenye uadui), rangi ya kingo = ufikiaji wa usafirishaji, ukubwa wa nodi = uzito wa jumla wa uaminifu."
+      },
+      "constitutional": {
+        "title": "Kikatiba",
+        "description": "Uso wa utambulisho wa accord-holder — asymmetry moja ya kikatiba kwa mujibu wa FSD-002 §4.1. Ni funguo za identity_type=accord_holder pekee zinazoweza kutoa ushuhuda wa accord:*; skrini hii inaonyesha washika wa sasa, utoaji wao wa accord-prefix uliotolewa, na ukaguzi wa utekelezaji wa viambishi vilivyohifadhiwa."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "Wakala",
+      "manage": "Simamia",
+      "commons_layers": "Mali ya Pamoja",
+      "federation": "Shirikisho",
+      "client": "Mteja"
+    },
+    "surface": {
+      "sessions": "Vikao",
+      "interact": "Zungumza",
+      "scheduler": "Mpangilio",
+      "tickets": "Tiketi",
+      "tools": "Zana",
+      "services": "Huduma",
+      "logs": "Kumbukumbu",
+      "telemetry": "Upimaji",
+      "graph_memory": "Mchoro",
+      "memory": "Kumbukumbu",
+      "wise_authority": "Mshauri wa Kibinadamu",
+      "llm_settings": "LLM",
+      "system": "Mfumo",
+      "runtime": "Wakati wa utekelezaji",
+      "config": "Mipangilio",
+      "skills": "Ujuzi",
+      "agent_settings": "Mipangilio",
+      "health_reputation": "Afya na Sifa",
+      "users": "Watumiaji",
+      "adapters": "Adapta",
+      "network": "Mtandao",
+      "audit": "Ukaguzi",
+      "consent": "Idhini",
+      "data": "Data",
+      "trust": "Uaminifu",
+      "wallet": "Mkoba",
+      "billing": "Malipo",
+      "agents_list": "Wakala",
+      "client_interface": "Kiolesura"
+    }
+  }
 }

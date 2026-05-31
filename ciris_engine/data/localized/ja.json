@@ -142,13 +142,13 @@
     "ponder_forced_retry": "良心の再試行後に強制的な PONDER",
     "override_rationale": "{conscience_name}によって上書きされました：{action}を再考する必要があります",
     "forced_ponder_rationale": "ループを防ぐために良心の再試行後に強制的な PONDER",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "良心の懸念：SPEAK の最低信頼度は {threshold} ですが、{confidence} が指定されました",
+    "ponder_concern_speak_harm": "良心の懸念：SPEAK の内容が有害となる可能性があります",
+    "ponder_concern_tool_confidence": "良心の懸念：TOOL の最低信頼度は {threshold} ですが、{confidence} が指定されました",
+    "ponder_concern_tool_requires_wa": "良心の懸念：このツールは賢明な権威の承認が必要です",
+    "ponder_concern_memorize_scope": "良心の懸念：MEMORIZE {scope} — この操作が適切かどうか確認してください",
+    "ponder_concern_forget_scope": "良心の懸念：FORGET {scope} — この操作は取り消せません",
+    "ponder_concern_high_stakes": "良心の懸念：重大な状況が検出されました — 慎重な検討が必要です",
     "retry_header": "**良心無視ガイダンス:**",
     "retry_intro": "{action}の前回の試みが拒否されました。理由: {reason}",
     "retry_alternatives_header": "IRIS-Eが列挙した代替案(SPEAKを再度選択する場合はピボットターゲットとして使用):",
@@ -958,11 +958,11 @@
     "memory_attributes": "属性",
     "memory_search_placeholder": "思考、タスク、観察を検索...",
     "memory_label_id": "ID",
-    "memory_label_type": "Type",
-    "memory_label_scope": "Scope",
-    "memory_label_created": "Created",
-    "memory_label_updated": "Updated",
-    "memory_label_unknown": "Unknown",
+    "memory_label_type": "タイプ",
+    "memory_label_scope": "スコープ",
+    "memory_label_created": "作成日時",
+    "memory_label_updated": "更新日時",
+    "memory_label_unknown": "不明",
     "memory_scope_local": "LOCAL",
     "memory_scope_identity": "IDENTITY",
     "memory_scope_environment": "ENVIRONMENT",
@@ -983,17 +983,17 @@
     "runtime_pause": "一時停止",
     "runtime_resume": "再開",
     "runtime_step": "ステップ",
-    "runtime_current_step": "Current Step",
-    "runtime_step_time": "Step Time",
-    "runtime_tokens_label": "Tokens",
-    "runtime_updates": "{count} updates",
-    "runtime_conditional": "conditional",
-    "runtime_task_info": "{count} thoughts | Updated: {updated}",
-    "runtime_instruction_1": "Real-time Stream: Connects to reasoning stream for live updates",
-    "runtime_instruction_2": "H3ERE Pipeline: 11 step points (0-10) with conditional recursive steps",
-    "runtime_instruction_3": "Pause/Resume: Control processing while maintaining stream connection",
-    "runtime_instruction_4": "Single Step: Execute one pipeline step (when paused)",
-    "runtime_instruction_5": "Live Visualization: See reasoning process in real-time",
+    "runtime_current_step": "現在のステップ",
+    "runtime_step_time": "ステップ時間",
+    "runtime_tokens_label": "トークン",
+    "runtime_updates": "{count}件の更新",
+    "runtime_conditional": "条件分岐",
+    "runtime_task_info": "{count}件の思考 | 更新日時：{updated}",
+    "runtime_instruction_1": "リアルタイムストリーム：ライブ更新のための推論ストリームに接続します",
+    "runtime_instruction_2": "H3ERE パイプライン：条件付き再帰ステップを含む11段階（0〜10）",
+    "runtime_instruction_3": "一時停止 / 再開：ストリーム接続を維持しながら処理を制御します",
+    "runtime_instruction_4": "シングルステップ：パイプラインを1ステップ実行します（一時停止中）",
+    "runtime_instruction_5": "ライブ可視化：推論プロセスをリアルタイムで確認できます",
     "runtime_paused": "一時停止中",
     "runtime_running": "実行中",
     "step_start_round": "0. ラウンド開始",
@@ -1013,12 +1013,12 @@
     "logs_auto_scroll_on": "自動スクロールON",
     "logs_entries": "ログ（{count}エントリ）",
     "logs_search_placeholder": "ログを検索...",
-    "logs_hide_filters": "Hide",
-    "logs_show_filters": "Filter",
-    "logs_level_label": "Level:",
-    "logs_service_label": "Service:",
-    "logs_limit_label": "Limit:",
-    "logs_collapse": "Collapse",
+    "logs_hide_filters": "非表示",
+    "logs_show_filters": "フィルター",
+    "logs_level_label": "レベル：",
+    "logs_service_label": "サービス：",
+    "logs_limit_label": "件数制限：",
+    "logs_collapse": "折りたたむ",
     "logs_expand": "展開",
     "trust_learn_more": "CIRISVerifyについて詳しく学ぶ",
     "trust_running": "認証チェックを実行中...",
@@ -1649,7 +1649,7 @@
     "skill_validate": "問題をチェック",
     "skill_workshop": "スキル工房",
     "skill_workshop_desc": "エージェントのスキルを作成・インポート・管理します。",
-    "skill_studio": "Skill Studio",
+    "skill_studio": "スキルスタジオ",
     "skill_studio_desc": "スキルをゼロから作成するためのビジュアルエディター。",
     "startup_creating_api": "API作成中",
     "startup_configuring": "ミドルウェア設定中",
@@ -1672,15 +1672,15 @@
     "wallet_paymaster_hint": "ガスレスUSDC送金を有効にするにはEtherspot Arka APIキーを入力してください",
     "wallet_paymaster_key_label": "Arka APIキー",
     "wallet_paymaster_save": "キーを保存",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "実行",
+    "interact_viz_complete": "完了",
+    "adapter_reauth_required": "再認証が必要です",
+    "adapter_reauth": "再認証する",
+    "adapter_reauth_reason": "理由：{reason}",
+    "settings_location": "所在地",
+    "settings_location_desc": "天気情報やローカル情報のために都市を設定してください",
+    "settings_search_city": "都市",
+    "settings_search_city_hint": "都市を検索...",
     "llm_settings_local_servers": "ローカルサーバー",
     "llm_settings_local_detected": "{count}個検出",
     "llm_settings_local_none": "見つかりません",
@@ -1953,11 +1953,11 @@
   "setup_validation_username_required": "ユーザー名は必須です",
   "startup": {
     "startup_retry": "再試行",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "サービスを確認中...",
+    "initializing": "初期化中...",
+    "loading_config": "設定を読み込み中...",
+    "ready": "準備完了",
+    "starting": "起動中..."
   },
   "status": {
     "all_operational": "[EN] All Operational",
@@ -1974,9 +1974,9 @@
   "system": {
     "system_cognitive_state": "認知状態",
     "system_queue_depth": "キューの深さ",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "ヘルス",
+    "metrics": "メトリクス",
+    "services": "サービス"
   },
   "task_id": "タスクID",
   "telemetry_online": "オンライン",
@@ -2055,5 +2055,394 @@
   "wa_resolve": "解決",
   "wa_service_status": "サービスステータス",
   "wa_status": "ステータス",
-  "login_first_run_welcome": "ようこそ！AIアシスタントのセットアップ方法を選択してください。"
+  "login_first_run_welcome": "ようこそ！AIアシスタントのセットアップ方法を選択してください。",
+  "network": {
+    "title": "ネットワーク",
+    "identity_card": {
+      "title": "フェデレーション ID",
+      "copy_address": "アドレスをコピー",
+      "qr_label": "QR · ラチェット / ローテーション",
+      "capabilities_title": "機能",
+      "copied": "コピーしました",
+      "copy_node_code": "ノードコードをコピー",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "ピアを招待するためにこのコードを共有してください。貼り付けまたはスキャンできます。",
+      "node_code_title": "私のノードコード",
+      "peers_canonical": "標準",
+      "peers_total": "ピア合計",
+      "qr_placeholder_label": "QR コード",
+      "signer_key_label": "署名キー"
+    },
+    "mode_card": {
+      "title": "エージェントモード",
+      "subtitle": "このエージェントがフェデレーションに参加する方法。変更時に Edge は再起動します。",
+      "client_label": "クライアント",
+      "client_description": "リモートノードに外向きに接続します。",
+      "proxy_label": "プロキシ",
+      "proxy_description": "プロキシフェデレーションサーフェスを持つローカルエージェント。",
+      "proxy_default_marker": "(デフォルト)",
+      "server_label": "サーバー",
+      "server_description": "完全なフェデレーションノード。",
+      "server_disk_gate": "≥256 GB の空きディスクが必要 · 空き {available}、必要 {required}",
+      "confirm_change_title": "再起動が必要です",
+      "confirm_change_body": "エージェントモードの切り替えには Edge の再起動が必要です。続行しますか?",
+      "confirm_change_button": "Edge を再起動",
+      "cancel_button": "キャンセル",
+      "insufficient_disk_error": "SERVER モードに必要な空きディスクが不足しています。空き {available}、必要 {required}。"
+    },
+    "stats_strip": {
+      "peers": "ピア",
+      "transports": "トランスポート",
+      "queue": "キュー",
+      "errors": "エラー",
+      "awaiting_edge_1_0": "Edge 1.0 待機中"
+    },
+    "tiles": {
+      "identity": "ID",
+      "map": "マップ",
+      "trust_graph": "信頼グラフ",
+      "peers": "ピア",
+      "interfaces": "インターフェース",
+      "paths": "パス",
+      "announces": "アナウンス",
+      "queue": "キュー",
+      "diagnostics": "診断",
+      "content": "コンテンツ",
+      "coming_soon_badge": "近日公開"
+    },
+    "sub_screens": {
+      "identity_description": "フェデレーション ID — 署名鍵、ハードウェアカストディ証明チェーン、ラチェット状態、ローテーション履歴。",
+      "map_description": "ローカルフェデレーション近傍の力指向キャンバス — ピアをノードとして、トランスポートを色付きエッジとして。",
+      "trust_graph_description": "トランスポート信頼トポロジのオペレータビュー — 直接付与、委任権限、敵対フラグ。",
+      "peers_description": "ソート可能なピア × トランスポート到達可能性マトリックス — このスタックが認識した全フェデレーション ID。",
+      "interfaces_description": "トランスポートごとのヘルス + 設定 + 統計 (rnstatus スタイル)。reticulum.conf 相当の CRUD。",
+      "paths_description": "RNS パステーブル — Edge が到達方法を知る各宛先、どのトランスポート経由、ホップ、有効期限。",
+      "announces_description": "ライブ + 振り返りアナウンスストリーム — 誰が、どのインターフェース、ホップ、署名検証。",
+      "queue_description": "トランスポートごとの送信パケットキュー: 深度、経過時間、再試行回数、フラグメンテーション状態。",
+      "diagnostics_description": "最近のエラー、署名失敗、ポリシーブロック、トランスポート変動 — オペレータフォレンジック。",
+      "content_description": "フェデレーションコンテンツストアブラウザ — ローカルキャッシュ、フェデレーション、ハッシュアドレス取得。"
+    },
+    "announces": {
+      "empty": "まだアナウンスはありません。フェデレーションイベントを待機中…",
+      "no_message": "(メッセージなし)",
+      "title": "ライブアナウンス"
+    },
+    "content": {
+      "back": "戻る",
+      "error": {
+        "edge_unavailable": "Edge は利用できません。",
+        "not_found": "このピアでコンテンツが見つかりません。別のピアを試してください。"
+      },
+      "fetch": {
+        "button": "取得",
+        "content_id_label": "コンテンツ ID (SHA-256)",
+        "content_id_placeholder": "64 文字の hex ダイジェスト",
+        "invalid_id": "コンテンツ ID は 64 文字の 16 進数である必要があります。",
+        "timeout_label": "タイムアウト"
+      },
+      "peer": {
+        "change": "ピアを変更",
+        "empty": "利用可能なピアがありません。まずピアを追加してください。",
+        "search": "ピアを検索"
+      },
+      "refresh": "更新",
+      "result": {
+        "content_type": "コンテンツタイプ",
+        "fetched_at": "取得日時",
+        "preview": "ペイロードプレビュー (最初の 200 バイト)",
+        "size": "サイズ",
+        "title": "結果"
+      },
+      "step1": {
+        "title": "クエリするピアを選択"
+      },
+      "step2": {
+        "title": "ピアからコンテンツを取得"
+      }
+    },
+    "diagnostics": {
+      "empty": "一致するイベントがありません。フィルターを調整するか待機してください。",
+      "more": "タップして展開",
+      "no_summary": "(ペイロード概要なし)",
+      "search_hint": "メッセージテキストまたは event_type でフィルター",
+      "title": "診断"
+    },
+    "interfaces": {
+      "empty": "トランスポートが構成されていません。",
+      "not_measured": "まだ測定されていません",
+      "peers": "ピア",
+      "refresh": "更新",
+      "row": {
+        "bytes_in": "受信バイト",
+        "bytes_out": "送信バイト",
+        "reach": "到達率 %",
+        "status": "ステータス"
+      },
+      "status": {
+        "active": "アクティブ",
+        "degraded": "劣化",
+        "idle": "アイドル",
+        "unknown": "不明"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "テレメトリーパイプラインを出荷すると、ピアが実際のマップに表示されます。それまでは、現在表示できるものは次のとおりです:",
+        "title": "捏造された場所はありません"
+      },
+      "future": {
+        "bullet_announces": "地域別にオーバーレイされたリアルタイムアナウンス",
+        "bullet_locations": "テレメトリーからのピアの場所",
+        "bullet_transport": "トランスポートリンクオーバーレイ (TCP / LoRa / I2P / AX.25)",
+        "title": "後で表示される内容"
+      },
+      "hero": {
+        "subtitle": "実際のマップはテレメトリーパイプラインと共に登場します。",
+        "title": "地理ビュー"
+      },
+      "refresh": "更新",
+      "today": {
+        "canonical": "標準ピア",
+        "other": "その他のピア",
+        "title": "現在あるもの",
+        "trusted": "信頼済みピア"
+      }
+    },
+    "paths": {
+      "empty": "まだパスイベントがありません。",
+      "kind_added": "追加されました",
+      "kind_changed": "変更されました",
+      "kind_lost": "失われました",
+      "kind_other": "イベント",
+      "no_static_table_note": "Edge 1.0 は静的パステーブルを公開しません。この画面はライブの変更のみを表示します。再デプロイで状態がリセットされる場合があります。",
+      "section_recent": "最近のパスイベント",
+      "title": "ライブパス"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "背景 (hex)",
+      "appearance_fg_label": "前景 (hex)",
+      "appearance_icon_label": "アイコン",
+      "appearance_save": "外観を保存",
+      "appearance_title": "外観",
+      "cancel_button": "キャンセル",
+      "confirm_block_body": "ブロックすると、このピアからのすべてのトラフィックが拒否されます。後でブロックを解除できます。",
+      "confirm_block_button": "ブロック",
+      "confirm_block_title": "このピアをブロックしますか?",
+      "copy_key_id": "キー ID をコピー",
+      "last_ok_days_ago": "{n} 日前",
+      "last_ok_hours_ago": "{n} 時間前",
+      "last_ok_just_now": "たった今",
+      "last_ok_min_ago": "{n} 分前",
+      "last_ok_never": "なし",
+      "not_found": "ピアが見つかりません",
+      "notes_empty": "メモがありません",
+      "notes_title": "メモ",
+      "reachability_empty": "まだ測定されていません",
+      "reachability_title": "到達可能性",
+      "sas_close": "閉じる",
+      "sas_digits_label": "数字",
+      "sas_instructions": "信頼できるチャネル (音声/ビデオ/対面) でこれらをピアと比較してください。両側が一致すれば、ピアは検証されます — 信頼を TRUSTED に切り替えてください。",
+      "sas_modal_title": "短い認証文字列",
+      "sas_show_button": "SAS コードを表示",
+      "sas_title": "ID の検証 (SAS)",
+      "sas_words_label": "単語",
+      "title": "ピア詳細",
+      "trust_state_title": "信頼状態"
+    },
+    "peers": {
+      "add_peer_cancel": "キャンセル",
+      "add_peer_fab": "ピアを追加",
+      "add_peer_paste_label": "ノードコードを貼り付け",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR をスキャン",
+      "add_peer_scan_qr_unavailable": "QR スキャンは近日公開",
+      "add_peer_submit": "追加",
+      "add_peer_title": "ピアを追加",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "招待するためにノードコードを共有するか、ピアのコードを追加してください。",
+      "empty_title": "ピアがまだいません",
+      "filter_all": "すべて",
+      "filter_blocked": "ブロック済み",
+      "filter_canonical": "標準",
+      "filter_trusted": "信頼済み",
+      "filter_unknown": "不明",
+      "filter_untrusted": "未信頼",
+      "show_infra": "CIRIS インフラストラクチャを表示",
+      "title": "ピア",
+      "trust_blocked": "ブロック済み",
+      "trust_trusted": "信頼済み",
+      "trust_unknown": "不明",
+      "trust_untrusted": "未信頼"
+    },
+    "queue": {
+      "failures": {
+        "send": "送信失敗",
+        "title": "失敗",
+        "verify": "検証失敗"
+      },
+      "refresh": "更新",
+      "stats": {
+        "depth": "キューの深さ",
+        "received": "受信",
+        "sent": "送信",
+        "title": "キュー統計"
+      },
+      "throughput": {
+        "bytes_in": "受信バイト",
+        "bytes_out": "送信バイト",
+        "received": "受信",
+        "sent": "送信",
+        "session": "このセッションの合計",
+        "title": "スループット"
+      }
+    },
+    "stream": {
+      "clear": "クリア",
+      "dismiss": "閉じる",
+      "event_count": "{count} イベント",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "一時停止",
+      "reconnect": "再接続",
+      "resume": "再開",
+      "resume_notice": "再接続しました。一部のイベントが失われている可能性があります。",
+      "retry": "再試行"
+    },
+    "trust_graph": {
+      "empty": "可視化するピアがありません。",
+      "legend": {
+        "blocked": "ブロック済み",
+        "canonical_hint": "太いリング輪郭 = 標準 (エージェントに同梱)。",
+        "edge_hint": "エッジの不透明度はメディアごとの到達可能性を反映します。",
+        "title": "信頼状態",
+        "trusted": "信頼済み",
+        "unknown": "不明",
+        "untrusted": "未信頼"
+      },
+      "refresh": "更新",
+      "summary": "{count} ピア · {canonical} 標準"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "エージェントモード",
+      "subtitle": "このエージェントがフェデレーションに参加する方法を変更します。ネットワーク画面を反映します。"
+    },
+    "brightness": "明るさ",
+    "brightness_light": "ライト",
+    "brightness_system": "システム",
+    "brightness_dark": "ダーク"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "アイデンティティ一覧",
+        "trust": "信頼",
+        "policies": "信頼ポリシー"
+      },
+      "badge": {
+        "coming_soon": "近日公開"
+      },
+      "agent": {
+        "title": "エージェント（自己）",
+        "subtitle": "エージェント自身 — あらゆる尺度に暗黙の自己。",
+        "identities_description": "エージェント自身のアイデンティティ鍵 — すべての貢献に署名するフェデレーションアドレスです。フレンドリー名はローカル設定から、key_id は CIRISEdge から取得されます。",
+        "trust_description": "自己信頼は基盤です。再帰的黄金律に免除条項はありません — エージェントが他者に求めることは、まず自らに課さなければなりません。",
+        "policies_description": "自己適用ポリシー：アイデンティティのローテーション周期、アテステーションの更新、この範囲でエージェントが署名する意思のある対象。"
+      },
+      "family": {
+        "title": "ファミリー",
+        "subtitle": "この運用者のアイデンティティを共有する他の CIRIS インスタンス。",
+        "identities_description": "兄弟インスタンス（同一エージェントの異なるランタイム）とその occurrence_id。フレンドリー名は運用者の設定から取得されます。",
+        "trust_description": "ファミリーメンバーは既定で運用者の署名鍵を共有 — 直接信頼が基準値です。マルチオカレンス調整による共有シャットダウン / ウェイクアップ決定。",
+        "policies_description": "オカレンス間ポリシー：共有タスクの確保、マルチオカレンスの安全境界、ファミリー範囲アクションの決定定足数。"
+      },
+      "local_community": {
+        "title": "ローカルコミュニティ",
+        "subtitle": "ローカルで信頼されたピア — ホームチャネル、世帯、単一ギルド。",
+        "identities_description": "運用者が明示的に信頼するピア。フレンドリー名はコンタクトブックから、key_id はアナウンステーブルから取得されます。",
+        "trust_description": "運用者によって直接付与される信頼。いつでも取り消し可能です。ローカル範囲の貢献はローカルコホート内に留まり、フェデレーションには公開されません。",
+        "policies_description": "コミュニティごとのポリシー：招待権限、許可されるコンテンツクラス、この範囲での紛争解決方法。"
+      },
+      "global_communities": {
+        "title": "グローバルコミュニティ",
+        "subtitle": "エージェントが参加する、コミュニティ横断のアフィニティグループ。",
+        "identities_description": "エージェントが参加する所属コミュニティ（協同組合、専門団体、相互扶助ネットワーク）。フレンドリー名は accord_holder レジストリから、なければ key_id を使用します。",
+        "trust_description": "信頼はコミュニティメンバーシップを通じて推移します。各コミュニティは独自の受け入れ基準と独自のアテステーション規律を持ちます。",
+        "policies_description": "所属範囲ポリシー：エージェントがどのコミュニティから指針を受け入れるか、相反する所属間の競合解決方法。"
+      },
+      "global_commons": {
+        "title": "グローバルコモンズ",
+        "subtitle": "普遍層としてのフェデレーション — 人類、エコロジー、そして基盤そのもの。",
+        "identities_description": "フェデレーション範囲で可視のすべてのアイデンティティ。humanity_accord の停止権限保持者、accord_holder プリンシパル、およびより広いピアプールを含みます。",
+        "trust_description": "普遍範囲での信頼は、フェデレーション自身のアテステーション規律によって付与されます。再帰的黄金律はこの範囲のすべてのプリンシパル — CIRIS L3C を含む — を拘束します。",
+        "policies_description": "フェデレーション全体の憲章的境界：humanity_accord 停止権限、accord_holder の予約プレフィックス、locality:decision の定足数サイズ。"
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "コモンズ貢献",
+        "description": "フェデレーション貢献カード：accord ファイル、安全性テスト、行動目撃、ルーブリック更新、撤回、委任。それぞれが極性、信頼度、目撃の多様性、Edge の ContentFetch トランスポートを介して解決される監査チェーン系譜を保持します。"
+      },
+      "participate": {
+        "title": "参加",
+        "description": "フェデレーション需要レジストリ — エージェントは必要なもの（ルーブリックレビュー、安全性目撃、委任範囲）を need:{domain}:{kind} アテステーションとして登録し、他のエージェントが確認、評価、応答します。"
+      },
+      "environment_graph": {
+        "title": "環境グラフ",
+        "description": "レンズ由来の環境グラフ — コホートごとの多様体適合度スコア、分配的アクセス測定、相関アクション検出。フェデレーションディレクトリの上位に位置するグラフ層で、エージェントは意思決定の際にこれに照らして推論します。"
+      },
+      "delegation": {
+        "title": "委任",
+        "description": "委任グラフ：このエージェントから委任され、またこのエージェントに委任された範囲。付与タイムスタンプ、evidence_refs、撤回チェーンを含みます。4 つの構造プリミティブの 1 つ — フェデレーションディレクトリと共同所有です。"
+      },
+      "trust_topology": {
+        "title": "信頼トポロジ",
+        "description": "フェデレーション信頼グラフ — ピアがノード、信頼付与がエッジ（直接 / 委任 / 敵対）、エッジの色はトランスポート到達性、ノードのサイズは集約信頼重みを示します。"
+      },
+      "constitutional": {
+        "title": "憲章的",
+        "description": "Accord 保持者のアイデンティティサーフェス — FSD-002 §4.1 に基づく唯一の憲章的非対称性。identity_type=accord_holder の鍵のみが accord:* アテステーションを発行できます。この画面では、現在の保持者、発行済みの accord プレフィックス、予約プレフィックス強制の監査を表示します。"
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "エージェント",
+      "manage": "管理",
+      "commons_layers": "コモンズ",
+      "federation": "フェデレーション",
+      "client": "クライアント"
+    },
+    "surface": {
+      "sessions": "セッション",
+      "interact": "やり取り",
+      "scheduler": "スケジューラ",
+      "tickets": "チケット",
+      "tools": "ツール",
+      "services": "サービス",
+      "logs": "ログ",
+      "telemetry": "テレメトリ",
+      "graph_memory": "グラフ",
+      "memory": "記憶",
+      "wise_authority": "賢明な権威",
+      "llm_settings": "LLM",
+      "system": "システム",
+      "runtime": "ランタイム",
+      "config": "設定",
+      "skills": "スキル",
+      "agent_settings": "設定",
+      "health_reputation": "健全性・評判",
+      "users": "ユーザー",
+      "adapters": "アダプター",
+      "network": "ネットワーク",
+      "audit": "監査",
+      "consent": "同意",
+      "data": "データ",
+      "trust": "信頼",
+      "wallet": "ウォレット",
+      "billing": "請求",
+      "agents_list": "エージェント一覧",
+      "client_interface": "インターフェース"
+    }
+  }
 }

@@ -151,11 +151,40 @@ This glossary defines the canonical translations for key CIRIS terms in Tamil. A
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort-Scope Vocabulary (2.9.4 Commons hub)
+
+| English | Tamil | Transliteration | Notes |
+|---------|-------|-----------------|-------|
+| Cohort scope | கூட்ட பரப்பு (cohort scope) | Kūṭṭa Parappu | CEG 0.6 wire-format term; keep English loan alongside native rendering |
+| Layer | அடுக்கு | Aṭukku | UX surface representing one cohort scope |
+| Agent (Self) | முகவர் (தான்) | Mukavar (Tāṉ) | "முகவர்" stays as the technical CIRIS term; "தான்" = reflexive self |
+| Family | குடும்பம் | Kuṭumpam | Sibling occurrences of the same agent; broader kin sense |
+| Local Community | உள்ளூர் சமூகம் | Uḷḷūr Camūkam | Geographically / immediately proximate community |
+| Global Communities | உலகளாவிய சமூகங்கள் | Ulakaḷāviya Camūkaṅkaḷ | Plural — cross-border affinity groups |
+| Global Commons | உலகப் பொதுமை | Ulakap Potumai | Universal federation layer (cohort scope) |
+| The Commons | பொதுமை ஓடை | Potumai Ōṭai | Federation contribution feed (distinct from Global Commons) |
+| Federation | ஃபெடரேஷன் | Ferēṣaṉ | Established CIRIS loan; network of attesting peers |
+| Constitutional | அரசியலமைப்பு | Araciyalamaippu | Federation constitutional structure (FSD-002 §4.1), not nation-state law |
+| Delegation | அதிகாரம் ஒப்படைப்பு | Atikāram Oppaṭaippu | Delegation graph of granted scopes |
+| Trust Topology | நம்பிக்கை இடவியல் | Nampikkai Iṭaviyal | Graph layout of peer-trust relationships |
+| Participate | பங்கேற்பு | Paṅkēṟpu | Federation needs registry; take part / contribute |
+| Environment Graph | சூழல் வரைபடம் | Cūḻal Varaipaṭam | Lens-derived environment conformity graph |
+
+## UI Labels — Commons Hub (2.9.4)
+
+| English | Tamil | Notes |
+|---------|-------|-------|
+| Identities | அடையாளங்கள் | Known entities at a scope |
+| Trust | நம்பிக்கை | Trust state per identity |
+| Trust policies | நம்பிக்கை கொள்கைகள் | Auto-trust policies at scope |
+| Coming Soon | விரைவில் வருகிறது | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-04-07 | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary and Commons hub UI labels for 2.9.4 |
 
 ---
 

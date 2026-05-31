@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Callable, Deque, Dict, List, Optional, Tuple
 
 import psutil
 
+from ciris_engine.constants import SERVER_MINIMUM_DISK_BYTES
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
@@ -394,6 +396,52 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             metrics["credit_last_timestamp"] = 0.0
 
         return metrics
+
+    # ------------------------------------------------------------------ #
+    # AgentMode disk gating (2.9.4)
+    # ------------------------------------------------------------------ #
+    # Free-disk readouts used to gate SERVER mode (see
+    # `ciris_engine/schemas/runtime/agent_mode.py`). These are pure queries
+    # — they do not touch `self.snapshot` so they stay safe to call from
+    # the API layer without coordinating with the scheduled monitor loop.
+
+    def get_available_disk_bytes(self, path: Optional[Path] = None) -> int:
+        """Return free bytes on the filesystem hosting ``path``.
+
+        Args:
+            path: Filesystem path to measure. Defaults to the resolved data
+                  directory (``get_data_dir()``). Falls back to ``self.db_path``
+                  if the data dir is not resolvable.
+
+        Returns:
+            Free bytes. Returns 0 if the path is not a real filesystem path
+            (e.g. when ``db_path`` is a Postgres connection string) or if
+            the lookup raises OSError — never raises to the caller.
+        """
+        target: Path
+        if path is not None:
+            target = path
+        else:
+            try:
+                from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+                target = get_data_dir()
+            except Exception:
+                # Path resolution can fail in unusual sandboxes; fall back
+                # to db_path which is always set on this service.
+                if isinstance(self.db_path, str) and self.db_path.startswith(("postgresql://", "postgres://")):
+                    return 0
+                target = Path(self.db_path)
+
+        try:
+            usage = shutil.disk_usage(str(target))
+        except (OSError, ValueError):
+            return 0
+        return int(usage.free)
+
+    def is_server_mode_eligible(self, path: Optional[Path] = None) -> bool:
+        """True iff free disk at ``path`` meets the SERVER-mode minimum."""
+        return self.get_available_disk_bytes(path) >= SERVER_MINIMUM_DISK_BYTES
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy."""

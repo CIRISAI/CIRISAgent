@@ -522,6 +522,20 @@ class CIRISRuntime(ServicePropertyMixin):
             critical=True,
         )
 
+        # Phase 1 (post-database): CIRISEdge federation runtime.
+        # Consumes the persist Engine from the previous step (CIRISEdge#16
+        # cohabitation). Currently best-effort due to Edge v0.9.1's PyO3
+        # cross-crate PyClass identity bug (CIRISEdge#22 — issuecomment-4560383149);
+        # flip to critical=True once Edge v0.9.2+ ships the fix (task #197).
+        # When degraded, `GET /v1/system/federation` returns `{available: false}`.
+        init_manager.register_step(
+            phase=InitializationPhase.DATABASE,
+            name="Initialize Edge Runtime",
+            handler=self._init_edge_runtime,
+            verifier=self._verify_edge_runtime,
+            critical=False,
+        )
+
         # Phase 2: MEMORY
         init_manager.register_step(
             phase=InitializationPhase.MEMORY,
@@ -701,6 +715,52 @@ class CIRISRuntime(ServicePropertyMixin):
         except Exception as e:
             logger.error(f"Database integrity check failed: {e}")
             return False
+
+    async def _init_edge_runtime(self) -> None:
+        """Initialize CIRISEdge federation runtime (foundation dep, post-database).
+
+        Currently best-effort due to Edge v0.9.1's PyO3 cross-crate PyClass
+        identity bug — the cohabitation handoff of persist's Engine fails
+        with `TypeError: argument 'engine': 'Engine' object is not an
+        instance of 'Engine'`. The edge_runtime module catches this
+        specific failure and logs a warning, leaving the Edge singleton
+        unset. When the Edge team ships v0.9.2+ with the fix (tracked at
+        CIRISEdge#22 issuecomment-4560383149), flip the register_step
+        above to critical=True.
+
+        Before invoking ``initialize_edge_runtime``, seed the
+        ``AgentModeBroker`` from ``EssentialConfig.agent_mode``. The broker
+        defaults to ``AgentMode.PROXY`` at module import; without this seed
+        the ``AGENT_MODE`` env var (parsed into EssentialConfig.agent_mode
+        by ``load_env_vars``) would be ignored by Edge, which reads the
+        mode through ``get_agent_mode_broker().current_mode()``. Use the
+        sync setter because ConfigService is not yet wired at this phase.
+        """
+        from ciris_engine.logic.runtime import edge_runtime
+        from ciris_engine.logic.utils.agent_mode_broker import get_agent_mode_broker
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        config = self._ensure_config()
+        get_agent_mode_broker().set_mode_sync(config.agent_mode)
+
+        identity_dir = get_data_dir() / "edge"
+        edge_runtime.initialize_edge_runtime(identity_dir)
+
+    async def _verify_edge_runtime(self) -> bool:
+        """Verify Edge runtime status — passes regardless of degraded state."""
+        from ciris_engine.logic.runtime import edge_runtime
+
+        if edge_runtime.is_available():
+            addr = edge_runtime.get_federation_address()
+            logger.info("Edge runtime verified: federation_address=%s", addr)
+        elif edge_runtime._edge_disabled():
+            logger.info("Edge runtime disabled via env — skipping verification")
+        else:
+            logger.warning(
+                "Edge runtime not available (degraded). "
+                "GET /v1/system/federation will report available=false."
+            )
+        return True  # Non-critical: always pass.
 
     async def _initialize_memory_service(self) -> None:
         """Initialize memory service early for identity storage."""

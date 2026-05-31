@@ -199,11 +199,39 @@ The following terms are commonly kept in English in Italian technical contexts:
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort-Scope Vocabulary (Commons hub — 2.9.4)
+
+| English | Italian | Notes |
+|---------|---------|-------|
+| Cohort scope | Ambito di coorte | CEG 0.6 wire-format term; technical CIRIS term. Wire key `cohort_scope` stays in English |
+| Layer | Strato | UX surface representing one cohort scope |
+| Agent (Self) | Agente (Sé) | First layer; "Agente" stays per glossary, "Sé" = reflexive self |
+| Family | Famiglia | "Siblings of the same agent" — sharing operator identity, not nuclear-family |
+| Local Community | Comunità Locale | Locally-trusted peers — home channel, household, single guild |
+| Global Communities | Comunità Globali | Plural — affinity groups spanning across borders (CEG affiliations) |
+| Global Commons | Bene Comune Globale | Universal federation layer (CEG species + planet + federation folded) |
+| Federation | Federazione | The CIRIS federation as network of peers (matches existing `network.*` usage) |
+| The Commons | Il Bene Comune | Federation contribution cards screen (distinct from Global Commons layer) |
+| Constitutional | Costituzionale | Accord-holder identity surface per FSD-002 §4.1 |
+| Delegation | Delega | Delegation graph — scopes delegated to/from this agent |
+| Trust Topology | Topologia di Fiducia | Federation trust graph — peers as nodes, trust grants as edges |
+| Participate | Partecipa | Federation needs registry — verb form (take part / contribute) |
+
+## Commons UI Labels (2.9.4)
+
+| English | Italian | Notes |
+|---------|---------|-------|
+| Identities | Identità | List of known entities at a scope |
+| Trust | Fiducia | Trust state per identity |
+| Trust policies | Politiche di fiducia | Policies that govern automatic trust at this scope |
+| Coming Soon | In arrivo | Placeholder for unshipped features (matches existing `network.tiles.coming_soon_badge`) |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-03-27 | Initial glossary based on it.json localization file |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary and Commons UI labels for 2.9.4 Commons hub |
 
 ---
 

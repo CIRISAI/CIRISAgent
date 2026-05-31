@@ -30,6 +30,18 @@ This glossary defines the canonical translations for key CIRIS terms in Turkish.
 | Integrity | Dürüstlük/Bütünlük | Ethical consistency |
 | Resilience | Dayanıklılık | Recovery from failures |
 | Signalling Gratitude | Minnettarlığın İfadesi | Acknowledging contributions |
+| Cohort scope | Kohort kapsamı | CEG 0.6 wire-format: katkının uygulandığı ölçek (öz / aile / topluluk / aidiyetler / tür / gezegen / federasyon) |
+| Layer | Katman | UX yüzeyi tek bir kohort kapsamını temsil eder |
+| Agent (Self) | Ajan (Öz) | Ajanın kendisi — ilk katman; operatörün zihinsel modelinde "öz" örtüktür |
+| Family | Aile | Operatörün kimliğini paylaşan diğer CIRIS örnekleri — kardeş örnekler, dar aile çağrışımı değil |
+| Local Community | Yerel Topluluk | Yerel olarak güvenilen eşler — ev kanalı, hane, tek lonca |
+| Global Communities | Küresel Topluluklar | Ajanın katıldığı, sınırları aşan ilgi/aidiyet grupları (çoğul) |
+| Global Commons | Küresel Müşterekler | Evrensel federasyon katmanı (CEG'in tür + gezegen + federasyon katmanını tek operatör yüzeyinde toplar) |
+| The Commons | Müşterekler | Federasyon katkı kartları akranı (kohort kapsamı "Küresel Müşterekler"den farklı) |
+| Constitutional | Anayasal | Anlaşma sahibi kimlik yüzeyi — FSD-002 §4.1 uyarınca tek anayasal asimetri; ulus-devlet anayasa hukukunu kastetmez |
+| Delegation | Yetki Devri | Bu ajana ve ondan devredilen kapsamların grafiği |
+| Trust Topology | Güven Topolojisi | Federasyon güven grafiği — eşler düğüm, güven tahsisleri kenar olarak |
+| Participate | Katıl | Federasyon ihtiyaç sicili — gerekenleri kaydet, başkaları yanıt verir |
 
 ## Technical Terms
 
@@ -69,6 +81,10 @@ This glossary defines the canonical translations for key CIRIS terms in Turkish.
 | Warning | Uyarı | |
 | Success | Başarılı | |
 | Loading | Yükleniyor | |
+| Identities | Kimlikler | Bir kapsamdaki bilinen varlıkların listesi (varsa kolay adlarla) |
+| Trust | Güven | Kimlik başına güven durumu (güveniliyor mu, nasıl) |
+| Trust policies | Güven politikaları | Bu kapsamda otomatik güveni yöneten politikalar |
+| Coming Soon | Çok Yakında | Üst akış altyapı çalışmasını bekleyen, henüz teslim edilmemiş özelliklerin yer tutucusu |
 
 ## DMA-Specific Terms
 

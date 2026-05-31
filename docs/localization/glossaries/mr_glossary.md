@@ -126,3 +126,34 @@ This glossary defines the canonical translations for key CIRIS terms in Marathi.
 | secondary_need_categories | secondary_need_categories | JSON key; keep in English |
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
+
+## Commons / Cohort-Scope UX (2.9.4)
+
+CEG 0.6 cohort-scope vocabulary used by the new Commons hub.
+
+### Core Concepts (cohort scope)
+
+| English | Marathi | Transliteration | Notes |
+|---------|---------|-----------------|-------|
+| Cohort scope | कोहोर्ट व्याप्ती (योगदानाची व्याप्ती) | Cohort vyaapti (yogdaanaachi vyaapti) | Technical CIRIS term; keep "cohort scope" recognizable |
+| Layer | स्तर | Star | UX surface for one cohort scope |
+| Self | स्वतः | Svatah | Reflexive identity; "agent itself" |
+| Family | कुटुंब | Kuṭumb | Sibling occurrences sharing operator identity (not nuclear family) |
+| Local Community | स्थानिक समुदाय | Sthaanik Samudaay | Locally-trusted peers |
+| Global Communities | जागतिक समुदाय | Jaagatik Samudaay | Cross-community affinity groups (plural) |
+| Global Commons | जागतिक सामायिक क्षेत्र | Jaagatik Saamaayik Kshetra | Universal federation layer |
+| The Commons | सामायिक योगदान | Saamaayik Yogdaan | Federation contribution feed |
+| Constitutional | संवैधानिक | Sanvaidhanik | Accord-holder identity surface; federation constitution |
+| Delegation | प्रतिनिधीकरण | Pratinidhikaran | Granting authority to act on one's behalf |
+| Trust Topology | विश्वास संरचना | Vishvaas Sanrachna | Trust graph |
+| Participate | सहभागी व्हा | Sahabhaagi Vhaa | Federation needs registry |
+| Affiliations | संलग्नता | Sanlagnataa | Joined communities (CEG term) |
+
+### UI Labels (Commons sections)
+
+| English | Marathi | Notes |
+|---------|---------|-------|
+| Identities | ओळखी | Plural; list of known entities at a scope |
+| Trust | विश्वास | Trust state per identity |
+| Trust policies | विश्वास धोरणे | Automatic-trust policies |
+| Coming Soon | लवकरच येत आहे | Placeholder for unshipped features |

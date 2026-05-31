@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Channel prefix constants for adapter routing
 REDDIT_CHANNEL_PREFIX = "reddit:"
+EDGE_CHANNEL_PREFIX = "edge:"
 
 
 @dataclass
@@ -139,6 +140,8 @@ class CommunicationBus(BaseBus[CommunicationService]):
             return any("CLI" in type(svc).__name__ for svc in all_services)
         elif channel_id.startswith(REDDIT_CHANNEL_PREFIX):
             return any("Reddit" in type(svc).__name__ for svc in all_services)
+        elif channel_id.startswith(EDGE_CHANNEL_PREFIX):
+            return any("Edge" in type(svc).__name__ for svc in all_services)
 
         # Fallback: check if any service has send_message capability
         for svc in all_services:

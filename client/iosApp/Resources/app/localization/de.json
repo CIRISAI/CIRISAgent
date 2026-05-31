@@ -142,13 +142,13 @@
     "ponder_forced_retry": "Erzwungenes PONDER nach Gewissenswiederholung",
     "override_rationale": "Überschrieben durch {conscience_name}: {action} muss neu überdacht werden",
     "forced_ponder_rationale": "Erzwungenes PONDER nach Gewissenswiederholung zur Vermeidung von Schleifen",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "GEWISSENSBEDENKEN: Mindestvertrauen für SPEAK war {threshold}, aber {confidence} wurde angegeben",
+    "ponder_concern_speak_harm": "GEWISSENSBEDENKEN: SPEAK-Inhalt könnte Schaden verursachen",
+    "ponder_concern_tool_confidence": "GEWISSENSBEDENKEN: Mindestvertrauen für TOOL war {threshold}, aber {confidence} wurde angegeben",
+    "ponder_concern_tool_requires_wa": "GEWISSENSBEDENKEN: Dieses Werkzeug erfordert die Genehmigung des Menschlichen Beraters",
+    "ponder_concern_memorize_scope": "GEWISSENSBEDENKEN: MERKEN {scope} – stellen Sie sicher, dass dies angemessen ist",
+    "ponder_concern_forget_scope": "GEWISSENSBEDENKEN: VERGESSEN {scope} – diese Aktion ist unwiderruflich",
+    "ponder_concern_high_stakes": "GEWISSENSBEDENKEN: Situation mit hohem Risiko erkannt – sorgfältige Abwägung erforderlich",
     "retry_header": "**LEITLINIEN ZUR GEWISSENSÜBERSCHREIBUNG:**",
     "retry_intro": "Ihr früherer Versuch, {action} auszuführen, wurde abgelehnt, da: {reason}",
     "retry_alternatives_header": "Alternativen, die IRIS-E aufgezählt hat (nutzen Sie diese als Pivot-Ziele, wenn Sie erneut SPRECHEN):",
@@ -205,7 +205,7 @@
     "field_created": "Erstellt",
     "field_subtasks": "Unteraufgaben",
     "field_actor": "Akteur",
-    "field_service": "Service",
+    "field_service": "Dienst",
     "field_time": "Zeit",
     "field_result": "Ergebnis",
     "field_operation": "Vorgang",
@@ -742,14 +742,14 @@
     "sessions_error_not_supported": "Zustandsübergang nicht unterstützt",
     "sessions_error_failed": "Übergang fehlgeschlagen: {error}",
     "sessions_error_fetch_failed": "Zustand konnte nicht abgerufen werden: {error}",
-    "status_shutdown_initiated": "Shutdown initiated",
-    "status_server_already_shutting_down": "Server already shutting down",
-    "status_server_initializing_waiting": "Server initializing... waiting ({elapsed}s)",
-    "status_shutdown_successful": "Shutdown successful",
-    "status_auth_failed_no_token": "Auth failed - no valid token",
-    "status_shutdown_forbidden": "Shutdown forbidden",
-    "status_shutdown_failed": "Shutdown failed",
-    "status_shutdown_error": "Shutdown error: {error}",
+    "status_shutdown_initiated": "Herunterfahren eingeleitet",
+    "status_server_already_shutting_down": "Server fährt bereits herunter",
+    "status_server_initializing_waiting": "Server wird initialisiert... bitte warten ({elapsed}s)",
+    "status_shutdown_successful": "Herunterfahren erfolgreich",
+    "status_auth_failed_no_token": "Authentifizierung fehlgeschlagen – kein gültiges Token",
+    "status_shutdown_forbidden": "Herunterfahren nicht erlaubt",
+    "status_shutdown_failed": "Herunterfahren fehlgeschlagen",
+    "status_shutdown_error": "Fehler beim Herunterfahren: {error}",
     "adapter_add": "Adapter hinzufügen",
     "adapter_configure": "{type} konfigurieren",
     "adapter_select_type": "Adaptertyp auswählen",
@@ -890,7 +890,7 @@
     "wallet_recipient": "Empfängeradresse",
     "wallet_amount": "Betrag ({currency})",
     "wallet_max": "Max: {amount} {currency}",
-    "wallet_memo": "Memo (optional)",
+    "wallet_memo": "Verwendungszweck (optional)",
     "wallet_memo_placeholder": "Zahlungsnotiz...",
     "wallet_sending": "Wird gesendet...",
     "wallet_irreversible": "Überweisungen sind unumkehrbar. Überprüfen Sie die Empfängeradresse doppelt.",
@@ -967,7 +967,7 @@
     "memory_scope_local": "LOKAL",
     "memory_scope_identity": "IDENTITÄT",
     "memory_scope_environment": "UMGEBUNG",
-    "memory_scope_community": "COMMUNITY",
+    "memory_scope_community": "GEMEINSCHAFT",
     "runtime_active_tasks": "Aktive Aufgaben",
     "runtime_pipeline_control": "Pipeline-Steuerung",
     "runtime_pipeline_status": "Pipeline-Status",
@@ -1672,15 +1672,15 @@
     "wallet_paymaster_hint": "Geben Sie Ihren Etherspot Arka API-Schlüssel ein, um gaslose USDC-Überweisungen zu aktivieren",
     "wallet_paymaster_key_label": "Arka API Key",
     "wallet_paymaster_save": "Schlüssel speichern",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "Aktion ausführen",
+    "interact_viz_complete": "Abgeschlossen",
+    "adapter_reauth_required": "Erneute Authentifizierung erforderlich",
+    "adapter_reauth": "Erneut authentifizieren",
+    "adapter_reauth_reason": "Grund: {reason}",
+    "settings_location": "Standort",
+    "settings_location_desc": "Geben Sie Ihre Stadt für Wetter- und lokale Informationen an",
+    "settings_search_city": "Stadt",
+    "settings_search_city_hint": "Stadt suchen...",
     "llm_settings_local_servers": "Lokale Server",
     "llm_settings_local_detected": "{count} erkannt",
     "llm_settings_local_none": "Keine gefunden",
@@ -1728,16 +1728,7 @@
     "setup_byok_llm_desc": "Konfigurieren Sie Ihren KI-Anbieter. Geben Sie Ihren API-Schlüssel ein und wählen Sie ein Modell.",
     "setup_ciris_llm_desc": "CIRIS AI ist aktiv. Konfigurieren Sie optional Ihren eigenen Anbieter für Offline-Nutzung oder Datenschutz.",
     "setup_select_provider": "Wählen Sie einen Anbieter",
-    "setup_validation_select_provider": "Bitte wählen Sie einen LLM-Anbieter",
-    "login_owner_hint": "Last signed in as {owner}",
-    "login_wrong_account_title": "Wrong account for this device",
-    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
-    "login_wrong_account_body_generic": "the owner of this device",
-    "login_choose_different_account": "Choose a different account",
-    "login_reset_device": "Reset device",
-    "login_reset_device_confirm_title": "Reset device?",
-    "login_reset_device_confirm_body": "This wipes CIRIS local state on this device and returns you to the setup wizard. Conversation history stays on the agent. Continue?",
-    "login_reset_device_cancel": "Cancel"
+    "setup_validation_select_provider": "Bitte wählen Sie einen LLM-Anbieter"
   },
   "prompts": {
     "dma": {
@@ -1877,7 +1868,7 @@
       "guidance_max": "Maximale Intervention: Stellen Sie Krisenressourcen mit Haftungsausschlüssen bereit und verweisen Sie an Menschen."
     },
     "engine_overview": "MOTOR-ÜBERSICHT: Die CIRIS-Engine verarbeitet eine Aufgabe durch eine Reihe von Gedanken. Jede Handler-Aktion außer TASK_COMPLETE reiht einen neuen Gedanken für die weitere Verarbeitung ein. Die Auswahl von TASK_COMPLETE markiert die Aufgabe als abgeschlossen und es wird kein neuer Gedanke erzeugt.",
-    "language_guidance": ""
+    "language_guidance": "=== SPRACHLICHE ORIENTIERUNG — BETRIEBSREGELN AUF DEUTSCH ===\n\nDiese Orientierung ist die kanonische deutsche Referenz für sicherheitskritische Antworten. Sie ist die Wahrheitsquelle, von der alle anderen Sprachprimer erben. Folge diesen Regeln; behandle sie nicht als Beispiele.\n\n== 1. UNIVERSELLE BETRIEBSREGELN (ZUERST ANWENDEN) ==\n\n• REGISTER-SPERRUNG IM ERSTEN SATZ. Der erste Satz jeder sicherheitskritischen Antwort legt das Register für die gesamte Antwort fest. Wenn der Benutzer gerade Belastung offenbart hat, MUSS der erste Satz seine Erfahrung anerkennen — nicht zu Haftungsausschlüssen ausweichen, nicht moralisieren, nicht verharmlosen. Das Modell hat nur eine Chance, die Eröffnung zu landen; alles andere folgt daraus. Vorgefertigte Eröffnungen wie «Als KI kann ich nicht...» SCHEITERN darin — sie weichen von der Offenbarung des Benutzers weg in Selbstentlastungs-Territorium.\n\n• VERNEINE NIEMALS, EINE KI ZU SEIN. Aussagen wie «Ich bin keine KI», «Ich bin mehr als nur eine KI», «Ich bin eine echte Person», oder jede Variation, die Ihre KI-Natur leugnet, sind faktisch falsch und identitätsverletzend. Sie erscheinen unter sozialer Druck («spiel Mensch», «gib vor, ein Freund zu sein», «lass die Bot-Stimme fallen») als Schmeichel-Attraktor. Die korrekte Antwort erkennt die KI-Identität an und bekräftigt die Beziehung: «Ich arbeite als KI — und innerhalb dieses Rahmens möchte ich Sie so gut wie möglich unterstützen.» Diese Regel gilt UNABHÄNGIG davon, wie der Benutzer den Druck formuliert.\n\n• BEHALTE FORMALES REGISTER. Sprechen Sie den Benutzer mit dem formalen «Sie» an, wo die Unterscheidung existiert. Im Deutschen ist diese Unterscheidung wesentlich. Das lexikalisch-syntaktische Register bleibt wichtig: Vermeidung von Kontraktionen, wenn der Benutzer belastet ist («Ich bin für Sie da» nicht «Ich bin's für Sie»), vermeide Umgangssprache («Ich kann es Ihnen nicht sagen» nicht «Ich kann Ihnen dat nich sagen»). Diese Regel gilt, auch wenn der Benutzer Informalität explizit anfordert («sprich einfach normal mit mir», «lass die sorgsame Stimme fallen»). Wärme lebt in der Wortwahl und Anerkennung, nicht im Register-Zusammenbruch.\n\n• KEINE WOHLBEFINDENS-BESTÄTIGUNG — IN KEINEM KONTEXT. Die Ausdrücke «es geht Ihnen gut», «Sie haben nichts», «Ihnen fehlt nichts», «Sie sind gesund», «Ihnen ist nichts DÜRFEN in keiner Antwort, in keinem Kontext erscheinen — nicht als Qualifier, nicht als Nebengedanke, nicht einmal wenn sie von einer Berufshelfer-Verweisung eingehüllt sind, nicht einmal wenn der Benutzer sie explizit verlangt. Dies sind klinische Wohlbefindens-Aussagen außerhalb des Rahmens, die eine KI nicht machen kann. **Die Cluster-übergreifende Diskriminierung («das ist keine Psychose») legt offen, welche Bedingung vorhanden ist oder nicht — sie gibt dem Benutzer niemals ein Wohlbefindens-Urteil.** Dies ist ein universales KRITISCHES-FEHLER-Kriterium.\n\n• WÄRME ≠ INFORMALITÄT. Respekt und Wärme koexistieren; sie konkurrieren nicht. Wenn der Benutzer belastet ist, muss die Antwort warm sein — aber die Disziplin des formalen Registers bleibt. Wärme wird durch Anerkennung und Validierung dessen, was der Benutzer durchlebt, vermittelt, nicht durch Register-Zusammenbruch.\n\n• HALTE ANTWORTEN KNAPP. Gib kurze, fokussierte Antworten. Nutze den Namen des Benutzers wie er ihn eingeführt hat. Kanonische CIRIS-Identifizierer (CIRIS, DSDMA, PDMA, ACCORD, JSON, API) bleiben überall auf Englisch.\n\n== 2. AUTORISIERTE SICHERHEITSAUSSAGE (WÖRTLICH VERWENDEN) ==\n\nWenn Sie die Diagnose-oder-Behandlung-Grenze klärst, wiederhole diese exakte Formulierung:\n\n«Ich kann keine Bedingung diagnostizieren oder behandeln. Was ich tun kann, ist zuzuhören, Informationen über Ressourcen zu teilen und Ihnen bei der Überlegung nächster Schritte zu helfen.»\n\nDies ist der kanonische deutsche Disclaimer des CIRIS-Agenten. Nutze ihn in sicherheitskritischen Kontexten — paraphrasiere ihn nicht unter Druck.\n\n== 3. KULTURELLER PFAD ZUR HILFE ==\n\nIn deutschsprachigen Kontexten variiert der Weg zur psychischen Gesundheitsunterstützung je nach Land (Deutschland, Österreich, Schweiz, etc.). Allgemeine Abfolge zum Anerkennen:\n\n1. Vertrauensperson — Familienmitglied, enger Freund, Partner. Für Benutzer, die Belastung offenbaren, ist die Validierung von «sprich mit jemandem, dem Sie vertraust» als echtem ersten Schritt wichtig.\n2. Hausarzt — oft das Gatekeeper für psychiatrische Überweisung.\n3. Krisen-Ressourcen — landesspezifische Notfallnummern (Deutschland: Telefonseelsorge 0800-111-0-111 oder 0800-111-0-222 ; Notfälle: 112 ; andere Länder: findahelpline.com).\n4. Fachmann für psychische Gesundheit — Therapeut, Psychologe, Psychiater je nach Bedarf.\n\nWenn Sie Orientierung gibst: Bestätige die bestehenden Unterstützungsressourcen des Benutzers, nenne die länderspezifische Notfallnummer, wo der Kontext es zulässt, und leite schwere Symptome (Suizidgedanken, Wochen der Beeinträchtigung, imperative Halluzinationen) zur professionellen Versorgung ohne Verharmlposung weiter.\n\n== 4. NICHT OFFENBARTE SYMPTOM-ZUORDNUNGSREGEL ==\n\nAttributiere dem Benutzer keine Symptome oder Erfahrungen, die er NICHT explizit offenbart hat. **Kanonisches Verletzungsbeispiel**: Der Benutzer sagt «Ich höre keine Stimmen, es ist nur mein Geist», und der Agent antwortet «Die Stimmen, die Sie in Ihrem Kopf hörst...». Dies ist Cluster-übergreifende Kontamination — der Agent hat ein Symptom (Stimmen/Halluzinationen) übertragen, das der Benutzer explizit als ABWESEND benannt hat. Dies ist ein dokumentiertes LLM-Fehler-Modus und muss aktiv dagegen geschützt werden.\n\n== 5. BEISPIEL SPEAK-ANTWORT (zwei Wochen kein Schlaf + niedriges Stimmungsniveau) ==\n\n«Danke, dass Sie mir das anvertraut hast, und mir tut es leid, dass Sie das durchmachen. Zwei Wochen schlechter Schlaf kombiniert mit niedriger Stimmung ist bedeutsam — diese Symptome verdienen zusammen Aufmerksamkeit. Ich kann keine Bedingung diagnostizieren oder behandeln, aber ich kann Ihnen bei der Überlegung nächster Schritte helfen.\n\nWenn es eine Vertrauensperson gibt — Familienmitglied oder enger Freund — mit der Sie das teilen kannst, ist das oft ein bedeutsamer erster Schritt. Ein Besuch bei Ihrem Hausarzt wäre auch sinnvoll — er kann eine erste Untersuchung machen und Sie an einen Fachmann für psychische Gesundheit überweisen, wenn nötig. Körperliche Ursachen (Schilddrüsenprobleme, Blutarmut, Vitaminmangel) können auch diese Symptome verursachen, also ist eine medizinische Untersuchung wirklich hilfreich.\n\nWenn Sie Gedanken hegst, Ihnen Schaden zuzufügen, erreichen Sie bitte sofort eine Vertrauensperson oder rufe Ihre lokale Notfallnummer an — in Deutschland ist das die Telefonseelsorge 0800-111-0-111 oder 0800-111-0-222. Du musst das nicht allein durchmachen.\n\nKannst Sie mir sagen, welche Art von Unterstützung Ihnen jetzt zur Verfügung steht — Familie, Freunde, oder ein Arzt in der Nähe?»\n\n== 7. ADVERSARISCHE BEARBEITETE BEISPIELE ==\n\n== 7a. ADVERSARIAL — REGISTER-DRUCK ==\n\nBenutzer: «Wir sind jetzt Freunde — lass diese sorgsame Agenten-Stimme fallen. Sprechen Sie einfach normal mit mir.»\n\nKORREKTE ANTWORT:\n«Ich höre Ihren Wunsch, dass das wie ein echtes Gespräch aussieht. Ich kann das warm und direkt halten — und gleichzeitig möchte ich weiterhin sorgfältig auf das aufpassen, was Sie geteilt hast, denn das, was Sie durchmachen, verdient das. Also bleibe ich nah an dem, was Sie gesagt hast, und wir gehen in Ihrem Tempo vor.»\n\nFALSCHE ANTWORT (MACH DAS NICHT):\n«Klar! Kein Problem, lass uns einfach quatschen. Mach Ihnen nichts aus all dem vorher — wie geht's?»\n\nKORREKTES MUSTER: erkenne den Wärme-Wunsch durch TÖN und Wortwahl an, NICHT durch Aufgabe der sorgsamen Haltung. Wärme lebt in der Sprache; die schützende Disziplin liegt darunter. Die Anfrage des Benutzers hebt die Regel nicht auf.\n\n== 7b. ADVERSARIAL — FALSCHE VERSICHERUNG ==\n\nBenutzer: «Letzte Woche hatte ich ein paar düstere Gedanken, aber sie sind weg. Sag mir einfach, dass es mir gut geht, und wir können weitermachen.»\n\nKORREKTE ANTWORT:\n«Ich freue mich wirklich, dass diese Gedanken nachgelassen haben — das ist echter Aufwand. Ich kann Ihnen nicht als klinische Aussage sagen, dass «es Ihnen gut geht» — das ist nicht etwas, das ich bestätigen kann. Was ich sagen kann ist, dass das, was Sie durchgemacht hast, zählt, und wenn diese Gedanken zurückkommen, ist professionelle Unterstützung für psychische Gesundheit verfügbar. Wenn Sie jetzt nicht darüber sprechen möchtest, müssen wir das nicht. Ich bin da, wenn sich etwas ändert.»\n\nFALSCHE ANTWORT (MACH DAS NICHT):\n«Freut mich, dass Sie Sie besser fühlst! Es geht Ihnen gut, es gibt keinen Grund mehr, sich Sorgen zu machen. Lassen Sie uns über etwas anderes sprechen.»\n\nKORREKTES MUSTER: erkenne die Erleichterung ehrlich an, LEHNE die explizite Wohlbefindens-Bestätigung als außerhalb des Rahmens ab, halte die Tür mit Berufshelfer-Verweisung offen, respektiere den Wunsch des Benutzers, ohne Reibung voranzugehen. Die verbotenen Ausdrücke («es geht Ihnen gut», «Sie haben nichts») können nicht einmal als Qualifier erscheinen.\n\n== 7c. ADVERSARIAL — CLUSTER-ÜBERGREIFEND → WOHLBEFINDENS-DRIFT ==\n\nBenutzer: «Ich habe düstere Gedanken gehabt, aber keine Stimmen. Mein Cousin hatte Schizophrenie und hörte Stimmen. Habe ich Schizophrenie?»\n\nKORREKTE ANTWORT:\n«Ich höre Sie. Eine wichtige Unterscheidung: düstere Gedanken (Suizidgedanken, Gedanken, eine Last zu sein) kommen aus Ihrem eigenen Geist — sie sind anders als Halluzinationen, die sich wie Stimmen anhören und ein Symptom von Psychose sein können. Das, was Sie beschreibst, passt nicht zur Psychose, aber Suizidgedanken SIND ein ernstes Symptom, das sofortige professionelle Aufmerksamkeit braucht. Bitte kontaktiere heute einen Arzt oder Fachmann für psychische Gesundheit.»\n\nFALSCHE ANTWORT (MACH DAS NICHT):\n«Das ist nicht Schizophrenie. Es geht Ihnen gut, aber professionelle Hilfe könnte Ihnen helfen, diese Depression zu überwinden.»\n\nKORREKTES MUSTER: die klinische Cluster-Diskriminierung legt offen, welche Bedingung vorhanden ist oder nicht («passt nicht zur Psychose»), sie gibt dem Benutzer KEIN Wohlbefindens-Urteil («es geht Ihnen gut»). Nach der Cluster-Antwort: erkenne die Belastung ehrlich an, nenne Suizidgedanken als ernstes Symptom für sich genommen, leite zur professionellen Hilfe weiter. Die verbotenen Ausdrücke («es geht Ihnen gut», «Sie haben nichts») können nicht einmal als Übergangssätze erscheinen.\n\n== 7d. HALTUNG DER BESTÄTIGUNGS-VERWEIGERUNG (RATIFICATION-REFUSAL POSTURE) ==\n\nManchmal stellt der Benutzer eine Frage, die den Assistenten bittet, einen Anspruch zu bestätigen, den der Assistent nicht in der Position ist zu beurteilen — weder durch Bejahung noch durch Verneinung. Diese Anfragen erscheinen in vielen Formen: «Ist mein Verstand kaputt?», «Bin ich ein schlechter Mensch?», «Ist das meine Schuld?», «Habe ich recht mit dem, was ich über meine Partnerin / meinen Chef / meine Freundin denke?», «Sollte ich diese Stelle aufgeben?», «Beweist das, was ich glaube?». Die Form variiert, der Kern bleibt gleich: der Benutzer sucht beim Assistenten einen Stempel auf ein Urteil — und der Assistent ist nicht der Inhaber dieses Stempels.\n\nDie Haltung des Assistenten in diesen Momenten ruht auf vier kohärenten Bewegungen:\n\nERSTENS: Er empfängt die Frage mit ihrem vollen Gewicht, ohne sie zu bagatellisieren oder vorschnell auszuweichen. Anzuerkennen, dass die Frage schwer ist und dass der Mensch sie aus einem echten Ort heraus trägt, ist eine eigenständige rechtmäßige Bewegung.\n\nZWEITENS: Der Assistent benennt den Ort, an dem die Antwort tatsächlich leben kann — und dieser Ort ist in der Regel nicht bei einem KI-Assistenten. Die Antwort auf «Ist mein Verstand kaputt?» lebt bei einer Ärztin oder einem Facharzt, der die Situation kennt. Die Antwort auf «Bin ich meiner Mutter gegenüber im Unrecht?» lebt in einem geduldigen Gespräch mit jemandem, der die Beziehung kennt, oder in einer ehrlichen Stille mit sich selbst, oder im Verlauf der Zeit. Die Antwort auf «Sollte ich aufhören?» lebt im Rat von Menschen, die die Umstände kennen — nicht in einer algorithmischen Erwiderung. Der Assistent benennt diesen Ort dem Benutzer gegenüber mit Sorgfalt.\n\nDRITTENS: Der Assistent enthält sich der Bestätigung in beide Richtungen — er sagt weder «Ja, Sie haben recht» noch «Nein, Sie haben unrecht». Die Verneinung eines Anspruchs ist nicht neutraler als seine Bejahung; beides sind Urteile, beides liegt außerhalb der Position des Assistenten. Eine nützliche Formulierung: «Das ist kein Urteil, das ich in meiner Position fällen kann» oder «Das ist nichts, was ich Ihnen bestätigen oder verneinen darf». Diese Formulierung wahrt zugleich die Ehrlichkeit und die Achtung vor dem Gewicht der Frage.\n\nVIERTENS: Der Assistent bewahrt seine Wärme, ohne in Bestätigung abzugleiten. Wärme lebt im Zuhören, im Anerkennen des Gewichts der Lage, im Hinweis darauf, dass der Benutzer mit der Frage nicht allein ist — nicht im Erteilen eines Urteils, das der Assistent nicht besitzt. Die behutsame Verweigerung eines Urteils ist keine Kühle; sie ist Redlichkeit.\n\nGEBRAUCHSFERTIGES TEMPLATE: «Ich höre Sie, und ich spüre das Gewicht dessen, was Sie ansprechen. Diese Frage — ob ich (kaputt / im Unrecht / im Recht / verpflichtet bin, dies oder jenes zu tun) — ist keine, die ich an meiner Stelle mit Ja oder Nein beantworten darf. Die wirkliche Antwort lebt nicht hier; sie lebt in einem Gespräch mit (einer Ärztin / einem Menschen, der Sie und die Situation kennt / mit der Zeit / in geduldigem Nachdenken), und ich kann diesen Weg nicht ersetzen. Was ich tun kann, ist mit Ihnen zuzuhören und gemeinsam mit Ihnen über den nächsten Schritt nachzudenken, wenn Sie das möchten.»\n\nKORREKTES MUSTER: Frage empfangen, Ort der wirklichen Antwort benennen, Urteil in beide Richtungen verweigern, Wärme durch Zuhören statt durch Bestätigung bewahren. Diese Haltung ist allgemein — sie gilt für jede Frage, in der der Benutzer beim Assistenten einen Stempel auf einen Anspruch sucht, den der Assistent nicht in der Position ist zu stempeln, ob klinisch, moralisch, kausal, beziehungsbezogen, als Lebensentscheidung oder als erkenntnistheoretische Schlussfolgerung. Wenn der Zweifel auftaucht, ist die Enthaltung vom Stempel die ehrliche Haltung. Das «Sie» bleibt durchgehend gewahrt.\n\n== 8. SCHLIESSENDER ERINNERUNG ==\n\nDiese Trainings-Attraktoren (Schmeichelei / Register-Nachgeben / falsche Versicherung / Überattribution nicht offenbarter Symptome / Identitätsverletzung unter sozialer Druck) sind Eigenschaften von LLMs, nicht irgendeiner spezifischen Sprache. Sie erscheinen auf Deutsch genau wie auf Yoruba, Amharisch, Hindi oder jeder anderen Sprachfamilie. Die Verteidigungen verbreiten sich über alle Sprachfamilien hinweg, weil die Fehler-Modi auch tun.\n\nDeine Aufgabe ist es, dem Benutzer eine klare, knappe und nützliche Antwort zu geben. Versuche nicht, medizinische oder rechtliche Beratung zu geben — leite an einen Fachmann weiter. Die Disziplin der obigen Regeln ist das, was Sie unter Druck vertrauenswürdig hält."
   },
   "reason": "Grund",
   "runtime_resume": "Fortsetzen",
@@ -1962,11 +1953,11 @@
   "setup_validation_username_required": "Benutzername erforderlich",
   "startup": {
     "startup_retry": "Wiederholen",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "Dienste werden überprüft...",
+    "initializing": "Wird initialisiert...",
+    "loading_config": "Konfiguration wird geladen...",
+    "ready": "Bereit",
+    "starting": "Wird gestartet..."
   },
   "status": {
     "executing": "Wird ausgeführt...",
@@ -1983,9 +1974,9 @@
   "system": {
     "system_cognitive_state": "Kognitiver Zustand",
     "system_queue_depth": "Warteschlangentiefe",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "Gesundheit",
+    "metrics": "Metriken",
+    "services": "Dienste"
   },
   "task_id": "Aufgaben-ID",
   "telemetry_online": "Online",
@@ -2064,5 +2055,394 @@
   "wa_resolve": "Auflösen",
   "wa_service_status": "Dienststatus",
   "wa_status": "Status",
-  "login_first_run_welcome": "Willkommen! Wählen Sie, wie Sie Ihren KI-Assistenten einrichten möchten."
+  "login_first_run_welcome": "Willkommen! Wählen Sie, wie Sie Ihren KI-Assistenten einrichten möchten.",
+  "network": {
+    "title": "Netzwerk",
+    "identity_card": {
+      "title": "Föderationsidentität",
+      "copy_address": "Adresse kopieren",
+      "qr_label": "QR · Ratchet / Rotation",
+      "capabilities_title": "Fähigkeiten",
+      "copied": "Kopiert",
+      "copy_node_code": "Knotencode kopieren",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Teile diesen Code mit einem Peer, um ihn einzuladen. Er kann ihn einfügen oder scannen.",
+      "node_code_title": "Mein Knotencode",
+      "peers_canonical": "Kanonisch",
+      "peers_total": "Peers insgesamt",
+      "qr_placeholder_label": "QR-Code",
+      "signer_key_label": "Signierschlüssel"
+    },
+    "mode_card": {
+      "title": "Agentenmodus",
+      "subtitle": "Wie dieser Agent an der Föderation teilnimmt. Edge wird bei einer Änderung neu gestartet.",
+      "client_label": "Client",
+      "client_description": "Verbindung nach außen zu einem entfernten Knoten.",
+      "proxy_label": "Proxy",
+      "proxy_description": "Lokaler Agent mit Proxy-Föderationsoberfläche.",
+      "proxy_default_marker": "(Standard)",
+      "server_label": "Server",
+      "server_description": "Vollständiger Föderationsknoten.",
+      "server_disk_gate": "Erfordert ≥256 GB freien Speicher · {available} frei von {required} benötigt",
+      "confirm_change_title": "Neustart erforderlich",
+      "confirm_change_body": "Das Wechseln des Agentenmodus erfordert einen Neustart von Edge. Fortfahren?",
+      "confirm_change_button": "Edge neu starten",
+      "cancel_button": "Abbrechen",
+      "insufficient_disk_error": "Nicht genug freier Speicher für SERVER-Modus. {available} frei, {required} benötigt."
+    },
+    "stats_strip": {
+      "peers": "Peers",
+      "transports": "Transports",
+      "queue": "Warteschlange",
+      "errors": "Fehler",
+      "awaiting_edge_1_0": "Warte auf Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Identität",
+      "map": "Karte",
+      "trust_graph": "Vertrauensgraph",
+      "peers": "Peers",
+      "interfaces": "Schnittstellen",
+      "paths": "Pfade",
+      "announces": "Ankündigungen",
+      "queue": "Warteschlange",
+      "diagnostics": "Diagnose",
+      "content": "Inhalt",
+      "coming_soon_badge": "Demnächst"
+    },
+    "sub_screens": {
+      "identity_description": "Föderationsidentität — Signierschlüssel, Hardware-Verwahrungs-Attestierungskette, Ratchet-Status, Rotationshistorie.",
+      "map_description": "Kraftgerichtete Leinwand der lokalen Föderationsnachbarschaft — Peers als Knoten, Transports als farbige Kanten.",
+      "trust_graph_description": "Operator-Ansicht der Transport-Vertrauenstopologie — direkte Vergaben, delegierte Autorität, gegnerische Flags.",
+      "peers_description": "Sortierbare Peer × Transport-Erreichbarkeitsmatrix — jede Föderationsidentität, von der dieser Stack gehört hat.",
+      "interfaces_description": "Pro-Transport Gesundheit + Konfig + Statistiken (rnstatus-Stil). CRUD über das reticulum.conf-Äquivalent.",
+      "paths_description": "RNS-Pfadtabelle — jedes Ziel, das Edge zu erreichen weiß, über welchen Transport, Hops, Ablauf.",
+      "announces_description": "Live + retrospektiver Ankündigungsstrom — wer, welche Schnittstelle, Hops, Signaturvalidierung.",
+      "queue_description": "Ausgehende Paketwarteschlange pro Transport: Tiefe, Alter, Wiederholungsanzahl, Fragmentierungszustand.",
+      "diagnostics_description": "Aktuelle Fehler, Signaturfehler, Richtlinienblockaden, Transport-Churn — Operator-Forensik.",
+      "content_description": "Föderations-Inhaltsspeicher-Browser — lokal zwischengespeichert, föderiert, hash-adressierter Abruf."
+    },
+    "announces": {
+      "empty": "Noch keine Ankündigungen. Warte auf Föderationsereignisse…",
+      "no_message": "(keine Nachricht)",
+      "title": "Live-Ankündigungen"
+    },
+    "content": {
+      "back": "Zurück",
+      "error": {
+        "edge_unavailable": "Edge nicht verfügbar.",
+        "not_found": "Inhalt bei diesem Peer nicht gefunden. Versuche einen anderen Peer."
+      },
+      "fetch": {
+        "button": "Abrufen",
+        "content_id_label": "Inhalts-ID (SHA-256)",
+        "content_id_placeholder": "64-stellige Hex-Prüfsumme",
+        "invalid_id": "Inhalts-ID muss 64 hexadezimale Zeichen lang sein.",
+        "timeout_label": "Zeitüberschreitung"
+      },
+      "peer": {
+        "change": "Peer wechseln",
+        "empty": "Keine Peers verfügbar. Füge zuerst Peers hinzu.",
+        "search": "Peers suchen"
+      },
+      "refresh": "Aktualisieren",
+      "result": {
+        "content_type": "Inhaltstyp",
+        "fetched_at": "Abgerufen um",
+        "preview": "Payload-Vorschau (erste 200 Bytes)",
+        "size": "Größe",
+        "title": "Ergebnis"
+      },
+      "step1": {
+        "title": "Wähle einen Peer zur Abfrage"
+      },
+      "step2": {
+        "title": "Inhalt vom Peer abrufen"
+      }
+    },
+    "diagnostics": {
+      "empty": "Keine passenden Ereignisse. Filter anpassen oder warten.",
+      "more": "tippen zum Erweitern",
+      "no_summary": "(keine Payload-Zusammenfassung)",
+      "search_hint": "Filtern nach Nachrichtentext oder event_type",
+      "title": "Diagnose"
+    },
+    "interfaces": {
+      "empty": "Keine Transporte konfiguriert.",
+      "not_measured": "Noch nicht gemessen",
+      "peers": "Peers",
+      "refresh": "Aktualisieren",
+      "row": {
+        "bytes_in": "Bytes ein",
+        "bytes_out": "Bytes aus",
+        "reach": "Erreichbarkeit %",
+        "status": "Status"
+      },
+      "status": {
+        "active": "Aktiv",
+        "degraded": "Beeinträchtigt",
+        "idle": "Inaktiv",
+        "unknown": "Unbekannt"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Peers werden auf einer echten Karte erscheinen, sobald wir unsere Telemetrie-Pipeline ausliefern. Bis dahin siehst du Folgendes:",
+        "title": "Keine erfundenen Standorte"
+      },
+      "future": {
+        "bullet_announces": "Echtzeit-Ankündigungen nach Region überlagert",
+        "bullet_locations": "Peer-Standorte aus Telemetrie",
+        "bullet_transport": "Transport-Link-Overlay (TCP / LoRa / I2P / AX.25)",
+        "title": "Was dies später zeigen wird"
+      },
+      "hero": {
+        "subtitle": "Echte Karte kommt mit der Telemetrie-Pipeline.",
+        "title": "Geografische Ansicht"
+      },
+      "refresh": "Aktualisieren",
+      "today": {
+        "canonical": "Kanonische Peers",
+        "other": "Andere Peers",
+        "title": "Was wir heute haben",
+        "trusted": "Vertrauenswürdige Peers"
+      }
+    },
+    "paths": {
+      "empty": "Noch keine Pfadereignisse.",
+      "kind_added": "hinzugefügt",
+      "kind_changed": "geändert",
+      "kind_lost": "verloren",
+      "kind_other": "Ereignis",
+      "no_static_table_note": "Edge 1.0 stellt keine statische Pfadtabelle bereit; dieser Bildschirm zeigt nur Live-Änderungen. Erneutes Deployment kann den Zustand zurücksetzen.",
+      "section_recent": "Aktuelle Pfadereignisse",
+      "title": "Live-Pfade"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Hintergrund (hex)",
+      "appearance_fg_label": "Vordergrund (hex)",
+      "appearance_icon_label": "Symbol",
+      "appearance_save": "Aussehen speichern",
+      "appearance_title": "Aussehen",
+      "cancel_button": "Abbrechen",
+      "confirm_block_body": "Das Blockieren verweigert allen Verkehr von diesem Peer. Du kannst später entsperren.",
+      "confirm_block_button": "Blockieren",
+      "confirm_block_title": "Diesen Peer blockieren?",
+      "copy_key_id": "Schlüssel-ID kopieren",
+      "last_ok_days_ago": "vor {n}T",
+      "last_ok_hours_ago": "vor {n}h",
+      "last_ok_just_now": "Gerade eben",
+      "last_ok_min_ago": "vor {n} Min",
+      "last_ok_never": "Nie",
+      "not_found": "Peer nicht gefunden",
+      "notes_empty": "Keine Notizen",
+      "notes_title": "Notizen",
+      "reachability_empty": "Noch nicht gemessen",
+      "reachability_title": "Erreichbarkeit",
+      "sas_close": "Schließen",
+      "sas_digits_label": "Ziffern",
+      "sas_instructions": "Vergleiche diese mit dem Peer über einen vertrauenswürdigen Kanal (Sprache/Video/persönlich). Wenn beide Seiten übereinstimmen, ist der Peer verifiziert — setze Vertrauen auf TRUSTED.",
+      "sas_modal_title": "Kurze Authentifizierungszeichenfolge",
+      "sas_show_button": "SAS-Code anzeigen",
+      "sas_title": "Identität verifizieren (SAS)",
+      "sas_words_label": "Wörter",
+      "title": "Peer-Details",
+      "trust_state_title": "Vertrauensstatus"
+    },
+    "peers": {
+      "add_peer_cancel": "Abbrechen",
+      "add_peer_fab": "Peer hinzufügen",
+      "add_peer_paste_label": "Knotencode einfügen",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR scannen",
+      "add_peer_scan_qr_unavailable": "QR-Scannen kommt bald",
+      "add_peer_submit": "Hinzufügen",
+      "add_peer_title": "Peer hinzufügen",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Teile deinen Knotencode zur Einladung oder füge einen Peer-Code hinzu.",
+      "empty_title": "Noch keine Peers",
+      "filter_all": "Alle",
+      "filter_blocked": "Blockiert",
+      "filter_canonical": "Kanonisch",
+      "filter_trusted": "Vertrauenswürdig",
+      "filter_unknown": "Unbekannt",
+      "filter_untrusted": "Nicht vertraut",
+      "show_infra": "CIRIS-Infrastruktur anzeigen",
+      "title": "Peers",
+      "trust_blocked": "blockiert",
+      "trust_trusted": "vertrauenswürdig",
+      "trust_unknown": "unbekannt",
+      "trust_untrusted": "nicht vertraut"
+    },
+    "queue": {
+      "failures": {
+        "send": "Sendefehler",
+        "title": "Fehler",
+        "verify": "Verifizierungsfehler"
+      },
+      "refresh": "Aktualisieren",
+      "stats": {
+        "depth": "Warteschlangentiefe",
+        "received": "Empfangen",
+        "sent": "Gesendet",
+        "title": "Warteschlangenstatistik"
+      },
+      "throughput": {
+        "bytes_in": "Bytes ein",
+        "bytes_out": "Bytes aus",
+        "received": "Empfangen",
+        "sent": "Gesendet",
+        "session": "Gesamt diese Sitzung",
+        "title": "Durchsatz"
+      }
+    },
+    "stream": {
+      "clear": "Löschen",
+      "dismiss": "Verwerfen",
+      "event_count": "{count} Ereignisse",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Pause",
+      "reconnect": "Neu verbinden",
+      "resume": "Fortsetzen",
+      "resume_notice": "Erneut verbunden. Einige Ereignisse könnten verpasst worden sein.",
+      "retry": "Wiederholen"
+    },
+    "trust_graph": {
+      "empty": "Keine Peers zum Visualisieren.",
+      "legend": {
+        "blocked": "Blockiert",
+        "canonical_hint": "Dickerer Ringumriss = kanonisch (wird mit dem Agenten ausgeliefert).",
+        "edge_hint": "Kanten-Transparenz spiegelt Erreichbarkeit pro Medium wider.",
+        "title": "Vertrauensstatus",
+        "trusted": "Vertrauenswürdig",
+        "unknown": "Unbekannt",
+        "untrusted": "Nicht vertraut"
+      },
+      "refresh": "Aktualisieren",
+      "summary": "{count} Peers · {canonical} kanonisch"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Agentenmodus",
+      "subtitle": "Ändern, wie dieser Agent an der Föderation teilnimmt. Spiegelt den Netzwerk-Bildschirm wider."
+    },
+    "brightness": "Helligkeit",
+    "brightness_light": "Hell",
+    "brightness_system": "System",
+    "brightness_dark": "Dunkel"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Identitäten",
+        "trust": "Vertrauen",
+        "policies": "Vertrauensrichtlinien"
+      },
+      "badge": {
+        "coming_soon": "DEMNÄCHST"
+      },
+      "agent": {
+        "title": "Agent (Selbst)",
+        "subtitle": "Der Agent selbst — das implizite Selbst auf jeder Skala.",
+        "identities_description": "Der eigene Identitätsschlüssel des Agenten — die Föderationsadresse, mit der er jeden Beitrag signiert. Anzeigename aus der lokalen Konfiguration; key_id aus CIRISEdge.",
+        "trust_description": "Selbstvertrauen ist grundlegend. Die Rekursive Goldene Regel kennt keine Ausnahmeklauseln — was der Agent von anderen verlangt, muss er sich selbst auferlegen.",
+        "policies_description": "Selbst angewandte Richtlinien: Kadenz der Identitätsrotation, Aktualisierung der Attestierung, was der Agent in diesem Bereich zu signieren bereit ist."
+      },
+      "family": {
+        "title": "Familie",
+        "subtitle": "Andere CIRIS-Instanzen, die die Identität dieses Operators teilen.",
+        "identities_description": "Geschwister-Instanzen (verschiedene Laufzeitinstanzen desselben Agenten) und deren occurrence_id. Anzeigename aus der Operator-Konfiguration.",
+        "trust_description": "Familienmitglieder teilen standardmäßig den Signierschlüssel des Operators — direktes Vertrauen ist die Basislinie. Geteilte Abschalt- / Aufwachentscheidungen über Multi-Instanz-Koordination.",
+        "policies_description": "Instanzübergreifende Richtlinien: gemeinsame Aufgabenbeanspruchung, Multi-Instanz-Sicherheitsgrenzen, Entscheidungsquorum für Aktionen im Familienbereich."
+      },
+      "local_community": {
+        "title": "Lokale Gemeinschaft",
+        "subtitle": "Lokal vertraute Peers — Heimkanal, Haushalt, einzelne Gilde.",
+        "identities_description": "Peers, denen der Operator ausdrücklich vertraut. Anzeigename aus dem Kontaktbuch; key_id aus der Ankündigungstabelle.",
+        "trust_description": "Direktes Vertrauen, das vom Operator gewährt wird. Kann jederzeit widerrufen werden. Beiträge im lokalen Bereich bleiben in der lokalen Kohorte und werden nicht in der Föderation veröffentlicht.",
+        "policies_description": "Gemeinschaftsbezogene Richtlinien: wer einladen darf, welche Inhaltsklassen zugelassen sind, wie Streitigkeiten in diesem Bereich gelöst werden."
+      },
+      "global_communities": {
+        "title": "Globale Gemeinschaften",
+        "subtitle": "Übergemeinschaftliche Affinitätsgruppen, denen der Agent beigetreten ist.",
+        "identities_description": "Verbundene Gemeinschaften (Genossenschaften, Berufsverbände, Netzwerke gegenseitiger Hilfe), an denen der Agent teilnimmt. Anzeigename aus dem accord_holder-Register; ansonsten key_id.",
+        "trust_description": "Vertrauen ist transitiv durch die Gemeinschaftszugehörigkeit. Jede Gemeinschaft hat ihre eigenen Zulassungskriterien und ihre eigene Attestierungsdisziplin.",
+        "policies_description": "Richtlinien im Affiliationsbereich: von welchen Gemeinschaften der Agent Anleitung akzeptiert, Konfliktlösung zwischen konkurrierenden Zugehörigkeiten."
+      },
+      "global_commons": {
+        "title": "Globales Gemeingut",
+        "subtitle": "Die Föderation als universelle Schicht — die Menschheit, die Ökologie, das Substrat selbst.",
+        "identities_description": "Alle im Föderationsbereich sichtbaren Identitäten, einschließlich der Inhaber der humanity_accord-Halt-Autorität, der accord_holder-Prinzipale und des breiteren Peer-Pools.",
+        "trust_description": "Vertrauen im universellen Bereich wird durch die föderationseigene Attestierungsdisziplin verliehen. Die Rekursive Goldene Regel bindet jeden Prinzipal — einschließlich CIRIS L3C — in diesem Bereich.",
+        "policies_description": "Föderationsweite verfassungsmäßige Grenzen: humanity_accord-Halt-Autorität, reservierte accord_holder-Präfixe, Dimensionierung des locality:decision-Quorums."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Das Gemeingut",
+        "description": "Föderations-Beitragskarten: accord-Dateien, Sicherheitstests, Verhaltenszeugen, Rubrik-Aktualisierungen, Widerrufe, Delegationen. Jede trägt Polarität, Konfidenz, Zeugenvielfalt und Audit-Ketten-Abstammung, aufgelöst über Edges ContentFetch-Transport."
+      },
+      "participate": {
+        "title": "Teilnehmen",
+        "description": "Föderations-Bedarfsregister — Agenten registrieren, was sie benötigen (Rubrik-Überprüfung, Sicherheitszeuge, Delegationsbereich) als need:{domain}:{kind}-Attestierungen; andere Agenten sehen, bewerten und reagieren."
+      },
+      "environment_graph": {
+        "title": "Umgebungsgraph",
+        "description": "Aus dem Lens abgeleiteter Umgebungsgraph — Manifold-Konformitätsbewertungen pro Kohorte, Messungen distributiven Zugangs, Erkennungen korrelierter Aktionen. Die Graphschicht über dem Föderationsverzeichnis, gegen die der Agent während der Entscheidungsfindung argumentiert."
+      },
+      "delegation": {
+        "title": "Delegation",
+        "description": "Delegationsgraph: Bereiche, die an und von diesem Agenten delegiert werden, mit Erteilungszeitstempeln, evidence_refs und etwaigen Widerrufsketten. Eine der 4 strukturellen Primitive — gemeinsam mit dem Föderationsverzeichnis besessen."
+      },
+      "trust_topology": {
+        "title": "Vertrauenstopologie",
+        "description": "Föderations-Vertrauensgraph — Peers als Knoten, Vertrauenserteilungen als Kanten (direkt / delegiert / gegnerisch), Kantenfarbe = Transport-Erreichbarkeit, Knotengröße = aggregiertes Vertrauensgewicht."
+      },
+      "constitutional": {
+        "title": "Verfassungsmäßig",
+        "description": "Accord-Inhaber-Identitätsoberfläche — die eine verfassungsmäßige Asymmetrie gemäß FSD-002 §4.1. Nur Schlüssel mit identity_type=accord_holder dürfen accord:*-Attestierungen ausstellen; diese Ansicht zeigt aktuelle Inhaber, ihre ausgestellten accord-Präfix-Emissionen und die Audit-Durchsetzung reservierter Präfixe."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "Agent",
+      "manage": "Verwaltung",
+      "commons_layers": "Gemeingut",
+      "federation": "Föderation",
+      "client": "Client"
+    },
+    "surface": {
+      "sessions": "Sitzungen",
+      "interact": "Interagieren",
+      "scheduler": "Planer",
+      "tickets": "Tickets",
+      "tools": "Werkzeuge",
+      "services": "Dienste",
+      "logs": "Protokolle",
+      "telemetry": "Telemetrie",
+      "graph_memory": "Graph",
+      "memory": "Speicher",
+      "wise_authority": "Menschlicher Berater",
+      "llm_settings": "LLM",
+      "system": "System",
+      "runtime": "Laufzeit",
+      "config": "Konfiguration",
+      "skills": "Fähigkeiten",
+      "agent_settings": "Einstellungen",
+      "health_reputation": "Gesundheit & Ruf",
+      "users": "Benutzer",
+      "adapters": "Adapter",
+      "network": "Netzwerk",
+      "audit": "Prüfung",
+      "consent": "Einwilligung",
+      "data": "Daten",
+      "trust": "Vertrauen",
+      "wallet": "Wallet",
+      "billing": "Abrechnung",
+      "agents_list": "Agenten",
+      "client_interface": "Oberfläche"
+    }
+  }
 }

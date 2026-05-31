@@ -374,6 +374,51 @@ jobs:
           path: qa_reports/qa_status.json
           retention-days: 14
 
+      - name: Surface incidents log to job summary on failure
+        # Don't make operators download the artifact + grep by hand. The
+        # actual cause of "agent never reached WORK" is usually a single
+        # ERROR/CRITICAL block in incidents_latest.log — pull it inline so
+        # it's visible in the GitHub Actions step log and the job summary.
+        if: failure()
+        run: |
+          {
+            echo "## 🚨 Staged QA (${{ matrix.subset }}) failed — surfacing logs"
+            echo
+            for backend in sqlite postgres; do
+              inc="logs/${backend}/incidents_latest.log"
+              if [ -f "$inc" ]; then
+                echo "### ${backend}: ERROR / CRITICAL lines from \`$inc\`"
+                echo
+                echo '```'
+                # Each ERROR/CRITICAL line + 5 following lines for traceback
+                # context. `grep -A 5 ... | head -200` caps at 200 lines so a
+                # runaway stack trace doesn't blow out the summary.
+                grep -nE ' - (ERROR|CRITICAL)|RUNTIME SHUTDOWN REQUESTED' -A 5 "$inc" \
+                  | head -200 \
+                  || echo "(no ERROR/CRITICAL lines — investigate latest.log)"
+                echo '```'
+                echo
+              else
+                echo "### ${backend}: no incidents log at \`$inc\`"
+                echo
+              fi
+            done
+            echo "Full logs in artifact: **staged-qa-server-logs-${{ matrix.subset }}**"
+            echo
+            echo "Download with: \`gh run download <RUN_ID> -n staged-qa-server-logs-${{ matrix.subset }}\`"
+            echo "(NOT \`-p '*'\` — path filters silently drop everything that doesn't match)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Also echo a marker to the step log so it's findable in a scroll.
+          echo "::group::Incidents log highlights (also in job summary)"
+          for backend in sqlite postgres; do
+            inc="logs/${backend}/incidents_latest.log"
+            if [ -f "$inc" ]; then
+              echo "--- ${backend} ---"
+              grep -nE ' - (ERROR|CRITICAL)|RUNTIME SHUTDOWN REQUESTED' -A 5 "$inc" | head -200 || true
+            fi
+          done
+          echo "::endgroup::"
+
       - name: Upload server logs on failure
         uses: actions/upload-artifact@v4
         if: failure()
@@ -383,7 +428,7 @@ jobs:
             logs/
             /tmp/ciris-staged-qa/venv/lib/python3.12/site-packages/logs/
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
   # Combine coverage and run SonarQube after all shards complete
   test-summary:

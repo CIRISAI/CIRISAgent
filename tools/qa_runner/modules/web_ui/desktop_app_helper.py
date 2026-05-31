@@ -443,28 +443,64 @@ class DesktopAppHelper:
                 return True
             return False
 
-        # Input credentials
+        # iOS/Android Login is a landing page with sign-in-method tiles
+        # (btn_apple_signin, btn_local_login). The username/password fields
+        # are revealed only after btn_local_login is tapped. Desktop's Login
+        # shows input_username directly. Detect by probing for input_username;
+        # if absent, click btn_local_login first.
+        is_mobile_login = False
+        if not await self.is_element_visible("input_username"):
+            if await self.is_element_visible("btn_local_login"):
+                is_mobile_login = True
+                await self.click("btn_local_login")
+                # Wait briefly for the local-credentials panel to render
+                await self.wait_for_element("input_username", timeout=3000)
+
+        # Input credentials. On iOS/Android, KMP TextField uses a StateFlow
+        # for the bound value — text entered via /input doesn't reach the
+        # view model synchronously, and back-to-back inputs race the
+        # StateFlow commit (documented in client/iosApp/CLAUDE.md as
+        # "Text input needs 2-second delay between fields"). Insert that
+        # delay only on mobile; desktop's Compose state updates are
+        # synchronous and don't need it.
         if not await self.input_text("input_username", username):
             return False
+        if is_mobile_login:
+            await asyncio.sleep(2.0)
         if not await self.input_text("input_password", password):
             return False
+        if is_mobile_login:
+            await asyncio.sleep(2.0)
 
         # Click login and wait for Interact screen
         return await self.click_and_wait_for_screen("btn_login_submit", "Interact", timeout_ms=timeout_ms)
 
     async def navigate_to(self, screen_name: str, timeout_ms: int = 5000) -> bool:
         """
-        Navigate to a screen using the menu.
+        Navigate to a screen using the EpistemicSidebar (post-2.9.4 nav chrome)
+        or the legacy menu for screens not yet migrated.
 
         Args:
-            screen_name: Screen to navigate to (e.g., "Adapters", "Settings")
+            screen_name: Screen to navigate to (e.g., "Network", "Adapters",
+                "Settings")
             timeout_ms: Timeout for navigation
 
         Returns:
             True if navigation successful
         """
-        # Map screen names to menu item tags
+        # Map screen names to:
+        #   - EpistemicSidebar nav rows (preferred for post-2.9.4 nav)
+        #   - Legacy menu items / direct buttons (fallback)
+        # Sidebar tags follow `nav_epistemic_<slug>` where slug = surface id
+        # with hyphens normalized to underscores.
         menu_items = {
+            # Sidebar-driven (2.9.4 EpistemicSidebar)
+            # Phase B (2026-05-31): "Network" alias preserved for existing
+            # walk-tests; it now resolves to the LayerGlobalCommons surface
+            # under the COMMONS_GROUP.
+            "Network": "nav_epistemic_layer_global_commons",
+            "Global Commons": "nav_epistemic_layer_global_commons",
+            # Legacy menu-driven
             "Adapters": "menu_adapters",
             "Settings": "btn_settings",  # Direct button, not in menu
             # Add more as needed
@@ -475,11 +511,48 @@ class DesktopAppHelper:
             print(f"Unknown screen: {screen_name}")
             return False
 
-        # Settings has a direct button
+        # Settings has a direct button (pre-sidebar legacy chrome)
         if screen_name == "Settings":
             return await self.click_and_wait_for_screen("btn_settings", "Settings", timeout_ms=timeout_ms)
 
-        # For menu items, first open menu
+        # Sidebar-driven navigation — the EpistemicSidebar is always rendered
+        # post-login (no toggle). Click the nav row directly, then wait for
+        # the destination's root testTag.
+        if menu_tag.startswith("nav_epistemic_"):
+            # Each surface lives in a collapsible group; the active group is
+            # expanded on render and others are collapsed. If the destination
+            # row isn't visible yet, expand its group first via the
+            # nav_group_<id> header (also a testableClickable).
+            screen_groups = {
+                "Network": "nav_group_manage",
+            }
+            screen_roots = {
+                "Network": "screen_network_hub",
+            }
+            group_tag = screen_groups.get(screen_name)
+            root_tag = screen_roots.get(screen_name)
+
+            if not await self.is_element_visible(menu_tag):
+                if group_tag is not None and await self.is_element_visible(group_tag):
+                    await self.click(group_tag)
+                    try:
+                        await self.wait_for_element(menu_tag, timeout=2000)
+                    except RuntimeError:
+                        return False
+                else:
+                    return False
+
+            if not await self.click(menu_tag):
+                return False
+            if root_tag is not None:
+                try:
+                    return await self.wait_for_element(root_tag, timeout=timeout_ms)
+                except RuntimeError:
+                    return False
+            # No known root testTag — fall back to screen-name polling.
+            return await self.wait_for_screen(screen_name, timeout=timeout_ms)
+
+        # For legacy menu items, first open menu
         if not await self.click_and_wait_for_element("btn_menu", menu_tag, timeout_ms=2000):
             return False
 

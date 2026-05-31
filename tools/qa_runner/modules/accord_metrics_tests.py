@@ -546,8 +546,24 @@ class AccordMetricsTests:
 
         Returns:
             List of missing field descriptions
+
+        Honors the same EXEMPT_ACTIONS contract `_test_critical_scoring_fields`
+        uses: ethical-faculty fields are legitimately absent on traces whose
+        selected_action is exempt (TASK_COMPLETE / RECALL / OBSERVE / DEFER /
+        REJECT) because those actions skip the entropy / coherence /
+        optimization-veto / epistemic-humility checks by design. The Postgres
+        backend's `accord_metrics::Verb Second Pass` test now drives $defer
+        through to a real DEFER trace (after the PQC-seed fix landed the audit
+        chain), so DEFER traces appear in the sample window and must skip the
+        ethical-faculty subset of GENERIC_REQUIRED_FIELDS the same way the
+        not-null validator already does. SQLite happened to avoid this by
+        sampling SPEAK-routed traces first; that was luck, not a contract.
         """
         missing: List[str] = []
+
+        aspdma_data = component_data.get("ASPDMA_RESULT", {}) or {}
+        selected_action = (aspdma_data.get("selected_action") or "").upper()
+        is_exempt = selected_action in self.EXEMPT_ACTIONS
 
         for event_type, required in self.GENERIC_REQUIRED_FIELDS.items():
             data = component_data.get(event_type, {})
@@ -562,8 +578,11 @@ class AccordMetricsTests:
             else:
                 # Simple list of required fields
                 for field in required:
+                    full_path = f"{event_type}.{field}"
                     if field not in data:
-                        missing.append(f"{event_type}.{field}")
+                        if is_exempt and full_path in self.ETHICAL_FACULTY_FIELDS:
+                            continue  # exempt-action contract: skip ethical-faculty fields
+                        missing.append(full_path)
 
         return missing
 

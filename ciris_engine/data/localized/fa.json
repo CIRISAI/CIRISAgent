@@ -148,13 +148,13 @@
     "ponder_forced_retry": "PONDER إجباري بعد إعادة محاولة وجدان",
     "override_rationale": "تم التجاوز بواسطة {conscience_name}: يجب إعادة النظر في {action}",
     "forced_ponder_rationale": "PONDER إجباري بعد إعادة محاولة وجدان لمنع الحلقات",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "هشدار وجدان: حداقل اطمینان لازم برای صحبت کنید {threshold} بود اما {confidence} ارائه شد",
+    "ponder_concern_speak_harm": "هشدار وجدان: محتوای صحبت کنید ممکن است آسیب‌رسان باشد",
+    "ponder_concern_tool_confidence": "هشدار وجدان: حداقل اطمینان لازم برای ابزار {threshold} بود اما {confidence} ارائه شد",
+    "ponder_concern_tool_requires_wa": "هشدار وجدان: این ابزار نیاز به تأیید مرجع خردمند دارد",
+    "ponder_concern_memorize_scope": "هشدار وجدان: به خاطر بسپارید {scope} — مطمئن شوید این مناسب است",
+    "ponder_concern_forget_scope": "هشدار وجدان: فراموش کنید {scope} — این عمل برگشت‌ناپذیر است",
+    "ponder_concern_high_stakes": "هشدار وجدان: موقعیت پُرخطر شناسایی شد — دقت و تأمل بیشتری لازم است",
     "retry_header": "**راهنمایی نادیده‌گیری وجدان:**",
     "retry_intro": "تلاش قبلی شما برای {action} رد شد زیرا: {reason}",
     "retry_alternatives_header": "گزینه‌های برشمارده شده توسط IRIS-E (اگر دوباره صحبت کنید، از آن‌ها به عنوان جهت محوری استفاده کنید):",
@@ -731,14 +731,14 @@
     "sessions_error_not_supported": "انتقال الحالة غير مدعوم",
     "sessions_error_failed": "فشل الانتقال: {error}",
     "sessions_error_fetch_failed": "فشل جلب الحالة: {error}",
-    "status_shutdown_initiated": "Shutdown initiated",
-    "status_server_already_shutting_down": "Server already shutting down",
-    "status_server_initializing_waiting": "Server initializing... waiting ({elapsed}s)",
-    "status_shutdown_successful": "Shutdown successful",
-    "status_auth_failed_no_token": "Auth failed - no valid token",
-    "status_shutdown_forbidden": "Shutdown forbidden",
-    "status_shutdown_failed": "Shutdown failed",
-    "status_shutdown_error": "Shutdown error: {error}",
+    "status_shutdown_initiated": "خاموش‌سازی آغاز شد",
+    "status_server_already_shutting_down": "سرور در حال خاموش‌شدن است",
+    "status_server_initializing_waiting": "سرور در حال راه‌اندازی... ({elapsed} ثانیه گذشته)",
+    "status_shutdown_successful": "خاموش‌سازی با موفقیت انجام شد",
+    "status_auth_failed_no_token": "احراز هویت ناموفق — توکن معتبر یافت نشد",
+    "status_shutdown_forbidden": "خاموش‌سازی مجاز نیست",
+    "status_shutdown_failed": "خاموش‌سازی ناموفق بود",
+    "status_shutdown_error": "خطا در خاموش‌سازی: {error}",
     "adapter_reloading": "إعادة تحميل المحول...",
     "adapter_not_found": "المحول غير موجود",
     "adapter_reloaded_successfully": "تم إعادة تحميل المحول بموفقیت",
@@ -1039,7 +1039,7 @@
     "trust_failed": "فشل التصديق",
     "trust_level": "مستوى التصديق {level}/5",
     "trust_agent_ver": "الوكيل v{version}",
-    "trust_verify_ver": "CIRISVerify v{version}",
+    "trust_verify_ver": "CIRISVerify نسخه {version}",
     "trust_last_ran": "آخر تشغيل للتحقق: {time}",
     "trust_level_debug": "تصحيح المستوى",
     "trust_level_explain": "المستوى 1: التحقق من ثنائي+بيانات الوظائف | المستوى 2: مفاتيح مدعومة بالأجهزة | المستوى 3: اتفاق المفاتيح من 3 مصادر | المستوى 4: بيان الوكيل | المستوى 5: المراجعة+البوابة",
@@ -1489,7 +1489,7 @@
     "login_error_cancelled": "ورود لغو شد. لطفاً دوباره تلاش کنید.",
     "skill_workshop": "ورشة المهارات",
     "skill_workshop_desc": "إنشاء المهارات واستيرادها وإدارتها للوكيل الخاص بك.",
-    "skill_studio": "Skill Studio",
+    "skill_studio": "استودیوی مهارت",
     "skill_studio_desc": "ویرایشگر بصری برای ایجاد مهارت‌ها از صفر.",
     "skill_create_new": "إنشاء مهارة جديدة",
     "skill_import": "استيراد مهارة",
@@ -1678,15 +1678,15 @@
     "wallet_paymaster_hint": "أدخل مفتاح Etherspot Arka API لتمكين تحويلات USDC بدون غاز",
     "wallet_paymaster_key_label": "مفتاح Arka API",
     "wallet_paymaster_save": "ذخیره المفتاح",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "اجرا",
+    "interact_viz_complete": "تکمیل شد",
+    "adapter_reauth_required": "احراز هویت مجدد لازم است",
+    "adapter_reauth": "احراز هویت مجدد",
+    "adapter_reauth_reason": "دلیل: {reason}",
+    "settings_location": "موقعیت مکانی",
+    "settings_location_desc": "شهر خود را برای اطلاعات آب‌وهوا و محلی تنظیم کنید",
+    "settings_search_city": "شهر",
+    "settings_search_city_hint": "جستجوی شهر...",
     "llm_settings_title": "پیکربندی LLM",
     "llm_settings_status": "نمای کلی وضعیت",
     "llm_settings_providers": "ارائه‌دهندگان",
@@ -1959,11 +1959,11 @@
   "setup_validation_username_required": "اسم المستخدم مطلوب",
   "startup": {
     "startup_retry": "إعادة المحاولة",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "در حال بررسی سرویس‌ها...",
+    "initializing": "در حال راه‌اندازی اولیه...",
+    "loading_config": "در حال بارگذاری تنظیمات...",
+    "ready": "آماده",
+    "starting": "در حال شروع..."
   },
   "status": {
     "executing": "جارٍ التنفيذ...",
@@ -1980,9 +1980,9 @@
   "system": {
     "system_cognitive_state": "الحالة الإدراكية",
     "system_queue_depth": "عمق قائمة الانتظار",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "سلامت",
+    "metrics": "معیارها",
+    "services": "سرویس‌ها"
   },
   "task_id": "معرف المهمة",
   "telemetry_online": "متصل",
@@ -2061,5 +2061,394 @@
   "wa_resolve": "حل",
   "wa_service_status": "حالة الخدمة",
   "wa_status": "الحالة",
-  "login_first_run_welcome": "مرحباً! اختر كيفية إعداد مساعد الذكاء الاصطناعي الخاص بك."
+  "login_first_run_welcome": "مرحباً! اختر كيفية إعداد مساعد الذكاء الاصطناعي الخاص بك.",
+  "network": {
+    "title": "شبکه",
+    "identity_card": {
+      "title": "هویت فدراسیون",
+      "copy_address": "کپی آدرس",
+      "qr_label": "QR · رچت / چرخش",
+      "capabilities_title": "قابلیت‌ها",
+      "copied": "کپی شد",
+      "copy_node_code": "کپی کد گره",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "این کد را با یک همتا برای دعوت به اشتراک بگذارید. می‌تواند آن را بچسباند یا اسکن کند.",
+      "node_code_title": "کد گره من",
+      "peers_canonical": "متعارف",
+      "peers_total": "مجموع همتاها",
+      "qr_placeholder_label": "کد QR",
+      "signer_key_label": "کلید امضا"
+    },
+    "mode_card": {
+      "title": "حالت عامل",
+      "subtitle": "نحوه مشارکت این عامل در فدراسیون. Edge هنگام تغییر مجدداً راه‌اندازی می‌شود.",
+      "client_label": "کلاینت",
+      "client_description": "اتصال به بیرون به یک گره راه دور.",
+      "proxy_label": "پروکسی",
+      "proxy_description": "عامل محلی با سطح فدراسیون پروکسی.",
+      "proxy_default_marker": "(پیش‌فرض)",
+      "server_label": "سرور",
+      "server_description": "گره فدراسیون کامل.",
+      "server_disk_gate": "نیازمند ≥256 گیگابایت دیسک آزاد · {available} آزاد از {required} مورد نیاز",
+      "confirm_change_title": "راه‌اندازی مجدد لازم است",
+      "confirm_change_body": "تغییر حالت عامل نیازمند راه‌اندازی مجدد Edge است. ادامه می‌دهید؟",
+      "confirm_change_button": "راه‌اندازی مجدد Edge",
+      "cancel_button": "لغو",
+      "insufficient_disk_error": "دیسک آزاد کافی برای حالت SERVER وجود ندارد. {available} آزاد، {required} مورد نیاز."
+    },
+    "stats_strip": {
+      "peers": "همتاها",
+      "transports": "حمل‌ونقل‌ها",
+      "queue": "صف",
+      "errors": "خطاها",
+      "awaiting_edge_1_0": "در انتظار Edge 1.0"
+    },
+    "tiles": {
+      "identity": "هویت",
+      "map": "نقشه",
+      "trust_graph": "گراف اعتماد",
+      "peers": "همتاها",
+      "interfaces": "رابط‌ها",
+      "paths": "مسیرها",
+      "announces": "اعلانات",
+      "queue": "صف",
+      "diagnostics": "تشخیص‌ها",
+      "content": "محتوا",
+      "coming_soon_badge": "به‌زودی"
+    },
+    "sub_screens": {
+      "identity_description": "هویت فدراسیون — کلید امضاکننده، زنجیره گواهی نگهداری سخت‌افزاری، وضعیت رچت، تاریخچه چرخش.",
+      "map_description": "بوم نیرومحور همسایگی فدراسیون محلی — همتاها به‌عنوان گره‌ها، حمل‌ونقل‌ها به‌عنوان یال‌های رنگی.",
+      "trust_graph_description": "نمای اپراتور توپولوژی اعتماد حمل‌ونقل — اعطاهای مستقیم، اقتدار تفویض‌شده، پرچم‌های خصمانه.",
+      "peers_description": "ماتریس قابل مرتب‌سازی همتا × دسترسی‌پذیری حمل‌ونقل — هر هویت فدراسیون که این پشته شنیده است.",
+      "interfaces_description": "سلامت + پیکربندی + آمار به ازای هر حمل‌ونقل (سبک rnstatus). CRUD روی معادل reticulum.conf.",
+      "paths_description": "جدول مسیر RNS — هر مقصدی که Edge می‌داند چگونه به آن برسد، از طریق کدام حمل‌ونقل، پرش‌ها، انقضا.",
+      "announces_description": "جریان اعلان زنده + گذشته‌نگر — چه کسی، کدام رابط، پرش‌ها، تأیید امضا.",
+      "queue_description": "صف بسته خروجی به ازای هر حمل‌ونقل: عمق، سن، شمارش تلاش مجدد، وضعیت قطعه‌قطعه‌سازی.",
+      "diagnostics_description": "خطاهای اخیر، شکست‌های امضا، بلوک‌های خط‌مشی، تلاطم حمل‌ونقل — پزشکی قانونی اپراتور.",
+      "content_description": "مرورگر فروشگاه محتوای فدراسیون — کش محلی، فدراسیون‌شده، بازیابی هش-آدرس."
+    },
+    "announces": {
+      "empty": "هنوز اعلانی نیست. در انتظار رویدادهای فدراسیون…",
+      "no_message": "(پیامی نیست)",
+      "title": "اعلان‌های زنده"
+    },
+    "content": {
+      "back": "بازگشت",
+      "error": {
+        "edge_unavailable": "Edge در دسترس نیست.",
+        "not_found": "محتوا در این همتا یافت نشد. همتای دیگری را امتحان کنید."
+      },
+      "fetch": {
+        "button": "دریافت",
+        "content_id_label": "شناسه محتوا (SHA-256)",
+        "content_id_placeholder": "خلاصه هگز ۶۴ کاراکتری",
+        "invalid_id": "شناسه محتوا باید ۶۴ کاراکتر هگزادسیمال باشد.",
+        "timeout_label": "مهلت زمانی"
+      },
+      "peer": {
+        "change": "تغییر همتا",
+        "empty": "همتایی در دسترس نیست. ابتدا همتا اضافه کنید.",
+        "search": "جستجوی همتاها"
+      },
+      "refresh": "تازه‌سازی",
+      "result": {
+        "content_type": "نوع محتوا",
+        "fetched_at": "دریافت در",
+        "preview": "پیش‌نمایش بار (۲۰۰ بایت اول)",
+        "size": "اندازه",
+        "title": "نتیجه"
+      },
+      "step1": {
+        "title": "همتایی برای پرس‌وجو انتخاب کنید"
+      },
+      "step2": {
+        "title": "دریافت محتوا از همتا"
+      }
+    },
+    "diagnostics": {
+      "empty": "رویداد منطبقی نیست. فیلترها را تنظیم کنید یا منتظر بمانید.",
+      "more": "برای گسترش بزنید",
+      "no_summary": "(خلاصه باری نیست)",
+      "search_hint": "بر اساس متن پیام یا event_type فیلتر کنید",
+      "title": "تشخیص"
+    },
+    "interfaces": {
+      "empty": "هیچ حمل‌ونقلی پیکربندی نشده است.",
+      "not_measured": "هنوز اندازه‌گیری نشده",
+      "peers": "همتاها",
+      "refresh": "تازه‌سازی",
+      "row": {
+        "bytes_in": "بایت‌های ورودی",
+        "bytes_out": "بایت‌های خروجی",
+        "reach": "دسترسی %",
+        "status": "وضعیت"
+      },
+      "status": {
+        "active": "فعال",
+        "degraded": "تخریب شده",
+        "idle": "بی‌کار",
+        "unknown": "ناشناخته"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "پس از راه‌اندازی خط لوله تله‌متری ما، همتاها روی نقشه واقعی نمایش داده می‌شوند. تا آن زمان، این چیزی است که اکنون می‌توانید ببینید:",
+        "title": "بدون مکان‌های جعلی"
+      },
+      "future": {
+        "bullet_announces": "اعلان‌های لحظه‌ای پوشانده شده بر اساس منطقه",
+        "bullet_locations": "مکان‌های همتا از تله‌متری",
+        "bullet_transport": "پوشش پیوند حمل‌ونقل (TCP / LoRa / I2P / AX.25)",
+        "title": "آنچه این بعداً نشان خواهد داد"
+      },
+      "hero": {
+        "subtitle": "نقشه واقعی با خط لوله تله‌متری می‌آید.",
+        "title": "نمای جغرافیایی"
+      },
+      "refresh": "تازه‌سازی",
+      "today": {
+        "canonical": "همتاهای متعارف",
+        "other": "همتاهای دیگر",
+        "title": "آنچه امروز داریم",
+        "trusted": "همتاهای مورد اعتماد"
+      }
+    },
+    "paths": {
+      "empty": "هنوز رویداد مسیری نیست.",
+      "kind_added": "اضافه شد",
+      "kind_changed": "تغییر یافت",
+      "kind_lost": "از دست رفت",
+      "kind_other": "رویداد",
+      "no_static_table_note": "Edge 1.0 جدول مسیر ایستا را در دسترس قرار نمی‌دهد؛ این صفحه فقط تغییرات زنده را نشان می‌دهد. استقرار مجدد ممکن است حالت را بازنشانی کند.",
+      "section_recent": "رویدادهای مسیر اخیر",
+      "title": "مسیرهای زنده"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "پس‌زمینه (hex)",
+      "appearance_fg_label": "پیش‌زمینه (hex)",
+      "appearance_icon_label": "نماد",
+      "appearance_save": "ذخیره ظاهر",
+      "appearance_title": "ظاهر",
+      "cancel_button": "لغو",
+      "confirm_block_body": "مسدودسازی تمام ترافیک از این همتا را رد می‌کند. می‌توانید بعداً رفع مسدودی کنید.",
+      "confirm_block_button": "مسدود کردن",
+      "confirm_block_title": "این همتا را مسدود کنید؟",
+      "copy_key_id": "کپی شناسه کلید",
+      "last_ok_days_ago": "{n} روز پیش",
+      "last_ok_hours_ago": "{n} ساعت پیش",
+      "last_ok_just_now": "همین الان",
+      "last_ok_min_ago": "{n} دقیقه پیش",
+      "last_ok_never": "هرگز",
+      "not_found": "همتا یافت نشد",
+      "notes_empty": "بدون یادداشت",
+      "notes_title": "یادداشت‌ها",
+      "reachability_empty": "هنوز اندازه‌گیری نشده",
+      "reachability_title": "دسترسی‌پذیری",
+      "sas_close": "بستن",
+      "sas_digits_label": "ارقام",
+      "sas_instructions": "این‌ها را با همتا از طریق کانال مورد اعتماد (صوتی/تصویری/حضوری) مقایسه کنید. اگر هر دو طرف مطابقت داشتند، همتا تأیید شده است — اعتماد را به TRUSTED تغییر دهید.",
+      "sas_modal_title": "رشته احراز هویت کوتاه",
+      "sas_show_button": "نمایش کد SAS",
+      "sas_title": "تأیید هویت (SAS)",
+      "sas_words_label": "کلمات",
+      "title": "جزئیات همتا",
+      "trust_state_title": "وضعیت اعتماد"
+    },
+    "peers": {
+      "add_peer_cancel": "لغو",
+      "add_peer_fab": "افزودن همتا",
+      "add_peer_paste_label": "چسباندن کد گره",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "اسکن QR",
+      "add_peer_scan_qr_unavailable": "اسکن QR به‌زودی",
+      "add_peer_submit": "افزودن",
+      "add_peer_title": "افزودن یک همتا",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "کد گره خود را برای دعوت به اشتراک بگذارید، یا کد یک همتا را اضافه کنید.",
+      "empty_title": "هنوز همتایی نیست",
+      "filter_all": "همه",
+      "filter_blocked": "مسدود",
+      "filter_canonical": "متعارف",
+      "filter_trusted": "مورد اعتماد",
+      "filter_unknown": "ناشناخته",
+      "filter_untrusted": "غیرقابل اعتماد",
+      "show_infra": "نمایش زیرساخت CIRIS",
+      "title": "همتاها",
+      "trust_blocked": "مسدود",
+      "trust_trusted": "مورد اعتماد",
+      "trust_unknown": "ناشناخته",
+      "trust_untrusted": "غیرقابل اعتماد"
+    },
+    "queue": {
+      "failures": {
+        "send": "خرابی‌های ارسال",
+        "title": "خرابی‌ها",
+        "verify": "خرابی‌های تأیید"
+      },
+      "refresh": "تازه‌سازی",
+      "stats": {
+        "depth": "عمق صف",
+        "received": "دریافت شده",
+        "sent": "ارسال شده",
+        "title": "آمار صف"
+      },
+      "throughput": {
+        "bytes_in": "بایت‌های ورودی",
+        "bytes_out": "بایت‌های خروجی",
+        "received": "دریافت شده",
+        "sent": "ارسال شده",
+        "session": "مجموع این جلسه",
+        "title": "گذردهی"
+      }
+    },
+    "stream": {
+      "clear": "پاک کردن",
+      "dismiss": "رد کردن",
+      "event_count": "{count} رویداد",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "مکث",
+      "reconnect": "اتصال مجدد",
+      "resume": "از سرگیری",
+      "resume_notice": "دوباره متصل شد. ممکن است برخی رویدادها از دست رفته باشند.",
+      "retry": "تلاش مجدد"
+    },
+    "trust_graph": {
+      "empty": "همتایی برای نمایش نیست.",
+      "legend": {
+        "blocked": "مسدود",
+        "canonical_hint": "خط حلقه ضخیم‌تر = متعارف (با عامل ارائه می‌شود).",
+        "edge_hint": "شفافیت لبه نشان‌دهنده دسترسی‌پذیری در هر واسط است.",
+        "title": "وضعیت اعتماد",
+        "trusted": "مورد اعتماد",
+        "unknown": "ناشناخته",
+        "untrusted": "غیرقابل اعتماد"
+      },
+      "refresh": "تازه‌سازی",
+      "summary": "{count} همتا · {canonical} متعارف"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "حالت عامل",
+      "subtitle": "تغییر نحوه مشارکت این عامل در فدراسیون. صفحه شبکه را منعکس می‌کند."
+    },
+    "brightness": "روشنایی",
+    "brightness_light": "روشن",
+    "brightness_system": "سیستم",
+    "brightness_dark": "تیره"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "هویت‌ها",
+        "trust": "اعتماد",
+        "policies": "سیاست‌های اعتماد"
+      },
+      "badge": {
+        "coming_soon": "به‌زودی"
+      },
+      "agent": {
+        "title": "عامل (خود)",
+        "subtitle": "خودِ عامل — خودِ ضمنی در هر مقیاس.",
+        "identities_description": "کلید هویت خودِ عامل — نشانی فدراسیون که با آن هر مشارکت را امضا می‌کند. نام دوستانه از پیکربندی محلی؛ key_id از CIRISEdge.",
+        "trust_description": "اعتماد به خود بنیادین است. قاعده طلایی بازگشتی هیچ بند استثنایی ندارد — آنچه عامل از دیگران می‌طلبد، باید بر خود نیز روا دارد.",
+        "policies_description": "سیاست‌های خود-اعمال: آهنگ چرخش هویت، تجدید گواهی، آنچه عامل در این محدوده آماده امضای آن است."
+      },
+      "family": {
+        "title": "خانواده",
+        "subtitle": "دیگر نمونه‌های CIRIS که هویت این اپراتور را به اشتراک می‌گذارند.",
+        "identities_description": "نمونه‌های همتا (نمونه‌های اجرایی متفاوت از یک عامل) و occurrence_id آن‌ها. نام دوستانه از پیکربندی اپراتور.",
+        "trust_description": "اعضای خانواده به‌طور پیش‌فرض کلید امضای اپراتور را به اشتراک می‌گذارند — اعتماد مستقیم خط پایه است. تصمیمات مشترک خاموش‌سازی / بیداری بر اساس هماهنگی چندنمونه‌ای.",
+        "policies_description": "سیاست‌های میان‌نمونه‌ای: ادعای وظیفه مشترک، مرزهای ایمنی چندنمونه‌ای، حد نصاب تصمیم برای اقدامات در محدوده خانواده."
+      },
+      "local_community": {
+        "title": "اجتماع محلی",
+        "subtitle": "همتاهای مورد اعتماد محلی — کانال خانه، خانوار، یک گیلد منفرد.",
+        "identities_description": "همتاهایی که توسط اپراتور به‌صراحت مورد اعتماد هستند. نام دوستانه از دفترچه تماس؛ key_id از جدول اعلان.",
+        "trust_description": "اعتماد مستقیمی که توسط اپراتور اعطا شده است. هر زمان قابل لغو است. مشارکت‌های محدوده محلی در کوهورت محلی باقی می‌مانند و در فدراسیون منتشر نمی‌شوند.",
+        "policies_description": "سیاست‌های هر اجتماع: چه کسی می‌تواند دعوت کند، چه دسته‌های محتوایی پذیرفته می‌شوند، چگونه اختلافات در این محدوده حل می‌شوند."
+      },
+      "global_communities": {
+        "title": "اجتماعات جهانی",
+        "subtitle": "گروه‌های وابستگی میان‌اجتماعی که عامل به آن‌ها پیوسته است.",
+        "identities_description": "اجتماعات وابسته (تعاونی‌ها، نهادهای حرفه‌ای، شبکه‌های یاری متقابل) که عامل در آن‌ها مشارکت می‌کند. نام دوستانه از رجیستری accord_holder؛ در غیر این صورت key_id.",
+        "trust_description": "اعتماد از طریق عضویت اجتماع متعدی است. هر اجتماع معیارهای پذیرش خود و نظم گواهی خود را دارد.",
+        "policies_description": "سیاست‌های محدوده وابستگی: عامل از کدام اجتماعات راهنمایی می‌پذیرد، حل تعارض میان وابستگی‌های رقیب."
+      },
+      "global_commons": {
+        "title": "میدان مشترک جهانی",
+        "subtitle": "فدراسیون به‌عنوان لایه آفاقی — بشریت، بوم‌شناسی، خودِ بستر.",
+        "identities_description": "تمام هویت‌های قابل مشاهده در محدوده فدراسیون، از جمله دارندگان humanity_accord halt-authority، اصول‌های accord_holder و استخر گسترده‌تر همتاها.",
+        "trust_description": "اعتماد در محدوده آفاقی توسط نظم گواهی خودِ فدراسیون اعطا می‌شود. قاعده طلایی بازگشتی هر اصل را در این محدوده مقید می‌کند — از جمله CIRIS L3C.",
+        "policies_description": "حدود بنیادین فدراسیون-فراگیر: humanity_accord halt-authority، پیشوندهای محفوظ accord_holder، اندازه حد نصاب locality:decision."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "مشارکت‌های مشترک",
+        "description": "کارت‌های مشارکت فدراسیون: فایل‌های accord، safety tests، behavior witnesses، rubric updates، recantations، delegations. هر یک حامل قطبیت، اطمینان، تنوع شاهد و تبارنامه زنجیره-ممیزی است که از طریق ترانسپورت ContentFetch در Edge حل می‌شود."
+      },
+      "participate": {
+        "title": "مشارکت کنید",
+        "description": "رجیستری نیازهای فدراسیون — عامل‌ها آنچه نیاز دارند (rubric review، safety witness، delegation scope) را به‌عنوان گواهی‌های need:{domain}:{kind} ثبت می‌کنند؛ دیگر عامل‌ها می‌بینند، امتیاز می‌دهند و پاسخ می‌دهند."
+      },
+      "environment_graph": {
+        "title": "گراف محیط",
+        "description": "گراف محیط مشتق از لنز — امتیازهای انطباق manifold بر هر کوهورت، اندازه‌گیری‌های دسترسی توزیعی، تشخیص اقدامات همبسته. لایه گرافی بالاتر از دایرکتوری فدراسیون که عامل در طول تصمیم‌گیری در برابر آن استدلال می‌کند."
+      },
+      "delegation": {
+        "title": "تفویض اختیار",
+        "description": "گراف تفویض اختیار: محدوده‌های تفویض شده به این عامل و از این عامل، با مهرهای زمانی اعطا، evidence_refs و هرگونه زنجیره بازپس‌گیری. یکی از 4 عنصر ساختاری بنیادین — مشترک با دایرکتوری فدراسیون."
+      },
+      "trust_topology": {
+        "title": "توپولوژی اعتماد",
+        "description": "گراف اعتماد فدراسیون — همتاها به‌عنوان گره‌ها، اعطاهای اعتماد به‌عنوان یال‌ها (مستقیم / تفویض شده / خصمانه)، رنگ یال = دسترسی ترانسپورت، اندازه گره = وزن کل اعتماد."
+      },
+      "constitutional": {
+        "title": "بنیادین",
+        "description": "سطح هویت accord-holder — تنها عدم تقارن بنیادین بر اساس FSD-002 §4.1. تنها کلیدهای identity_type=accord_holder می‌توانند گواهی‌های accord:* صادر کنند؛ این صفحه دارندگان فعلی، انتشارات accord-prefix صادرشده توسط آن‌ها و ممیزی اجرای پیشوند محفوظ را نشان می‌دهد."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "عامل",
+      "manage": "مدیریت",
+      "commons_layers": "مشترکات",
+      "federation": "فدراسیون",
+      "client": "کلاینت"
+    },
+    "surface": {
+      "sessions": "نشست‌ها",
+      "interact": "تعامل",
+      "scheduler": "زمان‌بندی",
+      "tickets": "تیکت‌ها",
+      "tools": "ابزارها",
+      "services": "سرویس‌ها",
+      "logs": "گزارش‌ها",
+      "telemetry": "تله‌متری",
+      "graph_memory": "گراف",
+      "memory": "حافظه",
+      "wise_authority": "مرجع خردمند",
+      "llm_settings": "LLM",
+      "system": "سیستم",
+      "runtime": "زمان اجرا",
+      "config": "پیکربندی",
+      "skills": "مهارت‌ها",
+      "agent_settings": "تنظیمات",
+      "health_reputation": "سلامت و اعتبار",
+      "users": "کاربران",
+      "adapters": "آداپتورها",
+      "network": "شبکه",
+      "audit": "حسابرسی",
+      "consent": "رضایت",
+      "data": "داده",
+      "trust": "اعتماد",
+      "wallet": "کیف پول",
+      "billing": "صورتحساب",
+      "agents_list": "عوامل",
+      "client_interface": "رابط"
+    }
+  }
 }

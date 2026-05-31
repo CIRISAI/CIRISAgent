@@ -123,11 +123,43 @@ This glossary defines the canonical translations for key CIRIS terms in Urdu. Al
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## Commons / Cohort-Scope UX (2.9.4)
+
+CEG 0.6 cohort-scope vocabulary used by the new Commons hub.
+
+### Core Concepts (cohort scope)
+
+| English | Urdu | Transliteration | Notes |
+|---------|------|-----------------|-------|
+| Cohort scope | کوہورٹ اسکوپ (شراکت کا دائرہ) | Cohort scope (sharakat ka daira) | Technical CIRIS term; keep "cohort scope" recognizable |
+| Layer | پرت | Parat | UX surface for one cohort scope |
+| Self | خود | Khud | Reflexive identity; "agent itself" |
+| Family | خاندان | Khaandaan | Sibling occurrences (not nuclear family) |
+| Local Community | مقامی برادری | Maqaami Biraadari | Locally-trusted peers |
+| Global Communities | عالمی برادریاں | Aalmi Biraadariyaan | Cross-community affinity groups (plural) |
+| Global Commons | عالمی مشترکہ میدان | Aalmi Mushtaraka Maidaan | Universal federation layer |
+| The Commons | مشترکہ شراکت | Mushtaraka Sharakat | Federation contribution feed |
+| Constitutional | آئینی | Aaeeni | Accord-holder identity surface; federation constitution |
+| Delegation | تفویض | Tafveez | Granting authority to act on one's behalf |
+| Trust Topology | اعتماد کا ڈھانچہ | I'timaad ka Dhaancha | Trust graph |
+| Participate | شرکت کریں | Shirkat Karen | Federation needs registry |
+| Affiliations | وابستگیاں | Vaabastagiyaan | Joined communities (CEG term) |
+
+### UI Labels (Commons sections)
+
+| English | Urdu | Notes |
+|---------|------|-------|
+| Identities | شناختیں | Plural; list of known entities at a scope |
+| Trust | اعتماد | Trust state per identity |
+| Trust policies | اعتماد کی پالیسیاں | Automatic-trust policies |
+| Coming Soon | جلد آرہا ہے | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2024-XX-XX | Initial glossary |
+| 1.1 | 2026-05-31 | Added CEG 0.6 cohort-scope vocabulary for 2.9.4 Commons hub |
 
 ---
 

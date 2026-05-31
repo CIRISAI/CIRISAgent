@@ -127,3 +127,24 @@ This glossary defines the canonical translations for key CIRIS terms in Burmese.
 | secondary_need_categories | secondary_need_categories | JSON key; keep in English |
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
+
+## CEG 0.6 Cohort Scope Vocabulary (2.9.4 Commons UX)
+
+| English | Burmese | Transliteration | Definition |
+|---------|---------|-----------------|------------|
+| Cohort scope | cohort scope (အတိုင်းအတာ) | A-tain-a-ta | CEG 0.6 wire term — scale of contribution |
+| Layer | အလွှာ | A-hlwa | UX surface for one cohort scope |
+| Agent (Self) | အေးဂျင့် (ကိုယ်တိုင်) | Ei-jin (ko-tain) | The agent itself; first layer |
+| Family | မိသားစု | Mi-tha-su | Sibling occurrences of the same agent |
+| Local Community | ဒေသခံ အသိုက်အဝန်း | De-tha-khan a-thaik-a-wun | Locally-trusted peers |
+| Global Communities | ကမ္ဘာလုံးဆိုင်ရာ အသိုက်အဝန်းများ | Kam-ba-lone-sain-ya a-thaik-a-wun-mya | Cross-community affinity groups |
+| Global Commons | ကမ္ဘာလုံးဆိုင်ရာ Commons | Kam-ba-lone-sain-ya | Universal federation layer |
+| The Commons | Commons (ပံ့ပိုးမှု ဖိဒ်) | — | Federation contribution cards screen |
+| Constitutional | ဖွဲ့စည်းပုံ (Federation) | Phwè-si-pone | Accord-holder identity surface |
+| Delegation | ကိုယ်စားလွှဲအပ်ခြင်း | Ko-za-hlwè-ap-chin | Delegation graph |
+| Trust Topology | ယုံကြည်မှု ပုံစံ | Yone-kyi-hmu pone-zan | Federation trust graph |
+| Participate | ပါဝင်ရန် | Pa-win-yan | Federation needs registry |
+| Identities | အထောက်အထားများ | A-htauk-a-hta-mya | List of known entities at a scope |
+| Trust | ယုံကြည်မှု | Yone-kyi-hmu | Trust state per identity |
+| Trust policies | ယုံကြည်မှု မူဝါဒများ | Yone-kyi-hmu mu-wa-da-mya | Policies governing automatic trust |
+| Coming Soon | မကြာမီ ရောက်ရှိမည် | Ma-kya-mi yauk-shi-mi | Placeholder for unshipped features |

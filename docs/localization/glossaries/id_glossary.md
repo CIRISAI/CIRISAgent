@@ -141,6 +141,27 @@ This glossary defines the canonical translations for key CIRIS terms in Indonesi
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
 
+## CEG 0.6 Cohort Scope Vocabulary (2.9.4 Commons UX)
+
+| English | Indonesian | Definition |
+|---------|------------|------------|
+| Cohort scope | Cakupan kohort (cohort scope) | CEG 0.6 wire term — scale at which a contribution applies |
+| Layer | Lapisan | UX surface for one cohort scope |
+| Agent (Self) | Agen (Diri) | The agent itself; first layer |
+| Family | Keluarga | Sibling occurrences of the same agent |
+| Local Community | Komunitas lokal | Locally-trusted peers |
+| Global Communities | Komunitas global | Cross-community affinity groups (affiliations) |
+| Global Commons | Ranah bersama global | Universal federation layer |
+| The Commons | Ranah bersama (umpan kontribusi) | Federation contribution cards screen |
+| Constitutional | Konstitusional (federasi) | Accord-holder identity surface per FSD-002 §4.1 |
+| Delegation | Delegasi | Delegation graph |
+| Trust Topology | Topologi kepercayaan | Federation trust graph |
+| Participate | Berpartisipasi | Federation needs registry |
+| Identities | Identitas | List of known entities at a scope |
+| Trust | Kepercayaan | Trust state per identity |
+| Trust policies | Kebijakan kepercayaan | Policies governing automatic trust |
+| Coming Soon | Segera hadir | Placeholder for unshipped features |
+
 ## Version History
 
 | Version | Date | Changes |

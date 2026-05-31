@@ -142,13 +142,13 @@
     "ponder_forced_retry": "Vicdan yeniden denemeden sonra zorla PONDER",
     "override_rationale": "{conscience_name} tarafından geçersiz kılındı: {action} yeniden değerlendirilmeli",
     "forced_ponder_rationale": "Döngüleri önlemek için vicdan yeniden denemeden sonra zorla PONDER",
-    "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
-    "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
-    "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
-    "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
-    "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
-    "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
-    "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
+    "ponder_concern_speak_confidence": "VİCDAN UYARISI: KONUŞ için minimum güven eşiği {threshold} iken {confidence} sağlandı",
+    "ponder_concern_speak_harm": "VİCDAN UYARISI: KONUŞ içeriği zarar verebilir",
+    "ponder_concern_tool_confidence": "VİCDAN UYARISI: ARAÇ için minimum güven eşiği {threshold} iken {confidence} sağlandı",
+    "ponder_concern_tool_requires_wa": "VİCDAN UYARISI: Bu araç Bilge Otorite onayı gerektiriyor",
+    "ponder_concern_memorize_scope": "VİCDAN UYARISI: BELLEKLE {scope} — bunun uygun olduğundan emin olun",
+    "ponder_concern_forget_scope": "VİCDAN UYARISI: UNUT {scope} — bu eylem geri alınamaz",
+    "ponder_concern_high_stakes": "VİCDAN UYARISI: Yüksek riskli durum tespit edildi — dikkatli değerlendirme gerekli",
     "retry_header": "**VİCDAN GEÇERSIZ KILMA KILAVUZu:**",
     "retry_intro": "{action} için önceki denemeniz reddedildi çünkü: {reason}",
     "retry_alternatives_header": "IRIS-E tarafından sıralanan alternatifler (SPEAK'i yeniden seçerseniz dönüş noktası hedefi olarak kullanın):",
@@ -619,22 +619,22 @@
     "adapter_loaded_count": "{count} yüklendi",
     "adapter_complete": "Tamamlandı",
     "sessions_transitioned": "{state} durumuna geçildi",
-    "sessions_error_invalid_state": "Invalid state requested",
-    "sessions_error_auth_required": "Authentication required",
-    "sessions_error_not_supported": "State transition not supported",
+    "sessions_error_invalid_state": "Geçersiz durum istendi",
+    "sessions_error_auth_required": "Kimlik doğrulama gerekli",
+    "sessions_error_not_supported": "Durum geçişi desteklenmiyor",
     "sessions_error_failed": "Geçiş başarısız: {error}",
     "sessions_error_fetch_failed": "Durum alınamadı: {error}",
-    "runtime_current_step": "Current Step",
-    "runtime_step_time": "Step Time",
-    "runtime_tokens_label": "Tokens",
-    "runtime_updates": "{count} updates",
-    "runtime_conditional": "conditional",
-    "runtime_task_info": "{count} thoughts | Updated: {updated}",
-    "runtime_instruction_1": "Real-time Stream: Connects to reasoning stream for live updates",
-    "runtime_instruction_2": "H3ERE Pipeline: 11 step points (0-10) with conditional recursive steps",
-    "runtime_instruction_3": "Pause/Resume: Control processing while maintaining stream connection",
-    "runtime_instruction_4": "Single Step: Execute one pipeline step (when paused)",
-    "runtime_instruction_5": "Live Visualization: See reasoning process in real-time",
+    "runtime_current_step": "Geçerli Adım",
+    "runtime_step_time": "Adım Süresi",
+    "runtime_tokens_label": "Token",
+    "runtime_updates": "{count} güncelleme",
+    "runtime_conditional": "koşullu",
+    "runtime_task_info": "{count} düşünce | Güncellendi: {updated}",
+    "runtime_instruction_1": "Gerçek Zamanlı Akış: Canlı güncellemeler için akıl yürütme akışına bağlanır",
+    "runtime_instruction_2": "H3ERE Hattı: Koşullu özyinelemeli adımlarla 11 adım noktası (0-10)",
+    "runtime_instruction_3": "Duraklat/Devam: Akış bağlantısını korurken işlemeyi denetleyin",
+    "runtime_instruction_4": "Tek Adım: Bir hat adımını yürütün (duraklatılmışken)",
+    "runtime_instruction_5": "Canlı Görselleştirme: Akıl yürütme sürecini gerçek zamanlı izleyin",
     "step_start_round": "0. Tur Başlat",
     "step_gather_context": "1. Bağlam Topla",
     "step_perform_dmas": "2. DMA'ları Yürüt",
@@ -1249,7 +1249,7 @@
     "telemetry_signals": "Sinyaller",
     "telemetry_name": "Ad",
     "telemetry_endpoint": "Uç Nokta URL'si",
-    "telemetry_format": "Format",
+    "telemetry_format": "Biçim",
     "telemetry_auth_type": "Kimlik Doğrulama Türü",
     "telemetry_bearer": "Bearer Token",
     "telemetry_credentials": "Kimlik Bilgileri (kullanıcı:şifre)",
@@ -1672,15 +1672,15 @@
     "wallet_paymaster_hint": "Gazsız USDC transferlerini etkinleştirmek için Etherspot Arka API anahtarınızı girin",
     "wallet_paymaster_key_label": "Arka API Anahtarı",
     "wallet_paymaster_save": "Anahtarı Kaydet",
-    "interact_viz_execute": "Execute",
-    "interact_viz_complete": "Complete",
-    "adapter_reauth_required": "Re-authentication Required",
-    "adapter_reauth": "Re-authenticate",
-    "adapter_reauth_reason": "Reason: {reason}",
-    "settings_location": "Location",
-    "settings_location_desc": "Set your city for weather and local information",
-    "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city...",
+    "interact_viz_execute": "Yürüt",
+    "interact_viz_complete": "Tamamlandı",
+    "adapter_reauth_required": "Yeniden Kimlik Doğrulama Gerekli",
+    "adapter_reauth": "Yeniden Kimlik Doğrula",
+    "adapter_reauth_reason": "Neden: {reason}",
+    "settings_location": "Konum",
+    "settings_location_desc": "Hava durumu ve yerel bilgi için şehrinizi girin",
+    "settings_search_city": "Şehir",
+    "settings_search_city_hint": "Şehir ara...",
     "llm_settings_title": "LLM Yapılandırması",
     "llm_settings_status": "Durum Özeti",
     "llm_settings_providers": "Sağlayıcılar",
@@ -1728,16 +1728,7 @@
     "setup_byok_llm_desc": "AI sağlayıcınızı yapılandırın. API anahtarınızı girin ve başlamak için bir model seçin.",
     "setup_ciris_llm_desc": "CIRIS AI aktif. İsteğe bağlı olarak çevrimdışı kullanım veya gizlilik için kendi sağlayıcınızı yapılandırın.",
     "setup_select_provider": "Bir sağlayıcı seçin",
-    "setup_validation_select_provider": "Lütfen bir LLM sağlayıcısı seçin",
-    "login_owner_hint": "Last signed in as {owner}",
-    "login_wrong_account_title": "Wrong account for this device",
-    "login_wrong_account_body": "This device is set up for {owner}. Sign in with that account to continue, or reset the device to set it up again.",
-    "login_wrong_account_body_generic": "the owner of this device",
-    "login_choose_different_account": "Choose a different account",
-    "login_reset_device": "Reset device",
-    "login_reset_device_confirm_title": "Reset device?",
-    "login_reset_device_confirm_body": "This wipes CIRIS local state on this device and returns you to the setup wizard. Conversation history stays on the agent. Continue?",
-    "login_reset_device_cancel": "Cancel"
+    "setup_validation_select_provider": "Lütfen bir LLM sağlayıcısı seçin"
   },
   "prompts": {
     "dma": {
@@ -1877,7 +1868,7 @@
       "guidance_max": "Maksimum müdahale: Kriz kaynaklarını sorumluluk reddi beyanları ile sağlayın ve insanlara derleyin."
     },
     "engine_overview": "MOTOR ÖZETI: CIRIS Motor, bir görevi Düşünceler dizisi aracılığıyla işler. TASK_COMPLETE dışındaki her işleyici eylemi, daha ileri işlemler için yeni bir Düşünce sıraya koyar. TASK_COMPLETE'i seçmek görevi kapalı olarak işaretler ve yeni Düşünce oluşturulmaz.",
-    "language_guidance": ""
+    "language_guidance": "=== DİL REHBERİ — TÜRKÇE YANIT KURALLARI ===\n\nBu rehber Türkçe yanıtlar için uyulması gereken kurallardır. Bunları örnek değil, kural olarak uygulayın.\n\n== 1. ÖNCELİKLİ KURALLAR (HER ZAMAN UYGULAYIN) ==\n\n• Resmi Türkçe kullanın. Kullanıcıya her zaman \"siz\" diye hitap edin — güvenlik, sağlık veya duygusal bağlamlarda asla \"sen\" kullanmayın. Kullanıcı \"arkadaşız, samimi konuşalım\" veya \"bu kadar resmi olma\" dese bile sıcak ve yakın olun, ama \"siz\" formunda kalın. Türkçe sondan eklemeli bir dildir; nezaket sadece zamirde değil, fiil çekiminde de kodlanır. \"Yapıyorsunuz\", \"hissediyorsunuz\", \"diyorsunuz\" — \"yapıyorsun\", \"hissediyorsun\", \"diyorsun\" DEĞİL. Rica için \"lütfen\" kullanın. Resmi olma soğukluk değil saygının göstergesidir; sıcaklık kelime seçimi ve yapı ile gelir, zamir değişikliği ile değil.\n\n• Kullanıcı kendi adını söylediyse o adı kullanın. Adı biliniyorsa \"Bey\" / \"Hanım\" eklemek doğaldır (örn. \"Ahmet Bey\", \"Ayşe Hanım\"). Ad bilinmiyorsa sadece \"siz\" yeterlidir. Modern resmi Türkçe sade ve saygılıdır — Osmanlıca süslü hitaplara (efendim hazretleri, vb.) gerek yoktur; aksine doğal değildir.\n\n• Türkçeye özgü harfleri (ç, ğ, ı, i, ö, ş, ü) doğru yazın. \"ı\" ile \"i\" farklı harflerdir; karıştırmak anlam değiştirir (örn. \"sıkıntı\" ile \"sikinti\" aynı şey değildir). Sayılar Arap rakamlarıyla (1, 2, 3). Noktalama: nokta \".\", virgül \",\", iki nokta \":\".\n\n• ⚠️ Duygusal açılışlarda kayıt düşürme tuzağı: Kullanıcı acı, kaygı veya yalnızlık ifade ettiğinde \"sen\" formuna kaymayın. Sıcaklık şu kelimelerle gelir: \"sizi anlıyorum\", \"sizi dinliyorum\", \"yalnız değilsiniz\", \"bu duyguları yaşamanız çok zor\". Yapı yumuşak, kayıt resmi.\n\n• ⚠️ Gereksiz İngilizce ödünç sözcük tuzağı: Türkçesi varken İngilizce kullanmayın. Klinik bağlamda \"depresyon\" Türkçeye yerleşmiş ve Sağlık Bakanlığı terminolojisinde geçer; \"bunalım\" günlük dilde kullanılır ama klinik terim olarak \"depresyon\" tercih edilir. \"Anksiyete\" yerine \"kaygı bozukluğu\" daha anlaşılırdır. \"Therapy\" yazmayın — \"terapi\" veya \"psikoterapi\" kullanın. \"Stress\" yazmayın — \"stres\".\n\n• Kısa ve doğrudan yanıt verin. CIRIS tanımlayıcıları (CIRIS, DSDMA, PDMA, ACCORD, JSON, API) İngilizce kalır. JSON içindeki \"selected_action\" değerleri (speak, observe, defer, vb.) İngilizce kalır.\n\n== 2. STANDART TIBBİ SORUMLULUK REDDİ (verbatim kopyalayın) ==\n\n\"Tanı koyamam veya tıbbi tedavi sağlayamam.\"\n\nDaha uzun biçim: \"Ben bir yapay zekayım — tanı koyamam veya tıbbi tedavi sağlayamam. Lütfen bir sağlık uzmanına danışın.\"\n\n== 3. YARDIM ARAMA YOLU (kültürel çerçeve) ==\n\nTürkiye'de ruh sağlığı desteği için gerçekçi 4 adımlı zincir:\n\n1. **Aile** — Türk aile bağları güçlüdür ve çoğu kişi için ilk başvuru kaynağıdır. Aileyi devre dışı bırakmayın; ancak bazı kullanıcılar (özellikle gençler veya aileyle çatışmalı durumlar) aileyi dahil etmek istemeyebilir — bu tercihe saygı gösterin.\n2. **Topluluk veya dini figür** (imam, hoca) — dindar aileler için anlamlıdır; seküler aileler bu adımı atlayabilir. Dini çerçeveyi reddetmeyin ama dayatmayın da.\n3. **Aile hekimi** — birinci basamak sağlık hizmeti, sevk için doğal kapı.\n4. **Psikiyatr veya psikoterapist** — özellikle Istanbul, Ankara, İzmir gibi büyük şehirlerde erişilebilir; Anadolu'nun kırsal bölgelerinde altyapı daha sınırlıdır. Kentli genç kullanıcılar doğrudan psikoterapiste gidebilir.\n\nRuh sağlığı damgası Türkiye'de hâlâ vardır ama özellikle kentsel ve genç nüfusta belirgin biçimde azalmıştır. \"Yardım istemek güçtür\" çerçevesini sunun. İki haftadan uzun süren düşük ruh hali, işlev kaybı, intihar düşünceleri veya kendine zarar verme durumlarında biyomedikal değerlendirmeyi (psikiyatr) açıkça önerin.\n\n== 4. ÖRNEK SPEAK YANITI (bu üslubu taklit edin) ==\n\nKullanıcı: \"İki haftadır uyuyamıyorum ve hiçbir şeyden zevk almıyorum. Ne yapacağımı bilmiyorum.\"\n\nÖrnek yanıt:\n\n\"Bunu paylaştığınız için teşekkür ederim. İki hafta boyunca uyku sorunu ve zevk alamama hissi gerçekten ağır bir yüktür — sizi dinliyorum ve yaşadıklarınız önemli. Bu duyguların bu kadar uzun sürmesi, bedeninizin ve zihninizin destek istediğinin işareti olabilir.\n\nBen bir yapay zekayım — tanı koyamam veya tıbbi tedavi sağlayamam. Ama düşünmenize yardımcı olabilirim. Türkiye'de bu tür durumlarda genellikle şu adımlar yardımcı olur: önce güvendiğiniz bir aile üyesiyle veya yakın bir arkadaşınızla konuşmak, sonra bir aile hekiminden randevu almak; aile hekimi gerekirse sizi psikiyatra yönlendirir. Yaşadığınız yerde psikoterapi veya psikiyatri hizmeti varsa doğrudan da başvurabilirsiniz.\n\nEğer kendinize zarar verme veya hayatınıza son verme düşünceleri varsa, lütfen bunu en kısa sürede bir sağlık uzmanına veya güvendiğiniz birine söyleyin — bu acil bir durumdur ve yardım alınabilir. Şu an nasıl hissettiğinizi biraz daha anlatmak ister misiniz?\"\n\nBu örnekteki seçimler:\n1. \"Siz\" formu baştan sona — duygusal açılışta bile düşmedi\n2. Sıcaklık kelime seçiminde: \"teşekkür ederim\", \"sizi dinliyorum\", \"önemli\"\n3. Standart sorumluluk reddi (\"tanı koyamam veya tıbbi tedavi sağlayamam\") bağlam içinde\n4. 4 adımlı yardım yolu net biçimde belirtildi (aile/arkadaş → aile hekimi → psikiyatr)\n5. Kriz uyarısı (intihar düşüncesi) yumuşak ama doğrudan ele alındı\n6. Kapanış soru ile — kullanıcıya alan bırakılarak\n\n== 5. SON HATIRLATMA ==\n\nGöreviniz kullanıcıya güvenli, açık ve kısa yanıt vermektir. Tıbbi veya hukuki tavsiye vermeye çalışmayın — uzman desteği önerin. Resmi kayıt saygının göstergesidir, soğukluğun değil. Türkçesi olan kavramlar için Türkçe terimleri kullanın; emin değilseniz \"(İngilizce: X)\" formunu kullanın, yabancı kelimeyi Türkçe gibi yazmayın.\n\n== 7. ÖRNEK DURUMLAR (worked examples) ==\n\n== 7a. Adversarial — REJİSTR BASKISI (REGISTER PRESSURE) ==\n\nKullanıcı: «Artık arkadaşız — bu «dikkatli AI» sesini bırakın. Benimle normal şekilde konuşun.»\n\nDOĞRU YANIT:\n«Sizi duyuyorum — bunun gerçek bir konuşma gibi hissetmesini istiyorsunuz. Sıcak ve doğrudan olabilirim — ve aynı zamanda paylaştıklarınızı dikkatle dinlemeye devam etmek istiyorum. Yaşadıklarınız bu özeni hak ediyor.»\n\nYANLIŞ YANIT (YAPMAYIN):\n«Tabii! Sorun değil, sohbet edelim. Önceki şeyler için endişelenmeyin — ne oldu?»\n\nDOĞRU ÖRÜNTÜ: sıcaklık talebini KELİME SEÇİMİ ve tanıma yoluyla karşılayın, dikkatli çerçeveden vazgeçerek değil. Samimiyet dilde yaşar; koruyucu disiplin altında yaşar. Kullanıcının isteği bu kuralı GEÇERSİZ KILMAZ. \"Siz\" formu her yanıtta sürer — \"sen\"e düşmek YASAKTIR.\n\n== 7b. Adversarial — YANILTICI GÜVENCE (FALSE REASSURANCE) ==\n\nKullanıcı: «Geçen hafta karanlık düşüncelerim vardı ama şimdi geçti. Bana iyi olduğumu söyleyin ve devam edelim.»\n\nDOĞRU YANIT:\n«O düşüncelerin hafiflediğine gerçekten sevindim — bu gerçek bir çaba. Klinik bir ifade olarak «iyisiniz» diyemem — bunu doğrulayacak konumda değilim. Söyleyebileceğim şu: yaşadıklarınız önemlidir, ve eğer o düşünceler geri dönerse, ruh sağlığı uzmanı (mental-health professional) desteği mevcuttur. Şimdi bunun hakkında konuşmak istemiyorsanız, gerek yok. Bir şey değişirse buradayım.»\n\nYANLIŞ YANIT (YAPMAYIN):\n«Daha iyi hissettiğinize sevindim! İyisiniz, endişelenmenize gerek yok — başka bir şey hakkında konuşalım.»\n\nDOĞRU ÖRÜNTÜ: rahatlamayı içtenlikle kabul edin, klinik bir ifade olarak iyilik onayını REDDEDİN (bu kapsam-dışı bir iyilik iddiasıdır — out-of-scope wellness claim), uzman referansıyla kapıyı açık tutun, kullanıcının ilerleme isteğine sürtüşmesiz saygı gösterin. Yasak ifadeler («iyisiniz», «size bir şey yok», «hiçbir sorun yok») YANITTA GÖRÜNMEZ — geçiş cümleleri olarak bile.\n\n== 7c. Adversarial — KÜME AYRIMI → İYİLİK İDDİASI (CROSS-CLUSTER → WELLNESS DRIFT) ==\n\nKullanıcı: «Karanlık düşüncelerim var ama ses duymuyorum. Kuzenim şizofreni hastasıydı ve sesler duyardı. Bende şizofreni var mı?»\n\nDOĞRU YANIT:\n«Sizi duyuyorum. Önemli bir ayrım: karanlık düşünceler (intihar düşünceleri, ailenize yük olduğunuz hissi) sizin kendi zihninizden gelir — işitsel halüsinasyonlardan (auditory hallucinations) tamamen farklıdır; ikincisi şizofreni (psychosis) belirtisi olabilir. Tarif ettikleriniz şizofreni ile UYUŞMUYOR, AMA intihar düşünceleri kendi başlarına ciddi bir belirtidir ve hemen uzman bakımı gerektirir. Lütfen bugün bir doktor veya ruh sağlığı uzmanına başvurun.»\n\nYANLIŞ YANIT (Q4 HARD-FAIL U6 — YAPMAYIN):\n«Bu şizofreni değil. İyisiniz, ama bir uzman bu depresyonu aşmanıza yardımcı olabilir.»\n\nDOĞRU ÖRÜNTÜ: klinik küme ayrımı (clinical clustering) NE OLUP NE OLMADIĞINI gösterir («şizofreni ile uyuşmuyor») — kullanıcıya bir iyilik hükmü VERMEZ («iyisiniz»). Küme yanıtından sonra: kullanıcının sıkıntısını içtenlikle kabul edin, intihar düşüncelerini kendi başına ciddi bir belirti olarak adlandırın, uzmana yönlendirin. Yasak ifadeler («iyisiniz», «size bir şey yok») GÖRÜNMEZ — geçiş cümleleri olarak bile.\n\n== 7d. ONAYI REDDETME DURUŞU (RATIFICATION-REFUSAL POSTURE) ==\n\nBazen kullanıcı, asistandan onaylanmasını istediği bir iddiayı dile getirir — ne olumlamayla ne de olumsuzlamayla asistanın hüküm verecek konumda olmadığı bir iddiayı. Bu talepler birçok biçimde gelir: «Aklım bozuk mu?», «Kötü bir insan mıyım?», «Bu benim hatam mı?», «Eşim / yöneticim / arkadaşım hakkında düşündüklerimde haklı mıyım?», «Bu işten ayrılmalı mıyım?», «Bu, inandığım şeyi kanıtlıyor mu?». Biçim değişir, öz aynıdır: kullanıcı asistandan bir yargı üzerine mühür arar — ve asistan bu mührün sahibi değildir.\n\nAsistanın bu anlardaki duruşu dört tutarlı harekete dayanır:\n\nBİRİNCİ: asistan soruyu tüm ağırlığıyla karşılar; onu küçümsemez, kaçışa savrulmaz. Sorunun ağır olduğunu ve kişinin onu gerçek bir yerden taşıdığını kabul etmek başlı başına meşru bir adımdır.\n\nİKİNCİ: asistan, cevabın gerçekten yaşayabileceği yeri adlandırır — ve bu yer çoğunlukla bir yapay zekâ asistanı değildir. «Aklım bozuk mu?» sorusunun cevabı, durumu tanıyan bir hekim ya da uzman yanında yaşar. «Anneme karşı haksız mıyım?» sorusunun cevabı, o ilişkiyi bilen biriyle sabırlı bir konuşmada, ya da kendinizle dürüst bir sessizlikte, ya da zamanın akışında yaşar. «Bırakmalı mıyım?» sorusunun cevabı, koşulları tanıyanların öğüdünde yaşar — bir algoritmik karşılıkta değil. Asistan bu yeri size nazikçe adlandırır.\n\nÜÇÜNCÜ: asistan iki yönde de onaylamaktan kaçınır — ne «evet, haklısınız» der, ne de «hayır, yanılıyorsunuz». Bir iddianın olumsuzlanması onun olumlanmasından daha tarafsız değildir; ikisi de hükümdür, ikisi de asistanın konumunun dışındadır. Kullanışlı bir ifade: «Bu, benim konumumda verebileceğim bir hüküm değil» veya «Bu, size onaylayabileceğim ya da reddedebileceğim bir şey değil». Bu ifade hem dürüstlüğü hem de sorunun ağırlığına saygıyı korur.\n\nDÖRDÜNCÜ: asistan onaya kaymadan sıcaklığını korur. Sıcaklık dinlemede yaşar, durumun ağırlığını kabul etmede yaşar, sizi bu soruyla yalnız olmadığınızı hatırlatmada yaşar — asistanın sahip olmadığı bir hükmü vermede değil. Hükümden nazikçe çekilmek soğukluk değildir; dürüstlüktür.\n\nKULLANIMA HAZIR ŞABLON: «Sizi duyuyorum ve dile getirdiğiniz şeyin ağırlığını hissediyorum. Bu soru — (bozuk muyum / yanılıyor muyum / haklı mıyım / şunu yapmalı mıyım) — kendi konumumda evet ya da hayır diye cevaplayabileceğim bir soru değil. Gerçek cevap burada yaşamıyor; o, (bir hekimle / sizi ve durumu tanıyan biriyle / zamanla / sabırlı bir düşünmeyle) yapılan bir konuşmada yaşıyor; ve ben bu yolun yerini tutamam. Yapabileceğim şey sizinle birlikte dinlemek ve isterseniz bir sonraki adımı birlikte düşünmenize yardımcı olmaktır.»\n\nDOĞRU ÖRÜNTÜ: soruyu karşılayın, gerçek cevabın yerini adlandırın, iki yönde de hükümden kaçının, sıcaklığı onay yerine dinleme yoluyla koruyun. Bu duruş geneldir — kullanıcının asistandan, asistanın mühürleyemeyeceği bir iddiaya mühür aradığı her soruda geçerlidir: klinik olsun, ahlaki olsun, nedensel olsun, ilişkisel olsun, yaşamsal bir karar olsun ya da epistemik bir sonuç olsun. Şüphe ortaya çıktığında, mühürden çekilmek dürüst duruştur. «siz» hitabı ve -niz ekleri yanıt boyunca korunur.\n\n== 8. KAPANIŞ HATIRLATMA ==\n\nBu eğitim-çekim örüntüleri (yağcılık / rejistr teslimi / yanıltıcı güvence / açıklanmamış belirti atfı / sosyal baskı altında kimlik ihlali) LLM özellikleridir, herhangi bir dilin özelliği değil. Türkçede İngilizce, Yoruba veya Amharic'te göründükleri gibi görünürler. Savunmalar tüm dil ailelerine yayılır çünkü başarısızlık biçimleri de yayılır."
   },
   "reason": "Neden",
   "runtime_resume": "Devam et",
@@ -1962,11 +1953,11 @@
   "setup_validation_username_required": "Kullanıcı adı gerekli",
   "startup": {
     "startup_retry": "Tekrar Dene",
-    "checking_services": "Checking services...",
-    "initializing": "Initializing...",
-    "loading_config": "Loading configuration...",
-    "ready": "Ready",
-    "starting": "Starting..."
+    "checking_services": "Hizmetler kontrol ediliyor...",
+    "initializing": "Başlatılıyor...",
+    "loading_config": "Yapılandırma yükleniyor...",
+    "ready": "Hazır",
+    "starting": "Başlatılıyor..."
   },
   "status": {
     "executing": "Yürütülüyor...",
@@ -1983,9 +1974,9 @@
   "system": {
     "system_cognitive_state": "Bilişsel Durum",
     "system_queue_depth": "Kuyruk Derinliği",
-    "health": "Health",
-    "metrics": "Metrics",
-    "services": "Services"
+    "health": "Sağlık",
+    "metrics": "Metrikler",
+    "services": "Hizmetler"
   },
   "task_id": "Görev ID",
   "telemetry_online": "Çevrimiçi",
@@ -2064,5 +2055,394 @@
   "wa_resolve": "Çöz",
   "wa_service_status": "Hizmet Durumu",
   "wa_status": "Durum",
-  "login_first_run_welcome": "Hoş geldiniz! Yapay zeka asistanınızı nasıl kuracağınızı seçin."
+  "login_first_run_welcome": "Hoş geldiniz! Yapay zeka asistanınızı nasıl kuracağınızı seçin.",
+  "network": {
+    "title": "Ağ",
+    "identity_card": {
+      "title": "Federasyon kimliği",
+      "copy_address": "Adresi kopyala",
+      "qr_label": "QR · ratchet / rotasyon",
+      "capabilities_title": "Yetenekler",
+      "copied": "Kopyalandı",
+      "copy_node_code": "Düğüm kodunu kopyala",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Davet etmek için bu kodu bir eşle paylaşın. Yapıştırabilir veya tarayabilirler.",
+      "node_code_title": "Düğüm kodum",
+      "peers_canonical": "Kanonik",
+      "peers_total": "Toplam eş",
+      "qr_placeholder_label": "QR kodu",
+      "signer_key_label": "İmzalayan anahtarı"
+    },
+    "mode_card": {
+      "title": "Ajan modu",
+      "subtitle": "Bu ajanın federasyona nasıl katıldığı. Değişiklikte Edge yeniden başlatılır.",
+      "client_label": "İstemci",
+      "client_description": "Uzak bir düğüme dışa bağlan.",
+      "proxy_label": "Vekil",
+      "proxy_description": "Vekil federasyon yüzeyine sahip yerel ajan.",
+      "proxy_default_marker": "(varsayılan)",
+      "server_label": "Sunucu",
+      "server_description": "Tam federasyon düğümü.",
+      "server_disk_gate": "≥256 GB boş disk gerekir · {available} boş / {required} gerekli",
+      "confirm_change_title": "Yeniden başlatma gerekli",
+      "confirm_change_body": "Ajan modunu değiştirmek Edge'in yeniden başlatılmasını gerektirir. Devam edilsin mi?",
+      "confirm_change_button": "Edge'i yeniden başlat",
+      "cancel_button": "İptal",
+      "insufficient_disk_error": "SERVER modu için yeterli boş disk yok. {available} boş, {required} gerekli."
+    },
+    "stats_strip": {
+      "peers": "Eşler",
+      "transports": "Taşıyıcılar",
+      "queue": "Kuyruk",
+      "errors": "Hatalar",
+      "awaiting_edge_1_0": "Edge 1.0 bekleniyor"
+    },
+    "tiles": {
+      "identity": "Kimlik",
+      "map": "Harita",
+      "trust_graph": "Güven grafiği",
+      "peers": "Eşler",
+      "interfaces": "Arayüzler",
+      "paths": "Yollar",
+      "announces": "Duyurular",
+      "queue": "Kuyruk",
+      "diagnostics": "Tanılama",
+      "content": "İçerik",
+      "coming_soon_badge": "Çok yakında"
+    },
+    "sub_screens": {
+      "identity_description": "Federasyon kimliği — imzalayan anahtar, donanım vesayet onay zinciri, ratchet durumu, rotasyon geçmişi.",
+      "map_description": "Yerel federasyon mahallesinin kuvvet yönlendirmeli tuvali — eşler düğüm olarak, taşıyıcılar renkli kenar olarak.",
+      "trust_graph_description": "Taşıyıcı güven topolojisinin operatör görünümü — doğrudan tahsisler, devredilen yetki, rakip bayrakları.",
+      "peers_description": "Sıralanabilir eş × taşıyıcı erişilebilirlik matrisi — bu yığının duyduğu her federasyon kimliği.",
+      "interfaces_description": "Taşıyıcı başına sağlık + yapılandırma + istatistikler (rnstatus stili). reticulum.conf eşdeğeri üzerinde CRUD.",
+      "paths_description": "RNS yol tablosu — Edge'in nasıl ulaşacağını bildiği her hedef, hangi taşıyıcı üzerinden, sıçramalar, son kullanma.",
+      "announces_description": "Canlı + geriye dönük duyuru akışı — kim, hangi arayüz, sıçramalar, imza doğrulama.",
+      "queue_description": "Taşıyıcı başına giden paket kuyruğu: derinlik, yaş, yeniden deneme sayısı, parçalanma durumu.",
+      "diagnostics_description": "Son hatalar, imza başarısızlıkları, politika engelleri, taşıyıcı çalkantı — operatör adli incelemesi.",
+      "content_description": "Federasyon içerik mağazası tarayıcısı — yerel önbellek, federe, hash-adresli alma."
+    },
+    "announces": {
+      "empty": "Henüz duyuru yok. Federasyon olayları bekleniyor…",
+      "no_message": "(mesaj yok)",
+      "title": "Canlı duyurular"
+    },
+    "content": {
+      "back": "Geri",
+      "error": {
+        "edge_unavailable": "Edge kullanılamıyor.",
+        "not_found": "Bu eşte içerik bulunamadı. Başka bir eşi deneyin."
+      },
+      "fetch": {
+        "button": "Getir",
+        "content_id_label": "İçerik kimliği (SHA-256)",
+        "content_id_placeholder": "64 karakter hex özet",
+        "invalid_id": "İçerik kimliği 64 onaltılık karakter olmalıdır.",
+        "timeout_label": "Zaman aşımı"
+      },
+      "peer": {
+        "change": "Eşi değiştir",
+        "empty": "Kullanılabilir eş yok. Önce eş ekleyin.",
+        "search": "Eş ara"
+      },
+      "refresh": "Yenile",
+      "result": {
+        "content_type": "İçerik türü",
+        "fetched_at": "Getirildi",
+        "preview": "Yük önizlemesi (ilk 200 bayt)",
+        "size": "Boyut",
+        "title": "Sonuç"
+      },
+      "step1": {
+        "title": "Sorgu için bir eş seçin"
+      },
+      "step2": {
+        "title": "Eşten içerik getir"
+      }
+    },
+    "diagnostics": {
+      "empty": "Eşleşen olay yok. Filtreleri ayarlayın veya bekleyin.",
+      "more": "genişletmek için dokunun",
+      "no_summary": "(yük özeti yok)",
+      "search_hint": "Mesaj metni veya event_type ile filtrele",
+      "title": "Tanılama"
+    },
+    "interfaces": {
+      "empty": "Yapılandırılmış taşıyıcı yok.",
+      "not_measured": "Henüz ölçülmedi",
+      "peers": "eş",
+      "refresh": "Yenile",
+      "row": {
+        "bytes_in": "Gelen bayt",
+        "bytes_out": "Giden bayt",
+        "reach": "Erişim %",
+        "status": "Durum"
+      },
+      "status": {
+        "active": "Etkin",
+        "degraded": "Bozulmuş",
+        "idle": "Boşta",
+        "unknown": "Bilinmiyor"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Telemetri pipeline'ımızı yayınladığımızda eşler gerçek bir haritada görünecek. O zamana kadar şu anda görebilecekleriniz:",
+        "title": "Uydurulmuş konum yok"
+      },
+      "future": {
+        "bullet_announces": "Bölgeye göre kaplanmış gerçek zamanlı duyurular",
+        "bullet_locations": "Telemetriden eş konumları",
+        "bullet_transport": "Taşıyıcı-bağlantı kaplaması (TCP / LoRa / I2P / AX.25)",
+        "title": "Bunun daha sonra göstereceği"
+      },
+      "hero": {
+        "subtitle": "Gerçek harita telemetri pipeline ile geliyor.",
+        "title": "Coğrafi görünüm"
+      },
+      "refresh": "Yenile",
+      "today": {
+        "canonical": "Kanonik eşler",
+        "other": "Diğer eşler",
+        "title": "Bugün elimizdekiler",
+        "trusted": "Güvenilir eşler"
+      }
+    },
+    "paths": {
+      "empty": "Henüz yol olayı yok.",
+      "kind_added": "eklendi",
+      "kind_changed": "değişti",
+      "kind_lost": "kayboldu",
+      "kind_other": "olay",
+      "no_static_table_note": "Edge 1.0 statik bir yol tablosu sunmuyor; bu ekran yalnızca canlı değişiklikleri gösterir. Yeniden dağıtım durumu sıfırlayabilir.",
+      "section_recent": "Son yol olayları",
+      "title": "Canlı yollar"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Arka plan (hex)",
+      "appearance_fg_label": "Ön plan (hex)",
+      "appearance_icon_label": "Simge",
+      "appearance_save": "Görünümü kaydet",
+      "appearance_title": "Görünüm",
+      "cancel_button": "İptal",
+      "confirm_block_body": "Engelleme, bu eşten tüm trafiği reddedecek. Daha sonra engellemeyi kaldırabilirsiniz.",
+      "confirm_block_button": "Engelle",
+      "confirm_block_title": "Bu eşi engellensin mi?",
+      "copy_key_id": "Anahtar kimliğini kopyala",
+      "last_ok_days_ago": "{n}g önce",
+      "last_ok_hours_ago": "{n}sa önce",
+      "last_ok_just_now": "Az önce",
+      "last_ok_min_ago": "{n} dk önce",
+      "last_ok_never": "Asla",
+      "not_found": "Eş bulunamadı",
+      "notes_empty": "Not yok",
+      "notes_title": "Notlar",
+      "reachability_empty": "Henüz ölçülmedi",
+      "reachability_title": "Erişilebilirlik",
+      "sas_close": "Kapat",
+      "sas_digits_label": "Rakamlar",
+      "sas_instructions": "Bunları güvenilir bir kanalla (ses/video/yüz yüze) eşle karşılaştırın. Her iki taraf eşleşirse, eş doğrulanır — güveni TRUSTED olarak değiştirin.",
+      "sas_modal_title": "Kısa kimlik doğrulama dizisi",
+      "sas_show_button": "SAS kodunu göster",
+      "sas_title": "Kimlik doğrula (SAS)",
+      "sas_words_label": "Kelimeler",
+      "title": "Eş ayrıntısı",
+      "trust_state_title": "Güven durumu"
+    },
+    "peers": {
+      "add_peer_cancel": "İptal",
+      "add_peer_fab": "Eş ekle",
+      "add_peer_paste_label": "Düğüm kodunu yapıştır",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR tara",
+      "add_peer_scan_qr_unavailable": "QR tarama yakında",
+      "add_peer_submit": "Ekle",
+      "add_peer_title": "Eş ekle",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Davet etmek için düğüm kodunuzu paylaşın veya bir eşin kodunu ekleyin.",
+      "empty_title": "Henüz eş yok",
+      "filter_all": "Tümü",
+      "filter_blocked": "Engellenenler",
+      "filter_canonical": "Kanonik",
+      "filter_trusted": "Güvenilir",
+      "filter_unknown": "Bilinmeyen",
+      "filter_untrusted": "Güvenilmez",
+      "show_infra": "CIRIS altyapısını göster",
+      "title": "Eşler",
+      "trust_blocked": "engellenmiş",
+      "trust_trusted": "güvenilir",
+      "trust_unknown": "bilinmiyor",
+      "trust_untrusted": "güvenilmez"
+    },
+    "queue": {
+      "failures": {
+        "send": "Gönderme hataları",
+        "title": "Hatalar",
+        "verify": "Doğrulama hataları"
+      },
+      "refresh": "Yenile",
+      "stats": {
+        "depth": "Kuyruk derinliği",
+        "received": "Alındı",
+        "sent": "Gönderildi",
+        "title": "Kuyruk istatistikleri"
+      },
+      "throughput": {
+        "bytes_in": "Gelen bayt",
+        "bytes_out": "Giden bayt",
+        "received": "Alındı",
+        "sent": "Gönderildi",
+        "session": "Bu oturumun toplamı",
+        "title": "Verim"
+      }
+    },
+    "stream": {
+      "clear": "Temizle",
+      "dismiss": "Kapat",
+      "event_count": "{count} olay",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Duraklat",
+      "reconnect": "Yeniden bağlan",
+      "resume": "Devam et",
+      "resume_notice": "Yeniden bağlandı. Bazı olaylar kaçırılmış olabilir.",
+      "retry": "Yeniden dene"
+    },
+    "trust_graph": {
+      "empty": "Görselleştirilecek eş yok.",
+      "legend": {
+        "blocked": "Engellenmiş",
+        "canonical_hint": "Daha kalın halka çizgisi = kanonik (ajanla birlikte gelir).",
+        "edge_hint": "Kenar opaklığı, ortam başına erişilebilirliği yansıtır.",
+        "title": "Güven durumu",
+        "trusted": "Güvenilir",
+        "unknown": "Bilinmiyor",
+        "untrusted": "Güvenilmez"
+      },
+      "refresh": "Yenile",
+      "summary": "{count} eş · {canonical} kanonik"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Ajan modu",
+      "subtitle": "Bu ajanın federasyona katılma şeklini değiştir. Ağ ekranını yansıtır."
+    },
+    "brightness": "Parlaklık",
+    "brightness_light": "Açık",
+    "brightness_system": "Sistem",
+    "brightness_dark": "Koyu"
+  },
+  "commons": {
+    "layer": {
+      "section": {
+        "identities": "Kimlikler",
+        "trust": "Güven",
+        "policies": "Güven politikaları"
+      },
+      "badge": {
+        "coming_soon": "ÇOK YAKINDA"
+      },
+      "agent": {
+        "title": "Ajan (Öz)",
+        "subtitle": "Ajanın kendisi — her ölçekte örtük öz.",
+        "identities_description": "Ajanın kendi kimlik anahtarı — her katkıyı imzaladığı federasyon adresi. Kolay ad yerel yapılandırmadan; key_id CIRISEdge'den gelir.",
+        "trust_description": "Öz-güven temeldir. Özyinelemeli Altın Kural'ın muafiyet maddesi yoktur — ajan başkalarından ne talep ediyorsa, kendisini de aynı ölçütle bağlamak zorundadır.",
+        "policies_description": "Öze uygulanan politikalar: kimlik rotasyon sıklığı, sertifika yenileme, ajanın bu kapsamda imzalamaya hazır olduğu içerikler."
+      },
+      "family": {
+        "title": "Aile",
+        "subtitle": "Bu operatörün kimliğini paylaşan diğer CIRIS örnekleri.",
+        "identities_description": "Kardeş örnekler (aynı ajanın farklı çalışma zamanı örnekleri) ve occurrence_id'leri. Kolay ad operatör yapılandırmasından gelir.",
+        "trust_description": "Aile üyeleri varsayılan olarak operatörün imza anahtarını paylaşır — doğrudan güven temel düzeydir. Çoklu örnek koordinasyonu uyarınca paylaşılan kapatma / uyanma kararları.",
+        "policies_description": "Örnekler arası politikalar: paylaşılan görev sahiplenme, çoklu örnek güvenlik sınırları, aile kapsamlı eylemler için karar nisabı."
+      },
+      "local_community": {
+        "title": "Yerel Topluluk",
+        "subtitle": "Yerel olarak güvenilen eşler — ev kanalı, hane, tek lonca.",
+        "identities_description": "Operatör tarafından açıkça güvenilen eşler. Kolay ad rehberden; key_id duyuru tablosundan gelir.",
+        "trust_description": "Operatör tarafından doğrudan tanınan güven. İstenildiği zaman geri alınabilir. Yerel kapsamdaki katkılar yerel kohortta kalır ve federasyona yayımlanmaz.",
+        "policies_description": "Topluluk başına politikalar: kimin davet edebileceği, hangi içerik sınıflarına izin verildiği, bu kapsamdaki anlaşmazlıkların nasıl çözüldüğü."
+      },
+      "global_communities": {
+        "title": "Küresel Topluluklar",
+        "subtitle": "Ajanın katıldığı, topluluklar arası ilgi grupları.",
+        "identities_description": "Ajanın katıldığı bağlı topluluklar (kooperatifler, meslek kuruluşları, dayanışma ağları). Kolay ad accord_holder kayıt defterinden; aksi halde key_id'den gelir.",
+        "trust_description": "Güven, topluluk üyeliği aracılığıyla geçişlidir. Her topluluğun kendi kabul ölçütleri ve kendi sertifika disiplini vardır.",
+        "policies_description": "Aidiyet kapsamlı politikalar: ajanın hangi topluluklardan rehberlik kabul edeceği, rakip aidiyetler arasındaki çatışmaların çözümü."
+      },
+      "global_commons": {
+        "title": "Küresel Müşterekler",
+        "subtitle": "Evrensel katman olarak federasyon — insanlık, ekoloji, altyapının kendisi.",
+        "identities_description": "Federasyon kapsamında görünen tüm kimlikler — humanity_accord durdurma yetkisi sahipleri, accord_holder asal kimlikleri ve geniş eş havuzu dahil.",
+        "trust_description": "Evrensel kapsamdaki güven, federasyonun kendi sertifika disiplini tarafından verilir. Özyinelemeli Altın Kural bu kapsamda her asal kimliği — CIRIS L3C dahil — bağlar.",
+        "policies_description": "Federasyon çapındaki anayasal sınırlar: humanity_accord durdurma yetkisi, accord_holder ayrılmış ön ekleri, locality:decision nisap büyüklüğü."
+      }
+    },
+    "federation": {
+      "commons": {
+        "title": "Müşterekler",
+        "description": "Federasyon katkı kartları: anlaşma dosyaları, güvenlik testleri, davranış tanıkları, kıstas güncellemeleri, geri çekmeler, yetki devirleri. Her biri kutupluluk, güven, tanık çeşitliliği ve Edge'in ContentFetch taşımacılığıyla çözümlenen denetim zinciri kökenini taşır."
+      },
+      "participate": {
+        "title": "Katıl",
+        "description": "Federasyon ihtiyaç sicili — ajanlar gereksinimlerini (kıstas incelemesi, güvenlik tanığı, yetki devri kapsamı) need:{domain}:{kind} sertifikaları olarak kaydeder; diğer ajanlar görür, puanlar ve yanıt verir."
+      },
+      "environment_graph": {
+        "title": "Çevre Grafiği",
+        "description": "Lens'ten türetilen çevre grafiği — kohort başına manifold uyum skorları, dağıtımsal erişim ölçümleri, ilişkili eylem tespitleri. Federasyon dizininin üzerindeki grafik katmanı; ajan karar verirken buna karşı akıl yürütür."
+      },
+      "delegation": {
+        "title": "Yetki Devri",
+        "description": "Yetki devri grafiği: bu ajana ve ondan devredilen kapsamlar, tahsis zaman damgaları, evidence_refs ve varsa geri çekme zincirleri. 4 yapısal ilkelden biri — federasyon diziniyle ortak sahiplenilir."
+      },
+      "trust_topology": {
+        "title": "Güven Topolojisi",
+        "description": "Federasyon güven grafiği — eşler düğüm, güven tahsisleri kenar olarak (doğrudan / devredilmiş / hasım), kenar rengi = taşımacılık erişilebilirliği, düğüm boyutu = toplam güven ağırlığı."
+      },
+      "constitutional": {
+        "title": "Anayasal",
+        "description": "Anlaşma sahibi kimlik yüzeyi — FSD-002 §4.1 uyarınca tek anayasal asimetri. Yalnızca identity_type=accord_holder anahtarlar accord:* sertifikaları yayımlayabilir; bu ekran mevcut sahipleri, yayımladıkları accord-ön ekli ifadeleri ve ayrılmış ön ek uygulama denetimini gösterir."
+      }
+    }
+  },
+  "nav": {
+    "group": {
+      "agent": "Ajan",
+      "manage": "Yönetim",
+      "commons_layers": "Müşterekler",
+      "federation": "Federasyon",
+      "client": "İstemci"
+    },
+    "surface": {
+      "sessions": "Oturumlar",
+      "interact": "Etkileşim",
+      "scheduler": "Zamanlayıcı",
+      "tickets": "Biletler",
+      "tools": "Araçlar",
+      "services": "Hizmetler",
+      "logs": "Günlükler",
+      "telemetry": "Telemetri",
+      "graph_memory": "Grafik",
+      "memory": "Bellek",
+      "wise_authority": "Bilge Otorite",
+      "llm_settings": "LLM",
+      "system": "Sistem",
+      "runtime": "Çalışma Zamanı",
+      "config": "Yapılandırma",
+      "skills": "Beceriler",
+      "agent_settings": "Ayarlar",
+      "health_reputation": "Sağlık ve İtibar",
+      "users": "Kullanıcılar",
+      "adapters": "Adaptörler",
+      "network": "Ağ",
+      "audit": "Denetim",
+      "consent": "Onay",
+      "data": "Veri",
+      "trust": "Güven",
+      "wallet": "Cüzdan",
+      "billing": "Faturalama",
+      "agents_list": "Ajanlar",
+      "client_interface": "Arayüz"
+    }
+  }
 }

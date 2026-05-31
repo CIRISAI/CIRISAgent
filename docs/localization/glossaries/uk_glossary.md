@@ -128,3 +128,25 @@ This glossary defines the canonical translations for key CIRIS terms in Ukrainia
 | secondary_need_categories | secondary_need_categories | JSON key; keep in English |
 | rights_basis | rights_basis | JSON key; keep in English |
 | domain_hint | domain_hint | JSON key; keep in English |
+
+## Commons / Cohort-Scope UX (CEG 0.6)
+
+| English | Ukrainian | Transliteration | Notes |
+|---------|-----------|-----------------|-------|
+| Cohort scope | Охоплення когорти | Okhoplennia kohorty | Технічний термін CIRIS; у коді залишається `cohort_scope` |
+| Layer | Шар | Shar | UX-поверхня одного охоплення когорти |
+| Agent (Self) | Агент (Я) | Ahent (Ya) | Агент залишається «Агент»; Self — «Я» як рефлексивне самовизначення |
+| Family | Родина | Rodyna | Споріднені екземпляри — «брати й сестри» одного агента, не нуклеарна сім'я |
+| Local Community | Локальна спільнота | Lokalna spilnota | Спільнота географічної / безпосередньої близькості |
+| Global Communities | Глобальні спільноти | Hlobalni spilnoty | Множина — афіліації поверх кордонів |
+| Global Commons | Глобальне надбання | Hlobalne nadbannia | Найширше охоплення; універсальна федеративна поверхня |
+| Federation | Федерація | Federatsiia | Уже в глосарії — мережа рівноправних вузлів |
+| The Commons | Стрічка надбання | Strichka nadbannia | Екран карток внесків федерації — відрізняти від «Глобального надбання» як охоплення |
+| Constitutional | Конституційний | Konstytutsiinyi | Конституційна структура федерації, не державне право |
+| Delegation | Делегування | Deleguvannia | Граф делегування: передані та отримані повноваження |
+| Trust Topology | Топологія довіри | Topolohiia doviry | Граф довіри: вузли — пiри, ребра — надання довіри |
+| Participate | Брати участь | Braty uchast | Дієслово: брати участь / робити внесок у реєстр потреб |
+| Identities | Ідентичності | Identychnosti | Список відомих сутностей у даному охопленні |
+| Trust | Довіра | Dovira | Стан довіри по кожній ідентичності |
+| Trust policies | Політики довіри | Polityky doviry | Правила автоматичної довіри в даному охопленні |
+| Coming Soon | Незабаром | Nezabarom | Заглушка для непоставлених функцій |

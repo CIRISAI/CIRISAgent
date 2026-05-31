@@ -71,7 +71,7 @@ fun LayerHubScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .testable("layer_hub_${scope.id}"),
+            .testable("layer_hub_${scope.id.replace('-', '_')}"),
     ) {
         Column(
             modifier = Modifier
@@ -83,7 +83,7 @@ fun LayerHubScreen(
             LayerHeader(scope = scope, icon = scopeIcon(scope))
 
             LayerSection(
-                testTag = "layer_section_identities_${scope.id}",
+                testTag = "layer_section_identities_${scope.id.replace('-', '_')}",
                 icon = CIRISIcons.person,
                 titleKey = "commons.layer.section.identities",
                 descriptionKey = identitiesDescriptionKey(scope),
@@ -92,7 +92,7 @@ fun LayerHubScreen(
             )
 
             LayerSection(
-                testTag = "layer_section_trust_${scope.id}",
+                testTag = "layer_section_trust_${scope.id.replace('-', '_')}",
                 icon = CIRISIcons.shield,
                 titleKey = "commons.layer.section.trust",
                 descriptionKey = trustDescriptionKey(scope),
@@ -101,7 +101,7 @@ fun LayerHubScreen(
             )
 
             LayerSection(
-                testTag = "layer_section_policies_${scope.id}",
+                testTag = "layer_section_policies_${scope.id.replace('-', '_')}",
                 icon = CIRISIcons.lock,
                 titleKey = "commons.layer.section.policies",
                 descriptionKey = policiesDescriptionKey(scope),

@@ -495,7 +495,11 @@ class DesktopAppHelper:
         # with hyphens normalized to underscores.
         menu_items = {
             # Sidebar-driven (2.9.4 EpistemicSidebar)
-            "Network": "nav_epistemic_network",
+            # Phase B (2026-05-31): "Network" alias preserved for existing
+            # walk-tests; it now resolves to the LayerGlobalCommons surface
+            # under the COMMONS_GROUP.
+            "Network": "nav_epistemic_layer_global_commons",
+            "Global Commons": "nav_epistemic_layer_global_commons",
             # Legacy menu-driven
             "Adapters": "menu_adapters",
             "Settings": "btn_settings",  # Direct button, not in menu

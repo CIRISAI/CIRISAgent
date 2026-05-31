@@ -239,10 +239,11 @@ class FederationWalkTest:
         """Best-effort back-nav to the Network hub between screen visits.
 
         The canonical "drop me at the hub" path is the EpistemicSidebar's
-        Network row (helper.navigate_to("Network")) — the sidebar is always
-        visible post-login, so a single click on `nav_epistemic_network`
-        reliably routes back to the hub. We try a legacy back button first
-        for screens that have one, then fall through to sidebar nav.
+        Global Commons row (helper.navigate_to("Network") still works as the
+        alias) — the sidebar is always visible post-login, so a single click
+        on `nav_epistemic_layer_global_commons` reliably routes back to the
+        hub. We try a legacy back button first for screens that have one,
+        then fall through to sidebar nav.
         """
         # Try the system back button (common testTag) then re-verify hub root.
         for back_tag in ("btn_back", "btn_top_back", "btn_nav_back"):

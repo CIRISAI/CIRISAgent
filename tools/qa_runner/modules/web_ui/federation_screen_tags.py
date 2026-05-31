@@ -27,11 +27,15 @@ from typing import Dict, List, Optional
 # ───────────────────────────────────────────────────────────────────
 # Sidebar nav entry (EpistemicSidebar)
 # ───────────────────────────────────────────────────────────────────
-# EpistemicSidebar item that opens the Network hub. The sidebar tags every
-# nav row as `nav_epistemic_<slug>` where <slug> is the surface id with
-# hyphens normalized to underscores. The Network surface id is "network",
-# so its tag is "nav_epistemic_network".
-NAV_EPISTEMIC_NETWORK = "nav_epistemic_network"
+# EpistemicSidebar item that opens the federation transport hub. The sidebar
+# tags every nav row as `nav_epistemic_<slug>` where <slug> is the surface id
+# with hyphens normalized to underscores. Phase B (2026-05-31): federation
+# transport substrate moved from NavSurface.Network ("network") to
+# NavSurface.LayerGlobalCommons ("layer-global-commons"). The legacy
+# constant name is kept for callers that historically imported
+# NAV_EPISTEMIC_NETWORK; it now points at the new tag.
+NAV_EPISTEMIC_NETWORK = "nav_epistemic_layer_global_commons"
+NAV_EPISTEMIC_LAYER_GLOBAL_COMMONS = "nav_epistemic_layer_global_commons"
 
 
 # ───────────────────────────────────────────────────────────────────

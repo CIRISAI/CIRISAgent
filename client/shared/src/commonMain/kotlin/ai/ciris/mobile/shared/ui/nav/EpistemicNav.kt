@@ -107,6 +107,11 @@ sealed class NavSurface(
      * Edge data is source of truth; UI is display + content-type-aware CRUD.
      * Lands in lockstep with CIRISEdge 1.0 / 1.1 (CIRISEdge#23–29 + the
      * sibling ask threads referenced in NETWORK_FFI_GAPS).
+     *
+     * Phase B (2026-05-31): no longer in `MANAGE_GROUP` — folded into
+     * [LayerGlobalCommons] in `COMMONS_GROUP`. Surface object retained
+     * because `surfaceToScreen` / `screenToSurface` keep a forwarding
+     * mapping for backward compat, but the sidebar entry is gone.
      */
     object Network : NavSurface("network", "Network", CIRISIcons.globe)
 
@@ -297,7 +302,9 @@ val MANAGE_GROUP = NavGroup(
         NavSurface.HealthReputation,
         NavSurface.Users,
         NavSurface.Adapters,
-        NavSurface.Network,         // federation transport substrate (Edge 1.0/1.1)
+        // Phase B (2026-05-31): NavSurface.Network removed — federation
+        // transport substrate now lives under COMMONS_GROUP as
+        // NavSurface.LayerGlobalCommons.
         NavSurface.Data,            // + Audit, Consent
         NavSurface.Trust,
         NavSurface.Billing,         // + Wallet

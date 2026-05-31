@@ -178,13 +178,13 @@ fun EpistemicSidebar(
                     expanded = expanded,
                     isActive = isActiveGroup,
                     onToggle = {
+                        // Pure expand/collapse. The earlier "useful landing"
+                        // jump to the first non-gated surface produced an
+                        // expand-and-jump-away surprise (e.g. tapping Manage →
+                        // jumped into Health Reputation card instead of showing
+                        // the group's options). Let the user expand to see
+                        // options, then pick one explicitly.
                         groupExpanded[group.id] = !expanded
-                        // If toggling a non-active group ON, jump to its first non-gated surface
-                        // so the user has a useful landing.
-                        if (!expanded && !isActiveGroup) {
-                            val firstUngated = group.surfaces.firstOrNull { it.gate == null }
-                            (firstUngated ?: group.surfaces.first()).let(onSurfaceSelected)
-                        }
                     },
                 )
                 if (expanded) {

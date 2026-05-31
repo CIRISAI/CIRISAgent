@@ -2404,5 +2404,45 @@
         "description": "Accord-holder identity surface — the one constitutional asymmetry per FSD-002 §4.1. Only identity_type=accord_holder keys may emit accord:* attestations; this screen shows current holders, their issued accord-prefix emissions, and the reserved-prefix enforcement audit."
       }
     }
+  },
+  "nav": {
+    "group": {
+      "agent": "Agent",
+      "manage": "Manage",
+      "commons_layers": "Commons",
+      "federation": "Federation",
+      "client": "Client"
+    },
+    "surface": {
+      "sessions": "Sessions",
+      "interact": "Interact",
+      "scheduler": "Scheduler",
+      "tickets": "Tickets",
+      "tools": "Tools",
+      "services": "Services",
+      "logs": "Logs",
+      "telemetry": "Telemetry",
+      "graph_memory": "Graph",
+      "memory": "Memory",
+      "wise_authority": "Wise Authority",
+      "llm_settings": "LLM",
+      "system": "System",
+      "runtime": "Runtime",
+      "config": "Config",
+      "skills": "Skills",
+      "agent_settings": "Settings",
+      "health_reputation": "Health & Reputation",
+      "users": "Users",
+      "adapters": "Adapters",
+      "network": "Network",
+      "audit": "Audit",
+      "consent": "Consent",
+      "data": "Data",
+      "trust": "Trust",
+      "wallet": "Wallet",
+      "billing": "Billing",
+      "agents_list": "Agents",
+      "client_interface": "Interface"
+    }
   }
 }

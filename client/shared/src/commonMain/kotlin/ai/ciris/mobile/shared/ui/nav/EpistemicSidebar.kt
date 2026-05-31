@@ -334,7 +334,10 @@ private fun NavGroupHeader(
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            text = group.label.uppercase(),
+            text = (group.labelKey
+                ?.let { localizedString(it) }
+                ?.takeIf { it.isNotEmpty() && it != group.labelKey }
+                ?: group.label).uppercase(),
             color = when {
                 isActive -> onSurfaceColor.copy(alpha = 0.85f)
                 else -> onSurfaceColor.copy(alpha = 0.55f)

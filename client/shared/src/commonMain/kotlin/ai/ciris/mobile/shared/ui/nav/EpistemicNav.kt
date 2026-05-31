@@ -60,48 +60,59 @@ sealed class NavSurface(
     // Agent group — runtime interaction surfaces
     // ═══════════════════════════════════════════════════════════════════════════
 
-    object Sessions : NavSurface("sessions", "Sessions", CIRISIcons.dateRange)
+    object Sessions : NavSurface("sessions", "Sessions", CIRISIcons.dateRange,
+        labelKey = "nav.surface.sessions",)
     object Interact : NavSurface(
         id = "interact", label = "Interact", icon = CIRISIcons.thought,
         children = listOf(Sessions),
-    )
+        labelKey = "nav.surface.interact",)
 
-    object Scheduler : NavSurface("scheduler", "Scheduler", CIRISIcons.stage)
+    object Scheduler : NavSurface("scheduler", "Scheduler", CIRISIcons.stage,
+        labelKey = "nav.surface.scheduler",)
     object Tickets : NavSurface(
         id = "tickets", label = "Tickets", icon = CIRISIcons.task,
         children = listOf(Scheduler),
-    )
+        labelKey = "nav.surface.tickets",)
 
-    object Tools : NavSurface("tools", "Tools", CIRISIcons.tools)
+    object Tools : NavSurface("tools", "Tools", CIRISIcons.tools,
+        labelKey = "nav.surface.tools",)
     object Services : NavSurface(
         id = "services", label = "Services", icon = CIRISIcons.bus,
         children = listOf(Tools),
-    )
+        labelKey = "nav.surface.services",)
 
-    object Logs : NavSurface("logs", "Logs", CIRISIcons.log)
+    object Logs : NavSurface("logs", "Logs", CIRISIcons.log,
+        labelKey = "nav.surface.logs",)
     object Telemetry : NavSurface(
         id = "telemetry", label = "Telemetry", icon = CIRISIcons.telemetry,
         children = listOf(Logs),
-    )
+        labelKey = "nav.surface.telemetry",)
 
-    object GraphMemory : NavSurface("graph-memory", "Graph", CIRISIcons.graph)
+    object GraphMemory : NavSurface("graph-memory", "Graph", CIRISIcons.graph,
+        labelKey = "nav.surface.graph_memory",)
     object Memory : NavSurface(
         id = "memory", label = "Memory", icon = CIRISIcons.memory,
         children = listOf(GraphMemory),
-    )
+        labelKey = "nav.surface.memory",)
 
-    object WiseAuthority : NavSurface("wise-authority", "Wise Authority", CIRISIcons.agent)
+    object WiseAuthority : NavSurface("wise-authority", "Wise Authority", CIRISIcons.agent,
+        labelKey = "nav.surface.wise_authority",)
 
     // Settings sub-tree — collects LLM / System / Runtime / Config / Skills
-    object LLMSettings : NavSurface("llm-settings", "LLM", CIRISIcons.model)
-    object System : NavSurface("system", "System", CIRISIcons.requirements)
-    object Runtime : NavSurface("runtime", "Runtime", CIRISIcons.processing)
-    object Config : NavSurface("config", "Config", CIRISIcons.instructions)
-    object Skills : NavSurface("skills", "Skills", CIRISIcons.skill)
+    object LLMSettings : NavSurface("llm-settings", "LLM", CIRISIcons.model,
+        labelKey = "nav.surface.llm_settings",)
+    object System : NavSurface("system", "System", CIRISIcons.requirements,
+        labelKey = "nav.surface.system",)
+    object Runtime : NavSurface("runtime", "Runtime", CIRISIcons.processing,
+        labelKey = "nav.surface.runtime",)
+    object Config : NavSurface("config", "Config", CIRISIcons.instructions,
+        labelKey = "nav.surface.config",)
+    object Skills : NavSurface("skills", "Skills", CIRISIcons.skill,
+        labelKey = "nav.surface.skills",)
     object AgentSettings : NavSurface(
         id = "agent-settings", label = "Settings", icon = CIRISIcons.settings,
         children = listOf(LLMSettings, System, Runtime, Config, Skills),
-    )
+        labelKey = "nav.surface.agent_settings",)
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Manage group — operator surfaces
@@ -113,9 +124,11 @@ sealed class NavSurface(
     // LENSCORE_CAPACITY gate; the surface itself is not gated.
     object HealthReputation : NavSurface(
         id = "health-reputation", label = "Health & Reputation", icon = CIRISIcons.identity,
-    )
-    object Users : NavSurface("users", "Users", CIRISIcons.person)
-    object Adapters : NavSurface("adapters", "Adapters", CIRISIcons.adapter)
+        labelKey = "nav.surface.health_reputation",)
+    object Users : NavSurface("users", "Users", CIRISIcons.person,
+        labelKey = "nav.surface.users",)
+    object Adapters : NavSurface("adapters", "Adapters", CIRISIcons.adapter,
+        labelKey = "nav.surface.adapters",)
     /**
      * Federation transport substrate — Reticulum + HTTPS + cohabitation Local.
      * Edge data is source of truth; UI is display + content-type-aware CRUD.
@@ -127,22 +140,27 @@ sealed class NavSurface(
      * because `surfaceToScreen` / `screenToSurface` keep a forwarding
      * mapping for backward compat, but the sidebar entry is gone.
      */
-    object Network : NavSurface("network", "Network", CIRISIcons.globe)
+    object Network : NavSurface("network", "Network", CIRISIcons.globe,
+        labelKey = "nav.surface.network",)
 
-    object Audit : NavSurface("audit", "Audit", CIRISIcons.audit)
-    object Consent : NavSurface("consent", "Consent", CIRISIcons.lock)
+    object Audit : NavSurface("audit", "Audit", CIRISIcons.audit,
+        labelKey = "nav.surface.audit",)
+    object Consent : NavSurface("consent", "Consent", CIRISIcons.lock,
+        labelKey = "nav.surface.consent",)
     object Data : NavSurface(
         id = "data", label = "Data", icon = CIRISIcons.pkg,
         children = listOf(Audit, Consent),
-    )
+        labelKey = "nav.surface.data",)
 
-    object Trust : NavSurface("trust", "Trust", CIRISIcons.shield)
+    object Trust : NavSurface("trust", "Trust", CIRISIcons.shield,
+        labelKey = "nav.surface.trust",)
 
-    object Wallet : NavSurface("wallet", "Wallet", CIRISIcons.keySecure)
+    object Wallet : NavSurface("wallet", "Wallet", CIRISIcons.keySecure,
+        labelKey = "nav.surface.wallet",)
     object Billing : NavSurface(
         id = "billing", label = "Billing", icon = CIRISIcons.wallet,
         children = listOf(Wallet),
-    )
+        labelKey = "nav.surface.billing",)
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Commons group — 5 UX-facing CEG 0.6 cohort scopes (per CEG §02 grammar:137).
@@ -231,8 +249,9 @@ sealed class NavSurface(
     object AgentsList : NavSurface(
         id = "agents-list", label = "Agents", icon = CIRISIcons.identity,
         gate = SubstrateGate.POST_SUBSTRATE_SUBSTITUTION,
-    )
-    object ClientInterface : NavSurface("client-interface", "Interface", CIRISIcons.home)
+        labelKey = "nav.surface.agents_list",)
+    object ClientInterface : NavSurface("client-interface", "Interface", CIRISIcons.home,
+        labelKey = "nav.surface.client_interface",)
 }
 
 /**
@@ -302,6 +321,13 @@ data class NavGroup(
     val surfaces: List<NavSurface>,
     /** Optional accent color hex; null = use default. */
     val accentHex: String? = null,
+    /**
+     * Optional localization key for the group's ALL-CAPS section header. When
+     * set the sidebar resolves `localizedString(labelKey)` and falls back to
+     * [label] if the locale has no entry. Per 2.9.4 release-prep: every group
+     * carries one.
+     */
+    val labelKey: String? = null,
 )
 
 val AGENT_GROUP = NavGroup(
@@ -317,7 +343,7 @@ val AGENT_GROUP = NavGroup(
         NavSurface.WiseAuthority,
         NavSurface.AgentSettings,   // + LLM, System, Runtime, Config, Skills
     ),
-)
+        labelKey = "nav.group.agent",)
 
 val MANAGE_GROUP = NavGroup(
     id = "manage",
@@ -334,7 +360,7 @@ val MANAGE_GROUP = NavGroup(
         NavSurface.Trust,
         NavSurface.Billing,         // + Wallet
     ),
-)
+        labelKey = "nav.group.manage",)
 
 /**
  * The 5 CEG 0.6 cohort scopes (folded 7 → 5; see [CohortScope.kt]). Each surface
@@ -354,7 +380,7 @@ val COMMONS_GROUP = NavGroup(
         NavSurface.LayerGlobalCommunities,
         NavSurface.LayerGlobalCommons,
     ),
-)
+        labelKey = "nav.group.commons_layers",)
 
 val FEDERATION_GROUP = NavGroup(
     id = "federation",
@@ -369,7 +395,7 @@ val FEDERATION_GROUP = NavGroup(
         NavSurface.TrustTopology,
         NavSurface.Constitutional,
     ),
-)
+        labelKey = "nav.group.federation",)
 
 val CLIENT_GROUP = NavGroup(
     id = "client",
@@ -379,7 +405,7 @@ val CLIENT_GROUP = NavGroup(
         NavSurface.AgentsList,
         NavSurface.ClientInterface,
     ),
-)
+        labelKey = "nav.group.client",)
 
 /** All groups in display order. Commons group inserted between Manage and Federation. */
 val EPISTEMIC_NAV_GROUPS = listOf(AGENT_GROUP, MANAGE_GROUP, COMMONS_GROUP, FEDERATION_GROUP, CLIENT_GROUP)

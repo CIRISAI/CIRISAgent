@@ -126,6 +126,45 @@ sealed class NavSurface(
     )
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Commons group — 5 UX-facing CEG 0.6 cohort scopes (per CEG §02 grammar:137).
+    // The 7 → 5 fold: self / family / community / affiliations are 1:1; species +
+    // planet + federation merge into Global Commons. See `CohortScope.kt` for the
+    // mapping rationale. Phase A (2026-05-31): all 5 render LayerHubScreen with
+    // section stubs (Identities · Trust · Policies) pinned to EDGE_PEERRESOLVER.
+    // Phase B folds the existing Network federation hub into LayerGlobalCommons.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /** Self — the agent itself. Implicit in the user's mental model. */
+    object LayerAgent : NavSurface(
+        id = "layer-agent", label = "Agent (Self)", icon = CIRISIcons.person,
+        gate = SubstrateGate.EDGE_PEERRESOLVER,
+    )
+
+    /** Other CIRIS occurrences sharing the operator's identity. */
+    object LayerFamily : NavSurface(
+        id = "layer-family", label = "Family", icon = CIRISIcons.home,
+        gate = SubstrateGate.EDGE_PEERRESOLVER,
+    )
+
+    /** One home channel / Discord guild / household — locally-trusted peers. */
+    object LayerLocalCommunity : NavSurface(
+        id = "layer-local-community", label = "Local Community", icon = CIRISIcons.location,
+        gate = SubstrateGate.EDGE_PEERRESOLVER,
+    )
+
+    /** Cross-community affinity groups the agent has joined (CEG affiliations). */
+    object LayerGlobalCommunities : NavSurface(
+        id = "layer-global-communities", label = "Global Communities", icon = CIRISIcons.shield,
+        gate = SubstrateGate.EDGE_PEERRESOLVER,
+    )
+
+    /** The federation as the universal layer (folds species + planet + federation). */
+    object LayerGlobalCommons : NavSurface(
+        id = "layer-global-commons", label = "Global Commons", icon = CIRISIcons.globe,
+        gate = SubstrateGate.EDGE_PEERRESOLVER,
+    )
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Federation group — 5 of 6 gated on substrate work
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -265,6 +304,26 @@ val MANAGE_GROUP = NavGroup(
     ),
 )
 
+/**
+ * The 5 CEG 0.6 cohort scopes (folded 7 → 5; see [CohortScope.kt]). Each surface
+ * is a LayerHubScreen showing Identities · Trust · Policies at that scope. Phase A
+ * lands the scaffolding; Phase B folds existing Network federation surface into
+ * LayerGlobalCommons.
+ */
+val COMMONS_GROUP = NavGroup(
+    id = "commons-layers",
+    label = "Commons",
+    icon = CIRISIcons.globe,
+    accentHex = "#C96A38", // CIRISColors.BusTool — shares the federation accent
+    surfaces = listOf(
+        NavSurface.LayerAgent,
+        NavSurface.LayerFamily,
+        NavSurface.LayerLocalCommunity,
+        NavSurface.LayerGlobalCommunities,
+        NavSurface.LayerGlobalCommons,
+    ),
+)
+
 val FEDERATION_GROUP = NavGroup(
     id = "federation",
     label = "Federation",
@@ -290,8 +349,8 @@ val CLIENT_GROUP = NavGroup(
     ),
 )
 
-/** All four groups in display order. */
-val EPISTEMIC_NAV_GROUPS = listOf(AGENT_GROUP, MANAGE_GROUP, FEDERATION_GROUP, CLIENT_GROUP)
+/** All groups in display order. Commons group inserted between Manage and Federation. */
+val EPISTEMIC_NAV_GROUPS = listOf(AGENT_GROUP, MANAGE_GROUP, COMMONS_GROUP, FEDERATION_GROUP, CLIENT_GROUP)
 
 /**
  * Walk the entire surface tree (depth-first) — used by routers needing the

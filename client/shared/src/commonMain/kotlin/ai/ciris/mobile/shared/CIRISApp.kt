@@ -3178,6 +3178,27 @@ fun CIRISApp(
                 apiClient = apiClient,
                 onIssueClick = { url -> uriHandler.openUri(url) },
             )
+            // ── 2.9.4 — CEG 0.6 layer hubs (Identities · Trust · Policies) ──
+            Screen.LayerAgent -> ai.ciris.mobile.shared.ui.screens.commons.LayerHubScreen(
+                scope = ai.ciris.mobile.shared.ui.nav.CohortScope.AGENT,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.LayerFamily -> ai.ciris.mobile.shared.ui.screens.commons.LayerHubScreen(
+                scope = ai.ciris.mobile.shared.ui.nav.CohortScope.FAMILY,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.LayerLocalCommunity -> ai.ciris.mobile.shared.ui.screens.commons.LayerHubScreen(
+                scope = ai.ciris.mobile.shared.ui.nav.CohortScope.LOCAL_COMMUNITY,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.LayerGlobalCommunities -> ai.ciris.mobile.shared.ui.screens.commons.LayerHubScreen(
+                scope = ai.ciris.mobile.shared.ui.nav.CohortScope.GLOBAL_COMMUNITIES,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
+            Screen.LayerGlobalCommons -> ai.ciris.mobile.shared.ui.screens.commons.LayerHubScreen(
+                scope = ai.ciris.mobile.shared.ui.nav.CohortScope.GLOBAL_COMMONS,
+                onIssueClick = { url -> uriHandler.openUri(url) },
+            )
         }
                 } // close Box(modifier = contentModifier)
             } // close mainScreenContent lambda
@@ -3816,6 +3837,16 @@ private sealed class Screen {
      * existing `is Screen.NetworkPeerDetail` arm in the `when` dispatch.
      */
     data class NetworkPeerDetail(val keyId: String) : Screen()
+
+    // 2.9.4 — 5 CEG 0.6 cohort-scope layer hubs (Identities · Trust · Policies).
+    // Phase A: each renders LayerHubScreen with the appropriate CohortScope.
+    // Phase B: LayerGlobalCommons absorbs the existing NetworkScreen federation
+    // hub. Per CEG §02 grammar:137 and `CohortScope.kt` for the 7 → 5 fold.
+    object LayerAgent : Screen()
+    object LayerFamily : Screen()
+    object LayerLocalCommunity : Screen()
+    object LayerGlobalCommunities : Screen()
+    object LayerGlobalCommons : Screen()
 }
 
 /**
@@ -3878,6 +3909,12 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.Constitutional -> ai.ciris.mobile.shared.ui.nav.NavSurface.Constitutional
     Screen.AgentsList -> ai.ciris.mobile.shared.ui.nav.NavSurface.AgentsList
     Screen.VizSettings -> ai.ciris.mobile.shared.ui.nav.NavSurface.ClientInterface
+    // CEG 0.6 layer hubs (2.9.4 Phase A)
+    Screen.LayerAgent -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerAgent
+    Screen.LayerFamily -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerFamily
+    Screen.LayerLocalCommunity -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerLocalCommunity
+    Screen.LayerGlobalCommunities -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommunities
+    Screen.LayerGlobalCommons -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons
     // Flow-only / no sidebar
     Screen.Startup, Screen.Login, Screen.Setup, Screen.ServerConnection, Screen.Help -> null
 }
@@ -3918,6 +3955,12 @@ private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen
     ai.ciris.mobile.shared.ui.nav.NavSurface.Constitutional -> Screen.Constitutional
     ai.ciris.mobile.shared.ui.nav.NavSurface.AgentsList -> Screen.AgentsList
     ai.ciris.mobile.shared.ui.nav.NavSurface.ClientInterface -> Screen.VizSettings
+    // CEG 0.6 layer hubs (2.9.4 Phase A)
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LayerAgent -> Screen.LayerAgent
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LayerFamily -> Screen.LayerFamily
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LayerLocalCommunity -> Screen.LayerLocalCommunity
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommunities -> Screen.LayerGlobalCommunities
+    ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons -> Screen.LayerGlobalCommons
 }
 
 /**

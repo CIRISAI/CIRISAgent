@@ -14,6 +14,7 @@ Architecture:
 
 import asyncio
 import logging
+from contextvars import ContextVar
 from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
@@ -46,6 +47,21 @@ from ciris_engine.schemas.types import JSONDict
 F = TypeVar("F", bound=Callable[..., Any])
 
 logger = logging.getLogger(__name__)
+
+
+# Tracks whether the current async-context is inside a RECURSIVE_CONSCIENCE
+# step. The recursive-conscience handler legitimately calls
+# `_conscience_execution_step` internally to reuse the conscience evaluator;
+# without this flag, the nested CONSCIENCE_EXECUTION step would broadcast an
+# `aspdma_result` event with `is_recursive=False`, colliding with the outer
+# RECURSIVE_CONSCIENCE step's broadcast and producing two un-flagged
+# duplicates per recursive retry. The streaming verifier flags those as a
+# real failure (CIRISAgent#772). Setting this ContextVar in the outer
+# streaming_step wrapper and reading it in `_create_event_for_step` ensures
+# every recursive-path emission carries `is_recursive=True`, which the
+# verifier tolerates as a legitimate retry. Defaults to False so non-
+# recursive flows behave exactly as before.
+_in_recursive_conscience: ContextVar[bool] = ContextVar("in_recursive_conscience", default=False)
 
 # Global registry for paused thought coroutines
 _paused_thoughts: Dict[str, asyncio.Event] = {}
@@ -279,6 +295,16 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
             # broadcast helper's warning log.
             parent_event = _resolve_parent_event_for_step(step)
 
+            # Mark recursive-conscience scope so the nested
+            # `_conscience_execution_step` call (which internally re-uses
+            # the conscience evaluator) emits its aspdma_result event with
+            # `is_recursive=True`. Without this token, the nested
+            # CONSCIENCE_EXECUTION's broadcast collides with the initial
+            # one as an un-flagged duplicate (CIRISAgent#772).
+            recursive_token = (
+                _in_recursive_conscience.set(True) if step == StepPoint.RECURSIVE_CONSCIENCE else None
+            )
+
             try:
                 # Execute the original function
                 if parent_event is not None:
@@ -318,6 +344,9 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
 
                 # Don't broadcast errors as reasoning events - handled at higher level
                 raise
+            finally:
+                if recursive_token is not None:
+                    _in_recursive_conscience.reset(recursive_token)
 
         return cast(F, wrapper)
 
@@ -1200,7 +1229,14 @@ def _create_event_for_step(
         logger.debug("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
         return _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event, thought_item)
     if step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
-        is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE
+        # The recursive-conscience handler internally calls
+        # `_conscience_execution_step` to reuse the evaluator; that nested
+        # CONSCIENCE_EXECUTION fires inside an outer RECURSIVE_CONSCIENCE
+        # streaming context. Reading `_in_recursive_conscience` lets the
+        # nested broadcast carry `is_recursive=True` so the streaming
+        # verifier tolerates it as a retry instead of flagging it as a
+        # duplicate of the initial CONSCIENCE_EXECUTION (CIRISAgent#772).
+        is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE or _in_recursive_conscience.get()
         return _create_aspdma_result_event(step_data, timestamp, is_recursive_step, create_reasoning_event)
     if step == StepPoint.FINALIZE_ACTION:
         return _create_conscience_result_event(step_data, timestamp, create_reasoning_event)

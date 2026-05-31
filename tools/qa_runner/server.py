@@ -1442,11 +1442,58 @@ class APIServerManager:
         if system_status:
             self.console.print(f"[dim]  /v1/system/status: {system_status}[/dim]")
 
+        # Surface the actual ERROR/CRITICAL lines from incidents_latest.log
+        # (not the tail of console.log — the real cause is usually 9+ minutes
+        # upstream of the timeout, and tail-N would only show the polling
+        # noise that fired right before we gave up). The CI "Agent never
+        # reached WORK" bug used to require downloading artifacts and grep'ing
+        # by hand; surfacing all ERROR/CRITICAL lines here makes it visible
+        # right in the step log.
+        incidents_path = Path(f"logs/{self.database_backend}/incidents_latest.log")
+        if incidents_path.exists():
+            try:
+                content = incidents_path.read_text(errors="ignore")
+                lines = content.splitlines()
+                # Pull ALL ERROR/CRITICAL lines + the 5 lines after each (for
+                # traceback context). Dedup so a repeated handler doesn't
+                # explode the output.
+                surfaced: list[str] = []
+                seen: set[str] = set()
+                for i, line in enumerate(lines):
+                    if " - ERROR" in line or " - CRITICAL" in line or "RUNTIME SHUTDOWN REQUESTED" in line:
+                        # Include 5 trailing lines for traceback context
+                        block = lines[i : min(i + 6, len(lines))]
+                        key = "\n".join(block[:1])
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        surfaced.extend(block)
+                        surfaced.append("")  # blank separator
+                if surfaced:
+                    self.console.print(
+                        f"[red]  ERROR/CRITICAL lines from {incidents_path} "
+                        f"({len(seen)} distinct):[/red]"
+                    )
+                    for line in surfaced[:200]:  # cap at 200 lines total
+                        self.console.print(f"[dim]    {line[:300]}[/dim]")
+                else:
+                    self.console.print(
+                        f"[dim]  No ERROR/CRITICAL lines in {incidents_path} "
+                        f"({len(lines)} lines scanned)[/dim]"
+                    )
+            except Exception as exc:
+                self.console.print(f"[dim]  Could not read incidents log: {exc}[/dim]")
+        else:
+            self.console.print(f"[dim]  No incidents log at {incidents_path}[/dim]")
+
+        # ALSO show the last 20 console lines for completeness — useful when
+        # the failure is at the shell level (server died before logging set
+        # up the file handlers).
         console_log_path = getattr(self, "_console_log_path", None)
         if console_log_path and Path(console_log_path).exists():
             try:
                 recent = Path(console_log_path).read_text(errors="ignore").splitlines()[-20:]
-                self.console.print("[dim]  Recent console log:[/dim]")
+                self.console.print("[dim]  Recent console log (last 20 lines):[/dim]")
                 for line in recent:
                     self.console.print(f"[dim]    {line[:220]}[/dim]")
             except Exception as exc:

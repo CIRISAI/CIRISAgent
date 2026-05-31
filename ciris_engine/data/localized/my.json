@@ -2055,5 +2055,281 @@
     "metrics": "Metrics",
     "services": "ဝန်ဆောင်မှုs"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "ကွန်ရက်",
+    "identity_card": {
+      "title": "Federation အထောက်အထား",
+      "copy_address": "လိပ်စာ ကူးယူ",
+      "qr_label": "QR · ratchet / လည်ပတ်မှု",
+      "capabilities_title": "စွမ်းရည်များ",
+      "copied": "ကူးယူပြီး",
+      "copy_node_code": "Node code ကူးယူ",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Peer တစ်ဦးကို ဖိတ်ခေါ်ရန် ဤ code ကို မျှဝေပါ။ သူတို့သည် paste သို့မဟုတ် scan လုပ်နိုင်သည်။",
+      "node_code_title": "ကျွန်ုပ်၏ node code",
+      "peers_canonical": "Canonical",
+      "peers_total": "Peer စုစုပေါင်း",
+      "qr_placeholder_label": "QR code",
+      "signer_key_label": "လက်မှတ်ထိုးသူ key"
+    },
+    "mode_card": {
+      "title": "Agent မုဒ်",
+      "subtitle": "ဤ agent သည် federation တွင် မည်သို့ ပါဝင်သည်။ ပြောင်းလဲချိန်တွင် Edge ပြန်လည် စတင်မည်။",
+      "client_label": "Client",
+      "client_description": "အဝေး node သို့ အပြင်ဘက် ချိတ်ဆက်ပါ။",
+      "proxy_label": "Proxy",
+      "proxy_description": "Proxy federation မျက်နှာပြင်ပါသော ဒေသခံ agent။",
+      "proxy_default_marker": "(ပုံသေ)",
+      "server_label": "ဆာဗာ",
+      "server_description": "ပြည့်စုံသော federation node။",
+      "server_disk_gate": "≥256 GB အခမဲ့ disk လိုအပ်သည် · {available} အခမဲ့၊ {required} လိုအပ်သည်",
+      "confirm_change_title": "ပြန်လည် စတင်ရန် လိုအပ်သည်",
+      "confirm_change_body": "Agent မုဒ် ပြောင်းခြင်းသည် Edge ပြန်လည် စတင်ရန် လိုအပ်သည်။ ဆက်လုပ်မလား?",
+      "confirm_change_button": "Edge ပြန်လည် စတင်",
+      "cancel_button": "ပယ်ဖျက်",
+      "insufficient_disk_error": "SERVER မုဒ် အတွက် အခမဲ့ disk မလုံလောက်ပါ။ {available} အခမဲ့၊ {required} လိုအပ်သည်။"
+    },
+    "stats_strip": {
+      "peers": "Peers",
+      "transports": "Transports",
+      "queue": "တန်းစီ",
+      "errors": "အမှားများ",
+      "awaiting_edge_1_0": "Edge 1.0 ကို စောင့်ဆိုင်းနေသည်"
+    },
+    "tiles": {
+      "identity": "အထောက်အထား",
+      "map": "မြေပုံ",
+      "trust_graph": "ယုံကြည်မှု ဂရပ်",
+      "peers": "Peers",
+      "interfaces": "Interface များ",
+      "paths": "လမ်းကြောင်းများ",
+      "announces": "ကြေညာချက်များ",
+      "queue": "တန်းစီ",
+      "diagnostics": "စစ်ဆေးမှု",
+      "content": "အကြောင်းအရာ",
+      "coming_soon_badge": "မကြာမီ ရောက်ရှိမည်"
+    },
+    "sub_screens": {
+      "identity_description": "Federation အထောက်အထား — လက်မှတ်ထိုးသူ ကီး၊ ဟာ့ဒ်ဝဲ-ထိန်းသိမ်းမှု ထောက်ခံချက် ကွင်းဆက်၊ ratchet အခြေအနေ၊ လည်ပတ်မှု မှတ်တမ်း။",
+      "map_description": "ဒေသခံ federation အိမ်နီးချင်း၏ force-directed canvas — peers ကို node အဖြစ်၊ transport ကို အရောင်ခြယ် edge အဖြစ်။",
+      "trust_graph_description": "Transport-trust topology ၏ operator မြင်ကွင်း — တိုက်ရိုက် ပေးအပ်မှု၊ ကိုယ်စားလှယ်လွှဲအပ်ထားသော အာဏာ၊ ရန်ဖက် အလံများ။",
+      "peers_description": "စီစဥ်နိုင်သော peer × transport ဆက်သွယ်နိုင်မှု matrix — ဤ stack ကြားသိခဲ့သော federation အထောက်အထား တိုင်း။",
+      "interfaces_description": "Transport တစ်ခုစီ၏ ကျန်းမာရေး + config + စာရင်းအင်း (rnstatus ပုံစံ)။ reticulum.conf နှင့် ညီမျှသည့်အရာအပေါ် CRUD။",
+      "paths_description": "RNS path table — Edge ရောက်ရှိနိုင်ပုံ သိရှိသော ဦးတည်ရာ တိုင်း၊ မည်သည့် transport မှ၊ hops၊ သက်တမ်းကုန်။",
+      "announces_description": "Live + ပြန်လည် ကြည့်ရှု announce stream — မည်သူ၊ မည်သည့် interface၊ hops၊ လက်မှတ် အတည်ပြုခြင်း။",
+      "queue_description": "Transport တစ်ခုစီ၏ အပြင်သို့ packet တန်းစီ - အနက်၊ အသက်၊ ထပ်မံကြိုးစားမှု အရေအတွက်၊ ပိုင်းခြားမှု အခြေအနေ။",
+      "diagnostics_description": "မကြာသေးမီက အမှားများ၊ လက်မှတ် ပျက်ကွက်မှု၊ မူဝါဒ ပိတ်ဆို့မှု၊ transport လှည့်ပတ်မှု — operator forensics။",
+      "content_description": "Federation content store browser — ဒေသခံ cache၊ federated၊ hash-လိပ်စာ ပြန်လည် ထုတ်ယူခြင်း။"
+    },
+    "announces": {
+      "empty": "ကြေငြာချက်များ မရှိသေးပါ။ federation event များကို စောင့်ဆိုင်းနေသည်…",
+      "no_message": "(မက်ဆေ့ချ်မရှိ)",
+      "title": "တိုက်ရိုက် ကြေငြာချက်များ"
+    },
+    "content": {
+      "back": "နောက်သို့",
+      "error": {
+        "edge_unavailable": "Edge ကို မရရှိနိုင်ပါ။",
+        "not_found": "ဤ peer တွင် content မတွေ့ပါ။ အခြား peer ကို စမ်းကြည့်ပါ။"
+      },
+      "fetch": {
+        "button": "ရယူ",
+        "content_id_label": "Content ID (SHA-256)",
+        "content_id_placeholder": "64-character hex digest",
+        "invalid_id": "Content ID သည် hexadecimal စာလုံး 64 လုံး ဖြစ်ရမည်။",
+        "timeout_label": "အချိန်ကန့်သတ်"
+      },
+      "peer": {
+        "change": "Peer ပြောင်း",
+        "empty": "ရရှိနိုင်သော peer မရှိပါ။ ဦးစွာ peer များ ထည့်ပါ။",
+        "search": "Peer များ ရှာ"
+      },
+      "refresh": "ပြန်ဆွဲ",
+      "result": {
+        "content_type": "Content အမျိုးအစား",
+        "fetched_at": "ရယူသည့်အချိန်",
+        "preview": "Payload preview (ပထမ 200 bytes)",
+        "size": "အရွယ်အစား",
+        "title": "ရလဒ်"
+      },
+      "step1": {
+        "title": "ဆေးကြောရန် peer ရွေးပါ"
+      },
+      "step2": {
+        "title": "Peer ထံမှ content ရယူ"
+      }
+    },
+    "diagnostics": {
+      "empty": "ကိုက်ညီသော event များ မရှိပါ။ filter များ ပြုပြင် သို့မဟုတ် စောင့်ပါ။",
+      "more": "ချဲ့ရန် တို့ပါ",
+      "no_summary": "(payload summary မရှိ)",
+      "search_hint": "မက်ဆေ့ချ်စာသား သို့မဟုတ် event_type ဖြင့် စစ်ထုတ်",
+      "title": "ပြဿနာရှာဖွေမှု"
+    },
+    "interfaces": {
+      "empty": "မည်သည့် transport မျှ ပြင်ဆင်ထားခြင်း မရှိပါ။",
+      "not_measured": "မတိုင်းတာရသေး",
+      "peers": "peer များ",
+      "refresh": "ပြန်ဆွဲ",
+      "row": {
+        "bytes_in": "ဝင်လာသော bytes",
+        "bytes_out": "ထွက်သွားသော bytes",
+        "reach": "ရောက်ရှိမှု %",
+        "status": "အခြေအနေ"
+      },
+      "status": {
+        "active": "Active",
+        "degraded": "ကျဆင်းနေ",
+        "idle": "Idle",
+        "unknown": "မသိ"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "ကျွန်ုပ်တို့ telemetry pipeline ကို ပို့ဆောင်ပြီးနောက် peer များသည် ပကတိ မြေပုံပေါ်တွင် ပေါ်လာလိမ့်မည်။ ထိုအချိန်အထိ၊ သင်ယခု မြင်နိုင်သည်မှာ-",
+        "title": "ဖန်တီးထားသော တည်နေရာများ မရှိ"
+      },
+      "future": {
+        "bullet_announces": "ဒေသအလိုက် ထပ်နေသော အချိန်ပြန် ကြေငြာချက်များ",
+        "bullet_locations": "Telemetry မှ peer တည်နေရာများ",
+        "bullet_transport": "Transport-link overlay (TCP / LoRa / I2P / AX.25)",
+        "title": "ဤအရာသည် နောက်ပိုင်းတွင် ပြလိမ့်မည်"
+      },
+      "hero": {
+        "subtitle": "Telemetry pipeline နှင့်အတူ ပကတိ မြေပုံ ရောက်လာမည်။",
+        "title": "ပထဝီဝင် မြင်ကွင်း"
+      },
+      "refresh": "ပြန်ဆွဲ",
+      "today": {
+        "canonical": "Canonical peer များ",
+        "other": "အခြား peer များ",
+        "title": "ယနေ့ ကျွန်ုပ်တို့တွင် ရှိသည်",
+        "trusted": "ယုံကြည်ရသော peer များ"
+      }
+    },
+    "paths": {
+      "empty": "Path event များ မရှိသေးပါ။",
+      "kind_added": "ထည့်ထား",
+      "kind_changed": "ပြောင်းထား",
+      "kind_lost": "ပျောက်ဆုံး",
+      "kind_other": "event",
+      "no_static_table_note": "Edge 1.0 သည် static path table ကို မဖော်ပြပါ။ ဤ screen သည် တိုက်ရိုက် ပြောင်းလဲမှုများကိုသာ ပြသည်။ Re-deploy သည် state ကို ပြန်လည် reset လုပ်နိုင်သည်။",
+      "section_recent": "မကြာသေးမီက path event များ",
+      "title": "တိုက်ရိုက် path များ"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "နောက်ခံ (hex)",
+      "appearance_fg_label": "ရှေ့ခံ (hex)",
+      "appearance_icon_label": "Icon",
+      "appearance_save": "အသွင်ပြင် သိမ်း",
+      "appearance_title": "အသွင်ပြင်",
+      "cancel_button": "ပယ်ဖျက်",
+      "confirm_block_body": "ပိတ်ဆို့ခြင်းသည် ဤ peer မှ traffic အားလုံးကို ငြင်းပယ်လိမ့်မည်။ နောက်ပိုင်းတွင် ပိတ်ဆို့မှု ဖြုတ်နိုင်သည်။",
+      "confirm_block_button": "ပိတ်ဆို့",
+      "confirm_block_title": "ဤ peer ကို ပိတ်ဆို့မလား?",
+      "copy_key_id": "Key id ကူးယူ",
+      "last_ok_days_ago": "{n} ရက်ကြာပြီ",
+      "last_ok_hours_ago": "{n} နာရီကြာပြီ",
+      "last_ok_just_now": "ယခုပင်",
+      "last_ok_min_ago": "{n} မိနစ်ကြာပြီ",
+      "last_ok_never": "ဘယ်တော့မှ မရှိ",
+      "not_found": "Peer မတွေ့ပါ",
+      "notes_empty": "မှတ်စုများ မရှိ",
+      "notes_title": "မှတ်စုများ",
+      "reachability_empty": "မတိုင်းတာရသေး",
+      "reachability_title": "ရောက်ရှိနိုင်မှု",
+      "sas_close": "ပိတ်",
+      "sas_digits_label": "ဂဏန်းများ",
+      "sas_instructions": "ဤအရာများကို ယုံကြည်ရသော channel (အသံ/ဗီဒီယို/တိုက်ရိုက်) မှတဆင့် peer နှင့် နှိုင်းယှဉ်ပါ။ နှစ်ဖက်စလုံး ကိုက်ညီပါက peer ကို အတည်ပြုပြီးဖြစ်သည် — trust ကို TRUSTED သို့ ပြောင်းပါ။",
+      "sas_modal_title": "Short authentication string",
+      "sas_show_button": "SAS code ပြ",
+      "sas_title": "Identity အတည်ပြု (SAS)",
+      "sas_words_label": "စကားလုံးများ",
+      "title": "Peer အသေးစိတ်",
+      "trust_state_title": "ယုံကြည်မှု အခြေအနေ"
+    },
+    "peers": {
+      "add_peer_cancel": "ပယ်ဖျက်",
+      "add_peer_fab": "Peer ထည့်",
+      "add_peer_paste_label": "Node code paste",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR scan",
+      "add_peer_scan_qr_unavailable": "QR scanning မကြာမီ လာမည်",
+      "add_peer_submit": "ထည့်",
+      "add_peer_title": "Peer ထည့်",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "ဖိတ်ခေါ်ရန် သင်၏ node code ကို မျှဝေပါ၊ သို့မဟုတ် peer ၏ code ကို ထည့်ပါ။",
+      "empty_title": "Peer များ မရှိသေး",
+      "filter_all": "အားလုံး",
+      "filter_blocked": "ပိတ်ဆို့ထား",
+      "filter_canonical": "Canonical",
+      "filter_trusted": "ယုံကြည်ရ",
+      "filter_unknown": "မသိ",
+      "filter_untrusted": "မယုံကြည်ရ",
+      "show_infra": "CIRIS infrastructure ပြ",
+      "title": "Peer များ",
+      "trust_blocked": "ပိတ်ဆို့ထား",
+      "trust_trusted": "ယုံကြည်ရ",
+      "trust_unknown": "မသိ",
+      "trust_untrusted": "မယုံကြည်ရ"
+    },
+    "queue": {
+      "failures": {
+        "send": "ပို့ဆောင်မှု ဆုံးရှုံးမှု",
+        "title": "ဆုံးရှုံးမှုများ",
+        "verify": "အတည်ပြုမှု ဆုံးရှုံးမှု"
+      },
+      "refresh": "ပြန်ဆွဲ",
+      "stats": {
+        "depth": "Queue depth",
+        "received": "လက်ခံ",
+        "sent": "ပို့",
+        "title": "Queue stats"
+      },
+      "throughput": {
+        "bytes_in": "ဝင်လာသော bytes",
+        "bytes_out": "ထွက်သွားသော bytes",
+        "received": "လက်ခံ",
+        "sent": "ပို့",
+        "session": "ဤ session ၏ စုစုပေါင်း",
+        "title": "Throughput"
+      }
+    },
+    "stream": {
+      "clear": "ရှင်းလင်း",
+      "dismiss": "ပယ်",
+      "event_count": "Event {count} ခု",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "ခဏရပ်",
+      "reconnect": "ပြန်ချိတ်ဆက်",
+      "resume": "ပြန်စတင်",
+      "resume_notice": "ပြန်ချိတ်ဆက်ပြီး။ အချို့ event များ လွဲချော်နိုင်သည်။",
+      "retry": "ပြန်ကြိုးစား"
+    },
+    "trust_graph": {
+      "empty": "ပြသရန် peer များ မရှိ။",
+      "legend": {
+        "blocked": "ပိတ်ဆို့ထား",
+        "canonical_hint": "ပိုထူသော ring outline = canonical (agent နှင့်အတူ ပါလာသည်)။",
+        "edge_hint": "Edge opacity သည် per-medium ရောက်ရှိနိုင်မှုကို ထင်ဟပ်သည်။",
+        "title": "ယုံကြည်မှု အခြေအနေ",
+        "trusted": "ယုံကြည်ရ",
+        "unknown": "မသိ",
+        "untrusted": "မယုံကြည်ရ"
+      },
+      "refresh": "ပြန်ဆွဲ",
+      "summary": "Peer {count} ဦး · {canonical} canonical"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Agent မုဒ်",
+      "subtitle": "ဤ agent သည် federation တွင် မည်သို့ ပါဝင်သည်ကို ပြောင်းပါ။ ကွန်ရက် မျက်နှာပြင်ကို ထင်ဟပ်စေသည်။"
+    },
+    "brightness": "လင်းအား",
+    "brightness_light": "လင်း",
+    "brightness_system": "စနစ်",
+    "brightness_dark": "မှောင်"
+  }
 }

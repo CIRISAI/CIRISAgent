@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,8 +19,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
+import ai.ciris.mobile.shared.ui.components.CIRISSignet
+import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 
 /**
@@ -53,6 +58,18 @@ fun EpistemicSidebar(
     onSurfaceSelected: (NavSurface) -> Unit,
     onIssueClick: (String) -> Unit = {},
     appVersion: String = "",
+    // Optional brightness state — when both are non-null, the sidebar renders
+    // a 3-way segmented control (Light / System / Dark) at the bottom so the
+    // user can flip themes without leaving the nav. Both null keeps the old
+    // sidebar contract for callers that don't surface theme state.
+    brightnessPreference: BrightnessPreference? = null,
+    onBrightnessChange: ((BrightnessPreference) -> Unit)? = null,
+    // Optional close callback — when non-null, the CIRIS header row at the top
+    // of the drawer becomes the close affordance (tap the CIRIS signet to
+    // dismiss the drawer). The drawer-open hamburger button on the main
+    // content is also the CIRIS signet so the open/close affordances are
+    // visually identical and always anchored at the top.
+    onCloseRequest: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val scroll = rememberScrollState()
@@ -87,38 +104,42 @@ fun EpistemicSidebar(
         }
     }
 
+    // Theme-aware surface color. `MaterialTheme.colorScheme.surface` follows
+    // the app's brightness preference (Light/Dark/System) so the sidebar
+    // visually matches the rest of the chrome instead of being a hardcoded
+    // dark slab on a light app.
+    val sidebarBackground = MaterialTheme.colorScheme.surface
+
     Column(
         modifier = modifier
             .fillMaxHeight()
             .width(220.dp)
-            .background(CIRISColors.BackgroundDarker)
+            .background(sidebarBackground)
             .testTag("epistemic_sidebar"),
     ) {
-        // Logo / header
+        // Logo / header — the CIRIS signet at the top doubles as the
+        // "close drawer" affordance when `onCloseRequest` is wired. This is
+        // the second half of the "CIRIS icon = hamburger, always and
+        // everywhere" contract: tapping the CIRIS signet on the main content
+        // opens the drawer; tapping the SAME signet in the drawer header
+        // closes it. Always anchored at the top so it's easy to re-reach.
+        val accentColor = MaterialTheme.colorScheme.primary
+        val onSurfaceColor = MaterialTheme.colorScheme.onSurface
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .let { if (onCloseRequest != null) it.testableClickable("btn_nav_drawer_close") { onCloseRequest() } else it }
                 .padding(horizontal = 16.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(CIRISColors.AccentCyan.copy(alpha = 0.10f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = CIRISIcons.keySecure,
-                    contentDescription = null,
-                    tint = CIRISColors.AccentCyan,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
+            CIRISSignet(
+                modifier = Modifier.size(22.dp).testable("img_ciris_signet_drawer"),
+                tintColor = accentColor,
+            )
             Spacer(Modifier.width(8.dp))
             Text(
                 text = "CIRIS",
-                color = CIRISColors.TextPrimary.copy(alpha = 0.85f),
+                color = onSurfaceColor.copy(alpha = 0.85f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -126,19 +147,19 @@ fun EpistemicSidebar(
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = appVersion,
-                    color = CIRISColors.TextDim,
+                    color = onSurfaceColor.copy(alpha = 0.5f),
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,
                 )
             }
         }
 
-        // Thin divider
+        // Thin divider — theme-aware so it reads on both light + dark
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(Color.White.copy(alpha = 0.06f)),
+                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
         )
 
         // Nav body — scrollable
@@ -180,6 +201,108 @@ fun EpistemicSidebar(
                 }
             }
         }
+
+        // ─── Theme strip at the bottom of the drawer ─────────────────
+        // Only renders when callers wire brightnessPreference + the change
+        // callback. Three-segment chip row (Light / System / Dark) so the
+        // user can toggle theme without leaving the nav. Surfaced here
+        // because the drawer is the canonical "global app affordance"
+        // surface in 2.9.4+ and theme is a global app affordance.
+        if (brightnessPreference != null && onBrightnessChange != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.10f)),
+            )
+            BrightnessStrip(
+                current = brightnessPreference,
+                onChange = onBrightnessChange,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BrightnessStrip(
+    current: BrightnessPreference,
+    onChange: (BrightnessPreference) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .testTag("sidebar_brightness_strip"),
+    ) {
+        Text(
+            text = localizedString("settings.brightness"),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .padding(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BrightnessSegment(
+                label = localizedString("settings.brightness_light"),
+                target = BrightnessPreference.LIGHT,
+                current = current,
+                onChange = onChange,
+                tag = "btn_brightness_light",
+                modifier = Modifier.weight(1f),
+            )
+            BrightnessSegment(
+                label = localizedString("settings.brightness_system"),
+                target = BrightnessPreference.SYSTEM,
+                current = current,
+                onChange = onChange,
+                tag = "btn_brightness_system",
+                modifier = Modifier.weight(1f),
+            )
+            BrightnessSegment(
+                label = localizedString("settings.brightness_dark"),
+                target = BrightnessPreference.DARK,
+                current = current,
+                onChange = onChange,
+                tag = "btn_brightness_dark",
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun BrightnessSegment(
+    label: String,
+    target: BrightnessPreference,
+    current: BrightnessPreference,
+    onChange: (BrightnessPreference) -> Unit,
+    tag: String,
+    modifier: Modifier = Modifier,
+) {
+    val selected = current == target
+    val bg = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
+    val fg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(bg)
+            .testableClickable(tag) { onChange(target) }
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = fg,
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
     }
 }
 
@@ -191,6 +314,8 @@ private fun NavGroupHeader(
     onToggle: () -> Unit,
 ) {
     val accent = group.accentHex?.let { parseHex(it) }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -202,8 +327,8 @@ private fun NavGroupHeader(
             imageVector = group.icon,
             contentDescription = null,
             tint = when {
-                isActive -> accent ?: CIRISColors.AccentCyan
-                else -> CIRISColors.TextDim
+                isActive -> accent ?: primaryColor
+                else -> onSurfaceColor.copy(alpha = 0.5f)
             },
             modifier = Modifier.size(13.dp),
         )
@@ -211,8 +336,8 @@ private fun NavGroupHeader(
         Text(
             text = group.label.uppercase(),
             color = when {
-                isActive -> CIRISColors.TextPrimary.copy(alpha = 0.75f)
-                else -> CIRISColors.TextTertiary
+                isActive -> onSurfaceColor.copy(alpha = 0.85f)
+                else -> onSurfaceColor.copy(alpha = 0.55f)
             },
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
@@ -222,7 +347,7 @@ private fun NavGroupHeader(
         Icon(
             imageVector = if (expanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
             contentDescription = null,
-            tint = CIRISColors.TextDim,
+            tint = onSurfaceColor.copy(alpha = 0.5f),
             modifier = Modifier.size(12.dp),
         )
     }
@@ -247,75 +372,97 @@ private fun NavSurfaceRow(
     val isExpanded = expandedMap[surface.id] ?: false
     val hasChildren = surface.children.isNotEmpty()
 
-    val rowBg = if (isActive) CIRISColors.AccentCyan.copy(alpha = 0.08f) else Color.Transparent
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val rowBg = if (isActive) primaryColor.copy(alpha = 0.10f) else Color.Transparent
     val labelColor = when {
-        isActive -> CIRISColors.AccentCyan
-        isAncestorOfActive -> CIRISColors.TextPrimary.copy(alpha = 0.6f)
-        else -> CIRISColors.TextTertiary
+        isActive -> primaryColor
+        isAncestorOfActive -> onSurfaceColor.copy(alpha = 0.75f)
+        else -> onSurfaceColor.copy(alpha = 0.6f)
     }
     val iconColor = when {
-        isActive -> CIRISColors.AccentCyan
-        else -> CIRISColors.TextDim
+        isActive -> primaryColor
+        else -> onSurfaceColor.copy(alpha = 0.5f)
     }
 
+    // Split-tap row: left zone (icon + label) navigates; right zone
+    // (chevron) only toggles inline expansion without navigating or closing
+    // the drawer. When the surface has no children, the whole row navigates
+    // (no chevron is rendered).
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(4.dp))
             .background(rowBg)
-            .testableClickable(navTag(surface.id)) {
-                onSurfaceSelected(surface)
-                if (hasChildren) expandedMap[surface.id] = !isExpanded
-            }
-            .padding(
-                start = (8 + 12 * indent).dp,
-                end = 10.dp,
-                top = 7.dp,
-                bottom = 7.dp,
-            ),
+            .padding(end = if (hasChildren) 0.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = surface.icon,
-            contentDescription = null,
-            tint = iconColor,
-            modifier = Modifier.size(12.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = surface.label,
-            color = labelColor,
-            fontSize = 11.sp,
-            fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
-            modifier = Modifier.weight(1f),
-        )
-        // Coming Soon chip — pinned to substrate issue
-        if (surface.gate != null) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(CIRISColors.BusTool.copy(alpha = 0.15f))
-                    .clickable { onIssueClick(surface.gate.url) }
-                    .testTag("nav_substrate_gate_${surface.id}")
-                    .padding(horizontal = 4.dp, vertical = 1.dp),
-            ) {
-                Text(
-                    text = "SOON",
-                    color = CIRISColors.BusTool,
-                    fontSize = 7.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp,
-                )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .testableClickable(navTag(surface.id)) { onSurfaceSelected(surface) }
+                .padding(
+                    start = (8 + 12 * indent).dp,
+                    end = if (hasChildren) 4.dp else 0.dp,
+                    top = 7.dp,
+                    bottom = 7.dp,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = surface.icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(12.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = surface.label,
+                color = labelColor,
+                fontSize = 11.sp,
+                fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
+                modifier = Modifier.weight(1f),
+            )
+            // Coming Soon chip — pinned to substrate issue (lives inside
+            // the nav zone so the chip's tap doesn't trigger expand)
+            if (surface.gate != null) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(CIRISColors.BusTool.copy(alpha = 0.15f))
+                        .clickable { onIssueClick(surface.gate.url) }
+                        .testTag("nav_substrate_gate_${surface.id}")
+                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                ) {
+                    Text(
+                        text = "SOON",
+                        color = CIRISColors.BusTool,
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp,
+                    )
+                }
             }
         }
+        // Chevron zone — separate testableClickable so tapping the chevron
+        // ONLY toggles inline expansion (no navigation, no drawer close).
+        // This is the user-requested split: left side = jump to the card,
+        // right side = expand the category in place.
         if (hasChildren) {
-            Spacer(Modifier.width(4.dp))
-            Icon(
-                imageVector = if (isExpanded) CIRISIcons.arrowUp else CIRISIcons.arrowRight,
-                contentDescription = null,
-                tint = CIRISColors.TextDim,
-                modifier = Modifier.size(10.dp),
-            )
+            Box(
+                modifier = Modifier
+                    .testableClickable("nav_expand_${surface.id}") {
+                        expandedMap[surface.id] = !isExpanded
+                    }
+                    .padding(start = 4.dp, end = 10.dp, top = 7.dp, bottom = 7.dp),
+            ) {
+                Icon(
+                    imageVector = if (isExpanded) CIRISIcons.arrowUp else CIRISIcons.arrowRight,
+                    contentDescription = null,
+                    tint = onSurfaceColor.copy(alpha = 0.5f),
+                    modifier = Modifier.size(12.dp),
+                )
+            }
         }
     }
     if (hasChildren && isExpanded) {

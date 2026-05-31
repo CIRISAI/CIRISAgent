@@ -2056,5 +2056,281 @@
     "metrics": "Metrics",
     "services": "Services"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "নেটওয়ার্ক",
+    "identity_card": {
+      "title": "ফেডারেশন পরিচয়",
+      "copy_address": "ঠিকানা অনুলিপি করুন",
+      "qr_label": "QR · র‍্যাচেট / আবর্তন",
+      "capabilities_title": "সক্ষমতা",
+      "copied": "কপি হয়েছে",
+      "copy_node_code": "নোড কোড কপি করুন",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "একজন পিয়ারকে আমন্ত্রণ জানাতে এই কোড শেয়ার করুন। তারা পেস্ট বা স্ক্যান করতে পারে।",
+      "node_code_title": "আমার নোড কোড",
+      "peers_canonical": "ক্যানোনিক্যাল",
+      "peers_total": "মোট পিয়ার",
+      "qr_placeholder_label": "QR কোড",
+      "signer_key_label": "স্বাক্ষরকারী কী"
+    },
+    "mode_card": {
+      "title": "এজেন্ট মোড",
+      "subtitle": "এই এজেন্ট ফেডারেশনে কীভাবে অংশগ্রহণ করে। পরিবর্তনে Edge পুনরায় চালু হবে।",
+      "client_label": "ক্লায়েন্ট",
+      "client_description": "একটি দূরবর্তী নোডে বাহ্যিকভাবে সংযোগ করুন।",
+      "proxy_label": "প্রক্সি",
+      "proxy_description": "প্রক্সি ফেডারেশন পৃষ্ঠতল সহ স্থানীয় এজেন্ট।",
+      "proxy_default_marker": "(ডিফল্ট)",
+      "server_label": "সার্ভার",
+      "server_description": "সম্পূর্ণ ফেডারেশন নোড।",
+      "server_disk_gate": "≥256 GB ফাঁকা ডিস্ক প্রয়োজন · {available} ফাঁকা, {required} প্রয়োজন",
+      "confirm_change_title": "পুনরায় চালু করা প্রয়োজন",
+      "confirm_change_body": "এজেন্ট মোড পরিবর্তন করতে Edge পুনরায় চালু করতে হবে। চালিয়ে যাবেন?",
+      "confirm_change_button": "Edge পুনরায় চালু করুন",
+      "cancel_button": "বাতিল",
+      "insufficient_disk_error": "SERVER মোডের জন্য পর্যাপ্ত ফাঁকা ডিস্ক নেই। {available} ফাঁকা, {required} প্রয়োজন।"
+    },
+    "stats_strip": {
+      "peers": "পিয়ার্স",
+      "transports": "ট্রান্সপোর্ট",
+      "queue": "সারি",
+      "errors": "ত্রুটি",
+      "awaiting_edge_1_0": "Edge 1.0 প্রতীক্ষারত"
+    },
+    "tiles": {
+      "identity": "পরিচয়",
+      "map": "মানচিত্র",
+      "trust_graph": "ট্রাস্ট গ্রাফ",
+      "peers": "পিয়ার্স",
+      "interfaces": "ইন্টারফেস",
+      "paths": "পাথ",
+      "announces": "ঘোষণা",
+      "queue": "সারি",
+      "diagnostics": "ডায়াগনস্টিকস",
+      "content": "বিষয়বস্তু",
+      "coming_soon_badge": "শীঘ্রই আসছে"
+    },
+    "sub_screens": {
+      "identity_description": "ফেডারেশন পরিচয় — স্বাক্ষরকারী কী, হার্ডওয়্যার-কাস্টডি প্রমাণীকরণ চেইন, র‍্যাচেট অবস্থা, আবর্তন ইতিহাস।",
+      "map_description": "স্থানীয় ফেডারেশন পাড়ার ফোর্স-ডিরেক্টেড ক্যানভাস — পিয়ার্স নোড হিসাবে, ট্রান্সপোর্ট রঙিন প্রান্ত হিসাবে।",
+      "trust_graph_description": "ট্রান্সপোর্ট-ট্রাস্ট টপোলজির অপারেটর দৃশ্য — সরাসরি অনুমোদন, প্রতিনিধি কর্তৃত্ব, প্রতিকূল পতাকা।",
+      "peers_description": "সাজানো পিয়ার × ট্রান্সপোর্ট নাগালযোগ্যতা ম্যাট্রিক্স — প্রতিটি ফেডারেশন পরিচয় যা এই স্ট্যাক শুনেছে।",
+      "interfaces_description": "প্রতি-ট্রান্সপোর্ট স্বাস্থ্য + কনফিগ + পরিসংখ্যান (rnstatus-শৈলী)। reticulum.conf-এর সমতুল্যের উপর CRUD।",
+      "paths_description": "RNS পাথ টেবিল — Edge পৌঁছাতে জানে এমন প্রতিটি গন্তব্য, কোন ট্রান্সপোর্ট দিয়ে, হপস, মেয়াদ।",
+      "announces_description": "লাইভ + পূর্ববর্তী ঘোষণা স্ট্রিম — কে, কোন ইন্টারফেস, হপস, স্বাক্ষর যাচাইকরণ।",
+      "queue_description": "প্রতি ট্রান্সপোর্টে বহির্গামী প্যাকেট সারি: গভীরতা, বয়স, পুনরায় চেষ্টা গণনা, খণ্ডিতকরণ অবস্থা।",
+      "diagnostics_description": "সাম্প্রতিক ত্রুটি, স্বাক্ষর ব্যর্থতা, নীতি ব্লক, ট্রান্সপোর্ট চার্ন — অপারেটর ফরেনসিক।",
+      "content_description": "ফেডারেশন কন্টেন্ট স্টোর ব্রাউজার — স্থানীয়ভাবে ক্যাশড, ফেডারেটেড, হ্যাশ-অ্যাড্রেস করা পুনরুদ্ধার।"
+    },
+    "announces": {
+      "empty": "এখনো কোনো ঘোষণা নেই। ফেডারেশন ইভেন্টের অপেক্ষায়…",
+      "no_message": "(কোনো বার্তা নেই)",
+      "title": "লাইভ ঘোষণা"
+    },
+    "content": {
+      "back": "ফিরে যান",
+      "error": {
+        "edge_unavailable": "Edge উপলব্ধ নয়।",
+        "not_found": "এই পিয়ারে বিষয়বস্তু পাওয়া যায়নি। অন্য পিয়ার চেষ্টা করুন।"
+      },
+      "fetch": {
+        "button": "আনুন",
+        "content_id_label": "বিষয়বস্তু আইডি (SHA-256)",
+        "content_id_placeholder": "64-অক্ষরের hex ডাইজেস্ট",
+        "invalid_id": "বিষয়বস্তু আইডি অবশ্যই 64 হেক্সাডেসিমাল অক্ষর হতে হবে।",
+        "timeout_label": "টাইমআউট"
+      },
+      "peer": {
+        "change": "পিয়ার পরিবর্তন",
+        "empty": "কোনো পিয়ার উপলব্ধ নেই। প্রথমে পিয়ার যোগ করুন।",
+        "search": "পিয়ার অনুসন্ধান"
+      },
+      "refresh": "রিফ্রেশ",
+      "result": {
+        "content_type": "বিষয়বস্তুর ধরন",
+        "fetched_at": "আনা হয়েছিল",
+        "preview": "পেলোড প্রিভিউ (প্রথম 200 বাইট)",
+        "size": "আকার",
+        "title": "ফলাফল"
+      },
+      "step1": {
+        "title": "জিজ্ঞাসার জন্য একটি পিয়ার নির্বাচন করুন"
+      },
+      "step2": {
+        "title": "পিয়ার থেকে বিষয়বস্তু আনুন"
+      }
+    },
+    "diagnostics": {
+      "empty": "কোনো মিলে যাওয়া ইভেন্ট নেই। ফিল্টার সামঞ্জস্য করুন বা অপেক্ষা করুন।",
+      "more": "প্রসারিত করতে আলতো চাপুন",
+      "no_summary": "(কোনো পেলোড সারাংশ নেই)",
+      "search_hint": "বার্তা টেক্সট বা event_type দ্বারা ফিল্টার",
+      "title": "ডায়াগনস্টিকস"
+    },
+    "interfaces": {
+      "empty": "কোনো ট্রান্সপোর্ট কনফিগার করা নেই।",
+      "not_measured": "এখনো পরিমাপ করা হয়নি",
+      "peers": "পিয়ার",
+      "refresh": "রিফ্রেশ",
+      "row": {
+        "bytes_in": "ইনকামিং বাইট",
+        "bytes_out": "আউটগোয়িং বাইট",
+        "reach": "পৌঁছানোর %",
+        "status": "স্থিতি"
+      },
+      "status": {
+        "active": "সক্রিয়",
+        "degraded": "অবনত",
+        "idle": "নিষ্ক্রিয়",
+        "unknown": "অজানা"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "আমাদের টেলিমেট্রি পাইপলাইন চালু হলে পিয়াররা একটি প্রকৃত মানচিত্রে প্রদর্শিত হবে। ততক্ষণ পর্যন্ত, আপনি এখন যা দেখতে পাচ্ছেন:",
+        "title": "কোনো জাল অবস্থান নেই"
+      },
+      "future": {
+        "bullet_announces": "অঞ্চল অনুসারে আচ্ছাদিত রিয়েল-টাইম ঘোষণা",
+        "bullet_locations": "টেলিমেট্রি থেকে পিয়ারের অবস্থান",
+        "bullet_transport": "ট্রান্সপোর্ট-লিঙ্ক ওভারলে (TCP / LoRa / I2P / AX.25)",
+        "title": "এটি পরে যা দেখাবে"
+      },
+      "hero": {
+        "subtitle": "টেলিমেট্রি পাইপলাইনের সাথে প্রকৃত মানচিত্র আসছে।",
+        "title": "ভৌগোলিক দৃশ্য"
+      },
+      "refresh": "রিফ্রেশ",
+      "today": {
+        "canonical": "ক্যানোনিক্যাল পিয়ার",
+        "other": "অন্যান্য পিয়ার",
+        "title": "আজ আমাদের যা আছে",
+        "trusted": "বিশ্বস্ত পিয়ার"
+      }
+    },
+    "paths": {
+      "empty": "এখনো কোনো পথ ইভেন্ট নেই।",
+      "kind_added": "যোগ করা হয়েছে",
+      "kind_changed": "পরিবর্তিত",
+      "kind_lost": "হারিয়েছে",
+      "kind_other": "ইভেন্ট",
+      "no_static_table_note": "Edge 1.0 একটি স্থির পথ টেবিল প্রকাশ করে না; এই স্ক্রিন কেবল লাইভ পরিবর্তন দেখায়। পুনঃস্থাপন অবস্থা পুনরায় সেট করতে পারে।",
+      "section_recent": "সাম্প্রতিক পথ ইভেন্ট",
+      "title": "লাইভ পথ"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "ব্যাকগ্রাউন্ড (hex)",
+      "appearance_fg_label": "ফোরগ্রাউন্ড (hex)",
+      "appearance_icon_label": "আইকন",
+      "appearance_save": "চেহারা সংরক্ষণ করুন",
+      "appearance_title": "চেহারা",
+      "cancel_button": "বাতিল",
+      "confirm_block_body": "ব্লক করা এই পিয়ার থেকে সমস্ত ট্রাফিক প্রত্যাখ্যান করবে। আপনি পরে আনব্লক করতে পারেন।",
+      "confirm_block_button": "ব্লক",
+      "confirm_block_title": "এই পিয়ারকে ব্লক করবেন?",
+      "copy_key_id": "কী আইডি কপি করুন",
+      "last_ok_days_ago": "{n} দিন আগে",
+      "last_ok_hours_ago": "{n} ঘন্টা আগে",
+      "last_ok_just_now": "এই মুহূর্তে",
+      "last_ok_min_ago": "{n} মিনিট আগে",
+      "last_ok_never": "কখনো নয়",
+      "not_found": "পিয়ার পাওয়া যায়নি",
+      "notes_empty": "কোনো নোট নেই",
+      "notes_title": "নোট",
+      "reachability_empty": "এখনো পরিমাপ করা হয়নি",
+      "reachability_title": "নাগালযোগ্যতা",
+      "sas_close": "বন্ধ",
+      "sas_digits_label": "সংখ্যা",
+      "sas_instructions": "একটি বিশ্বস্ত চ্যানেলে (ভয়েস/ভিডিও/সরাসরি) পিয়ারের সাথে এগুলি তুলনা করুন। উভয় পক্ষ মিলে গেলে, পিয়ার যাচাই হয়েছে — বিশ্বাস TRUSTED-এ পরিবর্তন করুন।",
+      "sas_modal_title": "সংক্ষিপ্ত প্রমাণীকরণ স্ট্রিং",
+      "sas_show_button": "SAS কোড দেখান",
+      "sas_title": "পরিচয় যাচাই করুন (SAS)",
+      "sas_words_label": "শব্দ",
+      "title": "পিয়ার বিবরণ",
+      "trust_state_title": "বিশ্বাসের অবস্থা"
+    },
+    "peers": {
+      "add_peer_cancel": "বাতিল",
+      "add_peer_fab": "পিয়ার যোগ করুন",
+      "add_peer_paste_label": "নোড কোড পেস্ট করুন",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR স্ক্যান করুন",
+      "add_peer_scan_qr_unavailable": "QR স্ক্যানিং শীঘ্রই আসছে",
+      "add_peer_submit": "যোগ করুন",
+      "add_peer_title": "একটি পিয়ার যোগ করুন",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "আমন্ত্রণ জানাতে আপনার নোড কোড শেয়ার করুন, বা একটি পিয়ারের কোড যোগ করুন।",
+      "empty_title": "এখনো কোনো পিয়ার নেই",
+      "filter_all": "সব",
+      "filter_blocked": "ব্লক করা",
+      "filter_canonical": "ক্যানোনিক্যাল",
+      "filter_trusted": "বিশ্বস্ত",
+      "filter_unknown": "অজানা",
+      "filter_untrusted": "অবিশ্বস্ত",
+      "show_infra": "CIRIS অবকাঠামো দেখান",
+      "title": "পিয়ার",
+      "trust_blocked": "ব্লক করা",
+      "trust_trusted": "বিশ্বস্ত",
+      "trust_unknown": "অজানা",
+      "trust_untrusted": "অবিশ্বস্ত"
+    },
+    "queue": {
+      "failures": {
+        "send": "পাঠানোর ব্যর্থতা",
+        "title": "ব্যর্থতা",
+        "verify": "যাচাইয়ের ব্যর্থতা"
+      },
+      "refresh": "রিফ্রেশ",
+      "stats": {
+        "depth": "সারির গভীরতা",
+        "received": "প্রাপ্ত",
+        "sent": "পাঠানো",
+        "title": "সারির পরিসংখ্যান"
+      },
+      "throughput": {
+        "bytes_in": "ইনকামিং বাইট",
+        "bytes_out": "আউটগোয়িং বাইট",
+        "received": "প্রাপ্ত",
+        "sent": "পাঠানো",
+        "session": "এই সেশনের মোট",
+        "title": "থ্রুপুট"
+      }
+    },
+    "stream": {
+      "clear": "পরিষ্কার করুন",
+      "dismiss": "বাতিল করুন",
+      "event_count": "{count} ইভেন্ট",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "বিরতি",
+      "reconnect": "পুনঃসংযোগ",
+      "resume": "পুনরায় শুরু",
+      "resume_notice": "পুনঃসংযোগ হয়েছে। কিছু ইভেন্ট হয়তো মিস হয়ে থাকতে পারে।",
+      "retry": "পুনরায় চেষ্টা"
+    },
+    "trust_graph": {
+      "empty": "ভিজ্যুয়ালাইজ করার জন্য কোনো পিয়ার নেই।",
+      "legend": {
+        "blocked": "ব্লক করা",
+        "canonical_hint": "মোটা রিং রূপরেখা = ক্যানোনিক্যাল (এজেন্টের সাথে আসে)।",
+        "edge_hint": "Edge স্বচ্ছতা প্রতি-মাধ্যম নাগালযোগ্যতা প্রতিফলিত করে।",
+        "title": "বিশ্বাসের অবস্থা",
+        "trusted": "বিশ্বস্ত",
+        "unknown": "অজানা",
+        "untrusted": "অবিশ্বস্ত"
+      },
+      "refresh": "রিফ্রেশ",
+      "summary": "{count} পিয়ার · {canonical} ক্যানোনিক্যাল"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "এজেন্ট মোড",
+      "subtitle": "এই এজেন্ট ফেডারেশনে কীভাবে অংশগ্রহণ করে তা পরিবর্তন করুন। নেটওয়ার্ক স্ক্রিনকে প্রতিফলিত করে।"
+    },
+    "brightness": "উজ্জ্বলতা",
+    "brightness_light": "হালকা",
+    "brightness_system": "সিস্টেম",
+    "brightness_dark": "অন্ধকার"
+  }
 }

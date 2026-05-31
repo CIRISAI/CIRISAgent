@@ -2055,5 +2055,281 @@
     "metrics": "Metrics",
     "services": "Services"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "ਨੈੱਟਵਰਕ",
+    "identity_card": {
+      "title": "ਫੈਡਰੇਸ਼ਨ ਪਛਾਣ",
+      "copy_address": "ਪਤਾ ਕਾਪੀ ਕਰੋ",
+      "qr_label": "QR · ਰੈਚੇਟ / ਘੁੰਮਾਉਣਾ",
+      "capabilities_title": "ਸਮਰੱਥਾਵਾਂ",
+      "copied": "ਕਾਪੀ ਹੋਇਆ",
+      "copy_node_code": "ਨੋਡ ਕੋਡ ਕਾਪੀ ਕਰੋ",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "ਪੀਅਰ ਨੂੰ ਸੱਦਾ ਦੇਣ ਲਈ ਇਹ ਕੋਡ ਸਾਂਝਾ ਕਰੋ। ਉਹ ਪੇਸਟ ਜਾਂ ਸਕੈਨ ਕਰ ਸਕਦੇ ਹਨ।",
+      "node_code_title": "ਮੇਰਾ ਨੋਡ ਕੋਡ",
+      "peers_canonical": "ਕੈਨੋਨੀਕਲ",
+      "peers_total": "ਕੁੱਲ ਪੀਅਰ",
+      "qr_placeholder_label": "QR ਕੋਡ",
+      "signer_key_label": "ਦਸਤਖਤਕਾਰ ਕੁੰਜੀ"
+    },
+    "mode_card": {
+      "title": "ਏਜੰਟ ਮੋਡ",
+      "subtitle": "ਇਹ ਏਜੰਟ ਫੈਡਰੇਸ਼ਨ ਵਿੱਚ ਕਿਵੇਂ ਹਿੱਸਾ ਲੈਂਦਾ ਹੈ। ਬਦਲਾਅ ਉੱਤੇ Edge ਮੁੜ ਚਾਲੂ ਹੋਵੇਗਾ।",
+      "client_label": "ਕਲਾਇੰਟ",
+      "client_description": "ਦੂਰ-ਦੁਰਾਡੇ ਨੋਡ ਨਾਲ ਬਾਹਰੀ ਤੌਰ 'ਤੇ ਕਨੈਕਟ ਕਰੋ।",
+      "proxy_label": "ਪ੍ਰੌਕਸੀ",
+      "proxy_description": "ਪ੍ਰੌਕਸੀ ਫੈਡਰੇਸ਼ਨ ਸਤ੍ਹਾ ਵਾਲਾ ਸਥਾਨਕ ਏਜੰਟ।",
+      "proxy_default_marker": "(ਡਿਫੌਲਟ)",
+      "server_label": "ਸਰਵਰ",
+      "server_description": "ਪੂਰਾ ਫੈਡਰੇਸ਼ਨ ਨੋਡ।",
+      "server_disk_gate": "≥256 GB ਖਾਲੀ ਡਿਸਕ ਦੀ ਲੋੜ · {available} ਖਾਲੀ, {required} ਲੋੜੀਂਦੀ",
+      "confirm_change_title": "ਮੁੜ ਚਾਲੂ ਕਰਨਾ ਲੋੜੀਂਦਾ",
+      "confirm_change_body": "ਏਜੰਟ ਮੋਡ ਬਦਲਣ ਲਈ Edge ਨੂੰ ਮੁੜ ਚਾਲੂ ਕਰਨਾ ਪਵੇਗਾ। ਜਾਰੀ ਰੱਖਣਾ?",
+      "confirm_change_button": "Edge ਮੁੜ ਚਾਲੂ ਕਰੋ",
+      "cancel_button": "ਰੱਦ ਕਰੋ",
+      "insufficient_disk_error": "SERVER ਮੋਡ ਲਈ ਕਾਫ਼ੀ ਖਾਲੀ ਡਿਸਕ ਨਹੀਂ। {available} ਖਾਲੀ, {required} ਲੋੜੀਂਦੀ।"
+    },
+    "stats_strip": {
+      "peers": "ਪੀਅਰਜ਼",
+      "transports": "ਟਰਾਂਸਪੋਰਟ",
+      "queue": "ਕਤਾਰ",
+      "errors": "ਗਲਤੀਆਂ",
+      "awaiting_edge_1_0": "Edge 1.0 ਦੀ ਉਡੀਕ"
+    },
+    "tiles": {
+      "identity": "ਪਛਾਣ",
+      "map": "ਨਕਸ਼ਾ",
+      "trust_graph": "ਭਰੋਸੇ ਦਾ ਗ੍ਰਾਫ",
+      "peers": "ਪੀਅਰਜ਼",
+      "interfaces": "ਇੰਟਰਫੇਸ",
+      "paths": "ਰਾਹ",
+      "announces": "ਘੋਸ਼ਣਾਵਾਂ",
+      "queue": "ਕਤਾਰ",
+      "diagnostics": "ਨਿਦਾਨ",
+      "content": "ਸਮੱਗਰੀ",
+      "coming_soon_badge": "ਜਲਦੀ ਆ ਰਿਹਾ ਹੈ"
+    },
+    "sub_screens": {
+      "identity_description": "ਫੈਡਰੇਸ਼ਨ ਪਛਾਣ — ਹਸਤਾਖਰਕਰਤਾ ਕੁੰਜੀ, ਹਾਰਡਵੇਅਰ-ਕਸਟਡੀ ਪ੍ਰਮਾਣੀਕਰਨ ਚੇਨ, ਰੈਚੇਟ ਸਥਿਤੀ, ਘੁੰਮਾਉਣ ਇਤਿਹਾਸ।",
+      "map_description": "ਸਥਾਨਕ ਫੈਡਰੇਸ਼ਨ ਆਂਢ-ਗੁਆਂਢ ਦਾ ਫੋਰਸ-ਡਾਇਰੈਕਟਿਡ ਕੈਨਵਸ — ਪੀਅਰਜ਼ ਨੋਡ ਵਜੋਂ, ਟਰਾਂਸਪੋਰਟ ਰੰਗਦਾਰ ਕਿਨਾਰਿਆਂ ਵਜੋਂ।",
+      "trust_graph_description": "ਟਰਾਂਸਪੋਰਟ-ਭਰੋਸੇ ਟੋਪੋਲੋਜੀ ਦਾ ਆਪਰੇਟਰ ਦ੍ਰਿਸ਼ — ਸਿੱਧੀਆਂ ਮਨਜ਼ੂਰੀਆਂ, ਡੈਲੀਗੇਟ ਅਥਾਰਟੀ, ਵਿਰੋਧੀ ਝੰਡੇ।",
+      "peers_description": "ਕ੍ਰਮਬੱਧ ਪੀਅਰ × ਟਰਾਂਸਪੋਰਟ ਪਹੁੰਚਯੋਗਤਾ ਮੈਟਰਿਕਸ — ਹਰ ਫੈਡਰੇਸ਼ਨ ਪਛਾਣ ਜੋ ਇਸ ਸਟੈਕ ਨੇ ਸੁਣੀ ਹੈ।",
+      "interfaces_description": "ਪ੍ਰਤੀ-ਟਰਾਂਸਪੋਰਟ ਸਿਹਤ + ਕੌਨਫਿਗ + ਅੰਕੜੇ (rnstatus-ਸ਼ੈਲੀ)। reticulum.conf-ਸਮਾਨ ਉੱਤੇ CRUD।",
+      "paths_description": "RNS ਪਾਥ ਟੇਬਲ — ਹਰ ਮੰਜ਼ਿਲ ਜਿੱਥੇ Edge ਪਹੁੰਚਣਾ ਜਾਣਦਾ ਹੈ, ਕਿਸ ਟਰਾਂਸਪੋਰਟ ਰਾਹੀਂ, ਹੌਪਸ, ਮਿਆਦ।",
+      "announces_description": "ਲਾਈਵ + ਪਿਛਾਖੜੀ ਘੋਸ਼ਣਾ ਸਟ੍ਰੀਮ — ਕੌਣ, ਕਿਹੜਾ ਇੰਟਰਫੇਸ, ਹੌਪਸ, ਹਸਤਾਖਰ ਪੁਸ਼ਟੀਕਰਨ।",
+      "queue_description": "ਪ੍ਰਤੀ ਟਰਾਂਸਪੋਰਟ ਆਊਟਬਾਉਂਡ ਪੈਕੇਟ ਕਤਾਰ: ਡੂੰਘਾਈ, ਉਮਰ, ਮੁੜ-ਕੋਸ਼ਿਸ਼ ਗਿਣਤੀ, ਟੁਕੜਾਕਰਨ ਸਥਿਤੀ।",
+      "diagnostics_description": "ਹਾਲੀਆ ਗਲਤੀਆਂ, ਹਸਤਾਖਰ ਅਸਫਲਤਾਵਾਂ, ਨੀਤੀ ਬਲਾਕ, ਟਰਾਂਸਪੋਰਟ ਮੰਥਨ — ਆਪਰੇਟਰ ਫੋਰੈਂਸਿਕ।",
+      "content_description": "ਫੈਡਰੇਸ਼ਨ ਸਮੱਗਰੀ ਸਟੋਰ ਬਰਾਊਜ਼ਰ — ਸਥਾਨਕ ਤੌਰ 'ਤੇ ਕੈਸ਼, ਫੈਡਰੇਟਿਡ, ਹੈਸ਼-ਪਤਾ ਪ੍ਰਾਪਤੀ।"
+    },
+    "announces": {
+      "empty": "ਅਜੇ ਕੋਈ ਘੋਸ਼ਣਾਵਾਂ ਨਹੀਂ। ਫੈਡਰੇਸ਼ਨ ਘਟਨਾਵਾਂ ਦੀ ਉਡੀਕ ਕਰ ਰਿਹਾ ਹੈ…",
+      "no_message": "(ਕੋਈ ਸੁਨੇਹਾ ਨਹੀਂ)",
+      "title": "ਲਾਈਵ ਘੋਸ਼ਣਾਵਾਂ"
+    },
+    "content": {
+      "back": "ਵਾਪਸ",
+      "error": {
+        "edge_unavailable": "Edge ਉਪਲਬਧ ਨਹੀਂ।",
+        "not_found": "ਇਸ ਪੀਅਰ 'ਤੇ ਸਮੱਗਰੀ ਨਹੀਂ ਮਿਲੀ। ਕੋਈ ਹੋਰ ਪੀਅਰ ਅਜ਼ਮਾਓ।"
+      },
+      "fetch": {
+        "button": "ਪ੍ਰਾਪਤ ਕਰੋ",
+        "content_id_label": "ਸਮੱਗਰੀ ID (SHA-256)",
+        "content_id_placeholder": "64-ਅੱਖਰੀ hex ਡਾਇਜੈਸਟ",
+        "invalid_id": "ਸਮੱਗਰੀ ID 64 ਹੈਕਸਾਡੈਸੀਮਲ ਅੱਖਰਾਂ ਦੀ ਹੋਣੀ ਚਾਹੀਦੀ ਹੈ।",
+        "timeout_label": "ਟਾਈਮਆਊਟ"
+      },
+      "peer": {
+        "change": "ਪੀਅਰ ਬਦਲੋ",
+        "empty": "ਕੋਈ ਪੀਅਰ ਉਪਲਬਧ ਨਹੀਂ। ਪਹਿਲਾਂ ਪੀਅਰ ਜੋੜੋ।",
+        "search": "ਪੀਅਰ ਖੋਜੋ"
+      },
+      "refresh": "ਰਿਫ੍ਰੈਸ਼",
+      "result": {
+        "content_type": "ਸਮੱਗਰੀ ਕਿਸਮ",
+        "fetched_at": "ਪ੍ਰਾਪਤ ਕੀਤਾ",
+        "preview": "ਪੇਲੋਡ ਪ੍ਰੀਵਿਊ (ਪਹਿਲੇ 200 ਬਾਈਟ)",
+        "size": "ਆਕਾਰ",
+        "title": "ਨਤੀਜਾ"
+      },
+      "step1": {
+        "title": "ਪੁੱਛਗਿੱਛ ਲਈ ਪੀਅਰ ਚੁਣੋ"
+      },
+      "step2": {
+        "title": "ਪੀਅਰ ਤੋਂ ਸਮੱਗਰੀ ਪ੍ਰਾਪਤ ਕਰੋ"
+      }
+    },
+    "diagnostics": {
+      "empty": "ਕੋਈ ਮਿਲਦੀ ਘਟਨਾਵਾਂ ਨਹੀਂ। ਫਿਲਟਰ ਬਦਲੋ ਜਾਂ ਉਡੀਕ ਕਰੋ।",
+      "more": "ਫੈਲਾਉਣ ਲਈ ਟੈਪ ਕਰੋ",
+      "no_summary": "(ਕੋਈ ਪੇਲੋਡ ਸਾਰ ਨਹੀਂ)",
+      "search_hint": "ਸੁਨੇਹਾ ਟੈਕਸਟ ਜਾਂ event_type ਦੁਆਰਾ ਫਿਲਟਰ",
+      "title": "ਡਾਇਗਨੋਸਟਿਕਸ"
+    },
+    "interfaces": {
+      "empty": "ਕੋਈ ਟਰਾਂਸਪੋਰਟ ਕੌਨਫਿਗਰ ਨਹੀਂ।",
+      "not_measured": "ਅਜੇ ਨਹੀਂ ਮਾਪਿਆ",
+      "peers": "ਪੀਅਰ",
+      "refresh": "ਰਿਫ੍ਰੈਸ਼",
+      "row": {
+        "bytes_in": "ਆਉਣ ਵਾਲੇ ਬਾਈਟ",
+        "bytes_out": "ਜਾਣ ਵਾਲੇ ਬਾਈਟ",
+        "reach": "ਪਹੁੰਚ %",
+        "status": "ਸਥਿਤੀ"
+      },
+      "status": {
+        "active": "ਸਰਗਰਮ",
+        "degraded": "ਖਰਾਬ",
+        "idle": "ਖਾਲੀ",
+        "unknown": "ਅਣਜਾਣ"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "ਜਦੋਂ ਅਸੀਂ ਆਪਣੀ ਟੈਲੀਮੈਟਰੀ ਪਾਈਪਲਾਈਨ ਜਾਰੀ ਕਰਾਂਗੇ ਤਾਂ ਪੀਅਰ ਇੱਕ ਅਸਲ ਨਕਸ਼ੇ 'ਤੇ ਦਿਖਾਈ ਦੇਣਗੇ। ਉਦੋਂ ਤੱਕ, ਹੁਣ ਤੁਸੀਂ ਕੀ ਦੇਖ ਸਕਦੇ ਹੋ:",
+        "title": "ਕੋਈ ਮਨਘੜਤ ਸਥਾਨ ਨਹੀਂ"
+      },
+      "future": {
+        "bullet_announces": "ਖੇਤਰ ਅਨੁਸਾਰ ਓਵਰਲੇ ਕੀਤੀਆਂ ਰੀਅਲ-ਟਾਈਮ ਘੋਸ਼ਣਾਵਾਂ",
+        "bullet_locations": "ਟੈਲੀਮੈਟਰੀ ਤੋਂ ਪੀਅਰ ਟਿਕਾਣੇ",
+        "bullet_transport": "ਟਰਾਂਸਪੋਰਟ-ਲਿੰਕ ਓਵਰਲੇ (TCP / LoRa / I2P / AX.25)",
+        "title": "ਇਹ ਬਾਅਦ ਵਿੱਚ ਕੀ ਦਿਖਾਏਗਾ"
+      },
+      "hero": {
+        "subtitle": "ਅਸਲ ਨਕਸ਼ਾ ਟੈਲੀਮੈਟਰੀ ਪਾਈਪਲਾਈਨ ਨਾਲ ਆ ਰਿਹਾ ਹੈ।",
+        "title": "ਭੂਗੋਲਿਕ ਦ੍ਰਿਸ਼"
+      },
+      "refresh": "ਰਿਫ੍ਰੈਸ਼",
+      "today": {
+        "canonical": "ਕੈਨੋਨੀਕਲ ਪੀਅਰ",
+        "other": "ਹੋਰ ਪੀਅਰ",
+        "title": "ਅੱਜ ਸਾਡੇ ਕੋਲ ਕੀ ਹੈ",
+        "trusted": "ਭਰੋਸੇਯੋਗ ਪੀਅਰ"
+      }
+    },
+    "paths": {
+      "empty": "ਅਜੇ ਕੋਈ ਮਾਰਗ ਘਟਨਾਵਾਂ ਨਹੀਂ।",
+      "kind_added": "ਜੋੜਿਆ",
+      "kind_changed": "ਬਦਲਿਆ",
+      "kind_lost": "ਗੁੰਮਿਆ",
+      "kind_other": "ਘਟਨਾ",
+      "no_static_table_note": "Edge 1.0 ਸਥਿਰ ਮਾਰਗ ਟੇਬਲ ਨੂੰ ਨਹੀਂ ਦਿਖਾਉਂਦਾ; ਇਹ ਸਕਰੀਨ ਸਿਰਫ਼ ਲਾਈਵ ਬਦਲਾਅ ਦਿਖਾਉਂਦੀ ਹੈ। ਮੁੜ-ਡਿਪਲੋਏ ਸਥਿਤੀ ਨੂੰ ਰੀਸੈੱਟ ਕਰ ਸਕਦਾ ਹੈ।",
+      "section_recent": "ਹਾਲੀਆ ਮਾਰਗ ਘਟਨਾਵਾਂ",
+      "title": "ਲਾਈਵ ਮਾਰਗ"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "ਪਿਛੋਕੜ (hex)",
+      "appearance_fg_label": "ਅਗੇਤਰ (hex)",
+      "appearance_icon_label": "ਆਈਕਨ",
+      "appearance_save": "ਦਿੱਖ ਸੁਰੱਖਿਅਤ ਕਰੋ",
+      "appearance_title": "ਦਿੱਖ",
+      "cancel_button": "ਰੱਦ ਕਰੋ",
+      "confirm_block_body": "ਬਲਾਕ ਕਰਨ ਨਾਲ ਇਸ ਪੀਅਰ ਤੋਂ ਸਾਰੇ ਟ੍ਰੈਫਿਕ ਨੂੰ ਇਨਕਾਰ ਕਰ ਦਿੱਤਾ ਜਾਵੇਗਾ। ਤੁਸੀਂ ਬਾਅਦ ਵਿੱਚ ਅਨਬਲਾਕ ਕਰ ਸਕਦੇ ਹੋ।",
+      "confirm_block_button": "ਬਲਾਕ ਕਰੋ",
+      "confirm_block_title": "ਇਸ ਪੀਅਰ ਨੂੰ ਬਲਾਕ ਕਰਨਾ ਹੈ?",
+      "copy_key_id": "ਕੁੰਜੀ ID ਕਾਪੀ ਕਰੋ",
+      "last_ok_days_ago": "{n} ਦਿਨ ਪਹਿਲਾਂ",
+      "last_ok_hours_ago": "{n} ਘੰਟੇ ਪਹਿਲਾਂ",
+      "last_ok_just_now": "ਹੁਣੇ",
+      "last_ok_min_ago": "{n} ਮਿੰਟ ਪਹਿਲਾਂ",
+      "last_ok_never": "ਕਦੇ ਨਹੀਂ",
+      "not_found": "ਪੀਅਰ ਨਹੀਂ ਮਿਲਿਆ",
+      "notes_empty": "ਕੋਈ ਨੋਟਸ ਨਹੀਂ",
+      "notes_title": "ਨੋਟਸ",
+      "reachability_empty": "ਅਜੇ ਨਹੀਂ ਮਾਪਿਆ",
+      "reachability_title": "ਪਹੁੰਚਯੋਗਤਾ",
+      "sas_close": "ਬੰਦ",
+      "sas_digits_label": "ਅੰਕ",
+      "sas_instructions": "ਭਰੋਸੇਯੋਗ ਚੈਨਲ (ਆਵਾਜ਼/ਵੀਡੀਓ/ਆਹਮੋ-ਸਾਹਮਣੇ) ਰਾਹੀਂ ਇਹਨਾਂ ਦੀ ਪੀਅਰ ਨਾਲ ਤੁਲਨਾ ਕਰੋ। ਜੇ ਦੋਵੇਂ ਪਾਸੇ ਮਿਲਦੇ ਹਨ, ਤਾਂ ਪੀਅਰ ਤਸਦੀਕ ਕੀਤਾ ਜਾਂਦਾ ਹੈ — ਭਰੋਸਾ TRUSTED ਵਿੱਚ ਬਦਲੋ।",
+      "sas_modal_title": "ਛੋਟੀ ਪ੍ਰਮਾਣੀਕਰਨ ਸਤਰ",
+      "sas_show_button": "SAS ਕੋਡ ਦਿਖਾਓ",
+      "sas_title": "ਪਛਾਣ ਤਸਦੀਕ ਕਰੋ (SAS)",
+      "sas_words_label": "ਸ਼ਬਦ",
+      "title": "ਪੀਅਰ ਵੇਰਵਾ",
+      "trust_state_title": "ਭਰੋਸਾ ਸਥਿਤੀ"
+    },
+    "peers": {
+      "add_peer_cancel": "ਰੱਦ ਕਰੋ",
+      "add_peer_fab": "ਪੀਅਰ ਜੋੜੋ",
+      "add_peer_paste_label": "ਨੋਡ ਕੋਡ ਪੇਸਟ ਕਰੋ",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR ਸਕੈਨ ਕਰੋ",
+      "add_peer_scan_qr_unavailable": "QR ਸਕੈਨਿੰਗ ਜਲਦੀ ਆ ਰਹੀ ਹੈ",
+      "add_peer_submit": "ਜੋੜੋ",
+      "add_peer_title": "ਪੀਅਰ ਜੋੜੋ",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "ਸੱਦਾ ਦੇਣ ਲਈ ਆਪਣਾ ਨੋਡ ਕੋਡ ਸਾਂਝਾ ਕਰੋ, ਜਾਂ ਕਿਸੇ ਪੀਅਰ ਦਾ ਕੋਡ ਜੋੜੋ।",
+      "empty_title": "ਅਜੇ ਕੋਈ ਪੀਅਰ ਨਹੀਂ",
+      "filter_all": "ਸਾਰੇ",
+      "filter_blocked": "ਬਲਾਕ ਕੀਤੇ",
+      "filter_canonical": "ਕੈਨੋਨੀਕਲ",
+      "filter_trusted": "ਭਰੋਸੇਯੋਗ",
+      "filter_unknown": "ਅਣਜਾਣ",
+      "filter_untrusted": "ਅਭਰੋਸੇਯੋਗ",
+      "show_infra": "CIRIS ਬੁਨਿਆਦੀ ਢਾਂਚਾ ਦਿਖਾਓ",
+      "title": "ਪੀਅਰ",
+      "trust_blocked": "ਬਲਾਕ ਕੀਤਾ",
+      "trust_trusted": "ਭਰੋਸੇਯੋਗ",
+      "trust_unknown": "ਅਣਜਾਣ",
+      "trust_untrusted": "ਅਭਰੋਸੇਯੋਗ"
+    },
+    "queue": {
+      "failures": {
+        "send": "ਭੇਜਣ ਦੀਆਂ ਅਸਫਲਤਾਵਾਂ",
+        "title": "ਅਸਫਲਤਾਵਾਂ",
+        "verify": "ਤਸਦੀਕ ਅਸਫਲਤਾਵਾਂ"
+      },
+      "refresh": "ਰਿਫ੍ਰੈਸ਼",
+      "stats": {
+        "depth": "ਕਤਾਰ ਡੂੰਘਾਈ",
+        "received": "ਪ੍ਰਾਪਤ",
+        "sent": "ਭੇਜਿਆ",
+        "title": "ਕਤਾਰ ਅੰਕੜੇ"
+      },
+      "throughput": {
+        "bytes_in": "ਆਉਣ ਵਾਲੇ ਬਾਈਟ",
+        "bytes_out": "ਜਾਣ ਵਾਲੇ ਬਾਈਟ",
+        "received": "ਪ੍ਰਾਪਤ",
+        "sent": "ਭੇਜਿਆ",
+        "session": "ਇਸ ਸੈਸ਼ਨ ਦਾ ਕੁੱਲ",
+        "title": "ਥਰੂਪੁਟ"
+      }
+    },
+    "stream": {
+      "clear": "ਸਾਫ਼ ਕਰੋ",
+      "dismiss": "ਖਾਰਜ ਕਰੋ",
+      "event_count": "{count} ਘਟਨਾਵਾਂ",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "ਰੋਕੋ",
+      "reconnect": "ਮੁੜ ਜੋੜੋ",
+      "resume": "ਮੁੜ ਸ਼ੁਰੂ ਕਰੋ",
+      "resume_notice": "ਮੁੜ ਜੁੜਿਆ। ਕੁਝ ਘਟਨਾਵਾਂ ਖੁੰਝ ਗਈਆਂ ਹੋ ਸਕਦੀਆਂ ਹਨ।",
+      "retry": "ਮੁੜ ਕੋਸ਼ਿਸ਼"
+    },
+    "trust_graph": {
+      "empty": "ਦੇਖਣ ਲਈ ਕੋਈ ਪੀਅਰ ਨਹੀਂ।",
+      "legend": {
+        "blocked": "ਬਲਾਕ ਕੀਤਾ",
+        "canonical_hint": "ਮੋਟੀ ਰਿੰਗ ਰੂਪਰੇਖਾ = ਕੈਨੋਨੀਕਲ (ਏਜੰਟ ਨਾਲ ਆਉਂਦੀ ਹੈ)।",
+        "edge_hint": "Edge ਪਾਰਦਰਸ਼ਤਾ ਹਰੇਕ-ਮਾਧਿਅਮ ਪਹੁੰਚਯੋਗਤਾ ਨੂੰ ਦਰਸਾਉਂਦੀ ਹੈ।",
+        "title": "ਭਰੋਸਾ ਸਥਿਤੀ",
+        "trusted": "ਭਰੋਸੇਯੋਗ",
+        "unknown": "ਅਣਜਾਣ",
+        "untrusted": "ਅਭਰੋਸੇਯੋਗ"
+      },
+      "refresh": "ਰਿਫ੍ਰੈਸ਼",
+      "summary": "{count} ਪੀਅਰ · {canonical} ਕੈਨੋਨੀਕਲ"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "ਏਜੰਟ ਮੋਡ",
+      "subtitle": "ਇਹ ਏਜੰਟ ਫੈਡਰੇਸ਼ਨ ਵਿੱਚ ਕਿਵੇਂ ਹਿੱਸਾ ਲੈਂਦਾ ਹੈ ਉਹ ਬਦਲੋ। ਨੈੱਟਵਰਕ ਸਕਰੀਨ ਨੂੰ ਦਰਸਾਉਂਦਾ ਹੈ।"
+    },
+    "brightness": "ਚਮਕ",
+    "brightness_light": "ਹਲਕਾ",
+    "brightness_system": "ਸਿਸਟਮ",
+    "brightness_dark": "ਗੂੜ੍ਹਾ"
+  }
 }

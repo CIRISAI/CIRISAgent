@@ -2055,5 +2055,281 @@
     "setup_ciris_llm_desc": "CIRIS AI đang hoạt động. Tùy chọn cấu hình nhà cung cấp riêng để sử dụng ngoại tuyến hoặc bảo mật.",
     "setup_select_provider": "Chọn nhà cung cấp",
     "setup_validation_select_provider": "Vui lòng chọn nhà cung cấp LLM"
+  },
+  "network": {
+    "title": "Mạng",
+    "identity_card": {
+      "title": "Danh tính liên bang",
+      "copy_address": "Sao chép địa chỉ",
+      "qr_label": "QR · ratchet / xoay",
+      "capabilities_title": "Khả năng",
+      "copied": "Đã sao chép",
+      "copy_node_code": "Sao chép mã nút",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Chia sẻ mã này với đồng đẳng để mời họ. Họ có thể dán hoặc quét.",
+      "node_code_title": "Mã nút của tôi",
+      "peers_canonical": "Chính tắc",
+      "peers_total": "Tổng đồng đẳng",
+      "qr_placeholder_label": "Mã QR",
+      "signer_key_label": "Khóa người ký"
+    },
+    "mode_card": {
+      "title": "Chế độ tác nhân",
+      "subtitle": "Cách tác nhân này tham gia vào liên bang. Edge sẽ khởi động lại khi thay đổi.",
+      "client_label": "Máy khách",
+      "client_description": "Kết nối ra ngoài đến một nút từ xa.",
+      "proxy_label": "Proxy",
+      "proxy_description": "Tác nhân cục bộ với bề mặt liên bang proxy.",
+      "proxy_default_marker": "(mặc định)",
+      "server_label": "Máy chủ",
+      "server_description": "Nút liên bang đầy đủ.",
+      "server_disk_gate": "Yêu cầu ≥256 GB đĩa trống · {available} trống trong {required} cần thiết",
+      "confirm_change_title": "Cần khởi động lại",
+      "confirm_change_body": "Chuyển đổi chế độ tác nhân yêu cầu khởi động lại Edge. Tiếp tục?",
+      "confirm_change_button": "Khởi động lại Edge",
+      "cancel_button": "Hủy",
+      "insufficient_disk_error": "Không đủ đĩa trống cho chế độ SERVER. {available} trống, {required} cần thiết."
+    },
+    "stats_strip": {
+      "peers": "Đồng đẳng",
+      "transports": "Vận chuyển",
+      "queue": "Hàng đợi",
+      "errors": "Lỗi",
+      "awaiting_edge_1_0": "Đang chờ Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Danh tính",
+      "map": "Bản đồ",
+      "trust_graph": "Đồ thị tin cậy",
+      "peers": "Đồng đẳng",
+      "interfaces": "Giao diện",
+      "paths": "Đường dẫn",
+      "announces": "Thông báo",
+      "queue": "Hàng đợi",
+      "diagnostics": "Chẩn đoán",
+      "content": "Nội dung",
+      "coming_soon_badge": "Sắp ra mắt"
+    },
+    "sub_screens": {
+      "identity_description": "Danh tính liên bang — khóa người ký, chuỗi chứng thực giữ phần cứng, trạng thái ratchet, lịch sử xoay.",
+      "map_description": "Canvas định hướng lực của khu vực liên bang địa phương — đồng đẳng là nút, vận chuyển là cạnh có màu.",
+      "trust_graph_description": "Chế độ xem của người vận hành về cấu trúc liên kết tin cậy vận chuyển — cấp trực tiếp, quyền được ủy quyền, cờ đối nghịch.",
+      "peers_description": "Ma trận có thể sắp xếp đồng đẳng × khả năng tiếp cận vận chuyển — mọi danh tính liên bang mà ngăn xếp này đã nghe.",
+      "interfaces_description": "Sức khỏe + cấu hình + thống kê theo vận chuyển (kiểu rnstatus). CRUD trên tương đương reticulum.conf.",
+      "paths_description": "Bảng đường dẫn RNS — mọi đích đến mà Edge biết cách tới, qua vận chuyển nào, hops, hết hạn.",
+      "announces_description": "Luồng thông báo trực tiếp + hồi tưởng — ai, giao diện nào, hops, xác thực chữ ký.",
+      "queue_description": "Hàng đợi gói tin gửi đi theo vận chuyển: độ sâu, tuổi, số lần thử lại, trạng thái phân mảnh.",
+      "diagnostics_description": "Lỗi gần đây, lỗi chữ ký, chặn chính sách, biến động vận chuyển — pháp y người vận hành.",
+      "content_description": "Trình duyệt kho nội dung liên bang — bộ nhớ đệm cục bộ, liên bang, truy xuất có địa chỉ hash."
+    },
+    "announces": {
+      "empty": "Chưa có thông báo nào. Đang chờ các sự kiện liên kết…",
+      "no_message": "(không có tin nhắn)",
+      "title": "Thông báo trực tiếp"
+    },
+    "content": {
+      "back": "Quay lại",
+      "error": {
+        "edge_unavailable": "Edge không khả dụng.",
+        "not_found": "Không tìm thấy nội dung tại đồng đẳng này. Hãy thử đồng đẳng khác."
+      },
+      "fetch": {
+        "button": "Lấy",
+        "content_id_label": "ID nội dung (SHA-256)",
+        "content_id_placeholder": "Bản tóm tắt hex 64 ký tự",
+        "invalid_id": "ID nội dung phải là 64 ký tự thập lục phân.",
+        "timeout_label": "Hết thời gian"
+      },
+      "peer": {
+        "change": "Đổi đồng đẳng",
+        "empty": "Không có đồng đẳng nào. Thêm đồng đẳng trước.",
+        "search": "Tìm kiếm đồng đẳng"
+      },
+      "refresh": "Làm mới",
+      "result": {
+        "content_type": "Loại nội dung",
+        "fetched_at": "Lấy lúc",
+        "preview": "Xem trước payload (200 byte đầu tiên)",
+        "size": "Kích thước",
+        "title": "Kết quả"
+      },
+      "step1": {
+        "title": "Chọn đồng đẳng để truy vấn"
+      },
+      "step2": {
+        "title": "Lấy nội dung từ đồng đẳng"
+      }
+    },
+    "diagnostics": {
+      "empty": "Không có sự kiện phù hợp. Điều chỉnh bộ lọc hoặc đợi.",
+      "more": "chạm để mở rộng",
+      "no_summary": "(không có tóm tắt payload)",
+      "search_hint": "Lọc theo văn bản tin nhắn hoặc event_type",
+      "title": "Chẩn đoán"
+    },
+    "interfaces": {
+      "empty": "Chưa cấu hình vận chuyển.",
+      "not_measured": "Chưa đo",
+      "peers": "đồng đẳng",
+      "refresh": "Làm mới",
+      "row": {
+        "bytes_in": "Byte vào",
+        "bytes_out": "Byte ra",
+        "reach": "Phạm vi %",
+        "status": "Trạng thái"
+      },
+      "status": {
+        "active": "Hoạt động",
+        "degraded": "Suy giảm",
+        "idle": "Không hoạt động",
+        "unknown": "Không xác định"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Đồng đẳng sẽ xuất hiện trên bản đồ thực sau khi chúng tôi triển khai pipeline telemetry. Cho đến lúc đó, đây là những gì bạn có thể thấy bây giờ:",
+        "title": "Không có vị trí bịa đặt"
+      },
+      "future": {
+        "bullet_announces": "Thông báo thời gian thực được phủ theo khu vực",
+        "bullet_locations": "Vị trí đồng đẳng từ telemetry",
+        "bullet_transport": "Lớp phủ liên kết vận chuyển (TCP / LoRa / I2P / AX.25)",
+        "title": "Cái này sẽ hiển thị sau"
+      },
+      "hero": {
+        "subtitle": "Bản đồ thực sẽ đến cùng với pipeline telemetry.",
+        "title": "Chế độ xem địa lý"
+      },
+      "refresh": "Làm mới",
+      "today": {
+        "canonical": "Đồng đẳng chính tắc",
+        "other": "Đồng đẳng khác",
+        "title": "Hôm nay chúng ta có gì",
+        "trusted": "Đồng đẳng đáng tin cậy"
+      }
+    },
+    "paths": {
+      "empty": "Chưa có sự kiện đường dẫn.",
+      "kind_added": "đã thêm",
+      "kind_changed": "đã thay đổi",
+      "kind_lost": "đã mất",
+      "kind_other": "sự kiện",
+      "no_static_table_note": "Edge 1.0 không hiển thị bảng đường dẫn tĩnh; màn hình này chỉ hiển thị thay đổi trực tiếp. Triển khai lại có thể đặt lại trạng thái.",
+      "section_recent": "Sự kiện đường dẫn gần đây",
+      "title": "Đường dẫn trực tiếp"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Nền (hex)",
+      "appearance_fg_label": "Tiền cảnh (hex)",
+      "appearance_icon_label": "Biểu tượng",
+      "appearance_save": "Lưu giao diện",
+      "appearance_title": "Giao diện",
+      "cancel_button": "Hủy",
+      "confirm_block_body": "Chặn sẽ từ chối tất cả lưu lượng từ đồng đẳng này. Bạn có thể bỏ chặn sau.",
+      "confirm_block_button": "Chặn",
+      "confirm_block_title": "Chặn đồng đẳng này?",
+      "copy_key_id": "Sao chép id khóa",
+      "last_ok_days_ago": "{n} ngày trước",
+      "last_ok_hours_ago": "{n} giờ trước",
+      "last_ok_just_now": "Vừa xong",
+      "last_ok_min_ago": "{n} phút trước",
+      "last_ok_never": "Không bao giờ",
+      "not_found": "Không tìm thấy đồng đẳng",
+      "notes_empty": "Không có ghi chú",
+      "notes_title": "Ghi chú",
+      "reachability_empty": "Chưa đo",
+      "reachability_title": "Khả năng tiếp cận",
+      "sas_close": "Đóng",
+      "sas_digits_label": "Chữ số",
+      "sas_instructions": "So sánh các giá trị này với đồng đẳng qua kênh đáng tin cậy (thoại/video/trực tiếp). Nếu cả hai bên khớp, đồng đẳng được xác minh — chuyển độ tin cậy sang TRUSTED.",
+      "sas_modal_title": "Chuỗi xác thực ngắn",
+      "sas_show_button": "Hiển thị mã SAS",
+      "sas_title": "Xác minh danh tính (SAS)",
+      "sas_words_label": "Từ",
+      "title": "Chi tiết đồng đẳng",
+      "trust_state_title": "Trạng thái tin cậy"
+    },
+    "peers": {
+      "add_peer_cancel": "Hủy",
+      "add_peer_fab": "Thêm đồng đẳng",
+      "add_peer_paste_label": "Dán mã nút",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "Quét QR",
+      "add_peer_scan_qr_unavailable": "Quét QR sắp ra mắt",
+      "add_peer_submit": "Thêm",
+      "add_peer_title": "Thêm đồng đẳng",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Chia sẻ mã nút của bạn để mời, hoặc thêm mã của đồng đẳng.",
+      "empty_title": "Chưa có đồng đẳng",
+      "filter_all": "Tất cả",
+      "filter_blocked": "Đã chặn",
+      "filter_canonical": "Chính tắc",
+      "filter_trusted": "Tin cậy",
+      "filter_unknown": "Không xác định",
+      "filter_untrusted": "Không tin cậy",
+      "show_infra": "Hiển thị cơ sở hạ tầng CIRIS",
+      "title": "Đồng đẳng",
+      "trust_blocked": "đã chặn",
+      "trust_trusted": "tin cậy",
+      "trust_unknown": "không xác định",
+      "trust_untrusted": "không tin cậy"
+    },
+    "queue": {
+      "failures": {
+        "send": "Lỗi gửi",
+        "title": "Lỗi",
+        "verify": "Lỗi xác minh"
+      },
+      "refresh": "Làm mới",
+      "stats": {
+        "depth": "Độ sâu hàng đợi",
+        "received": "Đã nhận",
+        "sent": "Đã gửi",
+        "title": "Thống kê hàng đợi"
+      },
+      "throughput": {
+        "bytes_in": "Byte vào",
+        "bytes_out": "Byte ra",
+        "received": "Đã nhận",
+        "sent": "Đã gửi",
+        "session": "Tổng phiên này",
+        "title": "Thông lượng"
+      }
+    },
+    "stream": {
+      "clear": "Xóa",
+      "dismiss": "Bỏ qua",
+      "event_count": "{count} sự kiện",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Tạm dừng",
+      "reconnect": "Kết nối lại",
+      "resume": "Tiếp tục",
+      "resume_notice": "Đã kết nối lại. Một số sự kiện có thể bị bỏ lỡ.",
+      "retry": "Thử lại"
+    },
+    "trust_graph": {
+      "empty": "Không có đồng đẳng để hiển thị.",
+      "legend": {
+        "blocked": "Đã chặn",
+        "canonical_hint": "Đường viền vòng dày hơn = chính tắc (đi kèm với tác nhân).",
+        "edge_hint": "Độ mờ cạnh phản ánh khả năng tiếp cận theo phương tiện.",
+        "title": "Trạng thái tin cậy",
+        "trusted": "Tin cậy",
+        "unknown": "Không xác định",
+        "untrusted": "Không tin cậy"
+      },
+      "refresh": "Làm mới",
+      "summary": "{count} đồng đẳng · {canonical} chính tắc"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Chế độ tác nhân",
+      "subtitle": "Thay đổi cách tác nhân này tham gia vào liên bang. Phản chiếu màn hình Mạng."
+    },
+    "brightness": "Độ sáng",
+    "brightness_light": "Sáng",
+    "brightness_system": "Hệ thống",
+    "brightness_dark": "Tối"
   }
 }

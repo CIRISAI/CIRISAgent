@@ -2055,5 +2055,281 @@
     "system_cognitive_state": "Matsayin Tunani",
     "system_queue_depth": "Zurfin Layi"
   },
-  "login_first_run_welcome": "Barka da zuwa! Zaɓi yadda za a saita mataimakin AI ɗinka."
+  "login_first_run_welcome": "Barka da zuwa! Zaɓi yadda za a saita mataimakin AI ɗinka.",
+  "network": {
+    "title": "Hanyar Sadarwa",
+    "identity_card": {
+      "title": "Asalin Federation",
+      "copy_address": "Kwafi adireshi",
+      "qr_label": "QR · ratchet / juyawa",
+      "capabilities_title": "Iyawa",
+      "copied": "An kwafa",
+      "copy_node_code": "Kwafa lambar node",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "Raba wannan lambar tare da abokin don gayyatar shi. Zai iya manna ko scan.",
+      "node_code_title": "Lambar node nawa",
+      "peers_canonical": "Canonical",
+      "peers_total": "Jimillar abokai",
+      "qr_placeholder_label": "Lambar QR",
+      "signer_key_label": "Maɓallin sa hannu"
+    },
+    "mode_card": {
+      "title": "Yanayin wakili",
+      "subtitle": "Yadda wannan wakili ke shiga cikin federation. Edge zai sake farawa lokacin canji.",
+      "client_label": "Abokin ciniki",
+      "client_description": "Haɗa zuwa waje zuwa nesa node.",
+      "proxy_label": "Proxy",
+      "proxy_description": "Wakili na gida tare da fuskar proxy federation.",
+      "proxy_default_marker": "(asali)",
+      "server_label": "Sabar",
+      "server_description": "Cikakken node na federation.",
+      "server_disk_gate": "Yana buƙatar ≥256 GB faifai kyauta · {available} kyauta na {required} ana buƙata",
+      "confirm_change_title": "Ana buƙatar sake farawa",
+      "confirm_change_body": "Canza yanayin wakili yana buƙatar sake farawa na Edge. A ci gaba?",
+      "confirm_change_button": "Sake fara Edge",
+      "cancel_button": "Soke",
+      "insufficient_disk_error": "Babu isasshen faifai kyauta don yanayin SERVER. {available} kyauta, {required} ana buƙata."
+    },
+    "stats_strip": {
+      "peers": "Abokai",
+      "transports": "Sufuri",
+      "queue": "Layi",
+      "errors": "Kurakurai",
+      "awaiting_edge_1_0": "Ana jiran Edge 1.0"
+    },
+    "tiles": {
+      "identity": "Asali",
+      "map": "Taswira",
+      "trust_graph": "Hoton amincewa",
+      "peers": "Abokai",
+      "interfaces": "Mahaɗa",
+      "paths": "Hanyoyi",
+      "announces": "Sanarwa",
+      "queue": "Layi",
+      "diagnostics": "Bincike",
+      "content": "Abun ciki",
+      "coming_soon_badge": "Yana zuwa nan ba da daɗewa ba"
+    },
+    "sub_screens": {
+      "identity_description": "Asalin federation — maɓallin sa hannu, sarƙar tabbatar da kulawa ta hardware, yanayin ratchet, tarihin juyawa.",
+      "map_description": "Zane mai jagora ƙarfi na unguwar federation ta gida — abokai a matsayin nodes, sufuri a matsayin gefuna masu launi.",
+      "trust_graph_description": "Ra'ayin mai gudanarwa na topology na amincewar sufuri — bayar da kai tsaye, hukuma da aka wakilta, alamomin masu hamayya.",
+      "peers_description": "Matsakaicin abokai × sufurin isa wanda za a iya tsara shi — kowane asalin federation da wannan stack ya ji.",
+      "interfaces_description": "Lafiyar kowane sufuri + config + ƙididdiga (salon rnstatus). CRUD akan daidai da reticulum.conf.",
+      "paths_description": "Tebur na hanyar RNS — kowane wurin zuwa wanda Edge ya san yadda zai kai, ta wace sufuri, hops, ƙarewa.",
+      "announces_description": "Yawo na sanarwa kai tsaye + na baya — wanene, wace mahaɗa, hops, tabbatarwar sa hannu.",
+      "queue_description": "Layin fakitin fita kowane sufuri: zurfi, shekaru, ƙidayar sake gwadawa, yanayin gutsattsarewa.",
+      "diagnostics_description": "Kurakurai na baya-bayan nan, gazawar sa hannu, toshe manufa, juyawar sufuri — bincike na mai gudanarwa.",
+      "content_description": "Mai bincike na ajiyar abun ciki na federation — an adana shi a cikin gida, federated, dawo da hash-adireshin."
+    },
+    "announces": {
+      "empty": "Babu sanarwa tukuna. Ana jiran abubuwan da suka faru na federation…",
+      "no_message": "(babu sako)",
+      "title": "Sanarwar kai tsaye"
+    },
+    "content": {
+      "back": "Komawa",
+      "error": {
+        "edge_unavailable": "Edge baya samuwa.",
+        "not_found": "Ba a samu abun ciki ba a wannan abokin. Gwada wani abokin daban."
+      },
+      "fetch": {
+        "button": "Dauko",
+        "content_id_label": "Lambar abun ciki (SHA-256)",
+        "content_id_placeholder": "Hex digest na haruffa 64",
+        "invalid_id": "Lambar abun ciki dole ne ta zama haruffa hexadecimal 64.",
+        "timeout_label": "Lokacin jiran"
+      },
+      "peer": {
+        "change": "Canza abokin",
+        "empty": "Babu abokai. Ƙara abokai da farko.",
+        "search": "Bincika abokai"
+      },
+      "refresh": "Sabunta",
+      "result": {
+        "content_type": "Nau'in abun ciki",
+        "fetched_at": "An dauko a",
+        "preview": "Bita na payload (bytes 200 na farko)",
+        "size": "Girma",
+        "title": "Sakamako"
+      },
+      "step1": {
+        "title": "Zaɓi abokin don tambaya"
+      },
+      "step2": {
+        "title": "Dauko abun ciki daga abokin"
+      }
+    },
+    "diagnostics": {
+      "empty": "Babu abubuwan da suka dace. Daidaita matattara ko jira.",
+      "more": "matsa don faɗaɗa",
+      "no_summary": "(babu taƙaitaccen payload)",
+      "search_hint": "Tace ta rubutun sako ko event_type",
+      "title": "Bincike"
+    },
+    "interfaces": {
+      "empty": "Ba a saita kowane sufuri ba.",
+      "not_measured": "Ba a auna ba tukuna",
+      "peers": "abokai",
+      "refresh": "Sabunta",
+      "row": {
+        "bytes_in": "Bytes masu shigowa",
+        "bytes_out": "Bytes masu fitowa",
+        "reach": "Isa %",
+        "status": "Matsayi"
+      },
+      "status": {
+        "active": "Mai aiki",
+        "degraded": "Tabarbarewa",
+        "idle": "Babu aiki",
+        "unknown": "Ba a sani ba"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "Abokai za su bayyana akan ainihin taswira da zarar mun fitar da bututun telemetry. Har sai lokacin, ga abin da kuke iya gani yanzu:",
+        "title": "Babu wuraren da aka ƙirƙira"
+      },
+      "future": {
+        "bullet_announces": "Sanarwar kai tsaye da aka shimfiɗa ta yanki",
+        "bullet_locations": "Wuraren abokai daga telemetry",
+        "bullet_transport": "Lulluɓi na haɗin sufuri (TCP / LoRa / I2P / AX.25)",
+        "title": "Abin da wannan zai nuna daga baya"
+      },
+      "hero": {
+        "subtitle": "Ainihin taswira yana zuwa tare da bututun telemetry.",
+        "title": "Hangen yanki"
+      },
+      "refresh": "Sabunta",
+      "today": {
+        "canonical": "Abokai na canonical",
+        "other": "Sauran abokai",
+        "title": "Abin da muke da shi a yau",
+        "trusted": "Abokai amintattu"
+      }
+    },
+    "paths": {
+      "empty": "Babu abubuwan da suka faru na hanya tukuna.",
+      "kind_added": "an ƙara",
+      "kind_changed": "ya canza",
+      "kind_lost": "ya ɓace",
+      "kind_other": "abin da ya faru",
+      "no_static_table_note": "Edge 1.0 baya fitar da tebur na hanya tsayayye; wannan allon yana nuna canje-canje masu kai tsaye kawai. Sake turawa na iya sake saita yanayin.",
+      "section_recent": "Abubuwan hanya na kwanan nan",
+      "title": "Hanyoyi kai tsaye"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "Baya (hex)",
+      "appearance_fg_label": "Gaba (hex)",
+      "appearance_icon_label": "Alama",
+      "appearance_save": "Adana kamanni",
+      "appearance_title": "Kamanni",
+      "cancel_button": "Soke",
+      "confirm_block_body": "Toshe zai ƙi duk zirga-zirga daga wannan abokin. Kuna iya cire toshe daga baya.",
+      "confirm_block_button": "Toshe",
+      "confirm_block_title": "Toshe wannan abokin?",
+      "copy_key_id": "Kwafa id na maɓalli",
+      "last_ok_days_ago": "kwana {n} da suka wuce",
+      "last_ok_hours_ago": "awa {n} da suka wuce",
+      "last_ok_just_now": "Yanzu",
+      "last_ok_min_ago": "minti {n} da suka wuce",
+      "last_ok_never": "Ba taɓa ba",
+      "not_found": "Ba a sami abokin ba",
+      "notes_empty": "Babu bayanai",
+      "notes_title": "Bayanai",
+      "reachability_empty": "Ba a auna ba tukuna",
+      "reachability_title": "Iya isa",
+      "sas_close": "Rufe",
+      "sas_digits_label": "Lambobi",
+      "sas_instructions": "Kwatanta waɗannan tare da abokin ta hanyar amintaccen channel (murya/video/a fuska). Idan ɓangarorin biyu sun dace, an tabbatar da abokin — juya amana zuwa TRUSTED.",
+      "sas_modal_title": "Gajeren zaren tabbatarwa",
+      "sas_show_button": "Nuna lambar SAS",
+      "sas_title": "Tabbatar da ainihi (SAS)",
+      "sas_words_label": "Kalmomi",
+      "title": "Cikakken bayanin abokin",
+      "trust_state_title": "Yanayin amana"
+    },
+    "peers": {
+      "add_peer_cancel": "Soke",
+      "add_peer_fab": "Ƙara abokin",
+      "add_peer_paste_label": "Manna lambar node",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "Scan QR",
+      "add_peer_scan_qr_unavailable": "Scan QR yana zuwa nan ba da jimawa ba",
+      "add_peer_submit": "Ƙara",
+      "add_peer_title": "Ƙara abokin",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "Raba lambar node ɗinka don gayyata, ko ƙara lambar abokin.",
+      "empty_title": "Babu abokai tukuna",
+      "filter_all": "Duka",
+      "filter_blocked": "An toshe",
+      "filter_canonical": "Canonical",
+      "filter_trusted": "Amintacce",
+      "filter_unknown": "Ba a sani ba",
+      "filter_untrusted": "Mara amana",
+      "show_infra": "Nuna kayan more rayuwa na CIRIS",
+      "title": "Abokai",
+      "trust_blocked": "an toshe",
+      "trust_trusted": "amintacce",
+      "trust_unknown": "ba a sani ba",
+      "trust_untrusted": "mara amana"
+    },
+    "queue": {
+      "failures": {
+        "send": "Gazawar aikawa",
+        "title": "Gazawa",
+        "verify": "Gazawar tabbatarwa"
+      },
+      "refresh": "Sabunta",
+      "stats": {
+        "depth": "Zurfin layi",
+        "received": "An karɓa",
+        "sent": "An aika",
+        "title": "Ƙididdigar layi"
+      },
+      "throughput": {
+        "bytes_in": "Bytes masu shigowa",
+        "bytes_out": "Bytes masu fitowa",
+        "received": "An karɓa",
+        "sent": "An aika",
+        "session": "Jimlar wannan zama",
+        "title": "Yawan aiki"
+      }
+    },
+    "stream": {
+      "clear": "Share",
+      "dismiss": "Korar",
+      "event_count": "Abubuwan da suka faru {count}",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "Dakata",
+      "reconnect": "Sake haɗawa",
+      "resume": "Ci gaba",
+      "resume_notice": "An sake haɗawa. Wasu abubuwa na iya ɓacewa.",
+      "retry": "Sake gwadawa"
+    },
+    "trust_graph": {
+      "empty": "Babu abokai don nunawa.",
+      "legend": {
+        "blocked": "An toshe",
+        "canonical_hint": "Kaurin zoben da ya yi kauri = canonical (yana zuwa tare da wakili).",
+        "edge_hint": "Bayyanar gefe yana nuna iya isa kowane matsakaici.",
+        "title": "Yanayin amana",
+        "trusted": "Amintacce",
+        "unknown": "Ba a sani ba",
+        "untrusted": "Mara amana"
+      },
+      "refresh": "Sabunta",
+      "summary": "{count} abokai · {canonical} canonical"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "Yanayin wakili",
+      "subtitle": "Canja yadda wannan wakili ke shiga cikin federation. Yana nuna allon Hanyar Sadarwa."
+    },
+    "brightness": "Haske",
+    "brightness_light": "Haske",
+    "brightness_system": "Tsarin",
+    "brightness_dark": "Duhu"
+  }
 }

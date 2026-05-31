@@ -2055,5 +2055,281 @@
     "metrics": "Metrics",
     "services": "सेवाs"
   },
-  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
+  "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant.",
+  "network": {
+    "title": "नेटवर्क",
+    "identity_card": {
+      "title": "फेडरेशन ओळख",
+      "copy_address": "पत्ता कॉपी करा",
+      "qr_label": "QR · रॅचेट / फिरवणे",
+      "capabilities_title": "क्षमता",
+      "copied": "कॉपी केले",
+      "copy_node_code": "नोड कोड कॉपी करा",
+      "crate_version": "Edge {version}",
+      "node_code_hint": "पीयरला आमंत्रित करण्यासाठी हा कोड शेअर करा. ते पेस्ट किंवा स्कॅन करू शकतात.",
+      "node_code_title": "माझा नोड कोड",
+      "peers_canonical": "कॅनॉनिकल",
+      "peers_total": "एकूण पीयर",
+      "qr_placeholder_label": "QR कोड",
+      "signer_key_label": "स्वाक्षरीकर्ता की"
+    },
+    "mode_card": {
+      "title": "एजंट मोड",
+      "subtitle": "हा एजंट फेडरेशनमध्ये कसा भाग घेतो. बदलावर Edge पुन्हा सुरू होईल.",
+      "client_label": "क्लायंट",
+      "client_description": "दूरस्थ नोडशी बाहेरून कनेक्ट करा.",
+      "proxy_label": "प्रॉक्सी",
+      "proxy_description": "प्रॉक्सी फेडरेशन पृष्ठभागासह स्थानिक एजंट.",
+      "proxy_default_marker": "(डीफॉल्ट)",
+      "server_label": "सर्व्हर",
+      "server_description": "पूर्ण फेडरेशन नोड.",
+      "server_disk_gate": "≥256 GB मोकळी डिस्क आवश्यक · {available} मोकळी, {required} आवश्यक",
+      "confirm_change_title": "रीस्टार्ट आवश्यक",
+      "confirm_change_body": "एजंट मोड बदलण्यासाठी Edge रीस्टार्ट आवश्यक आहे. सुरू ठेवायचे?",
+      "confirm_change_button": "Edge रीस्टार्ट करा",
+      "cancel_button": "रद्द करा",
+      "insufficient_disk_error": "SERVER मोडसाठी पुरेशी मोकळी डिस्क नाही. {available} मोकळी, {required} आवश्यक."
+    },
+    "stats_strip": {
+      "peers": "पीयर्स",
+      "transports": "ट्रान्सपोर्ट",
+      "queue": "रांग",
+      "errors": "त्रुटी",
+      "awaiting_edge_1_0": "Edge 1.0 ची प्रतीक्षा"
+    },
+    "tiles": {
+      "identity": "ओळख",
+      "map": "नकाशा",
+      "trust_graph": "विश्वास आलेख",
+      "peers": "पीयर्स",
+      "interfaces": "इंटरफेस",
+      "paths": "मार्ग",
+      "announces": "घोषणा",
+      "queue": "रांग",
+      "diagnostics": "निदान",
+      "content": "सामग्री",
+      "coming_soon_badge": "लवकरच येत आहे"
+    },
+    "sub_screens": {
+      "identity_description": "फेडरेशन ओळख — स्वाक्षरीकर्ता की, हार्डवेअर-कस्टडी प्रमाणीकरण साखळी, रॅचेट स्थिती, फिरवणे इतिहास.",
+      "map_description": "स्थानिक फेडरेशन शेजारचा बल-निर्देशित कॅनव्हास — पीयर्स नोड्स म्हणून, ट्रान्सपोर्ट रंगीत किनार्‍या म्हणून.",
+      "trust_graph_description": "ट्रान्सपोर्ट-विश्वास टोपोलॉजीचे ऑपरेटर दृश्य — थेट अनुदाने, प्रत्यायोजित प्राधिकरण, विरोधी ध्वज.",
+      "peers_description": "क्रमबद्ध पीयर × ट्रान्सपोर्ट पोहोचयोग्यता मॅट्रिक्स — या स्टॅकने ऐकलेली प्रत्येक फेडरेशन ओळख.",
+      "interfaces_description": "प्रति-ट्रान्सपोर्ट आरोग्य + कॉन्फिग + आकडेवारी (rnstatus-शैली). reticulum.conf-समतुल्यवर CRUD.",
+      "paths_description": "RNS मार्ग सारणी — Edge ला पोहोचण्याचा मार्ग माहीत असलेले प्रत्येक गंतव्य, कोणत्या ट्रान्सपोर्टद्वारे, हॉप्स, मुदत.",
+      "announces_description": "थेट + पूर्वलक्षी घोषणा प्रवाह — कोण, कोणता इंटरफेस, हॉप्स, स्वाक्षरी प्रमाणीकरण.",
+      "queue_description": "प्रति ट्रान्सपोर्ट आउटबाउंड पॅकेट रांग: खोली, वय, पुन्हा प्रयत्न संख्या, खंडित स्थिती.",
+      "diagnostics_description": "अलीकडील त्रुटी, स्वाक्षरी अपयश, धोरण ब्लॉक्स, ट्रान्सपोर्ट मंथन — ऑपरेटर न्यायवैद्यक.",
+      "content_description": "फेडरेशन सामग्री संचय ब्राउझर — स्थानिकरित्या कॅश्ड, फेडरेटेड, हॅश-संबोधित पुनर्प्राप्ती."
+    },
+    "announces": {
+      "empty": "अद्याप कोणत्याही घोषणा नाहीत. फेडरेशन इव्हेंटची प्रतीक्षा करत आहे…",
+      "no_message": "(कोणताही संदेश नाही)",
+      "title": "थेट घोषणा"
+    },
+    "content": {
+      "back": "मागे",
+      "error": {
+        "edge_unavailable": "Edge उपलब्ध नाही.",
+        "not_found": "या पीयरवर सामग्री सापडली नाही. वेगळा पीयर वापरून पहा."
+      },
+      "fetch": {
+        "button": "मिळवा",
+        "content_id_label": "सामग्री आयडी (SHA-256)",
+        "content_id_placeholder": "64-वर्णांची hex डायजेस्ट",
+        "invalid_id": "सामग्री आयडी 64 हेक्साडेसिमल वर्णांचा असणे आवश्यक आहे.",
+        "timeout_label": "टाइमआउट"
+      },
+      "peer": {
+        "change": "पीयर बदला",
+        "empty": "कोणतेही पीयर उपलब्ध नाहीत. आधी पीयर जोडा.",
+        "search": "पीयर शोधा"
+      },
+      "refresh": "रिफ्रेश",
+      "result": {
+        "content_type": "सामग्री प्रकार",
+        "fetched_at": "रोजी मिळाले",
+        "preview": "पेलोड पूर्वावलोकन (पहिले 200 बाइट्स)",
+        "size": "आकार",
+        "title": "निकाल"
+      },
+      "step1": {
+        "title": "क्वेरीसाठी पीयर निवडा"
+      },
+      "step2": {
+        "title": "पीयरकडून सामग्री मिळवा"
+      }
+    },
+    "diagnostics": {
+      "empty": "जुळणारे इव्हेंट नाहीत. फिल्टर समायोजित करा किंवा प्रतीक्षा करा.",
+      "more": "विस्तृत करण्यासाठी टॅप करा",
+      "no_summary": "(पेलोड सारांश नाही)",
+      "search_hint": "संदेश मजकूर किंवा event_type नुसार फिल्टर करा",
+      "title": "डायग्नोस्टिक्स"
+    },
+    "interfaces": {
+      "empty": "कोणतेही ट्रान्सपोर्ट कॉन्फिगर केलेले नाहीत.",
+      "not_measured": "अद्याप मोजले नाही",
+      "peers": "पीयर",
+      "refresh": "रिफ्रेश",
+      "row": {
+        "bytes_in": "इनकमिंग बाइट्स",
+        "bytes_out": "आउटगोइंग बाइट्स",
+        "reach": "पोहोच %",
+        "status": "स्थिती"
+      },
+      "status": {
+        "active": "सक्रिय",
+        "degraded": "खालावलेली",
+        "idle": "निष्क्रिय",
+        "unknown": "अज्ञात"
+      }
+    },
+    "map": {
+      "explanation": {
+        "body": "जेव्हा आम्ही आमची टेलिमेट्री पाइपलाइन लाँच करू, तेव्हा पीयर्स खऱ्या नकाशावर दिसतील. तोपर्यंत, आत्ता तुम्ही जे पाहू शकता ते येथे आहे:",
+        "title": "बनावट स्थाने नाहीत"
+      },
+      "future": {
+        "bullet_announces": "प्रदेशानुसार ओव्हरले केलेल्या रिअल-टाइम घोषणा",
+        "bullet_locations": "टेलिमेट्रीमधून पीयर स्थाने",
+        "bullet_transport": "ट्रान्सपोर्ट-लिंक ओव्हरले (TCP / LoRa / I2P / AX.25)",
+        "title": "हे नंतर काय दर्शवेल"
+      },
+      "hero": {
+        "subtitle": "टेलिमेट्री पाइपलाइनसह खरा नकाशा येत आहे.",
+        "title": "भौगोलिक दृश्य"
+      },
+      "refresh": "रिफ्रेश",
+      "today": {
+        "canonical": "कॅनॉनिकल पीयर",
+        "other": "इतर पीयर",
+        "title": "आज आमच्याकडे काय आहे",
+        "trusted": "विश्वसनीय पीयर"
+      }
+    },
+    "paths": {
+      "empty": "अद्याप कोणतेही पथ इव्हेंट नाहीत.",
+      "kind_added": "जोडले",
+      "kind_changed": "बदलले",
+      "kind_lost": "हरवले",
+      "kind_other": "इव्हेंट",
+      "no_static_table_note": "Edge 1.0 स्थिर पथ टेबल उघड करत नाही; ही स्क्रीन फक्त थेट बदल दर्शवते. पुन्हा डिप्लॉयमेंट स्थिती रीसेट करू शकते.",
+      "section_recent": "अलीकडील पथ इव्हेंट",
+      "title": "थेट पथ"
+    },
+    "peer_detail": {
+      "appearance_bg_label": "पार्श्वभूमी (hex)",
+      "appearance_fg_label": "अग्रभाग (hex)",
+      "appearance_icon_label": "आयकॉन",
+      "appearance_save": "दिसणे जतन करा",
+      "appearance_title": "दिसणे",
+      "cancel_button": "रद्द करा",
+      "confirm_block_body": "ब्लॉक केल्याने या पीयरकडील सर्व रहदारी नाकारली जाईल. तुम्ही नंतर अनब्लॉक करू शकता.",
+      "confirm_block_button": "ब्लॉक करा",
+      "confirm_block_title": "या पीयरला ब्लॉक करायचे?",
+      "copy_key_id": "की आयडी कॉपी करा",
+      "last_ok_days_ago": "{n} दिवसांपूर्वी",
+      "last_ok_hours_ago": "{n} तासांपूर्वी",
+      "last_ok_just_now": "आत्ताच",
+      "last_ok_min_ago": "{n} मिनिटांपूर्वी",
+      "last_ok_never": "कधीही नाही",
+      "not_found": "पीयर सापडला नाही",
+      "notes_empty": "कोणत्याही नोट्स नाहीत",
+      "notes_title": "नोट्स",
+      "reachability_empty": "अद्याप मोजले नाही",
+      "reachability_title": "पोहोचण्याची क्षमता",
+      "sas_close": "बंद करा",
+      "sas_digits_label": "अंक",
+      "sas_instructions": "विश्वसनीय चॅनेल (आवाज/व्हिडिओ/समक्ष) द्वारे पीयरसह यांची तुलना करा. दोन्ही बाजू जुळल्यास, पीयर सत्यापित आहे — विश्वास TRUSTED वर बदला.",
+      "sas_modal_title": "लघु प्रमाणीकरण स्ट्रिंग",
+      "sas_show_button": "SAS कोड दर्शवा",
+      "sas_title": "ओळख सत्यापित करा (SAS)",
+      "sas_words_label": "शब्द",
+      "title": "पीयर तपशील",
+      "trust_state_title": "विश्वास स्थिती"
+    },
+    "peers": {
+      "add_peer_cancel": "रद्द करा",
+      "add_peer_fab": "पीयर जोडा",
+      "add_peer_paste_label": "नोड कोड पेस्ट करा",
+      "add_peer_paste_placeholder": "CIRIS-V1-...",
+      "add_peer_scan_qr": "QR स्कॅन करा",
+      "add_peer_scan_qr_unavailable": "QR स्कॅनिंग लवकरच येत आहे",
+      "add_peer_submit": "जोडा",
+      "add_peer_title": "पीयर जोडा",
+      "canonical_chip": "CIRIS",
+      "empty_subtitle": "आमंत्रित करण्यासाठी तुमचा नोड कोड शेअर करा किंवा पीयरचा कोड जोडा.",
+      "empty_title": "अद्याप कोणतेही पीयर नाहीत",
+      "filter_all": "सर्व",
+      "filter_blocked": "ब्लॉक केलेले",
+      "filter_canonical": "कॅनॉनिकल",
+      "filter_trusted": "विश्वसनीय",
+      "filter_unknown": "अज्ञात",
+      "filter_untrusted": "अविश्वसनीय",
+      "show_infra": "CIRIS पायाभूत सुविधा दर्शवा",
+      "title": "पीयर",
+      "trust_blocked": "ब्लॉक केलेले",
+      "trust_trusted": "विश्वसनीय",
+      "trust_unknown": "अज्ञात",
+      "trust_untrusted": "अविश्वसनीय"
+    },
+    "queue": {
+      "failures": {
+        "send": "पाठविण्यातील अपयश",
+        "title": "अपयश",
+        "verify": "सत्यापन अपयश"
+      },
+      "refresh": "रिफ्रेश",
+      "stats": {
+        "depth": "रांगेची खोली",
+        "received": "प्राप्त",
+        "sent": "पाठविले",
+        "title": "रांग आकडेवारी"
+      },
+      "throughput": {
+        "bytes_in": "इनकमिंग बाइट्स",
+        "bytes_out": "आउटगोइंग बाइट्स",
+        "received": "प्राप्त",
+        "sent": "पाठविले",
+        "session": "या सत्राचा एकूण",
+        "title": "थ्रूपुट"
+      }
+    },
+    "stream": {
+      "clear": "साफ करा",
+      "dismiss": "नाकारा",
+      "event_count": "{count} इव्हेंट",
+      "last_event_id": "Last-Event-ID: {id}",
+      "pause": "विराम",
+      "reconnect": "पुन्हा कनेक्ट करा",
+      "resume": "पुन्हा सुरू करा",
+      "resume_notice": "पुन्हा कनेक्ट केले. काही इव्हेंट कदाचित चुकले असतील.",
+      "retry": "पुन्हा प्रयत्न करा"
+    },
+    "trust_graph": {
+      "empty": "व्हिज्युअलाइझ करण्यासाठी कोणतेही पीयर नाहीत.",
+      "legend": {
+        "blocked": "ब्लॉक केलेले",
+        "canonical_hint": "जाड रिंग रूपरेषा = कॅनॉनिकल (एजंटसह येते).",
+        "edge_hint": "एज पारदर्शकता प्रति-माध्यम पोहोच दर्शवते.",
+        "title": "विश्वास स्थिती",
+        "trusted": "विश्वसनीय",
+        "unknown": "अज्ञात",
+        "untrusted": "अविश्वसनीय"
+      },
+      "refresh": "रिफ्रेश",
+      "summary": "{count} पीयर · {canonical} कॅनॉनिकल"
+    }
+  },
+  "settings": {
+    "agent_mode_section": {
+      "title": "एजंट मोड",
+      "subtitle": "हा एजंट फेडरेशनमध्ये कसा भाग घेतो ते बदला. नेटवर्क स्क्रीन प्रतिबिंबित करते."
+    },
+    "brightness": "तेजस्विता",
+    "brightness_light": "हलका",
+    "brightness_system": "सिस्टम",
+    "brightness_dark": "गडद"
+  }
 }

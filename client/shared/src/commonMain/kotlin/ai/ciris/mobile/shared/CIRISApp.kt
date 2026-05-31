@@ -3191,6 +3191,20 @@ fun CIRISApp(
                         },
                         onIssueClick = { url -> uriHandler.openUri(url) },
                         appVersion = "v2.9.4",
+                        // Theme strip at the bottom of the drawer — Light /
+                        // System / Dark segmented control. Wired straight to
+                        // SettingsViewModel so the user can flip themes from
+                        // the global nav surface (matches Material 3 nav
+                        // drawer guidance for global affordances).
+                        brightnessPreference = brightnessPreference,
+                        onBrightnessChange = { settingsViewModel.setBrightnessPreference(it) },
+                        // CIRIS signet at the top of the drawer doubles as the
+                        // close button — matches the open affordance (also a
+                        // CIRIS signet) so the icon contract is "tap the CIRIS
+                        // signet to toggle the drawer, always and everywhere".
+                        onCloseRequest = if (isCompactWindow) {
+                            { drawerScope.launch { drawerState.close() } }
+                        } else null,
                     )
                 }
 
@@ -3205,23 +3219,28 @@ fun CIRISApp(
                             modifier = androidx.compose.ui.Modifier.fillMaxSize(),
                         ) {
                             mainScreenContent(androidx.compose.ui.Modifier.fillMaxSize())
-                            // Top-left hamburger overlay — the only affordance
-                            // to open the drawer on mobile. testableClickable
-                            // tag `btn_nav_drawer_open` is what the federation
+                            // Top-left CIRIS signet — IS the hamburger on
+                            // mobile. The same signet inside the drawer header
+                            // closes it (see EpistemicSidebar onCloseRequest),
+                            // so the affordance is consistent: "tap the CIRIS
+                            // signet to toggle the drawer, always and
+                            // everywhere". testableClickable tag
+                            // `btn_nav_drawer_open` is what the federation
                             // walk-test and any future UI tests dispatch
                             // against to switch surfaces on Android.
-                            IconButton(
-                                onClick = { drawerScope.launch { drawerState.open() } },
+                            Box(
                                 modifier = androidx.compose.ui.Modifier
                                     .align(androidx.compose.ui.Alignment.TopStart)
-                                    .padding(top = 8.dp, start = 8.dp)
+                                    .padding(top = 12.dp, start = 12.dp)
+                                    .size(40.dp)
                                     .testableClickable("btn_nav_drawer_open") {
                                         drawerScope.launch { drawerState.open() }
                                     },
+                                contentAlignment = androidx.compose.ui.Alignment.Center,
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Menu,
-                                    contentDescription = "Open navigation menu",
+                                ai.ciris.mobile.shared.ui.components.CIRISSignet(
+                                    modifier = androidx.compose.ui.Modifier.size(28.dp),
+                                    tintColor = MaterialTheme.colorScheme.primary,
                                 )
                             }
                         }

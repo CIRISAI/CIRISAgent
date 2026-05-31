@@ -34,25 +34,35 @@ object TestAutomationHandler {
 
     fun handleClick(request: ClickRequest): ActionResponse {
         val element = TestAutomationState.getElement(request.testTag)
-            ?: return ActionResponse(success = false, error = "Element not found: ${request.testTag}")
 
+        // Try the programmatic click handler FIRST, before requiring an
+        // element-position entry. `testableClickable` registers the handler the
+        // moment its modifier composes — popup / dialog content composes its
+        // modifiers and registers handlers even though their layout positions
+        // never reach the main-window `onGloballyPositioned` callback. Gating
+        // on a position entry would 404 the click for handlers that are live
+        // and dispatchable.
         val clicked = TestAutomationState.triggerClick(request.testTag)
-        return if (clicked) {
-            ActionResponse(
+        if (clicked) {
+            return ActionResponse(
                 success = true,
                 element = request.testTag,
                 action = "click",
-                coordinates = "${element.centerX},${element.centerY}"
-            )
-        } else {
-            // No programmatic click handler — return info for mouse click fallback
-            ActionResponse(
-                success = false,
-                error = "No click handler for: ${request.testTag}",
-                element = request.testTag,
-                coordinates = "${element.centerX},${element.centerY}"
+                coordinates = element?.let { "${it.centerX},${it.centerY}" }
             )
         }
+
+        if (element == null) {
+            return ActionResponse(success = false, error = "Element not found: ${request.testTag}")
+        }
+        // Element is positioned but has no programmatic handler (e.g. a plain
+        // `testable()` text). Caller can fall back to a coordinate-based click.
+        return ActionResponse(
+            success = false,
+            error = "No click handler for: ${request.testTag}",
+            element = request.testTag,
+            coordinates = "${element.centerX},${element.centerY}"
+        )
     }
 
     fun handleInput(request: InputRequest): ActionResponse {
@@ -75,7 +85,15 @@ object TestAutomationHandler {
         val startTime = currentTimeMs()
 
         while (currentTimeMs() - startTime < timeoutMs) {
-            if (TestAutomationState.getElement(request.testTag) != null) {
+            // Element-position OR click-handler is a positive signal. Dialog /
+            // sheet buttons register click handlers when their modifiers
+            // compose (before the popup window's layout pass reaches them), so
+            // `wait_for_element("btn_mode_confirm")` resolves the moment the
+            // confirm-button's modifier composes inside the dialog content —
+            // it does NOT have to wait for a position entry that may never
+            // arrive through the popup's separate layout tree.
+            if (TestAutomationState.getElement(request.testTag) != null
+                || TestAutomationState.hasClickHandler(request.testTag)) {
                 return ActionResponse(success = true, element = request.testTag, action = "wait")
             }
             delay(100)

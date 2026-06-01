@@ -318,6 +318,193 @@ class Engine:
             RuntimeError: backend / IO error.
         """
 
+    # ── v3.4.3 (CIRISPersist#124) — Federation blob + attestation
+    # admission surface for CIRISConformance CCS profile. The PyO3
+    # methods existed since v2.3.0 (#103, BlobStorage) / #115 / #121
+    # but were absent from this stub; the harness needs them documented
+    # to drive the §6.1 / §7.0 / §10.1.1 / §10.1.2 CEG conformance
+    # paths.
+
+    def put_blob_signing(
+        self,
+        sha256_hex: str,
+        body_inline_b64: str | None,
+        external_ref_json: str | None,
+        media_type: str | None,
+        attesting_key_id: str,
+        now_iso: str,
+        attestation_id_uuid: str,
+    ) -> None:
+        """v3.3.0 (#121) — One-call blob ingest: persist computes the
+        holds_bytes envelope, canonicalizes via the production
+        ``PythonJsonDumpsCanonicalizer``, signs via the engine's own
+        ``HardwareSigner``, and atomically commits the blob row + the
+        holder attestation.
+
+        ``body_inline_b64`` XOR ``external_ref_json`` — exactly one
+        body source. Inline bodies are base64-standard-alphabet;
+        external refs are a JSON-encoded ``{"url": ..., "size_bytes": N}``.
+        ``now_iso`` is RFC 3339 UTC; ``attestation_id_uuid`` is
+        caller-supplied (typically ``str(uuid.uuid4())``) — explicit so
+        replay / migration paths can pin specific IDs.
+
+        Use this instead of hand-assembling a ``SignedAttestation`` —
+        persist owns the canonicalizer choice and would silently fail
+        verification if a downstream JCS-canonicalized envelope were
+        passed in (#121 trap discipline).
+
+        Raises:
+            ValueError: ``blob_hash_mismatch`` / ``blob_inline_size_exceeded``
+                / ``blob_invalid_argument`` / ``blob_attestation_emission_failed``
+                / ``blob_trust_below_threshold`` (v3.4.0 #123 admission
+                gate) / ``federation_*`` for the holder attestation write.
+            RuntimeError: backend / IO error.
+        """
+
+    def put_blob_json(self, payload_json: str) -> None:
+        """v2.3.0 (#103) — Lower-level blob ingest accepting a fully
+        pre-signed ``PutBlobAttestation`` envelope. Use only when you
+        have an already-signed envelope (re-emit of remote announcement,
+        HSM-batched signing, replay with caller-determined timestamps).
+        Most callers want :meth:`put_blob_signing` — it owns
+        canonicalization + signing end-to-end.
+
+        Payload JSON shape::
+
+            {
+                "sha256_hex": str,
+                "body": {"Inline": <base64-bytes>} | {"External": {...}},
+                "media_type": str | None,
+                "attestation": {
+                    "attesting_key_id": str,
+                    "attestation_id": str,            # UUID
+                    "original_content_hash_hex": str,  # sha256 of the canonical envelope
+                    "scrub_signature_classical": str,  # base64 Ed25519
+                    "scrub_signature_pqc": str | None,
+                    "scrub_key_id": str,
+                    "scrub_timestamp": str             # RFC 3339
+                }
+            }
+
+        Raises:
+            ValueError: ``blob_hash_mismatch`` / ``blob_inline_size_exceeded``
+                / ``blob_attestation_emission_failed`` /
+                ``blob_trust_below_threshold``.
+            RuntimeError: backend / IO error.
+        """
+
+    def get_blob_json(self, sha256_hex: str) -> str | None:
+        """v2.3.0 (#103) — Read a blob by full SHA-256. Returns a
+        JSON-encoded ``BlobBody`` (``{"Inline": <bytes>}`` or
+        ``{"External": {...}}``) or ``None`` if absent.
+
+        Every successful read bumps ``federation_blobs.access_count``
+        and refreshes ``last_accessed_at`` (v3.4.0 #123 access
+        tracking). Use :meth:`list_holders_json` to find the live
+        attesters for a SHA before reading.
+
+        Raises:
+            ValueError: ``blob_invalid_argument`` on malformed SHA.
+            RuntimeError: backend / IO error.
+        """
+
+    def list_holders_json(self, sha256_hex: str) -> str:
+        """v2.3.0 (#103) — JSON-encoded list of ``attesting_key_id``
+        for every currently-live holder of this blob. Filters out
+        rows past the CEG §10.1.2 24-hour TTL AND rows with a
+        ``withdraws`` structural composer from the attester. Empty
+        list when no live holders.
+
+        Used by CIRISConformance to verify the §9.1 identity-aware-
+        storage property: "whose bytes am I holding?" The substrate
+        owns this query — consumers do not reproduce it.
+
+        Raises:
+            ValueError: ``blob_invalid_argument`` on malformed SHA.
+            RuntimeError: backend / IO error.
+        """
+
+    def put_attestation(self, signed_attestation_json: str) -> None:
+        """Admit a ``SignedAttestation`` into ``federation_attestations``.
+
+        Persist verifies the scrub-signature against the caller-named
+        ``scrub_key_id``'s pubkey in ``federation_keys`` BEFORE writing.
+        Reserved-prefix admission rules (v3.0.0 #102, CEG §7.0) and
+        the v3.4.0 #123 trust gate both fire ahead of the DB write.
+
+        Signed-attestation JSON shape::
+
+            {
+                "record": {
+                    "attestation_id": str,           # UUID
+                    "attesting_key_id": str,
+                    "attestation_type": str,         # e.g. "holds_bytes:sha256:..."
+                    "attestation_envelope": <opaque JSON>,
+                    "references_attestation_id": str | None,
+                    "references_attestation_type": str | None,
+                    "asserted_at": str,               # RFC 3339
+                    ...
+                },
+                "original_content_hash_hex": str,    # sha256 of canonical envelope
+                "scrub_signature_classical": str,    # base64 Ed25519
+                "scrub_signature_pqc": str | None,
+                "scrub_key_id": str,
+                "scrub_timestamp": str
+            }
+
+        Idempotent on ``(references_attestation_id, attestation_type,
+        attesting_key_id)`` triple — duplicate replay is silent ``Ok``
+        (CEG §6.1 dedup + precedence). Replay with different content
+        raises ``federation_conflict``.
+
+        Raises:
+            ValueError: ``federation_signature_invalid`` /
+                ``federation_conflict`` / ``federation_reserved_prefix_emitter_mismatch``
+                / ``federation_trust_below_threshold`` (#123) /
+                ``federation_invalid_argument``.
+            RuntimeError: backend / IO error.
+        """
+
+    def canonicalize_envelope(self, envelope_json: str) -> bytes:
+        """Canonicalize an arbitrary envelope via the production
+        ``PythonJsonDumpsCanonicalizer`` (sorted keys, no whitespace,
+        ``ensure_ascii=True``). Returns the canonical bytes the
+        substrate signs and verifies.
+
+        **Do not use** ``serde_json_canonicalizer`` (JCS RFC 8785) on
+        downstream — it is ``#[cfg(test)]`` only and produces different
+        bytes for non-ASCII envelopes. Use this canonicalizer
+        end-to-end so signature verify holds across the cohabitation
+        boundary (v3.3.0 #121 trap discipline).
+        """
+
+    def canonicalize_envelope_for_signing(self, envelope_json: str) -> bytes:
+        """Canonicalize for signing — same canonicalizer as
+        :meth:`canonicalize_envelope`. Separate entry point preserved
+        for callers (CIRISEdge, CIRISConformance) that key off the
+        function name semantically.
+        """
+
+    def verify_hybrid(
+        self,
+        canonical_bytes: bytes,
+        ed25519_sig_b64: str,
+        ml_dsa_65_sig_b64: str | None,
+        ed25519_pubkey_b64: str,
+        ml_dsa_65_pubkey_b64: str | None,
+        policy: str,
+    ) -> None:
+        """Verify a hybrid (Ed25519 + ML-DSA-65) signature over
+        ``canonical_bytes`` against caller-supplied pubkeys. ``policy``
+        is one of ``"strict"`` (both signatures required) /
+        ``"either"`` (one or the other) / ``"prefer_pqc"`` (PQC if
+        present, fall back to classical).
+
+        Raises:
+            ValueError: ``verify_signature_invalid`` /
+                ``verify_unknown_algorithm`` / ``verify_policy_violation``.
+        """
+
     def receive_and_persist(self, body: bytes) -> BatchSummary:
         """Run the FSD §3.3 ingest pipeline on a batch body.
 

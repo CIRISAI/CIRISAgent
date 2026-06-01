@@ -947,8 +947,23 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         graph_persistence._engine = None
         graph_persistence._engine_dsn = None
 
-    try:
-        engine = Engine(
+    # iOS default thread stack is 512KB; persist's tokio runtime needs ~8MB
+    # for its async init. Constructing Engine() directly on the asyncio
+    # thread blows the stack and crashes with EXC_BAD_ACCESS / SIGBUS /
+    # KERN_PROTECTION_FAILURE "Thread stack size exceeded due to excessive
+    # recursion" (CIRISRuntime thread, deep frames into
+    # ciris_persist.ciris_persist). Same fix CIRISVerify's iOS service.py
+    # applies for the same reason. On non-iOS platforms pthread default is
+    # ample (Linux 8MB, macOS-app workers ~512KB but main is large) so we
+    # only pay the worker-thread cost on iOS.
+    _is_ios = sys.platform == "ios" or (
+        sys.platform == "darwin"
+        and hasattr(sys, "implementation")
+        and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+    )
+
+    def _construct_engine() -> "Engine":
+        return Engine(
             dsn,
             signing_key_id,
             local_key_id=signing_key_id,
@@ -956,6 +971,30 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             local_pqc_key_id=signing_key_id,
             local_pqc_key_path=str(local_pqc_seed_path),
         )
+
+    try:
+        if _is_ios:
+            _result: dict[str, object] = {}
+
+            def _ios_worker() -> None:
+                try:
+                    _result["engine"] = _construct_engine()
+                except BaseException as we:  # noqa: BLE001 - re-raise on main thread
+                    _result["error"] = we
+
+            _prev_stack = threading.stack_size()
+            try:
+                threading.stack_size(8 * 1024 * 1024)
+                _t = threading.Thread(target=_ios_worker, name="persist-engine-init")
+                _t.start()
+                _t.join()
+            finally:
+                threading.stack_size(_prev_stack)
+            if "error" in _result:
+                raise _result["error"]  # type: ignore[misc]
+            engine = _result["engine"]  # type: ignore[assignment]
+        else:
+            engine = _construct_engine()
     except Exception as e:
         # iOS: flock() returns EPERM in the sandbox. Single-process mobile app
         # has no multi-agent risk. Delete any stale lock file and retry once.

@@ -89,8 +89,24 @@ LIBS: Dict[str, IOSLib] = {
         is_pyo3=True,  # Loads via Python import, not xcframework
         has_adapter=False,
     ),
+    "edge": IOSLib(
+        name="edge",
+        github_repo="CIRISAI/CIRISEdge",
+        pypi_package="ciris-edge",
+        framework_name="CIRISEdge",
+        ffi_lib_name="ciris_edge",
+        tarball_prefix="ciris-edge",
+        # Tarball layout matches persist (CIRISEdge v1.1.5):
+        #   ios-device/ciris_edge.abi3.so
+        #   ios-simulator/ciris_edge.abi3.so
+        device_dir="ios-device",
+        simulator_dir="ios-simulator",
+        dylib_filename="ciris_edge.abi3.so",  # PyO3 module, not ctypes FFI
+        bindings_package="ciris_edge",
+        is_pyo3=True,  # Loads via Python import, not xcframework
+        has_adapter=False,
+    ),
     # Future:
-    # "edge": IOSLib(...),
     # "lenscore": IOSLib(...),
     # "nodecore": IOSLib(...),
 }

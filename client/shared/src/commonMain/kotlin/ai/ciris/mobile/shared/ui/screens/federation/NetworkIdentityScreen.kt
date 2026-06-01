@@ -15,9 +15,10 @@ import ai.ciris.mobile.shared.viewmodels.NetworkIdentityViewModel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
@@ -103,23 +104,27 @@ fun NetworkIdentityScreen(
         },
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
-            LazyColumn(
+            // Bounded content (4 cards) — switched from LazyColumn to
+            // Column.verticalScroll for the same reason as T-T4 on the hub:
+            // narrow mobile viewports pushed NodeCodeCard below the
+            // LazyColumn's compose window, so text_my_node_code and
+            // btn_copy_my_node_code never reached /tree and the iOS
+            // federation walk-test reported them missing.
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
                     .testable("screen_federation_identity"),
-                contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 if (error != null) {
-                    item {
-                        ErrorBanner(message = error!!, onDismiss = { viewModel.clearError() })
-                    }
+                    ErrorBanner(message = error!!, onDismiss = { viewModel.clearError() })
                 }
-
-                item { IdentityHeaderCard(identity = identity) }
-                item { StatsRow(identity = identity) }
-                item { CapabilitiesCard(identity = identity) }
-                item { NodeCodeCard(nodeCode = nodeCode) }
+                IdentityHeaderCard(identity = identity)
+                StatsRow(identity = identity)
+                CapabilitiesCard(identity = identity)
+                NodeCodeCard(nodeCode = nodeCode)
             }
             if (loading && identity == null) {
                 CircularProgressIndicator(

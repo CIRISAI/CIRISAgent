@@ -1547,6 +1547,23 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         model = (model_name or "").lower()
 
         if "openrouter.ai" in base:
+            # Reasoning-OFF contract: pass `reasoning.enabled=false` so any
+            # reasoning-capable model that honours it (claude-sonnet-4.6,
+            # openai/gpt-5-chat, deepseek, etc.) emits zero reasoning tokens
+            # as before. `effort=minimal` is *not* a disable on those models —
+            # it's the lowest-effort setting and still emits reasoning tokens.
+            #
+            # OpenRouter explicitly rejects `reasoning.enabled=false` for the
+            # gpt-5 reasoning family with 400 "Reasoning is mandatory for this
+            # endpoint and cannot be disabled." (verified 2026-05-16 against
+            # `openai/gpt-5`). For that narrow case fall back to
+            # `effort=minimal`, which the gpt-5 family honours by emitting
+            # 0 reasoning tokens (cost ~$0.0002 on a trivial prompt). The
+            # chat-tuned variant `openai/gpt-5-chat` is reasoning-capable, not
+            # reasoning-mandatory, and stays on the universal `enabled=false`
+            # path.
+            if model.startswith("openai/gpt-5") and "chat" not in model:
+                return {"reasoning": {"effort": "minimal"}}
             return {"reasoning": {"enabled": False}}
 
         if "together" in base:

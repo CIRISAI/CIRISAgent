@@ -13,6 +13,10 @@ Note: OAuth endpoints are in api_auth_v2.py
 import logging
 import os
 import secrets
+import hmac
+import time
+import base64
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional, Set, cast
@@ -58,6 +62,56 @@ FETCH_USER_INFO_ERROR = "Failed to fetch user info"
 
 # Module-level flag to prevent multiple attestation triggers from the endpoint
 _attestation_triggered_from_endpoint = False
+
+# Module-level secret for HMAC signing of OAuth state
+_OAUTH_STATE_SECRET = os.getenv("CIRIS_OAUTH_STATE_SECRET") or os.getenv("JWT_SECRET_KEY")
+if not _OAUTH_STATE_SECRET:
+    raise RuntimeError(
+        "Missing required environment variable for OAuth state security. "
+        "You must set CIRIS_OAUTH_STATE_SECRET or JWT_SECRET_KEY to a secure random string."
+    )
+
+def _sign_oauth_state(state_data: dict) -> str:
+    """Sign OAuth state parameter with HMAC."""
+    # Add timestamp for expiration
+    state_data["ts"] = int(time.time())
+
+    # Generate HMAC signature
+    state_json = json.dumps(state_data, sort_keys=True)
+    signature = hmac.new(_OAUTH_STATE_SECRET.encode(), state_json.encode(), "sha256").hexdigest()
+    state_data["sig"] = signature
+
+    return base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
+
+def _verify_oauth_state(state: str) -> dict:
+    """Verify and decode OAuth state parameter."""
+    try:
+        state_data = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
+        signature = state_data.pop("sig", None)
+
+        if not signature:
+            raise ValueError("Missing signature")
+
+        # Verify timestamp (prevent replay attacks)
+        timestamp = state_data.get("ts", 0)
+        if time.time() - timestamp > 600:  # 10 minute expiration
+            raise ValueError("State expired")
+
+        # Verify HMAC
+        expected_sig = hmac.new(
+            _OAUTH_STATE_SECRET.encode(),
+            json.dumps(state_data, sort_keys=True).encode(),
+            "sha256"
+        ).hexdigest()
+
+        if not hmac.compare_digest(signature, expected_sig):
+            raise ValueError("Invalid signature")
+
+        return state_data
+
+    except Exception as e:
+        logger.warning(f"State verification failed: {e}")
+        raise ValueError(f"Invalid state parameter: {e}")
 
 # OAuth Frontend Redirect Configuration
 # These environment variables control where users are redirected after OAuth and what parameters are included
@@ -628,8 +682,8 @@ async def oauth_login(provider: str, request: Request, redirect_uri: Optional[st
             state_data["redirect_uri"] = validated_redirect_uri
             logger.info("OAuth login initiated with validated redirect_uri")
 
-        # Base64 encode the state JSON
-        state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
+        # Sign the state JSON with HMAC
+        state = _sign_oauth_state(state_data)
 
         # Use OAUTH_CALLBACK_BASE_URL environment variable, or construct from request
         base_url = os.getenv("OAUTH_CALLBACK_BASE_URL")
@@ -1396,12 +1450,14 @@ async def oauth_callback(
         marketing_opt_in_from_uri = None
 
         try:
-            state_json = base64.urlsafe_b64decode(state.encode()).decode()
-            state_data = json.loads(state_json)
+            state_data = _verify_oauth_state(state)
             redirect_uri = state_data.get("redirect_uri")
+        except Exception as e:
+            logger.error(f"State verification failed: {e}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state parameter")
 
+        try:
             # Defense-in-depth: Re-validate redirect_uri even from state
-            # (state could theoretically be tampered with)
             redirect_uri = validate_redirect_uri(redirect_uri)
 
             # Extract marketing_opt_in from redirect_uri query parameters
@@ -1415,8 +1471,7 @@ async def oauth_callback(
 
             logger.debug(f"Decoded state: redirect_uri={redirect_uri}, marketing_opt_in={marketing_opt_in_from_uri}")
         except Exception as e:
-            # If state decode fails, log but continue (backward compatibility)
-            logger.warning(f"Failed to decode state parameter: {e}. Using default redirect.")
+            logger.warning(f"Failed to process redirect_uri from state: {e}. Using default redirect.")
 
         # Use marketing_opt_in from redirect_uri if available, otherwise use query param
         final_marketing_opt_in = (

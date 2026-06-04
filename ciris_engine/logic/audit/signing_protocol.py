@@ -147,6 +147,10 @@ class CIRISVerifySigner(BaseSigner):
         self._client: Any = None  # CIRISVerify client, typed as Any to avoid import
         self._public_key_cache: Optional[bytes] = None
         self._algo_name: Optional[str] = None
+        # Last exception observed by initialize() when it returns False.
+        # Surfaced upstream so callers (UnifiedSigningKey, setup-complete) can
+        # report the real cause instead of a generic "Signer not initialized".
+        self._last_init_error: Optional[BaseException] = None
 
     @property
     def public_key_bytes(self) -> bytes:
@@ -276,10 +280,24 @@ class CIRISVerifySigner(BaseSigner):
         return False
 
     def initialize(self) -> bool:
-        """Initialize from CIRISVerify singleton.
+        """Initialize from CIRISVerify signing capability.
 
-        Returns True if CIRISVerify has a key available, False if waiting for Portal import.
-        Retries with backoff if attestation is in progress (AttestationInProgressError).
+        There are only two terminal outcomes:
+
+        * **CAN_SIGN** (returns True): CIRISVerify is loaded and an Ed25519 key
+          is available (either pre-existing or freshly generated).
+        * **CANNOT_SIGN** (returns False, ``_last_init_error`` populated):
+          CIRISVerify itself is unusable — the FFI singleton failed to
+          materialise, generate_key_sync() permanently refused, or some other
+          non-transient FFI defect.
+
+        ``AttestationInProgressError`` is **not** a third outcome. When verify
+        is holding its internal attestation lock, key-state calls block. We
+        wait — verify enforces its own internal timeout (90s today, 15s once
+        CIRISVerify#50 lands), and once it releases the lock the next probe
+        returns a real CAN_SIGN / CANNOT_SIGN verdict. Imposing our own wait
+        budget here would only produce a synthetic third state ("we gave up
+        waiting") that maps poorly onto the underlying binary capability.
         """
         import time
 
@@ -296,15 +314,26 @@ class CIRISVerifySigner(BaseSigner):
         except ImportError:
             pass
 
-        # Retry with backoff when attestation is running
-        max_retries = 10
-        base_delay = 0.5  # Start with 500ms delay
+        # ``error_attempts`` only counts non-attestation FFI errors. Attestation
+        # waits don't consume this budget — they're bounded by verify's own
+        # internal attestation timeout, not by ours.
+        ERROR_MAX_RETRIES = 10
+        ATTESTATION_WAIT_LOG_INTERVAL_S = 10.0
+        ATTESTATION_POLL_INTERVAL_S = 2.0
 
-        for attempt in range(max_retries):
+        error_attempts = 0
+        attestation_wait_start: Optional[float] = None
+        last_attestation_log_at: float = 0.0
+
+        while True:
             try:
                 client = get_verifier()
                 if client is None:
                     logger.debug("CIRISVerify singleton not available")
+                    self._last_init_error = RuntimeError(
+                        "CIRISVerify singleton returned None; FFI binding "
+                        "could not be initialised on this platform"
+                    )
                     return False
 
                 self._client = client
@@ -352,12 +381,22 @@ class CIRISVerifySigner(BaseSigner):
                         if self._try_generate_key_with_retry(client):
                             logger.info("[signing] Key regenerated successfully after hardware key loss")
                             # Continue loop to retry with new key
+                            attestation_wait_start = None
                             continue
                         else:
                             logger.error("[signing] Failed to regenerate key after hardware key loss")
+                            self._last_init_error = RuntimeError(
+                                f"hardware key was deleted or corrupted and regeneration "
+                                f"failed; original error: {type(e).__name__}: {e}"
+                            )
                             return False
                     else:
                         logger.error("[signing] Cannot regenerate - generate_key_sync not available")
+                        self._last_init_error = RuntimeError(
+                            f"hardware key was deleted or corrupted but the installed "
+                            f"CIRISVerify build does not expose generate_key_sync; "
+                            f"original error: {type(e).__name__}: {e}"
+                        )
                         return False
 
                 # Check if it's the specific attestation-in-progress error
@@ -365,22 +404,37 @@ class CIRISVerifySigner(BaseSigner):
                     AttestationInProgressError is not None and isinstance(e, AttestationInProgressError)
                 ) or "attestation" in error_msg
 
-                if is_attestation_busy and attempt < max_retries - 1:
-                    delay = base_delay * (2 ** min(attempt, 4))  # Cap at 8s
-                    logger.info(
-                        f"Attestation in progress, waiting {delay:.1f}s before retry "
-                        f"(attempt {attempt + 1}/{max_retries})"
-                    )
-                    time.sleep(delay)
-                elif attempt < max_retries - 1:
-                    # Other transient error - shorter retry
-                    logger.debug(f"CIRISVerify FFI call failed, retrying: {e}")
-                    time.sleep(0.1)
-                else:
-                    logger.warning(f"CIRISVerify not available after {max_retries} attempts: {e}")
-                    return False
+                if is_attestation_busy:
+                    # Attestation lock held by verify. Wait — don't burn the
+                    # non-attestation retry budget on this, and don't impose
+                    # our own wall-clock cap. Verify owns the timeout here.
+                    now = time.monotonic()
+                    if attestation_wait_start is None:
+                        attestation_wait_start = now
+                        last_attestation_log_at = now
+                        logger.info("[signing] CIRISVerify attestation lock held; waiting for release")
+                    elif now - last_attestation_log_at >= ATTESTATION_WAIT_LOG_INTERVAL_S:
+                        elapsed = now - attestation_wait_start
+                        logger.info(
+                            f"[signing] Still waiting on CIRISVerify attestation lock ({elapsed:.0f}s elapsed)"
+                        )
+                        last_attestation_log_at = now
+                    time.sleep(ATTESTATION_POLL_INTERVAL_S)
+                    continue
 
-        return False
+                # Non-attestation transient FFI error — bounded retry.
+                # Reset attestation wait state since we're seeing a different
+                # error class now.
+                attestation_wait_start = None
+                if error_attempts < ERROR_MAX_RETRIES - 1:
+                    logger.debug(f"CIRISVerify FFI call failed, retrying: {e}")
+                    error_attempts += 1
+                    time.sleep(0.1)
+                    continue
+
+                logger.warning(f"CIRISVerify not available after {ERROR_MAX_RETRIES} attempts: {e}")
+                self._last_init_error = e
+                return False
 
 
 class UnifiedSigningKey:
@@ -442,7 +496,11 @@ class UnifiedSigningKey:
         - Key persistence
 
         Raises:
-            RuntimeError: If CIRISVerify singleton is not available
+            RuntimeError: If CIRISVerify singleton is not available, or if
+                CIRISVerifySigner could not establish a signing key. The
+                underlying exception (e.g. Android Keystore failure) is
+                chained as ``__cause__`` so callers see the real root cause
+                instead of a generic "Signer not initialized" error.
         """
         if self._initialized:
             return
@@ -466,12 +524,32 @@ class UnifiedSigningKey:
             # Notify callback that key is available (may be new ephemeral or existing)
             self._notify_key_registered()
         else:
-            # CIRISVerify has no key - it will create an ephemeral one when needed
-            # Store the client reference so we can use it for signing
-            verify_signer._client = client
-            self._signer = verify_signer
-            self._initialized = True
-            logger.info("CIRISVerify ready - will create ephemeral key on first sign")
+            # CIRISVerifySigner.initialize() returned False. Historically we
+            # silently set _initialized=True here on the assumption that an
+            # ephemeral key would be created on first sign — but setup-complete
+            # (and several other callers) read .key_id immediately after
+            # initialize() and the silent path produced a generic
+            # "Signer not initialized" RuntimeError that gave the operator no
+            # actionable information.
+            #
+            # Surface the underlying exception captured by CIRISVerifySigner
+            # so callers see the real root cause (Android Keystore failure,
+            # missing FFI symbol, attestation timeout, etc.).
+            underlying = verify_signer._last_init_error
+            if underlying is not None:
+                raise RuntimeError(
+                    f"CIRISVerify signer could not establish a signing key: "
+                    f"{type(underlying).__name__}: {underlying}"
+                ) from underlying
+            # Defensive: initialize() returned False without recording an
+            # error. This is the legacy "older CIRISVerify without
+            # generate_key support" branch (return False at line 331).
+            raise RuntimeError(
+                "CIRISVerify signer reported no signing key available and did "
+                "not record an underlying error. The installed CIRISVerify "
+                "build may be missing generate_key_sync; upgrade to a build "
+                "that supports self-custody key generation."
+            )
 
     def load_provisioned_key(self, ed25519_private_key_b64: str) -> None:
         """DEPRECATED: Load signing key from Portal provisioning.

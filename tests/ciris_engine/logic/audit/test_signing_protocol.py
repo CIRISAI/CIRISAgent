@@ -147,6 +147,73 @@ class TestCIRISVerifySigner:
             assert result is False
             assert signer._client is None
 
+    def test_initialize_waits_through_attestation_in_progress(self):
+        """AttestationInProgressError is not a terminal failure — it means
+        CIRISVerify is holding its internal attestation lock. ``initialize()``
+        must wait until verify releases the lock and then complete normally,
+        regardless of how many times the error fires.
+
+        Regression test for the Galaxy S21U investigation: the prior
+        implementation imposed a max_retries=10 budget (~55s total backoff)
+        that gave up before verify's own attestation timeout (90s today, 15s
+        post-CIRISVerify#50), incorrectly producing a synthetic 'CIRISVerify
+        not available' failure when the underlying capability was fine.
+        """
+        from ciris_adapters.ciris_verify import AttestationInProgressError
+
+        mock_client = MagicMock()
+
+        # has_key_sync raises AttestationInProgressError 20 times (past the
+        # old max_retries=10 budget), then returns True. The contract is that
+        # the loop waits patiently through all 20 lock-held probes.
+        attestation_attempts = {"count": 0}
+
+        def has_key_side_effect():
+            attestation_attempts["count"] += 1
+            if attestation_attempts["count"] <= 20:
+                raise AttestationInProgressError("has_key")
+            return True
+
+        mock_client.has_key_sync.side_effect = has_key_side_effect
+        mock_client.get_ed25519_public_key_sync.return_value = b"k" * 32
+
+        # initialize() imports `time` lazily inside the function body, so
+        # patch the stdlib module directly to keep the test fast.
+        import time as _time
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client), patch.object(
+            _time, "sleep"
+        ):
+            signer = CIRISVerifySigner()
+            result = signer.initialize()
+
+        assert result is True
+        assert attestation_attempts["count"] == 21  # 20 errors + 1 success
+        assert signer._key_id is not None
+        assert signer._last_init_error is None
+
+    def test_initialize_records_last_init_error_on_max_retries(self):
+        """When initialize() exhausts retries, the underlying exception is
+        captured in _last_init_error so UnifiedSigningKey can surface it
+        instead of producing a generic 'Signer not initialized' error.
+
+        Regression test for the Galaxy S21U UNSUPPORTED_PLATFORM_CIRIS_VERIFY
+        investigation — the actual Android Keystore failure used to be
+        swallowed by the retry loop and never reached the user.
+        """
+        mock_client = MagicMock()
+        # has_key_sync raises a non-attestation, non-deleted-or-corrupted
+        # error so we drive every retry path to the max_retries fall-through.
+        keystore_error = RuntimeError("Android Keystore: StrongBox unavailable")
+        mock_client.has_key_sync.side_effect = keystore_error
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            signer = CIRISVerifySigner()
+            result = signer.initialize()
+
+            assert result is False
+            assert signer._last_init_error is keystore_error
+
     def test_sign_calls_client(self):
         """Test sign delegates to CIRISVerify client."""
         mock_client = MagicMock()
@@ -255,6 +322,52 @@ class TestUnifiedSigningKey:
             with pytest.raises(RuntimeError) as exc_info:
                 key.initialize()
             assert "CIRISVerify is not available" in str(exc_info.value)
+
+    def test_initialize_surfaces_signer_init_error(self):
+        """When CIRISVerifySigner.initialize() returns False with a captured
+        _last_init_error, UnifiedSigningKey.initialize() must raise with that
+        error chained as the cause — not silently mark itself initialized.
+
+        Regression test for the Galaxy S21U UNSUPPORTED_PLATFORM_CIRIS_VERIFY
+        investigation: the silent-success path was masking the real Android
+        Keystore error, leaving setup-complete to raise a generic
+        'Signer not initialized' RuntimeError.
+        """
+        mock_client = MagicMock()
+        keystore_error = RuntimeError("Android Keystore: StrongBox unavailable")
+        mock_client.has_key_sync.side_effect = keystore_error
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
+            with pytest.raises(RuntimeError) as exc_info:
+                key.initialize()
+
+            assert "CIRISVerify signer could not establish a signing key" in str(exc_info.value)
+            assert "StrongBox unavailable" in str(exc_info.value)
+            assert exc_info.value.__cause__ is keystore_error
+            # And it must NOT have left itself in a half-initialized state.
+            assert key._initialized is False
+
+    def test_initialize_raises_for_legacy_no_generator_path(self):
+        """When CIRISVerifySigner.initialize() returns False without capturing
+        a _last_init_error (legacy 'older CIRISVerify without generate_key
+        support' path), UnifiedSigningKey.initialize() must still raise with
+        a clear actionable message instead of silently completing.
+        """
+        # spec=["has_key_sync"] — no generate_key_sync attribute on the client.
+        # This drives CIRISVerifySigner.initialize() down the legacy return-False
+        # branch at line ~331 (no _last_init_error stored).
+        mock_client = MagicMock(spec=["has_key_sync"])
+        mock_client.has_key_sync.return_value = False
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            key = UnifiedSigningKey()
+            with pytest.raises(RuntimeError) as exc_info:
+                key.initialize()
+
+            assert "no signing key available" in str(exc_info.value)
+            assert "generate_key_sync" in str(exc_info.value)
+            assert key._initialized is False
 
     def test_initialize_with_key_available(self):
         """Test initialization when CIRISVerify has a key."""

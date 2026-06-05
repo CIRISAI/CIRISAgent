@@ -1041,9 +1041,11 @@ jobs:
         # tables (builds + binary_manifests + function_manifests) — closes
         # the parent-row gap that left 2.7.8/2.7.9 with only function_manifests
         # rows (#727). Also cuts over from gRPC RegisterBuild → HTTP POST
-        # /v1/builds; drops REGISTRY_JWT_SECRET requirement.
+        # /v1/builds; drops REGISTRY_JWT_SECRET requirement. Floor kept at the
+        # current runtime triple (4.8.0) so the CLI matches what the agent
+        # signs against at runtime — avoids canonical-hash skew on register.
         run: |
-          pip install --upgrade "ciris-verify>=3.0.1"
+          pip install --upgrade "ciris-verify>=4.8.0"
           which ciris-build-sign && ciris-build-sign --version
 
       - name: Emit build-secrets hash file

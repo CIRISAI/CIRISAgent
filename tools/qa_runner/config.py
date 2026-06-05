@@ -29,6 +29,7 @@ class QAModule(Enum):
     BILLING = "billing"
     BILLING_INTEGRATION = "billing_integration"  # Full OAuth user billing workflow
     MULTI_OCCURRENCE = "multi_occurrence"
+    AGENT_MODE = "agent_mode"  # AgentMode GET/PUT + 256 GiB SERVER disk gate
     MESSAGE_ID_DEBUG = "message_id_debug"  # Message ID correlation debugging
     REDDIT = "reddit"  # Reddit adapter testing
     SQL_EXTERNAL_DATA = "sql_external_data"  # SQL external data service testing
@@ -145,6 +146,7 @@ ALL_MODULE_SEQUENCE = [
     # Same exclusion class as billing_integration. Run them standalone.
     # Governance / observability
     QAModule.ACCORD_METRICS,
+    QAModule.AGENT_MODE,
     QAModule.CONTEXT_ENRICHMENT,
     QAModule.SYSTEM_MESSAGES,
     QAModule.AIR,

@@ -53,14 +53,14 @@ jobs:
           fi
 
       - name: Checkout ${{ inputs.target_branch }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.target_branch }}
           # Need full history so we can branch + push
           fetch-depth: 0
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 

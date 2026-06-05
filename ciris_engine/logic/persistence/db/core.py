@@ -992,7 +992,12 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
                 threading.stack_size(_prev_stack)
             if "error" in _result:
                 raise _result["error"]  # type: ignore[misc]
-            engine = _result["engine"]  # type: ignore[assignment]
+            # cast through Any: ciris-persist's Engine has no Python type stubs
+            # (the `from ciris_persist import Engine` is `type: ignore[import-untyped]`),
+            # so mypy infers `_result["engine"]` as `object` from the
+            # `dict[str, object]` declaration above and we lose attribute-resolution
+            # downstream (e.g. `engine.run_legacy_graph_migration` at line ~1046).
+            engine = cast(Any, _result["engine"])
         else:
             engine = _construct_engine()
     except Exception as e:

@@ -192,6 +192,99 @@ class TestCIRISVerifySigner:
         assert signer._key_id is not None
         assert signer._last_init_error is None
 
+    def test_try_generate_key_with_retry_singleton_reset_path(self):
+        """``_try_generate_key_with_retry`` falls into a second attempt after
+        the first ``generate_key_sync`` failure, resetting the singleton in
+        between. The retry path itself is what's uncovered — exercise it by
+        making the first attempt fail and the second succeed.
+        """
+        mock_client_a = MagicMock()
+        mock_client_a.generate_key_sync.side_effect = RuntimeError("first try failed")
+        mock_client_b = MagicMock()
+        # Second client succeeds.
+        mock_client_b.generate_key_sync.return_value = None
+
+        # reset_verifier + get_verifier are imported lazily inside the helper.
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.reset_verifier"
+        ), patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+            return_value=mock_client_b,
+        ):
+            signer = CIRISVerifySigner()
+            # Bypass time.sleep
+            import time as _time
+
+            with patch.object(_time, "sleep"):
+                ok = signer._try_generate_key_with_retry(mock_client_a)
+
+        assert ok is True
+        # Both clients tried — the helper's "reset and re-fetch" pattern is
+        # what we're exercising here.
+        mock_client_a.generate_key_sync.assert_called_once()
+        mock_client_b.generate_key_sync.assert_called_once()
+
+    def test_try_generate_key_with_retry_both_attempts_fail(self):
+        """Coverage gap: ``_try_generate_key_with_retry`` returns False when
+        both the first attempt and the post-reset retry fail."""
+        mock_client_a = MagicMock()
+        mock_client_a.generate_key_sync.side_effect = RuntimeError("first failure")
+        mock_client_b = MagicMock()
+        mock_client_b.generate_key_sync.side_effect = RuntimeError("second failure")
+
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.reset_verifier"
+        ), patch(
+            "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+            return_value=mock_client_b,
+        ):
+            signer = CIRISVerifySigner()
+            import time as _time
+
+            with patch.object(_time, "sleep"):
+                ok = signer._try_generate_key_with_retry(mock_client_a)
+
+        assert ok is False
+
+    def test_initialize_attestation_then_success_resets_attempts(self):
+        """Coverage gap: after waiting through some attestation-busy fires the
+        non-attestation retry budget is still fresh. Confirms the
+        ``error_attempts = 0`` semantics inside the busy branch — if the loop
+        later transitions to a real transient error, it gets the full retry
+        budget, not one drained by the attestation wait."""
+        from ciris_adapters.ciris_verify import AttestationInProgressError
+
+        mock_client = MagicMock()
+
+        # 3 attestation fires, then 9 transient FFI errors (less than the
+        # ERROR_MAX_RETRIES=10 budget), then success.
+        sequence = (
+            [AttestationInProgressError("has_key")] * 3
+            + [RuntimeError("transient FFI error")] * 9
+            + [True]
+        )
+        sequence_iter = iter(sequence)
+
+        def has_key_side_effect():
+            outcome = next(sequence_iter)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+
+        mock_client.has_key_sync.side_effect = has_key_side_effect
+        mock_client.get_ed25519_public_key_sync.return_value = b"k" * 32
+
+        import time as _time
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client), patch.object(
+            _time, "sleep"
+        ):
+            signer = CIRISVerifySigner()
+            result = signer.initialize()
+
+        assert result is True
+        assert signer._last_init_error is None
+
     def test_initialize_records_last_init_error_on_max_retries(self):
         """When initialize() exhausts retries, the underlying exception is
         captured in _last_init_error so UnifiedSigningKey can surface it

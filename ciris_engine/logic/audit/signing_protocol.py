@@ -268,9 +268,12 @@ class CIRISVerifySigner(BaseSigner):
                 client.generate_key_sync()  # type: ignore[attr-defined, unused-ignore]
                 logger.info("[signing] Ephemeral Ed25519 key generated successfully")
                 return True
-            except Exception as e:
-                logger.error(
-                    f"[signing] Key generation failed (attempt {attempt + 1}/2): {e}"
+            except Exception:
+                # Use logger.exception so the traceback lands in the log —
+                # callers diagnosing Android Keystore / FFI generation
+                # failures need the full chain, not just the str(e) summary.
+                logger.exception(
+                    "[signing] Key generation failed (attempt %d/2)", attempt + 1
                 )
 
                 if attempt == 0:

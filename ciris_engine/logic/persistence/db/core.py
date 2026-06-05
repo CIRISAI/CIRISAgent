@@ -8,7 +8,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Tuple, TypedDict, Union, cast
 
-from ciris_engine.logic.config.db_paths import get_audit_db_full_path, get_sqlite_db_full_path
+from ciris_engine.logic.config.db_paths import (
+    get_audit_db_full_path,
+    get_sqlite_db_full_path,
+)
 
 # iOS-specific: Global lock for SQLite operations to avoid iOS's SQLiteDatabaseTracking assertions
 # iOS's debug SQLite has stricter thread checking that triggers assertions with check_same_thread=False
@@ -43,7 +46,12 @@ def _get_ios_lock() -> threading.RLock:
 
 
 from .dialect import init_dialect
-from .retry import DEFAULT_BASE_DELAY, DEFAULT_MAX_DELAY, DEFAULT_MAX_RETRIES, is_retryable_error
+from .retry import (
+    DEFAULT_BASE_DELAY,
+    DEFAULT_MAX_DELAY,
+    DEFAULT_MAX_RETRIES,
+    is_retryable_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +113,9 @@ class IOSDictRow(dict[str, Any]):
             if 0 <= key < len(self._column_order):
                 col_name = self._column_order[key]
                 return super().__getitem__(col_name)
-            raise IndexError(f"Index {key} out of range (columns: {len(self._column_order)})")
+            raise IndexError(
+                f"Index {key} out of range (columns: {len(self._column_order)})"
+            )
         # String access - normal dict behavior
         return super().__getitem__(key)
 
@@ -125,7 +135,9 @@ class IOSSerializedCursor:
     and automatically recreated on the next execute().
     """
 
-    def __init__(self, cursor: sqlite3.Cursor, lock: threading.RLock, conn: sqlite3.Connection):
+    def __init__(
+        self, cursor: sqlite3.Cursor, lock: threading.RLock, conn: sqlite3.Connection
+    ):
         self._cursor = cursor
         self._lock = lock
         self._conn = conn  # Keep reference to recreate cursor if needed
@@ -185,12 +197,16 @@ class IOSSerializedCursor:
         if hasattr(row, "keys"):
             return dict(row)
         # Last resort: log warning and return empty dict
-        logger.warning("[iOS_CURSOR] _row_to_dict: no description and row has no keys()")
+        logger.warning(
+            "[iOS_CURSOR] _row_to_dict: no description and row has no keys()"
+        )
         return {}
 
     def fetchone(self) -> Any:
         if self._closed:
-            logger.warning("[iOS_CURSOR] fetchone() called on closed cursor, returning None")
+            logger.warning(
+                "[iOS_CURSOR] fetchone() called on closed cursor, returning None"
+            )
             return None
         logger.debug("[iOS_CURSOR] fetchone() called...")
         with self._lock:
@@ -203,7 +219,9 @@ class IOSSerializedCursor:
                     # Close cursor immediately to prevent iOS tracking assertions
                     self._cursor.close()
                     self._closed = True
-                    logger.debug(f"[iOS_CURSOR] fetchone() result={result}, cursor closed")
+                    logger.debug(
+                        f"[iOS_CURSOR] fetchone() result={result}, cursor closed"
+                    )
                 else:
                     logger.debug(f"[iOS_CURSOR] fetchone() succeeded: {result}")
                 return result
@@ -213,7 +231,9 @@ class IOSSerializedCursor:
 
     def fetchall(self) -> Any:
         if self._closed:
-            logger.warning("[iOS_CURSOR] fetchall() called on closed cursor, returning []")
+            logger.warning(
+                "[iOS_CURSOR] fetchall() called on closed cursor, returning []"
+            )
             return []
         logger.debug("[iOS_CURSOR] fetchall() called...")
         with self._lock:
@@ -226,9 +246,13 @@ class IOSSerializedCursor:
                     # Close cursor immediately to prevent iOS tracking assertions
                     self._cursor.close()
                     self._closed = True
-                    logger.debug(f"[iOS_CURSOR] fetchall() rows={len(result) if result else 0}, cursor closed")
+                    logger.debug(
+                        f"[iOS_CURSOR] fetchall() rows={len(result) if result else 0}, cursor closed"
+                    )
                 else:
-                    logger.debug(f"[iOS_CURSOR] fetchall() succeeded: {len(result) if result else 0} rows")
+                    logger.debug(
+                        f"[iOS_CURSOR] fetchall() succeeded: {len(result) if result else 0} rows"
+                    )
                 return result
             except Exception as e:
                 logger.error(f"[iOS_CURSOR] fetchall() FAILED: {e}")
@@ -351,7 +375,15 @@ class RetryConnection:
     """SQLite connection wrapper with automatic retry on write operations."""
 
     # SQL commands that modify data
-    WRITE_COMMANDS = {"INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "REPLACE"}
+    WRITE_COMMANDS = {
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "CREATE",
+        "DROP",
+        "ALTER",
+        "REPLACE",
+    }
 
     def __init__(
         self,
@@ -593,13 +625,19 @@ def _create_sqlite_connection_ios(db_path: str) -> "_IOSConnectionProxy":
     if cached is not None:
         try:
             cached.execute("SELECT 1")
-            logger.debug(f"[DB_CONNECT] iOS: reusing thread-local connection for {db_path}")
+            logger.debug(
+                f"[DB_CONNECT] iOS: reusing thread-local connection for {db_path}"
+            )
             return _IOSConnectionProxy(cached)
         except Exception:
-            logger.debug("[DB_CONNECT] iOS: cached connection invalid, creating new one")
+            logger.debug(
+                "[DB_CONNECT] iOS: cached connection invalid, creating new one"
+            )
             # Don't close here — let it die with the thread
 
-    logger.debug(f"[DB_CONNECT] iOS: creating new thread-local connection for {db_path}")
+    logger.debug(
+        f"[DB_CONNECT] iOS: creating new thread-local connection for {db_path}"
+    )
     try:
         conn = sqlite3.connect(
             db_path,
@@ -634,7 +672,9 @@ def _get_pragma_statements(is_ios: bool, busy_timeout: Optional[int]) -> list[st
 
 def _execute_pragmas(conn: Any, adapter: Any, pragma_statements: list[str]) -> None:
     """Execute PRAGMA statements on the connection."""
-    logger.debug(f"[DB_CONNECT] Executing {len(pragma_statements)} PRAGMA statements...")
+    logger.debug(
+        f"[DB_CONNECT] Executing {len(pragma_statements)} PRAGMA statements..."
+    )
     for pragma in pragma_statements:
         result = adapter.pragma(pragma)
         if result:
@@ -648,7 +688,9 @@ def _execute_pragmas(conn: Any, adapter: Any, pragma_statements: list[str]) -> N
 
 
 def get_db_connection(
-    db_path: Optional[str] = None, busy_timeout: Optional[int] = None, enable_retry: bool = True
+    db_path: Optional[str] = None,
+    busy_timeout: Optional[int] = None,
+    enable_retry: bool = True,
 ) -> Union[sqlite3.Connection, RetryConnection, Any]:
     """Open a stdlib sqlite3 connection for the bootstrap-layer schema init.
 
@@ -676,7 +718,9 @@ def get_db_connection(
     if is_ios:
         conn = _create_sqlite_connection_ios(db_path)
     else:
-        conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
+        conn = sqlite3.connect(
+            db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES
+        )
 
     conn.row_factory = sqlite3.Row
 
@@ -717,7 +761,9 @@ def get_connection_diagnostics(db_path: Optional[str] = None) -> ConnectionDiagn
     adapter = init_dialect(db_path)
     diagnostics: ConnectionDiagnostics = {
         "dialect": adapter.dialect.value,
-        "connection_string": adapter.db_url if adapter.is_postgresql() else adapter.db_path,
+        "connection_string": (
+            adapter.db_url if adapter.is_postgresql() else adapter.db_path
+        ),
         "is_postgresql": adapter.is_postgresql(),
         "is_sqlite": adapter.is_sqlite(),
     }
@@ -727,17 +773,17 @@ def get_connection_diagnostics(db_path: Optional[str] = None) -> ConnectionDiagn
         try:
             with get_db_connection(db_path=db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT count(*) as connection_count
                     FROM pg_stat_activity
                     WHERE datname = current_database()
-                    """
-                )
+                    """)
                 result = cursor.fetchone()
                 if result:
                     diagnostics["active_connections"] = (
-                        result[0] if isinstance(result, tuple) else result["connection_count"]
+                        result[0]
+                        if isinstance(result, tuple)
+                        else result["connection_count"]
                     )
                 cursor.close()
         except Exception as e:
@@ -808,8 +854,14 @@ def _persist_dsn_and_sentinel(db_path: str) -> Tuple[str, Optional[Path]]:
         # SQLAlchemy form: sqlite:///rel/path (3 slashes -> relative) or
         # sqlite:////abs/path (4 slashes -> absolute). Splitting on
         # 'sqlite:///' keeps the right leading-slash count for Path().
-        path_part = db_path.split("sqlite:///", 1)[-1] if "sqlite:///" in db_path else ""
-        sentinel = Path(path_part).resolve().parent if path_part and path_part != ":memory:" else None
+        path_part = (
+            db_path.split("sqlite:///", 1)[-1] if "sqlite:///" in db_path else ""
+        )
+        sentinel = (
+            Path(path_part).resolve().parent
+            if path_part and path_part != ":memory:"
+            else None
+        )
         return db_path, sentinel
     abs_path = Path(db_path).resolve()
     # `sqlite:///{abs_path}` where abs_path begins with '/' yields
@@ -851,8 +903,13 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     # an _expected_dsn that actually matches and the idempotent-skip works.
     _expected_dsn = _persist_dsn_and_sentinel(_resolved_db_path)[0]
 
-    if graph_persistence._engine is not None and graph_persistence._engine_dsn == _expected_dsn:
-        logger.debug("persist engine already wired to %s, skipping re-bootstrap", _expected_dsn)
+    if (
+        graph_persistence._engine is not None
+        and graph_persistence._engine_dsn == _expected_dsn
+    ):
+        logger.debug(
+            "persist engine already wired to %s, skipping re-bootstrap", _expected_dsn
+        )
         return
 
     # Resolve the DSN. Postgres takes its own URL; SQLite uses
@@ -904,7 +961,9 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         local_seed_path.write_bytes(os.urandom(32))
         try:
             local_seed_path.chmod(0o600)
-        except OSError as e:  # noqa: BLE001 - chmod is best-effort on platforms (Windows)
+        except (
+            OSError
+        ) as e:  # noqa: BLE001 - chmod is best-effort on platforms (Windows)
             logger.debug("Could not chmod local signing seed (non-fatal): %s", e)
         logger.info("Bootstrapped local signing seed at %s", local_seed_path)
 
@@ -923,7 +982,9 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         local_pqc_seed_path.write_bytes(os.urandom(32))
         try:
             local_pqc_seed_path.chmod(0o600)
-        except OSError as e:  # noqa: BLE001 - chmod is best-effort on platforms (Windows)
+        except (
+            OSError
+        ) as e:  # noqa: BLE001 - chmod is best-effort on platforms (Windows)
             logger.debug("Could not chmod local PQC signing seed (non-fatal): %s", e)
         logger.info("Bootstrapped local PQC signing seed at %s", local_pqc_seed_path)
 
@@ -977,9 +1038,16 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             _result: dict[str, object] = {}
 
             def _ios_worker() -> None:
+                # Narrow to Exception so KeyboardInterrupt / SystemExit
+                # propagate up the worker thread naturally instead of being
+                # silently transported back to main via `_result["error"]`.
+                # Exception subclasses (the only thing the persist Engine
+                # constructor realistically raises — sqlx errors, FFI
+                # marshalling errors, OSError on lock) are still captured
+                # for re-raise on the main thread.
                 try:
                     _result["engine"] = _construct_engine()
-                except BaseException as we:  # noqa: BLE001 - re-raise on main thread
+                except Exception as we:
                     _result["error"] = we
 
             _prev_stack = threading.stack_size()
@@ -1010,7 +1078,10 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
                 and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
             )
             if is_ios:
-                logger.warning("iOS: Engine bootstrap lock failed (%s) — clearing stale locks and retrying", e)
+                logger.warning(
+                    "iOS: Engine bootstrap lock failed (%s) — clearing stale locks and retrying",
+                    e,
+                )
                 # Remove any stale lock/WAL files that may be blocking
                 import glob
 
@@ -1020,14 +1091,20 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
                             Path(lock_file).unlink()
                             logger.info("Removed stale lock: %s", lock_file)
                         except OSError as unlink_err:
-                            logger.debug("Could not remove stale lock %s: %s", lock_file, unlink_err)
+                            logger.debug(
+                                "Could not remove stale lock %s: %s",
+                                lock_file,
+                                unlink_err,
+                            )
                 # Retry with fresh state
                 try:
                     from ciris_persist import reset_engine
 
                     reset_engine()
                 except Exception as reset_err:
-                    logger.debug("reset_engine() before retry failed (non-fatal): %s", reset_err)
+                    logger.debug(
+                        "reset_engine() before retry failed (non-fatal): %s", reset_err
+                    )
                 engine = Engine(dsn, signing_key_id)
             else:
                 raise
@@ -1047,10 +1124,15 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             try:
                 import json as _json
 
-                logger.info("A0a migration sentinel absent — running legacy graph migration")
+                logger.info(
+                    "A0a migration sentinel absent — running legacy graph migration"
+                )
                 raw = engine.run_legacy_graph_migration(_json.dumps({"dry_run": False}))
                 stats = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
-                if stats.get("outcome") in ("ok", "partial") and stats.get("errors", 0) == 0:
+                if (
+                    stats.get("outcome") in ("ok", "partial")
+                    and stats.get("errors", 0) == 0
+                ):
                     sentinel.write_text(
                         f'{{"nodes_written":{stats.get("nodes_written", 0)},'
                         f'"edges_written":{stats.get("edges_written", 0)}}}'

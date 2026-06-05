@@ -28,7 +28,7 @@ import logging
 import os
 import time
 from collections import deque
-from typing import Any, Deque, Dict, List, Optional
+from typing import Annotated, Any, Deque, Dict, List, Optional
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -238,7 +238,7 @@ class A2AAdapter(Service):
         @app.post("/a2a")
         async def a2a_endpoint(
             request: Request,
-            auth: AuthContext = Depends(require_admin),  # noqa: B008
+            auth: Annotated[AuthContext, Depends(require_admin)],
         ) -> JSONResponse:
             """Handle A2A JSON-RPC peer requests.
 
@@ -383,11 +383,12 @@ class A2AAdapter(Service):
         # FastAPI hands us the raw client tuple; honour X-Forwarded-For if a
         # trusted proxy added it, otherwise fall back to the socket peer.
         forwarded = request.headers.get("x-forwarded-for", "")
-        source_ip = (
-            forwarded.split(",")[0].strip()
-            if forwarded
-            else (request.client.host if request.client else "unknown")
-        )
+        if forwarded:
+            source_ip = forwarded.split(",")[0].strip()
+        elif request.client:
+            source_ip = request.client.host
+        else:
+            source_ip = "unknown"
         now = time.monotonic()
         bucket = self._rate_limit_buckets.setdefault(source_ip, deque())
         # Trim entries older than the window

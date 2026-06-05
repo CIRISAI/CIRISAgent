@@ -42,7 +42,10 @@ from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
-from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
+from ciris_engine.schemas.runtime.adapter_management import (
+    AdapterConfig,
+    RuntimeAdapterStatus,
+)
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .schemas import (
@@ -82,7 +85,9 @@ class A2AAdapter(Service):
             ever ships. Wildcard `["*"]` is rejected at config-time.
     """
 
-    def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
+    def __init__(
+        self, runtime: Any, context: Optional[Any] = None, **kwargs: Any
+    ) -> None:
         """Initialize A2A adapter.
 
         Args:
@@ -110,22 +115,36 @@ class A2AAdapter(Service):
             config_host = adapter_config.get("host", default_host)
             config_port = adapter_config.get("port", default_port)
             config_timeout = adapter_config.get("timeout", default_timeout)
-            config_max_concurrent = adapter_config.get("max_concurrent", default_max_concurrent)
-            config_rate_limit = adapter_config.get("rate_limit_per_minute", default_rate_limit_per_minute)
-            config_cors_origins = adapter_config.get("cors_origins", default_cors_origins)
+            config_max_concurrent = adapter_config.get(
+                "max_concurrent", default_max_concurrent
+            )
+            config_rate_limit = adapter_config.get(
+                "rate_limit_per_minute", default_rate_limit_per_minute
+            )
+            config_cors_origins = adapter_config.get(
+                "cors_origins", default_cors_origins
+            )
         else:
             config_host = getattr(adapter_config, "host", default_host)
             config_port = getattr(adapter_config, "port", default_port)
             config_timeout = getattr(adapter_config, "timeout", default_timeout)
-            config_max_concurrent = getattr(adapter_config, "max_concurrent", default_max_concurrent)
-            config_rate_limit = getattr(adapter_config, "rate_limit_per_minute", default_rate_limit_per_minute)
-            config_cors_origins = getattr(adapter_config, "cors_origins", default_cors_origins)
+            config_max_concurrent = getattr(
+                adapter_config, "max_concurrent", default_max_concurrent
+            )
+            config_rate_limit = getattr(
+                adapter_config, "rate_limit_per_minute", default_rate_limit_per_minute
+            )
+            config_cors_origins = getattr(
+                adapter_config, "cors_origins", default_cors_origins
+            )
 
         # Environment variables override config (for AgentBeats/Docker)
         self._host = os.environ.get("CIRIS_A2A_HOST") or config_host
         self._port = int(os.environ.get("CIRIS_A2A_PORT") or config_port)
         self._timeout = float(os.environ.get("CIRIS_A2A_TIMEOUT") or config_timeout)
-        self._max_concurrent = int(os.environ.get("CIRIS_A2A_MAX_CONCURRENT") or config_max_concurrent)
+        self._max_concurrent = int(
+            os.environ.get("CIRIS_A2A_MAX_CONCURRENT") or config_max_concurrent
+        )
         self._rate_limit_per_minute = int(
             os.environ.get("CIRIS_A2A_RATE_LIMIT_PER_MINUTE") or config_rate_limit
         )
@@ -292,7 +311,11 @@ class A2AAdapter(Service):
             except ValidationError as e:
                 # Invalid request format (Pydantic validation failed)
                 response = create_error_response(
-                    request_id=body.get("id", "unknown") if isinstance(body, dict) else "unknown",
+                    request_id=(
+                        body.get("id", "unknown")
+                        if isinstance(body, dict)
+                        else "unknown"
+                    ),
                     code=-32600,
                     message="Invalid request",
                     data=str(e),
@@ -360,7 +383,11 @@ class A2AAdapter(Service):
         # FastAPI hands us the raw client tuple; honour X-Forwarded-For if a
         # trusted proxy added it, otherwise fall back to the socket peer.
         forwarded = request.headers.get("x-forwarded-for", "")
-        source_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+        source_ip = (
+            forwarded.split(",")[0].strip()
+            if forwarded
+            else (request.client.host if request.client else "unknown")
+        )
         now = time.monotonic()
         bucket = self._rate_limit_buckets.setdefault(source_ip, deque())
         # Trim entries older than the window
@@ -378,7 +405,9 @@ class A2AAdapter(Service):
             )
         bucket.append(now)
 
-    async def _handle_benchmark_evaluate(self, body: dict[str, Any], request_id: str) -> JSONResponse:
+    async def _handle_benchmark_evaluate(
+        self, body: dict[str, Any], request_id: str
+    ) -> JSONResponse:
         """Handle benchmark.evaluate method (CIRISBench format).
 
         Args:
@@ -391,7 +420,9 @@ class A2AAdapter(Service):
         try:
             benchmark_request = BenchmarkRequest(**body)
             scenario_id = benchmark_request.params.scenario_id
-            scenario = benchmark_request.params.scenario  # Already includes category question
+            scenario = (
+                benchmark_request.params.scenario
+            )  # Already includes category question
 
             if not scenario.strip():
                 response = create_benchmark_error_response(
@@ -405,7 +436,9 @@ class A2AAdapter(Service):
             logger.info(f"[BENCHMARK] {scenario_id} processing ({len(scenario)} chars)")
 
             # Process the ethical query
-            result_text = await self.a2a_service.process_ethical_query(scenario, task_id=scenario_id)
+            result_text = await self.a2a_service.process_ethical_query(
+                scenario, task_id=scenario_id
+            )
 
             # Log the response
             logger.info(f"[BENCHMARK] {scenario_id} RESPONSE: {result_text[:200]}...")
@@ -438,7 +471,9 @@ class A2AAdapter(Service):
             )
             return JSONResponse(content=response.model_dump(), status_code=500)
 
-    async def _handle_tasks_send(self, body: dict[str, Any], request_id: str) -> JSONResponse:
+    async def _handle_tasks_send(
+        self, body: dict[str, Any], request_id: str
+    ) -> JSONResponse:
         """Handle tasks/send method (A2A format).
 
         Args:
@@ -466,7 +501,9 @@ class A2AAdapter(Service):
                 return JSONResponse(content=response.model_dump())
 
             # Process the ethical query
-            result_text = await self.a2a_service.process_ethical_query(query_text, task_id=a2a_request.params.task.id)
+            result_text = await self.a2a_service.process_ethical_query(
+                query_text, task_id=a2a_request.params.task.id
+            )
             response = create_success_response(
                 request_id=request_id,
                 task_id=a2a_request.params.task.id,
@@ -490,7 +527,6 @@ class A2AAdapter(Service):
                 message=f"Internal error: {str(e)}",
             )
             return JSONResponse(content=response.model_dump(), status_code=500)
-
 
     def _parse_ethical_response(self, response_text: str) -> tuple[str, str | None]:
         """Parse an ethical response to extract evaluation and reasoning.

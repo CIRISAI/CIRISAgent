@@ -342,7 +342,9 @@ class TestUnifiedSigningKey:
             with pytest.raises(RuntimeError) as exc_info:
                 key.initialize()
 
-            assert "CIRISVerify signer could not establish a signing key" in str(exc_info.value)
+            assert "CIRISVerify signer could not establish a signing key" in str(
+                exc_info.value
+            )
             assert "StrongBox unavailable" in str(exc_info.value)
             assert exc_info.value.__cause__ is keystore_error
             # And it must NOT have left itself in a half-initialized state.
@@ -688,12 +690,16 @@ class TestHardwareKeyRecovery:
         def has_key_side_effect():
             call_count[0] += 1
             if call_count[0] == 1:
-                raise RuntimeError("Hardware key was deleted or corrupted. Please create a new signing key.")
+                raise RuntimeError(
+                    "Hardware key was deleted or corrupted. Please create a new signing key."
+                )
             return True  # After regeneration, key exists
 
         mock_client.has_key_sync.side_effect = has_key_side_effect
         mock_client.generate_key_sync.return_value = None  # Generation succeeds
-        mock_client.get_ed25519_public_key_sync.return_value = b"recovered" + b"\x00" * 24
+        mock_client.get_ed25519_public_key_sync.return_value = (
+            b"recovered" + b"\x00" * 24
+        )
 
         with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
             signer = CIRISVerifySigner()
@@ -736,7 +742,9 @@ class TestHardwareKeyRecovery:
         def sign_side_effect(data):
             call_count[0] += 1
             if call_count[0] == 1:
-                raise RuntimeError("Hardware key was deleted or corrupted. Please create a new signing key.")
+                raise RuntimeError(
+                    "Hardware key was deleted or corrupted. Please create a new signing key."
+                )
             return b"recovered_signature" + b"\x00" * 45  # ~64 bytes
 
         mock_client.sign_ed25519_sync.side_effect = sign_side_effect
@@ -770,7 +778,9 @@ class TestHardwareKeyRecovery:
         signer._client = mock_client
 
         # Must patch reset_verifier to prevent real lib init during retry
-        with patch(self.RESET_VERIFIER_PATH), patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+        with patch(self.RESET_VERIFIER_PATH), patch(
+            VERIFIER_PATCH_PATH, return_value=mock_client
+        ):
             with pytest.raises(RuntimeError) as exc_info:
                 signer.sign(b"test data")
 
@@ -801,7 +811,9 @@ class TestHardwareKeyRecovery:
         mock_client = MagicMock()
 
         # Different error message - not related to deleted/corrupted
-        mock_client.sign_ed25519_sync.side_effect = RuntimeError("TPM communication timeout")
+        mock_client.sign_ed25519_sync.side_effect = RuntimeError(
+            "TPM communication timeout"
+        )
 
         signer = CIRISVerifySigner()
         signer._client = mock_client

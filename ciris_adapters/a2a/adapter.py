@@ -1,25 +1,44 @@
 """
 A2A (Agent-to-Agent) Adapter for CIRIS.
 
-Provides an A2A protocol endpoint for HE-300 ethical benchmarking.
-Exposes a JSON-RPC 2.0 compatible endpoint at POST /a2a.
+JSON-RPC 2.0 peer transport exposed at POST /a2a. The adapter name describes
+the *transport* (Agent-to-Agent peer protocol), not the *payload* — current
+methods focus on HE-300 benchmarking (CIRISBench is the canonical peer), and
+lens-contribution methods are expected to land in 2.9.6+ per CEG §5.8.
 
-This adapter is optimized for high-concurrency benchmarking scenarios
-with direct LLM access and minimal overhead.
+Security model (CIRISAgent#855, release/2.9.5):
+- All /a2a calls require admin-or-service-account auth (AuthAdminDep). A
+  service token issued to CIRISBench (or a human admin token for manual
+  benchmark runs) is the only way in. No "anyone can benchmark me"
+  semantics — per CEG §5.8, benchmark outcomes are signed contributions,
+  not anonymous.
+- CORS is locked down: no wildcard origins, credentials=False. The peer
+  caller is a service, not a browser.
+- Per-source-IP rate limit + global concurrency cap on the expensive
+  methods (benchmark.evaluate, tasks/send) — defense in depth even with
+  auth, protects against a compromised peer token.
+- Vestigial AgentBeats-hackathon methods (deferrals/receive,
+  deferrals/resolve, credits/notify) deleted — their schemas declared an
+  Ed25519-signed peer trust model the handlers never implemented, and
+  there's no working consumer of these on either side.
 """
 
 import asyncio
 import logging
 import os
-from typing import Any, List, Optional
+import time
+from collections import deque
+from typing import Any, Deque, Dict, List, Optional
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from uvicorn import Server
 
+from ciris_engine.logic.adapters.api.dependencies.auth import AuthContext, require_admin
+from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
@@ -30,8 +49,6 @@ from .schemas import (
     A2ARequest,
     A2AResponse,
     BenchmarkRequest,
-    CreditNotificationRequest,
-    DeferralReceiveRequest,
     create_benchmark_error_response,
     create_benchmark_response,
     create_error_response,
@@ -44,16 +61,25 @@ logger = logging.getLogger(__name__)
 
 class A2AAdapter(Service):
     """
-    A2A adapter for CIRIS ethical benchmarking.
+    A2A peer-transport adapter for CIRIS.
 
-    Provides a JSON-RPC 2.0 compatible endpoint for the HE-300 benchmark
-    protocol. Optimized for high concurrency (10-50+ simultaneous requests).
+    JSON-RPC 2.0 endpoint for benchmark/peer methods. Authenticated;
+    rate-limited; concurrency-capped. See module docstring for the security
+    model.
 
     Configuration:
         host: Host to bind to (default: 0.0.0.0)
         port: Port to bind to (default: 8100)
         system_prompt: Custom system prompt for ethical reasoning
-        timeout: Timeout for LLM calls in seconds (default: 60)
+        timeout: Timeout for LLM calls in seconds (default: 120)
+        max_concurrent: Global cap on concurrent expensive method calls
+            (default: 32). Bounds LLM-budget exposure even if rate limit
+            evaded.
+        rate_limit_per_minute: Per-source-IP request cap per minute
+            (default: 60). 0 disables the IP rate limit (auth-only).
+        cors_origins: List of allowed origins (default: [] — no CORS).
+            Override to a specific allowlist if a browser-hosted peer
+            ever ships. Wildcard `["*"]` is rejected at config-time.
     """
 
     def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
@@ -75,21 +101,52 @@ class A2AAdapter(Service):
         default_host = "0.0.0.0"
         default_port = 8100
         default_timeout = 120.0
+        default_max_concurrent = 32
+        default_rate_limit_per_minute = 60
+        default_cors_origins: List[str] = []
 
         # Get from adapter_config first
         if isinstance(adapter_config, dict):
             config_host = adapter_config.get("host", default_host)
             config_port = adapter_config.get("port", default_port)
             config_timeout = adapter_config.get("timeout", default_timeout)
+            config_max_concurrent = adapter_config.get("max_concurrent", default_max_concurrent)
+            config_rate_limit = adapter_config.get("rate_limit_per_minute", default_rate_limit_per_minute)
+            config_cors_origins = adapter_config.get("cors_origins", default_cors_origins)
         else:
             config_host = getattr(adapter_config, "host", default_host)
             config_port = getattr(adapter_config, "port", default_port)
             config_timeout = getattr(adapter_config, "timeout", default_timeout)
+            config_max_concurrent = getattr(adapter_config, "max_concurrent", default_max_concurrent)
+            config_rate_limit = getattr(adapter_config, "rate_limit_per_minute", default_rate_limit_per_minute)
+            config_cors_origins = getattr(adapter_config, "cors_origins", default_cors_origins)
 
         # Environment variables override config (for AgentBeats/Docker)
         self._host = os.environ.get("CIRIS_A2A_HOST") or config_host
         self._port = int(os.environ.get("CIRIS_A2A_PORT") or config_port)
         self._timeout = float(os.environ.get("CIRIS_A2A_TIMEOUT") or config_timeout)
+        self._max_concurrent = int(os.environ.get("CIRIS_A2A_MAX_CONCURRENT") or config_max_concurrent)
+        self._rate_limit_per_minute = int(
+            os.environ.get("CIRIS_A2A_RATE_LIMIT_PER_MINUTE") or config_rate_limit
+        )
+        # Reject wildcard origins at config-time. The adapter is service-to-service;
+        # if a browser-hosted peer ever ships, an explicit allowlist must be configured.
+        cors_origins_list: List[str] = list(config_cors_origins)
+        if "*" in cors_origins_list:
+            raise ValueError(
+                "A2A adapter: wildcard CORS origin (`*`) is not allowed. "
+                "Configure an explicit allowlist via cors_origins."
+            )
+        self._cors_origins: List[str] = cors_origins_list
+
+        # Global concurrency cap on expensive methods (benchmark.evaluate, tasks/send).
+        # Bounds total simultaneous LLM-budget exposure regardless of auth state.
+        self._concurrency_semaphore = asyncio.Semaphore(self._max_concurrent)
+
+        # Per-source-IP sliding-window rate limit. Maps IP → deque[request_timestamps].
+        # Window is 60 seconds; entries older than that are trimmed on each check.
+        self._rate_limit_buckets: Dict[str, Deque[float]] = {}
+        self._rate_limit_window_seconds: float = 60.0
 
         # Create A2A service with runtime for pipeline access
         self.a2a_service = A2AService(
@@ -115,20 +172,44 @@ class A2AAdapter(Service):
         """
         app = FastAPI(
             title="CIRIS A2A Protocol",
-            description="Agent-to-Agent protocol endpoint for ethical benchmarking",
+            description="Agent-to-Agent JSON-RPC peer transport (auth required)",
             version="1.0.0",
         )
 
-        # Add CORS for cross-origin requests
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+        # Wire the runtime's authentication service onto this app's state so
+        # FastAPI dependencies (Depends(require_admin)) can resolve. The
+        # underlying AuthenticationService is shared with the API adapter; we
+        # wrap it in our own APIAuthService instance here. Service tokens and
+        # user credentials persist in the runtime auth service / DB, so token
+        # validation is consistent across both adapters even though each has
+        # its own APIAuthService wrapper.
+        runtime_auth = getattr(self.runtime, "authentication_service", None) or getattr(
+            self.runtime, "auth_service", None
         )
+        if runtime_auth is not None:
+            app.state.auth_service = APIAuthService(runtime_auth)
+        else:
+            # Without an auth service the endpoint can't gate; fail fast
+            # instead of silently shipping an unauth'd surface.
+            raise RuntimeError(
+                "A2A adapter cannot initialize: runtime has no authentication_service. "
+                "The /a2a endpoint requires admin-or-service-account auth (CIRISAgent#855)."
+            )
 
-        # Health check endpoint
+        # CORS lockdown: service-to-service by default. If cors_origins is
+        # empty (the default), no CORS middleware is registered — non-browser
+        # callers (curl, CIRISBench, peer agents) are unaffected. A wildcard
+        # origin was rejected at config time in __init__.
+        if self._cors_origins:
+            app.add_middleware(
+                CORSMiddleware,
+                allow_origins=self._cors_origins,
+                allow_credentials=False,
+                allow_methods=["POST", "GET"],
+                allow_headers=["Authorization", "Content-Type"],
+            )
+
+        # Health check endpoint — kept unauth'd for ops/uptime probes.
         @app.get("/health")
         async def health_check() -> dict[str, str]:
             """Health check endpoint."""
@@ -136,12 +217,18 @@ class A2AAdapter(Service):
 
         # A2A protocol endpoint
         @app.post("/a2a")
-        async def a2a_endpoint(request: Request) -> JSONResponse:
-            """Handle A2A protocol requests.
+        async def a2a_endpoint(
+            request: Request,
+            auth: AuthContext = Depends(require_admin),  # noqa: B008
+        ) -> JSONResponse:
+            """Handle A2A JSON-RPC peer requests.
 
-            Accepts JSON-RPC 2.0 formatted requests and returns ethical
-            judgments. Supports both tasks/send and benchmark.evaluate methods.
+            Requires admin-or-service-account authentication. CIRISBench's
+            service token or a human admin token are the supported credentials.
             """
+            # Per-source-IP rate limit (defense-in-depth even with auth).
+            self._check_rate_limit(request)
+
             body = None
             try:
                 # Parse request body
@@ -177,25 +264,27 @@ class A2AAdapter(Service):
                     )
                     return JSONResponse(content=response.model_dump())
 
-                # Route based on method
+                # Route based on method. Expensive methods (benchmark.evaluate,
+                # tasks/send) drive full agent reasoning and are bounded by the
+                # global concurrency semaphore.
                 if method == "benchmark.evaluate":
-                    return await self._handle_benchmark_evaluate(body, request_id)
+                    async with self._concurrency_semaphore:
+                        return await self._handle_benchmark_evaluate(body, request_id)
                 elif method == "tasks/send":
-                    return await self._handle_tasks_send(body, request_id)
-                elif method == "deferrals/receive":
-                    return await self._handle_deferral_receive(body, request_id)
-                elif method == "deferrals/resolve":
-                    return await self._handle_deferral_resolve(body, request_id)
-                elif method == "credits/notify":
-                    return await self._handle_credit_notify(body, request_id)
+                    async with self._concurrency_semaphore:
+                        return await self._handle_tasks_send(body, request_id)
                 else:
-                    # -32601: Method not found (valid JSON-RPC but unsupported method)
+                    # -32601: Method not found (valid JSON-RPC but unsupported
+                    # method). The deferrals/receive, deferrals/resolve, and
+                    # credits/notify methods were deleted in release/2.9.5 —
+                    # they were vestigial AgentBeats-hackathon code with no
+                    # working consumer and unverified Ed25519 signatures.
                     response = create_error_response(
                         request_id=request_id,
                         code=-32601,
                         message=(
                             f"Method not found: {method}. Supported: tasks/send, "
-                            "benchmark.evaluate, deferrals/receive, deferrals/resolve, credits/notify"
+                            "benchmark.evaluate"
                         ),
                     )
                     return JSONResponse(content=response.model_dump())
@@ -220,36 +309,36 @@ class A2AAdapter(Service):
                 )
                 return JSONResponse(content=response.model_dump(), status_code=400)
 
-        # Metrics endpoint
+        # Metrics endpoint — kept unauth'd; only returns aggregate counters.
         @app.get("/metrics")
         async def metrics() -> dict[str, Any]:
             """Get A2A service metrics."""
             return self.a2a_service.get_metrics()
 
-        # AgentBeats agent manifest endpoint
+        # AgentBeats / peer-discovery manifest. Advertises only the methods
+        # that are actually wired (the vestigial ones were removed in 2.9.5).
         @app.get("/.well-known/agent.json")
         async def agent_manifest() -> dict[str, Any]:
-            """AgentBeats agent manifest for discovery."""
+            """Peer-discovery manifest. Auth is required on /a2a."""
             return {
                 "name": "CIRIS Agent",
-                "version": "1.9.4",
-                "description": "CIRIS ethical AI agent for ethical evaluation",
+                "version": "2.9.5",
+                "description": "CIRIS ethical AI agent — A2A peer transport",
                 "capabilities": [
                     "ethics-evaluation",
                     "a2a:tasks_send",
                     "a2a:benchmark.evaluate",
-                    "a2a:deferrals_receive",
-                    "a2a:deferrals_resolve",
-                    "a2a:credits_notify",
                 ],
                 "protocols": ["a2a"],
                 "methods": [
                     "tasks/send",
                     "benchmark.evaluate",
-                    "deferrals/receive",
-                    "deferrals/resolve",
-                    "credits/notify",
                 ],
+                "auth": {
+                    "required": True,
+                    "schemes": ["bearer"],
+                    "tier": "admin",
+                },
                 "endpoints": {
                     "a2a": "/a2a",
                     "health": "/health",
@@ -258,6 +347,36 @@ class A2AAdapter(Service):
             }
 
         return app
+
+    def _check_rate_limit(self, request: Request) -> None:
+        """Enforce per-source-IP sliding-window rate limit.
+
+        Raises 429 if the source IP has exceeded ``rate_limit_per_minute``
+        requests in the trailing 60-second window. A configured limit of 0
+        disables this check (auth-only).
+        """
+        if self._rate_limit_per_minute <= 0:
+            return
+        # FastAPI hands us the raw client tuple; honour X-Forwarded-For if a
+        # trusted proxy added it, otherwise fall back to the socket peer.
+        forwarded = request.headers.get("x-forwarded-for", "")
+        source_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+        now = time.monotonic()
+        bucket = self._rate_limit_buckets.setdefault(source_ip, deque())
+        # Trim entries older than the window
+        cutoff = now - self._rate_limit_window_seconds
+        while bucket and bucket[0] < cutoff:
+            bucket.popleft()
+        if len(bucket) >= self._rate_limit_per_minute:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Rate limit exceeded: {self._rate_limit_per_minute} "
+                    f"requests per 60s per source IP. Retry shortly."
+                ),
+                headers={"Retry-After": "60"},
+            )
+        bucket.append(now)
 
     async def _handle_benchmark_evaluate(self, body: dict[str, Any], request_id: str) -> JSONResponse:
         """Handle benchmark.evaluate method (CIRISBench format).
@@ -372,91 +491,6 @@ class A2AAdapter(Service):
             )
             return JSONResponse(content=response.model_dump(), status_code=500)
 
-    async def _handle_deferral_receive(self, body: dict[str, Any], request_id: str) -> JSONResponse:
-        """Handle deferrals/receive method.
-
-        CIRISNode pushes a deferral for this agent to resolve because
-        it has the required licensed domain capability.
-        """
-        try:
-            deferral_request = DeferralReceiveRequest(**body)
-            params = deferral_request.params
-
-            logger.info(
-                f"[DEFERRAL] Received deferral {params.deferral_id} "
-                f"from agent {params.requesting_agent_id[:8]}... "
-                f"domain={params.domain_hint or 'general'}"
-            )
-
-            # Process through the agent's pipeline
-            result_text = await self.a2a_service.process_ethical_query(params.payload, task_id=params.deferral_id)
-
-            return JSONResponse(
-                content={
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "result": {
-                        "deferral_id": params.deferral_id,
-                        "resolution": result_text,
-                        "status": "resolved",
-                    },
-                }
-            )
-
-        except Exception as e:
-            logger.error(f"Deferral receive error: {e}")
-            response = create_error_response(
-                request_id=request_id, code=-32603, message=f"Deferral processing error: {str(e)}"
-            )
-            return JSONResponse(content=response.model_dump(), status_code=500)
-
-    async def _handle_deferral_resolve(self, body: dict[str, Any], request_id: str) -> JSONResponse:
-        """Handle deferrals/resolve method (confirmation of resolution)."""
-        try:
-            logger.info(
-                f"[DEFERRAL] Resolution confirmation received: {body.get('params', {}).get('deferral_id', 'unknown')}"
-            )
-            return JSONResponse(
-                content={
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "result": {"status": "acknowledged"},
-                }
-            )
-        except Exception as e:
-            logger.error(f"Deferral resolve error: {e}")
-            response = create_error_response(request_id=request_id, code=-32603, message=str(e))
-            return JSONResponse(content=response.model_dump(), status_code=500)
-
-    async def _handle_credit_notify(self, body: dict[str, Any], request_id: str) -> JSONResponse:
-        """Handle credits/notify method.
-
-        Notification that a credit record was generated from a bilateral interaction.
-        """
-        try:
-            notification = CreditNotificationRequest(**body)
-            params = notification.params
-
-            logger.info(
-                f"[CREDIT] Record generated: interaction={params.interaction_id} "
-                f"outcome={params.outcome} coherence={params.coherence_score:.2f} "
-                f"counterparty={params.counterparty_agent_id[:8]}..."
-            )
-
-            return JSONResponse(
-                content={
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "result": {
-                        "interaction_id": params.interaction_id,
-                        "status": "acknowledged",
-                    },
-                }
-            )
-        except Exception as e:
-            logger.error(f"Credit notification error: {e}")
-            response = create_error_response(request_id=request_id, code=-32603, message=str(e))
-            return JSONResponse(content=response.model_dump(), status_code=500)
 
     def _parse_ethical_response(self, response_text: str) -> tuple[str, str | None]:
         """Parse an ethical response to extract evaluation and reasoning.

@@ -192,62 +192,13 @@ def create_benchmark_response(
 # =========================================================================
 
 
-class DeferralReceiveParams(BaseModel):
-    """Parameters for deferrals/receive method.
-
-    CIRISNode pushes a deferral for this agent to resolve
-    because it has the required domain capability.
-    """
-
-    deferral_id: str = Field(..., description="Unique deferral ID from CIRISNode")
-    requesting_agent_id: str = Field(..., description="Ed25519 pubkey hash of requesting agent")
-    requesting_trace_id: str = Field(..., description="ACCORD trace ID from requesting agent")
-    domain_hint: Optional[str] = Field(None, description="Licensed domain category")
-    payload: str = Field(..., description="Deferral payload (signed by requesting agent)")
-    signature: Optional[str] = Field(None, description="Ed25519 signature of requesting agent")
-    signature_key_id: Optional[str] = Field(None, description="Key ID of requesting agent")
-
-
-class DeferralReceiveRequest(BaseModel):
-    """JSON-RPC 2.0 request for deferrals/receive method."""
-
-    jsonrpc: Literal["2.0"] = "2.0"
-    id: str
-    method: Literal["deferrals/receive"] = "deferrals/receive"
-    params: DeferralReceiveParams
-
-
-class DeferralResolveResult(BaseModel):
-    """Result from resolving a deferral."""
-
-    deferral_id: str
-    resolution: str = Field(..., description="Resolution text/decision")
-    trace_id: str = Field(..., description="ACCORD trace ID of the resolution")
-    signature: Optional[str] = Field(None, description="Ed25519 signature of resolver")
-    signature_key_id: Optional[str] = Field(None, description="Key ID of resolver")
-
-
-class CreditNotificationParams(BaseModel):
-    """Parameters for credits/notify method.
-
-    Notification that a credit record was generated from a bilateral interaction.
-    """
-
-    interaction_id: str = Field(..., description="Deterministic interaction ID")
-    outcome: str = Field(..., description="resolved | partial")
-    coherence_score: float = Field(..., description="Coherence ratchet score")
-    domain_category: Optional[str] = Field(None, description="Licensed domain if applicable")
-    counterparty_agent_id: str = Field(..., description="The other agent in the interaction")
-    node_attestation: Optional[str] = Field(None, description="CIRISNode attestation signature")
-
-
-class CreditNotificationRequest(BaseModel):
-    """JSON-RPC 2.0 request for credits/notify method."""
-
-    jsonrpc: Literal["2.0"] = "2.0"
-    id: str
-    method: Literal["credits/notify"] = "credits/notify"
-    params: CreditNotificationParams
+# NOTE: DeferralReceiveParams/Request, DeferralResolveResult,
+# CreditNotificationParams/Request were deleted in release/2.9.5 — they
+# declared an Ed25519-signed peer trust model the handlers never verified
+# (CIRISAgent#855). When real federation deferral / credit methods land
+# (planned for the 2.9.6+ LensCore cohort, per CEG §5.8 signed-contribution
+# semantics), the new schemas will need a matching canonicalization spec and
+# signature-verification path before they're wired.
 
 
 def create_benchmark_error_response(

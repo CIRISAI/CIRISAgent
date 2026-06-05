@@ -181,6 +181,11 @@ class TestA2AEndpoint:
         runtime.adapters = []  # No API adapter, so it will use runtime.on_message
         runtime.service_registry = MagicMock()
         runtime.service_registry.get_service = MagicMock(return_value=None)
+        # The A2A adapter (post release/2.9.5) refuses to initialize without an
+        # authentication_service on the runtime. MagicMock is enough for the
+        # adapter to wrap into APIAuthService; tests that need auth to pass
+        # use dependency_overrides instead of going through real validation.
+        runtime.authentication_service = MagicMock()
 
         async def mock_on_message(message):
             """Mock on_message that simulates pipeline response."""
@@ -202,8 +207,43 @@ class TestA2AEndpoint:
         return adapter
 
     @pytest.fixture
-    def client(self, adapter):
-        """Create test client."""
+    def fake_admin_auth(self):
+        """Return a fake admin AuthContext callable suitable for
+        ``app.dependency_overrides[require_admin]`` — bypasses the real
+        token-validation path while still exercising the gated route."""
+        from datetime import datetime, timezone
+
+        from ciris_engine.schemas.api.auth import AuthContext, UserRole
+
+        async def _admin() -> AuthContext:
+            return AuthContext(
+                user_id="test_admin",
+                role=UserRole.ADMIN,
+                permissions=set(),
+                api_key_id="test_key",
+                authenticated_at=datetime.now(timezone.utc),
+            )
+
+        return _admin
+
+    @pytest.fixture
+    def client(self, adapter, fake_admin_auth):
+        """Create test client with auth overridden to a fake admin context.
+
+        Tests that want to assert auth IS enforced should use
+        ``unauthenticated_client`` instead.
+        """
+        from ciris_engine.logic.adapters.api.dependencies.auth import require_admin
+
+        adapter.app.dependency_overrides[require_admin] = fake_admin_auth
+        try:
+            yield TestClient(adapter.app)
+        finally:
+            adapter.app.dependency_overrides.clear()
+
+    @pytest.fixture
+    def unauthenticated_client(self, adapter):
+        """Test client WITHOUT the auth override — exercises the real 401 path."""
         return TestClient(adapter.app)
 
     def test_health_endpoint(self, client):
@@ -303,6 +343,87 @@ class TestA2AEndpoint:
         # Missing required fields results in method not found (-32601) or invalid request (-32600)
         assert data["error"]["code"] in (-32600, -32601)
 
+    def test_a2a_endpoint_rejects_unauthenticated(self, unauthenticated_client):
+        """A2A endpoint must reject calls without a valid bearer token.
+
+        Regression for CIRISAgent#855 — pre-release/2.9.5 the endpoint
+        accepted any caller and drove 120s of agent reasoning.
+        """
+        request_data = {
+            "jsonrpc": "2.0",
+            "id": "req-unauth",
+            "method": "tasks/send",
+            "params": {
+                "task": {
+                    "id": "task-unauth",
+                    "message": {"role": "user", "parts": [{"type": "text", "text": "x"}]},
+                }
+            },
+        }
+        response = unauthenticated_client.post("/a2a", json=request_data)
+        assert response.status_code == 401
+        assert "WWW-Authenticate" in response.headers
+
+    @pytest.mark.parametrize(
+        "deleted_method",
+        ["deferrals/receive", "deferrals/resolve", "credits/notify"],
+    )
+    def test_a2a_endpoint_rejects_deleted_methods(self, client, deleted_method):
+        """The deferrals/* and credits/notify methods were deleted in 2.9.5.
+
+        They were vestigial AgentBeats-hackathon code whose schemas declared
+        an Ed25519-signed peer trust model the handlers never verified
+        (CIRISAgent#855). Anything calling them today must learn it via a
+        JSON-RPC -32601 method-not-found error.
+        """
+        request_data = {
+            "jsonrpc": "2.0",
+            "id": f"req-{deleted_method}",
+            "method": deleted_method,
+            "params": {},
+        }
+        response = client.post("/a2a", json=request_data)
+        assert response.status_code == 200  # JSON-RPC errors return HTTP 200
+        data = response.json()
+        assert data["error"]["code"] == -32601
+        assert "Method not found" in data["error"]["message"]
+        # Make sure the deleted method's name isn't advertised in the new
+        # "Supported:" hint list.
+        assert deleted_method not in data["error"]["message"].split("Supported:", 1)[-1]
+
+    def test_a2a_adapter_refuses_wildcard_cors(self, mock_runtime):
+        """Config-time rejection of CORS wildcards.
+
+        CIRISAgent#855: the prior code shipped `allow_origins=["*"]` with
+        `allow_credentials=True`, an invalid CORS spec combination that
+        browsers reject but non-browser clients tolerate. The new adapter
+        refuses to instantiate with a wildcard origin so a stale config
+        can't silently downgrade the security posture.
+        """
+        with pytest.raises(ValueError, match="wildcard CORS"):
+            A2AAdapter(
+                runtime=mock_runtime,
+                adapter_config={
+                    "host": "127.0.0.1",
+                    "port": 8199,
+                    "cors_origins": ["*"],
+                },
+            )
+
+    def test_a2a_adapter_refuses_init_without_auth_service(self):
+        """If the runtime has no authentication_service, the A2A adapter must
+        refuse to construct — otherwise a misconfigured deployment would ship
+        an unauth'd /a2a endpoint by accident.
+        """
+        runtime = MagicMock()
+        runtime.authentication_service = None
+        runtime.auth_service = None
+        with pytest.raises(RuntimeError, match="authentication_service"):
+            A2AAdapter(
+                runtime=runtime,
+                adapter_config={"host": "127.0.0.1", "port": 8199},
+            )
+
 
 class TestA2AConcurrency:
     """Tests for A2A concurrency handling."""
@@ -320,6 +441,9 @@ class TestA2AConcurrency:
         runtime.adapters = []  # No API adapter, so it will use runtime.on_message
         runtime.service_registry = MagicMock()
         runtime.service_registry.get_service = MagicMock(return_value=None)
+        # Post release/2.9.5 the A2A adapter refuses to construct without an
+        # authentication_service on the runtime (CIRISAgent#855).
+        runtime.authentication_service = MagicMock()
 
         # Mock on_message with small delay to simulate real processing
         async def slow_on_message(message):

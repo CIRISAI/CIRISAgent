@@ -22,7 +22,7 @@ PyYAML>=6.0.1,<7.0.0
 SQLAlchemy>=2.0.0,<3.0.0  # SQL toolkit and ORM for external data sources
 
 # Async and HTTP
-aiohttp>=3.9.0,<4.0.0
+aiohttp>=3.13.4,<4.0.0  # Floor bumped from 3.9.0 to 3.13.4 (2026-06-05) to exclude the CVE-2026-345xx batch — CIRISAgent#853 (filed under the "aiohttp" body, mistitled as cryptography). Today's pip resolve lands on 3.14.0 which is well past the fix line; the floor just prevents a downstream consumer from pinning back into the vulnerable window.
 httpx>=0.25.0,<1.0.0
 anyio>=4.0.0,<5.0.0
 
@@ -34,7 +34,7 @@ pypdf>=6.0.0,<7.0.0  # PDF text extraction - CVE-2024-XXXXX (FlateDecode RAM exh
 docx2txt>=0.8,<1.0.0  # Pure Python DOCX text extraction
 
 # Security and Cryptography
-cryptography>=41.0.0,<47.0.0
+cryptography>=46.0.7,<47.0.0  # Floor bumped from 41.0.0 to 46.0.7 (2026-06-05) to exclude PYSEC-2026-35/36 + CVE-2026-26007 (fix versions 46.0.5/46.0.6/46.0.7) — CIRISAgent#854 (filed under the "cryptography" body, mistitled as python-multipart). Used on every authentication and signing surface so we want the floor explicit, not "whatever pip picks today." The <47 cap is unchanged for now; revisit when CIRISVerify's libtss2 hardware-path probe is exercised on cryptography 47/48 in CI.
 pycryptodome>=3.20.0,<4.0.0  # Keccak-256 for EVM address checksums (EIP-55)
 PyJWT[crypto]>=2.8.0,<3.0.0
 bcrypt>=4.0.0,<5.0.0
@@ -47,7 +47,7 @@ ciris-verify>=4.8.0,<5.0.0  # Hardware-rooted license verification + runtime tre
 fastapi>=0.111.0,<1.0.0
 uvicorn[standard]>=0.29.0,<1.0.0
 websockets>=14.0
-python-multipart>=0.0.6,<1.0.0
+python-multipart>=0.0.18,<1.0.0  # Floor bumped from 0.0.6 to 0.0.18 (2026-06-05) to exclude CVE-2024-53981 (DoS via large multipart parts, fix in 0.0.18) — covers the "python-multipart" body filed somewhere in CIRISAgent#852-#855 (the title/body shift in that batch makes the exact issue number ambiguous). Today's pip resolve lands on 0.0.32 which is well past the fix line.
 aiofiles>=23.2.0,<24.0.0
 
 # Utilities

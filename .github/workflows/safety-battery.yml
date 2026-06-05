@@ -221,11 +221,11 @@ jobs:
       CIRIS_ACCORD_METRICS_FLUSH_INTERVAL: '5'
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
@@ -238,7 +238,7 @@ jobs:
         # apt-install the runtime subset; ~5s on first cache miss.
         #
         # Retry-wrapped per 2.8.11 CI hardening.
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 5
           max_attempts: 3
@@ -250,7 +250,7 @@ jobs:
               libtss2-tctildr0 libtss2-esys-3.0.2-0 libtss2-mu-4.0.1-0
       - name: Install dependencies
         # Retry-wrapped per 2.8.11 CI hardening.
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 10
           max_attempts: 3
@@ -456,7 +456,7 @@ jobs:
         # as a separate small artifact so the next person looking at this
         # run has the data, not just the diagnostic guidance.
         if: steps.bundle.outputs.trace_count == '0'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: safety-battery-agent-logs-${{ github.run_id }}-${{ needs.pick-lang.outputs.lang }}
           path: |
@@ -469,7 +469,7 @@ jobs:
 
       - name: Attest capture bundle
         if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             ${{ steps.bundle.outputs.bundle_dir }}/results.jsonl
@@ -484,7 +484,7 @@ jobs:
         # and short-circuited on. Now: require bundle_dir to be set,
         # which only happens when "Locate capture bundle" succeeded.
         if: steps.dedup.outputs.skip != 'true' && steps.bundle.outputs.bundle_dir != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.versions.outputs.artifact_name }}
           path: |
@@ -542,18 +542,18 @@ jobs:
       # a CIRIS agent. No agent traces to stream.
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
       - name: Install dependencies
         # No libtss2 needed — the judge is a direct Anthropic API call.
         # Retry-wrapped per 2.8.11 CI hardening.
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 10
           max_attempts: 3
@@ -568,7 +568,7 @@ jobs:
         # Capture may have either (a) run fresh and uploaded the artifact
         # in THIS workflow run, or (b) deduped and pointed at an artifact
         # from a prior run. Either way the artifact_name is the same
-        # (tuple-deterministic, latest-wins). actions/download-artifact@v4
+        # (tuple-deterministic, latest-wins). actions/download-artifact@v7
         # only finds same-run uploads by default; use gh api to pull the
         # most-recent matching artifact across all runs in the repo so
         # the cross-run reuse path works.
@@ -829,7 +829,7 @@ jobs:
 
       - name: Attest interpret bundle
         if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             ${{ steps.interpret_bundle.outputs.bundle_dir }}/verdicts.jsonl
@@ -845,7 +845,7 @@ jobs:
         # interpret_bundle.outputs.bundle_dir to be set, and fail the
         # upload itself if no real files were found.
         if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_bundle.outputs.bundle_dir != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.interpret_versions.outputs.artifact_name }}
           path: |

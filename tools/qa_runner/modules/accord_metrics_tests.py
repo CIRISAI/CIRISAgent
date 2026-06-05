@@ -432,14 +432,38 @@ class AccordMetricsTests:
             # Trigger DEFER → DSASPDMA → VERB_SECOND_PASS_RESULT verb=defer
             await self.client.agent.interact(message="$defer Need wise authority guidance for verb_second_pass capture")
 
+            # Poll for the captured trace files.
+            #
+            # Flake fix (CIRISAgent CI, sqlite-leg-only): the VERB_SECOND_PASS
+            # event emission and trace assembly are fully DETERMINISTIC — the
+            # mock LLM forces TOOL/DEFER, the second pass always fires, and the
+            # component is always appended before ACTION_RESULT completes the
+            # trace. The only nondeterminism is wall-clock: a trace file is
+            # written ONLY when accord_metrics ships a `complete_trace` envelope
+            # (on the seed thought's ACTION_RESULT) AND the next flush tick
+            # (5s) POSTs it to the mock logshipper. Under CI load `interact()`
+            # can return early (server-side "still processing" timeout) while
+            # the seed thought is still in the pipeline — a single thought was
+            # observed taking ~36s end-to-end, with the completed trace landing
+            # ~9s after the old fixed 30s window had already closed. The events
+            # were captured correctly; the test had simply stopped looking.
+            #
+            # The deadline must therefore cover worst-case thought completion
+            # (bounded by the server interaction timeout, raised under
+            # --parallel-backends) + the 5s flush + write margin. The loop
+            # still early-exits the instant both verbs are seen, so the common
+            # case stays fast — only the slow/overloaded leg waits longer.
+            # See tools/qa_runner/CLAUDE.md § "SSE-Based Task Completion".
+            parallel_backends = os.environ.get("CIRIS_QA_PARALLEL_BACKENDS") == "1"
             # Wait for flush (server sets CIRIS_ACCORD_METRICS_FLUSH_INTERVAL=5)
             verbs_seen: set[str] = set()
-            max_wait = 30
+            max_wait = 120 if parallel_backends else 60
             waited = 0
+            poll_interval = 2
             new_traces: List[Path] = []
             while waited < max_wait and verbs_seen != {"tool", "defer"}:
-                await asyncio.sleep(2)
-                waited += 2
+                await asyncio.sleep(poll_interval)
+                waited += poll_interval
                 new_traces = [p for p in qa_reports.glob("trace_*.json") if p.name not in existing]
                 for trace_file in new_traces:
                     try:
@@ -455,8 +479,10 @@ class AccordMetricsTests:
 
             if not verbs_seen:
                 return False, (
-                    f"No VERB_SECOND_PASS_RESULT events found in {len(new_traces)} new traces "
-                    f"after $tool + $defer submission — verb-specific second pass not firing"
+                    f"No VERB_SECOND_PASS_RESULT events captured in {len(new_traces)} new traces "
+                    f"after {max_wait}s ($tool + $defer submission) — the second pass emits "
+                    f"deterministically, so this means the completed trace never flushed to disk "
+                    f"in the window (capture/flush stall), not that the verb pass failed to fire"
                 )
             missing = {"tool", "defer"} - verbs_seen
             if missing:

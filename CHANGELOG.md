@@ -5,6 +5,33 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.5] - 2026-06-05
+
+Hardening release. Surfaces the real CIRISVerify error chain on signing failures (was misclassified as "platform unsupported"), waits patiently while verify holds its attestation lock instead of inventing a synthetic timeout, bumps the substrate triple to the CIRISConformance canonical (closes CIRISEdge#58 + CIRISVerify#52 end-to-end), gates the A2A peer endpoint behind admin auth + rate limit, and raises the floor on the open CVE batch.
+
+### Changed
+
+- **Substrate pin**: ciris-persist `>=3.14.3` / ciris-edge `>=1.1.11` / ciris-verify `>=4.8.0` — aligns with the CIRISConformance reference matrix. Closes CIRISEdge#58 (cross-cdylib tokio aliasing) end-to-end on both backends via persist 3.13.0 executor_capsule + 3.14.0 sqlite inline-sync rewrite + edge 1.1.10 consumption. Verify 4.8.0 closes CIRISVerify#52 (S21U / Verizon LTE 90-second startup hang) with the ResilientRegistryClient parallel-race / 10s RACE_BUDGET. Android JNI bundles refreshed to 4.8.0 via `tools/update_ciris_verify.py`; iOS dylib refresh follow-up (macOS pipeline required).
+- **A2A adapter security model** (CIRISAgent#855): `/a2a` is now gated behind `Depends(require_admin)` — accepts SERVICE_ACCOUNT tokens (CIRISBench) or human ADMIN tokens at the same tier. Wildcard CORS rejected at config-time; default is no CORS middleware (peer transport is service-to-service). Per-source-IP sliding-window rate limit (60 req/min default, env-overridable) + global `asyncio.Semaphore` concurrency cap (32 default) on the expensive methods. Dispatcher cases + schemas for `deferrals/receive`, `deferrals/resolve`, `credits/notify` deleted — AgentBeats-hackathon residue whose handlers never verified the Ed25519 signature fields the schemas declared. Discovery manifest at `/.well-known/agent.json` advertises `auth: {required: true, schemes: [bearer], tier: admin}`. Filed [CIRISBench#6](https://github.com/CIRISAI/CIRISBench/issues/6) asking for matching client-side `Authorization` header.
+- **A2A error code rename**: `UNSUPPORTED_PLATFORM_CIRIS_VERIFY` → `CIRIS_VERIFY_SIGNING_UNAVAILABLE`. The old name was a category error — the platform was never the problem; the signing capability is. Kotlin `SetupScreen.kt` accepts both codes for backward compat with older agents.
+- **Dependency CVE floors** (CIRISAgent#852–#854): `aiohttp>=3.13.4` (CVE-2026-345xx batch), `cryptography>=46.0.7` (PYSEC-2026-35/36 + CVE-2026-26007), `python-multipart>=0.0.18` (CVE-2024-53981). Floors set defensively even though current resolve picks safe versions (pip-audit clean for all three after bump).
+
+### Added
+
+- **`mobile.setup_error_*` localization** (4 new keys, 29 locales × 5 deploy mirrors = 145 files): `setup_error_signing_unavailable_title`, `_body`, `_technical_details`, `_retry`. Replaces the hardcoded "(x86_64, aarch64-gnu)" architecture text in `SetupScreen.kt` which was both misleading (Android arm64 is supported) and wrong (the failure mode has nothing to do with CPU). Burmese (my) flagged `_NEEDS_NATIVE_REVIEW` per `feedback_subagent_translation_unreliable` memory.
+
+### Fixed
+
+- **Signer waits indefinitely on `AttestationInProgressError`**: `CIRISVerifySigner.initialize()` now treats verify's attestation lock as a transient (verify enforces its own internal timeout, 15s post-CIRISVerify#50). Replaces the prior `max_retries=10` budget (~55s total backoff) that gave up before verify's 90s window and incorrectly produced a "CIRISVerify not available" failure when the underlying capability was fine. Non-attestation FFI errors keep the 10-retry budget; only verify-genuinely-unusable surfaces as failure. (CIRISAgent#855 follow-on / S21U forensics)
+- **`UnifiedSigningKey.initialize()` surfaces the real underlying error** instead of silently marking itself initialized with a null `_key_id`. The prior path produced a generic `RuntimeError("Signer not initialized")` that gave operators nothing to act on; the chained exception now reveals the actual Android Keystore / FFI cause via `__cause__` and the Kotlin "Technical details:" line.
+- **`/v1/setup/complete` rolls back atomically** on signing failure (still) — but now distinguishes terminal CANNOT_SIGN from the deleted "deferred" path that never worked, and the error message names the actual exception class instead of "Unsupported Platform."
+
+### Substrate-side closeouts (cross-repo)
+
+- CIRISPersist#157, #139 closed (executor_capsule + durable-send class cure landed end-to-end in 3.13.0 + 3.14.0; edge 1.1.10 consumption green).
+- CIRISEdge#58, #59, #60 closed (cross-tokio aliasing structurally fixed; race rate 0% on both backends at the new triple; v1.1.10 + v1.1.11 published).
+- CIRISVerify upstream: comment + new follow-up issue (CIRISVerify#52) filed against verify with the Galaxy S21U forensic timeline; closed by verify 4.8.0 ship.
+
 ## [2.9.4] - 2026-05-30
 
 Federation transport release — CIRISEdge 1.0 GA wired through. Adds the **Network screen** (10-screen federation operator UI) on the unified KMP client, the **global AgentMode** (CLIENT/PROXY/SERVER) config with 256GB disk gate, **CIRIS-V1 NodeCode** peer-add codec, and a desktop QA walk-test that drives all 10 federation screens via the test-automation HTTP server.

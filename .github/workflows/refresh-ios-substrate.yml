@@ -1,0 +1,185 @@
+name: Refresh iOS substrate binaries
+
+# Refresh the iOS-bundled CIRISVerify Mach-O binaries (dylib + xcframework)
+# from a published GitHub release. Eliminates the "needs a macOS dev box"
+# bottleneck — runs on macos-latest which ships otool + install_name_tool +
+# the gh CLI out of the box.
+#
+# Manual trigger only. Opens a PR against the target branch with the refreshed
+# binaries + the bumped __version__ string. A human reviewer approves and
+# merges; no auto-push to release branches.
+#
+# This is the iOS counterpart to the agent-side substrate bumps already done
+# for Android in `tools/update_ciris_verify.py <version> --android-only`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "CIRISVerify version to refresh to (e.g. 4.8.0). Must already exist as a GitHub release on CIRISAI/CIRISVerify."
+        required: true
+        type: string
+      target_branch:
+        description: "Branch to open the refresh PR against (default: main)."
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: write       # Required to push the refresh branch
+  pull-requests: write  # Required to open the PR
+
+concurrency:
+  # Don't run two iOS refresh jobs at once. If a second one is requested,
+  # cancel the in-flight one — the newer version is presumably the wanted one.
+  group: refresh-ios-substrate
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Refresh iOS verify binaries (v${{ inputs.version }})
+    runs-on: macos-latest
+
+    steps:
+      - name: Validate version format
+        run: |
+          # Reject empty / malformed inputs early — protects against
+          # accidentally launching the tool with an arbitrary string that
+          # would resolve to a wrong tarball.
+          version="${{ inputs.version }}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: version '$version' is not a clean X.Y.Z semver."
+            exit 1
+          fi
+
+      - name: Checkout ${{ inputs.target_branch }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+          # Need full history so we can branch + push
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify Apple toolchain is present
+        # macos-latest ships these; this step is a defense-in-depth assert
+        # that fails the job loudly if a future runner image drops them,
+        # instead of failing inside the update tool with a confusing error.
+        run: |
+          which otool
+          which install_name_tool
+          otool --version || true
+          install_name_tool 2>&1 | head -1 || true
+
+      - name: Verify gh CLI auth
+        # gh on macos-latest auto-uses GITHUB_TOKEN; assert it works against
+        # CIRISVerify's releases before we burn the rest of the job.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "v${{ inputs.version }}" --repo CIRISAI/CIRISVerify \
+            --json tagName,name,url,createdAt --jq '.'
+
+      - name: Refresh iOS bundle to v${{ inputs.version }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # `--ios-only` runs the xcframework + dylib + python bindings
+          # refresh path. Tool downloads the iOS tarball from the
+          # CIRISVerify GitHub release, repackages, runs otool /
+          # install_name_tool to fix dylib install_names, and writes the
+          # binaries into client/iosApp/Frameworks/ and
+          # client/iosApp/Resources/app_packages/ciris_verify/.
+          python -m tools.update_ciris_verify "${{ inputs.version }}" --ios-only
+
+      - name: Detect changes
+        id: diff
+        run: |
+          # If the runner image happens to already be at the target version
+          # (idempotent re-run), there's nothing to commit. Detect that case
+          # and short-circuit so we don't open an empty PR.
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes — iOS bundle is already at v${{ inputs.version }}."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat
+          fi
+
+      - name: Configure git committer
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          # Use a recognisable bot identity so the audit trail shows this
+          # as a substrate-refresh commit, not as the human who triggered.
+          git config user.name "ciris-ios-substrate-refresh[bot]"
+          git config user.email "ciris-ios-substrate-refresh@users.noreply.github.com"
+
+      - name: Create branch, commit, push
+        id: branch
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          branch="chore/ios-substrate-refresh-v${{ inputs.version }}-$(date -u +%Y%m%dT%H%M%S)"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          git checkout -b "$branch"
+          # Stage only the substrate-relevant paths. The tool may write into
+          # iOS-only directories; this allow-list keeps any incidental
+          # workspace dirt out of the PR.
+          git add \
+            client/iosApp/Frameworks \
+            client/iosApp/Resources/app_packages/ciris_verify \
+            client/iosApp/Resources/app/ciris_adapters/ciris_verify/ffi_bindings/__init__.py \
+            ciris_adapters/ciris_verify/ffi_bindings/__init__.py
+          git status -s
+          # Single-line commit subject keeps it easy to read in `git log`;
+          # rationale lives in the PR body the next step writes.
+          git commit -m "chore(ios): refresh CIRISVerify substrate to v${{ inputs.version }}"
+          git push origin "$branch"
+
+      - name: Open PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERIFY_VERSION: ${{ inputs.version }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+          BRANCH_NAME: ${{ steps.branch.outputs.branch }}
+          TRIGGER_ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # Body is written to a file via printf (not a YAML-nested heredoc)
+          # to keep the YAML parser sane. All dynamic values come in via env
+          # vars so there's no expression interpolation inside the body text.
+          body_file=$(mktemp)
+          {
+            printf '%s\n' "Automated iOS substrate refresh produced by [\`refresh-ios-substrate.yml\`](.github/workflows/refresh-ios-substrate.yml) running on \`macos-latest\`."
+            printf '\n'
+            printf '%s\n' "Bumps the iOS-bundled CIRISVerify Mach-O binaries (dylib + xcframework) to **v${VERIFY_VERSION}** and updates the matching Python bindings \`__version__\` string. No agent-code changes."
+            printf '\n## Why this exists\n\n'
+            printf '%s\n' "The iOS substrate refresh previously required a developer with a macOS box (\`tools/update_ciris_verify.py --ios-only\` rejects non-macOS hosts because it needs Apple's \`otool\` and \`install_name_tool\`). Running this in CI on a hosted \`macos-latest\` runner removes that bottleneck — anyone with workflow_dispatch permission can refresh."
+            printf '\n## How to review\n\n'
+            printf '%s\n' "- Diff is expected to be **binary only** (\`*.dylib\`, \`*.framework/CIRISVerify\`, etc.) plus the two \`__version__\` text bumps to v${VERIFY_VERSION}."
+            printf '%s\n' "- Verify the dylib reports the right version via \`strings\` (the macOS runner did this implicitly via the tool's verification step)."
+            printf '%s\n' "- Cross-check against the Android JNI refresh that already shipped in the corresponding agent commit on \`${TARGET_BRANCH}\`."
+            printf '\n## Trigger context\n\n'
+            printf '%s\n' "- Triggered by: @${TRIGGER_ACTOR}"
+            printf '%s\n' "- Target verify version: \`${VERIFY_VERSION}\`"
+            printf '%s\n' "- Target branch: \`${TARGET_BRANCH}\`"
+            printf '%s\n' "- Workflow run: ${RUN_URL}"
+            printf '\n🤖 Generated by [refresh-ios-substrate.yml](.github/workflows/refresh-ios-substrate.yml)\n'
+          } > "$body_file"
+
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base "${TARGET_BRANCH}" \
+            --head "${BRANCH_NAME}" \
+            --title "chore(ios): refresh CIRISVerify substrate to v${VERIFY_VERSION}" \
+            --body-file "$body_file" \
+            --label "ios" \
+            --label "substrate"
+
+      - name: No-change summary
+        if: steps.diff.outputs.changed == 'false'
+        run: |
+          echo "iOS bundle is already at v${{ inputs.version }}. No PR opened."

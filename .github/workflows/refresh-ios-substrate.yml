@@ -145,7 +145,10 @@ jobs:
           # Stage only the iOS substrate paths — keeps incidental workspace
           # dirt out of the PR while covering the native .so, the .fwork
           # redirect frameworks, the Python bindings, and Resources.zip.
-          git add \
+          # -f is required: client/iosApp/Resources/ is gitignored
+          # (client/iosApp/.gitignore), so the regenerated Python bindings
+          # under Resources/app_packages won't stage without a force-add.
+          git add -f \
             client/iosApp/app_packages_native \
             client/iosApp/Frameworks \
             client/iosApp/Resources/app_packages \

@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
+import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
 import ai.ciris.mobile.shared.ui.icons.*
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
@@ -114,11 +115,17 @@ fun TrustPage(
             TopAppBar(
                 title = { Text(localizedString("mobile.screen_trust_security")) },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier.testableClickable("btn_trust_back") { onNavigateBack() }
-                    ) {
-                        Icon(CIRISIcons.arrowBack, contentDescription = "Back")
+                    // Suppressed on compact viewports — the global 3-state
+                    // overlay button in CIRISApp handles back navigation there to
+                    // avoid the "back arrow + signet stacked" bug. Wider viewports
+                    // (tablet/desktop) keep this arrow.
+                    if (!LocalIsCompactWindow.current) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier.testableClickable("btn_trust_back") { onNavigateBack() }
+                        ) {
+                            Icon(CIRISIcons.arrowBack, contentDescription = "Back")
+                        }
                     }
                 },
                 actions = {
@@ -185,7 +192,7 @@ fun TrustPage(
                     val status = verifyStatus!!
 
                     // Header card with summary
-                    TrustSummaryCard(status = status)
+                    TrustSummaryCard(status = status, deviceAttestationResult = deviceAttestationResult)
 
                     // 5 Expandable Tier Cards - consolidated view
                     TierCardsSection(
@@ -287,10 +294,16 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
 
 @Composable
 private fun TrustSummaryCard(
-    status: VerifyStatusResponse
+    status: VerifyStatusResponse,
+    deviceAttestationResult: DeviceAttestationResult? = null
 ) {
-    // Use backend's authoritative level calculation
-    val level = status.maxLevel
+    // WE declare the level from verify's status claims — verify no longer
+    // claims a level itself (status.maxLevel is verify's removed level claim,
+    // now always 0). calculateActualLevel() rolls the per-check statuses up
+    // into the highest fully-passing tier. Thread the UI's live device
+    // attestation result so L2 matches the tier card's own derivation.
+    val deviceAttestationPassed = (deviceAttestationResult as? DeviceAttestationResult.Success)?.verified
+    val level = status.calculateActualLevel(deviceAttestationPassed)
 
     // Check if current level has partial passes (for yellow state)
     val sourcesOk = (status.sourcesAgreeing ?: 0) >= 2
@@ -493,7 +506,10 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
                         l1Pass -> 1
                         else -> 0
                     }
-                    val match = calc == status.maxLevel
+                    // `calc` is the level WE declare from verify's status claims.
+                    // `status.maxLevel` is verify's removed level claim (now always
+                    // 0 — verify makes status claims, we declare levels), so it is
+                    // shown for diagnostics only and must NOT drive an error color.
                     Text(
                         text = localizedString("mobile.trust_calc_debug")
                             .replace("{calc}", calc.toString())
@@ -502,7 +518,7 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
-                        color = if (match) SemanticColors.Default.success else SemanticColors.Default.error
+                        color = textColor
                     )
                 }
             }
@@ -2177,8 +2193,9 @@ private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Uni
         }
     }
 
-    // Show hint when at L4 and registry key not found - user can upgrade to L5
-    if (status.maxLevel == 4 && keyStatus.contains("not_found", ignoreCase = true)) {
+    // Show hint when at L4 and registry key not found - user can upgrade to L5.
+    // Use OUR declared level (calculateActualLevel), not verify's removed maxLevel claim.
+    if (status.calculateActualLevel() == 4 && keyStatus.contains("not_found", ignoreCase = true)) {
         Text(
             text = localizedString("mobile.trust_wizard_hint"),
             fontSize = 10.sp,

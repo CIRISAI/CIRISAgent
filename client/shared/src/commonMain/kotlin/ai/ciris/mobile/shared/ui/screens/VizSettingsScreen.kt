@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import ai.ciris.mobile.shared.ui.icons.*
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
+import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -83,14 +84,20 @@ fun VizSettingsScreen(
             TopAppBar(
                 title = { Text("Visualization") },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier.testableClickable("btn_back") { onBack() },
-                    ) {
-                        Icon(
-                            imageVector = CIRISIcons.arrowBack,
-                            contentDescription = "Back",
-                        )
+                    // Suppressed on compact viewports — the global 3-state
+                    // overlay button in CIRISApp handles back navigation
+                    // there to avoid the prior "back arrow + signet stacked"
+                    // bug. Wider viewports (tablet/desktop) keep this arrow.
+                    if (!LocalIsCompactWindow.current) {
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier.testableClickable("btn_back") { onBack() },
+                        ) {
+                            Icon(
+                                imageVector = CIRISIcons.arrowBack,
+                                contentDescription = "Back",
+                            )
+                        }
                     }
                 },
             )

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import ai.ciris.mobile.shared.ui.icons.*
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
+import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -219,11 +220,17 @@ private fun EditingScreen(
             TopAppBar(
                 title = { Text("Skill Studio") },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier.testableClickable("btn_skill_back") { onNavigateBack() }
-                    ) {
-                        Icon(CIRISIcons.arrowBack, contentDescription = "Back")
+                    // Suppressed on compact viewports — the global 3-state
+                    // overlay button in CIRISApp handles back navigation
+                    // there to avoid the prior "back arrow + signet stacked"
+                    // bug. Wider viewports (tablet/desktop) keep this arrow.
+                    if (!LocalIsCompactWindow.current) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier.testableClickable("btn_skill_back") { onNavigateBack() }
+                        ) {
+                            Icon(CIRISIcons.arrowBack, contentDescription = "Back")
+                        }
                     }
                 },
                 actions = {
@@ -346,6 +353,10 @@ private fun PreviewScreen(
             TopAppBar(
                 title = { Text("Preview") },
                 navigationIcon = {
+                    // NOT compact-guarded: this is INTERNAL navigation (Preview →
+                    // Editor via onBack), not the screen's top-level back. The
+                    // global overlay only knows the screen's parent (Adapters),
+                    // so it can't replace this — it must always render.
                     IconButton(
                         onClick = onBack,
                         modifier = Modifier.testableClickable("btn_preview_back") { onBack() }
@@ -443,6 +454,9 @@ private fun SecurityReviewScreen(
             TopAppBar(
                 title = { Text("Security Report") },
                 navigationIcon = {
+                    // NOT compact-guarded: INTERNAL navigation (Security → Editor
+                    // via onBack), not the screen's top-level back. Must always
+                    // render — the global overlay only knows the parent (Adapters).
                     IconButton(
                         onClick = onBack,
                         modifier = Modifier.testableClickable("btn_security_back") { onBack() }

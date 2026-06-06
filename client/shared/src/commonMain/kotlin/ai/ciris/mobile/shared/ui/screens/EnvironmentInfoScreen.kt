@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import ai.ciris.mobile.shared.ui.icons.*
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
+import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,14 +53,20 @@ fun EnvironmentInfoScreen(
             TopAppBar(
                 title = { Text(localizedString("mobile.env_title")) },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier.testableClickable("btn_environment_back") { onNavigateBack() }
-                    ) {
-                        Icon(
-                            imageVector = CIRISIcons.arrowBack,
-                            contentDescription = localizedString("mobile.common_back")
-                        )
+                    // Suppressed on compact viewports — the global 3-state
+                    // overlay button in CIRISApp handles back navigation
+                    // there to avoid the prior "back arrow + signet stacked"
+                    // bug. Wider viewports (tablet/desktop) keep this arrow.
+                    if (!LocalIsCompactWindow.current) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier.testableClickable("btn_environment_back") { onNavigateBack() }
+                        ) {
+                            Icon(
+                                imageVector = CIRISIcons.arrowBack,
+                                contentDescription = localizedString("mobile.common_back")
+                            )
+                        }
                     }
                 },
                 actions = {

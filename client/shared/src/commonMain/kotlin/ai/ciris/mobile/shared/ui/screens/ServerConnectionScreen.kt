@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import ai.ciris.mobile.shared.ui.icons.*
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
+import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -74,14 +75,20 @@ fun ServerConnectionScreen(
             TopAppBar(
                 title = { Text(localizedString("mobile.server_connection_title")) },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier.testable("btn_server_back")
-                    ) {
-                        Icon(
-                            imageVector = CIRISIcons.arrowBack,
-                            contentDescription = "Back"
-                        )
+                    // Suppressed on compact viewports — the global 3-state
+                    // overlay button in CIRISApp handles back navigation
+                    // there to avoid the prior "back arrow + signet stacked"
+                    // bug. Wider viewports (tablet/desktop) keep this arrow.
+                    if (!LocalIsCompactWindow.current) {
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier.testable("btn_server_back")
+                        ) {
+                            Icon(
+                                imageVector = CIRISIcons.arrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

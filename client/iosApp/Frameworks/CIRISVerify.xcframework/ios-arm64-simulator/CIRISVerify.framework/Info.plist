@@ -5,7 +5,7 @@
     <key>CFBundleExecutable</key><string>CIRISVerify</string>
     <key>CFBundleIdentifier</key><string>ai.ciris.verify</string>
     <key>CFBundlePackageType</key><string>FMWK</string>
-    <key>CFBundleShortVersionString</key><string>4.6.0</string>
+    <key>CFBundleShortVersionString</key><string>4.8.1</string>
     <key>MinimumOSVersion</key><string>16.0</string>
     <key>CFBundleSupportedPlatforms</key>
     <array><string>iPhoneSimulator</string></array>

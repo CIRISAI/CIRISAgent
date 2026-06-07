@@ -69,6 +69,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -3341,7 +3342,17 @@ fun CIRISApp(
                             Box(
                                 modifier = androidx.compose.ui.Modifier
                                     .align(androidx.compose.ui.Alignment.TopStart)
-                                    .padding(top = 8.dp, start = 8.dp)
+                                    // Sit below the system status bar — this is a
+                                    // raw overlay (outside the screen's Scaffold),
+                                    // so it must consume the status-bar inset
+                                    // itself or it renders up under the Android
+                                    // clock/notification icons (Samsung-reported).
+                                    .statusBarsPadding()
+                                    // top = 4.dp matches the status-bar badge row
+                                    // (InteractScreen badge Row uses top = 4.dp), so
+                                    // the signet's vertical center lines up with the
+                                    // badge icons rather than sitting slightly low.
+                                    .padding(top = 4.dp, start = 8.dp)
                                     .size(56.dp)
                                     .testableClickable(iconTestTag) {
                                         when {

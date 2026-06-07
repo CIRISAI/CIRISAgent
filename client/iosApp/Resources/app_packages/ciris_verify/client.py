@@ -3852,3 +3852,31 @@ class MockCIRISVerify(CIRISVerify):
     def _default_disclosure(self, status: LicenseStatus, reason: str = "") -> str:
         """Generate default disclosure for mock."""
         return super()._default_disclosure(status, reason=reason)
+
+
+# =============================================================================
+# v4.7.0 wheel-surface graft (CIRISVerify#50)
+#
+# Each `attach_to(cls)` call installs methods on `CIRISVerify` and patches
+# `__init__` to wire FFI argtypes/restype after `_load_library` populates
+# `self._lib`. Idempotent.
+#
+# Mock instances inherit the methods but never set `_has_X_support` (Mock
+# skips `super().__init__`), so the methods short-circuit to `None`/raise
+# CIRISVerifyError per their gating contract — no Mock-specific overrides
+# needed.
+#
+# Order matters only for patched-__init__ chaining: each attach wraps the
+# prior __init__, so the wiring runs in the order listed below.
+# =============================================================================
+from ._wheel_hybrid_kex import attach_to as _attach_hybrid_kex  # noqa: E402
+from ._wheel_key_grant import attach_to as _attach_key_grant  # noqa: E402
+from ._wheel_locale_merkle import attach_to as _attach_locale_merkle  # noqa: E402
+from ._wheel_reconsider_dos import attach_to as _attach_reconsider_dos  # noqa: E402
+from ._wheel_skill_import import attach_to as _attach_skill_import  # noqa: E402
+
+_attach_hybrid_kex(CIRISVerify)
+_attach_key_grant(CIRISVerify)
+_attach_locale_merkle(CIRISVerify)
+_attach_reconsider_dos(CIRISVerify)
+_attach_skill_import(CIRISVerify)

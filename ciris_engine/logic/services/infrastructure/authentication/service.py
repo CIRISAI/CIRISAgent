@@ -2580,11 +2580,16 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
     def _check_integrity_degradation(self, current: AttestationResult) -> None:
         """Compare current attestation against baseline for L1/L2/L4 degradation.
 
-        Network-only failures (DNS, HTTPS connectivity) are ignored since they
-        don't indicate local integrity compromise. Only local integrity checks
-        matter: binary (L1), environment/key (L2), and file integrity (L4).
+        Network/registry-unreachable failures are NOT degradation — "unable to
+        verify" must never be treated as "verified bad" (CIRISAgent#862). Only
+        POSITIVE tamper evidence is grounds for emergency shutdown: a binary
+        self-check that ran and failed (L1), an env/key check that flipped (L2),
+        or actual file hash mismatches (L4 `files_failed > 0`). A registry the
+        agent couldn't reach — or a build record the registry didn't have — keeps
+        the agent running, because turning a registry outage into a fleet-wide
+        outage is the bug, not the safe behavior.
 
-        If degradation is detected, initiates emergency shutdown.
+        If genuine degradation is detected, initiates emergency shutdown.
         """
         baseline = self._baseline_attestation
         if baseline is None:
@@ -2593,20 +2598,45 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             logger.info("[attestation-refresh] No baseline yet, storing current as baseline")
             return
 
+        # #862: gate on registry reachability. CIRISVerify reports `reachable`
+        # separately from `valid` per source and a multi-source classifier
+        # (NoSourcesReachable / ValidationError = network failure). If the
+        # registry could not be reached this cycle, the result is UNVERIFIABLE,
+        # not degraded — log and stay up rather than shutting the fleet down.
+        network_failure_statuses = {"nosourcesreachable", "validationerror"}
+        status_normalized = (current.source_validation_status or "").lower().replace("_", "")
+        if not current.registry_reachable or status_normalized in network_failure_statuses:
+            logger.warning(
+                "[attestation-refresh] Registry unreachable this cycle "
+                f"(reachable={current.registry_reachable}, validation_status={current.source_validation_status}) "
+                "— attestation is UNVERIFIABLE, NOT degraded. Agent stays up; this is expected during "
+                "a registry/network outage and must not trigger shutdown (#862)."
+            )
+            return
+
         degradations: list[str] = []
 
-        # L1: Binary integrity — was OK at startup, now failing
-        if baseline.binary_ok and not current.binary_ok:
+        # L1: Binary integrity — was OK at startup, now failing. The binary
+        # self-check is local (no registry needed); once we know the registry
+        # was reachable this cycle, a False here is a genuine tamper signal —
+        # unless the self-check itself couldn't run (unavailable:*), which is
+        # not tamper.
+        binary_unverifiable = (current.binary_self_check or "").startswith("unavailable")
+        if baseline.binary_ok and not current.binary_ok and not binary_unverifiable:
             degradations.append(f"L1 binary_ok degraded: {baseline.binary_ok} -> {current.binary_ok}")
 
-        # L2: Environment/key integrity
+        # L2: Environment/key integrity (local check)
         if baseline.env_ok and not current.env_ok:
             degradations.append(f"L2 env_ok degraded: {baseline.env_ok} -> {current.env_ok}")
 
-        # L4: File integrity
-        if baseline.file_integrity_ok and not current.file_integrity_ok:
+        # L4: File integrity — require POSITIVE evidence (actual hash mismatches).
+        # `file_integrity_ok` also goes False when the registry has no build
+        # record for this version (404) or the manifest fetch failed — neither is
+        # tamper. Only `files_failed > 0` (Mismatch/Extra) is a real signal.
+        if baseline.file_integrity_ok and not current.file_integrity_ok and (current.files_failed or 0) > 0:
             degradations.append(
-                f"L4 file_integrity_ok degraded: {baseline.file_integrity_ok} -> {current.file_integrity_ok}"
+                f"L4 file_integrity_ok degraded with {current.files_failed} failed file(s): "
+                f"{baseline.file_integrity_ok} -> {current.file_integrity_ok}"
             )
 
         if not degradations:

@@ -1,10 +1,15 @@
 """
 Persistent authentication storage for CIRIS SDK.
 
-Provides secure storage for API keys and auth tokens with:
-- File-based persistence with proper permissions
-- Optional encryption for sensitive data
+Provides storage for API keys and auth tokens with:
+- File-based persistence at ~/.ciris/auth.json
+- Owner-only permissions (dir 0700, file 0600), set atomically at create time
 - Automatic token refresh management
+
+NOTE: secrets are stored in PLAINTEXT JSON (protected by filesystem perms, not
+encryption). Do not rely on this for at-rest confidentiality against an attacker
+who can read the file as the owning user. Encryption-at-rest (OS keyring) is a
+tracked follow-up (#849).
 """
 
 import json
@@ -98,19 +103,36 @@ class AuthStore:
                 save_data[key] = value.isoformat()
 
         try:
-            # Write to temp file first
+            # Write to temp file first. #849: create it with 0600 from BIRTH via
+            # os.open(O_CREAT, 0o600) — the previous open()+chmod() left a TOCTOU
+            # window where the plaintext API keys / refresh tokens sat on disk at
+            # the umask default (typically world-readable) before the chmod
+            # narrowed perms. os.open's mode is masked by umask, which can only
+            # REMOVE bits, so the secret is never created world-readable.
             temp_file = self.auth_file.with_suffix(".tmp")
-            with open(temp_file, "w") as f:
-                json.dump(save_data, f, indent=2)
+            try:
+                fd = os.open(str(temp_file), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w") as f:
+                    json.dump(save_data, f, indent=2)
+            except (AttributeError, OSError):
+                # Platforms without full POSIX os.open semantics (some Windows
+                # configs): fall back to the prior write-then-chmod path.
+                with open(temp_file, "w") as f:
+                    json.dump(save_data, f, indent=2)
+                try:
+                    os.chmod(temp_file, stat.S_IRUSR | stat.S_IWUSR)
+                except Exception:
+                    pass
 
-            # Set file permissions to 600 (owner read/write only)
+            # Defensively re-assert 0600 (no-op on POSIX where O_CREAT already
+            # set it; covers an existing temp file replaced above).
             try:
                 os.chmod(temp_file, stat.S_IRUSR | stat.S_IWUSR)
             except Exception:
                 # Windows may not support chmod
                 pass
 
-            # Atomically replace old file
+            # Atomically replace old file (preserves the temp file's 0600 mode)
             temp_file.replace(self.auth_file)
 
         except Exception as e:

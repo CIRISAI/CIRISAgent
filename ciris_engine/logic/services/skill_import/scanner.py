@@ -202,6 +202,17 @@ class SkillSecurityScanner:
         for _path, content in (skill.supporting_files or {}).items():
             all_text += "\n" + content
 
+        # #851: include the install specs (command/url/package/...) in the scanned
+        # text so a malicious install step — e.g. a `curl … | bash` URL/command —
+        # is subject to the backdoor / credential / network checks instead of
+        # sailing past untouched into the installer.
+        if skill.metadata and skill.metadata.install:
+            for spec in skill.metadata.install:
+                try:
+                    all_text += "\n" + spec.model_dump_json()
+                except Exception:
+                    all_text += "\n" + str(spec)
+
         # Run all checks
         findings.extend(self._check_prompt_injection(instructions))
         findings.extend(self._check_credentials(all_text))

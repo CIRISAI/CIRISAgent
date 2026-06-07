@@ -364,7 +364,16 @@ fun SetupScreen(
                 val isAlreadyConfigured = error.contains("already", ignoreCase = true) ||
                                           error.contains("configured", ignoreCase = true) ||
                                           error.contains("completed", ignoreCase = true)
-                val isUnsupportedPlatform = error.contains("UNSUPPORTED_PLATFORM_CIRIS_VERIFY", ignoreCase = true)
+                // Backend code for the "CIRISVerify FFI genuinely unusable on
+                // this device" terminal state. (Renamed from
+                // UNSUPPORTED_PLATFORM_CIRIS_VERIFY in release/2.9.5 — the old
+                // name was misleading; the device's architecture is fine, the
+                // signing capability is the thing that's broken.) We still
+                // match the old token for backward compat with any agent that
+                // hasn't shipped the rename yet.
+                val isSigningUnavailable =
+                    error.contains("CIRIS_VERIFY_SIGNING_UNAVAILABLE", ignoreCase = true) ||
+                    error.contains("UNSUPPORTED_PLATFORM_CIRIS_VERIFY", ignoreCase = true)
 
                 Column(
                     modifier = Modifier
@@ -372,7 +381,7 @@ fun SetupScreen(
                         .background(
                             when {
                                 isAlreadyConfigured -> semantic.surfaceWarning
-                                isUnsupportedPlatform -> SetupColors.ErrorLight
+                                isSigningUnavailable -> SetupColors.ErrorLight
                                 else -> SetupColors.ErrorLight
                             }
                         )
@@ -381,7 +390,7 @@ fun SetupScreen(
                     Text(
                         text = when {
                             isAlreadyConfigured -> localizedString("mobile.setup_already_complete")
-                            isUnsupportedPlatform -> "Platform Not Supported"
+                            isSigningUnavailable -> localizedString("mobile.setup_error_signing_unavailable_title")
                             else -> localizedString("mobile.setup_error")
                         },
                         fontWeight = FontWeight.Bold,
@@ -389,20 +398,23 @@ fun SetupScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (isUnsupportedPlatform) {
-                            "CIRISVerify is not available for this platform architecture. " +
-                            "The agent requires CIRISVerify for secure audit signing and attestation. " +
-                            "Please use a device with a supported architecture (x86_64, aarch64-gnu)."
+                        text = if (isSigningUnavailable) {
+                            localizedString("mobile.setup_error_signing_unavailable_body")
                         } else {
                             error
                         },
                         fontSize = 14.sp,
                         color = if (isAlreadyConfigured) semantic.onWarning else SetupColors.ErrorDark
                     )
-                    if (isUnsupportedPlatform) {
+                    if (isSigningUnavailable) {
+                        // Always render the raw backend message verbatim under
+                        // a localized "Technical details" header — that's the
+                        // only place engineers can read the underlying
+                        // exception class + message that initialize() captured
+                        // in _last_init_error. Critical for diagnosis.
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Technical details: $error",
+                            text = "${localizedString("mobile.setup_error_technical_details")}: $error",
                             fontSize = 12.sp,
                             color = SetupColors.ErrorDark.copy(alpha = 0.7f)
                         )

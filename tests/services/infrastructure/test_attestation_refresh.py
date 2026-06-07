@@ -29,8 +29,18 @@ def _make_result(
     max_level: int = 4,
     cached_at: datetime | None = None,
     cache_ttl_seconds: int = 3600,
+    files_failed: int | None = None,
+    registry_reachable: bool = True,
+    source_validation_status: str | None = "AllSourcesAgree",
+    binary_self_check: str | None = "verified",
 ) -> AttestationResult:
-    """Build an AttestationResult with controllable integrity flags."""
+    """Build an AttestationResult with controllable integrity flags.
+
+    Defaults model a healthy, registry-reachable attestation (the only state
+    in which a True->False flip is a genuine degradation). #862 tests override
+    ``registry_reachable`` / ``source_validation_status`` to simulate a network
+    outage that must NOT trigger shutdown.
+    """
     return AttestationResult(
         loaded=True,
         key_status="ephemeral",
@@ -38,6 +48,10 @@ def _make_result(
         binary_ok=binary_ok,
         env_ok=env_ok,
         file_integrity_ok=file_integrity_ok,
+        files_failed=files_failed,
+        registry_reachable=registry_reachable,
+        source_validation_status=source_validation_status,
+        binary_self_check=binary_self_check,
         max_level=max_level,
         cached_at=cached_at or datetime.now(timezone.utc),
         cache_ttl_seconds=cache_ttl_seconds,
@@ -111,7 +125,8 @@ class TestCheckIntegrityDegradation:
     def test_l4_file_integrity_degradation_triggers_shutdown(self):
         svc = self._make_service()
         svc._baseline_attestation = _make_result(file_integrity_ok=True)
-        current = _make_result(file_integrity_ok=False)
+        # Genuine tamper: actual hash mismatches (files_failed > 0), registry reachable.
+        current = _make_result(file_integrity_ok=False, files_failed=3)
 
         with patch(
             "ciris_engine.logic.services.infrastructure.authentication.service.request_global_shutdown"
@@ -124,7 +139,7 @@ class TestCheckIntegrityDegradation:
     def test_multiple_degradations_reported(self):
         svc = self._make_service()
         svc._baseline_attestation = _make_result(binary_ok=True, env_ok=True, file_integrity_ok=True)
-        current = _make_result(binary_ok=False, env_ok=False, file_integrity_ok=False)
+        current = _make_result(binary_ok=False, env_ok=False, file_integrity_ok=False, files_failed=2)
 
         with patch(
             "ciris_engine.logic.services.infrastructure.authentication.service.request_global_shutdown"
@@ -179,6 +194,79 @@ class TestCheckIntegrityDegradation:
         ) as mock_shutdown:
             svc._check_integrity_degradation(current)
             mock_shutdown.assert_not_called()
+
+    # --- #862: registry-unreachable must NOT be treated as integrity degradation ---
+
+    def test_registry_unreachable_does_not_trigger_shutdown(self):
+        """#862: every L1/L2/L4 flag flips to False purely because the registry
+        was unreachable (NoSourcesReachable). This is UNVERIFIABLE, not degraded —
+        the agent must stay up. This is the exact production cascade that took the
+        fleet offline."""
+        svc = self._make_service()
+        svc._baseline_attestation = _make_result(binary_ok=True, env_ok=True, file_integrity_ok=True)
+        current = _make_result(
+            binary_ok=False,
+            file_integrity_ok=False,
+            files_failed=0,
+            registry_reachable=False,
+            source_validation_status="NoSourcesReachable",
+        )
+
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.request_global_shutdown"
+        ) as mock_shutdown:
+            svc._check_integrity_degradation(current)
+            mock_shutdown.assert_not_called()
+
+    def test_missing_build_record_does_not_trigger_shutdown(self):
+        """#862: registry reachable but has no build record for this version (404),
+        so file_integrity_ok flips False with files_failed == 0. No real mismatch =
+        no tamper = no shutdown (the observed PartialAgreement false-positive)."""
+        svc = self._make_service()
+        svc._baseline_attestation = _make_result(file_integrity_ok=True)
+        current = _make_result(
+            file_integrity_ok=False,
+            files_failed=0,
+            registry_reachable=True,
+            source_validation_status="PartialAgreement",
+        )
+
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.request_global_shutdown"
+        ) as mock_shutdown:
+            svc._check_integrity_degradation(current)
+            mock_shutdown.assert_not_called()
+
+    def test_binary_unavailable_does_not_trigger_shutdown(self):
+        """#862: binary self-check couldn't run (unavailable:*) — not tamper."""
+        svc = self._make_service()
+        svc._baseline_attestation = _make_result(binary_ok=True)
+        current = _make_result(binary_ok=False, binary_self_check="unavailable:no_handle")
+
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.request_global_shutdown"
+        ) as mock_shutdown:
+            svc._check_integrity_degradation(current)
+            mock_shutdown.assert_not_called()
+
+    def test_genuine_tamper_with_registry_reachable_still_shuts_down(self):
+        """#862 must NOT suppress real tampers: registry reachable + a real binary
+        self-check failure still triggers emergency shutdown."""
+        svc = self._make_service()
+        svc._baseline_attestation = _make_result(binary_ok=True)
+        current = _make_result(
+            binary_ok=False,
+            binary_self_check="mismatch",
+            registry_reachable=True,
+            source_validation_status="AllSourcesAgree",
+        )
+
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.request_global_shutdown"
+        ) as mock_shutdown:
+            svc._check_integrity_degradation(current)
+            mock_shutdown.assert_called_once()
+            assert "L1 binary_ok" in mock_shutdown.call_args[0][0]
 
 
 # ---------------------------------------------------------------------------

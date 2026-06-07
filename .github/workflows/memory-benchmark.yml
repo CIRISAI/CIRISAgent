@@ -56,15 +56,15 @@ jobs:
       PYTHONUNBUFFERED: "1"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - name: Cache pip dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
@@ -73,7 +73,7 @@ jobs:
 
       - name: Install Dependencies
         # Retry-wrapped per 2.8.11 CI hardening.
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 10
           max_attempts: 3
@@ -97,7 +97,7 @@ jobs:
         # Retry-wrapped per 2.8.11 CI hardening (outer retry around the
         # 3-way fallback — apt mirror flake should not defeat the
         # distribution-detection logic).
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 5
           max_attempts: 3
@@ -170,7 +170,7 @@ jobs:
           echo "| Cold Start Peak | ${PEAK:-N/A} |" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload Benchmark Logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: memory-benchmark-${{ github.run_id }}
           path: |

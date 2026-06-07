@@ -101,6 +101,10 @@ class InstallStep(BaseModel):
     package: Optional[str] = Field(None, description="Package name for apt/pip/npm")
     command: Optional[str] = Field(None, description="Command for manual installation")
     url: Optional[str] = Field(None, description="URL for manual download/documentation")
+    target_dir: Optional[str] = Field(None, description="Extraction target directory for 'download' kind")
+    strip_components: Optional[int] = Field(
+        None, description="Leading path components to strip when extracting a 'download' archive (tar-style)"
+    )
     provides_binaries: List[str] = Field(default_factory=list, description="Binary names this step provides")
     verify_command: Optional[str] = Field(None, description="Command to verify success")
     platforms: List[str] = Field(default_factory=list, description="Platforms this step applies to. Empty = all")

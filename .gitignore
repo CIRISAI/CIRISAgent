@@ -203,3 +203,6 @@ mobile_qa_reports/
 
 # Downloaded CI fixture artifacts (DBs from CI runs, regenerable)
 local_fixtures/
+
+# Orphaned dev-only demo-capture tool (no .gitmodules URL) — not part of any build
+tools/SwiftCapture/

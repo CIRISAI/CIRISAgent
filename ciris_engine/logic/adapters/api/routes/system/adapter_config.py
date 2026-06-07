@@ -325,6 +325,7 @@ async def start_adapter_configuration(
 @router.get(
     "/adapters/configure/{session_id}",
     responses={
+        403: {"description": "Not the owner of this configuration session"},
         404: {"description": "Session not found"},
         500: {"description": "Failed to get configuration status"},
     },
@@ -332,7 +333,7 @@ async def start_adapter_configuration(
 async def get_configuration_status(
     session_id: str,
     request: Request,
-    auth: Annotated[AuthContext, Depends(require_setup_or_observer)],
+    auth: Annotated[AuthContext, Depends(require_setup_or_admin)],
 ) -> SuccessResponse[ConfigurationStatusResponse]:
     """
     Get current status of a configuration session.
@@ -340,7 +341,11 @@ async def get_configuration_status(
     Returns complete session state including current step, collected configuration,
     and session status.
 
-    Requires OBSERVER role, or accessible during first-run setup without auth.
+    #848: the response includes ``collected_config``, which holds OAuth tokens
+    collected during the flow. This endpoint therefore requires ADMIN (not
+    OBSERVER) AND ownership of the session — an OBSERVER who guessed a session_id
+    could otherwise read another user's in-flight oauth_tokens. Accessible during
+    first-run setup without auth (no real users exist yet).
     """
     try:
         config_service = get_adapter_config_service(request)
@@ -348,6 +353,15 @@ async def get_configuration_status(
 
         if not session:
             raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+
+        # #848: ownership gate. collected_config carries oauth_tokens; only the
+        # creating user (or setup mode, where there are no real users) may read
+        # it. ADMIN alone is insufficient — one admin must not read another
+        # user's in-flight OAuth tokens.
+        if auth.user_id != "setup_wizard" and session.user_id and session.user_id != auth.user_id:
+            raise HTTPException(
+                status_code=403, detail="Not the owner of this configuration session"
+            )
 
         # Get manifest to access steps
         manifest = config_service._adapter_manifests.get(session.adapter_type)

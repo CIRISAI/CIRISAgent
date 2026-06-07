@@ -1,8 +1,8 @@
 {
   "module": {
     "name": "a2a",
-    "version": "1.0.0",
-    "description": "Agent-to-Agent protocol adapter for HE-300 ethical benchmarking",
+    "version": "2.0.0",
+    "description": "Agent-to-Agent JSON-RPC peer transport. Auth-required. Current methods: tasks/send, benchmark.evaluate. Lens contribution methods expected in 2.9.6+ per CEG §5.8.",
     "author": "CIRIS Team"
   },
   "services": [

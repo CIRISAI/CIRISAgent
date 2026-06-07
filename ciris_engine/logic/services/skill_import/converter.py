@@ -48,34 +48,43 @@ def _map_install_kind(kind: str) -> str:
     return mapping.get(kind, "manual")
 
 
-def _build_download_command(spec: SkillInstallSpec, url: str) -> Tuple[Optional[str], str]:
-    """Build download command for archive-type install specs.
+def _build_download_spec(spec: SkillInstallSpec) -> Tuple[Optional[str], Optional[int], str]:
+    """Resolve archive-download specs into structured fields.
 
-    Returns:
-        Tuple of (command, kind) - command is None if not a download spec
+    #851: previously this synthesized a ``curl -L {url} | tar xz -C {dir}`` shell
+    string that the installer ran via ``sh -c``, giving any skill manifest
+    arbitrary code execution. We now emit a structured ``download`` step (url +
+    target_dir + strip_components) that the installer fetches and extracts
+    in-process with no shell. Returns (target_dir, strip_components, kind).
     """
     archive = getattr(spec, "archive", None)
     target_dir = getattr(spec, "targetDir", None) or getattr(spec, "target_dir", None)
     if not (archive and target_dir):
-        return None, _map_install_kind(spec.kind)
+        return None, None, _map_install_kind(spec.kind)
 
     strip = getattr(spec, "stripComponents", None) or getattr(spec, "strip_components", None)
-    strip_flag = f" --strip-components={strip}" if strip else ""
-    command = f"curl -L {url} | tar xz{strip_flag} -C {target_dir}"
-    return command, "manual"
+    try:
+        strip_int = int(strip) if strip is not None else None
+    except (TypeError, ValueError):
+        strip_int = None
+    return target_dir, strip_int, "download"
 
 
 def _build_install_steps(specs: List[SkillInstallSpec]) -> List[InstallStep]:
     """Convert OpenClaw install specs to CIRIS InstallStep models.
 
-    Maps all OpenClaw install fields to CIRIS InstallStep fields.
-    For 'download' kind specs, the URL is stored in the 'url' field
-    and a manual command is generated.
+    Maps all OpenClaw install fields to CIRIS InstallStep fields. Archive-download
+    specs become a structured ``download`` step (no shell command) — see #851.
     """
     steps: List[InstallStep] = []
     for i, spec in enumerate(specs):
         url: Optional[str] = getattr(spec, "url", None)
-        command, kind = _build_download_command(spec, url) if url else (None, _map_install_kind(spec.kind))
+        target_dir: Optional[str] = None
+        strip_components: Optional[int] = None
+        if url:
+            target_dir, strip_components, kind = _build_download_spec(spec)
+        else:
+            kind = _map_install_kind(spec.kind)
 
         steps.append(
             InstallStep(
@@ -84,8 +93,10 @@ def _build_install_steps(specs: List[SkillInstallSpec]) -> List[InstallStep]:
                 label=getattr(spec, "label", None) or f"Install via {spec.kind}",
                 formula=spec.formula if spec.formula else None,
                 package=spec.package if spec.package else None,
-                command=command,
+                command=None,  # #851: never synthesize a shell command from a manifest
                 url=url,
+                target_dir=target_dir,
+                strip_components=strip_components,
                 provides_binaries=spec.bins,
             )
         )

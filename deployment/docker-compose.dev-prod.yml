@@ -1,5 +1,13 @@
 version: '3.8'
 
+# IMAGE PINNING (CIRISAgent#850):
+# Images below use ghcr.io/cirisai/...:${CIRIS_VERSION:-latest}. This defaults to
+# `latest` (non-breaking) but lets operators pin a known-good build. To pin,
+# set CIRIS_VERSION to a published release tag, e.g.:
+#   export CIRIS_VERSION=2.9.5
+# For supply-chain integrity, ideally pin to an immutable digest by appending an
+# @sha256:... to the image reference once you have the digest for that tag.
+
 services:
   # Note: Nginx routing is handled by CIRISManager (separate repository)
   # For standalone deployment, agents are accessed directly
@@ -7,7 +15,7 @@ services:
 
   # Development: Single Datum agent with Mock LLM for testing
   agent-datum:
-    image: ghcr.io/cirisai/ciris-agent:latest
+    image: ghcr.io/cirisai/ciris-agent:${CIRIS_VERSION:-latest}
     container_name: ciris-agent-datum
     ports:
       - "127.0.0.1:8080:8080"  # Expose to localhost only for routing layer
@@ -45,7 +53,7 @@ services:
 
   # GUI Application
   ciris-gui:
-    image: ghcr.io/cirisai/ciris-gui:latest
+    image: ghcr.io/cirisai/ciris-gui:${CIRIS_VERSION:-latest}
     container_name: ciris-gui
     ports:
       - "127.0.0.1:3000:3000"  # Expose to localhost only for routing layer

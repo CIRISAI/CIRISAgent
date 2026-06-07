@@ -384,9 +384,6 @@ fun InteractScreen(
                 creditStatus = creditStatus,
                 trustStatus = trustStatus,
                 walletStatus = walletStatus,
-                cellVizState = cellVizState,
-                visualizationMode = visualizationMode,
-                onVisualizationToggle = { visualizationMode = visualizationMode.next() },
                 onShutdown = { viewModel.shutdown(emergency = false) },
                 onEmergencyStop = { viewModel.shutdown(emergency = true) },
                 onWalletClick = onOpenWalletPage,
@@ -700,9 +697,6 @@ private fun EnhancedStatusBar(
     creditStatus: CreditStatus,
     trustStatus: TrustStatus,
     walletStatus: WalletStatus,
-    cellVizState: ai.ciris.mobile.shared.ui.screens.graph.CellVizState,
-    visualizationMode: VisualizationMode,
-    onVisualizationToggle: () -> Unit,
     onShutdown: () -> Unit,
     onEmergencyStop: () -> Unit,
     onWalletClick: () -> Unit,
@@ -747,7 +741,8 @@ private fun EnhancedStatusBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                CapacityBadge(state = cellVizState, theme = theme)
+                // CapacityBadge + viz mode (bg/fg) toggle removed — no room on
+                // the compact status bar. Trust, wallet, and credits remain.
                 TrustShield(
                     trustStatus = trustStatus,
                     onClick = onTrustShieldClick,
@@ -764,49 +759,6 @@ private fun EnhancedStatusBar(
                         onClick = onCreditsClick,
                         theme = theme
                     )
-                }
-                Surface(
-                    onClick = onVisualizationToggle,
-                    shape = RoundedCornerShape(4.dp),
-                    color = when (visualizationMode) {
-                        VisualizationMode.FOREGROUND -> theme.statusConnected.copy(alpha = 0.2f)
-                        VisualizationMode.BACKGROUND -> theme.textAccent.copy(alpha = 0.15f)
-                        VisualizationMode.OFF -> Color.Transparent
-                    },
-                    modifier = Modifier.testableClickable("btn_viz_mode_toggle") {
-                        onVisualizationToggle()
-                    },
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = localizedString("mobile.interact_viz_label"),
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = when (visualizationMode) {
-                                VisualizationMode.FOREGROUND -> theme.statusConnected
-                                VisualizationMode.BACKGROUND -> theme.textAccent
-                                VisualizationMode.OFF -> theme.textMuted
-                            }
-                        )
-                        Text(
-                            text = when (visualizationMode) {
-                                VisualizationMode.OFF -> localizedString("mobile.interact_viz_mode_off")
-                                VisualizationMode.BACKGROUND -> localizedString("mobile.interact_viz_mode_bg")
-                                VisualizationMode.FOREGROUND -> localizedString("mobile.interact_viz_mode_fg")
-                            },
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = when (visualizationMode) {
-                                VisualizationMode.FOREGROUND -> theme.statusConnected
-                                VisualizationMode.BACKGROUND -> theme.textAccent
-                                VisualizationMode.OFF -> theme.textMuted
-                            }
-                        )
-                    }
                 }
             }
 
@@ -1101,225 +1053,6 @@ private fun TrustShield(
             )
         }
     }
-}
-
-/**
- * CIRIS capacity (ratchet) badge — the clear, at-a-glance companion to
- * the ambient cell-viz dials. Sits immediately beside the Trust shield
- * so the two system-health signals (attestation + behaviour) are read
- * together.
- *
- * Colour scheme mirrors the Trust shield so "green / amber / red" means
- * the same thing in both:
- *   - high_capacity   → green  (L5-equivalent)
- *   - healthy         → green  (strong but with room)
- *   - moderate        → amber  (L4-equivalent)
- *   - high_fragility  → red    (low-L-equivalent)
- *   - pre-fetch       → gray   (no data yet — same treatment as trust)
- *
- * The per-factor detail lives in the cell viz itself (ambient dials +
- * multi-coloured nucleus shells). The badge is intentionally a single
- * status LED so the chrome row stays scannable.
- */
-@Composable
-private fun CapacityBadge(
-    state: ai.ciris.mobile.shared.ui.screens.graph.CellVizState,
-    theme: InteractTheme,
-    modifier: Modifier = Modifier,
-) {
-    val isLoaded = !state.isPreFetch
-    // Colour is keyed to the LOCAL score when available — that's the
-    // signal the user is actively steering on this device. Fleet is
-    // context. Falls back to the fleet category when no local data.
-    val localScore = state.localScore
-    val effectiveCategory = when {
-        !isLoaded -> null
-        localScore == null -> state.category
-        localScore >= 0.85f -> "healthy"
-        localScore >= 0.65f -> "moderate"
-        else -> "high_fragility"
-    }
-    val badgeColor = when (effectiveCategory) {
-        "high_capacity", "healthy" -> theme.trustLevel5
-        "moderate" -> theme.trustLevel4
-        "high_fragility" -> theme.trustLevelLow
-        else -> theme.trustDefault
-    }
-
-    // Two-decimal fixed-width score. Avoid String.format (JVM-only in
-    // commonMain); use integer math to produce "0.90", "1.00", "0.38".
-    fun fmt(v: Float): String {
-        val hundredths = (v.coerceIn(0f, 1f) * 100f + 0.5f).toInt()
-        val whole = hundredths / 100
-        val frac = hundredths % 100
-        val fracStr = if (frac < 10) "0$frac" else "$frac"
-        return "$whole.$fracStr"
-    }
-    // Local first (user steers this), fleet second. Single dot, single
-    // pill — we do NOT add a second LED or a shield silhouette, to keep
-    // the badge visually distinct from the adjacent Trust shield.
-    val scoreText = when {
-        !isLoaded -> "…"
-        localScore != null -> "${fmt(localScore)} · ${fmt(state.compositeScore)}"
-        else -> fmt(state.compositeScore)
-    }
-
-    // Tap-to-explain dialog state. The card explains the σ-maturity rule
-    // (~30 interactions over 30 days for a fully-computed local score) so
-    // a fresh-install operator knows why their score isn't 1.00 yet —
-    // without that context the number reads as broken.
-    var showExplainer by remember { mutableStateOf(false) }
-
-    // Compact capacity badge - matches trust badge style. Now clickable.
-    Surface(
-        shape = RoundedCornerShape(4.dp),
-        color = badgeColor.copy(alpha = 0.15f),
-        modifier = modifier
-            .testableClickable("capacity_badge") { showExplainer = true },
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            if (!isLoaded) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(10.dp),
-                    strokeWidth = 1.dp,
-                    color = badgeColor,
-                )
-            } else {
-                // Status dot
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .background(color = badgeColor, shape = CircleShape),
-                )
-            }
-
-            Text(
-                text = scoreText,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = badgeColor,
-                maxLines = 1,
-            )
-        }
-    }
-
-    if (showExplainer) {
-        CapacityScoreExplainerCard(
-            state = state,
-            theme = theme,
-            onDismiss = { showExplainer = false },
-        )
-    }
-}
-
-/**
- * Tap-on-badge explainer for the CIRIS capacity score.
- *
- * Two things this card has to do:
- *
- *   1. Explain the **σ-maturity rule** — the local score blends service
- *      health + LLM health + a sustainability term that ramps over the
- *      last 30 days. Backend ``_sigma_from_positive_moments`` (in
- *      ``ciris_engine/logic/adapters/api/routes/my_data.py``) returns σ
- *      = 0.30 floor with 0 task_completes and σ = 1.00 at 30 task_completes
- *      over the rolling 30-day window. Without this context, a fresh
- *      install reads as "broken" — every other input is 1.00 the moment
- *      services boot.
- *
- *   2. Link out to the long-form spec at https://ciris.ai/ciris-scoring/
- *      so operators who want the full CCA derivation can read it.
- *
- * Pure Material3 AlertDialog; no platform-specific code. testTag
- * ``capacity_explainer`` for E2E automation.
- */
-@Composable
-private fun CapacityScoreExplainerCard(
-    state: ai.ciris.mobile.shared.ui.screens.graph.CellVizState,
-    theme: InteractTheme,
-    onDismiss: () -> Unit,
-) {
-    val uriHandler = LocalUriHandler.current
-    // Same integer-math formatter the badge uses; String.format is JVM-only
-    // in commonMain (see comment on the parent fun's fmt()).
-    fun fmt(v: Float): String {
-        val hundredths = (v.coerceIn(0f, 1f) * 100f + 0.5f).toInt()
-        val whole = hundredths / 100
-        val frac = hundredths % 100
-        val fracStr = if (frac < 10) "0$frac" else "$frac"
-        return "$whole.$fracStr"
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = Modifier.testable("capacity_explainer"),
-        title = {
-            Text(
-                text = "CIRIS Capacity Score",
-                fontWeight = FontWeight.SemiBold,
-            )
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = "The pair beside the trust shield is your local · fleet score, " +
-                        "each a real number in [0, 1]. Higher = more coherent.",
-                    fontSize = 13.sp,
-                )
-                Text(
-                    text = "Local reflects this device's CCA approximation: service health, " +
-                        "LLM health, and sustainability. Fleet is the template-aggregate " +
-                        "score across every install of the same agent template — that's " +
-                        "your context.",
-                    fontSize = 13.sp,
-                )
-                Text(
-                    text = "Why a fresh install isn't 1.00",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                )
-                Text(
-                    text = "The sustainability term needs operational evidence: roughly " +
-                        "30 successful interactions over a 30-day rolling window for a " +
-                        "fully computed local score. Until then it floors at 0.30 — that's " +
-                        "by design, so a brand-new agent doesn't claim coherence it " +
-                        "hasn't earned. Keep using the agent and the number climbs " +
-                        "honestly.",
-                    fontSize = 13.sp,
-                )
-                state.localScore?.let { local ->
-                    Text(
-                        text = "Right now your local score is ${fmt(local)}.",
-                        fontSize = 13.sp,
-                        color = theme.textMuted,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    uriHandler.openUri("https://ciris.ai/ciris-scoring/")
-                    onDismiss()
-                },
-                modifier = Modifier.testable("btn_capacity_explainer_learn_more"),
-            ) {
-                Text("Read the full spec")
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.testable("btn_capacity_explainer_close"),
-            ) {
-                Text("Close")
-            }
-        },
-    )
 }
 
 /**

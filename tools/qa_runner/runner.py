@@ -371,6 +371,7 @@ class QARunner:
             QAModule.VISION,
             QAModule.AIR,
             QAModule.ACCORD_METRICS,
+            QAModule.AGENT_MODE,
             QAModule.SYSTEM_MESSAGES,
             QAModule.HOSTED_TOOLS,
             QAModule.UTILITY_ADAPTERS,
@@ -1232,6 +1233,7 @@ class QARunner:
         )
         from .modules.accord_metrics_tests import AccordMetricsTests
         from .modules.adapter_autoload_tests import AdapterAutoloadTests
+        from .modules.agent_mode_tests import AgentModeTests
         from .modules.adapter_availability_tests import AdapterAvailabilityTests
         from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.adapter_manifest_tests import AdapterManifestTests
@@ -1294,6 +1296,7 @@ class QARunner:
             QAModule.VISION: VisionTests,
             QAModule.AIR: AIRTests,
             QAModule.ACCORD_METRICS: AccordMetricsTests,
+            QAModule.AGENT_MODE: AgentModeTests,
             QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
             QAModule.HOSTED_TOOLS: HostedToolsTests,
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,

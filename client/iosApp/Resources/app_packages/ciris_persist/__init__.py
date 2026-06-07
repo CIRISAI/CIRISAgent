@@ -58,3 +58,25 @@ __all__ = [
     # v1.10.1 (CIRISPersist#88) — handle-free process-singleton reset.
     "reset_engine",
 ]
+
+# v3.12.2 (CIRISPersist#156) — diagnostic harness surface. Re-exported
+# only when the underlying Rust wheel was built with `--features
+# debug-tools`; release wheels (default) don't have these symbols on
+# the native module, so the import falls through silently.
+#
+# Harnesses test with `if hasattr(ciris_persist, "panic_count"):`
+# before invoking. The full opt-in chain remains:
+#   1. wheel built with `--features debug-tools`  (compile-time)
+#   2. CIRIS_PERSIST_PANIC_LOG exported            (runtime)
+#   3. caller invokes panic_count() / install_panic_logger()
+try:
+    from .ciris_persist import (  # type: ignore[attr-defined]
+        install_panic_logger,
+        panic_count,
+    )
+
+    __all__.extend(["install_panic_logger", "panic_count"])
+except ImportError:
+    # Release wheel — no debug-tools feature. The diagnostic surface
+    # is genuinely absent, and that's the intended security posture.
+    pass

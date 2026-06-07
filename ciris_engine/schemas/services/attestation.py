@@ -84,6 +84,20 @@ class AttestationResult(BaseModel):
         default=None, description="Per-source error details: {source: {category: str, details: str}}"
     )
 
+    # #862: registry reachability — distinguishes "couldn't verify (network)" from
+    # "verified bad (tamper)". CIRISVerify reports `reachable` separately from `valid`
+    # per source, plus a top-level multi-source classifier. Defaults assume reachable
+    # so an older lib that omits these never suppresses a genuine tamper-shutdown.
+    registry_reachable: bool = Field(
+        default=True,
+        description="True if at least one registry source (DNS US/EU or HTTPS) was reachable this attestation",
+    )
+    source_validation_status: Optional[str] = Field(
+        default=None,
+        description="CIRISVerify multi-source classifier: AllSourcesAgree | PartialAgreement | "
+        "SourcesDisagree | NoSourcesReachable | ValidationError",
+    )
+
     # v0.7.0: Enhanced verification details
     ed25519_fingerprint: Optional[str] = Field(default=None, description="Ed25519 public key fingerprint (SHA-256 hex)")
     key_storage_mode: Optional[str] = Field(

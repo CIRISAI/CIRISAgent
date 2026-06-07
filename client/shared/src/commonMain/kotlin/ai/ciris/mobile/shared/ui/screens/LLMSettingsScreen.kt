@@ -21,6 +21,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -217,6 +219,10 @@ fun LLMSettingsScreen(
                                 contentDescription = localizedString("mobile.settings_back")
                             )
                         }
+                    } else {
+                        // Reserve the global signet/back overlay's footprint so the
+                        // TopAppBar title doesn't slide underneath it on compact.
+                        Spacer(Modifier.width(56.dp))
                     }
                 },
                 actions = {

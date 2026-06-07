@@ -98,6 +98,10 @@ fun VizSettingsScreen(
                                 contentDescription = "Back",
                             )
                         }
+                    } else {
+                        // Reserve the global signet/back overlay's footprint so the
+                        // TopAppBar title doesn't slide underneath it on compact.
+                        Spacer(Modifier.width(56.dp))
                     }
                 },
             )

@@ -3354,6 +3354,17 @@ fun CIRISApp(
                                     // badge icons rather than sitting slightly low.
                                     .padding(top = 4.dp, start = 8.dp)
                                     .size(56.dp)
+                                    // Theme-aware circular scrim so the glyph never
+                                    // disappears: many sub-screen TopAppBars use
+                                    // containerColor = colorScheme.primary, which is
+                                    // the SAME color the glyph used to be tinted — so
+                                    // the back arrow vanished against the bar. Sitting
+                                    // the glyph on a `surface` disc guarantees
+                                    // surface/onSurface contrast over ANY bar color in
+                                    // both light and dark mode. On the home status bar
+                                    // (also `surface`) the disc blends in invisibly, so
+                                    // the top-level signet looks unchanged.
+                                    .background(MaterialTheme.colorScheme.surface, CircleShape)
                                     .testableClickable(iconTestTag) {
                                         when {
                                             isDrawerOpen -> drawerScope.launch { drawerState.close() }
@@ -3367,13 +3378,19 @@ fun CIRISApp(
                                     isDrawerOpen -> Icon(
                                         imageVector = Icons.Filled.Menu,
                                         contentDescription = "Close navigation",
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        // onSurface (not primary): the glyph sits on the
+                                        // `surface` scrim disc, so onSurface guarantees
+                                        // contrast regardless of the bar color behind it.
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                         modifier = androidx.compose.ui.Modifier.size(40.dp),
                                     )
                                     backTarget != null -> Icon(
                                         imageVector = ai.ciris.mobile.shared.ui.components.CIRISIcons.arrowBack,
                                         contentDescription = "Go back",
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        // onSurface (not primary): see note above — the
+                                        // back arrow used to vanish on primary-colored
+                                        // sub-screen TopAppBars (CIRISAgent #title-overlap).
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                         modifier = androidx.compose.ui.Modifier.size(40.dp),
                                     )
                                     else -> ai.ciris.mobile.shared.ui.components.CIRISSignet(

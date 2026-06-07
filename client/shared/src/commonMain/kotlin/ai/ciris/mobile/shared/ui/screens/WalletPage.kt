@@ -10,6 +10,8 @@ import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.input.KeyboardType
@@ -189,6 +191,10 @@ fun WalletPage(
                         ) {
                             Icon(CIRISIcons.arrowBack, contentDescription = localizedString("mobile.common_back"))
                         }
+                    } else {
+                        // Reserve the global signet/back overlay's footprint so the
+                        // TopAppBar title doesn't slide underneath it on compact.
+                        Spacer(Modifier.width(56.dp))
                     }
                 },
                 actions = {

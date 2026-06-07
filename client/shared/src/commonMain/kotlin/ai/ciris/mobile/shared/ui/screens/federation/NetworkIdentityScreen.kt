@@ -15,6 +15,8 @@ import ai.ciris.mobile.shared.viewmodels.NetworkIdentityViewModel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -86,6 +88,10 @@ fun NetworkIdentityScreen(
                                 contentDescription = localizedString("mobile.common_back"),
                             )
                         }
+                    } else {
+                        // Reserve the global signet/back overlay's footprint so the
+                        // TopAppBar title doesn't slide underneath it on compact.
+                        Spacer(Modifier.width(56.dp))
                     }
                 },
                 actions = {

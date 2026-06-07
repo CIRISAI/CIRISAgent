@@ -6,6 +6,8 @@ import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -13,6 +15,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import ai.ciris.mobile.shared.ui.icons.*
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
+import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -264,14 +267,24 @@ fun DataManagementScreen(
             TopAppBar(
                 title = { Text(localizedString("mobile.nav_data_management")) },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier.testableClickable("btn_back") { onNavigateBack() }
-                    ) {
-                        Icon(
-                            imageVector = CIRISIcons.arrowBack,
-                            contentDescription = localizedString("mobile.common_back")
-                        )
+                    // Suppressed on compact viewports — the global 3-state
+                    // overlay button in CIRISApp handles back navigation
+                    // there to avoid the prior "back arrow + signet stacked"
+                    // bug. Wider viewports (tablet/desktop) keep this arrow.
+                    if (!LocalIsCompactWindow.current) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier.testableClickable("btn_back") { onNavigateBack() }
+                        ) {
+                            Icon(
+                                imageVector = CIRISIcons.arrowBack,
+                                contentDescription = localizedString("mobile.common_back")
+                            )
+                        }
+                    } else {
+                        // Reserve the global signet/back overlay's footprint so the
+                        // TopAppBar title doesn't slide underneath it on compact.
+                        Spacer(Modifier.width(56.dp))
                     }
                 },
                 actions = {

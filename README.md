@@ -66,7 +66,16 @@ ciris-agent                       # desktop app + local API server
 ciris-agent --adapter discord     # or run it as a Discord bot
 ```
 
-One-line server install (agent + web UI): `curl -sSL https://ciris.ai/install.sh | bash`
+Server install (agent + web UI) — download, optionally inspect, then run:
+
+```bash
+curl -fsSLO https://ciris.ai/install.sh
+# (optional) read install.sh to see what it does, then:
+bash install.sh
+```
+
+> Security note: piping `curl ... | bash` runs unreviewed code straight from
+> the network. Downloading first lets you inspect the script before executing it.
 
 ## For developers
 

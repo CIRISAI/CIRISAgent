@@ -16,6 +16,7 @@ Accord References:
 
 import logging
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.logic import persistence
@@ -42,6 +43,13 @@ logger = logging.getLogger(__name__)
 
 # Constants
 DEFAULT_REJECTION_REASON = "No reason provided"
+
+# #863-B: hard ceiling on shutdown-consent negotiation. The agent gets a real
+# window to accept (COMPLETED) or REJECT (FAILED), but a DEFERRED or otherwise
+# stuck shutdown thought must not poll "Waiting for agent response" forever
+# (production agents were stuck 5-9 DAYS). After this, proceed with a graceful
+# shutdown — the agent had its chance to object.
+SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS = 300.0
 
 
 class ShutdownProcessor(BaseProcessor):
@@ -71,6 +79,10 @@ class ShutdownProcessor(BaseProcessor):
         self.shutdown_complete = False
         self.shutdown_result: Optional[ShutdownResult] = None
         self.is_claiming_occurrence = False  # Flag to track if this occurrence claimed the shared task
+        # #863-B: wall-clock start of consent negotiation (stamped once), used to
+        # bound how long we wait for the agent to accept/reject before forcing a
+        # graceful shutdown.
+        self._negotiation_started_at: Optional[datetime] = None
 
         # Cognitive behaviors for conditional shutdown
         self.cognitive_behaviors = cognitive_behaviors or CognitiveStateBehaviors()
@@ -131,6 +143,49 @@ class ShutdownProcessor(BaseProcessor):
             return None
 
         return current_task
+
+    def _recover_from_missing_task(self) -> ShutdownResult:
+        """#863-A: the cached shutdown task vanished from the DB.
+
+        This happens when maintenance or another occurrence deletes/purges the
+        shared ``SHUTDOWN_SHARED_*`` row after we cached the handle. The old code
+        returned ``status="error"`` here, which the main loop treats as
+        non-terminal — so the processor spun on "Shutdown task disappeared!"
+        forever (production: round 500k+). Recover instead of spinning:
+
+        1. If a peer occurrence already COMPLETED the shutdown decision, adopt it
+           (terminal completed result).
+        2. Otherwise drop the stale handle so ``_create_shutdown_task`` rebuilds
+           it next round. The #863-B negotiation timeout still bounds the retry.
+        """
+        from ciris_engine.logic.persistence.models.tasks import get_latest_shared_task, is_shared_task_completed
+
+        if is_shared_task_completed("shutdown", within_hours=1):
+            existing_task = get_latest_shared_task("shutdown", within_hours=1)
+            logger.info(
+                "Shutdown task disappeared, but a peer occurrence already completed the shutdown decision "
+                f"({getattr(existing_task, 'task_id', 'unknown')}) — adopting it instead of erroring."
+            )
+            self.shutdown_complete = True
+            self.shutdown_result = ShutdownResult(
+                status="completed",
+                action="shutdown_accepted",
+                message="Adopted peer occurrence's completed shutdown decision after local task disappeared",
+                shutdown_ready=True,
+                duration_seconds=0.0,
+            )
+            return self.shutdown_result
+
+        logger.warning(
+            "Shutdown task disappeared and no peer decision found — clearing the stale handle so it is "
+            "recreated next round (was previously an infinite status=error spin, #863-A)."
+        )
+        self.shutdown_task = None
+        return ShutdownResult(
+            status="in_progress",
+            message="Shutdown task was missing; recreating next round",
+            duration_seconds=0.0,
+        )
 
     async def _ensure_task_activated(self, current_task: Task, round_number: int) -> None:
         """Ensure task is activated and has seed thoughts."""
@@ -273,16 +328,21 @@ class ShutdownProcessor(BaseProcessor):
                 )
                 return self.shutdown_result
 
+            # #863-B: stamp the negotiation start once, so the timeout below is
+            # measured from when consensual shutdown actually began.
+            if self._negotiation_started_at is None:
+                self._negotiation_started_at = self.time_service.now()
+
             # Create shutdown task if not exists (consent is required)
             if not self.shutdown_task:
                 await self._create_shutdown_task()
 
-            # Validate task exists
+            # Validate task exists. #863-A: if the cached task vanished from the
+            # DB, recover (adopt a peer decision or recreate) instead of spinning
+            # on status=error forever.
             current_task = self._validate_shutdown_task()
             if not current_task:
-                return ShutdownResult(
-                    status="error", message="Failed to validate shutdown task", errors=1, duration_seconds=0.0
-                )
+                return self._recover_from_missing_task()
 
             # Ensure task is activated and has seed thoughts
             await self._ensure_task_activated(current_task, round_number)
@@ -303,6 +363,31 @@ class ShutdownProcessor(BaseProcessor):
             result = await self._handle_task_completion(current_task)
             if result:
                 return result
+
+            # #863-B: the task is non-terminal (PENDING/ACTIVE/DEFERRED). A
+            # DEFERRED shutdown thought would otherwise poll forever. Once the
+            # negotiation window elapses, the agent has had its chance to accept
+            # or REJECT — proceed with a graceful shutdown rather than deadlock.
+            if self._negotiation_started_at is not None:
+                elapsed = (self.time_service.now() - self._negotiation_started_at).total_seconds()
+                if elapsed > SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS:
+                    logger.warning(
+                        f"Shutdown negotiation exceeded {SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS:.0f}s "
+                        f"(task_status={current_task.status.value}); agent neither accepted nor rejected — "
+                        "proceeding with graceful shutdown (#863-B)."
+                    )
+                    self.shutdown_complete = True
+                    self.shutdown_result = ShutdownResult(
+                        status="completed",
+                        action="shutdown_negotiation_timeout",
+                        message=(
+                            f"Shutdown negotiation timed out after {SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS:.0f}s "
+                            f"(last task_status={current_task.status.value}); proceeding with graceful shutdown"
+                        ),
+                        shutdown_ready=True,
+                        duration_seconds=0.0,
+                    )
+                    return self.shutdown_result
 
             # Still processing - return status
             # CRITICAL: Query with self.agent_occurrence_id, not shutdown_task.agent_occurrence_id

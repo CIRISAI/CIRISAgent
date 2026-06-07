@@ -69,6 +69,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -3272,7 +3273,16 @@ fun CIRISApp(
                             // federation screens now suppress THEIR back arrow
                             // on compact viewports via `LocalIsCompactWindow`;
                             // this button is the single source of truth.
+                            // GLOBAL STANDARD: this top-left icon is the single
+                            // back affordance for every sub-screen on compact.
+                            // Map each sub-screen to its parent; every screen
+                            // listed here suppresses its OWN TopAppBar back arrow
+                            // on compact via LocalIsCompactWindow, so the signet/
+                            // back never co-exist (Samsung-reported). Roots
+                            // (Interact / Login / Layer* hubs) fall to `else` and
+                            // show the CIRIS signet (opens the drawer) instead.
                             val backTarget: Screen? = when (currentScreen) {
+                                // Federation sub-screens → the Global Commons hub
                                 Screen.NetworkIdentity,
                                 Screen.NetworkMap,
                                 Screen.NetworkTrustGraph,
@@ -3284,6 +3294,36 @@ fun CIRISApp(
                                 Screen.NetworkDiagnostics,
                                 Screen.NetworkContent -> Screen.LayerGlobalCommons
                                 is Screen.NetworkPeerDetail -> Screen.NetworkPeers
+                                // Nested sub-screens → their direct parent
+                                Screen.GraphMemory -> Screen.Memory
+                                Screen.SkillStudio -> Screen.Adapters
+                                Screen.VizSettings -> Screen.Settings
+                                Screen.ServerConnection -> Screen.Interact
+                                // Sub-screens of the home (Interact)
+                                Screen.Adapters,
+                                Screen.Audit,
+                                Screen.Billing,
+                                Screen.Config,
+                                Screen.Consent,
+                                Screen.DataManagement,
+                                Screen.EnvironmentInfo,
+                                Screen.Help,
+                                Screen.LLMSettings,
+                                Screen.Logs,
+                                Screen.Memory,
+                                Screen.Runtime,
+                                Screen.Scheduler,
+                                Screen.Services,
+                                Screen.Sessions,
+                                Screen.Settings,
+                                Screen.System,
+                                Screen.Telemetry,
+                                Screen.Tickets,
+                                Screen.Tools,
+                                Screen.Trust,
+                                Screen.Users,
+                                Screen.Wallet,
+                                Screen.WiseAuthority -> Screen.Interact
                                 else -> null
                             }
                             val isDrawerOpen = drawerState.currentValue == DrawerValue.Open
@@ -3302,8 +3342,29 @@ fun CIRISApp(
                             Box(
                                 modifier = androidx.compose.ui.Modifier
                                     .align(androidx.compose.ui.Alignment.TopStart)
-                                    .padding(top = 8.dp, start = 8.dp)
+                                    // Sit below the system status bar — this is a
+                                    // raw overlay (outside the screen's Scaffold),
+                                    // so it must consume the status-bar inset
+                                    // itself or it renders up under the Android
+                                    // clock/notification icons (Samsung-reported).
+                                    .statusBarsPadding()
+                                    // top = 4.dp matches the status-bar badge row
+                                    // (InteractScreen badge Row uses top = 4.dp), so
+                                    // the signet's vertical center lines up with the
+                                    // badge icons rather than sitting slightly low.
+                                    .padding(top = 4.dp, start = 8.dp)
                                     .size(56.dp)
+                                    // Theme-aware circular scrim so the glyph never
+                                    // disappears: many sub-screen TopAppBars use
+                                    // containerColor = colorScheme.primary, which is
+                                    // the SAME color the glyph used to be tinted — so
+                                    // the back arrow vanished against the bar. Sitting
+                                    // the glyph on a `surface` disc guarantees
+                                    // surface/onSurface contrast over ANY bar color in
+                                    // both light and dark mode. On the home status bar
+                                    // (also `surface`) the disc blends in invisibly, so
+                                    // the top-level signet looks unchanged.
+                                    .background(MaterialTheme.colorScheme.surface, CircleShape)
                                     .testableClickable(iconTestTag) {
                                         when {
                                             isDrawerOpen -> drawerScope.launch { drawerState.close() }
@@ -3317,13 +3378,19 @@ fun CIRISApp(
                                     isDrawerOpen -> Icon(
                                         imageVector = Icons.Filled.Menu,
                                         contentDescription = "Close navigation",
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        // onSurface (not primary): the glyph sits on the
+                                        // `surface` scrim disc, so onSurface guarantees
+                                        // contrast regardless of the bar color behind it.
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                         modifier = androidx.compose.ui.Modifier.size(40.dp),
                                     )
                                     backTarget != null -> Icon(
                                         imageVector = ai.ciris.mobile.shared.ui.components.CIRISIcons.arrowBack,
                                         contentDescription = "Go back",
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        // onSurface (not primary): see note above — the
+                                        // back arrow used to vanish on primary-colored
+                                        // sub-screen TopAppBars (CIRISAgent #title-overlap).
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                         modifier = androidx.compose.ui.Modifier.size(40.dp),
                                     )
                                     else -> ai.ciris.mobile.shared.ui.components.CIRISSignet(

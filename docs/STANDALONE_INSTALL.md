@@ -4,9 +4,17 @@ Get CIRIS Agent + GUI running in minutes without Docker.
 
 ## Quick Start
 
+Download the installer, optionally inspect it, then run it:
+
 ```bash
-curl -sSL https://ciris.ai/install.sh | bash
+curl -fsSLO https://ciris.ai/install.sh
+# (optional) read install.sh to see what it does, then:
+bash install.sh
 ```
+
+> **Security note:** Piping `curl ... | bash` runs unreviewed code straight from
+> the network. Downloading the script first lets you inspect it before executing
+> it. All examples below follow this download-then-run pattern.
 
 That's it! The installer will:
 - ✅ Install all dependencies (Python 3.9+, Node.js 20+, pnpm)
@@ -38,13 +46,15 @@ After installation, you'll have:
 ### Custom Installation Directory
 
 ```bash
-curl -sSL https://ciris.ai/install.sh | bash -s -- --install-dir /opt/ciris
+curl -fsSLO https://ciris.ai/install.sh
+bash install.sh --install-dir /opt/ciris
 ```
 
 ### Skip Service Installation
 
 ```bash
-curl -sSL https://ciris.ai/install.sh | bash -s -- --skip-service
+curl -fsSLO https://ciris.ai/install.sh
+bash install.sh --skip-service
 ```
 
 ### Development Mode
@@ -52,13 +62,15 @@ curl -sSL https://ciris.ai/install.sh | bash -s -- --skip-service
 Installs development dependencies and builds in dev mode:
 
 ```bash
-curl -sSL https://ciris.ai/install.sh | bash -s -- --dev
+curl -fsSLO https://ciris.ai/install.sh
+bash install.sh --dev
 ```
 
 ### Install Specific Branches
 
 ```bash
-curl -sSL https://ciris.ai/install.sh | bash -s -- --agent-branch release/1.6.2 --gui-branch develop
+curl -fsSLO https://ciris.ai/install.sh
+bash install.sh --agent-branch release/1.6.2 --gui-branch develop
 ```
 
 ### Environment Variables
@@ -69,7 +81,8 @@ You can also configure via environment variables:
 export CIRIS_INSTALL_DIR="/opt/ciris"
 export CIRIS_AGENT_PORT="8080"
 export CIRIS_GUI_PORT="3000"
-curl -sSL https://ciris.ai/install.sh | bash
+curl -fsSLO https://ciris.ai/install.sh
+bash install.sh
 ```
 
 ## Post-Installation
@@ -207,7 +220,8 @@ systemctl --user restart ciris-agent ciris-gui
 ## Uninstallation
 
 ```bash
-curl -sSL https://ciris.ai/install.sh | bash -s -- --uninstall
+curl -fsSLO https://ciris.ai/install.sh
+bash install.sh --uninstall
 ```
 
 Or manually:
@@ -252,7 +266,8 @@ sudo apt-get install python3 python3-pip python3-venv nodejs npm
 brew install python@3.12 node@20
 
 # Then run installer with --skip-deps
-curl -sSL https://ciris.ai/install.sh | bash -s -- --skip-deps
+curl -fsSLO https://ciris.ai/install.sh
+bash install.sh --skip-deps
 ```
 
 ### Port Already in Use
@@ -264,7 +279,8 @@ curl -sSL https://ciris.ai/install.sh | bash -s -- --skip-deps
 ```bash
 export CIRIS_AGENT_PORT="8081"
 export CIRIS_GUI_PORT="3001"
-curl -sSL https://ciris.ai/install.sh | bash
+curl -fsSLO https://ciris.ai/install.sh
+bash install.sh
 ```
 
 Or edit `~/ciris/.env` after installation.

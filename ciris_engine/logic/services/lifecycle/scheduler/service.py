@@ -226,24 +226,59 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             # Increment triggered counter
             self._tasks_triggered += 1
 
-            # Check if this is a deferred task reactivation
-            if hasattr(task, "metadata") and task.metadata and "deferred_task_id" in task.metadata:
-                # Reactivate the deferred task
-                deferred_task_id = task.metadata["deferred_task_id"]
+            # Check if this is a deferred task reactivation. The deferred task id
+            # lives in deferral_history — ScheduledTask sets extra="forbid" and
+            # has NO `.metadata` attribute, so the old `task.metadata` check was
+            # dead code that silently never reactivated anything (#865). The
+            # deferring thought is task.origin_thought_id.
+            deferred_task_id: Optional[str] = None
+            if task.deferral_history:
+                last_entry = task.deferral_history[-1]
+                if isinstance(last_entry, dict):
+                    deferred_task_id = last_entry.get("deferred_task_id")
+
+            if deferred_task_id:
                 safe_deferred_id = _sanitize_for_log(deferred_task_id)
                 logger.info(f"Reactivating deferred task {safe_deferred_id}")
 
-                # Update the task status from 'deferred' to 'pending'
-                from ciris_engine.logic.persistence import update_task_status
+                from ciris_engine.logic.persistence import get_task_by_id, update_task_status
                 from ciris_engine.schemas.runtime.enums import TaskStatus
 
-                if self._time_service:
-                    update_task_status(deferred_task_id, TaskStatus.PENDING, "default")
+                # Guard on the REAL deferred task id (not the synthetic
+                # "Reactivate task ..." scheduled-task id). If the deferred task
+                # was removed, there is nothing to reactivate — skipping here
+                # also avoids the #863-C FK orphan (a thought pointing at a
+                # task row that no longer exists).
+                if get_task_by_id(deferred_task_id, "default") is None:
+                    logger.warning(
+                        f"Reactivate {safe_deferred_id}: deferred task no longer exists — nothing to reactivate"
+                    )
                 else:
-                    # If no time service available, skip updating the task
-                    logger.warning(f"Cannot update task {safe_deferred_id} status: no time service available")
+                    # (1) Task: deferred -> pending so it re-activates for work.
+                    update_task_status(deferred_task_id, TaskStatus.PENDING, "default")
 
-                logger.info(f"Task {safe_deferred_id} reactivated and marked as pending")
+                    # (2) Thought: re-pend the deferred thought. Setting the task
+                    # PENDING alone is NOT enough — get_tasks_needing_seed_thought
+                    # only seeds tasks that have ZERO thoughts, and the original
+                    # deferred thought still exists, so without this the thought
+                    # stays DEFERRED forever and the agent never reconsiders.
+                    # This is the missing transition at the heart of #865.
+                    if task.origin_thought_id:
+                        from ciris_engine.logic.persistence import update_thought_status
+
+                        update_thought_status(
+                            thought_id=task.origin_thought_id,
+                            status=ThoughtStatus.PENDING,
+                        )
+                        logger.info(
+                            f"Reactivated deferred task {safe_deferred_id}: task PENDING + thought "
+                            f"{_sanitize_for_log(task.origin_thought_id)} re-pended"
+                        )
+                    else:
+                        logger.info(
+                            f"Reactivated deferred task {safe_deferred_id}: task PENDING "
+                            "(no origin thought; a fresh seed thought will be generated)"
+                        )
 
             else:
                 # Create a new thought for regular scheduled tasks — but only

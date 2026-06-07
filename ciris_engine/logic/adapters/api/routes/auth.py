@@ -72,6 +72,17 @@ OAUTH_REDIRECT_PARAMS = os.getenv(
 # Always includes OAUTH_FRONTEND_URL if set. Relative paths (starting with /) are always allowed.
 OAUTH_ALLOWED_REDIRECT_DOMAINS = os.getenv("OAUTH_ALLOWED_REDIRECT_DOMAINS", "").split(",")
 OAUTH_ALLOWED_REDIRECT_DOMAINS = [d.strip().lower() for d in OAUTH_ALLOWED_REDIRECT_DOMAINS if d.strip()]
+# #846: private-network/loopback redirect hosts are NOT trusted by default — an
+# attacker-crafted OAuth login link with redirect_uri=http://127.0.0.1:.../ (or a
+# LAN IP) would otherwise exfiltrate the victim's live bearer token to a host the
+# attacker controls/reads. Set OAUTH_ALLOW_PRIVATE_REDIRECTS=true to opt in (e.g.
+# a Home Assistant deployment), or add the specific private host to
+# OAUTH_ALLOWED_REDIRECT_DOMAINS. Default is closed.
+OAUTH_ALLOW_PRIVATE_REDIRECTS = os.getenv("OAUTH_ALLOW_PRIVATE_REDIRECTS", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 
 # Helper functions
@@ -117,6 +128,31 @@ def _extract_hostname_from_netloc(netloc: str) -> str:
         return netloc.rsplit(":", 1)[0].lower()
 
     return netloc.lower()
+
+
+def _is_loopback_host(host: str) -> bool:
+    """
+    Check if a host is loopback (same machine).
+
+    Loopback is the one private class trusted by default for OAuth redirects:
+    the Home Assistant IndieAuth flow redirects back over HTTP to a localhost
+    OAuth endpoint we run on the same box, and a token sent to 127.0.0.1 can
+    only reach the same host (no remote exfiltration). LAN IPs / .local mDNS /
+    link-local are NOT loopback and stay gated (#846).
+    """
+    import ipaddress
+
+    # Callers pass an already-parsed hostname (urllib parsed.hostname), so do NOT
+    # re-run _extract_hostname_from_netloc here — it would split "::1" on the
+    # colon and mangle IPv6. Just strip any surviving brackets defensively.
+    hostname = (host or "").strip().strip("[]").lower()
+
+    if hostname in ("localhost", "127.0.0.1", "::1"):
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
 
 
 def _is_private_network_host(host: str) -> bool:
@@ -223,17 +259,42 @@ def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
             logger.warning("Rejected redirect_uri with invalid hostname")
             return None
 
-        is_private = _is_private_network_host(redirect_hostname)
+        # Compute loopback first; treat it as private for the HTTP-scheme gate so
+        # the HA localhost flow (and IPv6 ::1, which _is_private_network_host
+        # mishandles) is permitted over http.
+        is_loopback = _is_loopback_host(redirect_hostname)
+        is_private = is_loopback or _is_private_network_host(redirect_hostname)
         if not _validate_redirect_scheme(parsed.scheme.lower(), is_private, redirect_uri, redirect_hostname):
             return None
 
-        # Private network hosts are always allowed (Home Assistant, local dev)
-        if is_private:
-            logger.debug(f"Allowing redirect to private network host: {redirect_hostname}")
+        redirect_domain = redirect_hostname.lower()
+
+        # #846: Loopback (same machine) stays trusted by default — this is the
+        # Home Assistant IndieAuth path: HTTP redirect back to a localhost OAuth
+        # endpoint we run. A token sent to 127.0.0.1 cannot leave the host.
+        if is_loopback:
+            logger.debug(f"Allowing redirect to loopback host: {redirect_hostname}")
             return redirect_uri
 
+        # Non-loopback private hosts (LAN IPs, .local mDNS, link-local/metadata)
+        # are remotely reachable and are NOT trusted by default — otherwise a
+        # crafted login link exfiltrates the victim's live bearer token to a host
+        # the attacker controls/reads. Require explicit opt-in or an allowlist.
+        if is_private:
+            if OAUTH_ALLOW_PRIVATE_REDIRECTS:
+                logger.debug(f"Allowing redirect to private network host (opt-in): {redirect_hostname}")
+                return redirect_uri
+            allowed_domains = _get_allowed_redirect_domains()
+            if _is_domain_allowed(redirect_domain, allowed_domains):
+                logger.debug(f"Allowing redirect to allowlisted private host: {redirect_hostname}")
+                return redirect_uri
+            logger.warning(
+                f"Rejected redirect_uri to private host {redirect_hostname}: not loopback, not allowlisted, and "
+                "OAUTH_ALLOW_PRIVATE_REDIRECTS is not set. Refusing to leak a bearer token to a LAN host (#846)."
+            )
+            return None
+
         # Check against allowed domains for public URLs (hostname only, no port)
-        redirect_domain = redirect_hostname.lower()
         allowed_domains = _get_allowed_redirect_domains()
         if _is_domain_allowed(redirect_domain, allowed_domains):
             return redirect_uri

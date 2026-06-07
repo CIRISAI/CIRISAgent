@@ -46,8 +46,8 @@ android {
                 // installs the Android-bundled Python raises ModuleNotFound
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
-                install "ciris-persist==4.0.1"
-                install "ciris-edge==1.2.0"
+                install "ciris-persist==4.1.0"
+                install "ciris-edge==1.2.1"
 
                 // Core dependencies (same as original android/app/build.gradle)
                 install "pydantic-core==2.23.4"

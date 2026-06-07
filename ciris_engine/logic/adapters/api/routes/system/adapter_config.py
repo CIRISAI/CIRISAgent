@@ -325,6 +325,7 @@ async def start_adapter_configuration(
 @router.get(
     "/adapters/configure/{session_id}",
     responses={
+        403: {"description": "Not the owner of this configuration session"},
         404: {"description": "Session not found"},
         500: {"description": "Failed to get configuration status"},
     },

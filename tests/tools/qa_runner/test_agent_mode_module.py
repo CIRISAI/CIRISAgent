@@ -112,6 +112,8 @@ class TestEndpointShape:
             try:
                 instance._get_mode("tkn")
             except Exception:
+                # The mocked transport records the request then raises; this test
+                # only asserts on the URL it was given, so the raise is expected.
                 pass
             assert captured["url"].endswith("/v1/system/agent-mode"), captured["url"]
 
@@ -119,6 +121,7 @@ class TestEndpointShape:
             try:
                 instance._put_mode("tkn", "proxy")
             except Exception:
+                # Same as above — assert the request URL, ignore the mock's raise.
                 pass
             assert captured["url"].endswith("/v1/system/agent-mode"), captured["url"]
             assert captured["json"] == {"mode": "proxy"}

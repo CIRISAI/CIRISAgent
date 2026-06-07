@@ -365,29 +365,11 @@ class ShutdownProcessor(BaseProcessor):
                 return result
 
             # #863-B: the task is non-terminal (PENDING/ACTIVE/DEFERRED). A
-            # DEFERRED shutdown thought would otherwise poll forever. Once the
-            # negotiation window elapses, the agent has had its chance to accept
-            # or REJECT — proceed with a graceful shutdown rather than deadlock.
-            if self._negotiation_started_at is not None:
-                elapsed = (self.time_service.now() - self._negotiation_started_at).total_seconds()
-                if elapsed > SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS:
-                    logger.warning(
-                        f"Shutdown negotiation exceeded {SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS:.0f}s "
-                        f"(task_status={current_task.status.value}); agent neither accepted nor rejected — "
-                        "proceeding with graceful shutdown (#863-B)."
-                    )
-                    self.shutdown_complete = True
-                    self.shutdown_result = ShutdownResult(
-                        status="completed",
-                        action="shutdown_negotiation_timeout",
-                        message=(
-                            f"Shutdown negotiation timed out after {SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS:.0f}s "
-                            f"(last task_status={current_task.status.value}); proceeding with graceful shutdown"
-                        ),
-                        shutdown_ready=True,
-                        duration_seconds=0.0,
-                    )
-                    return self.shutdown_result
+            # DEFERRED shutdown thought would otherwise poll forever; force a
+            # graceful shutdown once the negotiation window elapses.
+            timeout_result = self._check_negotiation_timeout(current_task)
+            if timeout_result:
+                return timeout_result
 
             # Still processing - return status
             # CRITICAL: Query with self.agent_occurrence_id, not shutdown_task.agent_occurrence_id
@@ -406,6 +388,38 @@ class ShutdownProcessor(BaseProcessor):
         except Exception as e:
             logger.error(f"Error in shutdown processor: {e}", exc_info=True)
             return ShutdownResult(status="error", message=str(e), errors=1, duration_seconds=0.0)
+
+    def _check_negotiation_timeout(self, current_task: Task) -> Optional[ShutdownResult]:
+        """#863-B: force a graceful shutdown if consent negotiation runs too long.
+
+        A DEFERRED or otherwise stuck shutdown thought would poll "Waiting for
+        agent response" forever (production: 5-9 days). Once the negotiation
+        window elapses the agent has had its chance to accept or REJECT —
+        proceed with shutdown. Returns a terminal result, or None if still
+        within the window.
+        """
+        if self._negotiation_started_at is None:
+            return None
+        elapsed = (self.time_service.now() - self._negotiation_started_at).total_seconds()
+        if elapsed <= SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS:
+            return None
+        logger.warning(
+            f"Shutdown negotiation exceeded {SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS:.0f}s "
+            f"(task_status={current_task.status.value}); agent neither accepted nor rejected — "
+            "proceeding with graceful shutdown (#863-B)."
+        )
+        self.shutdown_complete = True
+        self.shutdown_result = ShutdownResult(
+            status="completed",
+            action="shutdown_negotiation_timeout",
+            message=(
+                f"Shutdown negotiation timed out after {SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS:.0f}s "
+                f"(last task_status={current_task.status.value}); proceeding with graceful shutdown"
+            ),
+            shutdown_ready=True,
+            duration_seconds=0.0,
+        )
+        return self.shutdown_result
 
     async def _create_shutdown_task(self) -> None:
         """Create the shutdown task with multi-occurrence coordination.

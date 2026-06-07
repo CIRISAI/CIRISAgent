@@ -103,6 +103,8 @@ class AgentModeTests:
             try:
                 self._put_mode(self._resolve_token(), self._original_mode)
             except Exception:
+                # Courtesy teardown only — if the server is already gone or
+                # unreachable there is nothing to restore and nothing actionable.
                 pass
 
         self._print_summary()

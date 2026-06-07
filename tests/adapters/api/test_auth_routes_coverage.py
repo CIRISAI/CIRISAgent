@@ -13,6 +13,7 @@ These tests complement the existing OAuth tests to achieve better coverage.
 """
 
 import base64
+import json
 import os
 import time
 from datetime import datetime, timezone
@@ -36,6 +37,16 @@ from ciris_engine.logic.adapters.api.routes.auth import (
     router,
 )
 from ciris_engine.schemas.api.auth import LoginRequest, UserRole
+
+
+@pytest.fixture(autouse=True)
+def _accept_oauth_state():
+    """#847: these tests exercise OAuth-callback behavior AFTER state validation.
+    Real flows register the csrf at login; here we bypass the single-use store so
+    a well-formed state is accepted. Tests that assert state REJECTION pass a
+    malformed/absent state, which fails decode before this is consulted."""
+    with patch("ciris_engine.logic.adapters.api.routes.auth._oauth_state_consume", return_value=True):
+        yield
 
 
 def _base64url_uint(value: int) -> str:
@@ -480,8 +491,11 @@ class TestOAuthErrorPaths:
                 mock_request.app.state = Mock()
                 mock_auth_service = Mock()
 
+                # Valid (decodable) state so we get past #847 state validation and
+                # reach the code/handler check this test targets.
+                valid_state = base64.urlsafe_b64encode(json.dumps({"csrf": "x"}).encode()).decode()
                 with pytest.raises(HTTPException) as exc_info:
-                    await oauth_callback("google", None, "test-state", mock_request, mock_auth_service)
+                    await oauth_callback("google", None, valid_state, mock_request, mock_auth_service)
 
                 # The function now properly validates and returns 400 for missing code
                 assert exc_info.value.status_code == 400
@@ -497,9 +511,11 @@ class TestOAuthErrorPaths:
         mock_request.app.state = Mock()
         mock_auth_service = Mock()
 
-        # This should trigger the _load_oauth_config error for unsupported provider
+        # Valid (decodable) state so #847 validation passes and we reach the
+        # provider/config check this test targets.
+        valid_state = base64.urlsafe_b64encode(json.dumps({"csrf": "x"}).encode()).decode()
         with pytest.raises(HTTPException) as exc_info:
-            await oauth_callback("invalid", "test-code", "test-state", mock_request, mock_auth_service)
+            await oauth_callback("invalid", "test-code", valid_state, mock_request, mock_auth_service)
 
         # The function returns 404 for unsupported providers due to config loading
         assert exc_info.value.status_code == 404
@@ -709,7 +725,9 @@ class TestOAuthRedirectURI:
 
     @pytest.mark.asyncio
     async def test_oauth_callback_malformed_state(self):
-        """Test oauth_callback handles malformed state gracefully."""
+        """#847: a malformed/undecodable state is REJECTED (fail-closed), not
+        silently accepted with a default redirect — that prior behavior let an
+        attacker drive the callback with a forged state."""
         from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
 
         # Malformed state (not valid base64 JSON)
@@ -743,12 +761,11 @@ class TestOAuthRedirectURI:
             mock_request.app = Mock()
             mock_request.app.state = Mock()
 
-            # Should not raise, should fall back to relative path
-            response = await oauth_callback("google", "test-code", malformed_state, mock_request, mock_auth_service)
-
-            # Should still work, using default redirect
-            assert response.status_code == 302
-            assert "access_token=" in response.headers["location"]
+            # Fail-closed: an undecodable state is rejected with 400.
+            with pytest.raises(HTTPException) as exc_info:
+                await oauth_callback("google", "test-code", malformed_state, mock_request, mock_auth_service)
+            assert exc_info.value.status_code == 400
+            assert "state" in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
     async def test_oauth_callback_preserves_redirect_uri_query_params(self):

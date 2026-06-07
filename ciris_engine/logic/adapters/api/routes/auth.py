@@ -13,6 +13,8 @@ Note: OAuth endpoints are in api_auth_v2.py
 import logging
 import os
 import secrets
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional, Set, cast
@@ -83,6 +85,41 @@ OAUTH_ALLOW_PRIVATE_REDIRECTS = os.getenv("OAUTH_ALLOW_PRIVATE_REDIRECTS", "").s
     "true",
     "yes",
 )
+
+# #847: server-side single-use store for OAuth `state` CSRF tokens. The state
+# blob carries a random csrf (secrets.token_urlsafe), but pre-fix NOTHING verified
+# it — an attacker could mint their own state, so it provided zero CSRF
+# protection. We now record each csrf we issue at login and require the callback
+# to present one we issued and have not yet consumed, within a short TTL. The
+# token is deleted on first use so replays fail. In-memory is sufficient for the
+# typical single API process (login and callback happen seconds apart in the same
+# process); a future cross-occurrence store can replace this map.
+_OAUTH_STATE_TTL_SECONDS = 600.0
+_oauth_pending_states: Dict[str, float] = {}
+_oauth_states_lock = threading.Lock()
+
+
+def _oauth_state_remember(csrf_token: str) -> None:
+    """Record a freshly-issued OAuth state CSRF token with a TTL."""
+    now = time.time()
+    with _oauth_states_lock:
+        # Opportunistically prune expired entries so the map can't grow unbounded.
+        for expired in [k for k, exp in _oauth_pending_states.items() if exp <= now]:
+            _oauth_pending_states.pop(expired, None)
+        _oauth_pending_states[csrf_token] = now + _OAUTH_STATE_TTL_SECONDS
+
+
+def _oauth_state_consume(csrf_token: Optional[str]) -> bool:
+    """Single-use verify: True iff the token was issued by us and is unexpired.
+
+    Removes the token so a replay of the same OAuth callback fails.
+    """
+    if not csrf_token:
+        return False
+    now = time.time()
+    with _oauth_states_lock:
+        expiry = _oauth_pending_states.pop(csrf_token, None)
+    return expiry is not None and expiry > now
 
 
 # Helper functions
@@ -688,6 +725,9 @@ async def oauth_login(provider: str, request: Request, redirect_uri: Optional[st
         if validated_redirect_uri:
             state_data["redirect_uri"] = validated_redirect_uri
             logger.info("OAuth login initiated with validated redirect_uri")
+
+        # #847: record the issued csrf server-side so the callback can verify it.
+        _oauth_state_remember(csrf_token)
 
         # Base64 encode the state JSON
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
@@ -1456,28 +1496,34 @@ async def oauth_callback(
         redirect_uri = None
         marketing_opt_in_from_uri = None
 
+        # #847: state must decode AND carry a csrf we issued. Fail CLOSED — a
+        # missing/undecodable state, or a csrf we never issued / already consumed
+        # / expired, aborts the callback. The previous code logged and continued,
+        # which let an attacker drive the callback with a forged or replayed state.
         try:
             state_json = base64.urlsafe_b64decode(state.encode()).decode()
             state_data = json.loads(state_json)
-            redirect_uri = state_data.get("redirect_uri")
-
-            # Defense-in-depth: Re-validate redirect_uri even from state
-            # (state could theoretically be tampered with)
-            redirect_uri = validate_redirect_uri(redirect_uri)
-
-            # Extract marketing_opt_in from redirect_uri query parameters
-            if redirect_uri:
-                uri_params = extract_query_params(redirect_uri)
-                marketing_opt_in_str = uri_params.get("marketing_opt_in", "").lower()
-                if marketing_opt_in_str in ("true", "1", "yes"):
-                    marketing_opt_in_from_uri = True
-                elif marketing_opt_in_str in ("false", "0", "no"):
-                    marketing_opt_in_from_uri = False
-
-            logger.debug(f"Decoded state: redirect_uri={redirect_uri}, marketing_opt_in={marketing_opt_in_from_uri}")
         except Exception as e:
-            # If state decode fails, log but continue (backward compatibility)
-            logger.warning(f"Failed to decode state parameter: {e}. Using default redirect.")
+            logger.warning(f"OAuth callback rejected: undecodable state parameter ({e})")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OAuth state")
+
+        if not _oauth_state_consume(state_data.get("csrf")):
+            logger.warning("OAuth callback rejected: state CSRF token missing, expired, or already used")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OAuth state")
+
+        # Defense-in-depth: re-validate redirect_uri even from a verified state.
+        redirect_uri = validate_redirect_uri(state_data.get("redirect_uri"))
+
+        # Extract marketing_opt_in from redirect_uri query parameters
+        if redirect_uri:
+            uri_params = extract_query_params(redirect_uri)
+            marketing_opt_in_str = uri_params.get("marketing_opt_in", "").lower()
+            if marketing_opt_in_str in ("true", "1", "yes"):
+                marketing_opt_in_from_uri = True
+            elif marketing_opt_in_str in ("false", "0", "no"):
+                marketing_opt_in_from_uri = False
+
+        logger.debug(f"Decoded state: redirect_uri={redirect_uri}, marketing_opt_in={marketing_opt_in_from_uri}")
 
         # Use marketing_opt_in from redirect_uri if available, otherwise use query param
         final_marketing_opt_in = (

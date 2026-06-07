@@ -1,5 +1,6 @@
 """Tests for the ToolInstaller service."""
 
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -103,7 +104,9 @@ class TestToolInstaller:
         cmd = installer._build_command(step)
         assert cmd == ["npm", "install", "-g", "typescript"]
 
-    def test_build_command_manual(self):
+    def test_build_command_manual_is_rejected(self):
+        """#851: 'manual' shell installs are no longer built — a manifest cannot
+        run `curl | bash`. _build_command returns None (treated as unknown)."""
         installer = ToolInstaller()
         step = InstallStep(
             id="manual-custom",
@@ -112,8 +115,7 @@ class TestToolInstaller:
             command="curl -sSL example.com/install.sh | bash",
             provides_binaries=["mytool"],
         )
-        cmd = installer._build_command(step)
-        assert cmd == ["sh", "-c", "curl -sSL example.com/install.sh | bash"]
+        assert installer._build_command(step) is None
 
     def test_build_command_unknown_kind(self):
         installer = ToolInstaller()
@@ -302,9 +304,11 @@ class TestCommandBuilders:
         installer = ToolInstaller()
         builders = installer._command_builders
 
-        expected = ["brew", "apt", "pip", "uv", "npm", "winget", "choco", "manual"]
+        expected = ["brew", "apt", "pip", "uv", "npm", "winget", "choco"]
         for manager in expected:
             assert manager in builders, f"Missing builder for {manager}"
+        # #851: 'manual' (arbitrary sh -c) must NOT be a registered builder.
+        assert "manual" not in builders
 
     def test_build_brew_cmd_with_formula(self):
         """Test _build_brew_cmd with valid formula."""
@@ -371,19 +375,47 @@ class TestCommandBuilders:
         cmd = installer._build_choco_cmd(step)
         assert cmd == ["choco", "install", "-y", "git"]
 
-    def test_build_manual_cmd_with_command(self):
-        """Test _build_manual_cmd with valid command."""
+    def test_manual_shell_install_is_removed(self):
+        """#851: the 'manual' sh -c escape hatch no longer exists — a manifest
+        cannot run arbitrary shell. _build_command returns None for 'manual', and
+        the package-manager check reports it unavailable."""
         installer = ToolInstaller()
-        step = InstallStep(id="test", kind="manual", label="Test", command="echo hello", provides_binaries=[])
-        cmd = installer._build_manual_cmd(step)
-        assert cmd == ["sh", "-c", "echo hello"]
+        assert not hasattr(installer, "_build_manual_cmd")
+        step = InstallStep(id="test", kind="manual", label="Test", command="rm -rf ~", provides_binaries=[])
+        assert installer._build_command(step) is None
+        assert installer._has_package_manager("manual") is False
 
-    def test_build_manual_cmd_without_command(self):
-        """Test _build_manual_cmd without command returns None."""
+    @pytest.mark.asyncio
+    async def test_download_rejects_non_https(self, tmp_path):
+        """#851: download URLs must be HTTPS."""
         installer = ToolInstaller()
-        step = InstallStep(id="test", kind="manual", label="Test", provides_binaries=[])
-        cmd = installer._build_manual_cmd(step)
-        assert cmd is None
+        step = InstallStep(
+            id="dl",
+            kind="download",
+            label="Test",
+            url="http://example.test/x.tgz",
+            target_dir=str(tmp_path / "out"),
+            provides_binaries=[],
+        )
+        result = await installer.install(step)
+        assert result.success is False
+        assert "failed" in result.message.lower() or "https" in result.message.lower()
+
+    def test_download_extract_blocks_path_traversal(self, tmp_path):
+        """#851: an archive member escaping target_dir (Tar Slip) is refused."""
+        import tarfile as _tarfile
+
+        target = str(tmp_path / "target")
+        os.makedirs(target, exist_ok=True)
+        # Build a tar with a traversing member.
+        archive = tmp_path / "evil.tar"
+        payload = tmp_path / "payload"
+        payload.write_text("pwned")
+        with _tarfile.open(archive, "w") as tf:
+            tf.add(str(payload), arcname="../../escape.txt")
+        with _tarfile.open(archive) as tf:
+            with pytest.raises(ValueError):
+                ToolInstaller._safe_extract_tar(tf, os.path.realpath(target), 0)
 
     def test_build_command_uses_dispatch_table(self):
         """Test that _build_command uses the dispatch table correctly."""

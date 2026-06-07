@@ -281,6 +281,17 @@ def build_attestation_result(
         registry_ok=key_attestation.get("registry_key_status") == "active",
         registry_key_status=key_attestation.get("registry_key_status") or attestation.get("registry_key_status"),
         sources_agreeing=_count_agreeing_sources(sources),
+        # #862: registry reachability is reported by CIRISVerify SEPARATELY from
+        # validity (a source can be reachable but disagree = tamper, or unreachable
+        # = network failure). `validation_status` is the multi-source classifier
+        # (NoSourcesReachable vs SourcesDisagree). Carry both so the degradation
+        # check can tell "couldn't verify" from "verified bad".
+        registry_reachable=bool(
+            sources.get("dns_us_reachable", False)
+            or sources.get("dns_eu_reachable", False)
+            or sources.get("https_reachable", False)
+        ),
+        source_validation_status=sources.get("validation_status"),
         # File integrity (Level 4)
         **file_fields,
         # Audit trail (Level 5)

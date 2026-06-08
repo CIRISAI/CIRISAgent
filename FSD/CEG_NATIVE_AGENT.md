@@ -101,7 +101,7 @@ Today the agent's **only** node write path is `cirisgraph_upsert_node` (the lega
 
 ## 4. Codebase shape (what changes — schema + projection, not agent-logic redesign)
 
-1. **A `SelfAttestation` projection layer** behind `add_graph_node()`: each node write *also* writes a `federation_attestations` local-tier row via the new persist surface. (Dual-write — §5 migration.)
+1. **`add_graph_node()` is rewired to write attestations directly** (not a parallel shadow): after the hard cut, a node write IS an `attestation_upsert_local(envelope)` call. Pre-cut, the `migrate_graph_nodes_to_attestations()` one-shot transforms the durable backlog (§5).
 2. **memory / config / consent / audit reads collapse to a CEG-query client** — `self_attestations.query(dimensions=[…], valid_at, confidence_floor)`. The existing services become thin typed views over the uniform substrate.
 3. **Context-gather collapse:** `batch_context.py`'s ~25 heterogeneous shapes (IdentityData, UserProfile, ChannelContext, SecretsSnapshot, TelemetrySummary, consent, queue depths, …) become a **CEG-query DAG** — one interface, composable confidence + provenance.
 4. **Local-tier signature deferral** wired into the promotion path (federation emit signs; local writes don't).
@@ -109,16 +109,25 @@ Today the agent's **only** node write path is `cirisgraph_upsert_node` (the lega
 
 ---
 
-## 5. Migration shape (resolves #840 OQ4) — **dual-write + cutover, never one-shot**
+## 5. Migration shape (resolves #840 OQ4) — **HARD cut-over, not dual-write**
 
-We have been in production for months on real agents; a one-shot bulk rewrite of `graph_nodes` is unacceptable. Phased, each phase reversible:
+A dual-write/shadow migration is the **wrong** tool here, for five reasons:
 
-- **P0 — projection dark-launch:** dual-write the **Clean** node types (config, identity, consent) → local-tier attestations alongside graph_nodes. Reads still hit graph_nodes. Zero behaviour change.
-- **P1 — shadow-read validation:** read both, assert equality in CI + a prod canary (reuse the multi-occurrence canary harness, `FSD/multi_occurrence_canary_rollout.md`). Surface divergence as incidents.
-- **P2 — read cutover:** flip the Clean services to read from attestations; graph_nodes become write-only shadow.
-- **P3 — context-gather as CEG query:** rewrite `batch_context.py` onto the query DAG.
-- **P4 — federation promotion live:** agent-intent (`dma:*`/`conscience:*`/principles) promotes to the public ledger; the LensCore fold (`{agent, lenscore_detector}`) consumes `detection:*` inbound.
-- **P5 — deprecate graph_nodes:** the Candidate/local-only types either get a confirmed CEG family or stay as local-tier attestations; the legacy table retires.
+1. **Dual-write IS the cohabitation this design exists to eliminate.** §0 commits to a single substrate, no second-surface tables. Running `graph_nodes` and `federation_attestations` side-by-side for a migration window is exactly the two-surface cohabitation the frame rejects. The only migration shape *coherent with the thesis* is a hard cut.
+2. **A shadow never tests the actual risk.** The risk is not "do rows copy" — it's "does the agent *reason* correctly off attestations." During dual-write the agent still reads `graph_nodes` (the shadow can't be source-of-truth), so the CEG-native agent is never exercised until cutover anyway. The shadow buys complexity and zero real confidence.
+3. **Most `graph_nodes` are derived, not durable.** TSDB data + the five `*_SUMMARY` types + trace/task summaries + USER/CHANNEL nodes are consolidations/observations — **regenerated, not migrated**. The genuinely durable set is small and bounded (identity, config, partnered-consent, accumulated CONCEPT/OBSERVATION memory) → a **one-shot mechanical transform**, one node → one envelope.
+4. **Continuity is by re-attestation, not data preservation.** The agent re-attests `identity:current` at every WAKEUP. A CEG-native agent boots, re-attests identity, runs the one-shot transform of the bounded durable set, and proceeds. Identity survives structurally.
+5. **Conformance is binary** (the CEG RC1 gate): the agent's state either IS CEG attestations or it isn't. A dual-write shadow is a non-conformant agent with a side table — it does not pass the gate. A hard cut delivers a conformant agent on day one.
+
+**The proven playbook (it was already a hard cut):** 2.9.0 *removed* the SQLite bootstrap layer outright and went straight to persist — no dual-write — de-risked by validating the transform against a **real production dump (scoutdb)** *before* the cut, with rollback = the release + the intact prior DB. Identical here:
+
+- **C0 — one-shot transform, offline-validated:** write `migrate_graph_nodes_to_attestations()` (durable types only: identity, config, consent, memory; derived types are dropped/regenerated). Validate it against **production DB dumps** in CI + a canary (`FSD/multi_occurrence_canary_rollout.md`) — assert every durable node round-trips to a queryable attestation. This validation, not a live shadow, is where confidence comes from.
+- **C1 — boot-time cut:** on first 3.0 boot, the migration runs once: durable `graph_nodes` → `federation_attestations` (local-tier), then the agent runs CEG-native. `graph_nodes` is retained **read-only as a cold backup** (not dropped) for one release.
+- **C2 — context-gather + all read paths are CEG queries** from the cut (memory/config/consent/audit become typed views over `attestation_query`). There is no period where some services read old and some read new.
+- **C3 — federation promotion live:** agent-intent (`dma:*`/`conscience:*`/principles) promotes to the public ledger; the LensCore fold (`{agent, lenscore_detector}`) consumes `detection:*` inbound.
+- **Rollback** = redeploy the prior release; the cold-backup `graph_nodes` table is still intact. Reversible at the release boundary, not via a shadow.
+
+The cut is atomic per occurrence and gated on the offline validation passing against real prod data — the same discipline that carried the persist/verify/edge substrate cut, applied one layer up.
 
 ---
 
@@ -127,9 +136,9 @@ We have been in production for months on real agents; a one-shot bulk rewrite of
 | release | CEG-native work |
 |---|---|
 | **2.9.6** (LensCore cut, *now*) | #754 done (tree_verify project param ✓). **This FSD ratified.** Persist attestation-surface ask filed. `ciris-lens-core` dependency added (fold-in scaffolding, #857). #842 closed-superseded. |
-| **2.9.7** (hardening) | persist attestation write+query surface lands; **P0 dual-write** for config/identity/consent. |
-| **2.9.8** (NodeCore/Registry) | **P1 shadow-read** + canary; **P2 cutover** of the Clean types. |
-| **3.0 / CEG 1.0** | **P3–P5**: context-gather-as-query, federation promotion live, graph_nodes retired. The CEG-native agent. |
+| **2.9.7** (hardening) | persist attestation write+query+promote surface lands (CIRISPersist#171); build `migrate_graph_nodes_to_attestations()` + the `attestation_query` read client. |
+| **2.9.8** (NodeCore/Registry) | **C0** — validate the one-shot transform against production DB dumps in CI + canary (`FSD/multi_occurrence_canary_rollout.md`); all read paths rewritten onto `attestation_query` behind a flag, exercised in the canary. |
+| **3.0 / CEG 1.0** | **C1–C3 hard cut** — boot-time transform, CEG-native from first boot, `graph_nodes` retained read-only as cold backup, federation promotion live. The CEG-native agent. Rollback = prior release. |
 
 ---
 

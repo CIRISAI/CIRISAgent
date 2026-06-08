@@ -1,6 +1,7 @@
 # FSD: CEG-Native Agent — graph_nodes ARE self-level CEG attestations
 
 **Status:** Design ratified (2026-06-08). 3.0 / CEG 1.0 candidate. Tracks CIRISAgent#840, umbrella #866.
+**Stakes:** CIRISAgent's CEG conformance is **one of the four implementations that gate CEG RC1** (the path to CEG 1.0) — alongside the three fabric siblings **CIRISNodeCore, CIRISLensCore, CIRISRegistry**. This is not just an agent feature: CEG cannot reach RC1/1.0 until the agent conforms. The agent is the *single-party epistemic-actor* reference implementation of the grammar.
 **Spec baseline:** CEG **0.15** (`CIRISRegistry/FSD/CEG/`, the Agent 3.0 / CEG 1.0 candidate).
 **Substrate baseline:** persist 4.1.0 / edge 1.3.0 / verify 4.8.1 (the migration to the Rust substrate is *done*; this is the next layer up).
 

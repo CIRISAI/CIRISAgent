@@ -14,8 +14,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 142
-        versionName "2.9.5"
+        versionCode 143
+        versionName "2.9.6"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -47,7 +47,7 @@ android {
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
                 install "ciris-persist==4.1.0"
-                install "ciris-edge==1.2.1"
+                install "ciris-edge==1.3.0"
 
                 // Core dependencies (same as original android/app/build.gradle)
                 install "pydantic-core==2.23.4"

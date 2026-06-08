@@ -191,6 +191,25 @@ def test_run_tree_verify_happy_path(tmp_path):
     assert "pyc" in call_kwargs["exempt_extensions"]
 
 
+def test_run_tree_verify_project_is_parameterizable(tmp_path):
+    """#754: a sibling substrate can verify its own registered manifest by
+    passing project=... — verify_tree() is project-agnostic."""
+    fake_verify_tree = MagicMock(return_value=_stub_verify_tree_result(project="ciris-lens-core"))
+    fake_request_cls = MagicMock(side_effect=SimpleNamespace)
+    fake_module = SimpleNamespace(verify_tree=fake_verify_tree, TreeVerifyRequest=fake_request_cls)
+
+    with patch.dict(sys.modules, {"ciris_verify": fake_module}):
+        result = tree_verify.run_tree_verify(
+            agent_version="0.4.1", agent_root=str(tmp_path), project="ciris-lens-core"
+        )
+
+    assert result is not None
+    # The override flows straight into the TreeVerifyRequest...
+    assert fake_request_cls.call_args.kwargs["project"] == "ciris-lens-core"
+    # ...and the result echoes the verified project.
+    assert result["project"] == "ciris-lens-core"
+
+
 def test_run_tree_verify_failed_files_captured(tmp_path):
     # FailedFileKind is an enum at runtime (with .value); accept str too for test stubs.
     failed_one = SimpleNamespace(path="ciris_engine/foo.py", kind="hash_mismatch")

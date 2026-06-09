@@ -60,6 +60,14 @@ class MobileTestConfig:
     test_email: str = "ciristest1@gmail.com"
     test_password: str = ""  # For Google Sign-In if manual entry needed
 
+    # Login mode for first-run setup. "local" clicks Local Login → setup wizard
+    # (fully driveable via the Compose test server); "google" launches the
+    # native Google overlay, which the test server cannot drive — prefer local.
+    login_mode: str = "google"
+    # Local account created by the setup wizard (login_mode="local").
+    setup_username: str = "admin"
+    setup_password: str = "qa_test_password_12345"
+
     # LLM settings for setup
     llm_provider: str = "groq"
     llm_api_key: str = ""
@@ -432,6 +440,9 @@ class MobileTestRunner:
         test_config = {
             "test_email": self.config.test_email,
             "test_password": self.config.test_password,
+            "login_mode": self.config.login_mode,
+            "setup_username": self.config.setup_username,
+            "setup_password": self.config.setup_password,
             "llm_provider": self.config.llm_provider,
             "llm_api_key": self.config.llm_api_key,
             "test_message": self.config.test_message,

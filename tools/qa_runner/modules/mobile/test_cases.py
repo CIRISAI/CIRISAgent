@@ -669,27 +669,33 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                 test_username = config.get("setup_username", "testuser")
                 test_password = config.get("setup_password", "testpass123")
 
-                # Fill username field if required message is shown
+                # Fill username — target the Compose field by its testTag
+                # ('input_username', resource-id), which is resolution-independent.
+                # Coordinate taps were brittle: hardcoded coords miss on different
+                # screen sizes and could land the password in the City field.
                 if ui.is_text_visible(CIRISAppConfig.TEXT_USERNAME_REQUIRED) or ui.is_text_visible(
                     CIRISAppConfig.TEXT_USERNAME
                 ):
-                    username_coords = ScreenCoordinates.get("username_field_center", config)
-                    adb.tap(*username_coords)
-                    time.sleep(0.3)
-                    adb.input_text(test_username)
-                    adb.press_back()  # Dismiss keyboard
+                    if not ui.set_text_by_resource_id("input_username", test_username):
+                        # Fallback for older builds without testTagsAsResourceId.
+                        username_coords = ScreenCoordinates.get("username_field_center", config)
+                        adb.tap(*username_coords)
+                        time.sleep(0.3)
+                        adb.input_text(test_username)
+                        adb.press_back()  # Dismiss keyboard
                     time.sleep(0.3)
                     print(f"  Step {step + 1}: Entered username '{test_username}'")
 
-                # Fill password field if required message is shown
+                # Fill password — same, by 'input_password' testTag.
                 if ui.is_text_visible(CIRISAppConfig.TEXT_PASSWORD_REQUIRED) or ui.is_text_visible(
                     CIRISAppConfig.TEXT_PASSWORD
                 ):
-                    password_coords = ScreenCoordinates.get("password_field_center", config)
-                    adb.tap(*password_coords)
-                    time.sleep(0.3)
-                    adb.input_text(test_password)
-                    adb.press_back()  # Dismiss keyboard
+                    if not ui.set_text_by_resource_id("input_password", test_password):
+                        password_coords = ScreenCoordinates.get("password_field_center", config)
+                        adb.tap(*password_coords)
+                        time.sleep(0.3)
+                        adb.input_text(test_password)
+                        adb.press_back()  # Dismiss keyboard
                     time.sleep(0.5)
                     print(f"  Step {step + 1}: Entered password")
 
@@ -967,29 +973,44 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
                 screenshots=all_screenshots,
             )
 
-        # 2. Google Sign-In
+        # 2. Login — local (Compose-driveable) or Google (native overlay).
         step_start = time.time()
-        print("\n[Step 2/4] Google Sign-In")
-        result = test_google_signin(adb, ui, config)
-        results.append(result)
-        all_screenshots.extend(result.screenshots)
-        print(f"  ⏱️  Step 2 completed in {time.time() - step_start:.1f}s")
-        if result.result not in [TestResult.PASSED, TestResult.SKIPPED]:
-            # Try local login as fallback
-            print("  Google Sign-In failed, trying Local Login...")
-            # Go back if needed
-            adb.press_back()
-            time.sleep(1)
+        login_mode = config.get("login_mode", "google")
+        if login_mode == "local":
+            print("\n[Step 2/4] Local Login (creating a local account)")
             result = test_local_login(adb, ui, config)
             results.append(result)
+            all_screenshots.extend(result.screenshots)
+            print(f"  ⏱️  Step 2 completed in {time.time() - step_start:.1f}s")
             if result.result != TestResult.PASSED:
                 return TestReport(
                     name="test_full_flow",
                     result=TestResult.FAILED,
                     duration=time.time() - start_time,
-                    message=f"Failed at login: {result.message}",
+                    message=f"Failed at local login: {result.message}",
                     screenshots=all_screenshots,
                 )
+        else:
+            print("\n[Step 2/4] Google Sign-In")
+            result = test_google_signin(adb, ui, config)
+            results.append(result)
+            all_screenshots.extend(result.screenshots)
+            print(f"  ⏱️  Step 2 completed in {time.time() - step_start:.1f}s")
+            if result.result not in [TestResult.PASSED, TestResult.SKIPPED]:
+                # Try local login as fallback
+                print("  Google Sign-In failed, trying Local Login...")
+                adb.press_back()
+                time.sleep(1)
+                result = test_local_login(adb, ui, config)
+                results.append(result)
+                if result.result != TestResult.PASSED:
+                    return TestReport(
+                        name="test_full_flow",
+                        result=TestResult.FAILED,
+                        duration=time.time() - start_time,
+                        message=f"Failed at login: {result.message}",
+                        screenshots=all_screenshots,
+                    )
 
         # 3. Setup Wizard
         step_start = time.time()

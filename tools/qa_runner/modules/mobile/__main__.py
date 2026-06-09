@@ -1068,6 +1068,9 @@ def test_command(args) -> int:
         apk_path=args.apk,
         reinstall_app=not args.no_reinstall,
         clear_data=not args.no_clear,
+        login_mode=args.login_mode,
+        setup_username=args.setup_username,
+        setup_password=args.setup_password,
         test_email=args.email,
         test_password=test_password,
         llm_api_key=llm_api_key,
@@ -1447,6 +1450,15 @@ Examples:
         default="~/.ciristest1_password",
         help="Path to file containing test account password",
     )
+    test_parser.add_argument(
+        "--login-mode",
+        choices=["local", "google"],
+        default="google",
+        help="First-run login: 'local' creates a local account via the setup wizard "
+        "(fully driveable by the test server); 'google' uses the native overlay (default).",
+    )
+    test_parser.add_argument("--setup-username", default="admin", help="Local account username (login_mode=local)")
+    test_parser.add_argument("--setup-password", default="qa_test_password_12345", help="Local account password (login_mode=local)")
     test_parser.add_argument("--llm-key", help="LLM API key for setup wizard")
     test_parser.add_argument(
         "--llm-key-file",

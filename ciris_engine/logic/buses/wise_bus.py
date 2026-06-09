@@ -36,6 +36,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Stewardship-tier cache freshness (D07 / CIRISAgent#810). The tier gates
+# community-moderation capability checks; caching it forever meant a privilege
+# escalation/revocation didn't take effect until process restart. A short TTL
+# re-resolves per-action-ish (config lookup is cheap; memory search only on
+# config miss) while bounding the privilege-lag window to this many seconds.
+_AGENT_TIER_TTL_SECONDS = 60.0
+
 
 class WiseBus(BaseBus[WiseAuthorityService]):
     """
@@ -59,7 +66,8 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         super().__init__(service_type=ServiceType.WISE_AUTHORITY, service_registry=service_registry)
         self._time_service = time_service
         self._start_time = time_service.now() if time_service else None
-        self._agent_tier: Optional[int] = None  # Cached agent tier
+        self._agent_tier: Optional[int] = None  # Cached agent tier (TTL-bounded, see _AGENT_TIER_TTL_SECONDS)
+        self._agent_tier_fetched_at: Optional[Any] = None  # datetime of last tier resolve
 
         # Metrics tracking
         self._requests_count = 0
@@ -121,28 +129,38 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         Returns:
             Agent tier level (1-5), defaults to 1 if not found
+
+        The resolved tier is cached for _AGENT_TIER_TTL_SECONDS so a privilege
+        escalation/revocation propagates without a process restart (D07 /
+        CIRISAgent#810) while keeping the per-call cost near zero on the hot path.
         """
+        now = self._time_service.now() if self._time_service else None
+
+        # Serve from cache while still fresh. If we have no clock, fall back to
+        # the original cache-forever behaviour rather than re-resolving every call.
         if self._agent_tier is not None:
-            return self._agent_tier
+            if now is None or self._agent_tier_fetched_at is None:
+                return self._agent_tier
+            age = (now - self._agent_tier_fetched_at).total_seconds()
+            if age < _AGENT_TIER_TTL_SECONDS:
+                return self._agent_tier
 
-        # Try to get tier from config service
+        # Resolve: config service first (cheap), then memory/identity on miss.
         tier = await self._get_tier_from_config()
-        if tier:
-            self._agent_tier = tier
-            logger.info(f"Agent tier detected from config: {self._agent_tier}")
-            return self._agent_tier
+        source = "config"
+        if not tier:
+            tier = await self._get_tier_from_memory()
+            source = "memory/identity"
+        resolved = int(tier) if tier else 1
+        if not tier:
+            source = "default"
 
-        # Try to get tier from memory/identity
-        tier = await self._get_tier_from_memory()
-        if tier:
-            self._agent_tier = tier
-            logger.info(f"Agent identified as Tier {self._agent_tier} (stewardship)")
-            return self._agent_tier
-
-        # Default to tier 1 (standard agent)
-        self._agent_tier = 1
-        logger.info(f"Using default agent tier: {self._agent_tier}")
-        return self._agent_tier
+        # Log only on change to avoid per-TTL log spam.
+        if resolved != self._agent_tier:
+            logger.info(f"Agent tier resolved to {resolved} (source={source})")
+        self._agent_tier = resolved
+        self._agent_tier_fetched_at = now
+        return resolved
 
     async def send_deferral(self, context: DeferralContext, handler_name: str) -> bool:
         """Send a deferral to wise authority services that support the domain.

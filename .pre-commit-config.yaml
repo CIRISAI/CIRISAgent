@@ -135,6 +135,18 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      # D27: runtime code must not depend on its own .md (outside L4 attestation
+      # tree). Fires on any ciris_engine python change. CIRISAgent#807.
+      - id: no-runtime-md-reference
+        name: D27 runtime .md-reference gate
+        entry: python tools/dev/check_no_runtime_md_reference.py
+        language: python
+        pass_filenames: false
+        files: '^ciris_engine/.*\.py$'
+        always_run: false
+        stages: [pre-commit]
+        verbose: true
+
 # Configuration
 default_language_version:
   python: python3.12

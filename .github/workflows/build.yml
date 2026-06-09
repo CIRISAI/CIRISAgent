@@ -36,6 +36,11 @@ jobs:
       - name: Localization guard (reference coverage + mirror parity)
         run: python tools/dev/check_localization_sync.py
 
+      # D27: runtime code must not depend on its own .md (outside L4 attestation
+      # tree). Stdlib-only AST gate, no deps. CIRISAgent#807.
+      - name: D27 runtime .md-reference gate
+        run: python tools/dev/check_no_runtime_md_reference.py
+
       - name: Cache pip dependencies
         uses: actions/cache@v5
         with:

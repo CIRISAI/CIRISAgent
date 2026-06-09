@@ -128,6 +128,27 @@ async def collect_system_warnings(request: Request) -> tuple[bool, list[SystemWa
         except Exception as e:
             logger.debug(f"Could not check adapter reauth status: {e}")
 
+    # Hardware-trust degradation (D18 / CIRISAgent#814). CIRISVerify produces
+    # hardware_trust_degraded on the attestation result (e.g. CVE-affected SoC
+    # auto-downgrade); the agent only surfaces it. Operators previously had to
+    # read the verifier advisory list directly.
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if auth_service is not None and hasattr(auth_service, "get_cached_attestation"):
+        try:
+            attestation = auth_service.get_cached_attestation(allow_stale=True)
+            if attestation is not None and getattr(attestation, "hardware_trust_degraded", False):
+                warnings.append(
+                    SystemWarning(
+                        code="hardware_trust_degraded",
+                        message=getattr(attestation, "trust_degradation_reason", None)
+                        or "Hardware security trust is degraded",
+                        severity="warning",
+                        action_url="/settings/trust",
+                    )
+                )
+        except Exception as e:
+            logger.debug(f"Could not check hardware trust degradation: {e}")
+
     # degraded_mode is True when NO working LLM is available
     degraded_mode = not has_working_llm
     return degraded_mode, warnings

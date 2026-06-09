@@ -178,10 +178,37 @@ sealed class NavSurface(
         labelKey = "commons.layer.agent.title",
     )
 
+    // ── Surfaces folded onto scale layers below (was the standalone Federation
+    // group, deleted 2.9.6). Defined before the Layer* parents that nest them.
+
+    object Participate : NavSurface(
+        id = "participate", label = "Participate", icon = CIRISIcons.add,
+        gate = SubstrateGate.NODECORE_NEEDS,
+        labelKey = "commons.federation.participate.title",
+    )
+    object EnvironmentGraph : NavSurface(
+        // Ungated 2.9.6 — routes to the live EnvironmentInfo screen
+        // (/v1/memory?scope=environment). The cohort-overlay extension remains
+        // future work; the base environment view ships now.
+        id = "environment-graph", label = "Environment Graph", icon = CIRISIcons.snapshot,
+        labelKey = "commons.federation.environment_graph.title",
+    )
+    object Delegation : NavSurface(
+        id = "delegation", label = "Delegation", icon = CIRISIcons.send,
+        gate = SubstrateGate.PERSIST_DELEGATES_TO,
+        labelKey = "commons.federation.delegation.title",
+    )
+    object Constitutional : NavSurface(
+        id = "constitutional", label = "Constitutional", icon = CIRISIcons.instructions,
+        gate = SubstrateGate.REGISTRY_ACCORD_HOLDER,
+        labelKey = "commons.federation.constitutional.title",
+    )
+
     /** Other CIRIS occurrences sharing the operator's identity. */
     object LayerFamily : NavSurface(
         id = "layer-family", label = "Family", icon = CIRISIcons.home,
         gate = SubstrateGate.EDGE_PEERRESOLVER,
+        children = listOf(Delegation),
         labelKey = "commons.layer.family.title",
     )
 
@@ -196,6 +223,7 @@ sealed class NavSurface(
     object LayerGlobalCommunities : NavSurface(
         id = "layer-global-communities", label = "Global Communities", icon = CIRISIcons.shield,
         gate = SubstrateGate.EDGE_PEERRESOLVER,
+        children = listOf(Participate),
         labelKey = "commons.layer.global_communities.title",
     )
 
@@ -203,43 +231,8 @@ sealed class NavSurface(
     object LayerGlobalCommons : NavSurface(
         id = "layer-global-commons", label = "Global Commons", icon = CIRISIcons.globe,
         gate = SubstrateGate.EDGE_PEERRESOLVER,
+        children = listOf(EnvironmentGraph, Constitutional),
         labelKey = "commons.layer.global_commons.title",
-    )
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Federation group — 5 of 6 gated on substrate work
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    object Commons : NavSurface(
-        id = "commons", label = "The Commons", icon = CIRISIcons.globe,
-        gate = SubstrateGate.EDGE_PEERRESOLVER,
-        labelKey = "commons.federation.commons.title",
-    )
-    object Participate : NavSurface(
-        id = "participate", label = "Participate", icon = CIRISIcons.add,
-        gate = SubstrateGate.NODECORE_NEEDS,
-        labelKey = "commons.federation.participate.title",
-    )
-    object EnvironmentGraph : NavSurface(
-        // EnvironmentInfoScreen partially covers; extension is gated.
-        id = "environment-graph", label = "Environment Graph", icon = CIRISIcons.snapshot,
-        gate = SubstrateGate.LENSCORE_COHORT,
-        labelKey = "commons.federation.environment_graph.title",
-    )
-    object Delegation : NavSurface(
-        id = "delegation", label = "Delegation", icon = CIRISIcons.send,
-        gate = SubstrateGate.PERSIST_DELEGATES_TO,
-        labelKey = "commons.federation.delegation.title",
-    )
-    object TrustTopology : NavSurface(
-        id = "trust-topology", label = "Trust Topology", icon = CIRISIcons.welcome,
-        gate = SubstrateGate.EDGE_PEERRESOLVER,
-        labelKey = "commons.federation.trust_topology.title",
-    )
-    object Constitutional : NavSurface(
-        id = "constitutional", label = "Constitutional", icon = CIRISIcons.instructions,
-        gate = SubstrateGate.REGISTRY_ACCORD_HOLDER,
-        labelKey = "commons.federation.constitutional.title",
     )
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -382,20 +375,12 @@ val COMMONS_GROUP = NavGroup(
     ),
         labelKey = "nav.group.commons_layers",)
 
-val FEDERATION_GROUP = NavGroup(
-    id = "federation",
-    label = "Federation",
-    icon = CIRISIcons.globe,
-    accentHex = "#C96A38", // CIRISColors.BusTool — the federation group's identifying warm accent
-    surfaces = listOf(
-        NavSurface.Commons,
-        NavSurface.Participate,
-        NavSurface.EnvironmentGraph,
-        NavSurface.Delegation,
-        NavSurface.TrustTopology,
-        NavSurface.Constitutional,
-    ),
-        labelKey = "nav.group.federation",)
+// FEDERATION_GROUP deleted 2.9.6 — it duplicated COMMONS_GROUP (same domain,
+// same accent/icon, sliced by feature instead of by scale). Its surfaces folded
+// onto the scale layers: Participate → Global Communities, Delegation → Family,
+// EnvironmentGraph + Constitutional → Global Commons (as children). "The Commons"
+// (redundant with LayerGlobalCommons) and "Trust Topology" (subsumed by the
+// per-scope Trust sections + NetworkTrustGraph) were removed entirely.
 
 val CLIENT_GROUP = NavGroup(
     id = "client",
@@ -407,8 +392,9 @@ val CLIENT_GROUP = NavGroup(
     ),
         labelKey = "nav.group.client",)
 
-/** All groups in display order. Commons group inserted between Manage and Federation. */
-val EPISTEMIC_NAV_GROUPS = listOf(AGENT_GROUP, MANAGE_GROUP, COMMONS_GROUP, FEDERATION_GROUP, CLIENT_GROUP)
+/** All groups in display order. The scale-organized Commons group absorbs what
+ *  used to be the separate Federation group (deleted 2.9.6). */
+val EPISTEMIC_NAV_GROUPS = listOf(AGENT_GROUP, MANAGE_GROUP, COMMONS_GROUP, CLIENT_GROUP)
 
 /**
  * Walk the entire surface tree (depth-first) — used by routers needing the

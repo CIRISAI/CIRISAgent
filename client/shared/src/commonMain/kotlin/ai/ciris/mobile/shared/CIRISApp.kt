@@ -3078,11 +3078,6 @@ fun CIRISApp(
                     onIssueClick = { url -> uriHandler.openUri(url) },
                 )
             }
-            Screen.Commons -> {
-                ai.ciris.mobile.shared.ui.screens.federation.CommonsScreen(
-                    onIssueClick = { url -> uriHandler.openUri(url) },
-                )
-            }
             Screen.Participate -> {
                 ai.ciris.mobile.shared.ui.screens.federation.ParticipateScreen(
                     onIssueClick = { url -> uriHandler.openUri(url) },
@@ -3090,11 +3085,6 @@ fun CIRISApp(
             }
             Screen.Delegation -> {
                 ai.ciris.mobile.shared.ui.screens.federation.DelegationScreen(
-                    onIssueClick = { url -> uriHandler.openUri(url) },
-                )
-            }
-            Screen.TrustTopology -> {
-                ai.ciris.mobile.shared.ui.screens.federation.TrustTopologyScreen(
                     onIssueClick = { url -> uriHandler.openUri(url) },
                 )
             }
@@ -3878,10 +3868,8 @@ private sealed class Screen {
     // HealthReputation ships with a real card (CellVizState-backed).
     // The other six are Coming Soon placeholders pinned to their substrate issue.
     object HealthReputation : Screen()
-    object Commons : Screen()
     object Participate : Screen()
     object Delegation : Screen()
-    object TrustTopology : Screen()
     object Constitutional : Screen()
     object AgentsList : Screen()
     object Network : Screen()
@@ -3971,11 +3959,9 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.Trust -> ai.ciris.mobile.shared.ui.nav.NavSurface.Trust
     Screen.Billing -> ai.ciris.mobile.shared.ui.nav.NavSurface.Billing
     Screen.Wallet -> ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet
-    Screen.Commons -> ai.ciris.mobile.shared.ui.nav.NavSurface.Commons
     Screen.Participate -> ai.ciris.mobile.shared.ui.nav.NavSurface.Participate
     Screen.EnvironmentInfo -> ai.ciris.mobile.shared.ui.nav.NavSurface.EnvironmentGraph
     Screen.Delegation -> ai.ciris.mobile.shared.ui.nav.NavSurface.Delegation
-    Screen.TrustTopology -> ai.ciris.mobile.shared.ui.nav.NavSurface.TrustTopology
     Screen.Constitutional -> ai.ciris.mobile.shared.ui.nav.NavSurface.Constitutional
     Screen.AgentsList -> ai.ciris.mobile.shared.ui.nav.NavSurface.AgentsList
     Screen.VizSettings -> ai.ciris.mobile.shared.ui.nav.NavSurface.ClientInterface
@@ -4021,11 +4007,9 @@ private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen
     ai.ciris.mobile.shared.ui.nav.NavSurface.Trust -> Screen.Trust
     ai.ciris.mobile.shared.ui.nav.NavSurface.Billing -> Screen.Billing
     ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet -> Screen.Wallet
-    ai.ciris.mobile.shared.ui.nav.NavSurface.Commons -> Screen.Commons
     ai.ciris.mobile.shared.ui.nav.NavSurface.Participate -> Screen.Participate
     ai.ciris.mobile.shared.ui.nav.NavSurface.EnvironmentGraph -> Screen.EnvironmentInfo
     ai.ciris.mobile.shared.ui.nav.NavSurface.Delegation -> Screen.Delegation
-    ai.ciris.mobile.shared.ui.nav.NavSurface.TrustTopology -> Screen.TrustTopology
     ai.ciris.mobile.shared.ui.nav.NavSurface.Constitutional -> Screen.Constitutional
     ai.ciris.mobile.shared.ui.nav.NavSurface.AgentsList -> Screen.AgentsList
     ai.ciris.mobile.shared.ui.nav.NavSurface.ClientInterface -> Screen.VizSettings

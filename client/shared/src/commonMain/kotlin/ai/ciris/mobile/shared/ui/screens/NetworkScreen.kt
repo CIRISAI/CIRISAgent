@@ -64,12 +64,9 @@ fun NetworkScreen(
 
     LaunchedEffect(Unit) {
         viewModel.loadAgentMode()
-        // Seed federation address from the existing mock until Edge 1.0 wires
-        // up a real signer_key_id pymethod. The card renders the placeholder
-        // until the real value arrives.
-        if (federationAddress == null) {
-            viewModel.setFederationAddress(MOCK_NETWORK_SNAPSHOT.localIdentity.keyId)
-        }
+        // No federation address is seeded — the real signer_key_id arrives when
+        // Edge 1.0 wires its endpoint; until then the identity card shows the
+        // honest "awaiting Edge" placeholder rather than a fabricated key.
     }
 
     // Pending-mode confirmation dialog state — apply mode change on confirm.
@@ -225,12 +222,11 @@ private fun IdentityCard(address: String?) {
     val clipboardManager = LocalClipboardManager.current
     // Always compose AddressRow so its `testable("text_network_identity_key")`
     // + `testableClickable("btn_network_identity_copy")` modifiers fire
-    // `onGloballyPositioned` on first paint. Falling back to the mock keyId
-    // avoids a transient race where the QA walk-test snapshots the hub
-    // before the LaunchedEffect-seeded address propagates through the
-    // StateFlow. Edge 1.0 wires the real signer_key_id.
-    val rendered: String = address?.takeIf { it.isNotBlank() }
-        ?: MOCK_NETWORK_SNAPSHOT.localIdentity.keyId
+    // `onGloballyPositioned` on first paint. When no real signer_key_id is
+    // available yet (Edge 1.0 wires it), render the honest "—" placeholder —
+    // the row still composes so the walk-test contract holds, but we never
+    // show a fabricated key.
+    val rendered: String = address?.takeIf { it.isNotBlank() } ?: "—"
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -644,36 +640,6 @@ private fun humanGiB(bytes: Long): String {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Mock data — kept here for the identity card seed value until Edge 1.0 wires
-// in real PyEdge.signer_key_id() FFI. The NetworkSnapshot mock used by the
-// prior tabbed scaffold lives in `models/NetworkSnapshot.kt`.
-// ═══════════════════════════════════════════════════════════════════════════
-
-internal val MOCK_NETWORK_SNAPSHOT = ai.ciris.mobile.shared.models.NetworkSnapshot(
-    localIdentity = ai.ciris.mobile.shared.models.LocalIdentity(
-        keyId = "fed1ce5b9a3c4e8d2017a4b5c6d7e8f901234567890abcdef1234567890abcdef",
-        keyIdShort = "fed1ce5b…cdef",
-        displayName = null,
-        edgeVersion = "0.9.1",
-        hardwareBacked = false,
-    ),
-    transports = emptyList(),
-    peers = emptyList(),
-    paths = emptyList(),
-    links = emptyList(),
-    blackholeList = emptyList(),
-    recentEvents = emptyList(),
-    summary = ai.ciris.mobile.shared.models.NetworkSummary(
-        transportCount = 0,
-        transportsUp = 0,
-        peerCount = 0,
-        peersReachableNow = 0,
-        trustedPeerCount = 0,
-        activeLinkCount = 0,
-        pathCount = 0,
-        blackholeCount = 0,
-        recentEventCount = 0,
-    ),
-    generatedAt = "2026-05-28T16:43:05Z",
-)
+// MOCK_NETWORK_SNAPSHOT removed 2.9.6 — the identity card no longer seeds a
+// fabricated federation key. The real signer_key_id arrives via Edge 1.0; until
+// then the card renders the honest "—" placeholder.

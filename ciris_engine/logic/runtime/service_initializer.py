@@ -968,6 +968,26 @@ This directory contains critical cryptographic keys for the CIRIS system.
             return getattr(config.services, attr_name, default)
         return default
 
+    def _resolve_llm_timeout(self, config: Any, base_url: Optional[str]) -> int:
+        """Resolve the per-call LLM timeout, accounting for local inference.
+
+        Cloud providers default to 20s so two retries across two providers fit
+        the 90s DMA budget. Local inference servers (Ollama / llama.cpp / vLLM
+        on localhost or a LAN box) are single-provider and an order of
+        magnitude slower — a small model on modest hardware can take well over
+        a minute to emit a full structured DMA response. A 20s default starves
+        them into spurious timeouts, so local URLs default to 300s instead.
+        An explicit CIRIS_LLM_TIMEOUT always wins.
+        """
+        explicit = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0"))
+        if explicit:
+            return explicit
+        effective_url = (base_url or "").lower()
+        is_local = any(x in effective_url for x in ("localhost", "127.0.0.1", "192.168.", "10.", "172.16."))
+        if is_local:
+            return int(self._get_llm_service_config_value(config, "llm_timeout_local", 300))
+        return int(self._get_llm_service_config_value(config, "llm_timeout", 20))
+
     async def _initialize_llm_services(self, config: Any, modules_to_load: Optional[List[str]] = None) -> None:
         """Initialize LLM service(s) based on configuration.
 
@@ -1070,9 +1090,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # LLM timeout - reduced default to 20s to allow failover within DMA timeout budget
         # With 90s DMA timeout: 20s × 2 retries × 2 providers = 80s < 90s
         # Can be overridden via CIRIS_LLM_TIMEOUT for slow providers
-        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
-            config, "llm_timeout", 20
-        )
+        llm_timeout = self._resolve_llm_timeout(config, base_url)
 
         # Provider-specific instructor mode defaults
         default_instructor_modes = {
@@ -1231,9 +1249,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
 
         # Use same timeout as primary LLM (20s default for failover budget)
-        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
-            config, "llm_timeout", 20
-        )
+        llm_timeout = self._resolve_llm_timeout(config, base_url)
 
         # Create config
         llm_config = OpenAIConfig(
@@ -1299,9 +1315,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         model_name = os.environ.get("CIRIS_PROXY_MODEL", "claude-sonnet-4-20250514")
 
         # Use same timeout as primary LLM
-        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
-            config, "llm_timeout", 20
-        )
+        llm_timeout = self._resolve_llm_timeout(config, base_url)
 
         llm_config = OpenAIConfig(
             base_url=base_url,

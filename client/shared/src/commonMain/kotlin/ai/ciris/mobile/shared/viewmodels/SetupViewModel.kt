@@ -174,6 +174,25 @@ class SetupViewModel(
         const val LOCAL_ON_DEVICE_DEFAULT_MODEL = "gemma-4-e2b"
 
         /**
+         * Provider ids that point at a local OpenAI-compatible Ollama
+         * server (on the device's loopback, or a LAN box reached via it).
+         * Selecting one of these in the wizard pre-fills the canonical
+         * local defaults below so the local-login path is one-tap.
+         */
+        val LOCAL_OLLAMA_PROVIDER_IDS = listOf("local", "openai_compatible")
+
+        /**
+         * Default base URL for a local Ollama server. Loopback by design:
+         * a bare local install serves here, and emulator/CI bridges
+         * (adb reverse, socat) map this onto a LAN inference box without
+         * leaking an environment-specific IP into the saved config.
+         */
+        const val LOCAL_OLLAMA_BASE_URL = "http://localhost:11434/v1"
+
+        /** Default local model — Gemma 4 e2b QAT fits an 8GB box at ~12 tok/s. */
+        const val LOCAL_OLLAMA_DEFAULT_MODEL = "gemma4:e2b-it-qat"
+
+        /**
          * Loopback base URL of the on-device OpenAI-compatible server
          * spawned by the Mobile Local LLM Python adapter. Kept in sync
          * with `MobileLocalLLMConfig.base_url()` in the Python side.
@@ -225,7 +244,24 @@ class SetupViewModel(
      * Examples: "OpenAI", "Anthropic", "Azure OpenAI", "LocalAI"
      */
     fun setLlmProvider(provider: String) {
-        _state.value = _state.value.copy(llmProvider = provider)
+        val current = _state.value
+        // Pre-fill canonical local-Ollama defaults when a local provider is
+        // chosen and the fields are still empty. Keeps the local-login path
+        // one-tap while leaving any value the user already typed untouched.
+        val isLocalOllama = provider in LOCAL_OLLAMA_PROVIDER_IDS
+        _state.value = current.copy(
+            llmProvider = provider,
+            llmBaseUrl = if (isLocalOllama && current.llmBaseUrl.isEmpty()) {
+                LOCAL_OLLAMA_BASE_URL
+            } else {
+                current.llmBaseUrl
+            },
+            llmModel = if (isLocalOllama && current.llmModel.isEmpty()) {
+                LOCAL_OLLAMA_DEFAULT_MODEL
+            } else {
+                current.llmModel
+            },
+        )
     }
 
     /**

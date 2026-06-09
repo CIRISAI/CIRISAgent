@@ -129,20 +129,6 @@ sealed class NavSurface(
         labelKey = "nav.surface.users",)
     object Adapters : NavSurface("adapters", "Adapters", CIRISIcons.adapter,
         labelKey = "nav.surface.adapters",)
-    /**
-     * Federation transport substrate — Reticulum + HTTPS + cohabitation Local.
-     * Edge data is source of truth; UI is display + content-type-aware CRUD.
-     * Lands in lockstep with CIRISEdge 1.0 / 1.1 (CIRISEdge#23–29 + the
-     * sibling ask threads referenced in NETWORK_FFI_GAPS).
-     *
-     * Phase B (2026-05-31): no longer in `MANAGE_GROUP` — folded into
-     * [LayerGlobalCommons] in `COMMONS_GROUP`. Surface object retained
-     * because `surfaceToScreen` / `screenToSurface` keep a forwarding
-     * mapping for backward compat, but the sidebar entry is gone.
-     */
-    object Network : NavSurface("network", "Network", CIRISIcons.globe,
-        labelKey = "nav.surface.network",)
-
     object Audit : NavSurface("audit", "Audit", CIRISIcons.audit,
         labelKey = "nav.surface.audit",)
     object Consent : NavSurface("consent", "Consent", CIRISIcons.lock,

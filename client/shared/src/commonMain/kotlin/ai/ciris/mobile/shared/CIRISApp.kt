@@ -3098,13 +3098,9 @@ fun CIRISApp(
                     onIssueClick = { url -> uriHandler.openUri(url) },
                 )
             }
-            // Phase B (2026-05-31): Screen.Network is now a backward-compat
-            // alias for Screen.LayerGlobalCommons — both render the federation
-            // transport hub. User-facing path is Screen.LayerGlobalCommons via
-            // the Commons sidebar group; Screen.Network kept so any internal
-            // routing through it (deep links, federation sub-screen back-nav
-            // pre-Phase-B) still lands somewhere coherent.
-            Screen.Network,
+            // The federation transport hub. Reached via the Global Commons
+            // layer in the Commons sidebar group; federation sub-screens
+            // back-nav here.
             Screen.LayerGlobalCommons -> {
                 ai.ciris.mobile.shared.ui.screens.NetworkScreen(
                     viewModel = networkViewModel,
@@ -3872,7 +3868,6 @@ private sealed class Screen {
     object Delegation : Screen()
     object Constitutional : Screen()
     object AgentsList : Screen()
-    object Network : Screen()
 
     // 2.9.4 — Network hub federation sub-screens. Each is a ComingSoonScreen
     // wrapper pinned to the Edge PeerResolver substrate issue until Edge 1.0
@@ -3939,9 +3934,8 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.HealthReputation -> ai.ciris.mobile.shared.ui.nav.NavSurface.HealthReputation
     Screen.Users -> ai.ciris.mobile.shared.ui.nav.NavSurface.Users
     Screen.Adapters -> ai.ciris.mobile.shared.ui.nav.NavSurface.Adapters
-    // Phase B (2026-05-31): Screen.Network + federation sub-screens highlight
-    // LayerGlobalCommons in the sidebar (the new home of the federation hub).
-    Screen.Network -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons
+    // Federation sub-screens highlight LayerGlobalCommons in the sidebar
+    // (the home of the federation hub).
     Screen.NetworkIdentity,
     Screen.NetworkMap,
     Screen.NetworkTrustGraph,
@@ -3996,11 +3990,6 @@ private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen
     ai.ciris.mobile.shared.ui.nav.NavSurface.HealthReputation -> Screen.HealthReputation
     ai.ciris.mobile.shared.ui.nav.NavSurface.Users -> Screen.Users
     ai.ciris.mobile.shared.ui.nav.NavSurface.Adapters -> Screen.Adapters
-    // Phase B (2026-05-31): NavSurface.Network forwards to LayerGlobalCommons.
-    // The Network surface object is retained for backward compat (walk-tests +
-    // any caller that still hard-references it), but it no longer appears in
-    // any sidebar group — the user-facing path is LayerGlobalCommons.
-    ai.ciris.mobile.shared.ui.nav.NavSurface.Network -> Screen.LayerGlobalCommons
     ai.ciris.mobile.shared.ui.nav.NavSurface.Data -> Screen.DataManagement
     ai.ciris.mobile.shared.ui.nav.NavSurface.Audit -> Screen.Audit
     ai.ciris.mobile.shared.ui.nav.NavSurface.Consent -> Screen.Consent

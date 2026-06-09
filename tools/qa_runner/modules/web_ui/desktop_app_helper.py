@@ -494,11 +494,9 @@ class DesktopAppHelper:
         # Sidebar tags follow `nav_epistemic_<slug>` where slug = surface id
         # with hyphens normalized to underscores.
         menu_items = {
-            # Sidebar-driven (2.9.4 EpistemicSidebar)
-            # Phase B (2026-05-31): "Network" alias preserved for existing
-            # walk-tests; it now resolves to the LayerGlobalCommons surface
-            # under the COMMONS_GROUP.
-            "Network": "nav_epistemic_layer_global_commons",
+            # Sidebar-driven (2.9.4 EpistemicSidebar). The federation transport
+            # hub is the Global Commons layer in the Commons group (2.9.6 deleted
+            # the separate Network/Federation surfaces; this is the canonical name).
             "Global Commons": "nav_epistemic_layer_global_commons",
             # Legacy menu-driven
             "Adapters": "menu_adapters",
@@ -524,10 +522,11 @@ class DesktopAppHelper:
             # row isn't visible yet, expand its group first via the
             # nav_group_<id> header (also a testableClickable).
             screen_groups = {
-                "Network": "nav_group_manage",
+                # Global Commons lives in the Commons group (id "commons-layers").
+                "Global Commons": "nav_group_commons-layers",
             }
             screen_roots = {
-                "Network": "screen_network_hub",
+                "Global Commons": "screen_network_hub",
             }
             group_tag = screen_groups.get(screen_name)
             root_tag = screen_roots.get(screen_name)

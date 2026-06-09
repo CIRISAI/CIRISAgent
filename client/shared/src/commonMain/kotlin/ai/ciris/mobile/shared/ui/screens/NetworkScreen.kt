@@ -64,9 +64,10 @@ fun NetworkScreen(
 
     LaunchedEffect(Unit) {
         viewModel.loadAgentMode()
-        // No federation address is seeded — the real signer_key_id arrives when
-        // Edge 1.0 wires its endpoint; until then the identity card shows the
-        // honest "awaiting Edge" placeholder rather than a fabricated key.
+        // Fetch the real federation identity (signer_key_id) from Edge. If Edge
+        // is degraded/unavailable the address stays null and the card shows "—"
+        // — never a fabricated key.
+        viewModel.loadFederationIdentity()
     }
 
     // Pending-mode confirmation dialog state — apply mode change on confirm.

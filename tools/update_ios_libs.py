@@ -39,18 +39,19 @@ IOS_RESOURCES_DIR = IOS_APP_DIR / "Resources"
 @dataclass
 class IOSLib:
     """Definition of an iOS native library."""
-    name: str                    # e.g. "verify", "persist"
-    github_repo: str             # e.g. "CIRISAI/CIRISVerify"
-    pypi_package: str            # e.g. "ciris-verify"
-    framework_name: str          # e.g. "CIRISVerify"
-    ffi_lib_name: str            # e.g. "libciris_verify_ffi"
-    tarball_prefix: str          # e.g. "ciris-verify"
+
+    name: str  # e.g. "verify", "persist"
+    github_repo: str  # e.g. "CIRISAI/CIRISVerify"
+    pypi_package: str  # e.g. "ciris-verify"
+    framework_name: str  # e.g. "CIRISVerify"
+    ffi_lib_name: str  # e.g. "libciris_verify_ffi"
+    tarball_prefix: str  # e.g. "ciris-verify"
     # Paths within the iOS tarball
-    device_dir: str              # e.g. "ios-device" or "ios/aarch64-apple-ios"
-    simulator_dir: str           # e.g. "ios-simulator" or "ios/aarch64-apple-ios-sim"
-    dylib_filename: str          # e.g. "libciris_verify_ffi.dylib" or "libciris_persist.dylib"
+    device_dir: str  # e.g. "ios-device" or "ios/aarch64-apple-ios"
+    simulator_dir: str  # e.g. "ios-simulator" or "ios/aarch64-apple-ios-sim"
+    dylib_filename: str  # e.g. "libciris_verify_ffi.dylib" or "libciris_persist.dylib"
     # Python bindings location
-    bindings_package: str        # e.g. "ciris_verify"
+    bindings_package: str  # e.g. "ciris_verify"
     # PyO3 modules load via Python import (app_packages_native + .fwork redirect)
     # ctypes FFI libs load via xcframework embedding
     is_pyo3: bool = False
@@ -140,8 +141,7 @@ def download_ios_tarball(lib: IOSLib, version: str, dest_dir: Path) -> Optional[
     for pattern in patterns:
         print(f"  Trying {pattern}...")
         result = run_cmd(
-            ["gh", "release", "download", tag, "--repo", lib.github_repo,
-             "--pattern", pattern, "--dir", str(dest_dir)],
+            ["gh", "release", "download", tag, "--repo", lib.github_repo, "--pattern", pattern, "--dir", str(dest_dir)],
             check=False,
         )
         for f in dest_dir.iterdir():
@@ -149,6 +149,53 @@ def download_ios_tarball(lib: IOSLib, version: str, dest_dir: Path) -> Optional[
                 print(f"  Downloaded: {f.name}")
                 return f
     return None
+
+
+_PLIST_SHORT_VERSION_RE = re.compile(
+    r"^(?P<indent>[ \t]*)<key>CFBundleShortVersionString</key><string>(?P<v>[^<]+)</string>[ \t]*$",
+    re.MULTILINE,
+)
+
+
+def repair_xcframework_info_plists() -> int:
+    """Idempotently add a missing CFBundleVersion key to every XCFramework's
+    inner framework Info.plist under client/iosApp/Frameworks/.
+
+    Apple App Store validation (error 90056) requires every framework bundle
+    Info.plist to carry both CFBundleShortVersionString AND CFBundleVersion.
+    This script's plist template historically wrote only the short string, so
+    refreshed XCFrameworks (CIRISVerify in particular) shipped invalid and
+    blocked App Store / TestFlight uploads. The template was fixed in this
+    same commit; this function repairs any already-checked-in artifacts so a
+    single tool run produces a fully-correct tree.
+
+    Behavior: when a plist has CFBundleShortVersionString but no
+    CFBundleVersion, insert a CFBundleVersion line with the same value
+    immediately after the short-version line. No-op when CFBundleVersion is
+    already present (or when there is no short-version string to mirror).
+    Returns the number of plists modified.
+    """
+    if not IOS_FRAMEWORKS_DIR.exists():
+        return 0
+    patched = 0
+    for info_plist in sorted(IOS_FRAMEWORKS_DIR.glob("*.xcframework/*/*.framework/Info.plist")):
+        text = info_plist.read_text(encoding="utf-8")
+        if "<key>CFBundleVersion</key>" in text:
+            continue
+        m = _PLIST_SHORT_VERSION_RE.search(text)
+        if not m:
+            continue
+        new_line = f"{m['indent']}<key>CFBundleVersion</key><string>{m['v']}</string>"
+        new_text = _PLIST_SHORT_VERSION_RE.sub(
+            lambda mm: mm.group(0) + "\n" + new_line,
+            text,
+            count=1,
+        )
+        info_plist.write_text(new_text, encoding="utf-8")
+        rel = info_plist.relative_to(REPO_ROOT)
+        print(f"  REPAIRED {rel}: added CFBundleVersion={m['v']}")
+        patched += 1
+    return patched
 
 
 def build_xcframework(lib: IOSLib, extract_dir: Path, version: str) -> bool:
@@ -200,6 +247,7 @@ def build_xcframework(lib: IOSLib, extract_dir: Path, version: str) -> bool:
     <key>CFBundleIdentifier</key><string>ai.ciris.{lib.name}</string>
     <key>CFBundlePackageType</key><string>FMWK</string>
     <key>CFBundleShortVersionString</key><string>{version}</string>
+    <key>CFBundleVersion</key><string>{version}</string>
     <key>MinimumOSVersion</key><string>16.0</string>
     <key>CFBundleSupportedPlatforms</key>
     <array><string>{platform}</string></array>
@@ -306,8 +354,7 @@ def update_python_bindings(lib: IOSLib, version: str) -> bool:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
         result = run_cmd(
-            [sys.executable, "-m", "pip", "download",
-             f"{lib.pypi_package}=={version}", "--no-deps", "-d", str(tmpdir)],
+            [sys.executable, "-m", "pip", "download", f"{lib.pypi_package}=={version}", "--no-deps", "-d", str(tmpdir)],
             check=False,
         )
 
@@ -353,7 +400,14 @@ def update_version_string(lib: IOSLib, version: str) -> None:
             print(f"  Updated __version__ in {agent_init.relative_to(REPO_ROOT)}")
 
     # iOS Resources copy
-    ios_init = IOS_RESOURCES_DIR / "app" / "ciris_adapters" / (lib.adapter_name or lib.bindings_package) / "ffi_bindings" / "__init__.py"
+    ios_init = (
+        IOS_RESOURCES_DIR
+        / "app"
+        / "ciris_adapters"
+        / (lib.adapter_name or lib.bindings_package)
+        / "ffi_bindings"
+        / "__init__.py"
+    )
     if ios_init.exists():
         content = ios_init.read_text()
         new_content = re.sub(r'__version__\s*=\s*"[^"]+"', f'__version__ = "{version}"', content)
@@ -451,11 +505,30 @@ def main():
     parser.add_argument("--lib", choices=list(LIBS.keys()), help="Update a specific library")
     parser.add_argument("version", nargs="?", help="Version to update to (default: from requirements.txt)")
     parser.add_argument("--rebuild-zip-only", action="store_true", help="Only rebuild Resources.zip")
+    parser.add_argument(
+        "--repair-info-plists",
+        action="store_true",
+        help="Only repair missing CFBundleVersion keys in checked-in XCFramework Info.plists, then exit",
+    )
     parser.add_argument("--skip-checksums", action="store_true", help="Skip checksum verification")
     args = parser.parse_args()
 
+    if args.repair_info_plists:
+        n = repair_xcframework_info_plists()
+        print(
+            f"\n  Repaired {n} Info.plist(s)" if n else "\n  All XCFramework Info.plists already have CFBundleVersion"
+        )
+        return
+
+    # Always run the idempotent Info.plist repair before any download/build work
+    # so a checked-in artifact missing CFBundleVersion gets fixed even when the
+    # caller doesn't think to ask. App Store error 90056 is hard to recover from
+    # late in the upload flow.
+    repair_xcframework_info_plists()
+
     if args.rebuild_zip_only:
         import os
+
         os.chdir(IOS_RESOURCES_DIR)
         rebuild_resources_zip()
         return
@@ -482,13 +555,14 @@ def main():
 
     # Rebuild zip
     import os
+
     os.chdir(IOS_RESOURCES_DIR)
     rebuild_resources_zip()
 
     # Verify
     print(f"\nVerifying bundled binaries...")
     all_ok = True
-    for name, lib in ([(args.lib, LIBS[args.lib])] if args.lib else LIBS.items()):
+    for name, lib in [(args.lib, LIBS[args.lib])] if args.lib else LIBS.items():
         version = args.version or get_pinned_version(lib.pypi_package)
         if version and not verify_dylib_version(lib, version):
             all_ok = False

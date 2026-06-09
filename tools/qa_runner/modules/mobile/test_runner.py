@@ -443,6 +443,7 @@ class MobileTestRunner:
             "login_mode": self.config.login_mode,
             "setup_username": self.config.setup_username,
             "setup_password": self.config.setup_password,
+            "clear_data": self.config.clear_data,
             "llm_provider": self.config.llm_provider,
             "llm_api_key": self.config.llm_api_key,
             "test_message": self.config.test_message,

@@ -254,9 +254,15 @@ def test_app_launch(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport
         adb.force_stop_app(CIRISAppConfig.PACKAGE)
         time.sleep(1)
 
-        print("  [2/5] Clearing app data...")
-        adb.clear_app_data(CIRISAppConfig.PACKAGE)
-        time.sleep(1)
+        # Honor --no-clear: clearing app data wipes the extracted Chaquopy Python
+        # bundle, and on a storage-constrained device re-extraction on relaunch
+        # can fail (app crashes back to home). Only clear when explicitly asked.
+        if config.get("clear_data", True):
+            print("  [2/5] Clearing app data...")
+            adb.clear_app_data(CIRISAppConfig.PACKAGE)
+            time.sleep(1)
+        else:
+            print("  [2/5] Skipping data clear (clear_data=False)")
 
         print("  [3/5] Launching app...")
         success = adb.launch_app(CIRISAppConfig.PACKAGE, CIRISAppConfig.MAIN_ACTIVITY)
@@ -273,8 +279,11 @@ def test_app_launch(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport
         # The app shows "CIRIS" splash then transitions to Login
         time.sleep(5)  # Initial wait for Python init
 
-        # Wait for login screen (up to 60 seconds for Python startup)
-        element = ui.wait_for_text(CIRISAppConfig.TEXT_SIGN_IN_GOOGLE, timeout=CIRISAppConfig.TIMEOUT_APP_LAUNCH)
+        # Wait for the Login screen — match on Local Login (always present, and
+        # the path local-login mode uses) OR the Google button.
+        element = ui.wait_for_text(
+            CIRISAppConfig.TEXT_LOCAL_LOGIN, timeout=CIRISAppConfig.TIMEOUT_APP_LAUNCH
+        ) or ui.wait_for_text(CIRISAppConfig.TEXT_SIGN_IN_GOOGLE, timeout=5)
 
         if not element:
             # Take screenshot for debugging

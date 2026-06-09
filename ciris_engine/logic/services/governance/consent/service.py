@@ -43,6 +43,7 @@ from ciris_engine.schemas.types import JSONDict
 
 # Import from new modules
 from .air import ArtificialInteractionReminder
+from .attestation import emit_consent_grant, emit_consent_revocation
 from .decay import DecayProtocolManager
 from .exceptions import ConsentNotFoundError, ConsentValidationError
 from .metrics import ConsentMetricsCollector
@@ -415,6 +416,11 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Update cache
         self._consent_cache[new_status.user_id] = new_status
 
+        # CEG-native fold (#869): dual-write the consent state as a local-tier
+        # CEG attestation. Best-effort + flag-gated — never breaks the consent
+        # write path. No-op unless CIRIS_CONSENT_CEG_ATTESTATIONS is set.
+        emit_consent_grant(new_status)
+
     async def update_consent(
         self, user_id: str, stream: ConsentStream, categories: List[ConsentCategory], reason: Optional[str] = None
     ) -> ConsentStatus:
@@ -525,6 +531,10 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Remove from cache (decay manager handles persistence)
         if user_id in self._consent_cache:
             del self._consent_cache[user_id]
+
+        # CEG-native fold (#869): emit + promote a revocation attestation so the
+        # opt-out is federation-announceable. Best-effort + flag-gated.
+        emit_consent_revocation(user_id, reason)
 
         return decay
 

@@ -99,9 +99,12 @@ class TestWiseBusProhibitions:
 
     @pytest.fixture
     def mock_time_service(self):
-        """Create a mock time service."""
+        """Create a mock time service. now() returns a real datetime per
+        TimeServiceProtocol (the tier TTL cache subtracts datetimes)."""
+        from datetime import datetime, timezone
+
         time_service = MagicMock()
-        time_service.now.return_value = "2024-01-01T00:00:00Z"
+        time_service.now.return_value = datetime(2024, 1, 1, tzinfo=timezone.utc)
         return time_service
 
     @pytest.fixture

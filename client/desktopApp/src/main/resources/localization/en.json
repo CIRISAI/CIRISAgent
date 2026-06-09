@@ -1834,7 +1834,16 @@
     "login_wrong_account_body": "{owner}\n\nSign in with the device owner's account, or reset the device to start over.",
     "login_wrong_account_body_generic": "This device belongs to a different account.",
     "login_choose_different_account": "Use a different account",
-    "status_ready": "Ready"
+    "status_ready": "Ready",
+    "data_community_trust_title": "Community & Trust",
+    "data_community_label": "Community",
+    "data_community_canonical": "CIRIS Community (ciris-canonical)",
+    "data_community_peer_label": "Peer trust",
+    "data_community_trusted": "Trusted",
+    "data_community_untrusted": "Not yet trusted",
+    "data_community_pending": "Federation pending — becomes a live trust object when the CIRIS community comes online.",
+    "data_community_consent_active": "Your consent is active — sharing with the CIRIS community.",
+    "data_community_consent_paused": "Paused — not currently sharing."
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",

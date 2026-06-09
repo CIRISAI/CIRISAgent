@@ -56,6 +56,12 @@ class DataManagementViewModel(
     private val _accordSettings = MutableStateFlow<AccordSettingsData?>(null)
     val accordSettings: StateFlow<AccordSettingsData?> = _accordSettings.asStateFlow()
 
+    // The canonical CIRIS community peer — the directed counterparty of the
+    // traces-consent object. Null until the lens federates as a peer
+    // (lenscore 1.0); the card renders a graceful "federation pending" state.
+    private val _communityPeer = MutableStateFlow<ai.ciris.mobile.shared.models.federation.LocalPeerState?>(null)
+    val communityPeer: StateFlow<ai.ciris.mobile.shared.models.federation.LocalPeerState?> = _communityPeer.asStateFlow()
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -119,6 +125,17 @@ class DataManagementViewModel(
                     _accordSettings.value = null
                     logWarn(method, "Accord settings not available (adapter not loaded?): ${e.message}")
                     logWarn(method, "Exception type: ${e::class.simpleName}, full: $e")
+                }
+
+                // Organic surface: the canonical CIRIS community peer (the directed
+                // counterparty for the traces-consent object). Best-effort — empty
+                // until the lens federates as a peer (lenscore 1.0).
+                try {
+                    val peers = apiClient.listFederationPeers(canonicalOnly = true)
+                    _communityPeer.value = peers.peers.firstOrNull { it.canonical }
+                } catch (e: Exception) {
+                    _communityPeer.value = null
+                    logDebug(method, "Canonical community peer not available yet: ${e.message}")
                 }
 
             } catch (e: Exception) {

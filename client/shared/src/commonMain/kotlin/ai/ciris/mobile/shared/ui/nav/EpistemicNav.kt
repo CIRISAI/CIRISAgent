@@ -129,6 +129,23 @@ sealed class NavSurface(
         labelKey = "nav.surface.users",)
     object Adapters : NavSurface("adapters", "Adapters", CIRISIcons.adapter,
         labelKey = "nav.surface.adapters",)
+    /**
+     * Network (CIRISEdge operator view) — THIS node's local edge facts:
+     * federation signer_key_id, agent mode (client/proxy/server), disk budget,
+     * data dir. Distinct from the Commons → Global Commons federation/peers
+     * SOCIAL view; this is the operator-infra slice. Live (no gate).
+     */
+    object NetworkOps : NavSurface("network-ops", "Network", CIRISIcons.bus,
+        labelKey = "nav.surface.network_ops",)
+
+    /**
+     * Storage (CIRISPersist operator view) — the graph store + on-disk facts:
+     * total nodes, nodes by type/scope, recent activity, storage location.
+     * Live (no gate).
+     */
+    object Storage : NavSurface("storage", "Storage", CIRISIcons.pkg,
+        labelKey = "nav.surface.storage",)
+
     object Audit : NavSurface("audit", "Audit", CIRISIcons.audit,
         labelKey = "nav.surface.audit",)
     object Consent : NavSurface("consent", "Consent", CIRISIcons.lock,
@@ -332,11 +349,11 @@ val MANAGE_GROUP = NavGroup(
         NavSurface.HealthReputation,
         NavSurface.Users,
         NavSurface.Adapters,
-        // Phase B (2026-05-31): NavSurface.Network removed — federation
-        // transport substrate now lives under COMMONS_GROUP as
-        // NavSurface.LayerGlobalCommons.
+        // The substrate operator-infra trio: Edge / Verify / Persist.
+        NavSurface.NetworkOps,      // Edge — local federation/transport facts
+        NavSurface.Trust,           // Verify — attestation ladder (Security)
+        NavSurface.Storage,         // Persist — graph store + disk facts
         NavSurface.Data,            // + Audit, Consent
-        NavSurface.Trust,
         NavSurface.Billing,         // + Wallet
     ),
         labelKey = "nav.group.manage",)

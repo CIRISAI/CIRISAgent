@@ -3078,6 +3078,17 @@ fun CIRISApp(
                     onIssueClick = { url -> uriHandler.openUri(url) },
                 )
             }
+            Screen.NetworkOps -> {
+                ai.ciris.mobile.shared.ui.screens.NetworkOpsScreen(
+                    viewModel = networkViewModel,
+                    onOpenFederationHub = { currentScreen = Screen.LayerGlobalCommons },
+                )
+            }
+            Screen.Storage -> {
+                ai.ciris.mobile.shared.ui.screens.StorageScreen(
+                    apiClient = apiClient,
+                )
+            }
             Screen.Participate -> {
                 ai.ciris.mobile.shared.ui.screens.federation.ParticipateScreen(
                     onIssueClick = { url -> uriHandler.openUri(url) },
@@ -3847,6 +3858,8 @@ private sealed class Screen {
     object Runtime : Screen()
     object Users : Screen()
     object Trust : Screen()
+    object NetworkOps : Screen()   // Manage — CIRISEdge local op-view
+    object Storage : Screen()      // Manage — CIRISPersist graph/disk view
     object Wallet : Screen()
     object Tickets : Screen()
     object Scheduler : Screen()
@@ -3951,6 +3964,8 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.Audit -> ai.ciris.mobile.shared.ui.nav.NavSurface.Audit
     Screen.Consent -> ai.ciris.mobile.shared.ui.nav.NavSurface.Consent
     Screen.Trust -> ai.ciris.mobile.shared.ui.nav.NavSurface.Trust
+    Screen.NetworkOps -> ai.ciris.mobile.shared.ui.nav.NavSurface.NetworkOps
+    Screen.Storage -> ai.ciris.mobile.shared.ui.nav.NavSurface.Storage
     Screen.Billing -> ai.ciris.mobile.shared.ui.nav.NavSurface.Billing
     Screen.Wallet -> ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet
     Screen.Participate -> ai.ciris.mobile.shared.ui.nav.NavSurface.Participate
@@ -3994,6 +4009,8 @@ private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen
     ai.ciris.mobile.shared.ui.nav.NavSurface.Audit -> Screen.Audit
     ai.ciris.mobile.shared.ui.nav.NavSurface.Consent -> Screen.Consent
     ai.ciris.mobile.shared.ui.nav.NavSurface.Trust -> Screen.Trust
+    ai.ciris.mobile.shared.ui.nav.NavSurface.NetworkOps -> Screen.NetworkOps
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Storage -> Screen.Storage
     ai.ciris.mobile.shared.ui.nav.NavSurface.Billing -> Screen.Billing
     ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet -> Screen.Wallet
     ai.ciris.mobile.shared.ui.nav.NavSurface.Participate -> Screen.Participate

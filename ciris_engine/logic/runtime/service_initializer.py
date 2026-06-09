@@ -273,8 +273,11 @@ class ServiceInitializer:
         master_key_path = keys_dir / "secrets_master.key"
         master_key = await self._load_or_create_master_key(master_key_path)
 
-        # Create README if it doesn't exist
-        readme_path = keys_dir / "README.md"
+        # Create README if it doesn't exist. Plain-text (.txt) on purpose:
+        # runtime code paths must not emit/reference .md files (D27 — keeps
+        # runtime free of Markdown surfaces; CIRISAgent#807). Content is
+        # informational only and reads identically as .txt.
+        readme_path = keys_dir / "README.txt"
         if not readme_path.exists():
             readme_content = """# CIRIS Keys Directory
 
@@ -315,7 +318,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
 """
             async with aiofiles.open(readme_path, "w") as f:
                 await f.write(readme_content)
-            logger.info("Created .ciris_keys/README.md")
+            logger.info("Created .ciris_keys/README.txt")
 
         # Use the proper helper function to get secrets database path
         # This handles PostgreSQL URL query parameter preservation correctly

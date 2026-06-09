@@ -523,6 +523,23 @@ async def delete_lens_traces(
         local_revoked = True
         logger.info(f"Local accord consent revoked for agent {agent_id_hash} via DSAR self-service")
 
+    # CEG-native: "Revoke and Delete" is a RECANT (mistake / delete my data) — the
+    # structural primitive that triggers the DSAR deletion cascade (the lens
+    # deletion above). Emit + promote the recants attestation so the withdrawal
+    # is federation-announceable. Best-effort + flag-gated.
+    try:
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            RevocationIntent,
+            current_community_grant_id,
+            emit_community_consent_revocation,
+        )
+
+        target = current_community_grant_id()
+        if target:
+            emit_community_consent_revocation(RevocationIntent.RECANT, target, reason=deletion.reason)
+    except Exception as e:  # never break the deletion flow
+        logger.debug(f"consent-CEG: recant emit skipped: {e}")
+
     # Step 3: Audit trail
     logger.info(
         "DSAR lens deletion requested",
@@ -660,6 +677,26 @@ async def update_accord_settings(
             logger.info(f"Persisted consent={settings.consent_given} to .env file")
         except Exception as e:
             logger.warning(f"Failed to persist consent to .env: {e}")
+
+        # CEG-native consent object (#869): grant on opt-in; the Switch-off is a
+        # WITHDRAW (stop going forward, retain history) — NOT a recant/delete.
+        # Best-effort + flag-gated (no-op until the canonical community key ships).
+        try:
+            from ciris_engine.logic.services.governance.consent.attestation import (
+                RevocationIntent,
+                current_community_grant_id,
+                emit_community_consent_grant,
+                emit_community_consent_revocation,
+            )
+
+            if settings.consent_given:
+                emit_community_consent_grant()
+            else:
+                target = current_community_grant_id()
+                if target:
+                    emit_community_consent_revocation(RevocationIntent.WITHDRAW, target)
+        except Exception as e:  # never break the settings update
+            logger.debug(f"consent-CEG: accord-settings emit skipped: {e}")
 
     if settings.trace_level is not None and hasattr(adapter, "metrics_service"):
         svc = adapter.metrics_service

@@ -370,6 +370,37 @@ def build_community_structural(
     )
 
 
+def current_community_grant_id() -> Optional[str]:
+    """attestation_id of the current community-trust grant, or None.
+
+    The structural primitives (withdraws/recants/supersedes) reference this as
+    their ``target``. Reads back via ``list_attestations`` and picks the latest
+    ``scores`` row on the community-trust dimension.
+    """
+    engine = _resolve_engine()
+    key_id = _resolve_attesting_key_id()
+    if engine is None or not key_id:
+        return None
+    try:
+        import json as _json
+
+        page = _json.loads(engine.list_attestations("{}", None, 100, key_id))  # type: ignore[attr-defined]
+        rows = page.get("items", [])
+        grants = [
+            r
+            for r in rows
+            if r.get("attestation_type") == "scores"
+            and (r.get("attestation_envelope") or {}).get("dimension") == _COMMUNITY_TRUST_DIMENSION
+        ]
+        if not grants:
+            return None
+        grants.sort(key=lambda r: r.get("asserted_at", ""), reverse=True)
+        return str(grants[0].get("attestation_id"))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("consent-CEG: grant lookup failed: %s", exc)
+        return None
+
+
 def emit_community_consent_grant() -> Optional[str]:
     """Best-effort emit the directed traces-consent grant. Returns attestation_id.
 

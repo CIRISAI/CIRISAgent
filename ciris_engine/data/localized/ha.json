@@ -1829,7 +1829,12 @@
     "setup_byok_llm_desc": "Saita mai ba da AI ɗin ku. Shigar da mabuɗin API ɗin ku kuma zaɓi samfuri don fara.",
     "setup_ciris_llm_desc": "CIRIS AI yana aiki. Zaku iya saita mai ba da ku don amfani da shi ba tare da haɗin yanar gizo ba ko sirri.",
     "setup_select_provider": "Zaɓi mai bayarwa",
-    "setup_validation_select_provider": "Da fatan za a zaɓi mai ba da LLM"
+    "setup_validation_select_provider": "Da fatan za a zaɓi mai ba da LLM",
+    "login_wrong_account_title": "Asusun da bai dace ba",
+    "login_wrong_account_body": "{owner}\n\nKa shiga da asusun mai na'urar, ko ka sake saita na'urar don farawa daga farko.",
+    "login_wrong_account_body_generic": "Wannan na'urar ta wani asusu ce dabam.",
+    "login_choose_different_account": "Yi amfani da wani asusu dabam",
+    "status_ready": "A shirye"
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",
@@ -2453,5 +2458,6 @@
       "agents_list": "Wakilai",
       "client_interface": "Fuska"
     }
-  }
+  },
+  "setup_validation_select_provider": "Zaɓi mai bayar da LLM"
 }

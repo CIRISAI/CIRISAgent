@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "Konfigurieren Sie Ihren KI-Anbieter. Geben Sie Ihren API-Schlüssel ein und wählen Sie ein Modell.",
     "setup_ciris_llm_desc": "CIRIS AI ist aktiv. Konfigurieren Sie optional Ihren eigenen Anbieter für Offline-Nutzung oder Datenschutz.",
     "setup_select_provider": "Wählen Sie einen Anbieter",
-    "setup_validation_select_provider": "Bitte wählen Sie einen LLM-Anbieter"
+    "setup_validation_select_provider": "Bitte wählen Sie einen LLM-Anbieter",
+    "login_wrong_account_title": "Falsches Konto",
+    "login_wrong_account_body": "{owner}\n\nMelden Sie sich mit dem Konto des Gerätebesitzers an oder setzen Sie das Gerät zurück, um neu zu beginnen.",
+    "login_wrong_account_body_generic": "Dieses Gerät gehört zu einem anderen Konto.",
+    "login_choose_different_account": "Anderes Konto verwenden",
+    "status_ready": "Bereit"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "Agenten",
       "client_interface": "Oberfläche"
     }
-  }
+  },
+  "setup_validation_select_provider": "LLM-Anbieter auswählen"
 }

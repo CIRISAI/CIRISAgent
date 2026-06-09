@@ -1829,7 +1829,12 @@
     "setup_byok_llm_desc": "మీ AI ప్రొవైడర్‌ని కాన్ఫిగర్ చేయండి. ప్రారంభించడానికి మీ API కీని నమోదు చేసి మోడల్‌ను ఎంచుకోండి.",
     "setup_ciris_llm_desc": "CIRIS AI చురుకుగా ఉంది. ఆఫ్‌లైన్ వినియోగం లేదా గోప్యత కోసం ఐచ్ఛికంగా మీ స్వంత ప్రొవైడర్‌ని కాన్ఫిగర్ చేయండి.",
     "setup_select_provider": "ప్రొవైడర్‌ని ఎంచుకోండి",
-    "setup_validation_select_provider": "దయచేసి LLM ప్రొవైడర్‌ని ఎంచుకోండి"
+    "setup_validation_select_provider": "దయచేసి LLM ప్రొవైడర్‌ని ఎంచుకోండి",
+    "login_wrong_account_title": "తప్పు ఖాతా",
+    "login_wrong_account_body": "{owner}\n\nపరికర యజమాని ఖాతాతో సైన్ ఇన్ చేయండి, లేదా మొదటి నుండి ప్రారంభించడానికి పరికరాన్ని రీసెట్ చేయండి.",
+    "login_wrong_account_body_generic": "ఈ పరికరం వేరే ఖాతాకు చెందినది.",
+    "login_choose_different_account": "వేరే ఖాతాను ఉపయోగించండి",
+    "status_ready": "సిద్ధం"
   },
   "conscience": {
     "ponder_attempted": "నేను {action} చేయడానికి ప్రయత్నించాను",
@@ -2453,5 +2458,6 @@
       "agents_list": "ఏజెంట్లు",
       "client_interface": "ఇంటర్‌ఫేస్"
     }
-  }
+  },
+  "setup_validation_select_provider": "ఒక LLM ప్రొవైడర్‌ను ఎంచుకోండి"
 }

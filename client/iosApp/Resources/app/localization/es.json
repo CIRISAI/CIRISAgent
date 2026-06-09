@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "Configure su proveedor de IA. Ingrese su clave API y seleccione un modelo para comenzar.",
     "setup_ciris_llm_desc": "CIRIS AI está activo. Opcionalmente configure su propio proveedor para uso sin conexión o privacidad.",
     "setup_select_provider": "Seleccione un proveedor",
-    "setup_validation_select_provider": "Por favor seleccione un proveedor de LLM"
+    "setup_validation_select_provider": "Por favor seleccione un proveedor de LLM",
+    "login_wrong_account_title": "Cuenta incorrecta",
+    "login_wrong_account_body": "{owner}\n\nInicia sesión con la cuenta del propietario del dispositivo o restablece el dispositivo para empezar de nuevo.",
+    "login_wrong_account_body_generic": "Este dispositivo pertenece a otra cuenta.",
+    "login_choose_different_account": "Usar otra cuenta",
+    "status_ready": "Listo"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "Agentes",
       "client_interface": "Interfaz"
     }
-  }
+  },
+  "setup_validation_select_provider": "Selecciona un proveedor de LLM"
 }

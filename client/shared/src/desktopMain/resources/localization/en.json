@@ -1829,7 +1829,12 @@
     "settings_location": "Location",
     "settings_location_desc": "Set your city for weather and local information",
     "settings_search_city": "City",
-    "settings_search_city_hint": "Search for a city..."
+    "settings_search_city_hint": "Search for a city...",
+    "login_wrong_account_title": "Wrong account",
+    "login_wrong_account_body": "{owner}\n\nSign in with the device owner's account, or reset the device to start over.",
+    "login_wrong_account_body_generic": "This device belongs to a different account.",
+    "login_choose_different_account": "Use a different account",
+    "status_ready": "Ready"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",
@@ -2453,5 +2458,6 @@
       "agents_list": "Agents",
       "client_interface": "Interface"
     }
-  }
+  },
+  "setup_validation_select_provider": "Select an LLM provider"
 }

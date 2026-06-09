@@ -1829,7 +1829,12 @@
     "setup_byok_llm_desc": "तुमचा AI प्रदाता कॉन्फिगर करा. सुरू करण्यासाठी तुमची API की प्रविष्ट करा आणि मॉडेल निवडा.",
     "setup_ciris_llm_desc": "CIRIS AI सक्रिय आहे. ऑफलाइन वापर किंवा गोपनीयतेसाठी वैकल्पिकरित्या तुमचा स्वतःचा प्रदाता कॉन्फिगर करा.",
     "setup_select_provider": "प्रदाता निवडा",
-    "setup_validation_select_provider": "कृपया LLM प्रदाता निवडा"
+    "setup_validation_select_provider": "कृपया LLM प्रदाता निवडा",
+    "login_wrong_account_title": "चुकीचे खाते",
+    "login_wrong_account_body": "{owner}\n\nडिव्हाइस मालकाच्या खात्याने साइन इन करा, किंवा पुन्हा सुरू करण्यासाठी डिव्हाइस रीसेट करा.",
+    "login_wrong_account_body_generic": "हे डिव्हाइस दुसऱ्या खात्याचे आहे.",
+    "login_choose_different_account": "दुसरे खाते वापरा",
+    "status_ready": "तयार"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {कृतीion}",
@@ -2453,5 +2458,6 @@
       "agents_list": "एजंट",
       "client_interface": "इंटरफेस"
     }
-  }
+  },
+  "setup_validation_select_provider": "एक LLM प्रदाता निवडा"
 }

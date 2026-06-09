@@ -1830,7 +1830,12 @@
     "setup_byok_llm_desc": "আপনার AI প্রদানকারী কনফিগার করুন। শুরু করতে আপনার API কী লিখুন এবং একটি মডেল নির্বাচন করুন।",
     "setup_ciris_llm_desc": "CIRIS AI সক্রিয়। অফলাইন ব্যবহার বা গোপনীয়তার জন্য ঐচ্ছিকভাবে আপনার নিজের প্রদানকারী কনফিগার করুন।",
     "setup_select_provider": "প্রদানকারী নির্বাচন করুন",
-    "setup_validation_select_provider": "অনুগ্রহ করে একটি LLM প্রদানকারী নির্বাচন করুন"
+    "setup_validation_select_provider": "অনুগ্রহ করে একটি LLM প্রদানকারী নির্বাচন করুন",
+    "login_wrong_account_title": "ভুল অ্যাকাউন্ট",
+    "login_wrong_account_body": "{owner}\n\nডিভাইস মালিকের অ্যাকাউন্ট দিয়ে সাইন ইন করুন, অথবা আবার শুরু করতে ডিভাইস রিসেট করুন।",
+    "login_wrong_account_body_generic": "এই ডিভাইসটি অন্য একটি অ্যাকাউন্টের।",
+    "login_choose_different_account": "অন্য একটি অ্যাকাউন্ট ব্যবহার করুন",
+    "status_ready": "প্রস্তুত"
   },
   "conscience": {
     "ponder_attempted": "আমি {action} করার চেষ্টা করেছিলাম",
@@ -2454,5 +2459,6 @@
       "agents_list": "এজেন্টরা",
       "client_interface": "ইন্টারফেস"
     }
-  }
+  },
+  "setup_validation_select_provider": "একটি LLM প্রদানকারী নির্বাচন করুন"
 }

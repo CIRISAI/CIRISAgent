@@ -1829,7 +1829,12 @@
     "setup_byok_llm_desc": "กำหนดค่าผู้ให้บริการ AI ของคุณ ป้อนคีย์ API และเลือกโมเดลเพื่อเริ่มต้น",
     "setup_ciris_llm_desc": "CIRIS AI ใช้งานอยู่ กำหนดค่าผู้ให้บริการของคุณเองสำหรับการใช้งานออฟไลน์หรือความเป็นส่วนตัว",
     "setup_select_provider": "เลือกผู้ให้บริการ",
-    "setup_validation_select_provider": "กรุณาเลือกผู้ให้บริการ LLM"
+    "setup_validation_select_provider": "กรุณาเลือกผู้ให้บริการ LLM",
+    "login_wrong_account_title": "บัญชีไม่ถูกต้อง",
+    "login_wrong_account_body": "{owner}\n\nเข้าสู่ระบบด้วยบัญชีของเจ้าของอุปกรณ์ หรือรีเซ็ตอุปกรณ์เพื่อเริ่มต้นใหม่",
+    "login_wrong_account_body_generic": "อุปกรณ์นี้เป็นของบัญชีอื่น",
+    "login_choose_different_account": "ใช้บัญชีอื่น",
+    "status_ready": "พร้อม"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {กระทำion}",
@@ -2453,5 +2458,6 @@
       "agents_list": "เอเจนต์",
       "client_interface": "อินเทอร์เฟซ"
     }
-  }
+  },
+  "setup_validation_select_provider": "เลือกผู้ให้บริการ LLM"
 }

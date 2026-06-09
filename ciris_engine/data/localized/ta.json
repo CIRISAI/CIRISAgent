@@ -1829,7 +1829,12 @@
     "setup_byok_llm_desc": "உங்கள் AI வழங்குநரை கட்டமைக்கவும். தொடங்க உங்கள் API விசையை உள்ளிட்டு ஒரு மாதிரியைத் தேர்ந்தெடுக்கவும்.",
     "setup_ciris_llm_desc": "CIRIS AI செயலில் உள்ளது. ஆஃப்லைன் பயன்பாடு அல்லது தனியுரிமைக்காக விருப்பமாக உங்கள் சொந்த வழங்குநரை கட்டமைக்கலாம்.",
     "setup_select_provider": "வழங்குநரைத் தேர்ந்தெடுக்கவும்",
-    "setup_validation_select_provider": "LLM வழங்குநரைத் தேர்ந்தெடுக்கவும்"
+    "setup_validation_select_provider": "LLM வழங்குநரைத் தேர்ந்தெடுக்கவும்",
+    "login_wrong_account_title": "தவறான கணக்கு",
+    "login_wrong_account_body": "{owner}\n\nசாதன உரிமையாளரின் கணக்குடன் உள்நுழையவும், அல்லது மீண்டும் தொடங்க சாதனத்தை மீட்டமைக்கவும்.",
+    "login_wrong_account_body_generic": "இந்தச் சாதனம் வேறொரு கணக்கைச் சேர்ந்தது.",
+    "login_choose_different_account": "வேறு கணக்கைப் பயன்படுத்து",
+    "status_ready": "தயார்"
   },
   "conscience": {
     "ponder_attempted": "I முயற்சித்தது to {செயல்}",
@@ -2453,5 +2458,6 @@
       "agents_list": "முகவர்கள்",
       "client_interface": "இடைமுகம்"
     }
-  }
+  },
+  "setup_validation_select_provider": "ஒரு LLM வழங்குநரைத் தேர்ந்தெடுக்கவும்"
 }

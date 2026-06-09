@@ -1743,7 +1743,12 @@
     "setup_byok_llm_desc": "ارائه‌دهنده هوش مصنوعی خود را پیکربندی کنید. کلید API خود را وارد کنید و یک مدل را برای شروع انتخاب کنید.",
     "setup_ciris_llm_desc": "CIRIS AI فعال است. به صورت اختیاری ارائه‌دهنده خود را برای استفاده آفلاین یا حفظ حریم خصوصی پیکربندی کنید.",
     "setup_select_provider": "یک ارائه‌دهنده انتخاب کنید",
-    "setup_validation_select_provider": "لطفاً یک ارائه‌دهنده LLM انتخاب کنید"
+    "setup_validation_select_provider": "لطفاً یک ارائه‌دهنده LLM انتخاب کنید",
+    "login_wrong_account_title": "حساب اشتباه",
+    "login_wrong_account_body": "{owner}\n\nبا حساب مالک دستگاه وارد شوید، یا برای شروع دوباره دستگاه را بازنشانی کنید.",
+    "login_wrong_account_body_generic": "این دستگاه به حساب دیگری تعلق دارد.",
+    "login_choose_different_account": "از حساب دیگری استفاده کنید",
+    "status_ready": "آماده"
   },
   "prompts": {
     "dma": {
@@ -2459,5 +2464,6 @@
       "agents_list": "عوامل",
       "client_interface": "رابط"
     }
-  }
+  },
+  "setup_validation_select_provider": "یک ارائه‌دهنده LLM را انتخاب کنید"
 }

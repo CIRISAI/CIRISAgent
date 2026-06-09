@@ -1829,7 +1829,12 @@
     "setup_byok_llm_desc": "Konfigurasi penyedia AI Anda. Masukkan kunci API dan pilih model untuk memulai.",
     "setup_ciris_llm_desc": "CIRIS AI aktif. Opsional konfigurasikan penyedia Anda sendiri untuk penggunaan offline atau privasi.",
     "setup_select_provider": "Pilih penyedia",
-    "setup_validation_select_provider": "Silakan pilih penyedia LLM"
+    "setup_validation_select_provider": "Silakan pilih penyedia LLM",
+    "login_wrong_account_title": "Akun salah",
+    "login_wrong_account_body": "{owner}\n\nMasuk dengan akun pemilik perangkat, atau atur ulang perangkat untuk memulai dari awal.",
+    "login_wrong_account_body_generic": "Perangkat ini milik akun yang berbeda.",
+    "login_choose_different_account": "Gunakan akun lain",
+    "status_ready": "Siap"
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",
@@ -2453,5 +2458,6 @@
       "agents_list": "Agen",
       "client_interface": "Antarmuka"
     }
-  }
+  },
+  "setup_validation_select_provider": "Pilih penyedia LLM"
 }

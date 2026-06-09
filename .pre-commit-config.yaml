@@ -122,13 +122,15 @@ repos:
         stages: [pre-commit]
         verbose: true
 
-      # Localization sync - Blocks if language files are out of sync
+      # Localization guard - Blocks on undefined referenced keys (raw-key UI bug)
+      # and en.json mirror drift. Fires when any bundle JSON or commonMain Kotlin
+      # (the localizedString/getString call sites) changes.
       - id: localization-sync
-        name: Localization Sync Check
+        name: Localization Guard (reference coverage + mirror parity)
         entry: python tools/dev/check_localization_sync.py
         language: python
         pass_filenames: false
-        files: '^localization/.*\.json$'
+        files: '^(ciris_engine/data/localized/.*\.json|client/.*/localization/.*\.json|client/shared/src/commonMain/.*\.kt)$'
         always_run: false
         stages: [pre-commit]
         verbose: true

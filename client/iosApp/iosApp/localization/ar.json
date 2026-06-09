@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "قم بتكوين مزود الذكاء الاصطناعي الخاص بك. أدخل مفتاح API واختر نموذجًا للبدء.",
     "setup_ciris_llm_desc": "CIRIS AI نشط. يمكنك اختيارياً تكوين مزودك الخاص للاستخدام دون اتصال أو الخصوصية.",
     "setup_select_provider": "اختر مزوداً",
-    "setup_validation_select_provider": "يرجى اختيار مزود LLM"
+    "setup_validation_select_provider": "يرجى اختيار مزود LLM",
+    "login_wrong_account_title": "حساب خاطئ",
+    "login_wrong_account_body": "{owner}\n\nسجّل الدخول بحساب مالك الجهاز، أو أعد ضبط الجهاز للبدء من جديد.",
+    "login_wrong_account_body_generic": "هذا الجهاز يخص حسابًا آخر.",
+    "login_choose_different_account": "استخدام حساب آخر",
+    "status_ready": "جاهز"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "الوكلاء",
       "client_interface": "الواجهة"
     }
-  }
+  },
+  "setup_validation_select_provider": "اختر مزوّد LLM"
 }

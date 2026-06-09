@@ -2063,7 +2063,12 @@
     "setup_byok_llm_desc": "Cấu hình nhà cung cấp AI của bạn. Nhập khóa API và chọn mô hình để bắt đầu.",
     "setup_ciris_llm_desc": "CIRIS AI đang hoạt động. Tùy chọn cấu hình nhà cung cấp riêng để sử dụng ngoại tuyến hoặc bảo mật.",
     "setup_select_provider": "Chọn nhà cung cấp",
-    "setup_validation_select_provider": "Vui lòng chọn nhà cung cấp LLM"
+    "setup_validation_select_provider": "Vui lòng chọn nhà cung cấp LLM",
+    "login_wrong_account_title": "Sai tài khoản",
+    "login_wrong_account_body": "{owner}\n\nĐăng nhập bằng tài khoản của chủ thiết bị, hoặc đặt lại thiết bị để bắt đầu lại.",
+    "login_wrong_account_body_generic": "Thiết bị này thuộc về một tài khoản khác.",
+    "login_choose_different_account": "Dùng tài khoản khác",
+    "status_ready": "Sẵn sàng"
   },
   "network": {
     "title": "Mạng",
@@ -2453,5 +2458,6 @@
       "agents_list": "Tác Nhân",
       "client_interface": "Giao Diện"
     }
-  }
+  },
+  "setup_validation_select_provider": "Chọn nhà cung cấp LLM"
 }

@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "AI 제공업체를 구성합니다. API 키를 입력하고 모델을 선택하여 시작하세요.",
     "setup_ciris_llm_desc": "CIRIS AI가 활성화되었습니다. 오프라인 사용이나 개인정보 보호를 위해 자체 제공업체를 구성할 수 있습니다.",
     "setup_select_provider": "제공업체 선택",
-    "setup_validation_select_provider": "LLM 제공업체를 선택해 주세요"
+    "setup_validation_select_provider": "LLM 제공업체를 선택해 주세요",
+    "login_wrong_account_title": "잘못된 계정",
+    "login_wrong_account_body": "{owner}\n\n기기 소유자의 계정으로 로그인하거나 기기를 초기화하여 다시 시작하세요.",
+    "login_wrong_account_body_generic": "이 기기는 다른 계정에 속해 있습니다.",
+    "login_choose_different_account": "다른 계정 사용",
+    "status_ready": "준비 완료"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "에이전트 목록",
       "client_interface": "인터페이스"
     }
-  }
+  },
+  "setup_validation_select_provider": "LLM 제공업체를 선택하세요"
 }

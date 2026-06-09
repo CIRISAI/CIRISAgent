@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "AI sağlayıcınızı yapılandırın. API anahtarınızı girin ve başlamak için bir model seçin.",
     "setup_ciris_llm_desc": "CIRIS AI aktif. İsteğe bağlı olarak çevrimdışı kullanım veya gizlilik için kendi sağlayıcınızı yapılandırın.",
     "setup_select_provider": "Bir sağlayıcı seçin",
-    "setup_validation_select_provider": "Lütfen bir LLM sağlayıcısı seçin"
+    "setup_validation_select_provider": "Lütfen bir LLM sağlayıcısı seçin",
+    "login_wrong_account_title": "Yanlış hesap",
+    "login_wrong_account_body": "{owner}\n\nCihaz sahibinin hesabıyla giriş yapın veya baştan başlamak için cihazı sıfırlayın.",
+    "login_wrong_account_body_generic": "Bu cihaz farklı bir hesaba ait.",
+    "login_choose_different_account": "Farklı bir hesap kullan",
+    "status_ready": "Hazır"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "Ajanlar",
       "client_interface": "Arayüz"
     }
-  }
+  },
+  "setup_validation_select_provider": "Bir LLM sağlayıcısı seçin"
 }

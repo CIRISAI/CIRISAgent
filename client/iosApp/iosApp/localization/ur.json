@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "اپنا AI فراہم کنندہ ترتیب دیں۔ شروع کرنے کے لیے اپنی API کلید درج کریں اور ایک ماڈل منتخب کریں۔",
     "setup_ciris_llm_desc": "CIRIS AI فعال ہے۔ آف لائن استعمال یا رازداری کے لیے اختیاری طور پر اپنا فراہم کنندہ ترتیب دیں۔",
     "setup_select_provider": "فراہم کنندہ منتخب کریں",
-    "setup_validation_select_provider": "براہ کرم ایک LLM فراہم کنندہ منتخب کریں"
+    "setup_validation_select_provider": "براہ کرم ایک LLM فراہم کنندہ منتخب کریں",
+    "login_wrong_account_title": "غلط اکاؤنٹ",
+    "login_wrong_account_body": "{owner}\n\nڈیوائس مالک کے اکاؤنٹ سے سائن ان کریں، یا دوبارہ شروع کرنے کے لیے ڈیوائس ری سیٹ کریں۔",
+    "login_wrong_account_body_generic": "یہ ڈیوائس کسی دوسرے اکاؤنٹ سے تعلق رکھتی ہے۔",
+    "login_choose_different_account": "کوئی دوسرا اکاؤنٹ استعمال کریں",
+    "status_ready": "تیار"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "ایجنٹ",
       "client_interface": "انٹرفیس"
     }
-  }
+  },
+  "setup_validation_select_provider": "ایک LLM فراہم کنندہ منتخب کریں"
 }

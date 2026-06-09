@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "AIプロバイダーを設定します。APIキーを入力してモデルを選択してください。",
     "setup_ciris_llm_desc": "CIRIS AIがアクティブです。オフライン使用やプライバシーのために独自のプロバイダーを設定できます。",
     "setup_select_provider": "プロバイダーを選択",
-    "setup_validation_select_provider": "LLMプロバイダーを選択してください"
+    "setup_validation_select_provider": "LLMプロバイダーを選択してください",
+    "login_wrong_account_title": "アカウントが違います",
+    "login_wrong_account_body": "{owner}\n\nデバイス所有者のアカウントでサインインするか、デバイスをリセットして最初からやり直してください。",
+    "login_wrong_account_body_generic": "このデバイスは別のアカウントに属しています。",
+    "login_choose_different_account": "別のアカウントを使用",
+    "status_ready": "準備完了"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "エージェント一覧",
       "client_interface": "インターフェース"
     }
-  }
+  },
+  "setup_validation_select_provider": "LLMプロバイダーを選択してください"
 }

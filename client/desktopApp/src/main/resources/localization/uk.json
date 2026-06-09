@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "Налаштуйте провайдера ШІ. Введіть ключ API та виберіть модель для початку.",
     "setup_ciris_llm_desc": "CIRIS AI активний. За бажанням налаштуйте власного провайдера для офлайн-використання або конфіденційності.",
     "setup_select_provider": "Виберіть провайдера",
-    "setup_validation_select_provider": "Будь ласка, виберіть провайдера LLM"
+    "setup_validation_select_provider": "Будь ласка, виберіть провайдера LLM",
+    "login_wrong_account_title": "Не той обліковий запис",
+    "login_wrong_account_body": "{owner}\n\nУвійдіть з обліковим записом власника пристрою або скиньте пристрій, щоб почати заново.",
+    "login_wrong_account_body_generic": "Цей пристрій належить іншому обліковому запису.",
+    "login_choose_different_account": "Використати інший обліковий запис",
+    "status_ready": "Готово"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "Агенти",
       "client_interface": "Інтерфейс"
     }
-  }
+  },
+  "setup_validation_select_provider": "Виберіть провайдера LLM"
 }

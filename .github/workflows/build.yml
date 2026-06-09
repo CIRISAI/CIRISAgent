@@ -28,6 +28,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Stdlib-only guard, no deps required — run before the pip install so a
+      # localization regression fails fast. Catches keys referenced in
+      # commonMain Kotlin (localizedString/getString) that are undefined in
+      # en.json (which render raw on every platform — CIRISAgent#240) and
+      # en.json mirror drift across platform bundles.
+      - name: Localization guard (reference coverage + mirror parity)
+        run: python tools/dev/check_localization_sync.py
+
       - name: Cache pip dependencies
         uses: actions/cache@v5
         with:

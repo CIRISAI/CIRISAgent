@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "Sanidi mtoa huduma wako wa AI. Ingiza ufunguo wako wa API na uchague mfano kuanza.",
     "setup_ciris_llm_desc": "CIRIS AI inafanya kazi. Unaweza kusanidi mtoa huduma wako mwenyewe kwa matumizi nje ya mtandao au faragha.",
     "setup_select_provider": "Chagua mtoa huduma",
-    "setup_validation_select_provider": "Tafadhali chagua mtoa huduma wa LLM"
+    "setup_validation_select_provider": "Tafadhali chagua mtoa huduma wa LLM",
+    "login_wrong_account_title": "Akaunti isiyo sahihi",
+    "login_wrong_account_body": "{owner}\n\nIngia kwa akaunti ya mmiliki wa kifaa, au weka upya kifaa ili kuanza upya.",
+    "login_wrong_account_body_generic": "Kifaa hiki ni cha akaunti tofauti.",
+    "login_choose_different_account": "Tumia akaunti tofauti",
+    "status_ready": "Tayari"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "Wakala",
       "client_interface": "Kiolesura"
     }
-  }
+  },
+  "setup_validation_select_provider": "Chagua mtoa huduma wa LLM"
 }

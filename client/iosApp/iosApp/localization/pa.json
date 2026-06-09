@@ -1829,7 +1829,12 @@
     "setup_byok_llm_desc": "ਆਪਣੇ AI ਪ੍ਰਦਾਤਾ ਨੂੰ ਕੌਂਫਿਗਰ ਕਰੋ। ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਆਪਣੀ API ਕੁੰਜੀ ਦਰਜ ਕਰੋ ਅਤੇ ਮਾਡਲ ਚੁਣੋ।",
     "setup_ciris_llm_desc": "CIRIS AI ਸਰਗਰਮ ਹੈ। ਔਫਲਾਈਨ ਵਰਤੋਂ ਜਾਂ ਗੋਪਨੀਯਤਾ ਲਈ ਵਿਕਲਪਿਕ ਤੌਰ ਤੇ ਆਪਣੇ ਪ੍ਰਦਾਤਾ ਨੂੰ ਕੌਂਫਿਗਰ ਕਰੋ।",
     "setup_select_provider": "ਪ੍ਰਦਾਤਾ ਚੁਣੋ",
-    "setup_validation_select_provider": "ਕਿਰਪਾ ਕਰਕੇ LLM ਪ੍ਰਦਾਤਾ ਚੁਣੋ"
+    "setup_validation_select_provider": "ਕਿਰਪਾ ਕਰਕੇ LLM ਪ੍ਰਦਾਤਾ ਚੁਣੋ",
+    "login_wrong_account_title": "ਗਲਤ ਖਾਤਾ",
+    "login_wrong_account_body": "{owner}\n\nਡਿਵਾਈਸ ਮਾਲਕ ਦੇ ਖਾਤੇ ਨਾਲ ਸਾਈਨ ਇਨ ਕਰੋ, ਜਾਂ ਦੁਬਾਰਾ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਡਿਵਾਈਸ ਰੀਸੈੱਟ ਕਰੋ।",
+    "login_wrong_account_body_generic": "ਇਹ ਡਿਵਾਈਸ ਕਿਸੇ ਹੋਰ ਖਾਤੇ ਨਾਲ ਸਬੰਧਤ ਹੈ।",
+    "login_choose_different_account": "ਕੋਈ ਹੋਰ ਖਾਤਾ ਵਰਤੋ",
+    "status_ready": "ਤਿਆਰ"
   },
   "conscience": {
     "ponder_attempted": "ਮੈਂ {action} ਕਰਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕੀਤੀ",
@@ -2453,5 +2458,6 @@
       "agents_list": "ਏਜੰਟ",
       "client_interface": "ਇੰਟਰਫੇਸ"
     }
-  }
+  },
+  "setup_validation_select_provider": "ਇੱਕ LLM ਪ੍ਰਦਾਤਾ ਚੁਣੋ"
 }

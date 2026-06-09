@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "የ AI አቅራቢዎን ያዋቅሩ። ለመጀመር የ API ቁልፍዎን ያስገቡ እና ሞዴል ይምረጡ።",
     "setup_ciris_llm_desc": "CIRIS AI ንቁ ነው። ለመስመር ውጭ አጠቃቀም ወይም ግላዊነት የራስዎን አቅራቢ በአማራጭ ያዋቅሩ።",
     "setup_select_provider": "አቅራቢ ይምረጡ",
-    "setup_validation_select_provider": "እባክዎ LLM አቅራቢ ይምረጡ"
+    "setup_validation_select_provider": "እባክዎ LLM አቅራቢ ይምረጡ",
+    "login_wrong_account_title": "የተሳሳተ መለያ",
+    "login_wrong_account_body": "{owner}\n\nበመሣሪያው ባለቤት መለያ ይግቡ፣ ወይም ከመጀመሪያው ለመጀመር መሣሪያውን ዳግም ያስጀምሩ።",
+    "login_wrong_account_body_generic": "ይህ መሣሪያ የሌላ መለያ ነው።",
+    "login_choose_different_account": "ሌላ መለያ ይጠቀሙ",
+    "status_ready": "ዝግጁ"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "ወኪሎች",
       "client_interface": "ገፅ"
     }
-  }
+  },
+  "setup_validation_select_provider": "የLLM አቅራቢ ይምረጡ"
 }

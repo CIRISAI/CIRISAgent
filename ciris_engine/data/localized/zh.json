@@ -1737,7 +1737,12 @@
     "setup_byok_llm_desc": "配置您的AI提供商。输入您的API密钥并选择模型以开始。",
     "setup_ciris_llm_desc": "CIRIS AI 已激活。可选择配置您自己的提供商以供离线使用或保护隐私。",
     "setup_select_provider": "选择提供商",
-    "setup_validation_select_provider": "请选择LLM提供商"
+    "setup_validation_select_provider": "请选择LLM提供商",
+    "login_wrong_account_title": "账户错误",
+    "login_wrong_account_body": "{owner}\n\n请使用设备所有者的账户登录，或重置设备重新开始。",
+    "login_wrong_account_body_generic": "此设备属于其他账户。",
+    "login_choose_different_account": "使用其他账户",
+    "status_ready": "就绪"
   },
   "prompts": {
     "dma": {
@@ -2453,5 +2458,6 @@
       "agents_list": "智能体列表",
       "client_interface": "界面"
     }
-  }
+  },
+  "setup_validation_select_provider": "请选择一个 LLM 提供商"
 }

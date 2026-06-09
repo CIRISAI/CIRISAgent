@@ -1829,7 +1829,12 @@
     "setup_byok_llm_desc": "Ṣeto olupese AI rẹ. Tẹ bọtini API rẹ ki o yan awoṣe lati bẹrẹ.",
     "setup_ciris_llm_desc": "CIRIS AI ti ṣiṣẹ́. O lè yan lati ṣeto olupese tirẹ fún lílo áìsípò tabi àṣírí.",
     "setup_select_provider": "Yan olupese kan",
-    "setup_validation_select_provider": "Jọwọ yan olupese LLM kan"
+    "setup_validation_select_provider": "Jọwọ yan olupese LLM kan",
+    "login_wrong_account_title": "Àkàùntì tí kò tọ́",
+    "login_wrong_account_body": "{owner}\n\nWọlé pẹ̀lú àkàùntì ẹni tó ni ẹ̀rọ náà, tàbí tún ẹ̀rọ náà ṣe láti bẹ̀rẹ̀ láti ìbẹ̀rẹ̀.",
+    "login_wrong_account_body_generic": "Ẹ̀rọ yìí jẹ́ ti àkàùntì mìíràn.",
+    "login_choose_different_account": "Lo àkàùntì mìíràn",
+    "status_ready": "Ó ti ṣetán"
   },
   "conscience": {
     "ponder_attempted": "Mo gbìyànjú láti {action}",
@@ -2453,5 +2458,6 @@
       "agents_list": "Àwọn Aṣojú",
       "client_interface": "Ojú-ìwòran"
     }
-  }
+  },
+  "setup_validation_select_provider": "Yan olùpèsè LLM"
 }

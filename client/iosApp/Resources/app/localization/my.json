@@ -1829,7 +1829,12 @@
     "setup_byok_llm_desc": "သင်၏ AI ပံ့ပိုးသူကို ပြင်ဆင်ပါ။ စတင်ရန် သင်၏ API သော့ကို ထည့်သွင်းပြီး မော်ဒယ်ကို ရွေးချယ်ပါ။",
     "setup_ciris_llm_desc": "CIRIS AI အလုပ်လုပ်နေပါသည်။ အော့ဖ်လိုင်းအသုံးပြုမှု သို့မဟုတ် ကိုယ်ရေးကိုယ်တာအတွက် သင့်ကိုယ်ပိုင် ပံ့ပိုးသူကို ရွေးချယ်ပြင်ဆင်ပါ။",
     "setup_select_provider": "ပံ့ပိုးသူကို ရွေးချယ်ပါ",
-    "setup_validation_select_provider": "LLM ပံ့ပိုးသူကို ရွေးချယ်ပါ"
+    "setup_validation_select_provider": "LLM ပံ့ပိုးသူကို ရွေးချယ်ပါ",
+    "login_wrong_account_title": "အကောင့်မှားနေသည်",
+    "login_wrong_account_body": "{owner}\n\nစက်ပစ္စည်းပိုင်ရှင်၏ အကောင့်ဖြင့် ဝင်ရောက်ပါ၊ သို့မဟုတ် အစမှ ပြန်စတင်ရန် စက်ပစ္စည်းကို ပြန်လည်သတ်မှတ်ပါ။",
+    "login_wrong_account_body_generic": "ဤစက်ပစ္စည်းသည် အခြားအကောင့်တစ်ခုနှင့် သက်ဆိုင်သည်။",
+    "login_choose_different_account": "အခြားအကောင့်ကို သုံးပါ",
+    "status_ready": "အသင့်ဖြစ်ပြီ"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {လုပ်ဆောင်ion}",
@@ -2453,5 +2458,6 @@
       "agents_list": "အေးဂျင့်များ",
       "client_interface": "မျက်နှာပြင်"
     }
-  }
+  },
+  "setup_validation_select_provider": "LLM ဝန်ဆောင်မှုပေးသူကို ရွေးချယ်ပါ"
 }

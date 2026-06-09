@@ -2456,8 +2456,13 @@
       "wallet": "Portefeuille",
       "billing": "Facturation",
       "agents_list": "Agents",
-      "client_interface": "Interface"
+      "client_interface": "Interface",
+      "network_ops": "Réseau",
+      "storage": "Stockage"
     }
   },
-  "setup_validation_select_provider": "Sélectionnez un fournisseur LLM"
+  "setup_validation_select_provider": "Sélectionnez un fournisseur LLM",
+  "network_ops": {
+    "open_federation_hub": "Ouvrir le hub de fédération →"
+  }
 }

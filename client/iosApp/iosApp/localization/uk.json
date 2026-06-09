@@ -2456,8 +2456,13 @@
       "wallet": "Гаманець",
       "billing": "Оплата",
       "agents_list": "Агенти",
-      "client_interface": "Інтерфейс"
+      "client_interface": "Інтерфейс",
+      "network_ops": "Мережа",
+      "storage": "Сховище"
     }
   },
-  "setup_validation_select_provider": "Виберіть провайдера LLM"
+  "setup_validation_select_provider": "Виберіть провайдера LLM",
+  "network_ops": {
+    "open_federation_hub": "Відкрити центр федерації →"
+  }
 }

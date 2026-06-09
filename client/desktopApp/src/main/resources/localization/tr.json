@@ -2456,8 +2456,13 @@
       "wallet": "Cüzdan",
       "billing": "Faturalama",
       "agents_list": "Ajanlar",
-      "client_interface": "Arayüz"
+      "client_interface": "Arayüz",
+      "network_ops": "Ağ",
+      "storage": "Depolama"
     }
   },
-  "setup_validation_select_provider": "Bir LLM sağlayıcısı seçin"
+  "setup_validation_select_provider": "Bir LLM sağlayıcısı seçin",
+  "network_ops": {
+    "open_federation_hub": "Federasyon merkezini aç →"
+  }
 }

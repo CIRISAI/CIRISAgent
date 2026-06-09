@@ -2456,8 +2456,13 @@
       "wallet": "Jakar kuɗi",
       "billing": "Biyan kuɗi",
       "agents_list": "Wakilai",
-      "client_interface": "Fuska"
+      "client_interface": "Fuska",
+      "network_ops": "Hanyar sadarwa",
+      "storage": "Ajiya"
     }
   },
-  "setup_validation_select_provider": "Zaɓi mai bayar da LLM"
+  "setup_validation_select_provider": "Zaɓi mai bayar da LLM",
+  "network_ops": {
+    "open_federation_hub": "Buɗe cibiyar tarayya →"
+  }
 }

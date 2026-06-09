@@ -2457,8 +2457,13 @@
       "wallet": "ওয়ালেট",
       "billing": "বিলিং",
       "agents_list": "এজেন্টরা",
-      "client_interface": "ইন্টারফেস"
+      "client_interface": "ইন্টারফেস",
+      "network_ops": "নেটওয়ার্ক",
+      "storage": "স্টোরেজ"
     }
   },
-  "setup_validation_select_provider": "একটি LLM প্রদানকারী নির্বাচন করুন"
+  "setup_validation_select_provider": "একটি LLM প্রদানকারী নির্বাচন করুন",
+  "network_ops": {
+    "open_federation_hub": "ফেডারেশন হাব খুলুন →"
+  }
 }

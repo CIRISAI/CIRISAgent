@@ -2456,8 +2456,13 @@
       "wallet": "பணப்பை",
       "billing": "வழிகாட்டல்",
       "agents_list": "முகவர்கள்",
-      "client_interface": "இடைமுகம்"
+      "client_interface": "இடைமுகம்",
+      "network_ops": "நெட்வொர்க்",
+      "storage": "சேமிப்பு"
     }
   },
-  "setup_validation_select_provider": "ஒரு LLM வழங்குநரைத் தேர்ந்தெடுக்கவும்"
+  "setup_validation_select_provider": "ஒரு LLM வழங்குநரைத் தேர்ந்தெடுக்கவும்",
+  "network_ops": {
+    "open_federation_hub": "ஃபெடரேஷன் மையத்தைத் திற →"
+  }
 }

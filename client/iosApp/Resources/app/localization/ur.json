@@ -2456,8 +2456,13 @@
       "wallet": "بٹوہ",
       "billing": "بلنگ",
       "agents_list": "ایجنٹ",
-      "client_interface": "انٹرفیس"
+      "client_interface": "انٹرفیس",
+      "network_ops": "نیٹ ورک",
+      "storage": "اسٹوریج"
     }
   },
-  "setup_validation_select_provider": "ایک LLM فراہم کنندہ منتخب کریں"
+  "setup_validation_select_provider": "ایک LLM فراہم کنندہ منتخب کریں",
+  "network_ops": {
+    "open_federation_hub": "فیڈریشن حب کھولیں →"
+  }
 }

@@ -2456,8 +2456,13 @@
       "wallet": "वॉलेट",
       "billing": "बिलिंग",
       "agents_list": "एजंट",
-      "client_interface": "इंटरफेस"
+      "client_interface": "इंटरफेस",
+      "network_ops": "नेटवर्क",
+      "storage": "संचयन"
     }
   },
-  "setup_validation_select_provider": "एक LLM प्रदाता निवडा"
+  "setup_validation_select_provider": "एक LLM प्रदाता निवडा",
+  "network_ops": {
+    "open_federation_hub": "फेडरेशन हब उघडा →"
+  }
 }

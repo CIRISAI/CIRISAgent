@@ -2456,8 +2456,13 @@
       "wallet": "المحفظة",
       "billing": "الفواتير",
       "agents_list": "الوكلاء",
-      "client_interface": "الواجهة"
+      "client_interface": "الواجهة",
+      "network_ops": "الشبكة",
+      "storage": "التخزين"
     }
   },
-  "setup_validation_select_provider": "اختر مزوّد LLM"
+  "setup_validation_select_provider": "اختر مزوّد LLM",
+  "network_ops": {
+    "open_federation_hub": "فتح مركز الاتحاد →"
+  }
 }

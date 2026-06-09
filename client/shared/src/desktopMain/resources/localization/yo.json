@@ -2456,8 +2456,13 @@
       "wallet": "Àpò Owó",
       "billing": "Ìsanwó",
       "agents_list": "Àwọn Aṣojú",
-      "client_interface": "Ojú-ìwòran"
+      "client_interface": "Ojú-ìwòran",
+      "network_ops": "Nẹ́tíwọ́kì",
+      "storage": "Ìfipamọ́"
     }
   },
-  "setup_validation_select_provider": "Yan olùpèsè LLM"
+  "setup_validation_select_provider": "Yan olùpèsè LLM",
+  "network_ops": {
+    "open_federation_hub": "Ṣí ibùdó ìṣọ̀kan-àjùmọ̀ṣe →"
+  }
 }

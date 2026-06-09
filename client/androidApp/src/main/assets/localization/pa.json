@@ -2456,8 +2456,13 @@
       "wallet": "ਬਟੂਆ",
       "billing": "ਬਿੱਲਿੰਗ",
       "agents_list": "ਏਜੰਟ",
-      "client_interface": "ਇੰਟਰਫੇਸ"
+      "client_interface": "ਇੰਟਰਫੇਸ",
+      "network_ops": "ਨੈੱਟਵਰਕ",
+      "storage": "ਸਟੋਰੇਜ"
     }
   },
-  "setup_validation_select_provider": "ਇੱਕ LLM ਪ੍ਰਦਾਤਾ ਚੁਣੋ"
+  "setup_validation_select_provider": "ਇੱਕ LLM ਪ੍ਰਦਾਤਾ ਚੁਣੋ",
+  "network_ops": {
+    "open_federation_hub": "ਫੈਡਰੇਸ਼ਨ ਹੱਬ ਖੋਲ੍ਹੋ →"
+  }
 }

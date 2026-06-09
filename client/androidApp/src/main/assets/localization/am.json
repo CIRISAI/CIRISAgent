@@ -2456,8 +2456,13 @@
       "wallet": "ቦርሳ",
       "billing": "ክፍያ",
       "agents_list": "ወኪሎች",
-      "client_interface": "ገፅ"
+      "client_interface": "ገፅ",
+      "network_ops": "አውታረ መረብ",
+      "storage": "ማከማቻ"
     }
   },
-  "setup_validation_select_provider": "የLLM አቅራቢ ይምረጡ"
+  "setup_validation_select_provider": "የLLM አቅራቢ ይምረጡ",
+  "network_ops": {
+    "open_federation_hub": "የፌዴሬሽን ማዕከል ክፈት →"
+  }
 }

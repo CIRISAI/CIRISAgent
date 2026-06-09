@@ -2456,8 +2456,13 @@
       "wallet": "ပိုက်ဆံအိတ်",
       "billing": "ငွေတောင်းခံ",
       "agents_list": "အေးဂျင့်များ",
-      "client_interface": "မျက်နှာပြင်"
+      "client_interface": "မျက်နှာပြင်",
+      "network_ops": "ကွန်ရက်",
+      "storage": "သိုလှောင်မှု"
     }
   },
-  "setup_validation_select_provider": "LLM ဝန်ဆောင်မှုပေးသူကို ရွေးချယ်ပါ"
+  "setup_validation_select_provider": "LLM ဝန်ဆောင်မှုပေးသူကို ရွေးချယ်ပါ",
+  "network_ops": {
+    "open_federation_hub": "ဖက်ဒရေးရှင်း စင်တာကို ဖွင့်ရန် →"
+  }
 }

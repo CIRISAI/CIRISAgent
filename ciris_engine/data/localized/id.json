@@ -2456,8 +2456,13 @@
       "wallet": "Dompet",
       "billing": "Tagihan",
       "agents_list": "Agen",
-      "client_interface": "Antarmuka"
+      "client_interface": "Antarmuka",
+      "network_ops": "Jaringan",
+      "storage": "Penyimpanan"
     }
   },
-  "setup_validation_select_provider": "Pilih penyedia LLM"
+  "setup_validation_select_provider": "Pilih penyedia LLM",
+  "network_ops": {
+    "open_federation_hub": "Buka pusat federasi →"
+  }
 }

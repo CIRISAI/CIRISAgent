@@ -2456,8 +2456,13 @@
       "wallet": "ウォレット",
       "billing": "請求",
       "agents_list": "エージェント一覧",
-      "client_interface": "インターフェース"
+      "client_interface": "インターフェース",
+      "network_ops": "ネットワーク",
+      "storage": "ストレージ"
     }
   },
-  "setup_validation_select_provider": "LLMプロバイダーを選択してください"
+  "setup_validation_select_provider": "LLMプロバイダーを選択してください",
+  "network_ops": {
+    "open_federation_hub": "フェデレーションハブを開く →"
+  }
 }

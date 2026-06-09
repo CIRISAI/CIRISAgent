@@ -2462,8 +2462,13 @@
       "wallet": "کیف پول",
       "billing": "صورتحساب",
       "agents_list": "عوامل",
-      "client_interface": "رابط"
+      "client_interface": "رابط",
+      "network_ops": "شبکه",
+      "storage": "فضای ذخیره‌سازی"
     }
   },
-  "setup_validation_select_provider": "یک ارائه‌دهنده LLM را انتخاب کنید"
+  "setup_validation_select_provider": "یک ارائه‌دهنده LLM را انتخاب کنید",
+  "network_ops": {
+    "open_federation_hub": "باز کردن هاب فدراسیون →"
+  }
 }

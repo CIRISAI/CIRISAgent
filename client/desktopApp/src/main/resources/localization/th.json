@@ -2456,8 +2456,13 @@
       "wallet": "กระเป๋าเงิน",
       "billing": "การเรียกเก็บเงิน",
       "agents_list": "เอเจนต์",
-      "client_interface": "อินเทอร์เฟซ"
+      "client_interface": "อินเทอร์เฟซ",
+      "network_ops": "เครือข่าย",
+      "storage": "ที่จัดเก็บ"
     }
   },
-  "setup_validation_select_provider": "เลือกผู้ให้บริการ LLM"
+  "setup_validation_select_provider": "เลือกผู้ให้บริการ LLM",
+  "network_ops": {
+    "open_federation_hub": "เปิดศูนย์กลางสหพันธ์ →"
+  }
 }

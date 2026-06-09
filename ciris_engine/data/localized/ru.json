@@ -2456,8 +2456,13 @@
       "wallet": "Кошелёк",
       "billing": "Оплата",
       "agents_list": "Агенты",
-      "client_interface": "Интерфейс"
+      "client_interface": "Интерфейс",
+      "network_ops": "Сеть",
+      "storage": "Хранилище"
     }
   },
-  "setup_validation_select_provider": "Выберите провайдера LLM"
+  "setup_validation_select_provider": "Выберите провайдера LLM",
+  "network_ops": {
+    "open_federation_hub": "Открыть центр федерации →"
+  }
 }

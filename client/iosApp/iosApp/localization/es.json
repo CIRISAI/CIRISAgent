@@ -2456,8 +2456,13 @@
       "wallet": "Billetera",
       "billing": "Facturación",
       "agents_list": "Agentes",
-      "client_interface": "Interfaz"
+      "client_interface": "Interfaz",
+      "network_ops": "Red",
+      "storage": "Almacenamiento"
     }
   },
-  "setup_validation_select_provider": "Selecciona un proveedor de LLM"
+  "setup_validation_select_provider": "Selecciona un proveedor de LLM",
+  "network_ops": {
+    "open_federation_hub": "Abrir centro de federación →"
+  }
 }

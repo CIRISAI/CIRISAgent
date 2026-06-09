@@ -2456,8 +2456,13 @@
       "wallet": "Mkoba",
       "billing": "Malipo",
       "agents_list": "Wakala",
-      "client_interface": "Kiolesura"
+      "client_interface": "Kiolesura",
+      "network_ops": "Mtandao",
+      "storage": "Hifadhi"
     }
   },
-  "setup_validation_select_provider": "Chagua mtoa huduma wa LLM"
+  "setup_validation_select_provider": "Chagua mtoa huduma wa LLM",
+  "network_ops": {
+    "open_federation_hub": "Fungua kituo cha shirikisho →"
+  }
 }

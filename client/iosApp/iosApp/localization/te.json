@@ -2456,8 +2456,13 @@
       "wallet": "వాలెట్",
       "billing": "బిల్లింగ్",
       "agents_list": "ఏజెంట్లు",
-      "client_interface": "ఇంటర్‌ఫేస్"
+      "client_interface": "ఇంటర్‌ఫేస్",
+      "network_ops": "నెట్‌వర్క్",
+      "storage": "నిల్వ"
     }
   },
-  "setup_validation_select_provider": "ఒక LLM ప్రొవైడర్‌ను ఎంచుకోండి"
+  "setup_validation_select_provider": "ఒక LLM ప్రొవైడర్‌ను ఎంచుకోండి",
+  "network_ops": {
+    "open_federation_hub": "ఫెడరేషన్ హబ్‌ను తెరవండి →"
+  }
 }

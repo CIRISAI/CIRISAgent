@@ -2456,8 +2456,13 @@
       "wallet": "钱包",
       "billing": "账单",
       "agents_list": "智能体列表",
-      "client_interface": "界面"
+      "client_interface": "界面",
+      "network_ops": "网络",
+      "storage": "存储"
     }
   },
-  "setup_validation_select_provider": "请选择一个 LLM 提供商"
+  "setup_validation_select_provider": "请选择一个 LLM 提供商",
+  "network_ops": {
+    "open_federation_hub": "打开联邦中心 →"
+  }
 }

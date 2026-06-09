@@ -2456,8 +2456,13 @@
       "wallet": "Wallet",
       "billing": "Abrechnung",
       "agents_list": "Agenten",
-      "client_interface": "Oberfläche"
+      "client_interface": "Oberfläche",
+      "network_ops": "Netzwerk",
+      "storage": "Speicher"
     }
   },
-  "setup_validation_select_provider": "LLM-Anbieter auswählen"
+  "setup_validation_select_provider": "LLM-Anbieter auswählen",
+  "network_ops": {
+    "open_federation_hub": "Föderations-Hub öffnen →"
+  }
 }

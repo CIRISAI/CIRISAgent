@@ -2456,8 +2456,13 @@
       "wallet": "Ví",
       "billing": "Thanh Toán",
       "agents_list": "Tác Nhân",
-      "client_interface": "Giao Diện"
+      "client_interface": "Giao Diện",
+      "network_ops": "Mạng lưới",
+      "storage": "Lưu trữ"
     }
   },
-  "setup_validation_select_provider": "Chọn nhà cung cấp LLM"
+  "setup_validation_select_provider": "Chọn nhà cung cấp LLM",
+  "network_ops": {
+    "open_federation_hub": "Mở trung tâm liên kết →"
+  }
 }

@@ -44,7 +44,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import aiohttp
 
@@ -307,6 +307,56 @@ _TRACE_SIGN_MAX_RETRIES = 10
 _TRACE_SIGN_RETRY_DELAY_S = 0.5
 
 
+# 2.9.6 is the HARD JCS cutover (CEG §0.9 / the substrate triple persist 4.10 ·
+# edge 1.5 · verify 5.0). Trace signing canonical bytes are produced by verify's
+# RFC 8785 (JCS) canonicalizer — ciris_verify_core::jcs via the verify FFI — so
+# they are byte-identical to what the Rust federation verifiers recompute on the
+# wire. This replaces the pre-2.9.6 `json.dumps(sort_keys=True,
+# separators=(",", ":"))` path, which was implicitly ensure_ascii=True and so
+# diverged on EVERY non-ASCII byte (i.e. the entire multilingual trace corpus —
+# signatures over Amharic/Arabic/Chinese/… traces verified locally but failed
+# against any Rust verifier). verify 5.0.0 is a hard dependency of the 2.9.6
+# triple (requirements.txt), so the binding is always present; we fail loud
+# rather than silently fall back to the divergent json.dumps bytes.
+_jcs_canon: Optional[Callable[[Any], bytes]] = None
+
+
+def _get_jcs_canonicalize() -> Callable[[Any], bytes]:
+    """Resolve verify's RFC 8785 (JCS) canonicalizer, cached process-wide.
+
+    Both sources wrap the SAME Rust impl (ciris_verify_core::jcs), so output is
+    byte-identical regardless of which loads:
+
+    1. The pip-installed ``ciris_verify`` package — the dependency-declared
+       source (``ciris-verify>=5.0.0`` in requirements.txt). Its wheel ships a
+       loadable native lib for every platform, so this is the path that works
+       in CI and any pip-based deploy.
+    2. The in-repo ``ciris_adapters.ciris_verify`` adapter — its Linux/Windows
+       native libs are build-time artifacts (bundled in the wheel / Android
+       jniLibs), so this path covers bundled deploys where only it is present.
+
+    Fails loud if neither resolves: a hard JCS cutover must never silently fall
+    back to the divergent ``json.dumps`` bytes (that would mint signatures the
+    Rust verifiers reject).
+    """
+    global _jcs_canon
+    if _jcs_canon is not None:
+        return _jcs_canon
+    errors: List[str] = []
+    for source in ("ciris_verify._jcs", "ciris_adapters.ciris_verify.ffi_bindings._jcs"):
+        try:
+            mod = __import__(source, fromlist=["jcs_canonicalize"])
+            _jcs_canon = mod.jcs_canonicalize
+            return _jcs_canon
+        except Exception as exc:  # ImportError / RuntimeError (lib not loadable)
+            errors.append(f"{source}: {exc}")
+    raise RuntimeError(
+        "2.9.6 JCS cutover: no RFC 8785 canonicalizer available from "
+        "ciris_verify (>= 5.0.0). Trace signing cannot proceed without it. "
+        "Tried: " + " | ".join(errors)
+    )
+
+
 def _attestation_in_progress_error() -> Optional[type]:
     """Return CIRISVerify's AttestationInProgressError type, if importable.
 
@@ -380,7 +430,10 @@ class Ed25519TraceSigner:
               "components":          [strip_empty({component_type,data,event_type,timestamp}), ...]
             }
 
-        Then `json.dumps(canonical, sort_keys=True, separators=(",", ":"))`.
+        Then RFC 8785 (JCS) canonicalized via verify — the 2.9.6 HARD cutover.
+        Pre-2.9.6 used `json.dumps(canonical, sort_keys=True, separators=(",",
+        ":"))`, which was ensure_ascii=True and diverged from the Rust verifiers
+        on all non-ASCII (the multilingual corpus). See the module-level note.
 
         Migration history:
         - <= 2.7.8.8 used a 2-field legacy canonical {"components", "trace_level"}
@@ -447,7 +500,11 @@ class Ed25519TraceSigner:
         # configured explicit values).
         if trace.deployment_profile is not None:
             canonical["deployment_profile"] = dict(trace.deployment_profile)
-        return json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        # 2.9.6 HARD JCS cutover: canonicalize via verify's RFC 8785 impl so the
+        # signed bytes are byte-identical to what the Rust federation verifiers
+        # recompute. The old `json.dumps(sort_keys=True, separators=(",", ":"))`
+        # was ensure_ascii=True and diverged on all non-ASCII. See module note.
+        return _get_jcs_canonicalize()(canonical)
 
     def sign_trace(self, trace: CompleteTrace) -> bool:
         """Sign a trace with the unified Ed25519 signing key.

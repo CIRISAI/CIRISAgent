@@ -21,6 +21,7 @@ import pytest
 from ciris_adapters.ciris_accord_metrics.services import (
     AccordMetricsService,
     CompleteTrace,
+    Ed25519TraceSigner,
     SimpleCapabilities,
     TraceComponent,
 )
@@ -779,3 +780,128 @@ class TestCompleteTrace:
 
         result = trace.to_dict()
         assert result["task_id"] is None
+
+
+class TestJCSCutover:
+    """2.9.6 HARD JCS cutover: trace signing canonical bytes are RFC 8785 (JCS),
+    byte-identical to what the Rust federation verifiers recompute.
+
+    These lock the cutover so a refactor can't silently revert to
+    ``json.dumps(sort_keys=True, separators=(",", ":"))`` — which is implicitly
+    ensure_ascii=True and diverges on every non-ASCII byte (the whole
+    multilingual trace corpus), minting signatures the Rust verifiers reject.
+    """
+
+    def _multilingual_trace(self) -> CompleteTrace:
+        return CompleteTrace(
+            trace_id="trace-jcs",
+            thought_id="thought-jcs",
+            task_id="task-jcs",
+            agent_id_hash="hashjcs",
+            started_at="2026-06-09T00:00:00Z",
+            completed_at="2026-06-09T00:00:01Z",
+            trace_schema_version="2.7.9",
+            components=[
+                TraceComponent(
+                    component_type="observation",
+                    event_type="THOUGHT_START",
+                    timestamp="2026-06-09T00:00:00Z",
+                    # Amharic + Chinese + Arabic — the corpus that broke the old path.
+                    data={"content": "ከመጀመሪያው ጥያቄ 你好 مرحبا"},
+                ),
+            ],
+        )
+
+    def test_canonical_message_is_jcs_not_json_dumps(self):
+        """Canonical bytes must be JCS, which on non-ASCII differ from the old
+        ensure_ascii=True json.dumps path."""
+        import json
+
+        signer = Ed25519TraceSigner()
+        trace = self._multilingual_trace()
+        canonical_bytes = signer._build_canonical_message(trace)
+
+        # JCS keeps non-ASCII as literal UTF-8; the old path \u-escapes it.
+        decoded = canonical_bytes.decode("utf-8")
+        assert "ከመጀመሪያው" in decoded
+        assert "你好" in decoded
+        assert "مرحبا" in decoded
+        assert b"\\u" not in canonical_bytes
+
+        # And it is genuinely NOT the legacy json.dumps output for this corpus.
+        legacy = json.dumps(
+            {
+                "trace_id": trace.trace_id,
+                "thought_id": trace.thought_id,
+                "task_id": trace.task_id,
+                "agent_id_hash": trace.agent_id_hash,
+                "started_at": trace.started_at,
+                "completed_at": trace.completed_at,
+                "trace_level": trace.trace_level,
+                "trace_schema_version": trace.trace_schema_version,
+                "components": [
+                    {
+                        "agent_id_hash": c.agent_id_hash or trace.agent_id_hash,
+                        "component_type": c.component_type,
+                        "data": c.data,
+                        "event_type": c.event_type,
+                        "timestamp": c.timestamp,
+                    }
+                    for c in trace.components
+                ],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        assert canonical_bytes != legacy
+
+    def test_jcs_canonical_matches_verify_binding(self):
+        """The producer's canonical bytes equal verify's standalone JCS output
+        (the one blessed ciris_verify_core::jcs impl)."""
+        from ciris_adapters.ciris_accord_metrics.services import _get_jcs_canonicalize
+
+        signer = Ed25519TraceSigner()
+        trace = self._multilingual_trace()
+        canonical_bytes = signer._build_canonical_message(trace)
+
+        # Recompute the canonical dict the producer builds, then JCS it directly.
+        jcs = _get_jcs_canonicalize()
+        expected = jcs(
+            {
+                "trace_id": trace.trace_id,
+                "thought_id": trace.thought_id,
+                "task_id": trace.task_id,
+                "agent_id_hash": trace.agent_id_hash,
+                "started_at": trace.started_at,
+                "completed_at": trace.completed_at,
+                "trace_level": trace.trace_level,
+                "trace_schema_version": trace.trace_schema_version,
+                "components": [
+                    {
+                        "agent_id_hash": trace.agent_id_hash,
+                        "component_type": "observation",
+                        "data": {"content": "ከመጀመሪያው ጥያቄ 你好 مرحبا"},
+                        "event_type": "THOUGHT_START",
+                        "timestamp": "2026-06-09T00:00:00Z",
+                    }
+                ],
+            }
+        )
+        assert canonical_bytes == expected
+
+    def test_jcs_canonical_bytes_are_ed25519_signable(self):
+        """The JCS canonical bytes for a multilingual trace round-trip through
+        Ed25519 sign/verify — i.e. they are valid signing input end-to-end.
+
+        Uses a freshly generated key directly over _build_canonical_message so
+        the assertion is about the canonicalization, not the key plumbing."""
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
+        signer = Ed25519TraceSigner()
+        trace = self._multilingual_trace()
+        canonical_bytes = signer._build_canonical_message(trace)
+
+        sk = ed25519.Ed25519PrivateKey.generate()
+        sig = sk.sign(canonical_bytes)
+        # Raises InvalidSignature if the bytes don't verify.
+        sk.public_key().verify(sig, canonical_bytes)

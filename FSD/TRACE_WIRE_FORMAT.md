@@ -992,9 +992,30 @@ canonical = {
         for c in trace.components
     ],
 }
-signed_bytes = json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
+signed_bytes = jcs_canonicalize(canonical)   # RFC 8785 — 2.9.6 HARD cutover
 signature = ed25519_sign(signed_bytes)
 ```
+
+**JCS canonicalization — the 2.9.6 hard cutover (CEG §0.9).** As of 2.9.6
+`signed_bytes` is the RFC 8785 (JSON Canonicalization Scheme) byte sequence,
+produced by `ciris_verify_core::jcs` (the one blessed impl, shipped in
+ciris-verify ≥ 5.0.0; the producer reaches it via
+`ciris_verify.jcs_canonicalize`). This is byte-identical to what the Rust
+federation verifiers recompute, so the agent-signed bytes and the verifier's
+reconstructed bytes match on **all** inputs.
+
+Pre-2.9.6 the producer used `json.dumps(canonical, sort_keys=True,
+separators=(",", ":"))`. That is **not** JCS: Python's `json.dumps` defaults to
+`ensure_ascii=True`, so every non-ASCII codepoint was emitted as a `\uXXXX`
+escape while RFC 8785 requires the minimal literal UTF-8 encoding. The two
+agree only on pure-ASCII traces; they diverge on the entire multilingual trace
+corpus (Amharic, Arabic, Chinese, …), where the legacy bytes verified locally
+but failed against any Rust verifier. 2.9.6 ships the cut across the substrate
+triple in lockstep — agent producer (`_build_canonical_message`), LensCore's
+byte-parity harness, persist's reconstruction, and verify — so there is no
+mixed-canonicalization window: a 2.9.6 signature is JCS, full stop. (For ASCII
+traces the bytes are unchanged, so already-signed historical ASCII traces still
+verify.)
 
 The `deployment_profile` block is part of the signed canonical so the
 6 cohort fields are non-forgeable post-emission. A federation peer
@@ -1036,8 +1057,11 @@ caches `signature_key_id → public_key` for verification.
 1. Look up the public key by `signature_key_id`.
 2. Reconstruct `canonical` from the received CompleteTrace using the
    shape that matches `trace_schema_version` (table above).
-3. `ed25519_verify(public_key, canonical_bytes, signature)`.
-4. Reject the trace on signature mismatch.
+3. JCS-canonicalize the reconstructed `canonical` (RFC 8785, via
+   `ciris_verify_core::jcs`) to obtain `canonical_bytes` — the same
+   canonicalizer the producer used (2.9.6+); never `json.dumps`.
+4. `ed25519_verify(public_key, canonical_bytes, signature)`.
+5. Reject the trace on signature mismatch.
 
 The lens MUST verify before persisting; storing un-verified traces
 defeats the ledger guarantee.

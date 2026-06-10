@@ -23,6 +23,7 @@ from . import (
     adapters,
     agent_mode,
     data_management,
+    fabric,
     health,
     llm_routes,
     peers,
@@ -78,6 +79,9 @@ router.include_router(agent_mode.router)
 
 # Federation peer-bootstrap: NodeCode share/add (GET observer+, POST system_admin)
 router.include_router(peers.router)
+
+# Fabric component versions: /system/fabric (Trust-page substrate versions)
+router.include_router(fabric.router)
 
 from .schemas import (
     AdapterActionRequest,

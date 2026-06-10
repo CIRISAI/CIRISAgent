@@ -1843,7 +1843,13 @@
     "data_community_untrusted": "Not yet trusted",
     "data_community_pending": "Federation pending — becomes a live trust object when the CIRIS community comes online.",
     "data_community_consent_active": "Your consent is active — sharing with the CIRIS community.",
-    "data_community_consent_paused": "Paused — not currently sharing."
+    "data_community_consent_paused": "Paused — not currently sharing.",
+    "trust_fabric_title": "Substrate Components",
+    "trust_fabric_pending": "Pending",
+    "trust_fabric_verified": "Verified",
+    "trust_fabric_mismatch": "Mismatch",
+    "trust_fabric_not_loaded": "Not loaded",
+    "trust_fabric_note": "Embedded-version and registry hash verification light up as the substrate components ship them."
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",

@@ -976,6 +976,44 @@ class CIRISApiClient(
     }
 
     /**
+     * Substrate component versions for the Trust page's fabric section.
+     *
+     * Hits ``GET /v1/system/fabric``. Returns each in-process cdylib crate's
+     * runtime version + the (pending) embedded-version / registry-hash status.
+     */
+    suspend fun getFabricVersions(): ai.ciris.mobile.shared.models.FabricVersionsResponse {
+        val method = "getFabricVersions"
+        logDebug(method, "GET /v1/system/fabric")
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+        return try {
+            val response = client.get("$baseUrl/v1/system/fabric") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Fabric versions fetch failed: ${response.status}")
+            }
+            val root = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            val data = root["data"] ?: throw RuntimeException("Fabric response missing 'data'")
+            val decoder = Json { ignoreUnknownKeys = true }
+            decoder.decodeFromJsonElement(
+                ai.ciris.mobile.shared.models.FabricVersionsResponse.serializer(),
+                data,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
      * Fetch federation content by SHA-256 [contentId] from [peerKeyId].
      *
      * The backend requires ``peer_key_id`` — there is no global

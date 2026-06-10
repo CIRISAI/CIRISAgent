@@ -14,16 +14,23 @@ The 9-field canonical per FSD/TRACE_WIRE_FORMAT.md §8 (post-2.7.8.9 / #710):
       "trace_schema_version": trace.trace_schema_version,
       "components":           [strip_empty({component_type,data,event_type,timestamp}), ...]
     }
-    message = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+    message = jcs_canonicalize(canonical)   # RFC 8785 — 2.9.6 HARD cutover
 
 Migration from the legacy 2-field (`{"components", "trace_level"}`) was gated
 on persist v0.1.15 shipping its `try-both` fallback verifier. Once persist
 accepts both shapes, the agent flips to the 9-field spec; once the agent
 fleet has flipped, persist drops the 2-field path on a future minor.
 
+As of 2.9.6 the canonicalizer is RFC 8785 (JCS), not
+`json.dumps(sort_keys=True, separators=(",", ":"))` — the expected-bytes
+builder below uses the SAME `_get_jcs_canonicalize()` the producer uses, so
+this guard catches a revert to json.dumps (which diverges on non-ASCII) and
+not just field-shape drift. JCS itself mandates sorted keys + compact
+separators, so the ASCII-fixture assertions are unchanged.
+
 These tests lock the canonical bytes shape — any drift (key set, key order,
-value formatting, separators) breaks signature verification on every trace
-and gets caught at CI time rather than in production.
+value formatting, separators, canonicalizer) breaks signature verification on
+every trace and gets caught at CI time rather than in production.
 """
 
 import hashlib
@@ -37,19 +44,24 @@ from ciris_adapters.ciris_accord_metrics.services import (
     CompleteTrace,
     Ed25519TraceSigner,
     TraceComponent,
+    _get_jcs_canonicalize,
     _strip_empty,
 )
 
 
 def _build_expected_message(trace: CompleteTrace) -> bytes:
-    """Reproduce the 2.7.9 canonical (FSD/TRACE_WIRE_FORMAT.md §8) byte-for-byte.
+    """Reproduce the signed canonical (FSD/TRACE_WIRE_FORMAT.md §8) byte-for-byte.
 
     Per-component shape carries 5 fields: agent_id_hash (denormalized from
     envelope, MUST equal trace.agent_id_hash), component_type, data,
-    event_type, timestamp. The outer canonical at 2.7.9 carries 10 keys
-    when `deployment_profile` (§3.2) is present — the cohort-taxonomy
-    block is part of the signed canonical so the 6 cohort labels are
-    non-forgeable post-emission. Absent at 2.7.0; present at 2.7.9.
+    event_type, timestamp. The outer canonical carries 10 keys when
+    `deployment_profile` (§3.2) is present — the cohort-taxonomy block is part
+    of the signed canonical so the 6 cohort labels are non-forgeable
+    post-emission. Field layout is unchanged across the "2.7.9" → "3.0.0"
+    schema bump; only the canonicalizer flipped to JCS (2.9.6).
+
+    Canonicalized via JCS (RFC 8785) — the SAME path the producer uses — so
+    this guard fails if the producer reverts to json.dumps.
     """
     components_data = [
         _strip_empty(
@@ -76,7 +88,7 @@ def _build_expected_message(trace: CompleteTrace) -> bytes:
     }
     if trace.deployment_profile is not None:
         canonical["deployment_profile"] = dict(trace.deployment_profile)
-    return json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return _get_jcs_canonicalize()(canonical)
 
 
 def _make_signer_with_key():

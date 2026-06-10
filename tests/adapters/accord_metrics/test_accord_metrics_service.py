@@ -800,7 +800,8 @@ class TestJCSCutover:
             agent_id_hash="hashjcs",
             started_at="2026-06-09T00:00:00Z",
             completed_at="2026-06-09T00:00:01Z",
-            trace_schema_version="2.7.9",
+            # JCS traces are stamped "3.0.0" — persist's major>=3 canonicalizer gate.
+            trace_schema_version="3.0.0",
             components=[
                 TraceComponent(
                     component_type="observation",

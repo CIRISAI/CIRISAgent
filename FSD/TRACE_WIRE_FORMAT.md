@@ -1038,7 +1038,8 @@ canonical is invalid even if it would happen to verify against the
 | `trace_schema_version` | Outer canonical | Per-component shape | Notes |
 |---|---|---|---|
 | `"2.7.0"` | 9 keys (no `deployment_profile`) | 4 fields: `component_type`, `data`, `event_type`, `timestamp` | The 9-field outer canonical shipped in 2.7.8.9. Persistence propagates `agent_id_hash` from envelope. |
-| `"2.7.9"` | 10 keys (adds `deployment_profile`) | 5 fields: above + `agent_id_hash` (denormalized) | Agent's wire-format emission as of release/2.7.9. Persistence reads `agent_id_hash` directly from each component AND extracts the 6 `deployment_profile` fields into denormalized `cirislens.trace_context` columns. |
+| `"2.7.9"` | 10 keys (adds `deployment_profile`) | 5 fields: above + `agent_id_hash` (denormalized) | Agent's wire-format emission 2.7.9 → pre-2.9.6. Same field layout as `"3.0.0"`; **canonicalizer is legacy Python `json.dumps(sort_keys=True, separators=(",",":"))`**. Persistence reads `agent_id_hash` directly from each component AND extracts the 6 `deployment_profile` fields into denormalized `cirislens.trace_context` columns. |
+| `"3.0.0"` | 10 keys (adds `deployment_profile`) | 5 fields: above + `agent_id_hash` (denormalized) | Agent's wire-format emission as of release/2.9.6. **Identical field layout to `"2.7.9"`; the ONLY change is the canonicalizer → RFC 8785 (JCS).** The major-version bump is the signed-bytes-bound discriminator for the canonicalizer gate (`major >= 3 ⇒ JCS`, `2.x ⇒ Python`); without it a verifier cannot tell which canonicalizer reproduces the signature. See §8 "JCS canonicalization". |
 
 The legacy 2-field shape (`{"components", "trace_level"}`, pre-2.7.8.9)
 is retired on the agent side. Persistence implementations MAY accept

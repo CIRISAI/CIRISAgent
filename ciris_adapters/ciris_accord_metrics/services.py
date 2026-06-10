@@ -52,11 +52,20 @@ from ciris_engine.schemas.services.authority_core import DeferralRequest
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
-# 2.7.9: bumped from "2.7.0" — signals to persistence that LLM_CALL events
-# carry the parent_event_type + parent_attempt_index fields specified in
-# TRACE_WIRE_FORMAT.md §5.10. Persistence layers MAY enforce field
-# presence on traces at this schema version.
-TRACE_SCHEMA_VERSION = "2.7.9"
+# 3.0.0: bumped from "2.7.9" as part of the 2.9.6 HARD JCS cutover
+# (CIRISAgent#871). The stamped trace_schema_version is the signed-bytes-bound
+# discriminator a verifier uses to pick the canonicalizer that reproduces the
+# signature: persist's gate is an era boundary — major >= 3 => JCS (RFC 8785),
+# 2.x => legacy Python json.dumps (`canon_version_for_trace_schema`,
+# persist src/verify/ed25519.rs). Leaving the stamp at "2.7.9" while signing
+# JCS would gate the agent's JCS traces to the Python canonicalizer, failing
+# every non-ASCII trace. The canonical FIELD LAYOUT is unchanged from 2.7.9
+# (same 9-field envelope + deployment_profile §3.2); only the canonicalizer
+# flipped, so persist's "3.0.0" dispatch arm reuses the 2.7.9 field builder.
+# History: "2.7.9" (bumped from "2.7.0") signalled that LLM_CALL events carry
+# the parent_event_type + parent_attempt_index fields per TRACE_WIRE_FORMAT.md
+# §5.10; persistence MAY enforce field presence at a given schema version.
+TRACE_SCHEMA_VERSION = "3.0.0"
 
 
 def _get_metrics_env(name: str, default: str = "") -> str:

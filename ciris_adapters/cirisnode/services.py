@@ -34,13 +34,19 @@ from ciris_engine.schemas.services.authority_core import DeferralRequest
 logger = logging.getLogger(__name__)
 
 
-# Re-use the canonical types from accord_metrics to guarantee Lens format compatibility
+# Shared enums still live in accord_metrics; the legacy Python trace
+# pipeline types moved to this adapter's private module when the 2.9.6
+# LensCore fold (#866) removed them from accord_metrics — CIRISNode is a
+# separate wire counterpart (full traces to the Node, Ed25519 inline
+# signatures) and its substrate fold is a follow-up. See _legacy_trace.py.
 from ciris_adapters.ciris_accord_metrics.services import (
+    SimpleCapabilities,
+    TraceDetailLevel,
+)
+from ciris_adapters.cirisnode._legacy_trace import (
     CompleteTrace,
     Ed25519TraceSigner,
-    SimpleCapabilities,
     TraceComponent,
-    TraceDetailLevel,
     _strip_empty,
 )
 

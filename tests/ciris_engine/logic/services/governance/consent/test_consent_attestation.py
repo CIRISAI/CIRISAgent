@@ -42,11 +42,16 @@ def _status(stream: ConsentStream = ConsentStream.PARTNERED) -> ConsentStatus:
 # ---------------------------------------------------------------- pure mapper
 
 
-def test_feature_flag_default_off(monkeypatch):
+def test_feature_flag_default_on_with_kill_switch(monkeypatch):
+    """Default ON as of 2.9.6 (#866): the CEG attestation IS the consent
+    artifact, so the emit must run unless explicitly killed."""
     monkeypatch.delenv("CIRIS_CONSENT_CEG_ATTESTATIONS", raising=False)
-    assert consent_ceg_attestations_enabled() is False
+    assert consent_ceg_attestations_enabled() is True
     monkeypatch.setenv("CIRIS_CONSENT_CEG_ATTESTATIONS", "true")
     assert consent_ceg_attestations_enabled() is True
+    for kill in ("0", "false", "no", "off", "FALSE", "Off"):
+        monkeypatch.setenv("CIRIS_CONSENT_CEG_ATTESTATIONS", kill)
+        assert consent_ceg_attestations_enabled() is False, kill
 
 
 def test_grant_input_shape():

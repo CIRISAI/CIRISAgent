@@ -639,14 +639,39 @@ def _write_verify_config(f: Any, setup: SetupCompleteRequest) -> None:
 
 
 def _write_accord_metrics_config(f: Any, setup: SetupCompleteRequest) -> None:
-    """Write Accord metrics consent if enabled."""
+    """Accord-traces opt-in at setup → the CEG consent wire artifact.
+
+    2.9.6 (#866 LensCore fold): the adapter is bootstrap-required, so the
+    setup checkbox no longer controls loading and no longer writes
+    CIRIS_ACCORD_METRICS_CONSENT* env vars (those survive only as a
+    QA-runner override). Opt-in IS the CEG promotion event: a
+    `consent:community_trust:v1` grant attestation written to the local
+    persist tier, which lens-core's consent gate resolves (newest-wins)
+    at every trace seal. Revocation later writes withdraws/recants via
+    the my-data routes — the same dimension, the same gate.
+
+    Best-effort: a failed emit must never break setup completion — the
+    user can re-grant from Data & Privacy settings (the accord-settings
+    PUT emits the identical artifact).
+    """
     if "ciris_accord_metrics" not in setup.enabled_adapters:
         return
-    consent_timestamp = datetime.now(timezone.utc).isoformat()
-    f.write("\n# Accord Metrics Consent (auto-set when adapter enabled)\n")
-    f.write("CIRIS_ACCORD_METRICS_CONSENT=true\n")
-    f.write(f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={consent_timestamp}\n")
-    logger.info(f"[SETUP] Accord metrics consent enabled: {consent_timestamp}")
+    try:
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            emit_community_consent_grant,
+        )
+
+        attestation_id = emit_community_consent_grant()
+        if attestation_id:
+            logger.info(f"[SETUP] Accord-traces CEG consent grant written: {attestation_id}")
+        else:
+            logger.warning(
+                "[SETUP] Accord-traces opt-in: CEG grant emit returned None "
+                "(engine/federation key not ready?) — user can re-grant from "
+                "Data & Privacy settings"
+            )
+    except Exception as e:
+        logger.warning(f"[SETUP] Accord-traces CEG grant emit failed (non-fatal): {e}")
 
 
 def _write_mobile_local_llm_config(f: Any, setup: SetupCompleteRequest) -> None:

@@ -148,27 +148,26 @@ class AccordMetricsAdapter(Service):
         logger.info("📋 ACCORD METRICS - get_services_to_register() called")
         logger.info(f"   Current consent state: {self._consent_given}")
 
-        registrations = []
-
-        # Only register if consent is given
-        # This prevents the service from receiving events before consent
-        if self._consent_given:
-            registrations.append(
-                AdapterServiceRegistration(
-                    service_type=ServiceType.WISE_AUTHORITY,
-                    provider=self.metrics_service,
-                    priority=Priority.LOW,  # Low priority - observational only
-                    capabilities=[
-                        "send_deferral",  # Receive WBD events
-                        "accord_metrics",
-                    ],
-                )
+        # 2.9.6: registration is UNCONDITIONAL. The adapter is the agent's
+        # observability spine (required like audit); consent never gated
+        # whether the pipeline exists — it gates SHARING, and the only
+        # consent enforcement point is the substrate's CEG gate
+        # (consent:community_trust:v1, evaluated by lens-core at every
+        # seal — a recant hard-stops the very next ACTION_RESULT).
+        registrations = [
+            AdapterServiceRegistration(
+                service_type=ServiceType.WISE_AUTHORITY,
+                provider=self.metrics_service,
+                priority=Priority.LOW,  # Low priority - observational only
+                capabilities=[
+                    "send_deferral",  # Receive WBD events
+                    "accord_metrics",
+                ],
             )
-            logger.info("✅ REGISTERED AccordMetricsService on WiseAuthority bus")
-            logger.info("   Capabilities: send_deferral, accord_metrics")
-        else:
-            logger.warning("❌ NOT REGISTERED - consent required")
-            logger.warning("   Set CIRIS_ACCORD_METRICS_CONSENT=true to enable")
+        ]
+        logger.info("✅ REGISTERED AccordMetricsService on WiseAuthority bus")
+        logger.info("   Capabilities: send_deferral, accord_metrics")
+        logger.info("   (consent gates sharing at the substrate seal, not registration)")
 
         logger.info("=" * 70)
         return registrations

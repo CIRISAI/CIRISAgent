@@ -1,70 +1,78 @@
 """
-Accord Metrics Services - Trace capture for CIRISLens scoring.
+Accord Metrics Services - Trace capture via the LensCore substrate.
 
-This module implements the AccordMetricsService which:
-1. Subscribes to reasoning_event_stream for trace capture (8 event types)
-2. Receives WBD (Wisdom-Based Deferral) events via WiseBus broadcast
-3. Batches events and sends them to CIRISLens API
-4. Signs complete traces with Ed25519 for integrity verification
-5. Only operates when explicit consent has been given
+2.9.6 LensCore fold (CIRISAgent#866 / #857): the trace-emit pipeline —
+partial-trace assembly, attempt indexing, canonicalization, Ed25519 signing,
+consent gating, local-copy tee, orphan sweep, and persistence — is OWNED BY
+THE SUBSTRATE (`ciris-lens-core` `LensClient`, wire contract frozen in
+CIRISLensCore/docs/PUBLIC_SCHEMA_CONTRACT.md). Sealed traces land in the
+local persist store via `Engine::receive_and_persist`; federation fan-out
+rides the substrate replication layer (CIRISLensCore#11 Cut 4), not agent
+HTTP. LensCore is the observability ORCHESTRATOR the way the audit service
+orchestrates the audit trail — and like persist/edge/verify it is a REQUIRED
+substrate leg in 2.9.6+: `start()` raises if it cannot be constructed.
+
+Per CIRISAgent#857 the legacy bespoke HTTP shipping path
+(`POST <CIRIS_ACCORD_METRICS_ENDPOINT>/accord/*`) is RETIRED — "no second
+shipping mechanism". That removed the aiohttp session, public-key
+registration, connectivity heartbeats, WBD HTTP POSTs, the event queue /
+batch / flush machinery, and the Python Ed25519 trace signer from this file
+(~2200 lines of Python replaced by the Rust substrate).
+
+What remains agent-side (the semantic mapping the substrate cannot own):
+1. reasoning_event_stream subscription — each event is normalized and fed
+   to `LensClient.capture_event`
+2. `_extract_component_data` — per-event-type payload construction with
+   trace-level field gating (generic / detailed / full_traces)
+3. WBD deferrals — captured as DEFERRAL_ROUTED events in the closed
+   15-variant ReasoningEventType taxonomy (no separate wire)
+4. Consent config sourcing + correlation-metadata inputs (raw values; the
+   PII lat/lng fuzz is a lens-core construction-time type invariant)
+
+Consent is enforced at the substrate: lens-core's dynamic CEG consent gate
+(`consent:community_trust:v1`, newest-wins; a withdraws/recants is a HARD
+stop that config cannot override) decides at every seal. The agent-side
+consent flag only selects the config-fallback timestamp handed to the
+client (the 2.9.6 interim path per CIRISAgent#870).
 
 Trace Detail Levels:
 - generic (default): Numeric scores only - powers ciris.ai/ciris-scoring
 - detailed: Adds actionable lists (sources, stakeholders, flags)
 - full_traces: Complete reasoning text for research corpus
 
-Trace Components (from coherence-ratchet):
-1. Observation - What triggered processing (THOUGHT_START)
-2. Context - System snapshot and environment (SNAPSHOT_AND_CONTEXT)
-3. Rationale - DMA reasoning analysis (DMA_RESULTS, IDMA_RESULT, ASPDMA_RESULT, TSASPDMA_RESULT)
-4. Conscience - Ethical validation (CONSCIENCE_RESULT)
-5. Action - Final action taken (ACTION_RESULT)
-6. Outcome - Execution results and audit (ACTION_RESULT audit data)
-
-Event Types (8 total - 7 core + 1 optional):
-- THOUGHT_START: Thought begins processing
-- SNAPSHOT_AND_CONTEXT: System snapshot + gathered context
-- DMA_RESULTS: 3 DMA results (CSDMA, DSDMA, PDMA)
-- IDMA_RESULT: Intuition DMA fragility check (always emitted)
-- ASPDMA_RESULT: Selected action + rationale
-- TSASPDMA_RESULT: Tool-Specific ASPDMA (optional, when TOOL selected)
-- CONSCIENCE_RESULT: Conscience evaluation + final action
-- ACTION_RESULT: Action execution outcome + audit trail
+Event Types (closed 15-variant taxonomy, locked by lens-core at compile
+time): THOUGHT_START, SNAPSHOT_AND_CONTEXT, DMA_RESULTS, IDMA_RESULT,
+ASPDMA_RESULT, TSASPDMA_RESULT (deprecated), VERB_SECOND_PASS_RESULT,
+CONSCIENCE_RESULT, ACTION_RESULT, LLM_CALL + the 5 Commons Credits events
+(DEFERRAL_ROUTED / DEFERRAL_RECEIVED / DEFERRAL_RESOLVED /
+GRATITUDE_SIGNALED / CREDIT_GENERATED).
 """
 
 import asyncio
-import base64
 import hashlib
-import json
 import logging
 import os
-import ssl
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
-
-import aiohttp
+from typing import Any, Dict, List, Optional
 
 from ciris_engine.schemas.services.authority_core import DeferralRequest
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
-# 3.0.0: bumped from "2.7.9" as part of the 2.9.6 HARD JCS cutover
-# (CIRISAgent#871). The stamped trace_schema_version is the signed-bytes-bound
-# discriminator a verifier uses to pick the canonicalizer that reproduces the
-# signature: persist's gate is an era boundary — major >= 3 => JCS (RFC 8785),
-# 2.x => legacy Python json.dumps (`canon_version_for_trace_schema`,
-# persist src/verify/ed25519.rs). Leaving the stamp at "2.7.9" while signing
-# JCS would gate the agent's JCS traces to the Python canonicalizer, failing
-# every non-ASCII trace. The canonical FIELD LAYOUT is unchanged from 2.7.9
-# (same 9-field envelope + deployment_profile §3.2); only the canonicalizer
-# flipped, so persist's "3.0.0" dispatch arm reuses the 2.7.9 field builder.
-# History: "2.7.9" (bumped from "2.7.0") signalled that LLM_CALL events carry
-# the parent_event_type + parent_attempt_index fields per TRACE_WIRE_FORMAT.md
-# §5.10; persistence MAY enforce field presence at a given schema version.
+# 2.9.6 crosses the JCS gate: the trace wire era the agent declares is
+# "3.0.0" — persist's signed-epoch verifier gate (`canon_version_for_trace_
+# schema`, src/verify/ed25519.rs) dispatches major >= 3 ⇒ JCS (RFC 8785),
+# 2.x ⇒ legacy Python json.dumps. The signed stamp itself is produced by
+# lens-core at seal time. NOTE: ciris-lens-core 1.0.0 still stamps "2.7.9"
+# and signs V1Python (its capture path froze before the gate crossing);
+# the upstream ask to align lens-core's stamp + canonicalizer to
+# 3.0.0/JCS is filed on CIRISLensCore — the agent pin moves to that cut.
+# Until then this constant documents the agent's DECLARED era; nothing
+# signature-bearing reads it (the legacy HTTP wire that used to carry it
+# is retired per #857).
 TRACE_SCHEMA_VERSION = "3.0.0"
 
 
@@ -101,57 +109,6 @@ def _get_metrics_env(name: str, default: str = "") -> str:
 # of truth so future call sites can't accidentally skip the rounding.
 _PII_LOCATION_FUZZ_DECIMALS = 1
 
-
-def _fuzz_location_to_region(value: float) -> str:
-    """Round a lat/lng float to PII-safe region resolution before wire emit.
-
-    Returns a stringified decimal degree at `_PII_LOCATION_FUZZ_DECIMALS`
-    precision (~11 km grid at 1 decimal). The wire field
-    `CorrelationMetadata.user_latitude` is `Option<String>` on persist's
-    side so the substrate accepts the fuzzed string verbatim — no schema
-    change needed (CIRISPersist envelope.rs).
-
-    Args:
-        value: raw float from the user's consented location (e.g., 42.0334).
-
-    Returns:
-        Stringified float at region resolution (e.g., "42.0" for 42.0334).
-
-    Invariant pinned by `test_fuzz_location_to_region_precision_*`:
-    for any input float in the valid lat/lng range, the parsed wire
-    value differs from `round(value, 1)` by at most floating-point
-    epsilon.
-    """
-    return f"{round(value, _PII_LOCATION_FUZZ_DECIMALS)}"
-
-
-class LensContentRejectError(RuntimeError):
-    """Lens parsed the batch and rejected it for content reasons (4xx, not 429).
-
-    Raised by _send_events_batch when the lens returns a 4xx that's NOT 429.
-    Caught by _flush_events to suppress the re-queue path: the same signed
-    bytes will fail signature verification (or schema validation, etc.) on
-    the next attempt with mathematical certainty. Re-queueing is wasted work
-    that piles up retry pressure against an already-broken downstream.
-
-    NOT raised for:
-    - 5xx (transient downstream issues — re-queue is correct)
-    - 429 (rate-limited — re-queue with backoff is correct)
-    - Network/connection errors (transient — re-queue is correct)
-    - Timeouts (handled separately, transient by definition)
-
-    Driver: 2.7.8.7 yo+v1_sensitive run hit 236 verify_signature_mismatch
-    rejections from the lens v0.1.10 verify path. Without this typed
-    exception, the failure handler re-queued every batch on every flush
-    cycle, multiplying network traffic by N attempts × 3 accord_metrics
-    adapter instances against an unrecoverable rejection state.
-    """
-
-    def __init__(self, status: int, message: str) -> None:
-        self.status = status
-        super().__init__(message)
-
-
 class TraceDetailLevel(str, Enum):
     """Trace detail levels for privacy/bandwidth control.
 
@@ -172,22 +129,6 @@ class TraceDetailLevel(str, Enum):
     DETAILED = "detailed"
     FULL_TRACES = "full_traces"
 
-
-def _strip_empty(obj: Any) -> Any:
-    """Recursively strip None, empty strings, empty lists, empty dicts to reduce payload size."""
-    if isinstance(obj, dict):
-        result = {}
-        for k, v in obj.items():
-            stripped = _strip_empty(v)
-            # Keep the value if it's not empty (0 and False are valid values)
-            if stripped is not None and stripped != "" and stripped != [] and stripped != {}:
-                result[k] = stripped
-        return result
-    elif isinstance(obj, list):
-        return [_strip_empty(item) for item in obj if item is not None]
-    return obj
-
-
 @dataclass
 class SimpleCapabilities:
     """Simple capabilities container for duck-typing with WiseBus.
@@ -201,424 +142,17 @@ class SimpleCapabilities:
     scopes: List[str]
     supported_domains: List[str] = field(default_factory=list)  # DomainCategory values
 
-
-@dataclass
-class TraceComponent:
-    """A single component of a reasoning trace.
-
-    `agent_id_hash` is denormalized from the parent CompleteTrace onto every
-    component as of trace_schema_version "2.7.9" (#712 item #1) — persistence
-    layers read it directly from each row instead of propagating from the
-    envelope. The wire representation carries the same value at both
-    CompleteTrace and TraceComponent levels; agents MUST emit them equal,
-    persistence MAY reject mismatches.
-    """
-
-    component_type: str  # observation, context, rationale, conscience, action, outcome
-    event_type: str  # THOUGHT_START, SNAPSHOT_AND_CONTEXT, etc.
-    timestamp: str
-    data: Dict[str, Any]
-    agent_id_hash: str = ""  # Denormalized from CompleteTrace.agent_id_hash; populated by build code.
-
-
-@dataclass
-class CompleteTrace:
-    """A complete 6-component reasoning trace.
-
-    `deployment_profile` (2.7.9+) carries the cohort-taxonomy block per
-    FSD/TRACE_WIRE_FORMAT.md §3.2 — 6 agent-declared fields routed into
-    the signed canonical bytes (§8) so cohort labels are non-forgeable
-    post-emission. Agents MUST emit this block at trace_schema_version
-    "2.7.9"; persistence MUST reject 2.7.9 traces missing it.
-    Migration defaults populate when the operator hasn't configured
-    explicit values (see `AccordMetricsService._build_deployment_profile`).
-    """
-
-    trace_id: str
-    thought_id: str
-    task_id: Optional[str]
-    agent_id_hash: str
-    started_at: str
-    completed_at: Optional[str] = None
-    components: List[TraceComponent] = field(default_factory=list)
-    signature: Optional[str] = None
-    signature_key_id: Optional[str] = None
-    # Trace level determines what data is included - MUST be part of signature
-    trace_level: Optional[str] = None
-    trace_schema_version: str = TRACE_SCHEMA_VERSION
-    # Cohort taxonomy block, 2.7.9+. Required-on-the-wire at
-    # trace_schema_version "2.7.9" per FSD §3.2; absent at 2.7.0.
-    deployment_profile: Optional[Dict[str, Any]] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization.
-
-        Uses _strip_empty on component data to match what was signed.
-        """
-        out: Dict[str, Any] = {
-            "trace_id": self.trace_id,
-            "thought_id": self.thought_id,
-            "task_id": self.task_id,
-            "agent_id_hash": self.agent_id_hash,
-            "started_at": self.started_at,
-            "completed_at": self.completed_at,
-            "trace_level": self.trace_level,
-            "trace_schema_version": self.trace_schema_version,
-            "components": [
-                {
-                    "agent_id_hash": c.agent_id_hash or self.agent_id_hash,
-                    "component_type": c.component_type,
-                    "data": _strip_empty(c.data),
-                    "event_type": c.event_type,
-                    "timestamp": c.timestamp,
-                }
-                for c in self.components
-            ],
-            "signature": self.signature,
-            "signature_key_id": self.signature_key_id,
-        }
-        if self.deployment_profile is not None:
-            out["deployment_profile"] = dict(self.deployment_profile)
-        return out
-
-    def compute_hash(self) -> str:
-        """Compute SHA-256 hash of trace content (excluding signature)."""
-        # Build deterministic representation
-        content: Dict[str, Any] = {
-            "trace_id": self.trace_id,
-            "thought_id": self.thought_id,
-            "task_id": self.task_id,
-            "agent_id_hash": self.agent_id_hash,
-            "started_at": self.started_at,
-            "completed_at": self.completed_at,
-            "trace_level": self.trace_level,
-            "trace_schema_version": self.trace_schema_version,
-            "components": [
-                {
-                    "component_type": c.component_type,
-                    "event_type": c.event_type,
-                    "timestamp": c.timestamp,
-                    "data": c.data,
-                }
-                for c in self.components
-            ],
-        }
-        if self.deployment_profile is not None:
-            content["deployment_profile"] = dict(self.deployment_profile)
-        json_str = json.dumps(content, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(json_str.encode()).hexdigest()
-
-
-# CIRISVerify briefly blocks signing while a tree attestation runs (typically
-# at startup); it raises a retryable AttestationInProgressError whose message
-# advises retrying after ~500ms. Without a retry, the trace is dropped.
-_TRACE_SIGN_MAX_RETRIES = 10
-_TRACE_SIGN_RETRY_DELAY_S = 0.5
-
-
-# 2.9.6 is the HARD JCS cutover (CEG §0.9 / the substrate triple persist 4.10 ·
-# edge 1.5 · verify 5.0). Trace signing canonical bytes are produced by verify's
-# RFC 8785 (JCS) canonicalizer — ciris_verify_core::jcs via the verify FFI — so
-# they are byte-identical to what the Rust federation verifiers recompute on the
-# wire. This replaces the pre-2.9.6 `json.dumps(sort_keys=True,
-# separators=(",", ":"))` path, which was implicitly ensure_ascii=True and so
-# diverged on EVERY non-ASCII byte (i.e. the entire multilingual trace corpus —
-# signatures over Amharic/Arabic/Chinese/… traces verified locally but failed
-# against any Rust verifier). verify 5.0.0 is a hard dependency of the 2.9.6
-# triple (requirements.txt), so the binding is always present; we fail loud
-# rather than silently fall back to the divergent json.dumps bytes.
-_jcs_canon: Optional[Callable[[Any], bytes]] = None
-
-
-def _get_jcs_canonicalize() -> Callable[[Any], bytes]:
-    """Resolve verify's RFC 8785 (JCS) canonicalizer, cached process-wide.
-
-    Both sources wrap the SAME Rust impl (ciris_verify_core::jcs), so output is
-    byte-identical regardless of which loads:
-
-    1. The pip-installed ``ciris_verify`` package — the dependency-declared
-       source (``ciris-verify>=5.0.0`` in requirements.txt). Its wheel ships a
-       loadable native lib for every platform, so this is the path that works
-       in CI and any pip-based deploy.
-    2. The in-repo ``ciris_adapters.ciris_verify`` adapter — its Linux/Windows
-       native libs are build-time artifacts (bundled in the wheel / Android
-       jniLibs), so this path covers bundled deploys where only it is present.
-
-    Fails loud if neither resolves: a hard JCS cutover must never silently fall
-    back to the divergent ``json.dumps`` bytes (that would mint signatures the
-    Rust verifiers reject).
-    """
-    global _jcs_canon
-    if _jcs_canon is not None:
-        return _jcs_canon
-    errors: List[str] = []
-    for source in ("ciris_verify._jcs", "ciris_adapters.ciris_verify.ffi_bindings._jcs"):
-        try:
-            mod = __import__(source, fromlist=["jcs_canonicalize"])
-            _jcs_canon = mod.jcs_canonicalize
-            return _jcs_canon
-        except Exception as exc:  # ImportError / RuntimeError (lib not loadable)
-            errors.append(f"{source}: {exc}")
-    raise RuntimeError(
-        "2.9.6 JCS cutover: no RFC 8785 canonicalizer available from "
-        "ciris_verify (>= 5.0.0). Trace signing cannot proceed without it. "
-        "Tried: " + " | ".join(errors)
-    )
-
-
-def _attestation_in_progress_error() -> Optional[type]:
-    """Return CIRISVerify's AttestationInProgressError type, if importable.
-
-    ciris_verify is an optional adapter, so the type is resolved dynamically.
-    """
-    try:
-        import ciris_adapters.ciris_verify as ciris_verify
-
-        err = getattr(ciris_verify, "AttestationInProgressError", None)
-        return err if isinstance(err, type) else None
-    except ImportError:
-        return None
-
-
-class Ed25519TraceSigner:
-    """Sign traces using the unified Ed25519 signing key.
-
-    This class wraps the unified signing key from ciris_engine.logic.audit.signing_protocol,
-    ensuring the same key is used for both audit trail signing and accord metrics traces.
-
-    The unified key is stored at data/agent_signing.key and is shared with the audit service.
-    """
-
-    def __init__(self, seed_dir: Optional[Path] = None):
-        """Initialize signer with optional seed directory for root public key."""
-        self._unified_key: Optional[Any] = None
-        self._root_pubkey: Optional[str] = None
-        self._key_id: Optional[str] = None
-
-        # Load root public key from seed directory (for verification only)
-        if seed_dir is None:
-            seed_dir = Path(__file__).parent.parent.parent / "seed"
-
-        root_pub_file = seed_dir / "root_pub.json"
-        if root_pub_file.exists():
-            with open(root_pub_file) as f:
-                root_data = json.load(f)
-                self._root_pubkey = root_data.get("pubkey")
-                logger.info(f"Loaded root public key: {root_data.get('wa_id', 'wa-unknown')}")
-
-    def _ensure_unified_key(self) -> bool:
-        """Ensure the unified signing key is loaded."""
-        if self._unified_key is not None:
-            return True
-
-        try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
-
-            self._unified_key = get_unified_signing_key()
-            self._key_id = self._unified_key.key_id
-            logger.info(f"Using unified signing key: {self._key_id}")
-            return True
-        except Exception as e:
-            logger.warning(f"Could not load unified signing key: {e}")
-            return False
-
-    def _build_canonical_message(self, trace: CompleteTrace) -> bytes:
-        """Build the canonical signing/verifying bytes per FSD/TRACE_WIRE_FORMAT.md §8.
-
-        9-field canonical (post-2.7.8.9 / CIRISAgent#710):
-
-            {
-              "trace_id":            ...,
-              "thought_id":          ...,
-              "task_id":             ...,
-              "agent_id_hash":       ...,
-              "started_at":          ...,
-              "completed_at":        ...,
-              "trace_level":         ...,
-              "trace_schema_version": ...,
-              "components":          [strip_empty({component_type,data,event_type,timestamp}), ...]
-            }
-
-        Then RFC 8785 (JCS) canonicalized via verify — the 2.9.6 HARD cutover.
-        Pre-2.9.6 used `json.dumps(canonical, sort_keys=True, separators=(",",
-        ":"))`, which was ensure_ascii=True and diverged from the Rust verifiers
-        on all non-ASCII (the multilingual corpus). See the module-level note.
-
-        Migration history:
-        - <= 2.7.8.8 used a 2-field legacy canonical {"components", "trace_level"}
-          to match what `lens-legacy api/accord_api.py::verify_trace_signature`
-          accepted. Persist v0.1.15 implements the spec's 9-field canonical;
-          legacy 2-field signatures fail `verify_strict` with HTTP 422
-          `verify_signature_mismatch` against the new typed verify path.
-        - Persist's `try-both` fallback (CIRISPersist issue) accepts BOTH shapes
-          during the migration window — so flipping the agent doesn't gate
-          persist, and persist's fallback doesn't gate the agent.
-        - Once the agent fleet has flipped to 9-field, persist drops the 2-field
-          path on a future minor.
-
-        The seven additional fields (vs the legacy 2-field) bind more provenance
-        into the signed bytes — federation peers verify "this agent claims this
-        thought_id at this time was signed under this schema version" without
-        trusting the envelope wrapping.
-        """
-        # Per-component shape at trace_schema_version "2.7.9" (#712 item #1):
-        # agent_id_hash is denormalized onto every TraceComponent so each
-        # event row is self-contained — persist reads it directly from the
-        # row instead of propagating from the envelope. The component's
-        # value MUST equal the envelope's agent_id_hash; we copy here to
-        # keep them locked.
-        components_list = [
-            _strip_empty(
-                {
-                    "agent_id_hash": c.agent_id_hash or trace.agent_id_hash,
-                    "component_type": c.component_type,
-                    "data": c.data,
-                    "event_type": c.event_type,
-                    "timestamp": c.timestamp.isoformat()
-                    if hasattr(c.timestamp, "isoformat")
-                    else str(c.timestamp),
-                }
-            )
-            for c in trace.components
-        ]
-        # `started_at` / `completed_at` are typed as Optional[str|datetime] on
-        # the trace envelope. Both mypy-narrow through an explicit None check
-        # AND pass through unchanged if already a str. Persist's canonicalizer
-        # does the same — the agreed-on shape is "ISO 8601 string or None".
-        def _iso(value: Any) -> Any:
-            if value is None:
-                return None
-            return value.isoformat() if hasattr(value, "isoformat") else str(value)
-
-        canonical: Dict[str, Any] = {
-            "trace_id": trace.trace_id,
-            "thought_id": trace.thought_id,
-            "task_id": trace.task_id,
-            "agent_id_hash": trace.agent_id_hash,
-            "started_at": _iso(trace.started_at),
-            "completed_at": _iso(trace.completed_at),
-            "trace_level": trace.trace_level,
-            "trace_schema_version": trace.trace_schema_version,
-            "components": components_list,
-        }
-        # 2.7.9+ deployment_profile block per FSD §3.2. The block is part of
-        # the signed canonical bytes — federation peers verify the cohort
-        # labels the agent declared at signing time so an intermediary
-        # (or persist itself) cannot re-stamp them. Absent at 2.7.0;
-        # present at 2.7.9 (with migration defaults if operator has not
-        # configured explicit values).
-        if trace.deployment_profile is not None:
-            canonical["deployment_profile"] = dict(trace.deployment_profile)
-        # 2.9.6 HARD JCS cutover: canonicalize via verify's RFC 8785 impl so the
-        # signed bytes are byte-identical to what the Rust federation verifiers
-        # recompute. The old `json.dumps(sort_keys=True, separators=(",", ":"))`
-        # was ensure_ascii=True and diverged on all non-ASCII. See module note.
-        return _get_jcs_canonicalize()(canonical)
-
-    def sign_trace(self, trace: CompleteTrace) -> bool:
-        """Sign a trace with the unified Ed25519 signing key.
-
-        Canonical bytes are produced by _build_canonical_message — see that
-        method's docstring for the 9-field shape per FSD/TRACE_WIRE_FORMAT.md §8
-        and the 2.7.8.9 migration note.
-
-        Returns True on success, False if the signing key isn't available.
-        """
-        if not self._ensure_unified_key() or self._unified_key is None:
-            logger.warning("No unified signing key available for trace signing")
-            return False
-
-        attestation_in_progress = _attestation_in_progress_error()
-        for attempt in range(_TRACE_SIGN_MAX_RETRIES):
-            try:
-                message = self._build_canonical_message(trace)
-                message_hash = hashlib.sha256(message).hexdigest()
-                logger.info(
-                    f"[SIGN_TRACE] trace={trace.trace_id} level={trace.trace_level} "
-                    f"len={len(message)} hash={message_hash[:16]} canonical=9-field"
-                )
-                trace.signature = self._unified_key.sign_base64(message)
-                trace.signature_key_id = self._key_id
-                logger.debug(f"Signed trace {trace.trace_id} with unified key {self._key_id}")
-                return True
-            except Exception as e:
-                last_attempt = attempt >= _TRACE_SIGN_MAX_RETRIES - 1
-                # The signing wrapper may re-raise CIRISVerify's
-                # AttestationInProgressError as a generic exception that only
-                # carries the message — so match the type OR the message.
-                is_attestation = (
-                    attestation_in_progress is not None
-                    and isinstance(e, attestation_in_progress)
-                ) or "attestation in progress" in str(e).lower()
-                if is_attestation and not last_attempt:
-                    logger.debug(
-                        "trace signing deferred (attestation in progress); "
-                        "retry %d/%d in %.1fs",
-                        attempt + 1,
-                        _TRACE_SIGN_MAX_RETRIES,
-                        _TRACE_SIGN_RETRY_DELAY_S,
-                    )
-                    time.sleep(_TRACE_SIGN_RETRY_DELAY_S)
-                    continue
-                logger.error(f"Failed to sign trace: {e}")
-                return False
-        return False
-
-    def verify_trace(self, trace: CompleteTrace) -> bool:
-        """Verify a trace signature using the root public key.
-
-        Uses the same _build_canonical_message helper as sign_trace, so the
-        sign/verify paths can never drift out of sync at the canonicalization
-        layer.
-        """
-        if not trace.signature or not self._root_pubkey:
-            return False
-
-        try:
-            from cryptography.hazmat.primitives.asymmetric import ed25519
-
-            pubkey_bytes = base64.urlsafe_b64decode(self._root_pubkey + "==")
-            public_key = ed25519.Ed25519PublicKey.from_public_bytes(pubkey_bytes)
-            sig_bytes = base64.urlsafe_b64decode(trace.signature + "==")
-            message = self._build_canonical_message(trace)
-            public_key.verify(sig_bytes, message)
-            return True
-        except Exception as e:
-            logger.warning(f"Trace signature verification failed: {e}")
-            return False
-
-    @property
-    def key_id(self) -> Optional[str]:
-        """Get the key ID, loading unified key if needed."""
-        if self._key_id is None:
-            self._ensure_unified_key()
-        return self._key_id
-
-    @property
-    def has_signing_key(self) -> bool:
-        """Check if a signing key is available."""
-        return self._ensure_unified_key()
-
-
 class AccordMetricsService:
-    """
-    Accord compliance metrics service for CIRISLens.
+    """Accord trace capture, orchestrated by the LensCore substrate.
 
-    This service:
-    1. Subscribes to reasoning_event_stream for FULL 6-component trace capture
-    2. Receives WBD (Wisdom-Based Deferral) events from WiseBus
-    3. Batches and sends traces to CIRISLens API
-    4. Signs complete traces with Ed25519 for integrity verification
+    The service is the agent-side half of the CIRISLensCore client-emit
+    contract: it subscribes to reasoning_event_stream, maps each event to
+    the component-dict shape `LensClient.capture_event` expects (semantic
+    extraction + trace-level gating), and lets the substrate own sealing,
+    signing, consent gating, tee, and persistence.
 
-    CRITICAL: This service ONLY sends data when:
-    1. User has explicitly consented via the setup wizard
-    2. The consent_given config flag is True
-    3. A valid consent_timestamp exists
-
-    Data sent is anonymized:
-    - Agent IDs are hashed
-    - No user message content is included
-    - Only structural decision metadata
+    Also implements the WiseAuthority duck-type (send_deferral) so WBD
+    events ride the same capture path as DEFERRAL_ROUTED components.
     """
 
     # Map reasoning events to trace components
@@ -682,14 +216,14 @@ class AccordMetricsService:
         config_consent = bool(self._config.get("consent_given", False))
         self._consent_given = config_consent or env_consent
 
-        # Consent timestamp - REQUIRED when consent is given, default to current time if not provided
+        # Consent timestamp - REQUIRED when consent is given (it is the
+        # config-fallback the lens-core consent gate uses when no CEG grant
+        # is discoverable; without it every seal resolves NoConsent)
         self._consent_timestamp: Optional[str] = None
         raw_timestamp = self._config.get("consent_timestamp") or env_timestamp
         if raw_timestamp is not None:
             self._consent_timestamp = str(raw_timestamp)
         elif self._consent_given:
-            # CRITICAL: If consent is given but no timestamp provided, use current time
-            # Without a timestamp, CIRISLens will reject all traces
             self._consent_timestamp = datetime.now(timezone.utc).isoformat()
             logger.warning(
                 f"⚠️ Consent given but no timestamp provided. Using current time: {self._consent_timestamp}. "
@@ -699,75 +233,46 @@ class AccordMetricsService:
         if env_consent and not config_consent:
             logger.info("✅ CONSENT enabled via environment variable CIRIS_ACCORD_METRICS_CONSENT")
 
-        # Endpoint configuration - check env var first for QA testing
-        env_endpoint = _get_metrics_env("ENDPOINT") or None
-        raw_url = self._config.get("endpoint_url")
-        if env_endpoint:
-            self._endpoint_url: str = env_endpoint
-        elif raw_url:
-            self._endpoint_url = str(raw_url)
-        else:
-            self._endpoint_url = "https://lens.ciris-services-1.ai/lens-api/api/v1"
-
-        # Local-tee feature flag for what gets shipped to lens.
-        # When CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR is set, every batch payload
-        # POSTed to lens is ALSO written to <dir>/accord-batch-<timestamp>-<seq>.json
-        # using the same JSON shape we POST. Purpose: audit copy when shipping
-        # to the live lens (which doesn't auto-mirror the way the mock-logshipper
-        # does in QA), and feeds the persist engine real test data for the new
-        # wire-format ingest path. Best-effort — disk failures must NEVER break
-        # the live POST (the lens is the source of truth, the local copy is
-        # supplementary). Default off; QA runner sets the dir to /tmp/<run-id>
-        # automatically when --live-lens is active (see tools/qa_runner/server.py).
+        # Local-tee: when CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR is set, the
+        # substrate writes every sealed batch to <dir>/lens-batch-<seq>.json
+        # (lens-core Gap 4 — best-effort, never fails persist). The QA
+        # runner sets this automatically when --live-lens is active.
         env_local_copy_dir = _get_metrics_env("LOCAL_COPY_DIR") or None
         self._local_copy_dir: Optional[Path] = None
-        self._local_copy_seq: int = 0
         if env_local_copy_dir:
             try:
                 candidate = Path(env_local_copy_dir)
                 candidate.mkdir(parents=True, exist_ok=True)
-                # Smoke-test writability so we fail at startup rather than
-                # silently dropping copies the operator thinks they have.
                 probe = candidate / ".accord_local_copy_probe"
                 probe.write_text("")
                 probe.unlink()
                 self._local_copy_dir = candidate
                 logger.info(
                     f"📂 [{self._adapter_instance_id}] Local-copy enabled: {candidate} "
-                    f"(every batch shipped to {self._endpoint_url} will be teed here)"
+                    f"(every sealed batch will be teed here by lens-core)"
                 )
             except OSError as e:  # PermissionError is a subclass of OSError
                 logger.warning(
                     f"⚠️ [{self._adapter_instance_id}] CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR={env_local_copy_dir!r} "
-                    f"is not writable ({e}); proceeding without local copies. "
-                    f"Live POSTs to lens are unaffected."
+                    f"is not writable ({e}); proceeding without local copies."
                 )
                 self._local_copy_dir = None
 
-        raw_batch = self._config.get("batch_size")
-        if raw_batch is not None and isinstance(raw_batch, (int, float, str)):
-            self._batch_size: int = int(raw_batch)
-        else:
-            self._batch_size = 10
-
-        # Flush interval - check env var first for QA testing
+        # Sweep cadence — reuses the historical FLUSH_INTERVAL knob so QA
+        # configs keep working; post-fold it paces orphan_sweep + the
+        # events-total persistence, not an HTTP flush.
         env_interval = _get_metrics_env("FLUSH_INTERVAL") or None
         raw_interval = self._config.get("flush_interval_seconds")
         if env_interval is not None:
-            self._flush_interval: float = float(env_interval)
+            self._sweep_interval: float = float(env_interval)
         elif raw_interval is not None and isinstance(raw_interval, (int, float, str)):
-            self._flush_interval = float(raw_interval)
+            self._sweep_interval = float(raw_interval)
         else:
-            self._flush_interval = 60.0
+            self._sweep_interval = 60.0
 
-        # Orphan-trace max age — safety net for traces that never see
-        # ACTION_RESULT. Without this, a severed upstream broadcast (e.g.,
-        # action_dispatcher's audit-required gate raising before
-        # _action_complete_step fires) leaves traces in _active_traces
-        # forever and nothing ever ships. Default = max(120s, 2× flush
-        # interval): long enough that a normal in-flight thought (10-30s
-        # DMA pipeline) doesn't get prematurely emitted, short enough
-        # that a regression doesn't go invisible for a whole run.
+        # Orphan-trace max age — handed to LensClient.orphan_sweep. Traces
+        # that never see ACTION_RESULT are purged by the substrate after
+        # this age (they are ephemeral by design — no action, no trace).
         env_orphan = _get_metrics_env("ORPHAN_MAX_AGE") or None
         raw_orphan = self._config.get("orphan_trace_max_age_seconds")
         if env_orphan is not None:
@@ -775,14 +280,11 @@ class AccordMetricsService:
         elif raw_orphan is not None and isinstance(raw_orphan, (int, float, str)):
             self._orphan_trace_max_age = float(raw_orphan)
         else:
-            self._orphan_trace_max_age = max(120.0, self._flush_interval * 2.0)
+            self._orphan_trace_max_age = max(120.0, self._sweep_interval * 2.0)
 
         # Trace detail level - per-adapter config takes precedence over env var
-        # This allows loading multiple adapters with different trace levels
-        # Default is GENERIC (numeric scores only) for ciris.ai/ciris-scoring
         env_level = _get_metrics_env("TRACE_LEVEL", "").lower()
         config_level = str(self._config.get("trace_level", "")).lower()
-        # Config takes precedence (allows per-adapter override), then env, then default
         level_str = config_level or env_level or "generic"
         level_source = "config" if config_level else ("env" if env_level else "default")
         try:
@@ -797,14 +299,10 @@ class AccordMetricsService:
             f"(source={level_source}, config='{config_level}', env='{env_level}')"
         )
 
-        # Cohort taxonomy (deployment_profile block per FSD §3.2, 2.7.9+).
-        # Operator-declared values from config; absence is filled with
-        # migration defaults at envelope-build time (see
-        # _build_deployment_profile). The 4 historical fields
-        # (region/type/role/template) were previously emitted only into
-        # correlation_metadata; the 6-field block consolidates them on the
-        # signed envelope so federation peers see non-forgeable cohort
-        # labels.
+        # Cohort taxonomy (deployment_profile block per FSD §3.2) —
+        # operator-declared values; migration defaults filled by
+        # _build_deployment_profile and stamped by lens-core onto every
+        # sealed trace.
         self._deployment_region: str = str(self._config.get("deployment_region", "") or "")
         self._deployment_type: str = str(self._config.get("deployment_type", "") or "")
         self._deployment_domain: str = str(self._config.get("deployment_domain", "") or "")
@@ -812,13 +310,15 @@ class AccordMetricsService:
         self._agent_role: str = str(self._config.get("agent_role", "") or "")
         self._agent_template: str = str(self._config.get("agent_template", "") or "")
 
-        # User location (only included if user explicitly consented via PREFERENCES step)
-        # Read from environment variables set during setup
+        # User location (only included if user explicitly consented via the
+        # PREFERENCES step). RAW values — lens-core fuzzes lat/lng to the
+        # ~11 km region grid as a construction-time type invariant
+        # (CIRISAgent#757); un-fuzzed coordinates are unconstructable on
+        # the wire by design.
         env_share_location = os.environ.get("CIRIS_SHARE_LOCATION_IN_TRACES", "").lower() == "true"
         self._share_location_in_traces: bool = env_share_location
         self._user_location: str = os.environ.get("CIRIS_USER_LOCATION", "") if env_share_location else ""
         self._user_timezone: str = os.environ.get("CIRIS_USER_TIMEZONE", "") if env_share_location else ""
-        # Coordinates in ISO 6709 decimal degrees format
         lat_str = os.environ.get("CIRIS_USER_LATITUDE", "") if env_share_location else ""
         lon_str = os.environ.get("CIRIS_USER_LONGITUDE", "") if env_share_location else ""
         self._user_latitude: Optional[float] = None
@@ -837,21 +337,22 @@ class AccordMetricsService:
             coords = f" ({self._user_latitude}, {self._user_longitude})" if self._user_latitude else ""
             logger.info(f"   Location sharing enabled: {self._user_location}{coords}")
 
-        # Event queue and batching
-        self._event_queue: List[Dict[str, Any]] = []
-        self._queue_lock = asyncio.Lock()
-        self._flush_task: Optional[asyncio.Task[None]] = None
-
-        # HTTP client session
-        self._session: Optional[aiohttp.ClientSession] = None
+        # The substrate client (constructed in start(); REQUIRED)
+        self._lens: Optional[Any] = None
 
         # Metrics (session counters)
         self._events_received = 0
-        self._events_sent = 0
+        self._events_sent = 0  # trace_events rows persisted by the substrate
         self._events_failed = 0
+        self._events_rejected = 0  # unknown event_type (typed rejection)
         self._traces_completed = 0
         self._traces_signed = 0
+        self._traces_consent_blocked = 0
         self._last_send_time: Optional[datetime] = None
+
+        # In-flight thought_ids (from capture_event outcomes; the
+        # authoritative partial-trace store lives in lens-core)
+        self._open_thoughts: set[str] = set()
 
         # Persisted cumulative total from prior sessions (loaded in start())
         self._persisted_events_sent = 0
@@ -864,31 +365,11 @@ class AccordMetricsService:
         # Reasoning event stream subscription
         self._reasoning_queue: Optional[asyncio.Queue[Any]] = None
         self._reasoning_task: Optional[asyncio.Task[None]] = None
-
-        # Active traces being built (keyed by thought_id)
-        self._active_traces: Dict[str, CompleteTrace] = {}
-        self._traces_lock = asyncio.Lock()
-
-        # Per-(thought_id, event_type) attempt index counter. Computed at
-        # broadcast-receive time and injected into the event dict so the lens
-        # has stable monotonic ordering for events that fire N times per
-        # thought (LLM_CALL, RECURSIVE_ASPDMA, RECURSIVE_CONSCIENCE,
-        # CONSCIENCE_RESULT, DMA_RESULTS bounce alternatives). For events that
-        # fire once per thought the index is always 0. Single-subscriber FIFO
-        # delivery from reasoning_event_stream guarantees broadcast-order
-        # arrival, so the counter increments produce a stable index.
-        # See FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.1 attempt_index semantics.
-        self._attempt_counters: Dict[Tuple[str, str], int] = {}
-
-        # Completed traces ready for sending
-        self._completed_traces: List[CompleteTrace] = []
-
-        # Trace signer
-        self._signer = Ed25519TraceSigner()
+        self._sweep_task: Optional[asyncio.Task[None]] = None
 
         logger.info(
             f"AccordMetricsService initialized (consent_given={self._consent_given}, "
-            f"endpoint={self._endpoint_url}, signer_key={self._signer.key_id})"
+            f"substrate=ciris-lens-core, level={self._trace_level.value})"
         )
 
     def _build_deployment_profile(self) -> Dict[str, Any]:
@@ -926,11 +407,14 @@ class AccordMetricsService:
         }
 
     def _compute_instance_hash(self, fallback_id: Optional[str] = None) -> str:
-        """Compute unique instance hash from signing key.
+        """Compute unique instance hash from the unified signing key.
 
-        Uses the signer's public key to generate a hash that is unique per agent instance,
-        not just per template name. This ensures that multiple instances of the same
-        template (e.g., 30 "Ally" agents) have distinct agent_id_hash values.
+        Uses the CIRISVerify-backed unified key's public bytes so the hash is
+        unique per agent INSTANCE, not per template name — and stable across
+        the LensCore fold (the same derivation the pre-fold Python signer
+        used, preserving DSAR/lens-identifier continuity even though trace
+        SIGNATURES now come from the persist federation key via
+        `engine.signer()`).
 
         Args:
             fallback_id: If signing key unavailable, hash this ID instead (for tests)
@@ -940,14 +424,14 @@ class AccordMetricsService:
             or hash of fallback_id if provided and no signing key,
             or "unknown" if neither available.
         """
-        if self._signer and self._signer.has_signing_key:
-            try:
-                unified_key = self._signer._unified_key
-                if unified_key is not None:
-                    pubkey_bytes = unified_key.public_key_bytes
-                    return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
-            except Exception as e:
-                logger.warning(f"Could not compute instance hash from signing key: {e}")
+        try:
+            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+            unified_key = get_unified_signing_key()
+            pubkey_bytes = unified_key.public_key_bytes
+            return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
+        except Exception as e:
+            logger.debug(f"Could not compute instance hash from signing key: {e}")
 
         # Fallback for tests/environments without signing key
         if fallback_id:
@@ -1034,78 +518,117 @@ class AccordMetricsService:
         except Exception as e:
             logger.debug(f"Could not persist events total: {e}")
 
+    def _build_lens_client(self) -> Any:
+        """Construct the substrate LensClient (REQUIRED in 2.9.6+).
+
+        lens-core composes against the process-singleton persist Engine
+        (constructed during persistence init, before adapters start) and
+        signs via `engine.signer()` — the federation identity key. Raises
+        RuntimeError when the substrate is unavailable: like persist/edge/
+        verify, a missing lens-core blocks the trace surface the same way
+        a missing persist blocks boot. (Platforms whose lens-core wheels
+        are still in flight — Android/iOS/Windows — are release-gated on
+        the upstream wheel asks, mirroring how persist/edge ship Chaquopy
+        wheels.)
+        """
+        try:
+            from ciris_lens_core import LensClient
+        except ImportError as e:
+            raise RuntimeError(
+                "ciris-lens-core is REQUIRED in 2.9.6+ (the observability "
+                "orchestrator — CIRISAgent#866). pip install "
+                "'ciris-lens-core>=1.0.0,<2.0.0'. Import failed: " + str(e)
+            ) from e
+
+        # The consent wire artifact: lens-core's gate resolves the newest
+        # consent:community_trust:v1 row BY this key at every seal — the
+        # grant our consent attestation module writes on opt-in, the
+        # withdraws/recants it writes on revocation (a recant is a hard
+        # stop). The config-fallback timestamp below only matters while no
+        # CEG row exists (e.g. QA-runner env override).
+        try:
+            from ciris_engine.logic.runtime.edge_runtime import get_federation_address
+
+            consent_key_id: Optional[str] = get_federation_address()
+        except Exception as e:
+            logger.warning(f"Federation address unavailable for consent gate ({e}); config-fallback consent only")
+            consent_key_id = None
+
+        try:
+            return LensClient(
+                self._consent_timestamp if self._consent_given else None,
+                self._trace_level.value,
+                deployment_profile=self._build_deployment_profile(),
+                consent_attesting_key_id=consent_key_id,
+                local_copy_dir=str(self._local_copy_dir) if self._local_copy_dir else None,
+                deployment_region=self._deployment_region or None,
+                deployment_type=self._deployment_type or None,
+                agent_role=self._agent_role or None,
+                agent_template=self._agent_template or None,
+                share_location=self._share_location_in_traces,
+                user_location=self._user_location or None,
+                user_timezone=self._user_timezone or None,
+                user_latitude=self._user_latitude,
+                user_longitude=self._user_longitude,
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"LensClient construction failed: {type(e).__name__}: {e}. "
+                "The persist Engine singleton must be initialized before "
+                "the accord_metrics adapter starts."
+            ) from e
+
     async def start(self) -> None:
-        """Start the service and initialize HTTP client."""
+        """Start the service: substrate client + stream subscription."""
         # Load persisted event count from previous sessions
         self._persisted_events_sent = self._load_persisted_events_total()
         if self._persisted_events_sent:
             logger.info(f"   Loaded persisted events total: {self._persisted_events_sent}")
 
         logger.info("=" * 70)
-        logger.info("🚀 ACCORD METRICS SERVICE STARTING")
+        logger.info("🚀 ACCORD METRICS SERVICE STARTING (LensCore substrate)")
         logger.info(f"   Consent given: {self._consent_given}")
-        logger.info(f"   Consent timestamp: {self._consent_timestamp or 'NOT SET (traces will be rejected!)'}")
-        logger.info(f"   Endpoint: {self._endpoint_url}")
+        logger.info(f"   Consent timestamp: {self._consent_timestamp or 'NOT SET'}")
+        logger.info(f"   Trace level: {self._trace_level.value}")
 
         # Set agent_id from constructor if provided and not already set
         if self._initial_agent_id and not self._agent_id_hash:
             self.set_agent_id(self._initial_agent_id)
             logger.info(f"   Agent ID set from constructor: {self._initial_agent_id}")
 
+        # REQUIRED substrate leg — raises if unavailable (see docstring)
+        self._lens = self._build_lens_client()
+        logger.info("   ✅ LensClient constructed (capture→seal→sign→persist owned by substrate)")
         logger.info("=" * 70)
 
-        # Subscribe to reasoning_event_stream for trace capture
-        # This happens regardless of consent - we just don't SEND until consent
+        # Subscribe to reasoning_event_stream for trace capture.
+        # Capture happens regardless of consent — lens-core's consent gate
+        # decides at each seal (a recant between two seals is enforced at
+        # the very next ACTION_RESULT).
         try:
             from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
 
             self._reasoning_queue = asyncio.Queue(maxsize=1000)
             reasoning_event_stream.subscribe(self._reasoning_queue)
             self._reasoning_task = asyncio.create_task(self._process_reasoning_events())
-            subscriber_count = len(reasoning_event_stream._subscribers)
-            logger.info("=" * 70)
-            logger.info(f"✅ SUBSCRIBED to reasoning_event_stream")
-            logger.info(f"   Total subscribers: {subscriber_count}")
-            logger.info(f"   Queue maxsize: 1000")
-            logger.info("=" * 70)
+            logger.info(f"✅ SUBSCRIBED to reasoning_event_stream (queue maxsize=1000)")
         except Exception as e:
-            logger.error("=" * 70)
             logger.error(f"❌ FAILED to subscribe to reasoning_event_stream: {e}")
             logger.error("   Traces will NOT be captured!")
-            logger.error("=" * 70)
+
+        self._sweep_task = asyncio.create_task(self._periodic_sweep())
 
         if not self._consent_given:
-            logger.warning("=" * 70)
-            logger.warning("⚠️  CONSENT NOT GIVEN - traces captured but NOT sent")
-            logger.warning("   Complete setup wizard to enable sending")
-            logger.warning("=" * 70)
-            return
-
-        # Initialize HTTP session and start flush task
-        self._initialize_http_session()
-        self._flush_task = asyncio.create_task(self._periodic_flush())
-
-        logger.info("=" * 70)
-        logger.info(f"✅ ACCORD METRICS SERVICE READY")
-        logger.info(f"   Sending to: {self._endpoint_url}")
-        logger.info(f"   Consent timestamp: {self._consent_timestamp}")
-        logger.info(f"   Batch size: {self._batch_size}")
-        logger.info(f"   Flush interval: {self._flush_interval}s")
-        logger.info("=" * 70)
-
-        # Register public key with CIRISLens (before connect event)
-        await self._register_public_key()
-
-        # Send connected event to server
-        await self._send_connected_event("startup")
+            logger.warning(
+                "⚠️  CONSENT NOT GIVEN — events are captured but every seal "
+                "resolves consent_blocked at the substrate (nothing persists)"
+            )
 
     async def stop(self) -> None:
-        """Stop the service and flush remaining events."""
+        """Stop the service: final sweep + stats."""
         logger.info("=" * 70)
         logger.info("🛑 ACCORD METRICS SERVICE STOPPING")
         logger.info(f"   Traces completed: {self._traces_completed}")
-        logger.info(f"   Events in queue: {len(self._event_queue)}")
-        logger.info("=" * 70)
 
         # Unsubscribe from reasoning_event_stream
         if self._reasoning_queue:
@@ -1117,539 +640,63 @@ class AccordMetricsService:
             except Exception as e:
                 logger.debug(f"Could not unsubscribe from reasoning_event_stream: {e}")
 
-        # Cancel reasoning task
-        if self._reasoning_task and not self._reasoning_task.done():
-            self._reasoning_task.cancel()
+        for task in (self._reasoning_task, self._sweep_task):
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass  # Expected - we initiated the cancellation
+
+        # Final orphan sweep + persist the cumulative counter
+        if self._lens is not None:
             try:
-                await self._reasoning_task
-            except asyncio.CancelledError:
-                pass  # Expected - we initiated the cancellation
+                purged = await asyncio.to_thread(self._lens.orphan_sweep, int(self._orphan_trace_max_age))
+                if purged:
+                    logger.info(f"   Final orphan sweep purged {purged} in-flight trace(s)")
+            except Exception as e:
+                logger.debug(f"Final orphan sweep failed: {e}")
+        self._persist_events_total()
 
-        # Cancel flush task
-        if self._flush_task and not self._flush_task.done():
-            self._flush_task.cancel()
-            try:
-                await self._flush_task
-            except asyncio.CancelledError:
-                pass  # Expected - we initiated the cancellation
-
-        # Flush remaining events
-        logger.info("   Performing final flush...")
-        await self._flush_events()
-
-        # Send disconnect event before closing session (only if consent still given)
-        if self._session and self._consent_given:
-            await self._send_connected_event("shutdown")
-
-        # Close HTTP session
-        if self._session:
-            await self._session.close()
-            self._session = None
-
-        logger.info("=" * 70)
         logger.info("📊 ACCORD METRICS FINAL STATS")
         logger.info(f"   Traces completed: {self._traces_completed}")
-        logger.info(f"   Events sent: {self._events_sent}")
-        logger.info(f"   Events failed: {self._events_failed}")
+        logger.info(f"   Trace events persisted: {self._events_sent}")
+        logger.info(f"   Consent-blocked seals: {self._traces_consent_blocked}")
         logger.info(f"   Events received: {self._events_received}")
         logger.info("=" * 70)
 
-    async def _periodic_flush(self) -> None:
-        """Periodically flush events even if batch is not full.
+    async def _periodic_sweep(self) -> None:
+        """Pace the substrate orphan sweep + events-total persistence.
 
-        Also sweeps `_active_traces` for orphan entries — traces that started
-        but never received ACTION_RESULT within `_orphan_trace_max_age`
-        seconds. Without this safety net a single upstream regression (e.g.,
-        action_dispatcher's audit-required gate short-circuiting
-        ACTION_COMPLETE) silently swallows every trace for the entire run.
+        Orphaned in-flight traces (no ACTION_RESULT) are ephemeral by
+        design — no action means it never happened; the substrate purges
+        them after `_orphan_trace_max_age` rather than force-emitting
+        partial traces.
         """
         try:
             while True:
                 try:
-                    await asyncio.sleep(self._flush_interval)
-                    await self._flush_events()
-                    await self._sweep_orphan_traces()
+                    await asyncio.sleep(self._sweep_interval)
+                    if self._lens is not None:
+                        purged = await asyncio.to_thread(
+                            self._lens.orphan_sweep, int(self._orphan_trace_max_age)
+                        )
+                        if purged:
+                            logger.warning(
+                                f"⏰ [{self._adapter_instance_id}] Substrate purged {purged} orphan "
+                                f"trace(s) (no ACTION_RESULT after {self._orphan_trace_max_age:.0f}s). "
+                                "This usually means the upstream ACTION_COMPLETE broadcast was severed."
+                            )
+                    self._persist_events_total()
                 except Exception as e:
                     if isinstance(e, asyncio.CancelledError):
                         raise  # Re-raise to exit cleanly
                     logger.error(
-                        f"Error in periodic flush: {type(e).__name__}: {e!r}",
+                        f"Error in periodic sweep: {type(e).__name__}: {e!r}",
                         exc_info=True,
                     )
         except asyncio.CancelledError:
             pass  # Clean exit on cancellation
-
-    async def _flush_events(self) -> None:
-        """Send all queued events to CIRISLens."""
-        if not self._consent_given:
-            logger.debug("⏭️  Flush skipped - no consent")
-            return
-        if not self._session:
-            logger.debug("⏭️  Flush skipped - no HTTP session")
-            return
-
-        async with self._queue_lock:
-            if not self._event_queue:
-                return
-
-            events_to_send = self._event_queue.copy()
-            self._event_queue.clear()
-
-        logger.info(
-            f"📤 [{self._adapter_instance_id}] FLUSHING {len(events_to_send)} events to {self._endpoint_url} (level={self._trace_level.value})"
-        )
-
-        try:
-            await self._send_events_batch(events_to_send)
-            self._events_sent += len(events_to_send)
-            self._last_send_time = datetime.now(timezone.utc)
-            logger.info(
-                f"✅ [{self._adapter_instance_id}] FLUSH SUCCESS: {len(events_to_send)} events sent "
-                f"(session: {self._events_sent}, lifetime: {self._persisted_events_sent + self._events_sent}, level={self._trace_level.value})"
-            )
-            # Persist cumulative total to survive restarts
-            self._persist_events_total()
-        except asyncio.TimeoutError as e:
-            # Empty str() on TimeoutError silently swallowed the cause for months.
-            # Log type + endpoint so incident capture records an actionable message.
-            self._events_failed += len(events_to_send)
-            logger.error(
-                f"❌ [{self._adapter_instance_id}] FLUSH FAILED - Timeout ({type(e).__name__}) "
-                f"posting {len(events_to_send)} events to {self._endpoint_url}/accord/events "
-                f"(connect=10s, read=20s, total=30s); level={self._trace_level.value}"
-            )
-            async with self._queue_lock:
-                if len(self._event_queue) < self._batch_size * 10:
-                    self._event_queue = events_to_send + self._event_queue
-                    logger.info(f"   Re-queued {len(events_to_send)} events for retry")
-        except LensContentRejectError as e:
-            # Lens rejected the batch for content reasons (4xx, not 429).
-            # Same bytes will be rejected next time. Discard rather than
-            # re-queue — re-queue would just pile up retry pressure against
-            # an unrecoverable state and starve the agent's event loop with
-            # 30s aiohttp.post calls that are guaranteed to fail.
-            self._events_failed += len(events_to_send)
-            logger.warning(
-                f"🚫 [{self._adapter_instance_id}] DISCARDING {len(events_to_send)} events: "
-                f"lens rejected with HTTP {e.status} (not transient). "
-                f"Sample rejection body (first 200 chars): {str(e)[:200]}"
-            )
-        except Exception as e:
-            self._events_failed += len(events_to_send)
-            logger.error(
-                f"❌ [{self._adapter_instance_id}] FLUSH FAILED: {len(events_to_send)} events: "
-                f"{type(e).__name__}: {e!r}",
-                exc_info=True,
-            )
-            # Re-queue failed events (up to a limit)
-            async with self._queue_lock:
-                if len(self._event_queue) < self._batch_size * 10:
-                    self._event_queue = events_to_send + self._event_queue
-                    logger.info(f"   Re-queued {len(events_to_send)} events for retry")
-
-    def _build_correlation_metadata(self) -> Dict[str, str]:
-        """Build the correlation_metadata block emitted on outbound wire.
-
-        Single source of truth for the agent-meta fields + PII fuzz.
-        Called by `_send_events_batch` (batch trace shipping) AND
-        `_send_connected_event` (connectivity heartbeats); before this
-        was extracted, both sites carried duplicate populate blocks
-        which (1) tripped SonarCloud's duplicated-lines gate and
-        (2) doubled the surface area where the PII fuzz could be
-        missed (CIRISAgent#757).
-
-        Returns a dict containing only non-empty values:
-        - Always (when configured): deployment_region, deployment_type,
-          agent_role, agent_template
-        - Only when `_share_location_in_traces=True` AND each individual
-          field is set: user_location, user_timezone (raw strings),
-          user_latitude, user_longitude (REGION-FUZZED via
-          `_fuzz_location_to_region` — ~11 km grid matching
-          `user_location` string coarseness per CIRISAgent#757)
-        """
-        correlation_metadata: Dict[str, str] = {}
-        if self._deployment_region:
-            correlation_metadata["deployment_region"] = self._deployment_region
-        if self._deployment_type:
-            correlation_metadata["deployment_type"] = self._deployment_type
-        if self._agent_role:
-            correlation_metadata["agent_role"] = self._agent_role
-        if self._agent_template:
-            correlation_metadata["agent_template"] = self._agent_template
-        # Include user location/timezone if explicitly consented via PREFERENCES step
-        if self._share_location_in_traces:
-            if self._user_location:
-                correlation_metadata["user_location"] = self._user_location
-            if self._user_timezone:
-                correlation_metadata["user_timezone"] = self._user_timezone
-            # Coordinates in ISO 6709 decimal degrees, fuzzed to region
-            # resolution (~11 km grid) so they match `user_location` string
-            # coarseness and don't leak residence. See
-            # `_fuzz_location_to_region` and CIRISAgent#757 PII analysis.
-            if self._user_latitude is not None:
-                correlation_metadata["user_latitude"] = _fuzz_location_to_region(self._user_latitude)
-            if self._user_longitude is not None:
-                correlation_metadata["user_longitude"] = _fuzz_location_to_region(self._user_longitude)
-        return correlation_metadata
-
-    async def _send_events_batch(self, events: List[Dict[str, Any]]) -> None:
-        """Send a batch of events to CIRISLens API.
-
-        Args:
-            events: List of event dictionaries to send
-        """
-        # Deferred (tracked under 2.7.9 / lens-413-handling): byte-size-bounded batching.
-        #
-        # The lens enforces HTTP 413 + max_bytes at 8 MiB per request body
-        # (AV-13 closed in lens middleware). Today this code path is event-
-        # COUNT gated (batch_size, default 10) with no byte ceiling. Real
-        # captured FULL_TRACES sizes from the 2.7.8 qa runs:
-        #   - 4.2 MB single complete_trace event (16-component thought)
-        #   - 3.0 MB / 1.2 MB / 642 KB also routine
-        # A batch of two such traces already overshoots the 8 MiB limit;
-        # default batch_size=10 will overshoot most days at FULL.
-        #
-        # Required work (split into a follow-up — non-trivial because a
-        # single event can exceed the limit on long recursive-conscience
-        # thoughts, so events[] partitioning alone isn't enough):
-        #   1. Estimate serialized bytes per event before assembly
-        #      (json.dumps with separators=(",",":") gives a tight bound).
-        #   2. Pack events[] into 1+ payloads each ≤ ~7.5 MiB serialized
-        #      (leave headroom for envelope + correlation_metadata).
-        #   3. POST each payload separately; preserve flush semantics
-        #      (all-or-nothing per the lens contract — if one chunk 4xx's,
-        #      requeue the unsent chunks the same way the current
-        #      _flush_events does on TimeoutError).
-        #   4. For the SINGLE-EVENT-OVERFLOW case (trace > 8 MiB on its
-        #      own — observed 4.2 MB max so far but a 5-retry recursive-
-        #      conscience thought at FULL could plausibly hit it):
-        #      negotiate a smaller trace level for that event (drop FULL
-        #      content, ship at DETAILED), OR split the components[] list
-        #      into a primary trace + appendix events keyed by trace_id.
-        #      The lens schema bump in FSD/TRACE_EVENT_LOG_PERSISTENCE.md
-        #      would naturally accommodate the appendix shape since each
-        #      event becomes its own row anyway.
-        #   5. Add a metric for "batches that exceeded ceiling" so we can
-        #      tell when single-event-overflow becomes common in
-        #      production rather than waiting for 413s.
-        #
-        # Until then: a 413 from the lens will surface as the generic
-        # `RuntimeError(f"CIRISLens API error {response.status}: ...")`
-        # below and the events get re-queued by _flush_events's failure
-        # path (capped at batch_size*10 deep). Functional but noisy.
-        if not self._session:
-            raise RuntimeError("HTTP session not initialized")
-
-        # CRITICAL: Require explicit consent_timestamp - server returns 422 without it
-        if not self._consent_timestamp:
-            raise RuntimeError(
-                "Cannot send events: consent_timestamp is not set. "
-                "Set CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP env var or provide consent_timestamp in config."
-            )
-
-        # Build correlation metadata via shared helper — single source of
-        # truth for the agent-meta fields + PII fuzz. See
-        # `_build_correlation_metadata` docstring for the contract.
-        correlation_metadata = self._build_correlation_metadata()
-
-        payload: Dict[str, Any] = {
-            "events": events,
-            "batch_timestamp": datetime.now(timezone.utc).isoformat(),
-            "consent_timestamp": self._consent_timestamp,
-            "trace_level": self._trace_level.value,
-            "trace_schema_version": TRACE_SCHEMA_VERSION,
-        }
-        # Only add correlation metadata if user opted in to any fields
-        if correlation_metadata:
-            payload["correlation_metadata"] = correlation_metadata
-
-        url = f"{self._endpoint_url}/accord/events"
-
-        # Serialize the body ONCE, here, with aiohttp's default settings so the
-        # bytes we tee, hash, and POST are byte-identical. Pre-2.7.8.12 the tee
-        # used `ensure_ascii=False, separators=(",", ":")` while aiohttp's
-        # `json=payload` path used `json.dumps` defaults (`ensure_ascii=True`,
-        # spaced separators) — the two byte sequences differed on every
-        # non-ASCII character and every comma/colon, so persist's
-        # body_sha256_prefix join from rejected wire bytes never matched any
-        # local-tee file. Single source of truth eliminates that drift.
-        body = json.dumps(payload).encode("utf-8")
-        body_sha256 = hashlib.sha256(body).hexdigest()
-        logger.info(
-            f"📡 [{self._adapter_instance_id}] POST {url} ({len(events)} events, "
-            f"trace_level={self._trace_level.value}, body_bytes={len(body)}, "
-            f"body_sha256={body_sha256[:16]}...)"
-        )
-
-        # Local tee: write the EXACT bytes we POST to disk if the operator
-        # opted in via CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR. Done BEFORE the
-        # POST so an operator killing the run mid-flight still has whatever
-        # was about to ship. Disk failures must NEVER block the POST — the
-        # lens is the source of truth, this copy is supplementary.
-        if self._local_copy_dir is not None:
-            self._local_copy_seq += 1
-            try:
-                # Filename pattern: accord-batch-<ISO-utc>-<seq>.json — sortable,
-                # collision-resistant within a single adapter instance, parseable
-                # by the persist engine's batch-replay path.
-                ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
-                copy_path = self._local_copy_dir / f"accord-batch-{ts}-{self._local_copy_seq:04d}.json"
-                copy_path.write_bytes(body)
-                logger.debug(
-                    f"📂 [{self._adapter_instance_id}] Tee'd batch ({len(events)} events, "
-                    f"body_sha256={body_sha256[:16]}) to {copy_path}"
-                )
-            except OSError as e:  # PermissionError is a subclass of OSError
-                logger.warning(
-                    f"⚠️ [{self._adapter_instance_id}] Local-copy write failed ({e}); "
-                    f"proceeding with POST. The lens will still receive this batch."
-                )
-
-        async with self._session.post(
-            url, data=body, headers={"Content-Type": "application/json"}
-        ) as response:
-            if response.status != 200:
-                error_text = await response.text()
-                # 4xx (except 429) → content rejection, the same bytes will
-                # fail again. Raise the typed exception so the flush handler
-                # can suppress the re-queue path. 5xx + 429 stay as generic
-                # RuntimeError → re-queue path applies (transient).
-                if 400 <= response.status < 500 and response.status != 429:
-                    raise LensContentRejectError(
-                        response.status,
-                        f"CIRISLens API error {response.status}: {error_text}",
-                    )
-                raise RuntimeError(f"CIRISLens API error {response.status}: {error_text}")
-            logger.info(f"✅ POST success: {response.status}")
-
-    async def _register_public_key(self) -> None:
-        """Register agent public key with CIRISLens for signature verification.
-
-        This should be called during startup, before sending any signed traces.
-        CIRISLens will use this key to verify all traces from this agent.
-        """
-        if not self._session:
-            logger.warning("Cannot register public key - HTTP session not initialized")
-            return
-
-        # Ensure signing key is initialized
-        if not self._signer.has_signing_key:
-            logger.warning("Cannot register public key - no signing key available")
-            return
-
-        try:
-            # Get registration payload from unified signing key
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
-
-            unified_key = get_unified_signing_key()
-            description = f"Agent key for accord metrics traces"
-            if self._agent_template:
-                description = f"Agent key ({self._agent_template})"
-
-            payload = unified_key.get_registration_payload(description)
-
-            # Store registered key ID for comparison during signing
-            self._registered_key_id = payload["key_id"]
-
-            url = f"{self._endpoint_url}/accord/public-keys"
-
-            logger.info("=" * 70)
-            logger.info(f"🔑 REGISTERING PUBLIC KEY with CIRISLens")
-            logger.info(f"   URL: {url}")
-            logger.info(f"   Key ID (REGISTRATION): {payload['key_id']}")
-            logger.info(f"   Public key (first 20 chars): {payload['public_key_base64'][:20]}...")
-            # Forensic-debug aid: log the full pubkey at DEBUG so persist-team
-            # diagnostic captures (pubkeys.csv) can be assembled from agent logs
-            # without standing up a separate dump tool. The pubkey is public by
-            # definition (lens has it; the registry has it); this is a logging
-            # convenience, not a secret-leak.
-            logger.debug(f"   Public key (full base64): {payload['public_key_base64']}")
-            logger.info(f"   Algorithm: {payload['algorithm']}")
-            logger.info(f"   Signer key_id: {self._signer.key_id}")
-
-            async with self._session.post(url, json=payload) as response:
-                if response.status == 200:
-                    logger.info(f"✅ PUBLIC KEY REGISTERED SUCCESSFULLY")
-                    logger.info("=" * 70)
-                elif response.status == 409:
-                    # Key already registered (conflict) - this is fine
-                    logger.info(f"✅ PUBLIC KEY ALREADY REGISTERED (409 Conflict)")
-                    logger.info("=" * 70)
-                else:
-                    error_text = await response.text()
-                    logger.warning(f"⚠️ PUBLIC KEY REGISTRATION FAILED - Status {response.status}: {error_text}")
-                    logger.warning("   Traces will still be signed, but verification may fail")
-                    logger.warning("=" * 70)
-
-        except aiohttp.ClientConnectorError as e:
-            logger.warning("=" * 70)
-            logger.warning(f"⚠️ PUBLIC KEY REGISTRATION FAILED - Cannot reach server: {e}")
-            logger.warning("   Will retry on next startup")
-            logger.warning("=" * 70)
-
-        except Exception as e:
-            logger.warning("=" * 70)
-            logger.warning(f"⚠️ PUBLIC KEY REGISTRATION FAILED - Unexpected error: {e}")
-            logger.warning("=" * 70)
-
-    async def _send_connected_event(self, event_type: str = "connected") -> None:
-        """Send a connected/heartbeat event to CIRISLens to signal agent is online.
-
-        Args:
-            event_type: Type of connection event (startup, heartbeat, reconnect)
-        """
-        if not self._session:
-            logger.warning("Cannot send connected event - HTTP session not initialized")
-            return
-
-        # Build correlation metadata via shared helper — same source of
-        # truth as the `_send_events_batch` populate path.
-        correlation_metadata = self._build_correlation_metadata()
-
-        timestamp = datetime.now(timezone.utc).isoformat()
-
-        # Build a signed trace for connectivity events
-        connectivity_trace = CompleteTrace(
-            trace_id=f"connectivity-{event_type}-{timestamp}",
-            thought_id=f"connectivity-{event_type}",
-            task_id=None,
-            agent_id_hash=self._agent_id_hash or self._compute_instance_hash(),
-            started_at=timestamp,
-            completed_at=timestamp,
-            deployment_profile=self._build_deployment_profile(),
-        )
-
-        # Add connectivity component. agent_name is included so lens can
-        # self-identify the agent alongside the hashed agent_id (the bare hash
-        # by itself makes triage in lens dashboards hard). agent_id_hash on
-        # the component is locked equal to the envelope's per the 2.7.9
-        # wire-format contract (TRACE_WIRE_FORMAT.md §4).
-        connectivity_trace.components.append(
-            TraceComponent(
-                component_type="connectivity",
-                event_type=event_type,
-                timestamp=timestamp,
-                agent_id_hash=connectivity_trace.agent_id_hash,
-                data={
-                    "version": "1.8.5",
-                    "trace_level": self._trace_level.value,
-                    "agent_name": self._agent_name or "",
-                    "agent_template": self._agent_template or "",
-                    **({"correlation_metadata": correlation_metadata} if correlation_metadata else {}),
-                },
-            )
-        )
-
-        # Sign the trace (falls back to empty strings if no key available)
-        if not self._signer.sign_trace(connectivity_trace):
-            # No signing key available - use empty strings for unsigned trace
-            connectivity_trace.signature = ""
-            connectivity_trace.signature_key_id = ""
-
-        payload: Dict[str, Any] = {
-            "event_type": f"connectivity_{event_type}",
-            "trace": connectivity_trace.to_dict(),
-        }
-
-        # Use the standard events endpoint
-        url = f"{self._endpoint_url}/accord/events"
-
-        try:
-            logger.info("=" * 70)
-            logger.info(f"📡 SENDING CONNECTED EVENT to {url}")
-            logger.info(f"   Event type: {event_type}")
-            logger.info(f"   Agent hash: {self._agent_id_hash}")
-
-            # CRITICAL: Require explicit consent_timestamp
-            if not self._consent_timestamp:
-                logger.error("❌ Cannot send connected event: consent_timestamp is not set")
-                logger.error("   Set CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP env var")
-                return
-
-            # Wrap as a standard event batch
-            batch_payload: Dict[str, Any] = {
-                "events": [payload],
-                "batch_timestamp": timestamp,
-                "consent_timestamp": self._consent_timestamp,
-                "trace_level": self._trace_level.value,
-            }
-            if correlation_metadata:
-                batch_payload["correlation_metadata"] = correlation_metadata
-
-            async with self._session.post(url, json=batch_payload) as response:
-                if response.status == 200:
-                    logger.info(f"✅ CONNECTED EVENT SUCCESS - Server acknowledged agent online")
-                    logger.info("=" * 70)
-                else:
-                    error_text = await response.text()
-                    logger.error(f"❌ CONNECTED EVENT FAILED - Status {response.status}: {error_text}")
-                    logger.error("=" * 70)
-
-        except aiohttp.ClientConnectorError as e:
-            logger.error("=" * 70)
-            logger.error(f"❌ CONNECTED EVENT FAILED - Cannot reach server: {type(e).__name__}: {e!r}")
-            logger.error(f"   Endpoint: {url}")
-            logger.error("   Check network connectivity and endpoint URL")
-            logger.error("=" * 70)
-
-        except asyncio.TimeoutError as e:
-            # aiohttp raises asyncio.TimeoutError on ClientTimeout; these have no
-            # str() representation, so surface the type + endpoint so the incident
-            # log actually identifies what hung.
-            logger.error("=" * 70)
-            logger.error(
-                f"❌ CONNECTED EVENT FAILED - Timeout ({type(e).__name__}) posting to {url}"
-            )
-            logger.error("   Server did not respond within client timeout (connect=10s, read=20s)")
-            logger.error("=" * 70)
-
-        except Exception as e:
-            logger.error("=" * 70)
-            logger.error(
-                f"❌ CONNECTED EVENT FAILED - Unexpected error: {type(e).__name__}: {e!r}",
-                exc_info=True,
-            )
-            logger.error(f"   Endpoint: {url}")
-            logger.error("=" * 70)
-
-    async def _queue_event(self, event: Dict[str, Any]) -> None:
-        """Add event to queue and flush if batch is full.
-
-        Args:
-            event: Event dictionary to queue
-        """
-        if not self._consent_given:
-            logger.debug("Event dropped - consent not given")
-            return
-
-        self._events_received += 1
-        events_to_send: List[Dict[str, Any]] = []
-
-        async with self._queue_lock:
-            self._event_queue.append(event)
-
-            if len(self._event_queue) >= self._batch_size:
-                # Prepare batch for sending
-                events_to_send = self._event_queue.copy()
-                self._event_queue.clear()
-
-        # Flush outside of lock if batch is full
-        if events_to_send:
-            try:
-                await self._send_events_batch(events_to_send)
-                self._events_sent += len(events_to_send)
-                self._last_send_time = datetime.now(timezone.utc)
-            except Exception as e:
-                self._events_failed += len(events_to_send)
-                logger.error(
-                    f"Failed to send batch ({len(events_to_send)} events) to "
-                    f"{self._endpoint_url}/accord/events: {type(e).__name__}: {e!r}",
-                    exc_info=True,
-                )
-
-    # =========================================================================
-    # Reasoning Event Stream Processing (6-Component Trace Capture)
-    # =========================================================================
 
     async def _process_reasoning_events(self) -> None:
         """Process reasoning events from the stream and build traces."""
@@ -1697,93 +744,81 @@ class AccordMetricsService:
             await self._process_single_event(event)
 
     async def _process_single_event(self, event: Dict[str, Any]) -> None:
-        """Process a single reasoning event.
+        """Normalize one reasoning event and feed it to the substrate.
 
-        Args:
-            event: Individual reasoning event dict
+        The agent-side half of the lens-core client-emit contract: map the
+        event to the `capture_event` component shape (event_type /
+        thought_id / timestamp / agent_id_hash / task_id / trace_level /
+        data) with `_extract_component_data` building `data` under the
+        configured trace-level gating. Everything downstream — partial
+        trace assembly, attempt_index injection, seal on ACTION_RESULT,
+        consent gate, canonical bytes, Ed25519 signature, tee, persistence
+        — is the substrate's.
         """
         raw_event_type = event.get("event_type", "")
         # Handle both enum objects and strings
-        # Enums show as <ReasoningEvent.THOUGHT_START: 'thought_start'>
         if hasattr(raw_event_type, "value"):
             event_type = raw_event_type.value.upper()  # 'thought_start' -> 'THOUGHT_START'
         else:
-            # String like "ReasoningEvent.THOUGHT_START" - extract the last part
             event_type = str(raw_event_type).replace("ReasoningEvent.", "")
 
         thought_id = event.get("thought_id", "")
-        task_id = event.get("task_id")
-        timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
-
         if not thought_id:
             logger.debug(f"Ignoring event without thought_id: {event_type}")
             return
 
         self._events_received += 1
 
-        # Compute attempt_index — monotonic per (thought_id, event_type).
-        # Single-subscriber FIFO from reasoning_event_stream preserves
-        # broadcast order; the counter increments produce a stable index
-        # the lens can use to order rows for events that fire multiple
-        # times per thought (LLM_CALL, RECURSIVE_*, CONSCIENCE_RESULT, DMA
-        # bounce alternatives). Inject into the event dict so the
-        # downstream _extract_component_data builders pick it up via
-        # event.get("attempt_index", 0).
-        attempt_key = (thought_id, event_type)
-        attempt_index = self._attempt_counters.get(attempt_key, 0)
-        self._attempt_counters[attempt_key] = attempt_index + 1
-        event["attempt_index"] = attempt_index
+        if self._lens is None:
+            # start() raises when the substrate is unavailable, so this only
+            # happens if events arrive before start() — drop with a debug.
+            logger.debug("LensClient not ready; dropping event %s", event_type)
+            return
 
-        # Get or create trace for this thought
-        async with self._traces_lock:
-            if thought_id not in self._active_traces:
-                # Create new trace
-                trace_id = f"trace-{thought_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
-                self._active_traces[thought_id] = CompleteTrace(
-                    trace_id=trace_id,
-                    thought_id=thought_id,
-                    task_id=task_id,
-                    agent_id_hash=self._agent_id_hash or self._compute_instance_hash(),
-                    started_at=timestamp,
-                    deployment_profile=self._build_deployment_profile(),
-                )
-                logger.debug(f"Created new trace {trace_id} for thought {thought_id}")
+        component: Dict[str, Any] = {
+            "event_type": event_type,
+            "thought_id": thought_id,
+            "timestamp": event.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            "agent_id_hash": self._agent_id_hash or self._compute_instance_hash(),
+            "task_id": event.get("task_id"),
+            "trace_level": self._trace_level.value,
+            "data": self._extract_component_data(event_type, event),
+        }
 
-            trace = self._active_traces[thought_id]
+        # to_thread keeps the seal's Ed25519+DB work off the event loop;
+        # the single-consumer await-per-event ordering preserves the FIFO
+        # the substrate's attempt_index counters depend on.
+        outcome = await asyncio.to_thread(self._lens.capture_event, component)
+        kind = outcome.get("outcome", "")
 
-        # Map event type to trace component
-        component_type = self.EVENT_TO_COMPONENT.get(event_type, "unknown")
-        if component_type == "unknown":
-            logger.debug(f"Unknown event type: {event_type}")
-
-        # Extract relevant data based on event type
-        component_data = self._extract_component_data(event_type, event)
-        # Always carry attempt_index forward so the lens row writer sees it
-        # uniformly across event types (single-emit events have 0 here, which
-        # is informative — confirms the event is the first occurrence).
-        component_data["attempt_index"] = attempt_index
-
-        # Add component to trace. agent_id_hash is denormalized from the
-        # parent CompleteTrace onto every component (TRACE_WIRE_FORMAT.md
-        # §4 — required as of trace_schema_version "2.7.9"). Each event
-        # row is self-contained; persist reads it directly without
-        # envelope propagation. Locked equal to the envelope value at
-        # build time.
-        component = TraceComponent(
-            component_type=component_type,
-            event_type=event_type,
-            timestamp=timestamp,
-            data=component_data,
-            agent_id_hash=trace.agent_id_hash,
-        )
-
-        async with self._traces_lock:
-            trace.components.append(component)
-
-        # Check if trace is complete (has ACTION_RESULT)
-        # Handle both formats
-        if event_type in ("ACTION_RESULT", "ReasoningEvent.ACTION_RESULT"):
-            await self._complete_trace(thought_id, timestamp)
+        if kind == "opened":
+            self._open_thoughts.add(thought_id)
+        elif kind == "sealed_and_persisted":
+            self._open_thoughts.discard(thought_id)
+            self._traces_completed += 1
+            if int(outcome.get("signatures_verified", 0)) > 0:
+                self._traces_signed += 1
+            inserted = int(outcome.get("trace_events_inserted", 0))
+            self._events_sent += inserted
+            self._last_send_time = datetime.now(timezone.utc)
+            logger.info(
+                f"✅ TRACE SEALED #{self._traces_completed}: {outcome.get('trace_id')} "
+                f"({inserted} trace_events, {outcome.get('signatures_verified', 0)} signature(s) verified)"
+            )
+        elif kind == "consent_blocked":
+            self._open_thoughts.discard(thought_id)
+            self._traces_consent_blocked += 1
+            logger.debug(
+                f"⏭️  Trace for {thought_id} consent_blocked at seal "
+                f"(reason={outcome.get('reason')})"
+            )
+        elif kind == "rejected":
+            self._events_rejected += 1
+            logger.warning(
+                f"🚫 Substrate rejected unknown event_type {outcome.get('raw')!r} "
+                f"(thought {thought_id})"
+            )
+        # "appended" needs no bookkeeping
 
     def _extract_component_data(self, event_type: str, event: Dict[str, Any]) -> Dict[str, Any]:
         """Extract reasoning data from event based on configured trace detail level.
@@ -2397,139 +1432,6 @@ class AccordMetricsService:
                 data["raw_data"] = _serialize(event)
             return data
 
-    async def _sweep_orphan_traces(self) -> None:
-        """Force-complete traces that never received ACTION_RESULT.
-
-        Only ACTION_RESULT triggers `_complete_trace`, which is the sole
-        path that queues a trace event onto `_event_queue` (and thus the
-        only path the periodic flush can ship). If a regression upstream
-        severs the ACTION_COMPLETE broadcast — historically: ActionDispatcher
-        raising "Audit service not available" before reaching
-        `_action_complete_step` — traces sit in `_active_traces` forever
-        and the entire run produces zero shipped traces.
-
-        Threshold is `_orphan_trace_max_age` (default = max(120s, 2× flush
-        interval)). Traces older than that get force-completed as-is with
-        whatever components were collected; downstream consumers see fewer
-        than 6 components and can flag them as partial.
-        """
-        if not self._active_traces:
-            return
-
-        now = datetime.now(timezone.utc)
-        now_iso = now.isoformat()
-        max_age = self._orphan_trace_max_age
-
-        stale: List[Tuple[str, str, int]] = []  # (thought_id, started_at, components)
-        async with self._traces_lock:
-            for thought_id, trace in list(self._active_traces.items()):
-                try:
-                    started = datetime.fromisoformat(trace.started_at)
-                    if started.tzinfo is None:
-                        started = started.replace(tzinfo=timezone.utc)
-                except (TypeError, ValueError):
-                    continue
-                age = (now - started).total_seconds()
-                if age > max_age:
-                    stale.append((thought_id, trace.started_at, len(trace.components)))
-
-        if not stale:
-            return
-
-        logger.warning(
-            f"⏰ [{self._adapter_instance_id}] Sweeping {len(stale)} orphan trace(s) "
-            f"(no ACTION_RESULT after {max_age:.0f}s) — emitting partial traces. "
-            f"This usually means the upstream ACTION_COMPLETE broadcast was severed."
-        )
-        for thought_id, started_at, component_count in stale:
-            logger.warning(
-                f"   orphan: thought_id={thought_id} started_at={started_at} "
-                f"components_collected={component_count}"
-            )
-            try:
-                await self._complete_trace(thought_id, now_iso)
-            except Exception as e:
-                logger.error(
-                    f"   failed to force-complete orphan {thought_id}: "
-                    f"{type(e).__name__}: {e!r}",
-                    exc_info=True,
-                )
-
-    async def _complete_trace(self, thought_id: str, completion_time: str) -> None:
-        """Complete and sign a trace.
-
-        Args:
-            thought_id: ID of the thought whose trace is complete
-            completion_time: Timestamp of completion
-        """
-        async with self._traces_lock:
-            if thought_id not in self._active_traces:
-                return
-
-            trace = self._active_traces.pop(thought_id)
-            trace.completed_at = completion_time
-            # Set trace_level BEFORE signing - critical for per-level signature verification
-            trace.trace_level = self._trace_level.value
-
-        # Drop attempt_index counters for this thought — they're only meaningful
-        # while the thought is in-flight, and leaving them in the dict means
-        # unbounded growth across long-running agents.
-        self._attempt_counters = {
-            key: count for key, count in self._attempt_counters.items() if key[0] != thought_id
-        }
-
-        # Sign the trace (signature includes trace_level for uniqueness)
-        if self._signer.sign_trace(trace):
-            self._traces_signed += 1
-            component_types = [c.event_type for c in trace.components]
-            logger.info(
-                f"✅ TRACE COMPLETE #{self._traces_completed + 1}: {trace.trace_id} "
-                f"(level={trace.trace_level}) with {len(trace.components)} components: {component_types}"
-            )
-        else:
-            logger.warning(f"⚠️ Trace {trace.trace_id} completed but NOT signed (no key)")
-
-        self._traces_completed += 1
-
-        # Add to completed traces
-        self._completed_traces.append(trace)
-
-        # Queue trace as event for sending
-        await self._queue_trace_event(trace)
-
-    async def _queue_trace_event(self, trace: CompleteTrace) -> None:
-        """Queue a completed trace for sending to CIRISLens.
-
-        Args:
-            trace: Completed trace to send
-        """
-        # trace.trace_level is already set in _complete_trace before signing
-        trace_dict = trace.to_dict()
-        trace_event = {
-            "event_type": "complete_trace",
-            "trace": trace_dict,
-            "trace_level": trace.trace_level,  # Also at event level for routing
-        }
-        await self._queue_event(trace_event)
-
-    def get_completed_traces(self) -> List[CompleteTrace]:
-        """Get list of completed traces (for testing/export).
-
-        Returns:
-            List of completed traces
-        """
-        return self._completed_traces.copy()
-
-    def get_latest_trace(self) -> Optional[CompleteTrace]:
-        """Get the most recently completed trace.
-
-        Returns:
-            Most recent trace or None
-        """
-        if self._completed_traces:
-            return self._completed_traces[-1]
-        return None
-
     # =========================================================================
     # WiseBus-Compatible Interface (Duck-typed)
     # =========================================================================
@@ -2537,80 +1439,50 @@ class AccordMetricsService:
     async def send_deferral(self, request: DeferralRequest) -> str:
         """Receive WBD (Wisdom-Based Deferral) events.
 
-        Called by WiseBus.send_deferral() which broadcasts to all WiseAuthority
-        services with the send_deferral capability. WBD events are a distinct
-        accord primitive from traces — they POST to the dedicated endpoint
-        /accord/wbd/deferrals per the CIRISLens accord contract, NOT to
-        /accord/events which is reserved for complete_trace envelopes.
-
-        Args:
-            request: DeferralRequest containing deferral details
-
-        Returns:
-            String confirming receipt
+        Called by WiseBus.send_deferral() which broadcasts to all
+        WiseAuthority services with the send_deferral capability. Post-fold
+        (CIRISAgent#857: "no second shipping mechanism") WBD events ride the
+        SAME substrate capture path as everything else — DEFERRAL_ROUTED is
+        one of the 5 Commons Credits events in the closed 15-variant
+        taxonomy. The component joins the deferring thought's in-flight
+        trace and seals with its ACTION_RESULT.
         """
-        logger.debug(f"Received WBD event for thought {request.thought_id}")
+        timestamp = datetime.now(timezone.utc).isoformat()
+        deferral_id = f"wbd-{request.thought_id}-{timestamp}"
 
-        # Build payload matching CIRISLens WBDDeferralCreate schema.
-        # See CIRISLens/api/accord_api.py::WBDDeferralCreate and POST /accord/wbd/deferrals.
-        reason = (request.reason or "").strip()
-        deferral_payload: Dict[str, Any] = {
-            "agent_id": self._agent_id_hash or self._compute_instance_hash(),
-            # Default to UNCERTAINTY — the reason text is free-form and we can't
-            # reliably classify it client-side. Lens is free to re-classify.
-            "trigger_type": "UNCERTAINTY",
-            "trigger_description": reason[:500] if reason else "Wisdom-based deferral",
-            "context_summary": (
-                f"thought_id={request.thought_id} task_id={request.task_id} "
-                f"defer_until={request.defer_until.isoformat() if request.defer_until else 'n/a'}"
-            ),
-            "dilemma_description": reason[:2000] if reason else "(no reason provided)",
-            "rationale": reason[:2000] if reason else None,
-            # Thread the thought/task identifiers through as trace_id/span_id so
-            # lens can join WBD events back to the owning trace.
-            "trace_id": request.task_id or None,
-            "span_id": request.thought_id or None,
+        if self._lens is None:
+            logger.debug("LensClient not ready; WBD deferral %s not captured", deferral_id)
+            return deferral_id
+
+        is_detailed = self._trace_level in (TraceDetailLevel.DETAILED, TraceDetailLevel.FULL_TRACES)
+        data: Dict[str, Any] = {
+            "defer_until": request.defer_until.isoformat() if request.defer_until else None,
         }
+        if is_detailed and request.reason:
+            data["reason"] = request.reason[:500]
 
-        await self._send_wbd_deferral(deferral_payload, request.thought_id)
-
-        return f"WBD event recorded for accord metrics: {request.thought_id}"
-
-    async def _send_wbd_deferral(self, payload: Dict[str, Any], thought_id: str) -> None:
-        """POST a WBD deferral directly to the dedicated lens endpoint.
-
-        Unlike trace events this is NOT batched through _event_queue — WBD is a
-        separate accord primitive with its own endpoint. Failures are logged but
-        don't raise, to keep the WiseBus broadcast non-blocking.
-        """
-        if not self._session:
-            logger.warning("Cannot send WBD deferral — HTTP session not initialized")
-            return
-
-        url = f"{self._endpoint_url}/accord/wbd/deferrals"
-        logger.info(f"📡 [{self._adapter_instance_id}] POST {url} (thought={thought_id})")
-
+        component: Dict[str, Any] = {
+            "event_type": "DEFERRAL_ROUTED",
+            "thought_id": request.thought_id,
+            "timestamp": timestamp,
+            "agent_id_hash": self._agent_id_hash or self._compute_instance_hash(),
+            "task_id": request.task_id,
+            "trace_level": self._trace_level.value,
+            "data": data,
+        }
         try:
-            async with self._session.post(url, json=payload) as response:
-                if response.status in (200, 201):
-                    logger.info(f"✅ WBD deferral accepted by lens (thought={thought_id})")
-                else:
-                    error_text = await response.text()
-                    logger.error(
-                        f"❌ WBD deferral rejected: Status {response.status} "
-                        f"{error_text[:500]} (url={url}, thought={thought_id})"
-                    )
-        except asyncio.TimeoutError as e:
-            logger.error(
-                f"❌ WBD deferral timed out ({type(e).__name__}) posting to {url} "
-                f"(thought={thought_id})"
+            outcome = await asyncio.to_thread(self._lens.capture_event, component)
+            self._events_received += 1
+            if outcome.get("outcome") == "opened":
+                self._open_thoughts.add(request.thought_id)
+            logger.info(
+                f"🧭 WBD deferral captured for thought {request.thought_id} "
+                f"(outcome={outcome.get('outcome')})"
             )
         except Exception as e:
-            logger.error(
-                f"❌ WBD deferral failed: {type(e).__name__}: {e!r} "
-                f"(url={url}, thought={thought_id})",
-                exc_info=True,
-            )
+            logger.error(f"Failed to capture WBD deferral: {type(e).__name__}: {e!r}")
+
+        return deferral_id
 
     async def fetch_guidance(self, context: Any) -> Optional[str]:
         """Not implemented - this service only receives deferrals.
@@ -2644,125 +1516,38 @@ class AccordMetricsService:
     # PDMA Decision Event Collection
     # =========================================================================
 
-    async def record_pdma_decision(
-        self,
-        thought_id: str,
-        selected_action: str,
-        rationale: str,
-        reasoning_summary: Optional[str] = None,
-    ) -> None:
-        """Record a PDMA decision event.
-
-        This method should be called when a PDMA decision is made.
-        It can be hooked into the telemetry or audit system.
-
-        Args:
-            thought_id: ID of the thought being processed
-            selected_action: The action selected (SPEAK, DEFER, etc.)
-            rationale: Brief rationale for the decision
-            reasoning_summary: Optional truncated reasoning
-        """
-        pdma_event: Dict[str, Any] = {
-            "event_type": "pdma_decision",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "agent_id": self._agent_id_hash or self._compute_instance_hash(),
-            "thought_id": thought_id,
-            "selected_action": selected_action,
-            "rationale": rationale[:200] if rationale else None,  # Truncate
-            "reasoning_summary": reasoning_summary[:500] if reasoning_summary else None,
-        }
-
-        await self._queue_event(pdma_event)
-        logger.debug(f"Recorded PDMA decision for thought {thought_id}: {selected_action}")
-
     # =========================================================================
     # Consent Management
     # =========================================================================
 
     def set_consent(self, consent_given: bool, timestamp: Optional[str] = None) -> None:
-        """Update consent state.
+        """Update consent state and rebuild the substrate client.
 
-        When consent is granted and the HTTP session/flush task are not yet
-        initialized (adapter was started without consent), this method will
-        start them so collection begins immediately without requiring a
-        full adapter reload.
+        The LensClient handle freezes its config-fallback consent_timestamp
+        at construction (the 2.9.6 interim path — CIRISAgent#870), so a
+        consent change rebuilds the handle. In-flight partial traces in the
+        old handle are dropped with it: on a REVOKE that is exactly the
+        desired hard stop; on a GRANT the loss of mid-flight thoughts is
+        acceptable (the next thought captures cleanly).
 
-        Args:
-            consent_given: Whether consent is given
-            timestamp: ISO timestamp when consent was given/revoked
+        Once the canonical community key publishes and
+        `consent_attesting_key_id` is wired, the substrate reads the CEG
+        grant live at each seal and this rebuild becomes unnecessary.
         """
         self._consent_given = consent_given
         self._consent_timestamp = timestamp or datetime.now(timezone.utc).isoformat()
 
         if consent_given:
             logger.info(f"Consent granted for accord metrics at {self._consent_timestamp}")
-            # If the service was started without consent, the HTTP session and
-            # flush task were never created.  Initialize them now so collection
-            # begins immediately.  Only do this if there's a running event loop.
-            try:
-                loop = asyncio.get_running_loop()
-                if self._session is None or (hasattr(self._session, "closed") and self._session.closed):
-                    self._initialize_http_session()
-                if self._flush_task is None or self._flush_task.done():
-                    self._flush_task = asyncio.create_task(self._periodic_flush())
-                    logger.info("Started periodic flush task after late consent grant")
-            except RuntimeError:
-                # No running event loop — session/task will be created on first async call
-                pass
         else:
             logger.info(f"Consent revoked for accord metrics at {self._consent_timestamp}")
 
-    def _initialize_http_session(self) -> None:
-        """Create the aiohttp session used to send events to CIRISLens.
-
-        Safe to call multiple times — will only create a session if one
-        does not already exist (or the existing one is closed).
-
-        On iOS, Python's default SSL context cannot find system CA certificates,
-        so we explicitly create an SSL context using certifi's bundled CA bundle.
-        """
-        if self._session is not None and not getattr(self._session, "closed", True):
-            return
-
-        # Create SSL context with certifi CA bundle for iOS compatibility.
-        # On iOS, Python's ssl module cannot locate system CA certs, causing
-        # SSLCertVerificationError for all HTTPS connections.
-        ssl_context = self._create_ssl_context()
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-
-        self._session = aiohttp.ClientSession(
-            connector=connector,
-            # Split timeout: distinguishes unreachable host (connect) from slow/stuck
-            # server response (sock_read) when the POST never returns. A total cap
-            # still protects against pathological cases.
-            timeout=aiohttp.ClientTimeout(total=30, connect=10, sock_read=20),
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "CIRIS-AccordMetrics/1.0",
-            },
-        )
-        logger.info(f"HTTP session initialized for {self._endpoint_url}")
-
-    @staticmethod
-    def _create_ssl_context() -> ssl.SSLContext:
-        """Create an SSL context with proper CA certificates.
-
-        Tries certifi first (bundled in iOS Resources), then falls back
-        to the default context (works on desktop/server platforms).
-        """
-        try:
-            import certifi
-
-            ca_bundle = certifi.where()
-            ctx = ssl.create_default_context(cafile=ca_bundle)
-            logger.info(f"SSL context created with certifi CA bundle: {ca_bundle}")
-            return ctx
-        except ImportError:
-            logger.debug("certifi not available, using default SSL context")
-        except Exception as e:
-            logger.warning(f"Failed to load certifi CA bundle: {e}, falling back to default")
-
-        return ssl.create_default_context()
+        if self._lens is not None:
+            try:
+                self._lens = self._build_lens_client()
+                logger.info("   LensClient rebuilt with updated consent state")
+            except RuntimeError as e:
+                logger.error(f"   LensClient rebuild failed: {e}")
 
     def set_agent_id(self, agent_id: str) -> None:
         """Set agent identity for traces.
@@ -2801,6 +1586,13 @@ class AccordMetricsService:
         Returns:
             Dictionary of service metrics
         """
+        try:
+            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+            signer_key_id: Optional[str] = get_unified_signing_key().key_id
+        except Exception:
+            signer_key_id = None
+
         return {
             "consent_given": self._consent_given,
             "trace_level": self._trace_level.value,
@@ -2808,37 +1600,33 @@ class AccordMetricsService:
             "events_sent": self._persisted_events_sent + self._events_sent,
             "events_sent_session": self._events_sent,
             "events_failed": self._events_failed,
-            "events_queued": len(self._event_queue),
+            "events_rejected": self._events_rejected,
+            "events_queued": 0,  # no agent-side queue post-fold (substrate-owned)
             "last_send_time": self._last_send_time.isoformat() if self._last_send_time else None,
             # Trace capture metrics
-            "traces_active": len(self._active_traces),
+            "traces_active": len(self._open_thoughts),
             "traces_completed": self._traces_completed,
             "traces_signed": self._traces_signed,
-            "signer_key_id": self._signer.key_id,
-            "has_signing_key": self._signer.has_signing_key,
+            "traces_consent_blocked": self._traces_consent_blocked,
+            "signer_key_id": signer_key_id,
+            "has_signing_key": signer_key_id is not None,
             "agent_id_hash": self._agent_id_hash,
+            "substrate": "ciris-lens-core",
         }
 
     def queue_lens_deletion_on_revoke(self) -> None:
-        """Queue a deletion event to be sent to CIRISLens.
+        """DSAR deletion request on consent revocation.
 
-        Called when consent is revoked to request removal of all traces
-        for this agent from the lens repository. Sends a disconnect event
-        with deletion_requested=True so the lens API knows to purge data.
+        Post-fold there is no bespoke deletion event to a lens HTTP API.
+        Deletion is CEG-native: my_data.py emits the
+        `emit_community_consent_revocation(RECANT)` attestation, lens-core's
+        consent gate hard-stops every subsequent seal, and lens-side purge
+        of historical data rides the CEG revoke/recant cascade
+        (CIRISLensCore requirement filed with #869). This method remains for
+        the my_data.py call-contract and records the request locally.
         """
-        if not self._agent_id_hash:
-            logger.warning("Cannot queue lens deletion: no agent_id_hash set")
-            return
-
-        deletion_event: Dict[str, Any] = {
-            "event_type": "consent_revoked_deletion_requested",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "agent_id_hash": self._agent_id_hash,
-            "deletion_requested": True,
-            "reason": "User revoked accord metrics consent via DSAR self-service",
-        }
-
-        self._event_queue.append(deletion_event)
         logger.info(
-            f"Queued lens deletion request for agent {self._agent_id_hash} " f"(queue size: {len(self._event_queue)})"
+            f"DSAR deletion requested for agent {self._agent_id_hash or 'unknown'} — "
+            "handled by the CEG recant cascade (consent gate stops emission at "
+            "the next seal; lens-side purge rides the revoke/recant cascade)"
         )

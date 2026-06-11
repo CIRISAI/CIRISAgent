@@ -21,8 +21,11 @@ requires a ``:v<N>``-versioned dimension; the envelope is opaque JSON to
 persist except ``dimension`` (the upsert key). See the round-trip test in
 ``tests/.../consent/test_consent_attestation.py``.
 
-Default OFF: gated on ``CIRIS_CONSENT_CEG_ATTESTATIONS`` so the dual-write is
-opt-in until the migration is validated end-to-end.
+Default ON as of 2.9.6 (the LensCore fold, CIRISAgent#866): the CEG
+attestation IS the consent wire artifact — lens-core's per-seal consent gate
+reads `consent:community_trust:v1` by the agent's federation key, so opt-in
+(grant) and revocation (withdraws/recants) only function if these emits run.
+``CIRIS_CONSENT_CEG_ATTESTATIONS=false`` remains as an emergency kill-switch.
 """
 
 from __future__ import annotations
@@ -63,8 +66,16 @@ _FEATURE_FLAG_ENV = "CIRIS_CONSENT_CEG_ATTESTATIONS"
 
 
 def consent_ceg_attestations_enabled() -> bool:
-    """True when the consent→CEG dual-write is opted in (default off)."""
-    return os.environ.get(_FEATURE_FLAG_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+    """True unless explicitly disabled (default ON as of 2.9.6).
+
+    The consent→CEG write is no longer a dual-write experiment: the CEG
+    attestation IS the consent artifact — lens-core's per-seal gate reads
+    the `consent:community_trust:v1` dimension to decide emission
+    (CIRISAgent#866 fold; opt-in = grant, revoke = withdraws/recants).
+    The flag remains only as an emergency kill-switch
+    (CIRIS_CONSENT_CEG_ATTESTATIONS=false).
+    """
+    return os.environ.get(_FEATURE_FLAG_ENV, "").strip().lower() not in ("0", "false", "no", "off")
 
 
 def _user_dimension(user_id: str) -> str:
@@ -401,30 +412,54 @@ def current_community_grant_id() -> Optional[str]:
         return None
 
 
-def emit_community_consent_grant() -> Optional[str]:
-    """Best-effort emit the directed traces-consent grant. Returns attestation_id.
+# Sentinel counterparty for the interim LOCAL-TIER grant emitted while the
+# canonical community key is unpublished. A local-tier row (no promotion,
+# subject_key_ids=[]) can never federate, so the "consent objects are
+# directed, never broadcast" invariant is preserved by construction — the
+# row is readable only by this occurrence's own substrate (which is exactly
+# what lens-core's per-seal consent gate reads). When the canonical key
+# publishes, the directed grant upserts over this row (same dimension).
+_PENDING_COMMUNITY_SENTINEL = "ciris:canonical-community:pending"
 
-    No-op (None) unless the flag is on, the engine + agent key are available,
-    AND the canonical community key is published (we never emit an undirected
-    traces-consent object).
+
+def emit_community_consent_grant() -> Optional[str]:
+    """Best-effort emit the traces-consent grant. Returns attestation_id.
+
+    This is THE consent wire artifact (2.9.6 #866): lens-core's consent gate
+    resolves the newest row on ``consent:community_trust:v1`` by the agent's
+    federation key at every trace seal. Two shapes:
+
+    - Canonical community key published → the DIRECTED grant
+      (subject_key_ids=[community]) — the CEG promotion event self→community.
+    - Key unpublished (interim) → an UNDIRECTED LOCAL-TIER grant that gates
+      local emission but cannot federate (never promoted, no subjects), so
+      nothing undirected ever leaves the occurrence.
+
+    No-op (None) when the kill-switch is set or engine/key are unavailable.
     """
     if not consent_ceg_attestations_enabled():
         return None
     engine = _resolve_engine()
     key_id = _resolve_attesting_key_id()
-    community = canonical_community_key_id()
-    if engine is None or not key_id or not community:
-        logger.debug(
-            "consent-CEG: skip community grant (engine=%s key=%s community=%s)",
-            engine is not None,
-            bool(key_id),
-            bool(community),
-        )
+    if engine is None or not key_id:
+        logger.debug("consent-CEG: skip community grant (engine=%s key=%s)", engine is not None, bool(key_id))
         return None
+    community = canonical_community_key_id()
     try:
-        grant = build_community_consent_grant(key_id, community)
-        attestation_id = engine.attestation_upsert_local(_directed_payload(grant, community))  # type: ignore[attr-defined]
-        logger.info("consent-CEG: emitted directed traces-consent grant %s → community %s", attestation_id, community)
+        grant = build_community_consent_grant(key_id, community or _PENDING_COMMUNITY_SENTINEL)
+        if community:
+            attestation_id = engine.attestation_upsert_local(_directed_payload(grant, community))  # type: ignore[attr-defined]
+            logger.info(
+                "consent-CEG: emitted directed traces-consent grant %s → community %s", attestation_id, community
+            )
+        else:
+            attestation_id = engine.attestation_upsert_local(grant.model_dump_json())  # type: ignore[attr-defined]
+            logger.info(
+                "consent-CEG: emitted INTERIM local-tier traces-consent grant %s "
+                "(canonical community key unpublished — gates local emission only, "
+                "directed grant supersedes when the key ships)",
+                attestation_id,
+            )
         return str(attestation_id)
     except Exception as exc:
         logger.warning("consent-CEG: community grant emit failed (non-fatal): %s", exc)
@@ -444,18 +479,31 @@ def emit_community_consent_revocation(
         return None
     engine = _resolve_engine()
     key_id = _resolve_attesting_key_id()
-    community = canonical_community_key_id()
-    if engine is None or not key_id or not community:
+    if engine is None or not key_id:
         return None
+    # A revocation MUST be writable even while the canonical community key is
+    # unpublished — lens-core's gate hard-stops on the newest withdraws/recants
+    # row regardless of direction, and a user's recant may never be blocked on
+    # upstream key publication. Undirected structural rows stay local-tier
+    # (no promotion), mirroring the interim grant.
+    community = canonical_community_key_id()
     try:
-        row = build_community_structural(intent, target_id, key_id, community, reason)
+        row = build_community_structural(intent, target_id, key_id, community or "", reason)
+        if not community:
+            row.subject_key_ids = []
         attestation_id = engine.attestation_insert_local(row.model_dump_json())  # type: ignore[attr-defined]
-        logger.info("consent-CEG: emitted %s on %s (community %s)", intent.value, target_id, community)
+        logger.info(
+            "consent-CEG: emitted %s on %s (%s)",
+            intent.value,
+            target_id,
+            f"community {community}" if community else "interim local-tier",
+        )
     except Exception as exc:
         logger.warning("consent-CEG: community revocation emit failed (non-fatal): %s", exc)
         return None
-    try:
-        engine.attestation_promote(attestation_id)  # type: ignore[attr-defined]
-    except Exception as exc:
-        logger.debug("consent-CEG: structural promote deferred (non-fatal): %s", exc)
+    if community:
+        try:
+            engine.attestation_promote(attestation_id)  # type: ignore[attr-defined]
+        except Exception as exc:
+            logger.debug("consent-CEG: structural promote deferred (non-fatal): %s", exc)
     return str(attestation_id)

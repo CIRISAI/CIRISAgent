@@ -620,8 +620,9 @@ async def _load_single_saved_adapter(
     return False
 
 
-# Bootstrap adapters that are always loaded at startup (skip in env fallback)
-BOOTSTRAP_ADAPTER_TYPES = {"api", "cli", "ciris_verify"}
+# Bootstrap adapters that are always loaded at startup (skip in env fallback).
+# ciris_accord_metrics is bootstrap-required as of 2.9.6 (#866 LensCore fold).
+BOOTSTRAP_ADAPTER_TYPES = {"api", "cli", "ciris_verify", "ciris_accord_metrics"}
 
 
 async def _load_adapters_from_env_fallback(

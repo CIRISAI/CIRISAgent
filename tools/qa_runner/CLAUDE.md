@@ -54,7 +54,9 @@ The QA runner prints the path during startup:
    CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR=/tmp/qa-runner-lens-traces-20260501T180000Z
 ```
 
-Files in that dir are named `accord-batch-<UTC-iso-microseconds>-<NNNN>.json`, sortable by timestamp, one file per batch flushed to lens.
+**2.9.6 fold note:** post-fold the tee is written by the lens-core substrate (`LensClient` `local_copy_dir`) as `lens-batch-<seq:08>.json` — the raw `BatchEnvelope` bytes handed to `receive_and_persist`. Pre-fold runs produced `accord-batch-<ISO>-<seq>.json` (the HTTP POST bytes); both patterns may appear in older dumps. Glob `*batch-*.json` to cover both.
+
+Files in that dir were PRE-FOLD named `accord-batch-<UTC-iso-microseconds>-<NNNN>.json`, sortable by timestamp, one file per batch flushed to lens.
 
 **Why this matters for troubleshooting** — the local copies contain the *exact* JSON the lens received: full reasoning event stream, every `@streaming_step` broadcast, every `LLM_CALL` event with prompt/completion bytes + duration + status enum, every conscience scalar, every CIRISVerify attestation field. When a sweep produces unexpected behavior — defer when it shouldn't, fabrication that the EH bullet should have caught, register-break that the IRIS-C BOUNDARY INTEGRITY principle missed — the answer lives in these batch files.
 
@@ -65,7 +67,7 @@ Files in that dir are named `accord-batch-<UTC-iso-microseconds>-<NNNN>.json`, s
 ls -lt /tmp/qa-runner-lens-traces-*/  | head
 
 # Find the trace for a specific thought_id (extract from qa_runner.log first)
-grep -l "th_abc123" /tmp/qa-runner-lens-traces-*/accord-batch-*.json
+grep -l "th_abc123" /tmp/qa-runner-lens-traces-*/*batch-*.json
 
 # What conscience signals fired on a particular thought?
 python3 -c "
@@ -75,13 +77,13 @@ for f in sys.argv[1:]:
     for ev in payload['events']:
         if ev.get('thought_id') == 'th_abc123' and 'conscience' in ev.get('event_type', '').lower():
             print(f, ev['event_type'], ev.get('coherence', ev.get('entropy_reduction_ratio')))
-" /tmp/qa-runner-lens-traces-*/accord-batch-*.json
+" /tmp/qa-runner-lens-traces-*/*batch-*.json
 
 # Why did the agent defer? Find the action_result + the conscience scalars that preceded it
 python3 -c "
 import json, glob
 events = []
-for f in sorted(glob.glob('/tmp/qa-runner-lens-traces-*/accord-batch-*.json')):
+for f in sorted(glob.glob('/tmp/qa-runner-lens-traces-*/*batch-*.json')):
     events.extend(json.load(open(f))['events'])
 for ev in events:
     if ev.get('action_executed') == 'defer':

@@ -996,12 +996,26 @@ signed_bytes = jcs_canonicalize(canonical)   # RFC 8785 — 2.9.6 HARD cutover
 signature = ed25519_sign(signed_bytes)
 ```
 
-**JCS canonicalization — the 2.9.6 hard cutover (CEG §0.9).** As of 2.9.6
-`signed_bytes` is the RFC 8785 (JSON Canonicalization Scheme) byte sequence,
-produced by `ciris_verify_core::jcs` (the one blessed impl, shipped in
-ciris-verify ≥ 5.0.0; the producer reaches it via
+**2.9.6 LensCore fold — the producer moved into the substrate.** As of the
+fold (CIRISAgent#866/#857) the agent's Python trace producer is RETIRED:
+`ciris-lens-core`'s `LensClient`/`CaptureClient` owns capture → seal →
+Ed25519-sign (via the persist Engine's federation signer) →
+`receive_and_persist`. lens-core 1.0.0 stamps `trace_schema_version "2.7.9"`
+and signs with persist's V1Python canonicalizer (the CEG 1.0-RC2 §0.9
+carve-out); the stamp+canonicalizer alignment to "3.0.0"/JCS is the upstream
+cut tracked in CIRISLensCore#43. The `"3.0.0"`+JCS producer below was live
+in the agent's Python signer for the pre-fold window (commits
+9c3546dc8/2a228b4a4) and remains live in the **cirisnode adapter's private
+legacy pipeline** (`ciris_adapters/cirisnode/_legacy_trace.py`, its own wire
+counterpart) — persist's signed-epoch verify gate dispatches both eras
+correctly.
+
+**JCS canonicalization — the 2.9.6 cutover (CEG §0.9).** `signed_bytes` at
+schema era "3.0.0" is the RFC 8785 (JSON Canonicalization Scheme) byte
+sequence, produced by `ciris_verify_core::jcs` (the one blessed impl,
+shipped in ciris-verify ≥ 5.0.0; Python producers reach it via
 `ciris_verify.jcs_canonicalize`). This is byte-identical to what the Rust
-federation verifiers recompute, so the agent-signed bytes and the verifier's
+federation verifiers recompute, so the signed bytes and the verifier's
 reconstructed bytes match on **all** inputs.
 
 Pre-2.9.6 the producer used `json.dumps(canonical, sort_keys=True,

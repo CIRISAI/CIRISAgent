@@ -623,7 +623,7 @@ class APIServerManager:
     def _prune_lens_trace_dirs(self) -> None:
         """Retention sweep for `/tmp/qa-runner-lens-traces-*` dirs.
 
-        Each live-lens QA run accumulates ~50-300MB of `accord-batch-*.json`
+        Each live-lens QA run accumulates ~50-300MB of `*batch-*.json`
         files in its tee dir. Left unchecked the dirs build up — saw
         60MB-free-of-935GB on 2026-05-03 from ~30 accumulated dirs blocking
         the next run. Called before creating this run's dir so we land at

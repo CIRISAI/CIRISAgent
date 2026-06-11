@@ -831,9 +831,15 @@ def _occurrence_trust_edge(request: Request) -> Tuple[bool, str]:
 
     1. The CEG community-trust consent artifact — newest row on
        ``consent:community_trust:v1`` by this occurrence's federation key
-       is a standing grant (scores/supersedes). This is the canonical
-       CIRIS community trust edge (the accord-traces opt-in).
+       is a standing DIRECTED grant (scores/supersedes with a real
+       counterparty). The interim local-tier grant (sentinel counterparty,
+       written while the canonical community key is unpublished) does NOT
+       count: a self-authored row with no counterparty is precisely the
+       solipsism τ exists to discount.
     2. Any reachable federation peer occurrence via the edge runtime.
+
+    Sync FFI work runs in this thread — callers in async context must wrap
+    with ``asyncio.to_thread`` (``_compute_local_capacity`` does).
     """
     # 1. CEG community-trust grant (newest-wins, mirroring lens-core's gate)
     try:
@@ -841,11 +847,24 @@ def _occurrence_trust_edge(request: Request) -> Tuple[bool, str]:
 
         from ciris_engine.logic.persistence.models.graph import get_persist_engine
         from ciris_engine.logic.runtime.edge_runtime import get_federation_address
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            _PENDING_COMMUNITY_SENTINEL,
+        )
 
         engine = get_persist_engine()
         key_id = get_federation_address()
         if engine is not None and key_id:
-            page = _json.loads(engine.list_attestations("{}", None, 100, key_id))
+            # Try a dimension-scoped filter first (keeps the community-trust
+            # row from falling off page 1 as per-user consent rows
+            # accumulate); fall back to the unfiltered page if persist
+            # rejects the filter key.
+            try:
+                raw = engine.list_attestations(
+                    _json.dumps({"dimension": "consent:community_trust:v1"}), None, 100, key_id
+                )
+            except Exception:
+                raw = engine.list_attestations("{}", None, 100, key_id)
+            page = _json.loads(raw)
             rows = [
                 r
                 for r in page.get("items", [])
@@ -853,9 +872,13 @@ def _occurrence_trust_edge(request: Request) -> Tuple[bool, str]:
             ]
             if rows:
                 rows.sort(key=lambda r: (r.get("asserted_at", ""), r.get("attestation_id", "")), reverse=True)
-                newest_type = rows[0].get("attestation_type")
-                if newest_type in ("scores", "supersedes"):
-                    return True, "community_grant"
+                newest = rows[0]
+                if newest.get("attestation_type") in ("scores", "supersedes"):
+                    claim = ((newest.get("attestation_envelope") or {}).get("claim")) or {}
+                    if claim.get("user_id") != _PENDING_COMMUNITY_SENTINEL:
+                        return True, "community_grant"
+                    # Interim self-authored grant: gates emission, but is
+                    # not a trust EDGE — fall through to the peer check.
                 # withdraws/recants = the edge was explicitly severed;
                 # fall through to the peer check rather than honoring a
                 # revoked grant.
@@ -991,7 +1014,8 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str, Dict[st
         sigma = await _sigma_from_positive_moments(request)
 
         # --- τ: trust edge (occurrence health is a relational property) ----
-        attested, trust_source = _occurrence_trust_edge(request)
+        # to_thread: the probe does real persist-FFI roundtrips.
+        attested, trust_source = await asyncio.to_thread(_occurrence_trust_edge, request)
         tau = TAU_ATTESTED if attested else TAU_ISOLATED
 
         j = coverage * k_eff_frac * rho_complement * lam * sigma * tau

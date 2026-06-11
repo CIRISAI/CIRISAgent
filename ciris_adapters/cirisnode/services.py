@@ -807,14 +807,22 @@ class CIRISNodeService:
         try:
             from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
 
-            # Use a throwaway instance to access _extract_component_data
-            # This is a classmethod-like pattern — the method only uses self._trace_level
+            # Use a throwaway instance to access _extract_component_data.
+            # The method reads self._trace_level AND (in the
+            # SNAPSHOT_AND_CONTEXT branch) self._agent_name — without the
+            # latter the AttributeError fell into the broad except below and
+            # silently forwarded the RAW system_snapshot at every trace
+            # level, bypassing GENERIC gating entirely.
             extractor = AccordMetricsService.__new__(AccordMetricsService)
             extractor._trace_level = self._trace_level
+            extractor._agent_name = getattr(self, "_agent_name", None) or ""
             return extractor._extract_component_data(event_type, event)
-        except Exception:
-            # Fallback: forward raw event data (minus internal fields)
-            return {k: v for k, v in event.items() if k not in ("event_type", "thought_id", "task_id", "timestamp")}
+        except Exception as e:
+            # Fallback: forward MINIMAL data only — never the raw event.
+            # Raw-event forwarding leaked ungated snapshot/reasoning content
+            # whenever extraction raised (the level gate exists for privacy).
+            logger.warning(f"cirisnode extraction failed for {event_type}: {type(e).__name__}: {e}")
+            return {"extraction_failed": True, "event_type_raw": str(event_type)}
 
     async def _complete_trace(self, thought_id: str, timestamp: str) -> None:
         """Finalize a trace and queue it for sending."""

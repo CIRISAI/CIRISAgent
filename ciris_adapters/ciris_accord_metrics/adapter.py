@@ -1,11 +1,12 @@
 """
-CIRIS Accord Metrics Adapter.
+CIRIS Accord Metrics Adapter — the reasoning-observability spine.
 
-This adapter provides accord compliance metrics collection for CIRISLens,
-reporting WBD (Wisdom-Based Deferral) events and PDMA decision events.
-
-CRITICAL: This adapter requires EXPLICIT opt-in via the setup wizard.
-No data is collected or sent without user consent.
+2.9.6+ (#866 LensCore fold): bootstrap-REQUIRED, always loaded. Capture is
+constitutive (the agent's local self-witness ledger, like the audit trail);
+the trace pipeline is owned by the ciris-lens-core substrate. CONSENT
+governs SHARING, not capture, and is a CEG wire artifact
+(consent:community_trust:v1) enforced by lens-core's gate at every seal —
+a recant is a hard stop. No data leaves the occurrence without the grant.
 """
 
 import asyncio
@@ -49,18 +50,21 @@ def _get_metrics_env(name: str, default: str = "") -> str:
 
 class AccordMetricsAdapter(Service):
     """
-    CIRIS Accord Metrics Adapter.
+    CIRIS Accord Metrics Adapter (post-fold, 2.9.6+).
 
     This adapter:
     1. Registers a WiseAuthority service to receive WBD events
-    2. Provides consent management for data collection
-    3. Batches and sends events to CIRISLens API
+       (registration is unconditional — consent gates sharing at the
+       substrate seal, not registration)
+    2. Provides the consent-state plumbing (set_consent → LensClient
+       rebuild; the CEG grant/revocation artifacts are the actual consent)
+    3. Hosts the AccordMetricsService that feeds reasoning events to the
+       ciris-lens-core substrate (capture → seal → sign → persist)
 
-    IMPORTANT: This adapter is NOT auto-loaded. It must be:
-    1. Explicitly added via --adapter ciris_accord_metrics
-    2. Configured via the setup wizard with EXPLICIT consent
-
-    No data is sent until the user completes the consent flow.
+    Bootstrap-REQUIRED: loaded with ciris_verify at every boot
+    (runtime/bootstrap_helpers.py). Trace data persists locally at the
+    self tier; nothing leaves the occurrence without the
+    consent:community_trust:v1 grant.
     """
 
     def __init__(
@@ -111,7 +115,7 @@ class AccordMetricsAdapter(Service):
             logger.info(f"   Consent timestamp: {adapter_config['consent_timestamp']}")
 
         if not self._consent_given:
-            logger.warning("❌ CONSENT NOT GIVEN - traces will NOT be captured")
+            logger.info("Consent not yet granted — capture runs; seals are consent_blocked at the substrate until the CEG grant exists")
             logger.warning("   Set CIRIS_ACCORD_METRICS_CONSENT=true or complete setup wizard")
         else:
             logger.info(f"✅ CONSENT GIVEN - traces WILL be captured and sent")
@@ -199,7 +203,7 @@ class AccordMetricsAdapter(Service):
         if self._consent_given:
             logger.info("✅ AccordMetricsAdapter STARTED - collecting metrics")
         else:
-            logger.warning("⚠️  AccordMetricsAdapter started WITHOUT consent - NO metrics collected")
+            logger.info("AccordMetricsAdapter started pre-consent — capture active, sharing gated at the substrate seal")
 
     async def stop(self) -> None:
         """Stop the Accord Metrics adapter."""

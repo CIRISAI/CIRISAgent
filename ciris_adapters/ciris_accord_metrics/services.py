@@ -52,6 +52,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -350,9 +351,19 @@ class AccordMetricsService:
         self._traces_consent_blocked = 0
         self._last_send_time: Optional[datetime] = None
 
-        # In-flight thought_ids (from capture_event outcomes; the
-        # authoritative partial-trace store lives in lens-core)
-        self._open_thoughts: set[str] = set()
+        # In-flight thought_ids → monotonic open time (from capture_event
+        # outcomes; the authoritative partial-trace store lives in lens-core).
+        # Timestamps let _periodic_sweep age out entries whose traces the
+        # substrate orphan-purged (we only learn a count, not which ids).
+        self._open_thoughts: Dict[str, float] = {}
+
+        # Serializes ALL capture_event calls. The stream consumer and
+        # send_deferral are separate asyncio tasks; without this, two
+        # asyncio.to_thread executors can enter the substrate concurrently,
+        # breaking the FIFO that attempt_index counters and seal ordering
+        # depend on (a DEFERRAL_ROUTED landing after its thought's
+        # ACTION_RESULT would re-open a fresh trace that then orphans).
+        self._capture_lock = asyncio.Lock()
 
         # Persisted cumulative total from prior sessions (loaded in start())
         self._persisted_events_sent = 0
@@ -470,7 +481,7 @@ class AccordMetricsService:
             from ciris_engine.logic.persistence.models.graph import get_graph_node
             from ciris_engine.schemas.services.graph_core import GraphScope
 
-            node = get_graph_node("accord_metrics/events_total", GraphScope.LOCAL)
+            node = get_graph_node("accord_metrics/trace_events_total", GraphScope.LOCAL)
             if node and node.attributes:
                 attrs = node.attributes
                 # Handle both dict and object attribute access
@@ -496,7 +507,7 @@ class AccordMetricsService:
 
             total = self._persisted_events_sent + self._events_sent
             node = GraphNode(
-                id="accord_metrics/events_total",
+                id="accord_metrics/trace_events_total",
                 type=NodeType.CONFIG,
                 scope=GraphScope.LOCAL,
                 attributes={
@@ -506,7 +517,7 @@ class AccordMetricsService:
                     # attrs["key"]. Without it, every config scan logged
                     # "Failed to convert node ... to ConfigNode: 'key'"
                     # (×100+ — a WARNING flood).
-                    "key": "accord_metrics/events_total",
+                    "key": "accord_metrics/trace_events_total",
                     "events_sent_total": total,
                     "last_updated": datetime.now(timezone.utc).isoformat(),
                 },
@@ -687,6 +698,13 @@ class AccordMetricsService:
                                 f"trace(s) (no ACTION_RESULT after {self._orphan_trace_max_age:.0f}s). "
                                 "This usually means the upstream ACTION_COMPLETE broadcast was severed."
                             )
+                        # Age out our open-thought mirror in lockstep: the
+                        # substrate purge tells us a count, not which ids, so
+                        # drop entries past the same orphan age.
+                        cutoff = time.monotonic() - self._orphan_trace_max_age
+                        stale = [tid for tid, opened in self._open_thoughts.items() if opened < cutoff]
+                        for tid in stale:
+                            self._open_thoughts.pop(tid, None)
                     self._persist_events_total()
                 except Exception as e:
                     if isinstance(e, asyncio.CancelledError):
@@ -741,7 +759,16 @@ class AccordMetricsService:
         events = event_data.get("events", [])
         logger.debug(f"Handling event_data with {len(events)} events")
         for event in events:
-            await self._process_single_event(event)
+            # Per-event isolation: one bad event must not drop the rest of
+            # the stream update (which may include the ACTION_RESULT seal).
+            try:
+                await self._process_single_event(event)
+            except Exception as e:
+                self._events_failed += 1
+                logger.error(
+                    f"capture failed for event {event.get('event_type', '?')} "
+                    f"(thought {event.get('thought_id', '?')}): {type(e).__name__}: {e!r}"
+                )
 
     async def _process_single_event(self, event: Dict[str, Any]) -> None:
         """Normalize one reasoning event and feed it to the substrate.
@@ -786,15 +813,17 @@ class AccordMetricsService:
         }
 
         # to_thread keeps the seal's Ed25519+DB work off the event loop;
-        # the single-consumer await-per-event ordering preserves the FIFO
-        # the substrate's attempt_index counters depend on.
-        outcome = await asyncio.to_thread(self._lens.capture_event, component)
+        # _capture_lock serializes against send_deferral (a separate task)
+        # so the substrate sees a strict FIFO — its attempt_index counters
+        # and seal ordering depend on it.
+        async with self._capture_lock:
+            outcome = await asyncio.to_thread(self._lens.capture_event, component)
         kind = outcome.get("outcome", "")
 
         if kind == "opened":
-            self._open_thoughts.add(thought_id)
+            self._open_thoughts[thought_id] = time.monotonic()
         elif kind == "sealed_and_persisted":
-            self._open_thoughts.discard(thought_id)
+            self._open_thoughts.pop(thought_id, None)
             self._traces_completed += 1
             if int(outcome.get("signatures_verified", 0)) > 0:
                 self._traces_signed += 1
@@ -806,7 +835,7 @@ class AccordMetricsService:
                 f"({inserted} trace_events, {outcome.get('signatures_verified', 0)} signature(s) verified)"
             )
         elif kind == "consent_blocked":
-            self._open_thoughts.discard(thought_id)
+            self._open_thoughts.pop(thought_id, None)
             self._traces_consent_blocked += 1
             logger.debug(
                 f"⏭️  Trace for {thought_id} consent_blocked at seal "
@@ -1471,10 +1500,11 @@ class AccordMetricsService:
             "data": data,
         }
         try:
-            outcome = await asyncio.to_thread(self._lens.capture_event, component)
+            async with self._capture_lock:
+                outcome = await asyncio.to_thread(self._lens.capture_event, component)
             self._events_received += 1
             if outcome.get("outcome") == "opened":
-                self._open_thoughts.add(request.thought_id)
+                self._open_thoughts[request.thought_id] = time.monotonic()
             logger.info(
                 f"🧭 WBD deferral captured for thought {request.thought_id} "
                 f"(outcome={outcome.get('outcome')})"

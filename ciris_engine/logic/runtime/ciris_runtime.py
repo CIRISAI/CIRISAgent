@@ -883,13 +883,31 @@ class CIRISRuntime(ServicePropertyMixin):
             if blocking_adapters:
                 await asyncio.gather(*(_start_single_adapter(adapter) for adapter in blocking_adapters))
 
+            def _log_background_start_failure(t: "asyncio.Task[Any]") -> None:
+                # Surface background-start failures explicitly: without this
+                # the re-raise in _start_single_adapter becomes an unretrieved
+                # task exception and a REQUIRED adapter (e.g. accord_metrics)
+                # can silently not run during the first-run wizard session.
+                self._background_tasks.discard(t)
+                if t.cancelled():
+                    return
+                exc = t.exception()
+                if exc is not None:
+                    logger.error(
+                        "[_start_adapters] BACKGROUND adapter start FAILED (%s): %s — "
+                        "the adapter is NOT running for this first-run session and "
+                        "will block boot on the next (non-first-run) start",
+                        t.get_name(),
+                        exc,
+                    )
+
             for adapter in background_adapters:
                 task = asyncio.create_task(
                     _start_single_adapter(adapter),
                     name=f"AdapterStart::{adapter.__class__.__name__}",
                 )
                 self._background_tasks.add(task)
-                task.add_done_callback(self._background_tasks.discard)
+                task.add_done_callback(_log_background_start_failure)
 
             logger.info(
                 "[_start_adapters] First-run blocking adapters started; %d background adapter starts scheduled",

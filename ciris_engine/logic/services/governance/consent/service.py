@@ -416,9 +416,10 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Update cache
         self._consent_cache[new_status.user_id] = new_status
 
-        # CEG-native fold (#869): dual-write the consent state as a local-tier
-        # CEG attestation. Best-effort + flag-gated — never breaks the consent
-        # write path. No-op unless CIRIS_CONSENT_CEG_ATTESTATIONS is set.
+        # CEG-native consent (#869/#866): write the consent state as a
+        # local-tier CEG attestation — the consent wire artifact. Best-effort,
+        # never breaks the consent write path. Default ON as of 2.9.6;
+        # CIRIS_CONSENT_CEG_ATTESTATIONS=false is the emergency kill-switch.
         emit_consent_grant(new_status)
 
     async def update_consent(

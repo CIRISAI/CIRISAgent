@@ -68,20 +68,27 @@ def mock_accord_adapter():
     adapter._consent_timestamp = "2026-01-15T10:00:00+00:00"
 
     svc = MagicMock()
+    # Post-fold (CIRISAgent#866) metrics shape: events_queued is always 0
+    # (no agent-side queue), plus events_rejected / traces_consent_blocked /
+    # substrate keys.
     svc.get_metrics.return_value = {
         "consent_given": True,
         "trace_level": "generic",
         "events_received": 42,
         "events_sent": 38,
+        "events_sent_session": 38,
         "events_failed": 0,
-        "events_queued": 2,
+        "events_rejected": 0,
+        "events_queued": 0,
         "last_send_time": "2026-03-20T09:00:00+00:00",
         "traces_active": 1,
         "traces_completed": 37,
         "traces_signed": 37,
+        "traces_consent_blocked": 0,
         "signer_key_id": "test-key-123",
         "has_signing_key": True,
         "agent_id_hash": hashlib.sha256(b"test-agent-001").hexdigest()[:16],
+        "substrate": "ciris-lens-core",
     }
     svc._endpoint_url = "https://lens.ciris-services-1.ai/lens-api/api/v1"
     adapter.metrics_service = svc
@@ -344,83 +351,77 @@ class TestHashConsistency:
 
 
 class TestConsentRevocationDeletionHook:
-    """Test that consent revocation can trigger lens deletion."""
+    """Consent revocation deletion hook — post-fold (CIRISAgent#866) the
+    method is LOG-ONLY: deletion is CEG-native (the recant cascade owns the
+    lens-side purge; the consent gate hard-stops every subsequent seal).
+    The method remains for the my_data.py call-contract."""
 
-    def test_queue_lens_deletion_on_revoke(self):
-        """Test the service method that queues deletion when consent is revoked."""
+    def test_queue_lens_deletion_on_revoke_is_log_only(self, caplog):
+        """The hook must not raise and must record the request locally."""
+        import logging
+
         from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
 
         svc = AccordMetricsService.__new__(AccordMetricsService)
         svc._agent_id_hash = "abc123def456"
-        svc._event_queue = []
 
-        svc.queue_lens_deletion_on_revoke()
+        with caplog.at_level(logging.INFO, logger="ciris_adapters.ciris_accord_metrics.services"):
+            svc.queue_lens_deletion_on_revoke()
 
-        assert len(svc._event_queue) == 1
-        event = svc._event_queue[0]
-        assert event["event_type"] == "consent_revoked_deletion_requested"
-        assert event["agent_id_hash"] == "abc123def456"
-        assert event["deletion_requested"] is True
+        assert any("abc123def456" in rec.message for rec in caplog.records)
+        assert any("recant cascade" in rec.message for rec in caplog.records)
 
-    def test_queue_deletion_no_agent_id(self):
-        """Should not queue if no agent_id_hash is set."""
+    def test_queue_deletion_no_agent_id_does_not_raise(self):
+        """Without an agent_id_hash the hook still completes (logs 'unknown')."""
         from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
 
         svc = AccordMetricsService.__new__(AccordMetricsService)
         svc._agent_id_hash = None
-        svc._event_queue = []
 
-        svc.queue_lens_deletion_on_revoke()
-
-        assert len(svc._event_queue) == 0
+        svc.queue_lens_deletion_on_revoke()  # must not raise
 
 
 class TestLateConsentInitialization:
-    """Test that granting consent after start initializes HTTP session + flush."""
+    """Granting consent after start rebuilds the substrate LensClient
+    (post-fold there is no HTTP session — the handle freezes its
+    config-fallback consent_timestamp at construction, so a consent
+    change rebuilds it)."""
 
-    def test_set_consent_true_creates_session(self):
-        """set_consent(True) should create HTTP session if none exists."""
+    def test_set_consent_true_rebuilds_lens_client_when_started(self):
+        """set_consent(True) on a started service rebuilds the client."""
         from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
 
         svc = AccordMetricsService.__new__(AccordMetricsService)
         svc._consent_given = False
         svc._consent_timestamp = None
-        svc._session = None
-        svc._flush_task = None
-        svc._flush_interval = 60.0
-        svc._endpoint_url = "https://example.com/api/v1"
-        svc._batch_size = 10
-        svc._event_queue = []
+        svc._lens = MagicMock()  # started: substrate handle exists
 
-        mock_session = MagicMock()
-        mock_session.closed = False
+        new_lens = MagicMock()
+        svc._build_lens_client = MagicMock(return_value=new_lens)
 
-        # Patch asyncio.get_running_loop (returns mock loop), aiohttp.ClientSession, and asyncio.create_task
-        with patch("ciris_adapters.ciris_accord_metrics.services.asyncio.get_running_loop", return_value=MagicMock()):
-            with patch("ciris_adapters.ciris_accord_metrics.services.aiohttp.ClientSession", return_value=mock_session):
-                with patch("ciris_adapters.ciris_accord_metrics.services.asyncio.create_task") as mock_create_task:
-                    mock_create_task.return_value = MagicMock(done=MagicMock(return_value=False))
-                    svc.set_consent(True)
+        svc.set_consent(True)
 
         assert svc._consent_given is True
-        assert svc._session is mock_session
-        # Flush task should have been created
-        mock_create_task.assert_called_once()
+        assert svc._consent_timestamp is not None
+        svc._build_lens_client.assert_called_once()
+        assert svc._lens is new_lens
 
-    def test_set_consent_false_does_not_create_session(self):
-        """set_consent(False) should not create an HTTP session."""
+    def test_set_consent_before_start_does_not_build_client(self):
+        """Before start() there is no handle to rebuild — set_consent only
+        flips the flags (start() constructs the REQUIRED client)."""
         from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
 
         svc = AccordMetricsService.__new__(AccordMetricsService)
         svc._consent_given = True
         svc._consent_timestamp = None
-        svc._session = None
-        svc._flush_task = None
+        svc._lens = None
+        svc._build_lens_client = MagicMock()
 
         svc.set_consent(False)
 
         assert svc._consent_given is False
-        assert svc._session is None
+        svc._build_lens_client.assert_not_called()
+        assert svc._lens is None
 
 
 # =============================================================================

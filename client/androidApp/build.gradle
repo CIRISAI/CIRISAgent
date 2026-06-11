@@ -36,18 +36,27 @@ android {
             pip {
                 options "--find-links", "wheels"  // Local wheels directory
 
-                // 2.9.5 substrate triple (v4 canonical) — persist 4.0.1 /
-                // verify 4.8.0 / edge 1.2.0 (CIRISConformance/matrices/
-                // current.yaml). All three ship Chaquopy-shaped Android wheels
-                // under `{prefix}-v{ver}-android-wheels.tar.gz` and are dropped
-                // into wheels/ by `tools/update_android_libs.py --lib X V`.
+                // 2.9.6 substrate quad — persist 5.2.0 / edge 2.0.2 /
+                // verify 5.1.0 / lens-core 1.0.0 (CIRISConformance/matrices/
+                // current.yaml). persist + edge ship Chaquopy-shaped Android
+                // wheels under `{prefix}-v{ver}-android-wheels.tar.gz`,
+                // dropped into wheels/ by the substrate updater
+                // (`tools/update_substrate_libs.py` / legacy
+                // `update_android_libs.py --lib X V`).
                 // Pins MUST match requirements.txt — version skew breaks
-                // cohabitation (CIRISEdge#16/#43 etc.). Without these two
+                // cohabitation (CIRISEdge#16/#43 etc.). Without these
                 // installs the Android-bundled Python raises ModuleNotFound
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
-                install "ciris-persist==4.10.0"
-                install "ciris-edge==1.5.0"
+                install "ciris-persist==5.2.0"
+                install "ciris-edge==2.0.2"
+                // ciris-lens-core is REQUIRED by the accord_metrics adapter
+                // in 2.9.6+ (CIRISAgent#866 LensCore fold). CIRISLensCore
+                // does not publish Android wheels yet — the upstream release-
+                // artifact ask is filed; uncomment when the wheels land in
+                // wheels/ via the substrate updater. Until then the adapter
+                // raises a clear RuntimeError at start on Android.
+                // install "ciris-lens-core==1.0.0"
 
                 // Core dependencies (same as original android/app/build.gradle)
                 install "pydantic-core==2.23.4"

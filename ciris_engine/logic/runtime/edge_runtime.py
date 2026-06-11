@@ -79,7 +79,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         import ciris_edge  # type: ignore[import-not-found, import-untyped, unused-ignore]
     except ImportError as e:
         raise RuntimeError(
-            "ciris-edge not importable but is REQUIRED for 2.9.4+. Pin ciris-edge>=1.0.0,<2.0.0 in requirements.txt."
+            "ciris-edge not importable but is REQUIRED for 2.9.4+. Pin ciris-edge>=2.0.2,<3.0.0 in requirements.txt."
         ) from e
 
     identity_dir.mkdir(parents=True, exist_ok=True)

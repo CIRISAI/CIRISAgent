@@ -8,11 +8,24 @@ for the API adapter, including production bug scenarios.
 import os
 from unittest.mock import patch
 
+import pytest
+
 from ciris_engine.logic.adapters.api.config import APIAdapterConfig
 
 
 class TestAPIConfig:
     """Test API adapter configuration handling."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_dotenv_cache(self, monkeypatch):
+        """get_env_var falls back to a module-cached repo-root .env —
+        whatever a prior QA run last wrote there (e.g. the postgres
+        leg's CIRIS_API_PORT=8001) would leak into the default-value
+        assertions. Pin the cache empty so only os.environ matters."""
+        from ciris_engine.logic.config import env_utils
+
+        monkeypatch.setattr(env_utils, "_ENV_VALUES", {})
+        monkeypatch.setattr(env_utils, "_ENV_LOADED", True)
 
     def test_default_config_values(self):
         """Test default configuration values."""

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from io import StringIO
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -38,25 +38,47 @@ class TestWriteAccordMetricsConfig:
     """Tests for _write_accord_metrics_config function."""
 
     def test_writes_nothing_when_adapter_not_enabled(self) -> None:
-        """Test that nothing is written when accord metrics adapter is not enabled."""
+        """No env writes and no CEG grant when the opt-in box is unchecked."""
         f = StringIO()
         setup = _create_mock_setup(enabled_adapters=["api", "discord"])
 
-        _write_accord_metrics_config(f, setup)
+        with patch(
+            "ciris_engine.logic.services.governance.consent.attestation.emit_community_consent_grant"
+        ) as mock_emit:
+            _write_accord_metrics_config(f, setup)
 
         assert f.getvalue() == ""
+        mock_emit.assert_not_called()
 
-    def test_writes_consent_when_adapter_enabled(self) -> None:
-        """Test that consent is written when accord metrics adapter is enabled."""
+    def test_emits_ceg_grant_when_adapter_enabled(self) -> None:
+        """2.9.6 contract: opt-in emits the consent:community_trust:v1 CEG
+        grant and writes NO consent env vars (adapter is bootstrap-required;
+        consent gates sharing via the wire artifact, not config)."""
         f = StringIO()
         setup = _create_mock_setup(enabled_adapters=["ciris_accord_metrics"])
 
-        _write_accord_metrics_config(f, setup)
+        with patch(
+            "ciris_engine.logic.services.governance.consent.attestation.emit_community_consent_grant",
+            return_value="att-123",
+        ) as mock_emit:
+            _write_accord_metrics_config(f, setup)
 
-        content = f.getvalue()
-        assert "CIRIS_ACCORD_METRICS_CONSENT=true" in content
-        assert "CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP=" in content
-        assert "Accord Metrics Consent" in content
+        assert f.getvalue() == ""
+        assert "CIRIS_ACCORD_METRICS_CONSENT" not in f.getvalue()
+        mock_emit.assert_called_once_with()
+
+    def test_grant_emit_failure_never_breaks_setup(self) -> None:
+        """A failed CEG emit is logged and swallowed — setup must complete."""
+        f = StringIO()
+        setup = _create_mock_setup(enabled_adapters=["ciris_accord_metrics"])
+
+        with patch(
+            "ciris_engine.logic.services.governance.consent.attestation.emit_community_consent_grant",
+            side_effect=RuntimeError("persist not ready"),
+        ):
+            _write_accord_metrics_config(f, setup)
+
+        assert f.getvalue() == ""
 
 
 class TestWriteMobileLocalLlmConfig:

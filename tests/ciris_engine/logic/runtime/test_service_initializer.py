@@ -461,8 +461,7 @@ class TestServiceInitializer:
 
         # Both services MUST appear under WISE_AUTHORITY.
         assert service_initializer.wa_auth_system in wa_registrations, (
-            "WiseAuthorityService missing from WISE_AUTHORITY registrations — "
-            "deferral/guidance path will be broken"
+            "WiseAuthorityService missing from WISE_AUTHORITY registrations — " "deferral/guidance path will be broken"
         )
         assert service_initializer.auth_service in wa_registrations, (
             "AuthenticationService missing from WISE_AUTHORITY registrations — "
@@ -527,6 +526,7 @@ class TestServiceInitializer:
         mock_services.llm_model = "test-model"
         mock_services.llm_max_retries = 3
         mock_services.llm_timeout = 30
+        mock_services.llm_timeout_local = 300
         mock_essential_config.services = mock_services
 
         # Mock OpenAI API key present
@@ -569,6 +569,7 @@ class TestServiceInitializer:
         mock_services.llm_model = "test-model"
         mock_services.llm_max_retries = 3
         mock_services.llm_timeout = 30
+        mock_services.llm_timeout_local = 300
         mock_essential_config.services = mock_services
 
         service_initializer._mock_llm = True

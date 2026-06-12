@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\nInicia sesión con la cuenta del propietario del dispositivo o restablece el dispositivo para empezar de nuevo.",
     "login_wrong_account_body_generic": "Este dispositivo pertenece a otra cuenta.",
     "login_choose_different_account": "Usar otra cuenta",
-    "status_ready": "Listo"
+    "status_ready": "Listo",
+    "data_community_canonical": "Comunidad CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Tu consentimiento está activo — compartiendo con la comunidad CIRIS.",
+    "data_community_consent_paused": "En pausa — sin compartir actualmente.",
+    "data_community_label": "Comunidad",
+    "data_community_peer_label": "Confianza entre pares",
+    "data_community_pending": "Federación pendiente — será un objeto de confianza activo cuando la comunidad CIRIS esté en línea.",
+    "data_community_trust_title": "Comunidad y confianza",
+    "data_community_trusted": "De confianza",
+    "data_community_untrusted": "Aún sin confianza",
+    "trust_fabric_mismatch": "Discrepancia",
+    "trust_fabric_not_loaded": "No cargado",
+    "trust_fabric_note": "La verificación de versión integrada y hash del registro se activará cuando los componentes del sustrato las entreguen.",
+    "trust_fabric_pending": "Pendiente",
+    "trust_fabric_title": "Componentes del sustrato",
+    "trust_fabric_verified": "Verificado"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "Actualizar",
       "summary": "{count} pares · {canonical} canónico"
+    },
+    "federation_id": {
+      "title": "ID de federación",
+      "hint": "La dirección que usan los servidores de registro y lens para llegar a este agente.",
+      "initializing": "Inicializando identidad…",
+      "pubkey_label": "Clave Ed25519",
+      "copy_key_id": "Copiar ID de clave",
+      "cap_signing": "Firma",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Cifrado de contenido"
     }
   },
   "settings": {

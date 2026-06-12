@@ -2102,6 +2102,17 @@
       "qr_placeholder_label": "QR code",
       "copied": "Copied"
     },
+    "federation_id": {
+      "title": "Federation ID",
+      "hint": "The address registry and lens servers use to reach this agent.",
+      "initializing": "Identity initializing…",
+      "pubkey_label": "Ed25519 key",
+      "copy_key_id": "Copy key ID",
+      "cap_signing": "Signing",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Content encryption"
+    },
     "peers": {
       "title": "Peers",
       "filter_all": "All",

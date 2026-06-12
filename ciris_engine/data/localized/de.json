@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\nMelden Sie sich mit dem Konto des Gerätebesitzers an oder setzen Sie das Gerät zurück, um neu zu beginnen.",
     "login_wrong_account_body_generic": "Dieses Gerät gehört zu einem anderen Konto.",
     "login_choose_different_account": "Anderes Konto verwenden",
-    "status_ready": "Bereit"
+    "status_ready": "Bereit",
+    "data_community_canonical": "CIRIS-Community (ciris-canonical)",
+    "data_community_consent_active": "Ihre Einwilligung ist aktiv — Teilen mit der CIRIS-Community.",
+    "data_community_consent_paused": "Pausiert — derzeit kein Teilen.",
+    "data_community_label": "Community",
+    "data_community_peer_label": "Peer-Vertrauen",
+    "data_community_pending": "Föderation ausstehend — wird zum aktiven Vertrauensobjekt, sobald die CIRIS-Community online ist.",
+    "data_community_trust_title": "Community & Vertrauen",
+    "data_community_trusted": "Vertraut",
+    "data_community_untrusted": "Noch nicht vertraut",
+    "trust_fabric_mismatch": "Abweichung",
+    "trust_fabric_not_loaded": "Nicht geladen",
+    "trust_fabric_note": "Embedded-Version und Registry-Hash-Prüfung aktivieren sich, sobald die Substrat-Komponenten sie liefern.",
+    "trust_fabric_pending": "Ausstehend",
+    "trust_fabric_title": "Substrat-Komponenten",
+    "trust_fabric_verified": "Verifiziert"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "Aktualisieren",
       "summary": "{count} Peers · {canonical} kanonisch"
+    },
+    "federation_id": {
+      "title": "Föderations-ID",
+      "hint": "Die Adresse, über die Registry- und Lens-Server diesen Agenten erreichen.",
+      "initializing": "Identität wird initialisiert…",
+      "pubkey_label": "Ed25519-Schlüssel",
+      "copy_key_id": "Schlüssel-ID kopieren",
+      "cap_signing": "Signieren",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Inhaltsverschlüsselung"
     }
   },
   "settings": {

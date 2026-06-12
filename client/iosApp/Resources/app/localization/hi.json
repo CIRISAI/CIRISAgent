@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\nडिवाइस मालिक के खाते से साइन इन करें, या फिर से शुरू करने के लिए डिवाइस रीसेट करें।",
     "login_wrong_account_body_generic": "यह डिवाइस किसी दूसरे खाते का है।",
     "login_choose_different_account": "कोई दूसरा खाता इस्तेमाल करें",
-    "status_ready": "तैयार"
+    "status_ready": "तैयार",
+    "data_community_canonical": "CIRIS समुदाय (ciris-canonical)",
+    "data_community_consent_active": "आपकी सहमति सक्रिय है — CIRIS समुदाय के साथ साझा हो रहा है।",
+    "data_community_consent_paused": "रुका हुआ — अभी साझा नहीं हो रहा।",
+    "data_community_label": "समुदाय",
+    "data_community_peer_label": "सहकर्मी विश्वास",
+    "data_community_pending": "फ़ेडरेशन लंबित — CIRIS समुदाय के ऑनलाइन आते ही यह जीवंत विश्वास-वस्तु बन जाएगा।",
+    "data_community_trust_title": "समुदाय और विश्वास",
+    "data_community_trusted": "विश्वसनीय",
+    "data_community_untrusted": "अभी विश्वसनीय नहीं",
+    "trust_fabric_mismatch": "बेमेल",
+    "trust_fabric_not_loaded": "लोड नहीं हुआ",
+    "trust_fabric_note": "एम्बेडेड-संस्करण और रजिस्ट्री हैश सत्यापन तब सक्रिय होंगे जब सबस्ट्रेट घटक उन्हें उपलब्ध कराएँगे।",
+    "trust_fabric_pending": "लंबित",
+    "trust_fabric_title": "सबस्ट्रेट घटक",
+    "trust_fabric_verified": "सत्यापित"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "रिफ्रेश",
       "summary": "{count} पीयर · {canonical} कैनोनिकल"
+    },
+    "federation_id": {
+      "title": "फ़ेडरेशन आईडी",
+      "hint": "वह पता जिससे रजिस्ट्री और लेंस सर्वर इस एजेंट तक पहुँचते हैं।",
+      "initializing": "पहचान आरंभ हो रही है…",
+      "pubkey_label": "Ed25519 कुंजी",
+      "copy_key_id": "कुंजी आईडी कॉपी करें",
+      "cap_signing": "हस्ताक्षर",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "सामग्री एन्क्रिप्शन"
     }
   },
   "settings": {

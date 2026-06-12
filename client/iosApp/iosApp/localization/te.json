@@ -1834,7 +1834,22 @@
     "login_wrong_account_body": "{owner}\n\nపరికర యజమాని ఖాతాతో సైన్ ఇన్ చేయండి, లేదా మొదటి నుండి ప్రారంభించడానికి పరికరాన్ని రీసెట్ చేయండి.",
     "login_wrong_account_body_generic": "ఈ పరికరం వేరే ఖాతాకు చెందినది.",
     "login_choose_different_account": "వేరే ఖాతాను ఉపయోగించండి",
-    "status_ready": "సిద్ధం"
+    "status_ready": "సిద్ధం",
+    "data_community_canonical": "CIRIS సముదాయం (ciris-canonical)",
+    "data_community_consent_active": "మీ సమ్మతి సక్రియంగా ఉంది — CIRIS సముదాయంతో పంచుకుంటోంది.",
+    "data_community_consent_paused": "పాజ్ చేయబడింది — ప్రస్తుతం పంచుకోవడం లేదు.",
+    "data_community_label": "సముదాయం",
+    "data_community_peer_label": "సహచర విశ్వాసం",
+    "data_community_pending": "ఫెడరేషన్ పెండింగ్‌లో — CIRIS సముదాయం ఆన్‌లైన్‌కు వచ్చాక ఇది సజీవ విశ్వాస వస్తువు అవుతుంది.",
+    "data_community_trust_title": "సముదాయం & విశ్వాసం",
+    "data_community_trusted": "విశ్వసనీయం",
+    "data_community_untrusted": "ఇంకా విశ్వసనీయం కాదు",
+    "trust_fabric_mismatch": "అసమతుల్యత",
+    "trust_fabric_not_loaded": "లోడ్ కాలేదు",
+    "trust_fabric_note": "సబ్‌స్ట్రేట్ భాగాలు అందించగానే ఎంబెడెడ్-వెర్షన్ మరియు రిజిస్ట్రీ హ్యాష్ ధృవీకరణ సక్రియమవుతాయి.",
+    "trust_fabric_pending": "పెండింగ్‌లో",
+    "trust_fabric_title": "సబ్‌స్ట్రేట్ భాగాలు",
+    "trust_fabric_verified": "ధృవీకరించబడింది"
   },
   "conscience": {
     "ponder_attempted": "నేను {action} చేయడానికి ప్రయత్నించాను",
@@ -2334,6 +2349,17 @@
       },
       "refresh": "రిఫ్రెష్",
       "summary": "{count} పీర్‌లు · {canonical} కానోనికల్"
+    },
+    "federation_id": {
+      "title": "ఫెడరేషన్ ఐడీ",
+      "hint": "రిజిస్ట్రీ మరియు లెన్స్ సర్వర్లు ఈ ఏజెంట్‌ను చేరుకోవడానికి ఉపయోగించే చిరునామా.",
+      "initializing": "గుర్తింపు ప్రారంభమవుతోంది…",
+      "pubkey_label": "Ed25519 కీ",
+      "copy_key_id": "కీ ఐడీ కాపీ చేయండి",
+      "cap_signing": "సంతకం",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "కంటెంట్ ఎన్‌క్రిప్షన్"
     }
   },
   "settings": {

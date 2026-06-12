@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\nበመሣሪያው ባለቤት መለያ ይግቡ፣ ወይም ከመጀመሪያው ለመጀመር መሣሪያውን ዳግም ያስጀምሩ።",
     "login_wrong_account_body_generic": "ይህ መሣሪያ የሌላ መለያ ነው።",
     "login_choose_different_account": "ሌላ መለያ ይጠቀሙ",
-    "status_ready": "ዝግጁ"
+    "status_ready": "ዝግጁ",
+    "data_community_canonical": "የCIRIS ማህበረሰብ (ciris-canonical)",
+    "data_community_consent_active": "ፈቃድዎ ንቁ ነው — ከCIRIS ማህበረሰብ ጋር በማጋራት ላይ።",
+    "data_community_consent_paused": "ቆሟል — በአሁኑ ጊዜ አይጋራም።",
+    "data_community_label": "ማህበረሰብ",
+    "data_community_peer_label": "የአቻ እምነት",
+    "data_community_pending": "ፌዴሬሽን በመጠባበቅ ላይ — የCIRIS ማህበረሰብ ሲመጣ ቀጥታ የእምነት ነገር ይሆናል።",
+    "data_community_trust_title": "ማህበረሰብ እና እምነት",
+    "data_community_trusted": "የታመነ",
+    "data_community_untrusted": "ገና ያልታመነ",
+    "trust_fabric_mismatch": "አለመጣጣም",
+    "trust_fabric_not_loaded": "አልተጫነም",
+    "trust_fabric_note": "የውስጥ-ሥሪት እና የመዝገብ ሃሽ ማረጋገጫ የመሠረተ-ክፍሎች ሲያቀርቡ ይበራሉ።",
+    "trust_fabric_pending": "በመጠባበቅ ላይ",
+    "trust_fabric_title": "የመሠረተ-ልማት ክፍሎች",
+    "trust_fabric_verified": "የተረጋገጠ"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "አድስ",
       "summary": "{count} አጋሮች · {canonical} ቀኖናዊ"
+    },
+    "federation_id": {
+      "title": "የፌዴሬሽን መለያ",
+      "hint": "መዝገብ እና ሌንስ አገልጋዮች ይህን ወኪል ለመድረስ የሚጠቀሙበት አድራሻ።",
+      "initializing": "ማንነት በመጀመር ላይ…",
+      "pubkey_label": "Ed25519 ቁልፍ",
+      "copy_key_id": "የቁልፍ መለያ ቅዳ",
+      "cap_signing": "መፈረም",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "የይዘት ምስጠራ"
     }
   },
   "settings": {

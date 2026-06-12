@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\nسجّل الدخول بحساب مالك الجهاز، أو أعد ضبط الجهاز للبدء من جديد.",
     "login_wrong_account_body_generic": "هذا الجهاز يخص حسابًا آخر.",
     "login_choose_different_account": "استخدام حساب آخر",
-    "status_ready": "جاهز"
+    "status_ready": "جاهز",
+    "data_community_canonical": "مجتمع CIRIS (ciris-canonical)",
+    "data_community_consent_active": "موافقتك نشطة — تتم المشاركة مع مجتمع CIRIS.",
+    "data_community_consent_paused": "متوقف — لا تتم المشاركة حاليًا.",
+    "data_community_label": "المجتمع",
+    "data_community_peer_label": "ثقة النظراء",
+    "data_community_pending": "الاتحاد قيد الانتظار — يصبح كائن ثقة حيًا عندما يتصل مجتمع CIRIS.",
+    "data_community_trust_title": "المجتمع والثقة",
+    "data_community_trusted": "موثوق",
+    "data_community_untrusted": "غير موثوق بعد",
+    "trust_fabric_mismatch": "عدم تطابق",
+    "trust_fabric_not_loaded": "غير محمّل",
+    "trust_fabric_note": "يضيء التحقق من الإصدار المضمّن وتجزئة السجل عندما توفرها مكونات الركيزة.",
+    "trust_fabric_pending": "قيد الانتظار",
+    "trust_fabric_title": "مكونات الركيزة",
+    "trust_fabric_verified": "تم التحقق"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "تحديث",
       "summary": "{count} نظراء · {canonical} أصلي"
+    },
+    "federation_id": {
+      "title": "معرّف الاتحاد",
+      "hint": "العنوان الذي تستخدمه خوادم السجل والعدسة للوصول إلى هذا الوكيل.",
+      "initializing": "جارٍ تهيئة الهوية…",
+      "pubkey_label": "مفتاح Ed25519",
+      "copy_key_id": "نسخ معرّف المفتاح",
+      "cap_signing": "التوقيع",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "تشفير المحتوى"
     }
   },
   "settings": {

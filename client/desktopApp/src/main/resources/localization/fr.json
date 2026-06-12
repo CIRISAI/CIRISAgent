@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\nConnectez-vous avec le compte du propriétaire de l'appareil, ou réinitialisez l'appareil pour recommencer.",
     "login_wrong_account_body_generic": "Cet appareil appartient à un autre compte.",
     "login_choose_different_account": "Utiliser un autre compte",
-    "status_ready": "Prêt"
+    "status_ready": "Prêt",
+    "data_community_canonical": "Communauté CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Votre consentement est actif — partage avec la communauté CIRIS.",
+    "data_community_consent_paused": "En pause — aucun partage actuellement.",
+    "data_community_label": "Communauté",
+    "data_community_peer_label": "Confiance des pairs",
+    "data_community_pending": "Fédération en attente — deviendra un objet de confiance actif quand la communauté CIRIS sera en ligne.",
+    "data_community_trust_title": "Communauté et confiance",
+    "data_community_trusted": "Fiable",
+    "data_community_untrusted": "Pas encore fiable",
+    "trust_fabric_mismatch": "Discordance",
+    "trust_fabric_not_loaded": "Non chargé",
+    "trust_fabric_note": "La vérification de version intégrée et du hash du registre s'activera quand les composants du substrat les fourniront.",
+    "trust_fabric_pending": "En attente",
+    "trust_fabric_title": "Composants du substrat",
+    "trust_fabric_verified": "Vérifié"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "Actualiser",
       "summary": "{count} pairs · {canonical} canoniques"
+    },
+    "federation_id": {
+      "title": "ID de fédération",
+      "hint": "L'adresse utilisée par les serveurs registry et lens pour joindre cet agent.",
+      "initializing": "Initialisation de l'identité…",
+      "pubkey_label": "Clé Ed25519",
+      "copy_key_id": "Copier l'ID de clé",
+      "cap_signing": "Signature",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Chiffrement du contenu"
     }
   },
   "settings": {

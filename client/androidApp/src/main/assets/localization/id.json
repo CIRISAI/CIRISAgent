@@ -1834,7 +1834,22 @@
     "login_wrong_account_body": "{owner}\n\nMasuk dengan akun pemilik perangkat, atau atur ulang perangkat untuk memulai dari awal.",
     "login_wrong_account_body_generic": "Perangkat ini milik akun yang berbeda.",
     "login_choose_different_account": "Gunakan akun lain",
-    "status_ready": "Siap"
+    "status_ready": "Siap",
+    "data_community_canonical": "Komunitas CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Persetujuan Anda aktif — berbagi dengan komunitas CIRIS.",
+    "data_community_consent_paused": "Dijeda — saat ini tidak berbagi.",
+    "data_community_label": "Komunitas",
+    "data_community_peer_label": "Kepercayaan rekan",
+    "data_community_pending": "Federasi tertunda — menjadi objek kepercayaan aktif saat komunitas CIRIS online.",
+    "data_community_trust_title": "Komunitas & Kepercayaan",
+    "data_community_trusted": "Tepercaya",
+    "data_community_untrusted": "Belum tepercaya",
+    "trust_fabric_mismatch": "Tidak cocok",
+    "trust_fabric_not_loaded": "Belum dimuat",
+    "trust_fabric_note": "Verifikasi versi tertanam dan hash registri akan aktif saat komponen substrat menyediakannya.",
+    "trust_fabric_pending": "Tertunda",
+    "trust_fabric_title": "Komponen substrat",
+    "trust_fabric_verified": "Terverifikasi"
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",
@@ -2334,6 +2349,17 @@
       },
       "refresh": "Segarkan",
       "summary": "{count} peer · {canonical} kanonis"
+    },
+    "federation_id": {
+      "title": "ID Federasi",
+      "hint": "Alamat yang digunakan server registry dan lens untuk menjangkau agen ini.",
+      "initializing": "Identitas sedang dimulai…",
+      "pubkey_label": "Kunci Ed25519",
+      "copy_key_id": "Salin ID kunci",
+      "cap_signing": "Tanda tangan",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Enkripsi konten"
     }
   },
   "settings": {

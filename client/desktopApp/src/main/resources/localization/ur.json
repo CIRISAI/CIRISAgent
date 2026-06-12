@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\nڈیوائس مالک کے اکاؤنٹ سے سائن ان کریں، یا دوبارہ شروع کرنے کے لیے ڈیوائس ری سیٹ کریں۔",
     "login_wrong_account_body_generic": "یہ ڈیوائس کسی دوسرے اکاؤنٹ سے تعلق رکھتی ہے۔",
     "login_choose_different_account": "کوئی دوسرا اکاؤنٹ استعمال کریں",
-    "status_ready": "تیار"
+    "status_ready": "تیار",
+    "data_community_canonical": "CIRIS کمیونٹی (ciris-canonical)",
+    "data_community_consent_active": "آپ کی رضامندی فعال ہے — CIRIS کمیونٹی کے ساتھ شیئر ہو رہا ہے۔",
+    "data_community_consent_paused": "موقوف — فی الحال شیئر نہیں ہو رہا۔",
+    "data_community_label": "کمیونٹی",
+    "data_community_peer_label": "ہم مرتبہ اعتماد",
+    "data_community_pending": "فیڈریشن زیر التواء — CIRIS کمیونٹی آن لائن آنے پر یہ زندہ اعتماد کی شے بن جائے گا۔",
+    "data_community_trust_title": "کمیونٹی اور اعتماد",
+    "data_community_trusted": "قابل اعتماد",
+    "data_community_untrusted": "ابھی قابل اعتماد نہیں",
+    "trust_fabric_mismatch": "عدم مطابقت",
+    "trust_fabric_not_loaded": "لوڈ نہیں ہوا",
+    "trust_fabric_note": "ایمبیڈڈ ورژن اور رجسٹری ہیش کی تصدیق اس وقت فعال ہوگی جب سبسٹریٹ اجزاء انہیں فراہم کریں گے۔",
+    "trust_fabric_pending": "زیر التواء",
+    "trust_fabric_title": "سبسٹریٹ اجزاء",
+    "trust_fabric_verified": "تصدیق شدہ"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "تازہ کریں",
       "summary": "{count} پیئرز · {canonical} کینونیکل"
+    },
+    "federation_id": {
+      "title": "فیڈریشن شناخت",
+      "hint": "وہ پتہ جو رجسٹری اور لینز سرورز اس ایجنٹ تک پہنچنے کے لیے استعمال کرتے ہیں۔",
+      "initializing": "شناخت شروع ہو رہی ہے…",
+      "pubkey_label": "Ed25519 کلید",
+      "copy_key_id": "کلید شناخت کاپی کریں",
+      "cap_signing": "دستخط",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "مواد کی خفیہ کاری"
     }
   },
   "settings": {

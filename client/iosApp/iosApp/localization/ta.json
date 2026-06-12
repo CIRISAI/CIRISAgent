@@ -1834,7 +1834,22 @@
     "login_wrong_account_body": "{owner}\n\nசாதன உரிமையாளரின் கணக்குடன் உள்நுழையவும், அல்லது மீண்டும் தொடங்க சாதனத்தை மீட்டமைக்கவும்.",
     "login_wrong_account_body_generic": "இந்தச் சாதனம் வேறொரு கணக்கைச் சேர்ந்தது.",
     "login_choose_different_account": "வேறு கணக்கைப் பயன்படுத்து",
-    "status_ready": "தயார்"
+    "status_ready": "தயார்",
+    "data_community_canonical": "CIRIS சமூகம் (ciris-canonical)",
+    "data_community_consent_active": "உங்கள் ஒப்புதல் செயலில் உள்ளது — CIRIS சமூகத்துடன் பகிரப்படுகிறது.",
+    "data_community_consent_paused": "இடைநிறுத்தப்பட்டது — தற்போது பகிரப்படவில்லை.",
+    "data_community_label": "சமூகம்",
+    "data_community_peer_label": "சக நம்பிக்கை",
+    "data_community_pending": "கூட்டமைப்பு நிலுவையில் — CIRIS சமூகம் இணையத்தில் வந்ததும் இது உயிருள்ள நம்பிக்கை-பொருளாகும்.",
+    "data_community_trust_title": "சமூகமும் நம்பிக்கையும்",
+    "data_community_trusted": "நம்பகமானது",
+    "data_community_untrusted": "இன்னும் நம்பப்படவில்லை",
+    "trust_fabric_mismatch": "பொருந்தவில்லை",
+    "trust_fabric_not_loaded": "ஏற்றப்படவில்லை",
+    "trust_fabric_note": "உட்பொதிந்த-பதிப்பு மற்றும் பதிவக ஹாஷ் சரிபார்ப்பு அடித்தள கூறுகள் வழங்கியதும் செயல்படும்.",
+    "trust_fabric_pending": "நிலுவையில்",
+    "trust_fabric_title": "அடித்தள கூறுகள்",
+    "trust_fabric_verified": "சரிபார்க்கப்பட்டது"
   },
   "conscience": {
     "ponder_attempted": "I முயற்சித்தது to {செயல்}",
@@ -2334,6 +2349,17 @@
       },
       "refresh": "புதுப்பி",
       "summary": "{count} பீர்கள் · {canonical} நியதி"
+    },
+    "federation_id": {
+      "title": "கூட்டமைப்பு அடையாளம்",
+      "hint": "பதிவகம் மற்றும் லென்ஸ் சேவையகங்கள் இந்த முகவரை அடைய பயன்படுத்தும் முகவரி.",
+      "initializing": "அடையாளம் தொடங்குகிறது…",
+      "pubkey_label": "Ed25519 சாவி",
+      "copy_key_id": "சாவி அடையாளத்தை நகலெடு",
+      "cap_signing": "கையொப்பம்",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "உள்ளடக்க குறியாக்கம்"
     }
   },
   "settings": {

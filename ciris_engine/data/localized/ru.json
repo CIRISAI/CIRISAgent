@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\nВойдите с аккаунтом владельца устройства или сбросьте устройство, чтобы начать заново.",
     "login_wrong_account_body_generic": "Это устройство принадлежит другому аккаунту.",
     "login_choose_different_account": "Использовать другой аккаунт",
-    "status_ready": "Готово"
+    "status_ready": "Готово",
+    "data_community_canonical": "Сообщество CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Ваше согласие активно — данные передаются сообществу CIRIS.",
+    "data_community_consent_paused": "Приостановлено — в данный момент передача не ведётся.",
+    "data_community_label": "Сообщество",
+    "data_community_peer_label": "Доверие пиров",
+    "data_community_pending": "Федерация ожидается — станет живым объектом доверия, когда сообщество CIRIS выйдет в сеть.",
+    "data_community_trust_title": "Сообщество и доверие",
+    "data_community_trusted": "Доверенный",
+    "data_community_untrusted": "Пока не доверенный",
+    "trust_fabric_mismatch": "Несоответствие",
+    "trust_fabric_not_loaded": "Не загружено",
+    "trust_fabric_note": "Проверка встроенной версии и хэша реестра включится, когда компоненты субстрата начнут их предоставлять.",
+    "trust_fabric_pending": "Ожидается",
+    "trust_fabric_title": "Компоненты субстрата",
+    "trust_fabric_verified": "Проверено"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "Обновить",
       "summary": "{count} пиров · {canonical} канонических"
+    },
+    "federation_id": {
+      "title": "ID федерации",
+      "hint": "Адрес, по которому серверы реестра и линзы обращаются к этому агенту.",
+      "initializing": "Инициализация идентичности…",
+      "pubkey_label": "Ключ Ed25519",
+      "copy_key_id": "Копировать ID ключа",
+      "cap_signing": "Подпись",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Шифрование содержимого"
     }
   },
   "settings": {

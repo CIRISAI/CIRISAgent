@@ -1834,7 +1834,22 @@
     "login_wrong_account_body": "{owner}\n\nKa shiga da asusun mai na'urar, ko ka sake saita na'urar don farawa daga farko.",
     "login_wrong_account_body_generic": "Wannan na'urar ta wani asusu ce dabam.",
     "login_choose_different_account": "Yi amfani da wani asusu dabam",
-    "status_ready": "A shirye"
+    "status_ready": "A shirye",
+    "data_community_canonical": "Al'ummar CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Yardarku tana aiki — ana raba tare da al'ummar CIRIS.",
+    "data_community_consent_paused": "An dakata — ba a raba a halin yanzu ba.",
+    "data_community_label": "Al'umma",
+    "data_community_peer_label": "Amincewar tsara",
+    "data_community_pending": "Tarayya na jira — zai zama abin amincewa mai rai idan al'ummar CIRIS ta shigo kan layi.",
+    "data_community_trust_title": "Al'umma da Amincewa",
+    "data_community_trusted": "Amintacce",
+    "data_community_untrusted": "Ba a amince ba tukuna",
+    "trust_fabric_mismatch": "Rashin daidaito",
+    "trust_fabric_not_loaded": "Ba a ɗora ba",
+    "trust_fabric_note": "Tabbatar da sigar da aka saka da hash na rajista za su kunna idan abubuwan tushe suka kawo su.",
+    "trust_fabric_pending": "Na jira",
+    "trust_fabric_title": "Abubuwan tushe",
+    "trust_fabric_verified": "An tabbatar"
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",
@@ -2334,6 +2349,17 @@
       },
       "refresh": "Sabunta",
       "summary": "{count} abokai · {canonical} canonical"
+    },
+    "federation_id": {
+      "title": "ID na Tarayya",
+      "hint": "Adireshin da sabar rajista da lens ke amfani da shi don isa ga wannan wakili.",
+      "initializing": "Ana fara shaida…",
+      "pubkey_label": "Maɓallin Ed25519",
+      "copy_key_id": "Kwafi ID na maɓalli",
+      "cap_signing": "Sa hannu",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Ɓoye abun ciki"
     }
   },
   "settings": {

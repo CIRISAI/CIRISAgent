@@ -1834,7 +1834,22 @@
     "login_wrong_account_body": "{owner}\n\nစက်ပစ္စည်းပိုင်ရှင်၏ အကောင့်ဖြင့် ဝင်ရောက်ပါ၊ သို့မဟုတ် အစမှ ပြန်စတင်ရန် စက်ပစ္စည်းကို ပြန်လည်သတ်မှတ်ပါ။",
     "login_wrong_account_body_generic": "ဤစက်ပစ္စည်းသည် အခြားအကောင့်တစ်ခုနှင့် သက်ဆိုင်သည်။",
     "login_choose_different_account": "အခြားအကောင့်ကို သုံးပါ",
-    "status_ready": "အသင့်ဖြစ်ပြီ"
+    "status_ready": "အသင့်ဖြစ်ပြီ",
+    "data_community_canonical": "CIRIS အသိုင်းအဝိုင်း (ciris-canonical)",
+    "data_community_consent_active": "သင့်သဘောတူညီချက် အသက်ဝင်နေသည် — CIRIS အသိုင်းအဝိုင်းနှင့် မျှဝေနေသည်။",
+    "data_community_consent_paused": "ရပ်နားထားသည် — လောလောဆယ် မမျှဝေပါ။",
+    "data_community_label": "အသိုင်းအဝိုင်း",
+    "data_community_peer_label": "လုပ်ဖော်ကိုင်ဖက် ယုံကြည်မှု",
+    "data_community_pending": "ဖက်ဒရေးရှင်း စောင့်ဆိုင်းနေသည် — CIRIS အသိုင်းအဝိုင်း အွန်လိုင်းရောက်လျှင် တိုက်ရိုက်ယုံကြည်မှုအရာ ဖြစ်လာမည်။",
+    "data_community_trust_title": "အသိုင်းအဝိုင်းနှင့် ယုံကြည်မှု",
+    "data_community_trusted": "ယုံကြည်ရသည်",
+    "data_community_untrusted": "မယုံကြည်ရသေးပါ",
+    "trust_fabric_mismatch": "မကိုက်ညီမှု",
+    "trust_fabric_not_loaded": "မတင်ရသေးပါ",
+    "trust_fabric_note": "substrate အစိတ်အပိုင်းများ ပေးအပ်လာသည်နှင့် embedded-version နှင့် registry hash စိစစ်မှု အသက်ဝင်လာမည်။",
+    "trust_fabric_pending": "စောင့်ဆိုင်းနေသည်",
+    "trust_fabric_title": "Substrate အစိတ်အပိုင်းများ",
+    "trust_fabric_verified": "စိစစ်ပြီး"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {လုပ်ဆောင်ion}",
@@ -2334,6 +2349,17 @@
       },
       "refresh": "ပြန်ဆွဲ",
       "summary": "Peer {count} ဦး · {canonical} canonical"
+    },
+    "federation_id": {
+      "title": "ဖက်ဒရေးရှင်း ID",
+      "hint": "မှတ်ပုံတင်နှင့် lens ဆာဗာများက ဤအေးဂျင့်ထံ ရောက်ရှိရန် အသုံးပြုသော လိပ်စာ။",
+      "initializing": "အထောက်အထား စတင်နေသည်…",
+      "pubkey_label": "Ed25519 သော့",
+      "copy_key_id": "သော့ ID ကူးယူရန်",
+      "cap_signing": "လက်မှတ်ထိုးခြင်း",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "အကြောင်းအရာ ကုဒ်ဝှက်ခြင်း"
     }
   },
   "settings": {

@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\n请使用设备所有者的账户登录，或重置设备重新开始。",
     "login_wrong_account_body_generic": "此设备属于其他账户。",
     "login_choose_different_account": "使用其他账户",
-    "status_ready": "就绪"
+    "status_ready": "就绪",
+    "data_community_canonical": "CIRIS 社区 (ciris-canonical)",
+    "data_community_consent_active": "您的同意已生效 — 正在与 CIRIS 社区共享。",
+    "data_community_consent_paused": "已暂停 — 当前未共享。",
+    "data_community_label": "社区",
+    "data_community_peer_label": "对等信任",
+    "data_community_pending": "联邦待定 — CIRIS 社区上线后将成为实际的信任对象。",
+    "data_community_trust_title": "社区与信任",
+    "data_community_trusted": "已信任",
+    "data_community_untrusted": "尚未信任",
+    "trust_fabric_mismatch": "不匹配",
+    "trust_fabric_not_loaded": "未加载",
+    "trust_fabric_note": "当基底组件提供时,内嵌版本与注册表哈希验证将启用。",
+    "trust_fabric_pending": "待定",
+    "trust_fabric_title": "基底组件",
+    "trust_fabric_verified": "已验证"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "刷新",
       "summary": "{count} 个对等节点 · {canonical} 个标准"
+    },
+    "federation_id": {
+      "title": "联邦 ID",
+      "hint": "注册表和透镜服务器用于联系此代理的地址。",
+      "initializing": "正在初始化身份…",
+      "pubkey_label": "Ed25519 密钥",
+      "copy_key_id": "复制密钥 ID",
+      "cap_signing": "签名",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "内容加密"
     }
   },
   "settings": {

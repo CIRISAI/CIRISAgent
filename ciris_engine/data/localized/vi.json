@@ -2068,7 +2068,22 @@
     "login_wrong_account_body": "{owner}\n\nĐăng nhập bằng tài khoản của chủ thiết bị, hoặc đặt lại thiết bị để bắt đầu lại.",
     "login_wrong_account_body_generic": "Thiết bị này thuộc về một tài khoản khác.",
     "login_choose_different_account": "Dùng tài khoản khác",
-    "status_ready": "Sẵn sàng"
+    "status_ready": "Sẵn sàng",
+    "data_community_canonical": "Cộng đồng CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Sự đồng ý của bạn đang hoạt động — đang chia sẻ với cộng đồng CIRIS.",
+    "data_community_consent_paused": "Tạm dừng — hiện không chia sẻ.",
+    "data_community_label": "Cộng đồng",
+    "data_community_peer_label": "Tin cậy ngang hàng",
+    "data_community_pending": "Liên bang đang chờ — sẽ trở thành đối tượng tin cậy thực khi cộng đồng CIRIS trực tuyến.",
+    "data_community_trust_title": "Cộng đồng & Tin cậy",
+    "data_community_trusted": "Đáng tin cậy",
+    "data_community_untrusted": "Chưa được tin cậy",
+    "trust_fabric_mismatch": "Không khớp",
+    "trust_fabric_not_loaded": "Chưa tải",
+    "trust_fabric_note": "Xác minh phiên bản nhúng và hash sổ đăng ký sẽ kích hoạt khi các thành phần nền tảng cung cấp.",
+    "trust_fabric_pending": "Đang chờ",
+    "trust_fabric_title": "Thành phần nền tảng",
+    "trust_fabric_verified": "Đã xác minh"
   },
   "network": {
     "title": "Mạng",
@@ -2334,6 +2349,17 @@
       },
       "refresh": "Làm mới",
       "summary": "{count} đồng đẳng · {canonical} chính tắc"
+    },
+    "federation_id": {
+      "title": "ID liên bang",
+      "hint": "Địa chỉ mà máy chủ registry và lens dùng để liên hệ với tác tử này.",
+      "initializing": "Đang khởi tạo danh tính…",
+      "pubkey_label": "Khóa Ed25519",
+      "copy_key_id": "Sao chép ID khóa",
+      "cap_signing": "Ký",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Mã hóa nội dung"
     }
   },
   "settings": {

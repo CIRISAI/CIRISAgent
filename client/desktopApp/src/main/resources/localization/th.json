@@ -1834,7 +1834,22 @@
     "login_wrong_account_body": "{owner}\n\nเข้าสู่ระบบด้วยบัญชีของเจ้าของอุปกรณ์ หรือรีเซ็ตอุปกรณ์เพื่อเริ่มต้นใหม่",
     "login_wrong_account_body_generic": "อุปกรณ์นี้เป็นของบัญชีอื่น",
     "login_choose_different_account": "ใช้บัญชีอื่น",
-    "status_ready": "พร้อม"
+    "status_ready": "พร้อม",
+    "data_community_canonical": "ชุมชน CIRIS (ciris-canonical)",
+    "data_community_consent_active": "ความยินยอมของคุณใช้งานอยู่ — กำลังแบ่งปันกับชุมชน CIRIS",
+    "data_community_consent_paused": "หยุดชั่วคราว — ขณะนี้ไม่ได้แบ่งปัน",
+    "data_community_label": "ชุมชน",
+    "data_community_peer_label": "ความเชื่อถือของเพียร์",
+    "data_community_pending": "สหพันธ์รอดำเนินการ — จะกลายเป็นอ็อบเจกต์ความเชื่อถือจริงเมื่อชุมชน CIRIS ออนไลน์",
+    "data_community_trust_title": "ชุมชนและความเชื่อถือ",
+    "data_community_trusted": "เชื่อถือได้",
+    "data_community_untrusted": "ยังไม่เชื่อถือ",
+    "trust_fabric_mismatch": "ไม่ตรงกัน",
+    "trust_fabric_not_loaded": "ยังไม่โหลด",
+    "trust_fabric_note": "การตรวจสอบเวอร์ชันฝังตัวและแฮชรีจิสทรีจะทำงานเมื่อส่วนประกอบของชั้นพื้นฐานพร้อมให้บริการ",
+    "trust_fabric_pending": "รอดำเนินการ",
+    "trust_fabric_title": "ส่วนประกอบชั้นพื้นฐาน",
+    "trust_fabric_verified": "ตรวจสอบแล้ว"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {กระทำion}",
@@ -2334,6 +2349,17 @@
       },
       "refresh": "รีเฟรช",
       "summary": "พีร์ {count} · canonical {canonical}"
+    },
+    "federation_id": {
+      "title": "รหัสสหพันธ์",
+      "hint": "ที่อยู่ที่เซิร์ฟเวอร์ registry และ lens ใช้เพื่อเข้าถึงเอเจนต์นี้",
+      "initializing": "กำลังเริ่มต้นข้อมูลประจำตัว…",
+      "pubkey_label": "กุญแจ Ed25519",
+      "copy_key_id": "คัดลอกรหัสกุญแจ",
+      "cap_signing": "การลงนาม",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "การเข้ารหัสเนื้อหา"
     }
   },
   "settings": {

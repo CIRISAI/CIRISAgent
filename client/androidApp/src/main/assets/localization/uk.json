@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\nУвійдіть з обліковим записом власника пристрою або скиньте пристрій, щоб почати заново.",
     "login_wrong_account_body_generic": "Цей пристрій належить іншому обліковому запису.",
     "login_choose_different_account": "Використати інший обліковий запис",
-    "status_ready": "Готово"
+    "status_ready": "Готово",
+    "data_community_canonical": "Спільнота CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Ваша згода активна — дані передаються спільноті CIRIS.",
+    "data_community_consent_paused": "Призупинено — наразі передача не ведеться.",
+    "data_community_label": "Спільнота",
+    "data_community_peer_label": "Довіра пірів",
+    "data_community_pending": "Федерація очікується — стане живим об'єктом довіри, коли спільнота CIRIS буде онлайн.",
+    "data_community_trust_title": "Спільнота та довіра",
+    "data_community_trusted": "Довірений",
+    "data_community_untrusted": "Поки не довірений",
+    "trust_fabric_mismatch": "Невідповідність",
+    "trust_fabric_not_loaded": "Не завантажено",
+    "trust_fabric_note": "Перевірка вбудованої версії та хешу реєстру увімкнеться, коли компоненти субстрату їх надаватимуть.",
+    "trust_fabric_pending": "Очікується",
+    "trust_fabric_title": "Компоненти субстрату",
+    "trust_fabric_verified": "Перевірено"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "Оновити",
       "summary": "{count} пiрів · {canonical} канонічних"
+    },
+    "federation_id": {
+      "title": "ID федерації",
+      "hint": "Адреса, за якою сервери реєстру та лінзи звертаються до цього агента.",
+      "initializing": "Ініціалізація ідентичності…",
+      "pubkey_label": "Ключ Ed25519",
+      "copy_key_id": "Копіювати ID ключа",
+      "cap_signing": "Підпис",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Шифрування вмісту"
     }
   },
   "settings": {

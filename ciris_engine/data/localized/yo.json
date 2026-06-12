@@ -1834,7 +1834,22 @@
     "login_wrong_account_body": "{owner}\n\nWọlé pẹ̀lú àkàùntì ẹni tó ni ẹ̀rọ náà, tàbí tún ẹ̀rọ náà ṣe láti bẹ̀rẹ̀ láti ìbẹ̀rẹ̀.",
     "login_wrong_account_body_generic": "Ẹ̀rọ yìí jẹ́ ti àkàùntì mìíràn.",
     "login_choose_different_account": "Lo àkàùntì mìíràn",
-    "status_ready": "Ó ti ṣetán"
+    "status_ready": "Ó ti ṣetán",
+    "data_community_canonical": "Àwùjọ CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Ìfọwọ́sí rẹ ń ṣiṣẹ́ — ń pín pẹ̀lú àwùjọ CIRIS.",
+    "data_community_consent_paused": "Ti dáwọ́ dúró — kò pín lọ́wọ́lọ́wọ́.",
+    "data_community_label": "Àwùjọ",
+    "data_community_peer_label": "Ìgbẹ́kẹ̀lé ẹlẹgbẹ́",
+    "data_community_pending": "Ìsọ̀kan ń dúró — yóò di ohun ìgbẹ́kẹ̀lé alààyè nígbà tí àwùjọ CIRIS bá wá sórí ayélujára.",
+    "data_community_trust_title": "Àwùjọ àti Ìgbẹ́kẹ̀lé",
+    "data_community_trusted": "A gbẹ́kẹ̀lé",
+    "data_community_untrusted": "Kò tíì gbẹ́kẹ̀lé",
+    "trust_fabric_mismatch": "Àìbáramu",
+    "trust_fabric_not_loaded": "Kò tíì gbé wọlé",
+    "trust_fabric_note": "Ìmúdájú ẹ̀yà-inú àti hash ìforúkọsílẹ̀ yóò tàn nígbà tí àwọn ẹ̀yà ìpìlẹ̀ bá pèsè wọn.",
+    "trust_fabric_pending": "Ń dúró",
+    "trust_fabric_title": "Àwọn ẹ̀yà ìpìlẹ̀",
+    "trust_fabric_verified": "Ti múdájú"
   },
   "conscience": {
     "ponder_attempted": "Mo gbìyànjú láti {action}",
@@ -2334,6 +2349,17 @@
       },
       "refresh": "Tún ṣe",
       "summary": "{count} ẹlẹ́gbẹ́ · {canonical} canonical"
+    },
+    "federation_id": {
+      "title": "ID Ìsọ̀kan",
+      "hint": "Àdírẹ́sì tí àwọn olupin ìforúkọsílẹ̀ àti lens ń lò láti dé ọ̀dọ̀ aṣojú yìí.",
+      "initializing": "Ìdánimọ̀ ń bẹ̀rẹ̀…",
+      "pubkey_label": "Kọ́kọ́rọ́ Ed25519",
+      "copy_key_id": "Ṣe àdàkọ ID kọ́kọ́rọ́",
+      "cap_signing": "Ìfọwọ́sí",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Ìpamọ́ àkóónú"
     }
   },
   "settings": {

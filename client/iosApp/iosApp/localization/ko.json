@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\n기기 소유자의 계정으로 로그인하거나 기기를 초기화하여 다시 시작하세요.",
     "login_wrong_account_body_generic": "이 기기는 다른 계정에 속해 있습니다.",
     "login_choose_different_account": "다른 계정 사용",
-    "status_ready": "준비 완료"
+    "status_ready": "준비 완료",
+    "data_community_canonical": "CIRIS 커뮤니티 (ciris-canonical)",
+    "data_community_consent_active": "동의가 활성화됨 — CIRIS 커뮤니티와 공유 중입니다.",
+    "data_community_consent_paused": "일시중지 — 현재 공유하지 않습니다.",
+    "data_community_label": "커뮤니티",
+    "data_community_peer_label": "피어 신뢰",
+    "data_community_pending": "연합 대기 중 — CIRIS 커뮤니티가 온라인이 되면 실제 신뢰 객체가 됩니다.",
+    "data_community_trust_title": "커뮤니티 및 신뢰",
+    "data_community_trusted": "신뢰됨",
+    "data_community_untrusted": "아직 신뢰되지 않음",
+    "trust_fabric_mismatch": "불일치",
+    "trust_fabric_not_loaded": "로드되지 않음",
+    "trust_fabric_note": "임베디드 버전 및 레지스트리 해시 검증은 기반 구성요소가 제공하는 대로 활성화됩니다.",
+    "trust_fabric_pending": "대기 중",
+    "trust_fabric_title": "기반 구성요소",
+    "trust_fabric_verified": "검증됨"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "새로고침",
       "summary": "{count}개 피어 · {canonical}개 정규"
+    },
+    "federation_id": {
+      "title": "연합 ID",
+      "hint": "레지스트리와 렌즈 서버가 이 에이전트에 접근할 때 사용하는 주소입니다.",
+      "initializing": "신원 초기화 중…",
+      "pubkey_label": "Ed25519 키",
+      "copy_key_id": "키 ID 복사",
+      "cap_signing": "서명",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "콘텐츠 암호화"
     }
   },
   "settings": {

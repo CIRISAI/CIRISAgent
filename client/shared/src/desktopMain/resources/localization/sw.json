@@ -1742,7 +1742,22 @@
     "login_wrong_account_body": "{owner}\n\nIngia kwa akaunti ya mmiliki wa kifaa, au weka upya kifaa ili kuanza upya.",
     "login_wrong_account_body_generic": "Kifaa hiki ni cha akaunti tofauti.",
     "login_choose_different_account": "Tumia akaunti tofauti",
-    "status_ready": "Tayari"
+    "status_ready": "Tayari",
+    "data_community_canonical": "Jumuiya ya CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Idhini yako iko hai — inashiriki na jumuiya ya CIRIS.",
+    "data_community_consent_paused": "Imesitishwa — haishiriki kwa sasa.",
+    "data_community_label": "Jumuiya",
+    "data_community_peer_label": "Imani ya wenzao",
+    "data_community_pending": "Shirikisho linasubiri — litakuwa kitu hai cha imani jumuiya ya CIRIS itakapokuwa mtandaoni.",
+    "data_community_trust_title": "Jumuiya na Imani",
+    "data_community_trusted": "Inaaminika",
+    "data_community_untrusted": "Bado haijaaminika",
+    "trust_fabric_mismatch": "Kutolingana",
+    "trust_fabric_not_loaded": "Haijapakiwa",
+    "trust_fabric_note": "Uthibitishaji wa toleo-lililopachikwa na hash ya rejista utawaka vipengele vya msingi vitakapovitoa.",
+    "trust_fabric_pending": "Inasubiri",
+    "trust_fabric_title": "Vipengele vya msingi",
+    "trust_fabric_verified": "Imethibitishwa"
   },
   "prompts": {
     "dma": {
@@ -2334,6 +2349,17 @@
       },
       "refresh": "Onyesha upya",
       "summary": "Wenza {count} · {canonical} wa asili"
+    },
+    "federation_id": {
+      "title": "Kitambulisho cha Shirikisho",
+      "hint": "Anwani inayotumiwa na seva za rejista na lens kumfikia wakala huyu.",
+      "initializing": "Utambulisho unaanzishwa…",
+      "pubkey_label": "Ufunguo wa Ed25519",
+      "copy_key_id": "Nakili kitambulisho cha ufunguo",
+      "cap_signing": "Kusaini",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Usimbaji wa maudhui"
     }
   },
   "settings": {

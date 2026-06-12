@@ -20,11 +20,7 @@ from typing import Annotated, Any, Optional
 from fastapi import APIRouter, Depends, Query, Request
 from starlette.responses import JSONResponse
 
-from ciris_engine.logic.adapters.api.dependencies.auth import (
-    AuthContext,
-    require_observer,
-    require_system_admin,
-)
+from ciris_engine.logic.adapters.api.dependencies.auth import AuthContext, require_observer, require_system_admin
 from ciris_engine.logic.runtime.bootstrap_peers import BootstrapPeerSeeder
 from ciris_engine.logic.utils.node_code_codec import (
     ChecksumMismatchError,
@@ -76,9 +72,7 @@ def _get_or_create_seeder(request: Request) -> BootstrapPeerSeeder:
     if time_service is None:
         # The seeder needs a TimeServiceProtocol. We don't want to half-
         # construct one — surface this as a 503-ish error to the route.
-        raise RuntimeError(
-            "Cannot create BootstrapPeerSeeder: time_service not wired on app.state"
-        )
+        raise RuntimeError("Cannot create BootstrapPeerSeeder: time_service not wired on app.state")
 
     seeder = BootstrapPeerSeeder(time_service=time_service, registry_fetch_url=None)
     setattr(request.app.state, _SEEDER_STATE_KEY, seeder)
@@ -103,9 +97,7 @@ def _get_local_identity(request: Request) -> tuple[Optional[str], Optional[str]]
         return key_id, pubkey_b64
 
     try:
-        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
-            get_verifier,
-        )
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
 
         verifier = get_verifier()
     except Exception as exc:
@@ -171,8 +163,7 @@ async def get_my_node_code(
             content={
                 "error": "FEDERATION_IDENTITY_UNAVAILABLE",
                 "detail": (
-                    "Local agent's signing key is not yet available — "
-                    "CIRISVerify has not finished bootstrap."
+                    "Local agent's signing key is not yet available — " "CIRISVerify has not finished bootstrap."
                 ),
             },
         )
@@ -200,6 +191,54 @@ async def get_my_node_code(
         alias_hint=alias_hint,
     )
     return SuccessResponse(data=response)
+
+
+@router.get(
+    "/peers/federation-identity",
+    responses={
+        503: {"description": "Persist engine / federation identity not yet available"},
+    },
+)
+async def get_federation_identity(request: Request, auth: AuthObserverDep) -> Any:
+    """Return this occurrence's full federation identity aggregate.
+
+    OBSERVER+ readable. Sources persist's ``local_identity_aggregate()``
+    (persist 5.4.0+, CIRISPersist#198 / CEG 1.0 §5.6.8.8.2) — the
+    single-call snapshot of the hybrid identity across the three keypair
+    roles (signing Ed25519 + optional ML-DSA-65, Reticulum transport
+    keys, content-encryption X25519 + ML-KEM-768). This is THE address
+    the production lens / registry servers use to reach this node, shown
+    in the UI alongside the NodeCode connect card.
+    """
+    try:
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError("persist engine not wired")
+        import json as _json
+
+        aggregate = _json.loads(engine.local_identity_aggregate())
+    except Exception as exc:
+        logger.debug("federation identity aggregate unavailable: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "FEDERATION_IDENTITY_UNAVAILABLE",
+                "detail": f"persist local_identity_aggregate unavailable: {type(exc).__name__}",
+            },
+        )
+
+    # Companion NodeCode identity (the connect-card key) so the UI can
+    # render both on one surface.
+    key_id, pubkey_b64 = _get_local_identity(request)
+    return SuccessResponse(
+        data={
+            "aggregate": aggregate,
+            "node_code_key_id": key_id,
+            "node_code_pubkey_ed25519_base64": pubkey_b64,
+        }
+    )
 
 
 def _decode_error_subtype(exc: Exception) -> str:

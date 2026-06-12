@@ -152,15 +152,22 @@ class IDeviceHelper(DeviceHelper):
                 udid = hw.get("udid", "")
                 conn = device.get("connectionProperties", {})
                 tunnel_state = conn.get("tunnelState", "")
+                pairing_state = conn.get("pairingState", "")
 
                 # Build UDID -> CoreDevice UUID map
                 if udid and coredevice_uuid:
                     IDeviceHelper._udid_to_coredevice[udid] = coredevice_uuid
 
+                # Apple's devicectl only sets tunnelState=connected while a
+                # command is actively running; an idle but paired USB device
+                # reports tunnelState=disconnected. Treat paired devices as
+                # reachable — the tunnel will (re)open on the next command.
+                is_reachable = tunnel_state == "connected" or pairing_state == "paired"
+
                 devices.append(
                     DeviceInfo(
                         identifier=coredevice_uuid,
-                        state="device" if tunnel_state == "connected" else "offline",
+                        state="device" if is_reachable else "offline",
                         platform=Platform.IOS,
                         name=device.get("deviceProperties", {}).get("name"),
                         os_version=device.get("deviceProperties", {}).get("osVersionNumber"),

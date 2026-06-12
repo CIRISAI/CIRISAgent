@@ -143,8 +143,9 @@ class CapacityResponse(BaseModel):
     cached: bool = Field(False, description="True if served from local cache rather than live lens fetch")
     # Local score — populated when the request uses ?scope=local|both.
     # Null when scope=fleet (default) so the existing client contract is
-    # unchanged. The local computation is a CCA approximation
-    # (J = k_eff · (1 − ρ) · λ · σ) over fast-to-read runtime signals.
+    # unchanged. The local computation is a CCA approximation in the
+    # Accord 1.3 form (J = μ·k_eff·λ·σ·τ, correlation folded into k_eff)
+    # over fast-to-read runtime signals.
     local_score: Optional[float] = Field(
         None, description="This occurrence's own capacity score in [0, 1]; null when scope=fleet."
     )
@@ -922,9 +923,13 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str, Dict[st
         legitimately approach 1.0, and the only one rendered as the five
         CIRIS factors.
 
-    Implements the trust-gated CCA approximation:
+    Implements the trust-gated CCA approximation (Accord 1.3 form —
+    Book IX Ch 4: J = k_eff · λ · σ, where correlation enters THROUGH
+    k_eff rather than as a separate (1 − ρ̄) factor, which double-counted
+    it; our k_eff below is the raw healthy fraction discounted by the
+    correlation proxy, i.e. an approximation of k/(1 + ρ̄·(k−1))):
 
-        J = μ · k_eff · (1 − ρ) · λ · σ · τ
+        J = μ · k_eff · λ · σ · τ        with k_eff = k_raw · (1 − ρ_proxy)
 
       * ``μ`` (coverage) = fraction of registry services that actually
         expose a health surface. Missing instrumentation is missing
@@ -986,7 +991,7 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str, Dict[st
         measurable = [h for h in health_results if h is not None]
         healthy = sum(1 for h in measurable if h)
         coverage = len(measurable) / total if total else 0.0
-        k_eff_frac = (healthy / len(measurable)) if measurable else 0.0
+        k_raw_frac = (healthy / len(measurable)) if measurable else 0.0
 
         # ρ proxy over measurable services: a single failure is normal
         # operational variance (ρ ≈ 0); many failing *simultaneously* is
@@ -997,6 +1002,11 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str, Dict[st
         else:
             rho = max(0.0, min(1.0, (failures - 1) / (len(measurable) - 1)))
         rho_complement = 1.0 - rho
+        # Accord 1.3 (A2): correlation enters THROUGH k_eff — the discount
+        # k/(1 + rho*(k-1)) IS the diversity term; a separate (1-rho) factor
+        # double-counted it. Our proxy form: k_eff = k_raw * (1 - rho_proxy),
+        # numerically identical to the pre-1.3 product, correctly framed.
+        k_eff_frac = k_raw_frac * rho_complement
 
         # λ: strictness is active when the Wise Authority service is
         # healthy (conscience is baked into the thought processor).
@@ -1018,7 +1028,7 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str, Dict[st
         attested, trust_source = await asyncio.to_thread(_occurrence_trust_edge, request)
         tau = TAU_ATTESTED if attested else TAU_ISOLATED
 
-        j = coverage * k_eff_frac * rho_complement * lam * sigma * tau
+        j = coverage * k_eff_frac * lam * sigma * tau
         j = max(0.0, min(1.0, j))  # defensive; τ < 1 already bounds it
 
         category = (
@@ -1026,6 +1036,7 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str, Dict[st
         )
         components: Dict[str, Any] = {
             "coverage": round(coverage, 4),
+            "k_raw": round(k_raw_frac, 4),
             "k_eff": round(k_eff_frac, 4),
             "rho_complement": round(rho_complement, 4),
             "lambda": round(lam, 4),

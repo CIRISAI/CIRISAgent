@@ -4,12 +4,17 @@ iOS Physical Device Test Cases for CIRIS App
 Test cases for physical iOS devices using:
 - pymobiledevice3 screenshots + Vision OCR for UI verification
 - iproxy port forwarding + HTTP API calls for backend verification
+- The in-app test-automation HTTP server (port 9091, gated by
+  ``CIRIS_TEST_MODE=true``) for real UI interaction via testTag identifiers
 
-These tests work without UI interaction (no tap/swipe/input on physical devices).
-They verify the running app state via screenshots and API endpoints.
+API-only tests stay read-only via OCR. The UI-login flow restarts the app
+with ``CIRIS_TEST_MODE=true``, forwards port 19091 → 9091 via iproxy, and
+drives Compose testTags directly.
 """
 
 import json
+import shutil
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -639,34 +644,41 @@ def test_physical_full_check(helper: IDeviceHelper, ui: PhysicalDeviceUIHelper, 
         print("\n=== Physical Device Full Check ===\n")
 
         # 1. Screenshot + OCR
-        print("[Step 1/5] Screenshot & App State")
+        print("[Step 1/6] Screenshot & App State")
         r = test_physical_app_state(helper, ui, config)
         results.append(r)
         all_screenshots.extend(r.screenshots)
         print(f"  -> {r.result.value}: {r.message}")
 
         # 2. API Health
-        print("\n[Step 2/5] API Health Check")
+        print("\n[Step 2/6] API Health Check")
         r = test_physical_api_health(helper, ui, config)
         results.append(r)
         print(f"  -> {r.result.value}: {r.message}")
 
         # 3. Attestation (no auth needed)
-        print("\n[Step 3/5] Attestation Status")
+        print("\n[Step 3/6] Attestation Status")
         r = test_physical_attestation(helper, ui, config)
         results.append(r)
         print(f"  -> {r.result.value}: {r.message}")
 
         # 4. Telemetry
-        print("\n[Step 4/5] Telemetry & Services")
+        print("\n[Step 4/6] Telemetry & Services")
         r = test_physical_api_telemetry(helper, ui, config)
         results.append(r)
         print(f"  -> {r.result.value}: {r.message}")
 
         # 5. Verify Status
-        print("\n[Step 5/5] CIRISVerify Status")
+        print("\n[Step 5/6] CIRISVerify Status")
         r = test_physical_api_verify_status(helper, ui, config)
         results.append(r)
+        print(f"  -> {r.result.value}: {r.message}")
+
+        # 6. Real UI login + navigation (relaunches with CIRIS_TEST_MODE)
+        print("\n[Step 6/6] UI Login & Navigation")
+        r = test_physical_ui_login(helper, ui, config)
+        results.append(r)
+        all_screenshots.extend(r.screenshots)
         print(f"  -> {r.result.value}: {r.message}")
 
         passed = sum(1 for r in results if r.result == TestResult.PASSED)
@@ -698,3 +710,307 @@ def test_physical_full_check(helper: IDeviceHelper, ui: PhysicalDeviceUIHelper, 
             message=f"Error: {str(e)}",
             screenshots=all_screenshots,
         )
+
+
+# ========== Test-Automation HTTP Client (real UI drive) ==========
+
+
+class TestAutomationClient:
+    """Thin HTTP client for the in-app test-automation server (POSIX socket
+    on iOS, Ktor CIO on desktop). Forwarded to the device via iproxy.
+
+    The server is gated by the ``CIRIS_TEST_MODE`` env var on the device side
+    and listens on port 9091 by default. Endpoints supported on iOS:
+    ``/health``, ``/screen``, ``/tree``, ``/click``, ``/input``, ``/wait``,
+    ``/element/{tag}``. (``/act`` is desktop-only — use the individual
+    endpoints here.)
+    """
+
+    def __init__(self, base_url: str = "http://127.0.0.1:19091"):
+        self.base_url = base_url.rstrip("/")
+
+    def _request(self, method: str, path: str, data: Optional[dict] = None, timeout: int = 5) -> Tuple[int, dict]:
+        url = f"{self.base_url}{path}"
+        body = json.dumps(data).encode() if data else None
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"} if body else {},
+            method=method,
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body_bytes = resp.read()
+                try:
+                    return resp.status, json.loads(body_bytes)
+                except json.JSONDecodeError:
+                    return resp.status, {"raw": body_bytes.decode("utf-8", errors="replace")}
+        except urllib.error.HTTPError as e:
+            try:
+                return e.code, json.loads(e.read())
+            except Exception:
+                return e.code, {"error": str(e)}
+        except (urllib.error.URLError, ConnectionRefusedError, OSError) as e:
+            return 0, {"error": str(e)}
+
+    def health(self) -> Tuple[int, dict]:
+        return self._request("GET", "/health")
+
+    def screen(self) -> Optional[str]:
+        status, body = self._request("GET", "/screen")
+        return body.get("screen") if status == 200 else None
+
+    def tree(self) -> List[str]:
+        status, body = self._request("GET", "/tree")
+        if status != 200:
+            return []
+        return [e.get("testTag", "") for e in body.get("elements", [])]
+
+    def click(self, test_tag: str) -> bool:
+        status, body = self._request("POST", "/click", {"testTag": test_tag})
+        return status == 200 and bool(body.get("success"))
+
+    def input(self, test_tag: str, text: str, clear_first: bool = True) -> bool:
+        status, body = self._request(
+            "POST",
+            "/input",
+            {"testTag": test_tag, "text": text, "clearFirst": clear_first},
+        )
+        return status == 200 and bool(body.get("success"))
+
+    def wait_for_screen(self, expected: str, timeout: float = 10.0, interval: float = 0.5) -> bool:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.screen() == expected:
+                return True
+            time.sleep(interval)
+        return False
+
+
+def _ensure_iproxy(local_port: int, remote_port: int, udid: str) -> Optional[subprocess.Popen]:
+    """Start an iproxy process forwarding ``local_port`` → device ``remote_port``.
+
+    If iproxy is missing or fails, returns None. Caller is responsible for
+    terminating the returned Popen.
+    """
+    if not shutil.which("iproxy"):
+        return None
+    try:
+        return subprocess.Popen(
+            ["iproxy", str(local_port), str(remote_port), "-u", udid],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, FileNotFoundError):
+        return None
+
+
+def _resolve_udid(helper: IDeviceHelper) -> Optional[str]:
+    """Resolve the libimobiledevice UDID (needed by iproxy) for the active
+    device. The QA helper canonicalizes to the CoreDevice UUID, so we have to
+    look up the reverse mapping it builds during get_devices()."""
+    coredevice = helper.device_id or (helper.get_devices()[0].identifier if helper.get_devices() else None)
+    if not coredevice:
+        return None
+    for udid, cd in IDeviceHelper._udid_to_coredevice.items():
+        if cd == coredevice:
+            return udid
+    if shutil.which("idevice_id"):
+        result = subprocess.run(["idevice_id", "-l"], capture_output=True, text=True, timeout=10)
+        udids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if len(udids) == 1:
+            return udids[0]
+    return None
+
+
+def test_physical_ui_login(helper: IDeviceHelper, ui: PhysicalDeviceUIHelper, config: dict) -> TestReport:
+    """Drive a real UI login on the device via the in-app test-automation server.
+
+    Flow:
+      1. Relaunch the app with ``CIRIS_TEST_MODE=true``
+      2. Forward port 19091 → device 9091 via iproxy
+      3. Wait for the test server's /health
+      4. Click ``btn_local_login`` → enter admin/qa_test_password_12345 →
+         click ``btn_login_submit``
+      5. Verify we land on the ``Interact`` screen
+      6. Navigate to ``Telemetry`` and back, verifying screen transitions
+    """
+    start_time = time.time()
+    screenshots = []
+    bundle_id = "ai.ciris.mobile"
+    test_port_local = config.get("test_port_local", 19091)
+    test_port_remote = config.get("test_port_remote", 9091)
+    username = config.get("username", "admin")
+    password = config.get("password", "qa_test_password_12345")
+
+    iproxy_proc: Optional[subprocess.Popen] = None
+    try:
+        print("  [1/6] Resolving device UDID for iproxy...")
+        udid = _resolve_udid(helper)
+        if not udid:
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.SKIPPED,
+                duration=time.time() - start_time,
+                message="Could not resolve libimobiledevice UDID (iproxy requires it)",
+            )
+
+        print("  [2/6] Relaunching app with CIRIS_TEST_MODE=true...")
+        launched = helper.launch_app(
+            bundle_id,
+            env_vars={"CIRIS_TEST_MODE": "true"},
+            terminate_existing=True,
+        )
+        if not launched:
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Failed to launch app with CIRIS_TEST_MODE",
+            )
+
+        print(f"  [3/6] Forwarding iproxy {test_port_local} -> device {test_port_remote}...")
+        iproxy_proc = _ensure_iproxy(test_port_local, test_port_remote, udid)
+        if not iproxy_proc:
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.SKIPPED,
+                duration=time.time() - start_time,
+                message="iproxy not available (install libimobiledevice)",
+            )
+
+        client = TestAutomationClient(f"http://127.0.0.1:{test_port_local}")
+
+        print("  [4/6] Waiting for in-app test server...")
+        deadline = time.time() + 30.0
+        ready = False
+        while time.time() < deadline:
+            status, body = client.health()
+            if status == 200 and body.get("testMode"):
+                ready = True
+                break
+            time.sleep(2)
+        if not ready:
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=("Test automation server never came up. " "Is the app built with the testing module included?"),
+            )
+
+        print("  [5/6] Waiting for Login screen (Startup -> Login can take ~60s)...")
+        # First app launch runs CIRISVerify attestation + spins up the Python
+        # backend + boots 22 services before the Login screen renders. Give it
+        # a generous window; on subsequent relaunches it's typically much faster.
+        if not client.wait_for_screen("Login", timeout=120.0, interval=1.5):
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Did not reach Login screen (still on {client.screen()!r})",
+            )
+
+        print("  [5b/6] Driving Login → Local Login → submit...")
+
+        if not client.click("btn_local_login"):
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not click btn_local_login",
+            )
+        time.sleep(2)  # StateFlow propagation
+
+        if not client.input("input_username", username):
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not enter username",
+            )
+        time.sleep(2)
+
+        if not client.input("input_password", password):
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not enter password",
+            )
+        time.sleep(2)
+
+        if not client.click("btn_login_submit"):
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not click btn_login_submit",
+            )
+
+        if not client.wait_for_screen("Interact", timeout=15.0):
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Did not reach Interact screen (still on {client.screen()!r})",
+            )
+
+        interact_shot = ui.screenshot(f"/tmp/ciris_phys_ui_interact_{int(time.time())}.png")
+        if interact_shot:
+            screenshots.append(interact_shot)
+
+        print("  [6/6] Navigating Interact → Telemetry → Interact...")
+        # The nav drawer button is testable on both screens.
+        client.click("btn_nav_drawer_open")
+        time.sleep(2)
+        if not client.click("nav_epistemic_telemetry"):
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not navigate to Telemetry",
+                screenshots=screenshots,
+            )
+        if not client.wait_for_screen("Telemetry", timeout=8.0):
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Did not reach Telemetry (still on {client.screen()!r})",
+                screenshots=screenshots,
+            )
+        telemetry_shot = ui.screenshot(f"/tmp/ciris_phys_ui_telemetry_{int(time.time())}.png")
+        if telemetry_shot:
+            screenshots.append(telemetry_shot)
+
+        client.click("btn_nav_drawer_open")
+        time.sleep(2)
+        client.click("nav_epistemic_interact")
+        client.wait_for_screen("Interact", timeout=8.0)
+
+        return TestReport(
+            name="test_physical_ui_login",
+            result=TestResult.PASSED,
+            duration=time.time() - start_time,
+            message=(f"Logged in as {username!r} via Compose testTags; " f"navigated Interact → Telemetry → Interact"),
+            screenshots=screenshots,
+        )
+
+    except Exception as e:
+        return TestReport(
+            name="test_physical_ui_login",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {type(e).__name__}: {e}",
+            screenshots=screenshots,
+        )
+    finally:
+        if iproxy_proc is not None:
+            try:
+                iproxy_proc.terminate()
+                try:
+                    iproxy_proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    iproxy_proc.kill()
+            except Exception:
+                pass

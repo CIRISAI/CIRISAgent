@@ -1000,10 +1000,12 @@ signature = ed25519_sign(signed_bytes)
 fold (CIRISAgent#866/#857) the agent's Python trace producer is RETIRED:
 `ciris-lens-core`'s `LensClient`/`CaptureClient` owns capture → seal →
 Ed25519-sign (via the persist Engine's federation signer) →
-`receive_and_persist`. lens-core 1.0.0 stamps `trace_schema_version "2.7.9"`
-and signs with persist's V1Python canonicalizer (the CEG 1.0-RC2 §0.9
-carve-out); the stamp+canonicalizer alignment to "3.0.0"/JCS is the upstream
-cut tracked in CIRISLensCore#43. The `"3.0.0"`+JCS producer below was live
+`receive_and_persist`. As of ciris-lens-core **1.0.1** (CIRISLensCore#43.2)
+the substrate stamps `trace_schema_version "3.0.0"` and seals with the JCS
+canonicalizer selected by the SAME `canon_version_for_trace_schema` gate the
+verifier uses (major ≥ 3 ⇒ RFC 8785) — stamp and bytes cannot skew, the
+carve-out era is closed, and the 2.9.6 JCS cutover is complete at every
+layer. (lens-core 1.0.0 transitionally stamped "2.7.9"/V1Python.) The `"3.0.0"`+JCS producer below was live
 in the agent's Python signer for the pre-fold window (commits
 9c3546dc8/2a228b4a4) and remains live in the **cirisnode adapter's private
 legacy pipeline** (`ciris_adapters/cirisnode/_legacy_trace.py`, its own wire

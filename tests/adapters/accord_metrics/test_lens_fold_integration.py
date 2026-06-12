@@ -10,8 +10,8 @@ KNOWN UPSTREAM BLOCKER (CIRISLensCore#43): LensClient construction fails
 in pip cohabitation ("no process Engine") because the lens-core wheel
 statically bundles its own persist crate; the capsule handshake fix is
 pending upstream. Every test that constructs a real LensClient is marked
-xfail(strict=False) so the suite auto-greens the moment the fixed wheel
-lands — at which point the xfail marks should be removed.
+The CIRISLensCore#43 blocker is RESOLVED (lens-core 1.0.1 ships the
+engine= capsule handshake); these tests run for real against the wheel.
 
 Engine wiring follows tests/fixtures/persist_engine.py: the global
 `persist_engine` fixture calls reset_engine() first (via
@@ -19,7 +19,7 @@ _release_persist_engine), constructs Engine with a scratch sqlite DSN +
 seed key, and wires it into persistence.models.graph.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 import pytest
@@ -98,7 +98,6 @@ def fold_service(persist_engine, tmp_path, monkeypatch):
     return service
 
 
-@pytest.mark.xfail(reason=XFAIL_REASON, strict=False)
 class TestLensFoldIntegration:
     """Real Engine + real LensClient through the service lifecycle."""
 
@@ -199,14 +198,19 @@ class TestLensFoldIntegration:
     @pytest.mark.asyncio
     async def test_orphan_sweep_runs_against_real_substrate(self, fold_service):
         """A thought without ACTION_RESULT is ephemeral by design — the
-        substrate sweep purges it (max_age 0 makes it immediate)."""
+        substrate sweep purges it. The purge compares the trace's
+        started_at (the opening event's timestamp) STRICTLY against
+        now - max_age, so backdate the event two hours and sweep at one
+        hour — deterministic, no sleeps."""
         await fold_service.start()
         try:
-            await fold_service._process_single_event(_thought_start("th-fold-orphan"))
+            event = _thought_start("th-fold-orphan")
+            event["timestamp"] = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+            await fold_service._process_single_event(event)
 
             import asyncio
 
-            purged = await asyncio.to_thread(fold_service._lens.orphan_sweep, 0)
+            purged = await asyncio.to_thread(fold_service._lens.orphan_sweep, 3600)
             assert purged >= 1
         finally:
             await fold_service.stop()

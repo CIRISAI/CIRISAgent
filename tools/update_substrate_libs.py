@@ -384,8 +384,19 @@ def install_jni_libs(lib: SubstrateLib, extract_dir: Path) -> bool:
             if alt.exists():
                 src = alt
             else:
-                print(f"  {abi}: MISSING ({src.relative_to(extract_dir)}) — skipping")
-                continue
+                # Versioned top-dir wrapper (lens-core 1.0.1 pattern:
+                # `{prefix}-v{ver}-android/{abi}/{so}`): probe any single
+                # child directory that contains the ABI layout.
+                wrapped = [
+                    d / abi / lib.so_filename
+                    for d in extract_dir.iterdir()
+                    if d.is_dir() and (d / abi / lib.so_filename).exists()
+                ]
+                if wrapped:
+                    src = wrapped[0]
+                else:
+                    print(f"  {abi}: MISSING ({src.relative_to(extract_dir)}) — skipping")
+                    continue
 
         dest_dir = JNI_LIBS_DIR / abi
         dest_dir.mkdir(parents=True, exist_ok=True)

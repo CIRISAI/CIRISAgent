@@ -53,14 +53,35 @@ def persist_engine() -> Iterator[Engine]:
     with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as pf:
         db_path = pf.name
 
-    engine = Engine(f"sqlite:///{db_path}", "test-key")
+    # Production parity (db/core.py _construct_engine): the Engine carries a
+    # LocalSigner (32-byte Ed25519 seed) so seal/sign paths work — lens-core's
+    # LensClient signs via engine.local_key_id()/local_sign(), which raises
+    # "no local signing key configured" on a bare Engine. The federation key
+    # is registered the way edge-init does in production so attestation
+    # writes (consent CEG artifacts) and the lens consent gate's directory
+    # read both function in tests.
+    seed_path = db_path + ".seed"
+    with open(seed_path, "wb") as sf:
+        sf.write(os.urandom(32))
+
+    engine = Engine(
+        f"sqlite:///{db_path}",
+        "test-key",
+        local_key_id="test-key",
+        local_key_path=seed_path,
+    )
+    try:
+        engine.register_federation_key("agent", "test-key")
+    except Exception:  # noqa: BLE001 - federation_conflict = already registered
+        pass
     set_persist_engine(engine, dsn=f"sqlite:///{db_path}")
 
     try:
         yield engine
     finally:
         _release_persist_engine()
-        try:
-            os.unlink(db_path)
-        except OSError:
-            pass
+        for path in (db_path, seed_path):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass

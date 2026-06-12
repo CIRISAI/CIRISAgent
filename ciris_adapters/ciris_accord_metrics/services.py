@@ -67,11 +67,12 @@ logger = logging.getLogger(__name__)
 # "3.0.0" — persist's signed-epoch verifier gate (`canon_version_for_trace_
 # schema`, src/verify/ed25519.rs) dispatches major >= 3 ⇒ JCS (RFC 8785),
 # 2.x ⇒ legacy Python json.dumps. The signed stamp itself is produced by
-# lens-core at seal time. NOTE: ciris-lens-core 1.0.0 still stamps "2.7.9"
-# and signs V1Python (its capture path froze before the gate crossing);
-# the upstream ask to align lens-core's stamp + canonicalizer to
-# 3.0.0/JCS is filed on CIRISLensCore — the agent pin moves to that cut.
-# Until then this constant documents the agent's DECLARED era; nothing
+# lens-core at seal time — "3.0.0"/JCS as of ciris-lens-core 1.0.1
+# (CIRISLensCore#43.2): the seal selects its canonicalizer via the SAME
+# canon_version_for_trace_schema gate the verifier uses, so stamp and
+# bytes can never skew. E2E-verified 2026-06-12: Amharic+Chinese trace
+# sealed, signed, persist-verified at ingest. This constant mirrors the
+# substrate stamp for documentation/telemetry; nothing
 # signature-bearing reads it (the legacy HTTP wire that used to carry it
 # is retired per #857).
 TRACE_SCHEMA_VERSION = "3.0.0"
@@ -565,10 +566,26 @@ class AccordMetricsService:
             logger.warning(f"Federation address unavailable for consent gate ({e}); config-fallback consent only")
             consent_key_id = None
 
+        # The cross-wheel Engine handshake (CIRISLensCore#43.1, lens-core
+        # 1.0.1+): pass the host's wheel-constructed Engine explicitly —
+        # lens-core extracts the shared Arc via the CIRISPersist#109 capsule
+        # accessors. Without it, lens-core's in-crate singleton (a different
+        # static in its statically-bundled persist copy) cannot see this
+        # Engine and construction fails in pip cohabitation.
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError(
+                "LensClient construction requires the persist Engine singleton — "
+                "initialize_database() must run before the accord_metrics adapter starts."
+            )
+
         try:
             return LensClient(
                 self._consent_timestamp if self._consent_given else None,
                 self._trace_level.value,
+                engine=engine,
                 deployment_profile=self._build_deployment_profile(),
                 consent_attesting_key_id=consent_key_id,
                 local_copy_dir=str(self._local_copy_dir) if self._local_copy_dir else None,

@@ -141,8 +141,15 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         if self._agent_tier is not None:
             if now is None or self._agent_tier_fetched_at is None:
                 return self._agent_tier
-            age = (now - self._agent_tier_fetched_at).total_seconds()
-            if age < _AGENT_TIER_TTL_SECONDS:
+            try:
+                age = (now - self._agent_tier_fetched_at).total_seconds()
+                fresh = age < _AGENT_TIER_TTL_SECONDS
+            except (TypeError, AttributeError):
+                # Non-datetime clock (e.g. a mocked time service): treat the
+                # cache as expired and re-resolve — the conservative direction
+                # for the D07 escalation/revocation-propagation guarantee.
+                fresh = False
+            if fresh:
                 return self._agent_tier
 
         # Resolve: config service first (cheap), then memory/identity on miss.
@@ -203,7 +210,8 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 if domain_hint:
                     supported_domains = getattr(caps, "supported_domains", [])
                     supported_domain_values = {
-                        domain.value if isinstance(domain, DomainCategory) else str(domain) for domain in supported_domains
+                        domain.value if isinstance(domain, DomainCategory) else str(domain)
+                        for domain in supported_domains
                     }
                     # Reject services with empty supported_domains OR without the required domain
                     if not supported_domains or domain_hint.value not in supported_domain_values:

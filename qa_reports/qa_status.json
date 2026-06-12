@@ -170,13 +170,31 @@
       "status": "failing",
       "duration_seconds": 62.74,
       "context": null
+    },
+    "accord_metrics": {
+      "last_run": "2026-06-12T23:45:38.230883+00:00",
+      "passed": 11,
+      "failed": 0,
+      "total": 11,
+      "status": "passing",
+      "duration_seconds": 17.5,
+      "context": null
+    },
+    "consent": {
+      "last_run": "2026-06-12T23:45:38.231346+00:00",
+      "passed": 8,
+      "failed": 0,
+      "total": 8,
+      "status": "passing",
+      "duration_seconds": 2.81,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 19,
-    "passing": 17,
+    "total_modules": 21,
+    "passing": 19,
     "failing": 2,
     "not_run": 0
   },
-  "last_updated": "2026-05-21T03:54:57.829890+00:00"
+  "last_updated": "2026-06-12T23:45:38.231371+00:00"
 }

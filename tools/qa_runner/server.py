@@ -689,10 +689,14 @@ class APIServerManager:
         Also sweeps any legacy traces left at qa_reports/ root (pre-2.7.8
         single-backend layout) so they don't accumulate across upgrades.
         """
-        # Per-backend dir
+        # Per-backend dir. lens-batch-*.json sit in per-instance subdirs
+        # (2.9.6 fold: the substrate tee replaced the logshipper exports),
+        # hence the rglob.
         if self.qa_reports_dir.exists():
-            trace_files = list(self.qa_reports_dir.glob("real_trace_*.json")) + list(
-                self.qa_reports_dir.glob("trace_*.json")
+            trace_files = (
+                list(self.qa_reports_dir.glob("real_trace_*.json"))
+                + list(self.qa_reports_dir.glob("trace_*.json"))
+                + list(self.qa_reports_dir.rglob("lens-batch-*.json"))
             )
             for f in trace_files:
                 f.unlink()
@@ -776,12 +780,8 @@ class APIServerManager:
         # `sys.executable main.py` from the repo root.
         if self.config.staged_env is not None:
             cmd = [str(self.config.staged_env.ciris_server), "--port", str(self.config.api_port)]
-            self.console.print(
-                f"[dim]Using staged ciris-server: {self.config.staged_env.ciris_server}[/dim]"
-            )
-            self.console.print(
-                f"[dim]Canonical tree hash: {self.config.staged_env.total_hash}[/dim]"
-            )
+            self.console.print(f"[dim]Using staged ciris-server: {self.config.staged_env.ciris_server}[/dim]")
+            self.console.print(f"[dim]Canonical tree hash: {self.config.staged_env.total_hash}[/dim]")
         else:
             main_path = Path(__file__).parent.parent.parent / "main.py"
             cmd = [sys.executable, str(main_path), "--port", str(self.config.api_port)]
@@ -894,8 +894,7 @@ class APIServerManager:
             env.setdefault("CIRIS_USER_LATITUDE", "42.0334")
             env.setdefault("CIRIS_USER_LONGITUDE", "-88.0834")
             self.console.print(
-                f"[dim]Live mode: location sharing enabled "
-                f"(CIRIS_USER_LOCATION={env['CIRIS_USER_LOCATION']})[/dim]"
+                f"[dim]Live mode: location sharing enabled " f"(CIRIS_USER_LOCATION={env['CIRIS_USER_LOCATION']})[/dim]"
             )
 
         # Force first-run mode for SETUP module tests or when data was wiped
@@ -925,16 +924,15 @@ class APIServerManager:
             # an explicit env var (e.g. for debugging or one-off CI runs).
             env.setdefault(k, v)
         if merged:
-            modules_label = ",".join(m.value for m in self.modules
-                                     if any(merge_server_env([m]).keys() - {"__conflicts__"}))
+            modules_label = ",".join(
+                m.value for m in self.modules if any(merge_server_env([m]).keys() - {"__conflicts__"})
+            )
             self.console.print(
-                f"[dim]Merged module SERVER_ENV from {modules_label or 'selected modules'}: "
-                f"{merged}[/dim]"
+                f"[dim]Merged module SERVER_ENV from {modules_label or 'selected modules'}: " f"{merged}[/dim]"
             )
         if conflicts:
             self.console.print(
-                f"[yellow]SERVER_ENV conflicts across modules (last-write-wins): "
-                f"{conflicts}[/yellow]"
+                f"[yellow]SERVER_ENV conflicts across modules (last-write-wins): " f"{conflicts}[/yellow]"
             )
 
         # Set backend-specific log directory to avoid symlink collisions
@@ -954,6 +952,17 @@ class APIServerManager:
         else:
             # SQLite is the default, no need to set CIRIS_DB_URL
             self.console.print(f"[dim]Using SQLite (default)[/dim]")
+
+        # Per-backend Edge (Reticulum) listen port. Under --parallel-backends
+        # both legs otherwise race for 0.0.0.0:4242; the loser's Edge init
+        # fails "Address already in use", its federation signer key never
+        # registers with persist, and EVERY lens-core trace seal then fails
+        # verify_unknown_key (the whole trace pipeline silently dies for
+        # that leg). Respect an operator override if one is set.
+        if "CIRIS_EDGE_LISTEN_ADDR" not in env:
+            edge_port = 4242 if self.database_backend != "postgres" else 4243
+            env["CIRIS_EDGE_LISTEN_ADDR"] = f"0.0.0.0:{edge_port}"
+            self.console.print(f"[dim]Edge listen addr: 0.0.0.0:{edge_port} (per-backend)[/dim]")
 
         # Set billing configuration from QAConfig if enabled
         if self.config.billing_enabled:
@@ -1042,6 +1051,16 @@ class APIServerManager:
                     # crash the host (saw 60M-free-of-935G on 2026-05-03).
                     # Operator override via CIRIS_QA_LENS_TRACE_KEEP_N.
                     self._prune_lens_trace_dirs()
+            else:
+                # 2.9.6 fold: the bespoke HTTP shipping path is retired, so
+                # the mock logshipper never sees traces anymore — the
+                # substrate seals straight into persist. The lens-core
+                # local tee (lens-batch-*.json under a per-instance subdir)
+                # is now THE on-disk stream accord_metrics_tests.py reads,
+                # so point it at this backend's qa_reports/ namespace.
+                if "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" not in env:
+                    self.qa_reports_dir.mkdir(parents=True, exist_ok=True)
+                    env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] = str(self.qa_reports_dir)
             self.console.print(
                 f"[dim]Enabling accord_metrics adapter with consent for trace capture ({trace_level})[/dim]"
             )
@@ -1250,9 +1269,7 @@ class APIServerManager:
                 last_status = auth_response.status_code
                 if auth_response.status_code == 200:
                     if attempt > 1:
-                        self.console.print(
-                            f"[dim]Authenticated after {attempt} attempt(s)[/dim]"
-                        )
+                        self.console.print(f"[dim]Authenticated after {attempt} attempt(s)[/dim]")
                     return auth_response.json()["access_token"]
 
                 # Non-2xx that's NOT a transient resume-in-flight signature:
@@ -1471,15 +1488,13 @@ class APIServerManager:
                         surfaced.append("")  # blank separator
                 if surfaced:
                     self.console.print(
-                        f"[red]  ERROR/CRITICAL lines from {incidents_path} "
-                        f"({len(seen)} distinct):[/red]"
+                        f"[red]  ERROR/CRITICAL lines from {incidents_path} " f"({len(seen)} distinct):[/red]"
                     )
                     for line in surfaced[:200]:  # cap at 200 lines total
                         self.console.print(f"[dim]    {line[:300]}[/dim]")
                 else:
                     self.console.print(
-                        f"[dim]  No ERROR/CRITICAL lines in {incidents_path} "
-                        f"({len(lines)} lines scanned)[/dim]"
+                        f"[dim]  No ERROR/CRITICAL lines in {incidents_path} " f"({len(lines)} lines scanned)[/dim]"
                     )
             except Exception as exc:
                 self.console.print(f"[dim]  Could not read incidents log: {exc}[/dim]")

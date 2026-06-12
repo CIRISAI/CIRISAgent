@@ -30,7 +30,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import aiohttp
 
@@ -269,10 +269,50 @@ class AccordMetricsTests:
         # The server-side mock logshipper is configured to write to this same
         # path, so the test always reads what the agent just wrote.
         self.qa_reports_dir: Path = (
-            qa_reports_dir
-            if qa_reports_dir is not None
-            else Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports_dir if qa_reports_dir is not None else Path(__file__).parent.parent.parent.parent / "qa_reports"
         )
+
+    def _load_trace_dicts(self, level: Optional[str] = None) -> List[Tuple[str, Dict[str, Any]]]:
+        """Load sealed traces from disk as (name, trace_dict) pairs.
+
+        2.9.6 fold (#857/#866): the bespoke HTTP shipping path is retired,
+        so the mock logshipper no longer receives traces. The on-disk
+        stream is now the lens-core local tee — the QA server points
+        CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR at qa_reports/<backend>/ and
+        the substrate writes <instance>/lens-batch-<seq>.json there, one
+        batch per seal, each event carrying the full signed trace dict
+        (components / signature / trace_level / ...) — the same shape the
+        retired trace_*.json logshipper exports held. Legacy exports are
+        still read for back-compat with dumps from older runs.
+
+        Args:
+            level: Optional trace-level filter ("generic", "detailed",
+                "full_traces") matched against each trace's own
+                trace_level stamp. Legacy files without the stamp pass.
+        """
+        traces: List[Tuple[str, Dict[str, Any]]] = []
+        qa = self.qa_reports_dir
+        for path in sorted(qa.rglob("lens-batch-*.json")):
+            try:
+                batch = json.loads(path.read_text())
+            except Exception:
+                continue
+            for idx, event in enumerate(batch.get("events", [])):
+                trace = event.get("trace")
+                if isinstance(trace, dict):
+                    traces.append((f"{path.parent.name}/{path.name}#{idx}", trace))
+        legacy_glob = {
+            "detailed": "trace_detailed_*.json",
+            "full_traces": "trace_full_*.json",
+        }.get(level or "", "trace_*.json")
+        for path in sorted(qa.glob(legacy_glob)):
+            try:
+                traces.append((path.name, json.loads(path.read_text())))
+            except Exception:
+                continue
+        if level:
+            traces = [(n, t) for n, t in traces if not t.get("trace_level") or t.get("trace_level") == level]
+        return traces
 
     async def run(self) -> List[Dict[str, Any]]:
         """Run all accord metrics tests.
@@ -387,16 +427,15 @@ class AccordMetricsTests:
 
             # Wait for traces to be flushed (QA uses 5-second flush interval)
             # Check periodically for trace files to appear
-            qa_reports = self.qa_reports_dir
             max_wait = 15  # Wait up to 15 seconds
             waited = 0
 
             while waited < max_wait:
                 await asyncio.sleep(2)
                 waited += 2
-                trace_files = list(qa_reports.glob("trace_*.json"))
-                if trace_files:
-                    return True, f"Interaction completed, {len(trace_files)} trace(s) captured"
+                traces = self._load_trace_dicts()
+                if traces:
+                    return True, f"Interaction completed, {len(traces)} trace(s) captured"
 
             return True, "Interaction completed (traces may still be batching)"
 
@@ -423,9 +462,8 @@ class AccordMetricsTests:
         force ASPDMA into a verb that has a second-pass evaluator.
         """
         try:
-            qa_reports = self.qa_reports_dir
-            # Snapshot trace files BEFORE so we only validate the ones we just produced
-            existing = {p.name for p in qa_reports.glob("trace_*.json")}
+            # Snapshot traces BEFORE so we only validate the ones we just produced
+            existing = {name for name, _ in self._load_trace_dicts()}
 
             # Trigger TOOL → TSASPDMA → VERB_SECOND_PASS_RESULT verb=tool
             await self.client.agent.interact(message="$tool self_help")
@@ -460,17 +498,12 @@ class AccordMetricsTests:
             max_wait = 120 if parallel_backends else 60
             waited = 0
             poll_interval = 2
-            new_traces: List[Path] = []
+            new_traces: List[Tuple[str, Dict[str, Any]]] = []
             while waited < max_wait and verbs_seen != {"tool", "defer"}:
                 await asyncio.sleep(poll_interval)
                 waited += poll_interval
-                new_traces = [p for p in qa_reports.glob("trace_*.json") if p.name not in existing]
-                for trace_file in new_traces:
-                    try:
-                        with open(trace_file) as f:
-                            trace = json.load(f)
-                    except Exception:
-                        continue
+                new_traces = [(n, t) for n, t in self._load_trace_dicts() if n not in existing]
+                for _name, trace in new_traces:
                     for comp in trace.get("components", []):
                         if comp.get("event_type") == "VERB_SECOND_PASS_RESULT":
                             verb = comp.get("data", {}).get("verb")
@@ -505,29 +538,27 @@ class AccordMetricsTests:
             if self.live_lens:
                 return True, "Skipped (traces sent to live Lens server, not local files)"
 
-            # Find trace files saved by mock logshipper
-            qa_reports = self.qa_reports_dir
-            trace_files = list(qa_reports.glob("trace_*.json"))
+            # Read the lens-core tee (+ legacy logshipper exports)
+            trace_dicts = self._load_trace_dicts()
 
-            if not trace_files:
-                return False, "No trace files found in qa_reports/ - is accord_metrics adapter loaded?"
+            if not trace_dicts:
+                return False, "No traces found in qa_reports/ - is accord_metrics adapter loaded?"
 
-            # Validate at least one trace
+            # Validate at least one trace. Scan a wide sample: adapter
+            # instances registered mid-run (the multi-level trio) seal
+            # partial traces for thoughts already in flight — those are
+            # legitimately missing THOUGHT_START et al., and the rglob
+            # sort puts them first. One fully-valid trace anywhere in the
+            # sample proves the capture pipeline emits every scoring field.
             validation_errors: List[str] = []
             traces_validated = 0
             total_missing_fields = 0
+            sample = trace_dicts[:30]
 
-            for trace_file in trace_files[:3]:  # Validate up to 3 traces
-                try:
-                    with open(trace_file) as f:
-                        trace = json.load(f)
-                except Exception as e:
-                    validation_errors.append(f"{trace_file.name}: Failed to load: {e}")
-                    continue
-
+            for trace_name, trace in sample:
                 components = trace.get("components", [])
                 if not components:
-                    validation_errors.append(f"{trace_file.name}: No components")
+                    validation_errors.append(f"{trace_name}: No components")
                     continue
 
                 # Build component data by event_type
@@ -544,7 +575,7 @@ class AccordMetricsTests:
                     total_missing_fields += len(missing_fields)
                     # Only report first few missing fields per trace
                     sample = missing_fields[:5]
-                    validation_errors.append(f"{trace_file.name}: Missing {len(missing_fields)} fields: {sample}")
+                    validation_errors.append(f"{trace_name}: Missing {len(missing_fields)} fields: {sample}")
                 else:
                     traces_validated += 1
 
@@ -555,7 +586,7 @@ class AccordMetricsTests:
             if validation_errors:
                 # Some traces validated, some had issues
                 return True, (
-                    f"{traces_validated}/{len(trace_files[:3])} traces valid for CIRIS scoring "
+                    f"{traces_validated}/{len(sample)} traces valid for CIRIS scoring "
                     f"({total_missing_fields} total missing fields in others)"
                 )
 
@@ -668,23 +699,16 @@ class AccordMetricsTests:
             if self.live_lens:
                 return True, "Skipped (traces sent to live Lens server)"
 
-            qa_reports = self.qa_reports_dir
-            trace_files = list(qa_reports.glob("trace_*.json"))
+            trace_dicts = self._load_trace_dicts()
 
-            if not trace_files:
-                return True, "No trace files found - skipping null validation"
+            if not trace_dicts:
+                return True, "No traces found - skipping null validation"
 
             null_field_counts: Dict[str, int] = {}
             non_exempt_traces = 0
             exempt_traces = 0
 
-            for trace_file in trace_files[:10]:  # Check up to 10 traces
-                try:
-                    with open(trace_file) as f:
-                        trace = json.load(f)
-                except Exception:
-                    continue
-
+            for _trace_name, trace in trace_dicts[:10]:  # Check up to 10 traces
                 components = trace.get("components", [])
                 if not components:
                     continue
@@ -809,27 +833,16 @@ class AccordMetricsTests:
             if self.live_lens:
                 return True, "Skipped (traces sent to live Lens server)"
 
-            # Find detailed trace files
-            qa_reports = self.qa_reports_dir
-            trace_files = list(qa_reports.glob("trace_detailed_*.json"))
-
-            if not trace_files:
-                # Try generic traces - they may have some detailed fields
-                trace_files = list(qa_reports.glob("trace_*.json"))
-                if not trace_files:
-                    return True, "No trace files found - skipping detailed validation"
+            # Detailed-level traces; fall back to any level (they may
+            # still carry some detailed fields)
+            trace_dicts = self._load_trace_dicts("detailed") or self._load_trace_dicts()
+            if not trace_dicts:
+                return True, "No traces found - skipping detailed validation"
 
             validation_errors: List[str] = []
             traces_validated = 0
 
-            for trace_file in trace_files[:3]:
-                try:
-                    with open(trace_file) as f:
-                        trace = json.load(f)
-                except Exception as e:
-                    validation_errors.append(f"{trace_file.name}: Failed to load: {e}")
-                    continue
-
+            for trace_name, trace in trace_dicts[:3]:
                 components = trace.get("components", [])
                 if not components:
                     continue
@@ -862,7 +875,7 @@ class AccordMetricsTests:
                         )
                     ]
                     if critical:
-                        validation_errors.append(f"{trace_file.name}: Missing v1.9.1 fields: {critical[:5]}")
+                        validation_errors.append(f"{trace_name}: Missing v1.9.1 fields: {critical[:5]}")
 
             if traces_validated > 0:
                 return True, f"{traces_validated} traces have detailed fields"
@@ -890,24 +903,15 @@ class AccordMetricsTests:
             if self.live_lens:
                 return True, "Skipped (traces sent to live Lens server)"
 
-            # Find full trace files
-            qa_reports = self.qa_reports_dir
-            trace_files = list(qa_reports.glob("trace_full_*.json"))
+            trace_dicts = self._load_trace_dicts("full_traces")
 
-            if not trace_files:
-                return True, "No full trace files found - skipping (may need full_traces adapter)"
+            if not trace_dicts:
+                return True, "No full traces found - skipping (may need full_traces adapter)"
 
             validation_errors: List[str] = []
             traces_validated = 0
 
-            for trace_file in trace_files[:3]:
-                try:
-                    with open(trace_file) as f:
-                        trace = json.load(f)
-                except Exception as e:
-                    validation_errors.append(f"{trace_file.name}: Failed to load: {e}")
-                    continue
-
+            for trace_name, trace in trace_dicts[:3]:
                 components = trace.get("components", [])
                 if not components:
                     continue
@@ -930,7 +934,7 @@ class AccordMetricsTests:
                         if any(k in f for k in ["thought_content", "raw_llm_response", "positive_moment"])
                     ]
                     if v191_fields:
-                        validation_errors.append(f"{trace_file.name}: Missing v1.9.1 FULL fields: {v191_fields}")
+                        validation_errors.append(f"{trace_name}: Missing v1.9.1 FULL fields: {v191_fields}")
 
             if traces_validated > 0:
                 return True, f"{traces_validated} traces have full reasoning fields"
@@ -955,8 +959,7 @@ class AccordMetricsTests:
             if self.live_lens:
                 return True, "Skipped (traces sent to live Lens server)"
 
-            qa_reports = self.qa_reports_dir
-            all_traces = list(qa_reports.glob("trace_*.json"))
+            all_traces = self._load_trace_dicts()
 
             if not all_traces:
                 return True, "No traces found - skipping comprehensive validation"
@@ -985,10 +988,8 @@ class AccordMetricsTests:
             found_fields: Dict[str, Set[str]] = {"GENERIC": set(), "DETAILED": set(), "FULL": set()}
             total_traces = 0
 
-            for trace_file in all_traces[:10]:
+            for _trace_name, trace in all_traces[:10]:
                 try:
-                    with open(trace_file) as f:
-                        trace = json.load(f)
                     total_traces += 1
 
                     components = trace.get("components", [])
@@ -1068,11 +1069,10 @@ class AccordMetricsTests:
             if self.live_lens:
                 return True, "Skipped (traces sent to live Lens server, not local files)"
 
-            # Check trace files saved by mock logshipper
-            qa_reports = self.qa_reports_dir
-            trace_files = list(qa_reports.glob("trace_*.json"))
+            # Read the lens-core tee (+ legacy logshipper exports)
+            trace_dicts = self._load_trace_dicts()
 
-            if not trace_files:
+            if not trace_dicts:
                 return False, "No traces captured - accord_metrics adapter may not be loaded"
 
             # Summarize captured traces
@@ -1080,21 +1080,16 @@ class AccordMetricsTests:
             unsigned_count = 0
             total_components = 0
 
-            for trace_file in trace_files:
-                try:
-                    with open(trace_file) as f:
-                        trace = json.load(f)
-                    if trace.get("signature"):
-                        signed_count += 1
-                    else:
-                        unsigned_count += 1
-                    total_components += len(trace.get("components", []))
-                except Exception:
-                    continue
+            for _trace_name, trace in trace_dicts:
+                if trace.get("signature"):
+                    signed_count += 1
+                else:
+                    unsigned_count += 1
+                total_components += len(trace.get("components", []))
 
             # Report summary
             summary = (
-                f"{len(trace_files)} traces captured "
+                f"{len(trace_dicts)} traces captured "
                 f"({signed_count} signed, {unsigned_count} unsigned, "
                 f"{total_components} total components)"
             )

@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.components
 
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.models.federation.FederationIdentityAggregate
 import ai.ciris.mobile.shared.models.federation.FederationIdentityResponse
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
@@ -88,47 +89,65 @@ fun FederationIdCard(federationId: FederationIdentityResponse?) {
             Spacer(Modifier.height(8.dp))
 
             val aggregate = federationId?.aggregate
-            val keyId = aggregate?.keyId
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SelectionContainer(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = keyId ?: localizedString("network.federation_id.initializing"),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = if (keyId != null) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        fontSize = 13.sp,
-                        modifier = Modifier.testable("federation_id_key"),
-                    )
-                }
-                // Always render the copy IconButton — `enabled` gates the
-                // actual copy/state change (same composition-timing-race
-                // rationale as btn_copy_signer_key above).
-                run {
-                    val hasKey = !keyId.isNullOrBlank()
+            if (aggregate == null) {
+                Text(
+                    text = localizedString("network.federation_id.initializing"),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    modifier = Modifier.testable("federation_id_key"),
+                )
+            } else {
+                // ── Reticulum transport — THE federation-routable address ──
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = localizedString("network.federation_id.cap_reticulum"),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = CIRISColors.AccentCyan,
+                        )
+                        SelectionContainer {
+                            Text(
+                                text = aggregate.reticulumEd25519PubkeyB64
+                                    ?: aggregate.reticulumX25519PubkeyB64
+                                    ?: localizedString("network.federation_id.initializing"),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.testable("federation_id_key"),
+                            )
+                        }
+                        aggregate.reticulumX25519PubkeyB64?.let { x ->
+                            if (aggregate.reticulumEd25519PubkeyB64 != null) {
+                                Text(
+                                    text = "x25519: $x",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    // Copy the COMPOSITE identity (every key role, labeled).
                     IconButton(
                         onClick = {
-                            if (hasKey) {
-                                clipboard.setText(AnnotatedString(keyId!!))
-                                copied = true
-                                scope.launch {
-                                    delay(1500)
-                                    copied = false
-                                }
+                            clipboard.setText(AnnotatedString(compositeIdentityText(aggregate)))
+                            copied = true
+                            scope.launch {
+                                delay(1500)
+                                copied = false
                             }
                         },
-                        enabled = hasKey,
                         modifier = Modifier.testableClickable("federation_id_copy") {
-                            if (hasKey) {
-                                clipboard.setText(AnnotatedString(keyId!!))
-                                copied = true
-                            }
+                            clipboard.setText(AnnotatedString(compositeIdentityText(aggregate)))
+                            copied = true
                         },
                     ) {
                         Icon(
@@ -139,26 +158,54 @@ fun FederationIdCard(federationId: FederationIdentityResponse?) {
                         )
                     }
                 }
-            }
-            if (copied) {
-                Spacer(Modifier.height(4.dp))
+                if (copied) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = localizedString("network.identity_card.copied"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CIRISColors.SuccessGreen,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+
+                // ── Composite key material ─────────────────────────────────
+                CompositeKeyRow(
+                    label = localizedString("network.federation_id.cap_signing"),
+                    value = aggregate.ed25519PubkeyB64,
+                )
+                aggregate.mlDsa65PubkeyB64?.let {
+                    CompositeKeyRow(
+                        label = localizedString("network.federation_id.cap_signing") +
+                            " · " + localizedString("network.federation_id.cap_pqc"),
+                        value = it,
+                    )
+                }
+                aggregate.contentX25519PubkeyB64?.let {
+                    CompositeKeyRow(
+                        label = localizedString("network.federation_id.cap_content"),
+                        value = it,
+                    )
+                }
+                aggregate.contentMlKem768PubkeyB64?.let {
+                    CompositeKeyRow(
+                        label = localizedString("network.federation_id.cap_content") +
+                            " · " + localizedString("network.federation_id.cap_pqc"),
+                        value = it,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                // persist key-id ALIAS (registry lookup handle) — small caption,
+                // not the headline: an alias is not a federation address.
                 Text(
-                    text = localizedString("network.identity_card.copied"),
+                    text = "key id: " + aggregate.keyId,
                     style = MaterialTheme.typography.labelSmall,
-                    color = CIRISColors.SuccessGreen,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
             if (aggregate != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = localizedString("network.federation_id.pubkey_label") +
-                        ": " + pubkeyShortForm(aggregate.ed25519PubkeyB64),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 Spacer(Modifier.height(8.dp))
                 // (stable tag, localized label) — present = non-null key material.
                 val capabilities = buildList {
@@ -217,6 +264,39 @@ internal fun FederationCapabilityChips(items: List<Pair<String, String>>) {
  * into commonMain, so this is a key-prefix short form, not a hash
  * fingerprint; falls back to the b64 head when decoding fails.
  */
+/** One labeled, wrapping, selectable mono row of composite key material. */
+@Composable
+private fun CompositeKeyRow(label: String, value: String) {
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SelectionContainer {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/** The composite identity as labeled lines — what the copy button copies. */
+internal fun compositeIdentityText(a: FederationIdentityAggregate): String = buildString {
+    appendLine("key_id: ${a.keyId}")
+    appendLine("signing_ed25519: ${a.ed25519PubkeyB64}")
+    a.mlDsa65PubkeyB64?.let { appendLine("signing_ml_dsa_65: $it") }
+    a.reticulumEd25519PubkeyB64?.let { appendLine("reticulum_ed25519: $it") }
+    a.reticulumX25519PubkeyB64?.let { appendLine("reticulum_x25519: $it") }
+    a.contentX25519PubkeyB64?.let { appendLine("content_x25519: $it") }
+    a.contentMlKem768PubkeyB64?.let { appendLine("content_ml_kem_768: $it") }
+}.trimEnd()
+
 @OptIn(ExperimentalEncodingApi::class)
 internal fun pubkeyShortForm(pubkeyB64: String): String {
     return try {

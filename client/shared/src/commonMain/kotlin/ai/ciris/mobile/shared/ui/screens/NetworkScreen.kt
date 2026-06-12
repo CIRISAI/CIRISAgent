@@ -125,8 +125,11 @@ fun NetworkScreen(
     // verticalScroll has the same UX (scrollable, padded, spaced) but
     // composes everything eagerly — testTags reach `/tree` on Android and
     // desktop alike.
+    // Surface paints the theme background — without it the hub bleeds the
+    // host's default (white) behind the cards.
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .testable("screen_network_hub")
             .verticalScroll(rememberScrollState())
@@ -177,6 +180,7 @@ fun NetworkScreen(
 
         // ── 10 navigation tiles in a 2-column grid ───────────────────────────
         tilesGrid(onTileClick)
+    }
     }
 }
 

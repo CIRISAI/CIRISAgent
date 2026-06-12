@@ -26,11 +26,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ciris_adapters.ciris_accord_metrics.services import (
-    AccordMetricsService,
-    SimpleCapabilities,
-    TraceDetailLevel,
-)
+from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService, SimpleCapabilities, TraceDetailLevel
 from ciris_engine.schemas.services.authority_core import DeferralRequest
 
 # ---------------------------------------------------------------------------
@@ -111,7 +107,15 @@ def _event(event_type: Any = "THOUGHT_START", thought_id: str = "th-1", **overri
 @pytest.fixture(autouse=True)
 def _clean_metrics_env(monkeypatch):
     """Keep service construction deterministic regardless of the host env."""
-    for name in ("CONSENT", "CONSENT_TIMESTAMP", "TRACE_LEVEL", "LOCAL_COPY_DIR", "FLUSH_INTERVAL", "ORPHAN_MAX_AGE"):
+    for name in (
+        "CONSENT",
+        "CONSENT_TIMESTAMP",
+        "TRACE_LEVEL",
+        "LOCAL_COPY_DIR",
+        "FLUSH_INTERVAL",
+        "ORPHAN_MAX_AGE",
+        "CAPTURE_DEFERRALS",
+    ):
         monkeypatch.delenv(f"CIRIS_ACCORD_METRICS_{name}", raising=False)
         monkeypatch.delenv(f"CIRIS_COVENANT_METRICS_{name}", raising=False)
     monkeypatch.delenv("CIRIS_SHARE_LOCATION_IN_TRACES", raising=False)
@@ -257,8 +261,16 @@ class TestLocalCopyDirInit:
         target = tmp_path / "lens-tee"
         monkeypatch.setenv("CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR", str(target))
         service = AccordMetricsService()
-        assert service._local_copy_dir == target
-        assert target.is_dir()
+        # Per-instance subdir: each LensClient numbers its batches from 0,
+        # so instances sharing the base dir would overwrite each other.
+        assert service._local_copy_dir == target / "default"
+        assert (target / "default").is_dir()
+
+    def test_instance_id_namespaces_tee_subdir(self, monkeypatch, tmp_path):
+        target = tmp_path / "lens-tee"
+        monkeypatch.setenv("CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR", str(target))
+        service = AccordMetricsService(config={"adapter_id": "ciris_accord_metrics:full/x"})
+        assert service._local_copy_dir == target / "ciris_accord_metrics_full_x"
 
     def test_unwritable_dir_falls_through_to_disabled(self, monkeypatch, tmp_path):
         blocker = tmp_path / "not-a-dir"
@@ -579,7 +591,34 @@ class TestProcessSingleEventComponentShape:
 
 
 class TestAccordMetricsServiceWBDEvents:
-    """Post-fold WBD deferrals ride the same substrate capture path."""
+    """Post-fold WBD deferrals ride the same substrate capture path.
+
+    Capture is HELD by default until the persist floor ships the
+    `deferral_routed` trace_events variant (CIRISPersist#203) — these
+    tests opt in via CIRIS_ACCORD_METRICS_CAPTURE_DEFERRALS to exercise
+    the capture path itself.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _enable_deferral_capture(self, monkeypatch):
+        monkeypatch.setenv("CIRIS_ACCORD_METRICS_CAPTURE_DEFERRALS", "true")
+
+    @pytest.mark.asyncio
+    async def test_send_deferral_held_by_default(self, monkeypatch):
+        """Default (no env): the deferral is counted but never reaches the
+        substrate — a sealed trace carrying deferral_routed fails persist
+        ingest wholesale (CIRISPersist#203)."""
+        monkeypatch.delenv("CIRIS_ACCORD_METRICS_CAPTURE_DEFERRALS", raising=False)
+        service = _make_service()
+        fake = FakeLensClient(outcomes=[{"outcome": "opened"}])
+        service._lens = fake
+
+        result = await service.send_deferral(make_deferral_request(thought_id="th-held"))
+
+        assert result.startswith("wbd-th-held-")
+        assert fake.captured == []
+        assert service._deferrals_held == 1
+        assert service.get_metrics()["deferrals_held"] == 1
 
     @pytest.mark.asyncio
     async def test_send_deferral_captures_deferral_routed(self):

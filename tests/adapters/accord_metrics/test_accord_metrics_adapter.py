@@ -42,7 +42,15 @@ def make_deferral_request(
 @pytest.fixture(autouse=True)
 def _clean_metrics_env(monkeypatch):
     """Keep adapter construction deterministic regardless of the host env."""
-    for name in ("CONSENT", "CONSENT_TIMESTAMP", "TRACE_LEVEL", "LOCAL_COPY_DIR", "FLUSH_INTERVAL", "ORPHAN_MAX_AGE"):
+    for name in (
+        "CONSENT",
+        "CONSENT_TIMESTAMP",
+        "TRACE_LEVEL",
+        "LOCAL_COPY_DIR",
+        "FLUSH_INTERVAL",
+        "ORPHAN_MAX_AGE",
+        "CAPTURE_DEFERRALS",
+    ):
         monkeypatch.delenv(f"CIRIS_ACCORD_METRICS_{name}", raising=False)
         monkeypatch.delenv(f"CIRIS_COVENANT_METRICS_{name}", raising=False)
 
@@ -508,10 +516,12 @@ class TestAccordMetricsAdapterIntegration:
     """Integration tests for adapter + service."""
 
     @pytest.mark.asyncio
-    async def test_full_wbd_flow_with_consent(self, mock_runtime):
+    async def test_full_wbd_flow_with_consent(self, mock_runtime, monkeypatch):
         """WBD deferrals ride the substrate capture path: DEFERRAL_ROUTED
         joins the deferring thought's in-flight trace ('no second shipping
-        mechanism' — #857)."""
+        mechanism' — #857). Opt-in env: capture is held by default until
+        the persist floor ships the variant (CIRISPersist#203)."""
+        monkeypatch.setenv("CIRIS_ACCORD_METRICS_CAPTURE_DEFERRALS", "true")
         adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,

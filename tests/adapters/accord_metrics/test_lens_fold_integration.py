@@ -156,7 +156,10 @@ class TestLensFoldIntegration:
             assert fold_service._traces_completed == 1
 
             tee_dir = fold_service._tee_dir_for_assertions
-            tee_files = sorted(tee_dir.glob("*.json"))
+            # rglob: the service namespaces the tee per adapter instance
+            # (<base>/<instance>/lens-batch-*.json) so parallel instances
+            # can't overwrite each other's batch sequence.
+            tee_files = sorted(tee_dir.rglob("*.json"))
             assert tee_files, f"no teed batch files in {tee_dir}"
             teed = tee_files[0].read_text(encoding="utf-8")
             assert NON_ASCII_CONTENT in teed
@@ -187,7 +190,7 @@ class TestLensFoldIntegration:
             assert service._traces_completed == 0
             assert service._events_sent == 0
             assert thought_id not in service._open_thoughts
-            assert list(tee_dir.glob("*.json")) == []
+            assert list(tee_dir.rglob("*.json")) == []
 
             metrics = service.get_metrics()
             assert metrics["traces_consent_blocked"] == 1

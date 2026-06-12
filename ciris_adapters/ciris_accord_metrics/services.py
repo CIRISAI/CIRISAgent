@@ -52,6 +52,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -76,6 +77,17 @@ logger = logging.getLogger(__name__)
 # signature-bearing reads it (the legacy HTTP wire that used to carry it
 # is retired per #857).
 TRACE_SCHEMA_VERSION = "3.0.0"
+
+
+def _capture_deferrals_enabled() -> bool:
+    """Whether DEFERRAL_ROUTED components may join trace capture.
+
+    Default OFF (CIRISPersist#203): the persist floor's trace_events
+    component enum lacks `deferral_routed`, so a sealed trace carrying one
+    fails ingest wholesale. Flip the default (and delete this gate) when
+    the pinned persist ships the variant.
+    """
+    return _get_metrics_env("CAPTURE_DEFERRALS", "").lower() in ("1", "true", "yes", "on")
 
 
 def _get_metrics_env(name: str, default: str = "") -> str:
@@ -111,6 +123,7 @@ def _get_metrics_env(name: str, default: str = "") -> str:
 # of truth so future call sites can't accidentally skip the rounding.
 _PII_LOCATION_FUZZ_DECIMALS = 1
 
+
 class TraceDetailLevel(str, Enum):
     """Trace detail levels for privacy/bandwidth control.
 
@@ -131,6 +144,7 @@ class TraceDetailLevel(str, Enum):
     DETAILED = "detailed"
     FULL_TRACES = "full_traces"
 
+
 @dataclass
 class SimpleCapabilities:
     """Simple capabilities container for duck-typing with WiseBus.
@@ -143,6 +157,7 @@ class SimpleCapabilities:
     actions: List[str]
     scopes: List[str]
     supported_domains: List[str] = field(default_factory=list)  # DomainCategory values
+
 
 class AccordMetricsService:
     """Accord trace capture, orchestrated by the LensCore substrate.
@@ -236,14 +251,20 @@ class AccordMetricsService:
             logger.info("✅ CONSENT enabled via environment variable CIRIS_ACCORD_METRICS_CONSENT")
 
         # Local-tee: when CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR is set, the
-        # substrate writes every sealed batch to <dir>/lens-batch-<seq>.json
-        # (lens-core Gap 4 — best-effort, never fails persist). The QA
-        # runner sets this automatically when --live-lens is active.
+        # substrate writes every sealed batch to
+        # <dir>/<instance>/lens-batch-<seq>.json (lens-core Gap 4 —
+        # best-effort, never fails persist). The QA runner sets this
+        # automatically. The per-INSTANCE subdir is load-bearing: each
+        # LensClient keeps its own batch sequence counter starting at 0,
+        # so two instances (e.g. the QA multi-level generic/detailed/
+        # full_traces trio) sharing one dir silently overwrite each
+        # other's lens-batch-00000000.json.
         env_local_copy_dir = _get_metrics_env("LOCAL_COPY_DIR") or None
         self._local_copy_dir: Optional[Path] = None
         if env_local_copy_dir:
             try:
-                candidate = Path(env_local_copy_dir)
+                safe_instance = re.sub(r"[^A-Za-z0-9._-]", "_", self._adapter_instance_id) or "default"
+                candidate = Path(env_local_copy_dir) / safe_instance
                 candidate.mkdir(parents=True, exist_ok=True)
                 probe = candidate / ".accord_local_copy_probe"
                 probe.write_text("")
@@ -347,6 +368,7 @@ class AccordMetricsService:
         self._events_sent = 0  # trace_events rows persisted by the substrate
         self._events_failed = 0
         self._events_rejected = 0  # unknown event_type (typed rejection)
+        self._deferrals_held = 0  # WBD deferrals held from capture (CIRISPersist#203)
         self._traces_completed = 0
         self._traces_signed = 0
         self._traces_consent_blocked = 0
@@ -544,7 +566,10 @@ class AccordMetricsService:
         wheels.)
         """
         try:
-            from ciris_lens_core import LensClient
+            # import-untyped: the lens-core wheel ships no py.typed marker
+            # yet (1.1 docs ask alongside the capture_event concurrency
+            # contract) — same treatment as the other substrate imports.
+            from ciris_lens_core import LensClient  # type: ignore[import-untyped]
         except ImportError as e:
             raise RuntimeError(
                 "ciris-lens-core is REQUIRED in 2.9.6+ (the observability "
@@ -706,9 +731,7 @@ class AccordMetricsService:
                 try:
                     await asyncio.sleep(self._sweep_interval)
                     if self._lens is not None:
-                        purged = await asyncio.to_thread(
-                            self._lens.orphan_sweep, int(self._orphan_trace_max_age)
-                        )
+                        purged = await asyncio.to_thread(self._lens.orphan_sweep, int(self._orphan_trace_max_age))
                         if purged:
                             logger.warning(
                                 f"⏰ [{self._adapter_instance_id}] Substrate purged {purged} orphan "
@@ -854,15 +877,11 @@ class AccordMetricsService:
         elif kind == "consent_blocked":
             self._open_thoughts.pop(thought_id, None)
             self._traces_consent_blocked += 1
-            logger.debug(
-                f"⏭️  Trace for {thought_id} consent_blocked at seal "
-                f"(reason={outcome.get('reason')})"
-            )
+            logger.debug(f"⏭️  Trace for {thought_id} consent_blocked at seal " f"(reason={outcome.get('reason')})")
         elif kind == "rejected":
             self._events_rejected += 1
             logger.warning(
-                f"🚫 Substrate rejected unknown event_type {outcome.get('raw')!r} "
-                f"(thought {thought_id})"
+                f"🚫 Substrate rejected unknown event_type {outcome.get('raw')!r} " f"(thought {thought_id})"
             )
         # "appended" needs no bookkeeping
 
@@ -1135,9 +1154,7 @@ class AccordMetricsService:
                         idma.get("effective_module_count") if isinstance(idma, dict) else None
                     )
                     idma_data["source_clusters"] = idma.get("source_clusters") if isinstance(idma, dict) else None
-                    idma_data["common_cause_flags"] = (
-                        idma.get("common_cause_flags") if isinstance(idma, dict) else None
-                    )
+                    idma_data["common_cause_flags"] = idma.get("common_cause_flags") if isinstance(idma, dict) else None
                     idma_data["intervention_recommendation"] = (
                         idma.get("intervention_recommendation") if isinstance(idma, dict) else None
                     )
@@ -1155,9 +1172,7 @@ class AccordMetricsService:
                     idma_data["moving_variance"] = idma.get("moving_variance") if isinstance(idma, dict) else None
                     idma_data["rho_critical"] = idma.get("rho_critical") if isinstance(idma, dict) else None
                     idma_data["k_required"] = idma.get("k_required") if isinstance(idma, dict) else None
-                    idma_data["defense_function"] = (
-                        idma.get("defense_function") if isinstance(idma, dict) else None
-                    )
+                    idma_data["defense_function"] = idma.get("defense_function") if isinstance(idma, dict) else None
                     idma_data["collapse_rate"] = idma.get("collapse_rate") if isinstance(idma, dict) else None
                     idma_data["time_to_truth"] = idma.get("time_to_truth") if isinstance(idma, dict) else None
                     idma_data["time_to_entropy"] = idma.get("time_to_entropy") if isinstance(idma, dict) else None
@@ -1454,9 +1469,7 @@ class AccordMetricsService:
                 # llm_bus.py:183-189 logs the unwired call site so it can be
                 # fixed; we just omit the field so the rest of the trace ships.
                 "parent_event_type": (
-                    None
-                    if event.get("parent_event_type") == "UNKNOWN_PARENT"
-                    else event.get("parent_event_type")
+                    None if event.get("parent_event_type") == "UNKNOWN_PARENT" else event.get("parent_event_type")
                 ),
                 "parent_attempt_index": event.get("parent_attempt_index"),
             }
@@ -1500,6 +1513,22 @@ class AccordMetricsService:
             logger.debug("LensClient not ready; WBD deferral %s not captured", deferral_id)
             return deferral_id
 
+        # HOLD (CIRISPersist#203): persist 5.5.x's trace_events component
+        # enum does not yet include `deferral_routed` — lens-core 1.0.1
+        # accepts the capture, but the seal then fails receive_and_persist
+        # with schema_malformed_json, losing the deferring thought's ENTIRE
+        # trace. Until the floor ships the variant, count the deferral and
+        # skip the capture. Operator override for floor-validation runs:
+        # CIRIS_ACCORD_METRICS_CAPTURE_DEFERRALS=true.
+        if not _capture_deferrals_enabled():
+            self._deferrals_held += 1
+            logger.info(
+                f"🧭 WBD deferral for thought {request.thought_id} HELD from trace capture "
+                f"(persist floor lacks deferral_routed variant — CIRISPersist#203; "
+                f"held={self._deferrals_held})"
+            )
+            return deferral_id
+
         is_detailed = self._trace_level in (TraceDetailLevel.DETAILED, TraceDetailLevel.FULL_TRACES)
         data: Dict[str, Any] = {
             "defer_until": request.defer_until.isoformat() if request.defer_until else None,
@@ -1523,8 +1552,7 @@ class AccordMetricsService:
             if outcome.get("outcome") == "opened":
                 self._open_thoughts[request.thought_id] = time.monotonic()
             logger.info(
-                f"🧭 WBD deferral captured for thought {request.thought_id} "
-                f"(outcome={outcome.get('outcome')})"
+                f"🧭 WBD deferral captured for thought {request.thought_id} " f"(outcome={outcome.get('outcome')})"
             )
         except Exception as e:
             logger.error(f"Failed to capture WBD deferral: {type(e).__name__}: {e!r}")
@@ -1647,6 +1675,7 @@ class AccordMetricsService:
             "events_sent": self._persisted_events_sent + self._events_sent,
             "events_sent_session": self._events_sent,
             "events_failed": self._events_failed,
+            "deferrals_held": self._deferrals_held,
             "events_rejected": self._events_rejected,
             "events_queued": 0,  # no agent-side queue post-fold (substrate-owned)
             "last_send_time": self._last_send_time.isoformat() if self._last_send_time else None,

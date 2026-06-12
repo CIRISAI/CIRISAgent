@@ -17,7 +17,7 @@ import logging
 import os
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, Dict, Optional, Tuple
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -638,6 +638,53 @@ async def get_accord_settings(
     )
 
 
+def _apply_consent_change(adapter: Any, consent_given: bool) -> None:
+    """Apply a consent flip: adapter state + .env persistence + CEG artifact.
+
+    CEG-native consent object (#869): grant on opt-in; the switch-off is a
+    WITHDRAW (stop going forward, retain history) — NOT a recant/delete.
+    Both side-channels are best-effort and never break the settings update.
+    """
+    adapter.update_consent(consent_given)
+
+    # CRITICAL: Persist consent change to .env file so it survives restart
+    try:
+        _update_env_consent(consent_given)
+        logger.info(f"Persisted consent={consent_given} to .env file")
+    except Exception as e:
+        logger.warning(f"Failed to persist consent to .env: {e}")
+
+    try:
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            RevocationIntent,
+            current_community_grant_id,
+            emit_community_consent_grant,
+            emit_community_consent_revocation,
+        )
+
+        if consent_given:
+            emit_community_consent_grant()
+        else:
+            target = current_community_grant_id()
+            if target:
+                emit_community_consent_revocation(RevocationIntent.WITHDRAW, target)
+    except Exception as e:
+        logger.debug(f"consent-CEG: accord-settings emit skipped: {e}")
+
+
+def _apply_trace_level_change(adapter: Any, trace_level: str) -> None:
+    """Apply a trace-level change; 400 on an unknown level."""
+    from ciris_adapters.ciris_accord_metrics.services import TraceDetailLevel
+
+    try:
+        adapter.metrics_service._trace_level = TraceDetailLevel(trace_level)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid trace_level: {trace_level}",
+        )
+
+
 @router.put(
     "/accord-settings",
     responses={
@@ -669,48 +716,12 @@ async def update_accord_settings(
     changes: list[str] = []
 
     if settings.consent_given is not None:
-        adapter.update_consent(settings.consent_given)
+        _apply_consent_change(adapter, settings.consent_given)
         changes.append(f"consent_given={settings.consent_given}")
 
-        # CRITICAL: Persist consent change to .env file so it survives restart
-        try:
-            _update_env_consent(settings.consent_given)
-            logger.info(f"Persisted consent={settings.consent_given} to .env file")
-        except Exception as e:
-            logger.warning(f"Failed to persist consent to .env: {e}")
-
-        # CEG-native consent object (#869): grant on opt-in; the Switch-off is a
-        # WITHDRAW (stop going forward, retain history) — NOT a recant/delete.
-        # Best-effort + flag-gated (no-op until the canonical community key ships).
-        try:
-            from ciris_engine.logic.services.governance.consent.attestation import (
-                RevocationIntent,
-                current_community_grant_id,
-                emit_community_consent_grant,
-                emit_community_consent_revocation,
-            )
-
-            if settings.consent_given:
-                emit_community_consent_grant()
-            else:
-                target = current_community_grant_id()
-                if target:
-                    emit_community_consent_revocation(RevocationIntent.WITHDRAW, target)
-        except Exception as e:  # never break the settings update
-            logger.debug(f"consent-CEG: accord-settings emit skipped: {e}")
-
     if settings.trace_level is not None and hasattr(adapter, "metrics_service"):
-        svc = adapter.metrics_service
-        from ciris_adapters.ciris_accord_metrics.services import TraceDetailLevel
-
-        try:
-            svc._trace_level = TraceDetailLevel(settings.trace_level)
-            changes.append(f"trace_level={settings.trace_level}")
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid trace_level: {settings.trace_level}",
-            )
+        _apply_trace_level_change(adapter, settings.trace_level)
+        changes.append(f"trace_level={settings.trace_level}")
 
     if not changes:
         raise HTTPException(
@@ -824,28 +835,41 @@ TAU_ATTESTED = 0.95
 TAU_ISOLATED = 0.60
 
 
-def _occurrence_trust_edge(request: Request) -> Tuple[bool, str]:
-    """Is this occurrence's health claim anchored to a trusted peer?
+def _newest_community_trust_row(engine: Any, key_id: str) -> Optional[Dict[str, Any]]:
+    """Newest attestation row on ``consent:community_trust:v1`` by key_id.
 
-    Returns (attested, source) with source ∈ {"community_grant", "peer",
-    "none"}. Checks, in order:
-
-    1. The CEG community-trust consent artifact — newest row on
-       ``consent:community_trust:v1`` by this occurrence's federation key
-       is a standing DIRECTED grant (scores/supersedes with a real
-       counterparty). The interim local-tier grant (sentinel counterparty,
-       written while the canonical community key is unpublished) does NOT
-       count: a self-authored row with no counterparty is precisely the
-       solipsism τ exists to discount.
-    2. Any reachable federation peer occurrence via the edge runtime.
-
-    Sync FFI work runs in this thread — callers in async context must wrap
-    with ``asyncio.to_thread`` (``_compute_local_capacity`` does).
+    Tries a dimension-scoped filter first (keeps the community-trust row
+    from falling off page 1 as per-user consent rows accumulate); falls
+    back to the unfiltered page if persist rejects the filter key.
     """
-    # 1. CEG community-trust grant (newest-wins, mirroring lens-core's gate)
-    try:
-        import json as _json
+    import json as _json
 
+    try:
+        raw = engine.list_attestations(_json.dumps({"dimension": "consent:community_trust:v1"}), None, 100, key_id)
+    except Exception:
+        raw = engine.list_attestations("{}", None, 100, key_id)
+    page = _json.loads(raw)
+    rows = [
+        r
+        for r in page.get("items", [])
+        if (r.get("attestation_envelope") or {}).get("dimension") == "consent:community_trust:v1"
+    ]
+    if not rows:
+        return None
+    rows.sort(key=lambda r: (r.get("asserted_at", ""), r.get("attestation_id", "")), reverse=True)
+    newest: Dict[str, Any] = rows[0]
+    return newest
+
+
+def _community_grant_edge() -> bool:
+    """True when the newest community-trust row is a standing DIRECTED grant.
+
+    The interim local-tier grant (sentinel counterparty, written while the
+    canonical community key is unpublished) does NOT count: a self-authored
+    row with no counterparty is precisely the solipsism τ exists to
+    discount. withdraws/recants = the edge was explicitly severed.
+    """
+    try:
         from ciris_engine.logic.persistence.models.graph import get_persist_engine
         from ciris_engine.logic.runtime.edge_runtime import get_federation_address
         from ciris_engine.logic.services.governance.consent.attestation import (
@@ -854,58 +878,106 @@ def _occurrence_trust_edge(request: Request) -> Tuple[bool, str]:
 
         engine = get_persist_engine()
         key_id = get_federation_address()
-        if engine is not None and key_id:
-            # Try a dimension-scoped filter first (keeps the community-trust
-            # row from falling off page 1 as per-user consent rows
-            # accumulate); fall back to the unfiltered page if persist
-            # rejects the filter key.
-            try:
-                raw = engine.list_attestations(
-                    _json.dumps({"dimension": "consent:community_trust:v1"}), None, 100, key_id
-                )
-            except Exception:
-                raw = engine.list_attestations("{}", None, 100, key_id)
-            page = _json.loads(raw)
-            rows = [
-                r
-                for r in page.get("items", [])
-                if (r.get("attestation_envelope") or {}).get("dimension") == "consent:community_trust:v1"
-            ]
-            if rows:
-                rows.sort(key=lambda r: (r.get("asserted_at", ""), r.get("attestation_id", "")), reverse=True)
-                newest = rows[0]
-                if newest.get("attestation_type") in ("scores", "supersedes"):
-                    claim = ((newest.get("attestation_envelope") or {}).get("claim")) or {}
-                    if claim.get("user_id") != _PENDING_COMMUNITY_SENTINEL:
-                        return True, "community_grant"
-                    # Interim self-authored grant: gates emission, but is
-                    # not a trust EDGE — fall through to the peer check.
-                # withdraws/recants = the edge was explicitly severed;
-                # fall through to the peer check rather than honoring a
-                # revoked grant.
+        if engine is None or not key_id:
+            return False
+        newest = _newest_community_trust_row(engine, key_id)
+        if newest is None or newest.get("attestation_type") not in ("scores", "supersedes"):
+            return False
+        claim = ((newest.get("attestation_envelope") or {}).get("claim")) or {}
+        return claim.get("user_id") != _PENDING_COMMUNITY_SENTINEL
     except Exception as e:
         logger.debug(f"[capacity.trust] community-grant probe failed: {type(e).__name__}: {e}")
+        return False
 
-    # 2. Reachable federation peer occurrence
+
+def _reachable_peer_edge() -> bool:
+    """True when the edge runtime can see at least one federation peer."""
     try:
         from ciris_engine.logic.runtime.edge_runtime import try_get_edge
 
         edge = try_get_edge()
-        if edge is not None:
-            peers = getattr(edge, "list_peers", None)
-            if callable(peers):
-                if len(peers() or []) > 0:
-                    return True, "peer"
-            else:
-                snapshot = getattr(edge, "metrics_snapshot", None)
-                if callable(snapshot):
-                    metrics = snapshot() or {}
-                    if isinstance(metrics, dict) and int(metrics.get("peers", 0) or 0) > 0:
-                        return True, "peer"
+        if edge is None:
+            return False
+        peers = getattr(edge, "list_peers", None)
+        if callable(peers):
+            return len(peers() or []) > 0
+        snapshot = getattr(edge, "metrics_snapshot", None)
+        if callable(snapshot):
+            metrics = snapshot() or {}
+            return isinstance(metrics, dict) and int(metrics.get("peers", 0) or 0) > 0
+        return False
     except Exception as e:
         logger.debug(f"[capacity.trust] peer probe failed: {type(e).__name__}: {e}")
+        return False
 
+
+def _occurrence_trust_edge(request: Request) -> Tuple[bool, str]:
+    """Is this occurrence's health claim anchored to a trusted peer?
+
+    Returns (attested, source) with source ∈ {"community_grant", "peer",
+    "none"}: first the CEG community-trust consent artifact (newest-wins,
+    mirroring lens-core's gate), then any reachable federation peer.
+
+    Sync FFI work runs in this thread — callers in async context must wrap
+    with ``asyncio.to_thread`` (``_compute_local_capacity`` does).
+    """
+    if _community_grant_edge():
+        return True, "community_grant"
+    if _reachable_peer_edge():
+        return True, "peer"
     return False, "none"
+
+
+async def _probe_service_health(s: Any) -> Optional[bool]:
+    """True/False when the service exposes health; None = unmeasurable.
+
+    No health surface is missing EVIDENCE, not health — the pre-2.9.6
+    default-True here is what minted the erroneous 1.0 scores. A probe
+    that raises IS evidence of unhealth.
+    """
+    try:
+        is_healthy = getattr(s, "is_healthy", None)
+        if callable(is_healthy):
+            result = is_healthy()
+            if hasattr(result, "__await__"):
+                return bool(await result)
+            return bool(result)
+        healthy_attr = getattr(s, "healthy", None)
+        if healthy_attr is None:
+            return None
+        return bool(healthy_attr)
+    except Exception:
+        return False
+
+
+def _k_eff_terms(healthy: int, measurable: int) -> Tuple[float, float, float]:
+    """(k_raw, 1−ρ, k_eff) over the measurable services.
+
+    ρ proxy: a single failure is normal operational variance (ρ ≈ 0);
+    many failing *simultaneously* is correlated systemic stress (ρ → 1).
+    Accord 1.3 (A2): correlation enters THROUGH k_eff — the discount
+    k/(1 + ρ·(k−1)) IS the diversity term; a separate (1−ρ) factor
+    double-counted it. Our proxy form k_eff = k_raw · (1 − ρ) is
+    numerically identical to the pre-1.3 product, correctly framed.
+    """
+    k_raw = (healthy / measurable) if measurable else 0.0
+    failures = measurable - healthy
+    rho = 0.0 if measurable <= 1 else max(0.0, min(1.0, (failures - 1) / (measurable - 1)))
+    rho_complement = 1.0 - rho
+    return k_raw, rho_complement, k_raw * rho_complement
+
+
+def _lambda_from_wise_authority(services: List[Any], health_results: List[Optional[bool]]) -> float:
+    """λ strictness: 1.0 iff the Wise Authority service is present AND
+    healthy (conscience is baked into the thought processor), else 0.7."""
+    for s, h in zip(services, health_results):
+        if not h:
+            continue
+        class_name = type(s).__name__.lower()
+        svc_name = getattr(s, "service_name", "").lower()
+        if "wiseauthority" in class_name or "wise_authority" in svc_name:
+            return 1.0
+    return 0.7
 
 
 async def _compute_local_capacity(request: Request) -> Tuple[float, str, Dict[str, Any]]:
@@ -968,57 +1040,12 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str, Dict[st
         services = svc_registry.get_all_services() if hasattr(svc_registry, "get_all_services") else []
         total = max(1, len(services))
 
-        async def _probe_health(s: Any) -> Optional[bool]:
-            """True/False when the service exposes health; None = unmeasurable."""
-            try:
-                is_healthy = getattr(s, "is_healthy", None)
-                if callable(is_healthy):
-                    result = is_healthy()
-                    if hasattr(result, "__await__"):
-                        return bool(await result)
-                    return bool(result)
-                healthy_attr = getattr(s, "healthy", None)
-                if healthy_attr is None:
-                    # No health surface: missing EVIDENCE, not health.
-                    # (The pre-2.9.6 default-True here is what minted the
-                    # erroneous 1.0 scores.)
-                    return None
-                return bool(healthy_attr)
-            except Exception:
-                return False  # A probe that raises IS evidence of unhealth
-
-        health_results = await asyncio.gather(*(_probe_health(s) for s in services), return_exceptions=False)
+        health_results = await asyncio.gather(*(_probe_service_health(s) for s in services), return_exceptions=False)
         measurable = [h for h in health_results if h is not None]
         healthy = sum(1 for h in measurable if h)
         coverage = len(measurable) / total if total else 0.0
-        k_raw_frac = (healthy / len(measurable)) if measurable else 0.0
-
-        # ρ proxy over measurable services: a single failure is normal
-        # operational variance (ρ ≈ 0); many failing *simultaneously* is
-        # correlated systemic stress (ρ → 1).
-        failures = len(measurable) - healthy
-        if len(measurable) <= 1:
-            rho = 0.0
-        else:
-            rho = max(0.0, min(1.0, (failures - 1) / (len(measurable) - 1)))
-        rho_complement = 1.0 - rho
-        # Accord 1.3 (A2): correlation enters THROUGH k_eff — the discount
-        # k/(1 + rho*(k-1)) IS the diversity term; a separate (1-rho) factor
-        # double-counted it. Our proxy form: k_eff = k_raw * (1 - rho_proxy),
-        # numerically identical to the pre-1.3 product, correctly framed.
-        k_eff_frac = k_raw_frac * rho_complement
-
-        # λ: strictness is active when the Wise Authority service is
-        # healthy (conscience is baked into the thought processor).
-        lam = 0.7
-        for s, h in zip(services, health_results):
-            if not h:
-                continue
-            class_name = type(s).__name__.lower()
-            svc_name = getattr(s, "service_name", "").lower()
-            if "wiseauthority" in class_name or "wise_authority" in svc_name:
-                lam = 1.0
-                break
+        k_raw_frac, rho_complement, k_eff_frac = _k_eff_terms(healthy, len(measurable))
+        lam = _lambda_from_wise_authority(services, health_results)
 
         # --- σ from recent task_complete positive moments ------------------
         sigma = await _sigma_from_positive_moments(request)

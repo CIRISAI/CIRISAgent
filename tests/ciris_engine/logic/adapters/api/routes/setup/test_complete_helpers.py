@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ciris_engine.logic.adapters.api.routes.setup.complete import (
-    _write_accord_metrics_config,
+    _emit_accord_metrics_consent,
     _write_adapter_specific_config,
     _write_location_config,
     _write_location_sharing_consent,
@@ -35,7 +35,7 @@ def _create_mock_setup(**kwargs):
 
 
 class TestWriteAccordMetricsConfig:
-    """Tests for _write_accord_metrics_config function."""
+    """Tests for _emit_accord_metrics_consent (the accord-traces opt-in emit)."""
 
     def test_writes_nothing_when_adapter_not_enabled(self) -> None:
         """No env writes and no CEG grant when the opt-in box is unchecked."""
@@ -45,7 +45,7 @@ class TestWriteAccordMetricsConfig:
         with patch(
             "ciris_engine.logic.services.governance.consent.attestation.emit_community_consent_grant"
         ) as mock_emit:
-            _write_accord_metrics_config(f, setup)
+            _emit_accord_metrics_consent(setup)
 
         assert f.getvalue() == ""
         mock_emit.assert_not_called()
@@ -61,7 +61,7 @@ class TestWriteAccordMetricsConfig:
             "ciris_engine.logic.services.governance.consent.attestation.emit_community_consent_grant",
             return_value="att-123",
         ) as mock_emit:
-            _write_accord_metrics_config(f, setup)
+            _emit_accord_metrics_consent(setup)
 
         assert f.getvalue() == ""
         assert "CIRIS_ACCORD_METRICS_CONSENT" not in f.getvalue()
@@ -76,7 +76,7 @@ class TestWriteAccordMetricsConfig:
             "ciris_engine.logic.services.governance.consent.attestation.emit_community_consent_grant",
             side_effect=RuntimeError("persist not ready"),
         ):
-            _write_accord_metrics_config(f, setup)
+            _emit_accord_metrics_consent(setup)
 
         assert f.getvalue() == ""
 

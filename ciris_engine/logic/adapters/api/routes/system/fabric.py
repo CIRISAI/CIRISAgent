@@ -71,7 +71,7 @@ def _runtime_version(module_name: str) -> tuple[bool, Optional[str]]:
         return False, None
 
 
-@router.get("/fabric", response_model=SuccessResponse[FabricVersionsResponse])
+@router.get("/fabric")
 async def get_fabric_versions(auth: AuthObserverDep) -> SuccessResponse[FabricVersionsResponse]:
     """Substrate component versions + trust status (Trust page fabric section)."""
     components: List[FabricComponent] = []

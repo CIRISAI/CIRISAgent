@@ -498,13 +498,17 @@ class AccordMetricsService:
             scopes=["accord_compliance"],
         )
 
+    # Graph node id for the cumulative events_sent counter (persists the
+    # total across sessions; survives the 2.9.6 fold rename).
+    _EVENTS_TOTAL_NODE_ID = "accord_metrics/trace_events_total"
+
     def _load_persisted_events_total(self) -> int:
         """Load persisted cumulative events_sent from previous sessions."""
         try:
             from ciris_engine.logic.persistence.models.graph import get_graph_node
             from ciris_engine.schemas.services.graph_core import GraphScope
 
-            node = get_graph_node("accord_metrics/trace_events_total", GraphScope.LOCAL)
+            node = get_graph_node(self._EVENTS_TOTAL_NODE_ID, GraphScope.LOCAL)
             if node and node.attributes:
                 attrs = node.attributes
                 # Handle both dict and object attribute access
@@ -530,7 +534,7 @@ class AccordMetricsService:
 
             total = self._persisted_events_sent + self._events_sent
             node = GraphNode(
-                id="accord_metrics/trace_events_total",
+                id=self._EVENTS_TOTAL_NODE_ID,
                 type=NodeType.CONFIG,
                 scope=GraphScope.LOCAL,
                 attributes={
@@ -540,7 +544,7 @@ class AccordMetricsService:
                     # attrs["key"]. Without it, every config scan logged
                     # "Failed to convert node ... to ConfigNode: 'key'"
                     # (×100+ — a WARNING flood).
-                    "key": "accord_metrics/trace_events_total",
+                    "key": self._EVENTS_TOTAL_NODE_ID,
                     "events_sent_total": total,
                     "last_updated": datetime.now(timezone.utc).isoformat(),
                 },
@@ -664,7 +668,7 @@ class AccordMetricsService:
             self._reasoning_queue = asyncio.Queue(maxsize=1000)
             reasoning_event_stream.subscribe(self._reasoning_queue)
             self._reasoning_task = asyncio.create_task(self._process_reasoning_events())
-            logger.info(f"✅ SUBSCRIBED to reasoning_event_stream (queue maxsize=1000)")
+            logger.info("✅ SUBSCRIBED to reasoning_event_stream (queue maxsize=1000)")
         except Exception as e:
             logger.error(f"❌ FAILED to subscribe to reasoning_event_stream: {e}")
             logger.error("   Traces will NOT be captured!")
@@ -877,12 +881,10 @@ class AccordMetricsService:
         elif kind == "consent_blocked":
             self._open_thoughts.pop(thought_id, None)
             self._traces_consent_blocked += 1
-            logger.debug(f"⏭️  Trace for {thought_id} consent_blocked at seal " f"(reason={outcome.get('reason')})")
+            logger.debug(f"⏭️  Trace for {thought_id} consent_blocked at seal (reason={outcome.get('reason')})")
         elif kind == "rejected":
             self._events_rejected += 1
-            logger.warning(
-                f"🚫 Substrate rejected unknown event_type {outcome.get('raw')!r} " f"(thought {thought_id})"
-            )
+            logger.warning(f"🚫 Substrate rejected unknown event_type {outcome.get('raw')!r} (thought {thought_id})")
         # "appended" needs no bookkeeping
 
     def _extract_component_data(self, event_type: str, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -1551,11 +1553,9 @@ class AccordMetricsService:
             self._events_received += 1
             if outcome.get("outcome") == "opened":
                 self._open_thoughts[request.thought_id] = time.monotonic()
-            logger.info(
-                f"🧭 WBD deferral captured for thought {request.thought_id} " f"(outcome={outcome.get('outcome')})"
-            )
-        except Exception as e:
-            logger.error(f"Failed to capture WBD deferral: {type(e).__name__}: {e!r}")
+            logger.info(f"🧭 WBD deferral captured for thought {request.thought_id} (outcome={outcome.get('outcome')})")
+        except Exception:
+            logger.exception("Failed to capture WBD deferral")
 
         return deferral_id
 
@@ -1621,8 +1621,8 @@ class AccordMetricsService:
             try:
                 self._lens = self._build_lens_client()
                 logger.info("   LensClient rebuilt with updated consent state")
-            except RuntimeError as e:
-                logger.error(f"   LensClient rebuild failed: {e}")
+            except RuntimeError:
+                logger.exception("   LensClient rebuild failed")
 
     def set_agent_id(self, agent_id: str) -> None:
         """Set agent identity for traces.

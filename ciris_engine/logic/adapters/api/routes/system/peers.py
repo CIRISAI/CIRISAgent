@@ -162,9 +162,7 @@ async def get_my_node_code(
             status_code=503,
             content={
                 "error": "FEDERATION_IDENTITY_UNAVAILABLE",
-                "detail": (
-                    "Local agent's signing key is not yet available — " "CIRISVerify has not finished bootstrap."
-                ),
+                "detail": "Local agent's signing key is not yet available — CIRISVerify has not finished bootstrap.",
             },
         )
 

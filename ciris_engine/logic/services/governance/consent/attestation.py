@@ -39,6 +39,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+
 from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
 
 logger = logging.getLogger(__name__)
@@ -211,7 +213,11 @@ def emit_consent_grant(status: ConsentStatus) -> Optional[str]:
     try:
         payload = build_consent_grant_input(status, key_id).model_dump_json()
         attestation_id = engine.attestation_upsert_local(payload)  # type: ignore[attr-defined]
-        logger.info("consent-CEG: emitted grant attestation %s for user %s", attestation_id, status.user_id)
+        logger.info(
+            "consent-CEG: emitted grant attestation %s for user %s",
+            attestation_id,
+            sanitize_for_log(status.user_id),
+        )
         return str(attestation_id)
     except Exception as exc:
         logger.warning("consent-CEG: grant emit failed (non-fatal): %s", exc)
@@ -235,7 +241,11 @@ def emit_consent_revocation(user_id: str, reason: Optional[str] = None, promote:
     try:
         payload = build_consent_revocation_input(user_id, key_id, reason).model_dump_json()
         attestation_id = engine.attestation_upsert_local(payload)  # type: ignore[attr-defined]
-        logger.info("consent-CEG: emitted revocation attestation %s for user %s", attestation_id, user_id)
+        logger.info(
+            "consent-CEG: emitted revocation attestation %s for user %s",
+            attestation_id,
+            sanitize_for_log(user_id),
+        )
     except Exception as exc:
         logger.warning("consent-CEG: revocation emit failed (non-fatal): %s", exc)
         return None

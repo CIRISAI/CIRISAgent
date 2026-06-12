@@ -638,7 +638,7 @@ def _write_verify_config(f: Any, setup: SetupCompleteRequest) -> None:
     f.write(f"CIRIS_VERIFY_REQUIRE_HARDWARE={require_hw}\n")
 
 
-def _write_accord_metrics_config(f: Any, setup: SetupCompleteRequest) -> None:
+def _emit_accord_metrics_consent(setup: SetupCompleteRequest) -> None:
     """Accord-traces opt-in at setup → the CEG consent wire artifact.
 
     2.9.6 (#866 LensCore fold): the adapter is bootstrap-required, so the
@@ -764,7 +764,7 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         f.write(f"CIRIS_ADAPTER={','.join(setup.enabled_adapters)}\n")
 
         # Write adapter-specific configs using helper functions
-        _write_accord_metrics_config(f, setup)
+        _emit_accord_metrics_consent(setup)
         _write_mobile_local_llm_config(f, setup)
         _write_adapter_specific_config(f, setup)
 

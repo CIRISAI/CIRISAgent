@@ -4,6 +4,7 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.models.AgentMode
 import ai.ciris.mobile.shared.models.AgentModeChangeResult
 import ai.ciris.mobile.shared.models.AgentModeStatus
+import ai.ciris.mobile.shared.models.federation.FederationIdentityResponse
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -41,6 +42,11 @@ class NetworkViewModel(
      *  is unavailable (degraded mode → 503), which the card renders as "—". */
     private val _federationAddress = MutableStateFlow<String?>(null)
     val federationAddress: StateFlow<String?> = _federationAddress.asStateFlow()
+
+    /** persist's full identity aggregate (Federation ID card) — null while
+     *  loading and on graceful 503 (identity still initializing). */
+    private val _federationId = MutableStateFlow<FederationIdentityResponse?>(null)
+    val federationId: StateFlow<FederationIdentityResponse?> = _federationId.asStateFlow()
 
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
@@ -144,6 +150,12 @@ class NetworkViewModel(
                 _federationAddress.value = null
                 PlatformLogger.d(TAG, "federation identity unavailable (Edge degraded?): ${e.message}")
             }
+            // persist's full identity aggregate (null on 503 — initializing)
+            runCatching { apiClient.getFederationIdentityAggregate() }
+                .onSuccess { _federationId.value = it }
+                .onFailure { e ->
+                    PlatformLogger.d(TAG, "federation aggregate unavailable: ${e.message}")
+                }
         }
     }
 }

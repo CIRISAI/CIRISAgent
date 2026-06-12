@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.ui.screens
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.components.FederationIdCard
 import ai.ciris.mobile.shared.viewmodels.NetworkViewModel
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -35,64 +36,70 @@ fun NetworkOpsScreen(
     val status by viewModel.status.collectAsState()
     val mode by viewModel.mode.collectAsState()
     val federationAddress by viewModel.federationAddress.collectAsState()
+    val federationId by viewModel.federationId.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.loadAgentMode()
         viewModel.loadFederationIdentity()
     }
 
-    Scaffold(
-        modifier = modifier,
-        topBar = {
-            TopAppBar(title = { Text(localizedString("nav.surface.network_ops").ifEmpty { "Network" }) })
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState())
-                .testable("screen_network_ops"),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = "CIRISEdge · this node",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    // In-content title (hub pattern): the app shell draws a floating logo at
+    // the top-left, which clips a Scaffold TopAppBar title ("Network" → "ork").
+    // Surface paints the theme background the removed Scaffold used to supply.
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+            .testable("screen_network_ops"),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Spacer(Modifier.height(36.dp))
+        Text(
+            text = localizedString("nav.surface.network_ops").ifEmpty { "Network" },
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = "CIRISEdge · this node",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        OpsCard(title = "Federation identity", testTag = "card_netops_identity") {
+            OpsRow(
+                "Signer key",
+                federationAddress?.takeIf { it.isNotBlank() } ?: "—",
+                "row_netops_signer_key",
+                mono = true,
             )
+        }
 
-            OpsCard(title = "Federation identity", testTag = "card_netops_identity") {
-                OpsRow(
-                    "Signer key",
-                    federationAddress?.takeIf { it.isNotBlank() } ?: "—",
-                    "row_netops_signer_key",
-                    mono = true,
-                )
-            }
+        FederationIdCard(federationId = federationId)
 
-            OpsCard(title = "Agent mode", testTag = "card_netops_mode") {
-                OpsRow("Current", mode.wire.uppercase(), "row_netops_mode")
-                status?.let {
-                    OpsRow("SERVER-eligible", if (it.serverEligible) "yes" else "no", "row_netops_server_eligible")
-                }
-            }
-
-            status?.let { s ->
-                OpsCard(title = "Disk budget", testTag = "card_netops_disk") {
-                    OpsRow("Available", formatBytes(s.availableDiskBytes), "row_netops_disk_available")
-                    OpsRow("SERVER minimum", formatBytes(s.serverMinimumDiskBytes), "row_netops_disk_minimum")
-                    OpsRow("Data directory", s.dataDir, "row_netops_data_dir", mono = true)
-                }
-            }
-
-            Button(
-                onClick = onOpenFederationHub,
-                modifier = Modifier.fillMaxWidth().testableClickable("btn_netops_open_hub") { onOpenFederationHub() },
-            ) {
-                Text(localizedString("network_ops.open_federation_hub").ifEmpty { "Open federation hub →" })
+        OpsCard(title = "Agent mode", testTag = "card_netops_mode") {
+            OpsRow("Current", mode.wire.uppercase(), "row_netops_mode")
+            status?.let {
+                OpsRow("SERVER-eligible", if (it.serverEligible) "yes" else "no", "row_netops_server_eligible")
             }
         }
+
+        status?.let { s ->
+            OpsCard(title = "Disk budget", testTag = "card_netops_disk") {
+                OpsRow("Available", formatBytes(s.availableDiskBytes), "row_netops_disk_available")
+                OpsRow("SERVER minimum", formatBytes(s.serverMinimumDiskBytes), "row_netops_disk_minimum")
+                OpsPathRow("Data directory", s.dataDir, "row_netops_data_dir")
+            }
+        }
+
+        Button(
+            onClick = onOpenFederationHub,
+            modifier = Modifier.fillMaxWidth().testableClickable("btn_netops_open_hub") { onOpenFederationHub() },
+        ) {
+            Text(localizedString("network_ops.open_federation_hub").ifEmpty { "Open federation hub →" })
+        }
+    }
     }
 }
 
@@ -106,6 +113,22 @@ private fun OpsCard(title: String, testTag: String, content: @Composable ColumnS
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             content()
         }
+    }
+}
+
+/** Long mono values (paths) — label on its own line, value wrapping below.
+ *  A SpaceBetween row collides label and value when the value is wider than
+ *  the remaining space (seen with the Android data dir path). */
+@Composable
+private fun OpsPathRow(label: String, value: String, testTag: String) {
+    Column(modifier = Modifier.fillMaxWidth().testable(testTag)) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            fontFamily = FontFamily.Monospace,
+        )
     }
 }
 

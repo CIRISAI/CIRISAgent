@@ -3882,10 +3882,9 @@ private sealed class Screen {
     object Constitutional : Screen()
     object AgentsList : Screen()
 
-    // 2.9.4 — Network hub federation sub-screens. Each is a ComingSoonScreen
-    // wrapper pinned to the Edge PeerResolver substrate issue until Edge 1.0
-    // wires in the corresponding PyEdge FFI surface. Reached via the 10-tile
-    // grid on NetworkScreen; not sidebar-navigable.
+    // Network hub federation sub-screens — all ten live since T-E / T-E-D
+    // (2.9.4→2.9.6). Reached via the 10-tile grid on NetworkScreen; not
+    // sidebar-navigable.
     object NetworkIdentity : Screen()
     object NetworkMap : Screen()
     object NetworkTrustGraph : Screen()

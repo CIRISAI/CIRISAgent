@@ -7,6 +7,7 @@ import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.AgentModeSelector
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
+import ai.ciris.mobile.shared.ui.components.FederationIdCard
 import ai.ciris.mobile.shared.viewmodels.NetworkViewModel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,8 +45,7 @@ import androidx.compose.ui.unit.sp
  *   4. 10 navigation tiles — Identity / Map / Trust Graph / Peers /
  *      Interfaces / Paths / Announces / Queue / Diagnostics / Content.
  *
- * Each tile carries a "Coming Soon" badge until the corresponding sub-screen
- * lands with real Edge data. Surface is intentionally exhaustive so federation
+ * All ten sub-screens are live (T-E / T-E-D) — tiles navigate directly.
  * capability is *visible* to operators today, not deferred to "Edge 1.0 ships."
  */
 @Composable
@@ -61,6 +61,7 @@ fun NetworkScreen(
     val restartPending by viewModel.restartPending.collectAsState()
     val insufficientDisk by viewModel.insufficientDisk.collectAsState()
     val federationAddress by viewModel.federationAddress.collectAsState()
+    val federationId by viewModel.federationId.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.loadAgentMode()
@@ -136,6 +137,10 @@ fun NetworkScreen(
 
         // ── Identity card ────────────────────────────────────────────────────
         IdentityCard(address = federationAddress)
+
+        // ── Federation ID (persist identity aggregate) — top-level, not
+        //    buried in the Identity sub-screen ─────────────────────────────────
+        FederationIdCard(federationId = federationId)
 
         // ── Mode selector card ───────────────────────────────────────────────
         ModeCard(
@@ -245,48 +250,6 @@ private fun IdentityCard(address: String?) {
             )
             Spacer(Modifier.height(12.dp))
             AddressRow(address = rendered, clipboard = clipboardManager)
-            Spacer(Modifier.height(12.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                // QR placeholder
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(
-                            width = 1.dp,
-                            color = CIRISColors.AccentCyan.copy(alpha = 0.4f),
-                            shape = RoundedCornerShape(8.dp),
-                        )
-                        .testable("img_network_qr_placeholder"),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = CIRISIcons.identity,
-                        contentDescription = null,
-                        tint = CIRISColors.AccentCyan,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-                Column {
-                    Text(
-                        text = localizedString("network.identity_card.qr_label"),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = localizedString("network.stats_strip.awaiting_edge_1_0"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp,
-                    )
-                }
-            }
         }
     }
 }
@@ -432,12 +395,6 @@ private fun StatCell(tag: String, label: String, modifier: Modifier = Modifier) 
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 10.sp,
-        )
-        Text(
-            text = localizedString("network.stats_strip.awaiting_edge_1_0"),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            fontSize = 9.sp,
         )
     }
 }
@@ -605,21 +562,6 @@ private fun NavTile(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(CIRISColors.BusTool.copy(alpha = 0.15f))
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        text = localizedString("network.tiles.coming_soon_badge"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = CIRISColors.BusTool,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
             }
         }
     }

@@ -330,6 +330,20 @@ task syncPythonSources(type: Exec) {
 
     workingDir "../.."
     commandLine "python3", "-m", "tools.dev.stage_runtime", "${buildDir}/python-src", "--quiet"
+
+    // Strip host-platform binaries from the staged tree. The canonical
+    // stage_runtime tree carries macOS/Linux FFI binaries for desktop
+    // (e.g. ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dylib,
+    // 7.7 MB) — on Android the natives ride jniLibs/pip wheels, so anything
+    // binary inside python-src is dead weight shipped to every device.
+    // L4 parity is unaffected: the python-file manifest hashes .py only.
+    doLast {
+        delete fileTree("${buildDir}/python-src") {
+            include "**/*.dylib"
+            include "**/*.dll"
+            include "**/*.so"
+        }
+    }
 }
 
 // Copy backend localization JSON files to ciris_engine/data/localized/

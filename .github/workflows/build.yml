@@ -714,9 +714,13 @@ jobs:
           python-version: '3.12'
 
       - name: Set up Java 17 (for jlink + desktop JAR build)
+        # CIRISAgent#875 — Liberica, NOT Temurin: the jlink runtime trimmed
+        # here ships inside the Windows installer, and Temurin 17 dropped
+        # Windows 7 support. BellSoft Liberica JDK 17 officially supports
+        # Win7 SP1, so the bundled runtime launches on the supported floor.
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: 'liberica'
           java-version: '17'
 
       - name: Set up Gradle (with distribution + dependency cache)
@@ -782,6 +786,25 @@ jobs:
           $jar = Get-ChildItem -Path 'client\desktopApp\build\compose\jars' -Filter 'CIRIS-windows-*.jar' | Select-Object -First 1
           if (-not $jar) { Write-Error "No CIRIS-windows-*.jar found"; exit 1 }
           .\installers\windows\bundle-jre.ps1 -JarPath $jar.FullName -OutputDir dist\runtime
+        shell: pwsh
+
+      - name: Fetch Universal CRT redist (Windows 7 prerequisite, best-effort)
+        # CIRISAgent#875 — Win7 needs KB2999226 for the api-ms-win-crt-*
+        # import-sets the bundled Rust/Python binaries carry. Best-effort:
+        # the .iss bundles it with skipifsourcedoesntexist, so a failed/rot
+        # download never breaks the build (Win8.1+ ignores it; Win7 users
+        # can hand-provision per installers/windows/README.md).
+        continue-on-error: true
+        run: |
+          $dst = "installers/windows/redist"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          $url = "https://download.microsoft.com/download/5/B/C/5BC5DBB3-652D-4DCE-B14A-475AB85EEF6E/Windows6.1-KB2999226-x64.msu"
+          try {
+            Invoke-WebRequest -Uri $url -OutFile "$dst/Windows6.1-KB2999226-x64.msu" -UseBasicParsing -TimeoutSec 120
+            Write-Host "UCRT redist fetched."
+          } catch {
+            Write-Warning "UCRT redist fetch failed ($_); installer will build without it (Win7 users hand-provision)."
+          }
         shell: pwsh
 
       - name: Install Inno Setup

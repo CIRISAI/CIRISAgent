@@ -16,6 +16,14 @@
 #     JAVA_HOME points to a JDK 17+ install (jlink is part of the JDK).
 #     The CIRIS desktop JAR must already be built (the build.yml job copies
 #     it from the matrix Windows wheel build).
+#
+# WINDOWS 7 (CIRISAgent#875): the trimmed jlink runtime inherits the host
+# JDK's OS floor. Eclipse Temurin 17 DROPPED Windows 7 support — a Temurin-
+# built runtime fails to launch on Win7 SP1. Use a Win7-capable vendor:
+# BellSoft Liberica or Azul Zulu JDK 17 both officially support Windows 7
+# SP1. CI sets distribution: 'liberica' in the build-windows-installer job.
+# This script soft-warns (not fails) if it detects a non-Win7 vendor so a
+# local desktop-only build still works.
 
 [CmdletBinding()]
 param(
@@ -42,6 +50,20 @@ $jlink = Join-Path $env:JAVA_HOME "bin\jlink.exe"
 if (-not (Test-Path $jlink)) {
     Write-Error "jlink not found at $jlink — JDK 17+ required (JRE alone is insufficient)"
     exit 1
+}
+
+# Win7-capability soft-check (CIRISAgent#875). Temurin 17 dropped Win7;
+# Liberica / Zulu retain it. Warn — don't fail — so local desktop-only
+# builds (which never ship to Win7) still succeed.
+$javaForVendor = Join-Path $env:JAVA_HOME "bin\java.exe"
+if (Test-Path $javaForVendor) {
+    $vstr = (& $javaForVendor -version 2>&1 | Out-String)
+    if ($vstr -match "Temurin|Adoptium") {
+        Write-Warning ("JDK vendor looks like Temurin/Adoptium, which DROPPED " +
+            "Windows 7 support. The trimmed runtime will NOT launch on Win7 SP1. " +
+            "For a Win7-capable installer, set JAVA_HOME to a Liberica or Zulu " +
+            "JDK 17 (CI uses distribution: 'liberica'). Continuing anyway.")
+    }
 }
 
 # Modules required by the Compose desktop bundle. Generous baseline. If a

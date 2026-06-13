@@ -110,3 +110,44 @@ the desktop JAR (build it first via gradle) or the trimmed JRE
 - Authenticode code signing (`/SSignTool=`) once the cert lands.
 - macOS `.dmg` and Linux `.AppImage` parallel installers — same architecture (PyInstaller + bundled JRE + native installer wrapper) just different wrappers.
 - Auto-update path — Sparkle on macOS, Squirrel.Windows on Windows. Not needed until adoption justifies the maintenance burden.
+
+## Windows 7 SP1 support tier (CIRISAgent#875)
+
+CIRIS commits to a best-effort **Windows 7 SP1 x64** tier — old hardware is
+where the mission's highest-need users live. "If we can support arm32, we can
+support Win7." Win7 runs with honest degradations, surfaced in-app, never
+hidden.
+
+**Substrate (done).** The whole quad is Win7-SP1-loadable as of the #881
+adoption floor — persist 5.5.5 / edge 2.2.1 / verify 5.1.3 / lens-core 1.3.0,
+each built with the Tier-3 `x86_64-win7-windows-msvc` lane (the Win8/10 std
+symbols become dynamic `GetProcAddress`-with-fallback, absent from the static
+import table — verify by *parsing the PE import directory*, not a substring
+scan). Closed: CIRISEdge#94, CIRISPersist#205, CIRISLensCore#48, CIRISVerify#67.
+
+**Installer (this tier).**
+- `MinVersion=6.1sp1` in the `.iss` — Setup refuses cleanly below Win7 SP1.
+- **JRE**: CI builds the trimmed jlink runtime from **BellSoft Liberica** JDK 17
+  (`distribution: 'liberica'`), not Temurin — Temurin 17 dropped Win7; Liberica
+  and Zulu retain it. `bundle-jre.ps1` soft-warns if it detects a Temurin host.
+- **UCRT**: Win7 needs the Universal CRT (KB2999226) for the `api-ms-win-crt-*`
+  import-sets every bundled binary carries. CI fetches the redist best-effort
+  into `redist/` (gitignored); the `.iss` bundles it (`skipifsourcedoesntexist`)
+  and installs it via `wusa` on Win7-only when `ucrtbase.dll` is absent. If the
+  fetch rots, the installer still builds — Win7 users hand-provision KB2999226.
+- **Attestation tier**: Win7 predates TPM 2.0 TBS, so CIRISVerify runs at the
+  software-key tier — the same degradation path unsupported Android SoCs take.
+  A one-time post-install note sets the expectation; the Trust page shows it
+  in-app. Everything else (engine, lens fold, federation, desktop GUI) is normal.
+
+**Still open (the honest residual):**
+1. **PyInstaller CPython payload** — `actions/setup-python` ships official CPython,
+   which gates on Win8.1+ (a handful of `PathCch*` / api-set imports). The Win7
+   tier needs the PyInstaller bundle built against a **Win7-capable CPython**
+   (the PythonWin7-class patched-official builds run 3.9–3.13 on Win7). Not yet
+   wired — the installer's Python half will still fail to launch on Win7 until
+   this lands.
+2. **On-device acceptance** — a clean Windows 7 SP1 x64 VM must install, boot to
+   WORK with all 22 services, seal a trace via lens-core, and show the software
+   attestation tier. This is the gate that closes #875 (the checkbox folded in
+   from CIRISVerify#67).

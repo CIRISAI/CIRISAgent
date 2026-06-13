@@ -14,8 +14,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 142
-        versionName "2.9.5"
+        versionCode 143
+        versionName "2.9.6"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -31,23 +31,32 @@ android {
             // ciris_engine MUST be included for startup hash verification to work!
             // ciris_edge added in 2.9.4 — Edge is the third leg of the
             // substrate triple and must be import-able from Python at boot.
-            extractPackages "pydantic_core", "ciris_persist", "ciris_edge", "ciris_engine", "ciris_adapters"
+            extractPackages "pydantic_core", "ciris_persist", "ciris_edge", "ciris_lens_core", "ciris_engine", "ciris_adapters"
 
             pip {
                 options "--find-links", "wheels"  // Local wheels directory
 
-                // 2.9.5 substrate triple (v4 canonical) — persist 4.0.1 /
-                // verify 4.8.0 / edge 1.2.0 (CIRISConformance/matrices/
-                // current.yaml). All three ship Chaquopy-shaped Android wheels
-                // under `{prefix}-v{ver}-android-wheels.tar.gz` and are dropped
-                // into wheels/ by `tools/update_android_libs.py --lib X V`.
+                // 2.9.6 substrate quad — persist 5.5.3 / edge 2.1.1 /
+                // verify 5.1.0 / lens-core 1.0.1 (CIRISConformance/matrices/
+                // current.yaml). persist + edge ship Chaquopy-shaped Android
+                // wheels under `{prefix}-v{ver}-android-wheels.tar.gz`,
+                // dropped into wheels/ by the substrate updater
+                // (`tools/update_substrate_libs.py` / legacy
+                // `update_android_libs.py --lib X V`).
                 // Pins MUST match requirements.txt — version skew breaks
-                // cohabitation (CIRISEdge#16/#43 etc.). Without these two
+                // cohabitation (CIRISEdge#16/#43 etc.). Without these
                 // installs the Android-bundled Python raises ModuleNotFound
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
-                install "ciris-persist==4.1.0"
-                install "ciris-edge==1.2.1"
+                install "ciris-persist==5.5.5"
+                install "ciris-edge==2.2.1"
+                // ciris-lens-core is REQUIRED by the accord_metrics adapter
+                // in 2.9.6+ (CIRISAgent#866 LensCore fold) — the fourth
+                // substrate leg. Android wheels ship in the lens-core release
+                // artifacts as of v1.0.1 (CIRISLensCore#43.3); refreshed by
+                // the substrate updater (`tools/update_substrate_libs.py
+                // --platform android --lib lens V`).
+                install "ciris-lens-core==1.3.0"
 
                 // Core dependencies (same as original android/app/build.gradle)
                 install "pydantic-core==2.23.4"

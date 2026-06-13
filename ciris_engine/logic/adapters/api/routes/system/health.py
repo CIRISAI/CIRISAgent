@@ -101,36 +101,66 @@ async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
     ]
 
 
+async def _adapter_reauth_warnings(request: Request) -> list[SystemWarning]:
+    """Warnings for adapters needing re-authentication."""
+    adapter_manager = getattr(request.app.state, "adapter_manager", None)
+    if not adapter_manager:
+        return []
+    try:
+        adapter_statuses = await adapter_manager.get_all_adapter_status()
+    except Exception as e:
+        logger.debug(f"Could not check adapter reauth status: {e}")
+        return []
+    return [
+        SystemWarning(
+            code="adapter_needs_reauth",
+            message=f"Adapter '{status.adapter_id}' needs re-authentication: {status.reauth_reason or 'Token expired'}",
+            severity="warning",
+            action_url=f"/settings/adapters/{status.adapter_id}",
+        )
+        for status in adapter_statuses
+        if status.needs_reauth
+    ]
+
+
+def _hardware_trust_warnings(request: Request) -> list[SystemWarning]:
+    """Hardware-trust degradation (D18 / CIRISAgent#814).
+
+    CIRISVerify produces hardware_trust_degraded on the attestation result
+    (e.g. CVE-affected SoC auto-downgrade); the agent only surfaces it.
+    Operators previously had to read the verifier advisory list directly.
+    """
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if auth_service is None or not hasattr(auth_service, "get_cached_attestation"):
+        return []
+    try:
+        attestation = auth_service.get_cached_attestation(allow_stale=True)
+        if attestation is not None and getattr(attestation, "hardware_trust_degraded", False):
+            return [
+                SystemWarning(
+                    code="hardware_trust_degraded",
+                    message=getattr(attestation, "trust_degradation_reason", None)
+                    or "Hardware security trust is degraded",
+                    severity="warning",
+                    action_url="/settings/trust",
+                )
+            ]
+    except Exception as e:
+        logger.debug(f"Could not check hardware trust degradation: {e}")
+    return []
+
+
 async def collect_system_warnings(request: Request) -> tuple[bool, list[SystemWarning]]:
     """Collect system-level warnings and check degraded mode.
 
-    Returns (degraded_mode, warnings) tuple.
+    Returns (degraded_mode, warnings) tuple. degraded_mode is True when NO
+    working LLM is available.
     """
-    # Check LLM availability first
     has_working_llm, llm_warnings = await check_llm_availability()
     warnings = llm_warnings.copy()
-
-    # Check for adapters needing re-authentication
-    adapter_manager = getattr(request.app.state, "adapter_manager", None)
-    if adapter_manager:
-        try:
-            adapter_statuses = await adapter_manager.get_all_adapter_status()
-            for status in adapter_statuses:
-                if status.needs_reauth:
-                    warnings.append(
-                        SystemWarning(
-                            code="adapter_needs_reauth",
-                            message=f"Adapter '{status.adapter_id}' needs re-authentication: {status.reauth_reason or 'Token expired'}",
-                            severity="warning",
-                            action_url=f"/settings/adapters/{status.adapter_id}",
-                        )
-                    )
-        except Exception as e:
-            logger.debug(f"Could not check adapter reauth status: {e}")
-
-    # degraded_mode is True when NO working LLM is available
-    degraded_mode = not has_working_llm
-    return degraded_mode, warnings
+    warnings.extend(await _adapter_reauth_warnings(request))
+    warnings.extend(_hardware_trust_warnings(request))
+    return not has_working_llm, warnings
 
 
 @router.get("/health")

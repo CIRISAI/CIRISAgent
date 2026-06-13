@@ -76,8 +76,8 @@ GUIDE_EXPECTED_HASHES: Dict[str, str] = {
 }
 
 ACCORD_EXPECTED_HASHES: Dict[str, str] = {
-    "accord_1.2b_POLYGLOT.txt": "3d7f8b3e21fb0aeca8876ece53db211be1d7227400fdb7e61888334396e4320e",
-    "accord_1.2b_POLYGLOT_compressed.txt": "a48b426f5d423bf3388bb7dd8c7a226515e95cffea104edefe8ae602e88fea02",
+    "accord_1.2b_POLYGLOT.txt": "f9bdeb3d78a6232663a5e26e4934fcccb7e56ce57690d80982a17cc323c39f99",
+    "accord_1.2b_POLYGLOT_compressed.txt": "e05d18acbf4656237431155ca465142b53fd2f63854d9f5659e62a947a201adc",
     # Localized ACCORD files
     "accord_1.2b_am.txt": "904d52df1cd101281eca1ee1fa81e798da0bfc064171d74d55ebca7a3b36a453",
     "accord_1.2b_ar.txt": "c62fa189807f5a6048ba2716eac1d3e36d65394c2a69acd5818656f4447dc4dd",

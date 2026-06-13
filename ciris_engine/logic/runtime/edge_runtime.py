@@ -79,7 +79,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         import ciris_edge  # type: ignore[import-not-found, import-untyped, unused-ignore]
     except ImportError as e:
         raise RuntimeError(
-            "ciris-edge not importable but is REQUIRED for 2.9.4+. Pin ciris-edge>=1.0.0,<2.0.0 in requirements.txt."
+            "ciris-edge not importable but is REQUIRED for 2.9.4+. Pin ciris-edge>=2.0.2,<3.0.0 in requirements.txt."
         ) from e
 
     identity_dir.mkdir(parents=True, exist_ok=True)
@@ -137,6 +137,26 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             listen_addr,
             len(bootstrap_peers),
         )
+        # 2.9.6 (#866 LensCore fold): register the federation signer key in
+        # persist's federation directory. The agent authors local-tier CEG
+        # attestations under this identity — the consent wire artifact
+        # (consent:community_trust:v1 grants/revocations) and lens-core's
+        # per-seal consent gate both depend on it; attestation_upsert_local
+        # rejects unregistered attesting keys with federation_invalid_argument.
+        # Re-registration of the same key raises federation_conflict — benign.
+        try:
+            engine.register_federation_key("agent", key_id)
+            logger.info("Federation signer key registered with persist: %s", key_id)
+        except Exception as reg_exc:
+            if "conflict" in str(reg_exc).lower():
+                logger.debug("Federation signer key already registered: %s", key_id)
+            else:
+                logger.warning(
+                    "Federation signer key registration failed (%s) — CEG consent "
+                    "emits and the lens-core consent gate will not function until "
+                    "the key is registered",
+                    reg_exc,
+                )
     except Exception:
         logger.info("Edge runtime initialized (signer_key_id not yet queryable)")
 

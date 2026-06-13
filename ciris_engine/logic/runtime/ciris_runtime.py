@@ -846,57 +846,78 @@ class CIRISRuntime(ServicePropertyMixin):
 
         await self._perform_startup_maintenance()
 
+    async def _start_single_adapter(self, adapter: Any) -> None:
+        """Start one adapter with timing + explicit failure logging."""
+        adapter_name = adapter.__class__.__name__
+        start_time = time.perf_counter()
+        logger.info("[_start_adapters] Starting %s", adapter_name)
+        try:
+            await adapter.start()
+            elapsed = time.perf_counter() - start_time
+            logger.info("[_start_adapters] %s started in %.2fs", adapter_name, elapsed)
+        except Exception:
+            elapsed = time.perf_counter() - start_time
+            logger.exception("[_start_adapters] %s failed after %.2fs", adapter_name, elapsed)
+            raise
+
+    def _log_background_adapter_start_failure(self, t: "asyncio.Task[Any]") -> None:
+        """Surface background-start failures explicitly.
+
+        Without this the re-raise in _start_single_adapter becomes an
+        unretrieved task exception and a REQUIRED adapter (e.g.
+        accord_metrics) can silently not run during the first-run wizard
+        session.
+        """
+        self._background_tasks.discard(t)
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            logger.error(
+                "[_start_adapters] BACKGROUND adapter start FAILED (%s): %s — "
+                "the adapter is NOT running for this first-run session and "
+                "will block boot on the next (non-first-run) start",
+                t.get_name(),
+                exc,
+            )
+
+    async def _start_adapters_first_run(self) -> None:
+        """First-run start order: wizard-critical adapters block, the rest
+        start in the background so the setup wizard is reachable fast."""
+        blocking_adapter_names = {"CIRISVerifyAdapter", "ApiPlatform"}
+        blocking_adapters = [a for a in self.adapters if a.__class__.__name__ in blocking_adapter_names]
+        background_adapters = [a for a in self.adapters if a.__class__.__name__ not in blocking_adapter_names]
+
+        logger.info(
+            "[_start_adapters] First-run mode: blocking adapters=%s background adapters=%s",
+            [adapter.__class__.__name__ for adapter in blocking_adapters],
+            [adapter.__class__.__name__ for adapter in background_adapters],
+        )
+
+        if blocking_adapters:
+            await asyncio.gather(*(self._start_single_adapter(adapter) for adapter in blocking_adapters))
+
+        for adapter in background_adapters:
+            task = asyncio.create_task(
+                self._start_single_adapter(adapter),
+                name=f"AdapterStart::{adapter.__class__.__name__}",
+            )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._log_background_adapter_start_failure)
+
+        logger.info(
+            "[_start_adapters] First-run blocking adapters started; %d background adapter starts scheduled",
+            len(background_adapters),
+        )
+
     async def _start_adapters(self) -> None:
         """Start all adapters."""
         from ciris_engine.logic.setup.first_run import is_first_run
 
-        async def _start_single_adapter(adapter: Any) -> None:
-            adapter_name = adapter.__class__.__name__
-            start_time = time.perf_counter()
-            logger.info("[_start_adapters] Starting %s", adapter_name)
-            try:
-                await adapter.start()
-                elapsed = time.perf_counter() - start_time
-                logger.info("[_start_adapters] %s started in %.2fs", adapter_name, elapsed)
-            except Exception:
-                elapsed = time.perf_counter() - start_time
-                logger.exception("[_start_adapters] %s failed after %.2fs", adapter_name, elapsed)
-                raise
-
         if is_first_run():
-            blocking_adapter_names = {"CIRISVerifyAdapter", "ApiPlatform"}
-            blocking_adapters: list[Any] = []
-            background_adapters: list[Any] = []
-            for adapter in self.adapters:
-                adapter_name = adapter.__class__.__name__
-                if adapter_name in blocking_adapter_names:
-                    blocking_adapters.append(adapter)
-                else:
-                    background_adapters.append(adapter)
-
-            logger.info(
-                "[_start_adapters] First-run mode: blocking adapters=%s background adapters=%s",
-                [adapter.__class__.__name__ for adapter in blocking_adapters],
-                [adapter.__class__.__name__ for adapter in background_adapters],
-            )
-
-            if blocking_adapters:
-                await asyncio.gather(*(_start_single_adapter(adapter) for adapter in blocking_adapters))
-
-            for adapter in background_adapters:
-                task = asyncio.create_task(
-                    _start_single_adapter(adapter),
-                    name=f"AdapterStart::{adapter.__class__.__name__}",
-                )
-                self._background_tasks.add(task)
-                task.add_done_callback(self._background_tasks.discard)
-
-            logger.info(
-                "[_start_adapters] First-run blocking adapters started; %d background adapter starts scheduled",
-                len(background_adapters),
-            )
+            await self._start_adapters_first_run()
         else:
-            await asyncio.gather(*(_start_single_adapter(adapter) for adapter in self.adapters))
+            await asyncio.gather(*(self._start_single_adapter(adapter) for adapter in self.adapters))
 
         logger.info(f"All {len(self.adapters)} adapters started")
         await self._migrate_adapter_configs_to_graph()

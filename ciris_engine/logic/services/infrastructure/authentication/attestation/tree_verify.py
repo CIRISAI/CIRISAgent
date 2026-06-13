@@ -132,6 +132,7 @@ def _canonical_tree_walk_rules() -> Tuple[List[str], List[str], List[str]]:
 def run_tree_verify(
     agent_version: Optional[str] = None,
     agent_root: Optional[str] = None,
+    project: str = "ciris-agent",
 ) -> Optional[Dict[str, Any]]:
     """Run ``verify_tree()`` and return a ``python_integrity``-shaped dict.
 
@@ -140,6 +141,11 @@ def run_tree_verify(
             to ``get_default_agent_version()``.
         agent_root: Directory containing the include_roots. Defaults to
             ``resolve_install_root()``.
+        project: Registry project to verify the tree against. Defaults to
+            ``"ciris-agent"`` (the agent's own source tree). CIRISVerify's
+            ``verify_tree()`` is project-agnostic, so a sibling substrate can pass
+            its own project (e.g. ``"ciris-lens-core"`` / ``"ciris-edge"``) to
+            verify a different registered manifest (CIRISAgent#754).
 
     Returns:
         Dict suitable for overlaying onto ``attestation_data["python_integrity"]``,
@@ -166,7 +172,7 @@ def run_tree_verify(
     include_roots, exempt_dirs, exempt_extensions = _canonical_tree_walk_rules()
 
     logger.info(
-        f"[tree_verify] verify_tree(root={agent_root}, version={agent_version}, "
+        f"[tree_verify] verify_tree(project={project}, root={agent_root}, version={agent_version}, "
         f"include={include_roots}, exempt_dirs={len(exempt_dirs)}, exempt_exts={len(exempt_extensions)})"
     )
 
@@ -176,7 +182,7 @@ def run_tree_verify(
             include_roots=include_roots,
             exempt_dirs=exempt_dirs,
             exempt_extensions=exempt_extensions,
-            project="ciris-agent",
+            project=project,
             binary_version=agent_version,
         )
         result = verify_tree(request)

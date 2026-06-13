@@ -824,6 +824,11 @@
     "login_ciris_hosted_info": "CIRIS ہوسٹ شدہ LLM خدمات کو {provider} لاگ ان کی ضرورت ہے",
     "login_credentials_hint": "سیٹ اپ کے دوران آپ نے جو بنایا ہے انہیں داخل کریں",
     "login_footer": "CIRIS AI کی طرف سے چلایا جا رہا ہے",
+    "login_owner_hint": "آخری بار سائن ان: {owner}",
+    "login_reset_device": "ڈیوائس ری سیٹ کریں",
+    "login_reset_device_confirm_title": "ڈیوائس ری سیٹ کریں؟",
+    "login_reset_device_confirm_body": "یہ تمام مقامی ڈیٹا مٹا دے گا اور سیٹ اپ وزرڈ پر واپس لے جائے گا۔ یہ عمل واپس نہیں کیا جا سکتا۔",
+    "login_reset_device_cancel": "منسوخ کریں",
     "login_local": "مقامی لاگ ان",
     "login_marketing_optin": "مجھے پروڈکٹ کی تازیاں اور اعلانات بھیجیں",
     "login_password_label": "پاس ورڈ",
@@ -1732,7 +1737,27 @@
     "setup_byok_llm_desc": "اپنا AI فراہم کنندہ ترتیب دیں۔ شروع کرنے کے لیے اپنی API کلید درج کریں اور ایک ماڈل منتخب کریں۔",
     "setup_ciris_llm_desc": "CIRIS AI فعال ہے۔ آف لائن استعمال یا رازداری کے لیے اختیاری طور پر اپنا فراہم کنندہ ترتیب دیں۔",
     "setup_select_provider": "فراہم کنندہ منتخب کریں",
-    "setup_validation_select_provider": "براہ کرم ایک LLM فراہم کنندہ منتخب کریں"
+    "setup_validation_select_provider": "براہ کرم ایک LLM فراہم کنندہ منتخب کریں",
+    "login_wrong_account_title": "غلط اکاؤنٹ",
+    "login_wrong_account_body": "{owner}\n\nڈیوائس مالک کے اکاؤنٹ سے سائن ان کریں، یا دوبارہ شروع کرنے کے لیے ڈیوائس ری سیٹ کریں۔",
+    "login_wrong_account_body_generic": "یہ ڈیوائس کسی دوسرے اکاؤنٹ سے تعلق رکھتی ہے۔",
+    "login_choose_different_account": "کوئی دوسرا اکاؤنٹ استعمال کریں",
+    "status_ready": "تیار",
+    "data_community_canonical": "CIRIS کمیونٹی (ciris-canonical)",
+    "data_community_consent_active": "آپ کی رضامندی فعال ہے — CIRIS کمیونٹی کے ساتھ شیئر ہو رہا ہے۔",
+    "data_community_consent_paused": "موقوف — فی الحال شیئر نہیں ہو رہا۔",
+    "data_community_label": "کمیونٹی",
+    "data_community_peer_label": "ہم مرتبہ اعتماد",
+    "data_community_pending": "فیڈریشن زیر التواء — CIRIS کمیونٹی آن لائن آنے پر یہ زندہ اعتماد کی شے بن جائے گا۔",
+    "data_community_trust_title": "کمیونٹی اور اعتماد",
+    "data_community_trusted": "قابل اعتماد",
+    "data_community_untrusted": "ابھی قابل اعتماد نہیں",
+    "trust_fabric_mismatch": "عدم مطابقت",
+    "trust_fabric_not_loaded": "لوڈ نہیں ہوا",
+    "trust_fabric_note": "ایمبیڈڈ ورژن اور رجسٹری ہیش کی تصدیق اس وقت فعال ہوگی جب سبسٹریٹ اجزاء انہیں فراہم کریں گے۔",
+    "trust_fabric_pending": "زیر التواء",
+    "trust_fabric_title": "سبسٹریٹ اجزاء",
+    "trust_fabric_verified": "تصدیق شدہ"
   },
   "prompts": {
     "dma": {
@@ -2324,6 +2349,17 @@
       },
       "refresh": "تازہ کریں",
       "summary": "{count} پیئرز · {canonical} کینونیکل"
+    },
+    "federation_id": {
+      "title": "فیڈریشن شناخت",
+      "hint": "وہ پتہ جو رجسٹری اور لینز سرورز اس ایجنٹ تک پہنچنے کے لیے استعمال کرتے ہیں۔",
+      "initializing": "شناخت شروع ہو رہی ہے…",
+      "pubkey_label": "Ed25519 کلید",
+      "copy_key_id": "کلید شناخت کاپی کریں",
+      "cap_signing": "دستخط",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "مواد کی خفیہ کاری"
     }
   },
   "settings": {
@@ -2446,7 +2482,13 @@
       "wallet": "بٹوہ",
       "billing": "بلنگ",
       "agents_list": "ایجنٹ",
-      "client_interface": "انٹرفیس"
+      "client_interface": "انٹرفیس",
+      "network_ops": "نیٹ ورک",
+      "storage": "اسٹوریج"
     }
+  },
+  "setup_validation_select_provider": "ایک LLM فراہم کنندہ منتخب کریں",
+  "network_ops": {
+    "open_federation_hub": "فیڈریشن حب کھولیں →"
   }
 }

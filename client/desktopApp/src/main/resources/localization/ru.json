@@ -360,6 +360,11 @@
     "login_marketing_optin": "Присылать мне обновления и объявления о продукте",
     "login_privacy": "Посмотреть Политику конфиденциальности",
     "login_footer": "Работает на CIRIS AI",
+    "login_owner_hint": "Последний вход: {owner}",
+    "login_reset_device": "Сбросить устройство",
+    "login_reset_device_confirm_title": "Сбросить устройство?",
+    "login_reset_device_confirm_body": "Это удалит все локальные данные и вернёт мастер настройки. Отменить это действие невозможно.",
+    "login_reset_device_cancel": "Отмена",
     "login_username": "Имя пользователя",
     "login_password_label": "Пароль",
     "login_submit": "Войти",
@@ -1732,7 +1737,27 @@
     "setup_byok_llm_desc": "Настройте провайдера ИИ. Введите ключ API и выберите модель для начала.",
     "setup_ciris_llm_desc": "CIRIS AI активен. При необходимости настройте собственного провайдера для работы офлайн или конфиденциальности.",
     "setup_select_provider": "Выберите провайдера",
-    "setup_validation_select_provider": "Пожалуйста, выберите провайдера LLM"
+    "setup_validation_select_provider": "Пожалуйста, выберите провайдера LLM",
+    "login_wrong_account_title": "Не тот аккаунт",
+    "login_wrong_account_body": "{owner}\n\nВойдите с аккаунтом владельца устройства или сбросьте устройство, чтобы начать заново.",
+    "login_wrong_account_body_generic": "Это устройство принадлежит другому аккаунту.",
+    "login_choose_different_account": "Использовать другой аккаунт",
+    "status_ready": "Готово",
+    "data_community_canonical": "Сообщество CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Ваше согласие активно — данные передаются сообществу CIRIS.",
+    "data_community_consent_paused": "Приостановлено — в данный момент передача не ведётся.",
+    "data_community_label": "Сообщество",
+    "data_community_peer_label": "Доверие пиров",
+    "data_community_pending": "Федерация ожидается — станет живым объектом доверия, когда сообщество CIRIS выйдет в сеть.",
+    "data_community_trust_title": "Сообщество и доверие",
+    "data_community_trusted": "Доверенный",
+    "data_community_untrusted": "Пока не доверенный",
+    "trust_fabric_mismatch": "Несоответствие",
+    "trust_fabric_not_loaded": "Не загружено",
+    "trust_fabric_note": "Проверка встроенной версии и хэша реестра включится, когда компоненты субстрата начнут их предоставлять.",
+    "trust_fabric_pending": "Ожидается",
+    "trust_fabric_title": "Компоненты субстрата",
+    "trust_fabric_verified": "Проверено"
   },
   "prompts": {
     "dma": {
@@ -2324,6 +2349,17 @@
       },
       "refresh": "Обновить",
       "summary": "{count} пиров · {canonical} канонических"
+    },
+    "federation_id": {
+      "title": "ID федерации",
+      "hint": "Адрес, по которому серверы реестра и линзы обращаются к этому агенту.",
+      "initializing": "Инициализация идентичности…",
+      "pubkey_label": "Ключ Ed25519",
+      "copy_key_id": "Копировать ID ключа",
+      "cap_signing": "Подпись",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Шифрование содержимого"
     }
   },
   "settings": {
@@ -2446,7 +2482,13 @@
       "wallet": "Кошелёк",
       "billing": "Оплата",
       "agents_list": "Агенты",
-      "client_interface": "Интерфейс"
+      "client_interface": "Интерфейс",
+      "network_ops": "Сеть",
+      "storage": "Хранилище"
     }
+  },
+  "setup_validation_select_provider": "Выберите провайдера LLM",
+  "network_ops": {
+    "open_federation_hub": "Открыть центр федерации →"
   }
 }

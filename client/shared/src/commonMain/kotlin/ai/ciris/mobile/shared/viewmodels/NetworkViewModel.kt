@@ -4,6 +4,7 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.models.AgentMode
 import ai.ciris.mobile.shared.models.AgentModeChangeResult
 import ai.ciris.mobile.shared.models.AgentModeStatus
+import ai.ciris.mobile.shared.models.federation.FederationIdentityResponse
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -36,10 +37,16 @@ class NetworkViewModel(
     private val _mode = MutableStateFlow(AgentMode.PROXY)
     val mode: StateFlow<AgentMode> = _mode.asStateFlow()
 
-    /** Edge federation address (32-char hex). Sourced from the existing
-     *  NetworkSnapshot mock until PyEdge FFI lands. */
+    /** Edge federation address (the local agent's signer_key_id). Populated by
+     *  [loadFederationIdentity] from GET /v1/federation/identity; null while Edge
+     *  is unavailable (degraded mode → 503), which the card renders as "—". */
     private val _federationAddress = MutableStateFlow<String?>(null)
     val federationAddress: StateFlow<String?> = _federationAddress.asStateFlow()
+
+    /** persist's full identity aggregate (Federation ID card) — null while
+     *  loading and on graceful 503 (identity still initializing). */
+    private val _federationId = MutableStateFlow<FederationIdentityResponse?>(null)
+    val federationId: StateFlow<FederationIdentityResponse?> = _federationId.asStateFlow()
 
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
@@ -128,10 +135,27 @@ class NetworkViewModel(
         _error.value = null
     }
 
-    /** Provisional setter for the local federation address — wired off the
-     *  existing NetworkSnapshot mock so the identity card renders before
-     *  Edge 1.0 exposes a real signer_key_id endpoint. */
-    fun setFederationAddress(address: String?) {
-        _federationAddress.value = address
+    /** Fetch the real local federation identity (signer_key_id) from Edge via
+     *  GET /v1/federation/identity. On degraded mode (Edge unavailable → 503 →
+     *  thrown) the address stays null and the identity card shows "—". Safe to
+     *  retry; never throws. */
+    fun loadFederationIdentity() {
+        viewModelScope.launch {
+            try {
+                val identity = apiClient.getFederationIdentity()
+                _federationAddress.value = identity.signerKeyId
+                PlatformLogger.i(TAG, "federation identity: signer_key_id=${identity.signerKeyId.take(12)}…")
+            } catch (e: Exception) {
+                // Edge unavailable / degraded — leave address null (card → "—").
+                _federationAddress.value = null
+                PlatformLogger.d(TAG, "federation identity unavailable (Edge degraded?): ${e.message}")
+            }
+            // persist's full identity aggregate (null on 503 — initializing)
+            runCatching { apiClient.getFederationIdentityAggregate() }
+                .onSuccess { _federationId.value = it }
+                .onFailure { e ->
+                    PlatformLogger.d(TAG, "federation aggregate unavailable: ${e.message}")
+                }
+        }
     }
 }

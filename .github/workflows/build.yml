@@ -28,6 +28,19 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Stdlib-only guard, no deps required — run before the pip install so a
+      # localization regression fails fast. Catches keys referenced in
+      # commonMain Kotlin (localizedString/getString) that are undefined in
+      # en.json (which render raw on every platform — CIRISAgent#240) and
+      # en.json mirror drift across platform bundles.
+      - name: Localization guard (reference coverage + mirror parity)
+        run: python tools/dev/check_localization_sync.py
+
+      # D27: runtime code must not depend on its own .md (outside L4 attestation
+      # tree). Stdlib-only AST gate, no deps. CIRISAgent#807.
+      - name: D27 runtime .md-reference gate
+        run: python tools/dev/check_no_runtime_md_reference.py
+
       - name: Cache pip dependencies
         uses: actions/cache@v5
         with:
@@ -1041,11 +1054,15 @@ jobs:
         # tables (builds + binary_manifests + function_manifests) — closes
         # the parent-row gap that left 2.7.8/2.7.9 with only function_manifests
         # rows (#727). Also cuts over from gRPC RegisterBuild → HTTP POST
-        # /v1/builds; drops REGISTRY_JWT_SECRET requirement. Floor kept at the
-        # current runtime triple (4.8.0) so the CLI matches what the agent
-        # signs against at runtime — avoids canonical-hash skew on register.
+        # /v1/builds; drops REGISTRY_JWT_SECRET requirement. Pinned to the
+        # current runtime triple (verify 5.0.0, bounded <6.0.0) so the CLI
+        # matches what the agent signs against at runtime — avoids canonical-
+        # hash skew on register. The edge-1.5 cut moved the runtime verify wheel
+        # to 5.0.0 (persist 4.10.0 lifted its `ciris-verify` pin to `<6,>=5`), so
+        # the JCS canonicalization (#59/#61) is now consistent sign-time and
+        # runtime; the bound just keeps the signer on the same major as runtime.
         run: |
-          pip install --upgrade "ciris-verify>=4.8.0"
+          pip install --upgrade "ciris-verify>=5.0.0,<6.0.0"
           which ciris-build-sign && ciris-build-sign --version
 
       - name: Emit build-secrets hash file

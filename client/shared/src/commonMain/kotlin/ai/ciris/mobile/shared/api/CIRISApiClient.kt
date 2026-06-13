@@ -6,6 +6,7 @@ import ai.ciris.mobile.shared.models.federation.EdgeReachabilityEntry
 import ai.ciris.mobile.shared.models.federation.FederationContentRequest
 import ai.ciris.mobile.shared.models.federation.FederationContentResponse
 import ai.ciris.mobile.shared.models.federation.FederationIdentity
+import ai.ciris.mobile.shared.models.federation.FederationIdentityResponse
 import ai.ciris.mobile.shared.models.federation.FederationMetricsResponse
 import ai.ciris.mobile.shared.models.federation.FederationPeerAppearanceUpdateRequest
 import ai.ciris.mobile.shared.models.federation.FederationPeerDetailResponse
@@ -976,6 +977,44 @@ class CIRISApiClient(
     }
 
     /**
+     * Substrate component versions for the Trust page's fabric section.
+     *
+     * Hits ``GET /v1/system/fabric``. Returns each in-process cdylib crate's
+     * runtime version + the (pending) embedded-version / registry-hash status.
+     */
+    suspend fun getFabricVersions(): ai.ciris.mobile.shared.models.FabricVersionsResponse {
+        val method = "getFabricVersions"
+        logDebug(method, "GET /v1/system/fabric")
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+        return try {
+            val response = client.get("$baseUrl/v1/system/fabric") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Fabric versions fetch failed: ${response.status}")
+            }
+            val root = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            val data = root["data"] ?: throw RuntimeException("Fabric response missing 'data'")
+            val decoder = Json { ignoreUnknownKeys = true }
+            decoder.decodeFromJsonElement(
+                ai.ciris.mobile.shared.models.FabricVersionsResponse.serializer(),
+                data,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
      * Fetch federation content by SHA-256 [contentId] from [peerKeyId].
      *
      * The backend requires ``peer_key_id`` — there is no global
@@ -1045,6 +1084,42 @@ class CIRISApiClient(
                 throw RuntimeException("NodeCode share failed: ${response.status}")
             }
             decodeFederationEnvelope(response.bodyAsText(), NodeCodeShareResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Full federation identity aggregate — persist's
+     * ``LocalIdentityAggregate`` (signing Ed25519 + optional ML-DSA-65,
+     * Reticulum transport keys, content-encryption X25519 + ML-KEM-768)
+     * plus the companion NodeCode identity. This is THE address the
+     * production lens / registry servers use to reach this node.
+     * OBSERVER+ readable.
+     *
+     * Hits ``GET /v1/system/peers/federation-identity``. Returns null
+     * on 503 (persist identity not yet initialized) so the caller can
+     * render an "initializing" state instead of an error banner.
+     */
+    suspend fun getFederationIdentityAggregate(): FederationIdentityResponse? {
+        val method = "getFederationIdentityAggregate"
+        logDebug(method, "GET /v1/system/peers/federation-identity")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$baseUrl/v1/system/peers/federation-identity") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (response.status == HttpStatusCode.ServiceUnavailable) {
+                logDebug(method, "federation identity not yet available (503)")
+                null
+            } else if (!response.status.isSuccess()) {
+                throw RuntimeException("Federation identity aggregate fetch failed: ${response.status}")
+            } else {
+                decodeFederationEnvelope(response.bodyAsText(), FederationIdentityResponse.serializer())
+            }
         } catch (e: Exception) {
             logException(method, e, "url=$baseUrl")
             throw e

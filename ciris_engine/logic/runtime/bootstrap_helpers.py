@@ -179,9 +179,17 @@ def load_adapters_from_bootstrap(runtime: Any) -> None:
     # derived from CIRISVerify signing key (Identity = Wallet)
     _load_single_adapter(runtime, "wallet", "wallet")
 
+    # 2.9.6+: accord_metrics is REQUIRED (CIRISAgent#866 LensCore fold) —
+    # the agent's reasoning-observability spine, orchestrated by the
+    # ciris-lens-core substrate the way the audit service orchestrates the
+    # audit trail. Always loaded regardless of consent: consent gates
+    # SHARING (the CEG community grant lens-core evaluates at every seal),
+    # never whether the agent witnesses its own reasoning.
+    _load_single_adapter(runtime, "ciris_accord_metrics", "ciris_accord_metrics")
+
     for load_request in runtime.bootstrap.adapters:
         # Skip internal adapters if someone explicitly listed them — already loaded above
-        if load_request.adapter_type in ("ciris_verify", "wallet"):
+        if load_request.adapter_type in ("ciris_verify", "wallet", "ciris_accord_metrics"):
             continue
 
         from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext

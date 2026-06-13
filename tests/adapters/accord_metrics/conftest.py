@@ -26,8 +26,11 @@ class MockUnifiedKey:
 def mock_unified_signing_key():
     """Mock the unified signing key to prevent blocking on CIRISVerify vault.
 
-    The Ed25519TraceSigner tries to load the unified signing key which can
-    hang if CIRISVerify vault isn't available. This fixture mocks it out.
+    _compute_instance_hash / get_metrics load the unified signing key, which
+    can hang if the CIRISVerify vault isn't available. This fixture mocks it
+    out; the stub has no public_key_bytes, so the service exercises the
+    fallback agent_id hashing path. (Trace SIGNING moved to the lens-core
+    substrate via engine.signer() in the 2.9.6 fold — CIRISAgent#866.)
     """
     with patch(
         "ciris_engine.logic.audit.signing_protocol.get_unified_signing_key",

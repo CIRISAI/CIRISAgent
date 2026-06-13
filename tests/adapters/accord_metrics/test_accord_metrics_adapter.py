@@ -1,18 +1,19 @@
 """
-Comprehensive tests for AccordMetricsAdapter.
+Comprehensive tests for AccordMetricsAdapter — post-LensCore-fold (#866).
 
 Tests cover:
 - Initialization with/without consent
-- Service registration behavior
-- Consent management
+- Service registration behavior (UNCONDITIONAL as of 2.9.6 — consent gates
+  sharing at the substrate's CEG seal, not registration)
+- Consent management (update_consent -> set_consent +
+  queue_lens_deletion_on_revoke)
 - Configuration and status reporting
-- Adapter lifecycle
+- Adapter lifecycle (metrics service start mocked at the substrate seam)
 """
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -20,6 +21,8 @@ from ciris_adapters.ciris_accord_metrics.adapter import AccordMetricsAdapter, Ad
 from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.authority_core import DeferralRequest
+
+from .test_accord_metrics_service import FakeLensClient
 
 
 def make_deferral_request(
@@ -34,6 +37,22 @@ def make_deferral_request(
         reason=reason,
         defer_until=datetime.now(timezone.utc),
     )
+
+
+@pytest.fixture(autouse=True)
+def _clean_metrics_env(monkeypatch):
+    """Keep adapter construction deterministic regardless of the host env."""
+    for name in (
+        "CONSENT",
+        "CONSENT_TIMESTAMP",
+        "TRACE_LEVEL",
+        "LOCAL_COPY_DIR",
+        "FLUSH_INTERVAL",
+        "ORPHAN_MAX_AGE",
+        "CAPTURE_DEFERRALS",
+    ):
+        monkeypatch.delenv(f"CIRIS_ACCORD_METRICS_{name}", raising=False)
+        monkeypatch.delenv(f"CIRIS_COVENANT_METRICS_{name}", raising=False)
 
 
 @pytest.fixture
@@ -60,6 +79,14 @@ def mock_context():
     context = MagicMock()
     context.agent_id = "context-agent-456"
     return context
+
+
+def _mock_substrate(adapter: AccordMetricsAdapter) -> FakeLensClient:
+    """Patch the REQUIRED substrate seam so adapter.start() succeeds in
+    unit tests (the real LensClient needs the persist Engine singleton)."""
+    fake = FakeLensClient()
+    adapter.metrics_service._build_lens_client = lambda: fake  # type: ignore[method-assign]
+    return fake
 
 
 class TestAccordMetricsAdapterExports:
@@ -127,10 +154,14 @@ class TestAccordMetricsAdapterInit:
 
 
 class TestAccordMetricsAdapterServiceRegistration:
-    """Tests for service registration behavior."""
+    """Registration is UNCONDITIONAL as of 2.9.6 (#866): the adapter is the
+    agent's observability spine. Consent never gated whether the pipeline
+    exists — it gates SHARING, enforced by lens-core's CEG consent gate at
+    every seal."""
 
-    def test_get_services_without_consent(self, mock_runtime):
-        """Test no services registered without consent."""
+    def test_get_services_without_consent_still_registers(self, mock_runtime):
+        """No-consent must NOT suppress registration (capture still runs;
+        every seal resolves consent_blocked at the substrate)."""
         adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
@@ -139,7 +170,8 @@ class TestAccordMetricsAdapterServiceRegistration:
 
         registrations = adapter.get_services_to_register()
 
-        assert len(registrations) == 0
+        assert len(registrations) == 1
+        assert registrations[0].service_type == ServiceType.WISE_AUTHORITY
 
     def test_get_services_with_consent(self, mock_runtime):
         """Test service registered with consent."""
@@ -156,6 +188,20 @@ class TestAccordMetricsAdapterServiceRegistration:
         assert reg.service_type == ServiceType.WISE_AUTHORITY
         assert "send_deferral" in reg.capabilities
         assert "accord_metrics" in reg.capabilities
+
+    def test_registration_identical_regardless_of_consent(self, mock_runtime):
+        """The registration payload must not vary with consent state."""
+        with_consent = AccordMetricsAdapter(
+            runtime=mock_runtime, context=None, adapter_config={"consent_given": True}
+        ).get_services_to_register()
+        without_consent = AccordMetricsAdapter(
+            runtime=mock_runtime, context=None, adapter_config={"consent_given": False}
+        ).get_services_to_register()
+
+        assert len(with_consent) == len(without_consent) == 1
+        assert with_consent[0].service_type == without_consent[0].service_type
+        assert with_consent[0].capabilities == without_consent[0].capabilities
+        assert with_consent[0].priority == without_consent[0].priority
 
     def test_service_provider_is_metrics_service(self, mock_runtime):
         """Test registered provider is the metrics service."""
@@ -221,6 +267,45 @@ class TestAccordMetricsAdapterConsent:
         assert adapter._consent_given is False
         assert adapter.metrics_service._consent_given is False
 
+    def test_update_consent_calls_set_consent(self, mock_runtime):
+        """update_consent must thread state through service.set_consent."""
+        adapter = AccordMetricsAdapter(
+            runtime=mock_runtime,
+            context=None,
+        )
+        adapter.metrics_service.set_consent = MagicMock()
+
+        adapter.update_consent(True)
+
+        adapter.metrics_service.set_consent.assert_called_once_with(True, adapter._consent_timestamp)
+
+    def test_update_consent_revoke_with_lens_deletion(self, mock_runtime):
+        """Revocation with request_lens_deletion=True triggers the DSAR hook
+        (log-only post-fold; the CEG recant cascade owns actual deletion)."""
+        adapter = AccordMetricsAdapter(
+            runtime=mock_runtime,
+            context=None,
+            adapter_config={"consent_given": True},
+        )
+        adapter.metrics_service.queue_lens_deletion_on_revoke = MagicMock()
+
+        adapter.update_consent(False, request_lens_deletion=True)
+
+        adapter.metrics_service.queue_lens_deletion_on_revoke.assert_called_once()
+
+    def test_update_consent_revoke_without_lens_deletion(self, mock_runtime):
+        """Revocation without the flag must NOT trigger the DSAR hook."""
+        adapter = AccordMetricsAdapter(
+            runtime=mock_runtime,
+            context=None,
+            adapter_config={"consent_given": True},
+        )
+        adapter.metrics_service.queue_lens_deletion_on_revoke = MagicMock()
+
+        adapter.update_consent(False)
+
+        adapter.metrics_service.queue_lens_deletion_on_revoke.assert_not_called()
+
 
 class TestAccordMetricsAdapterConfig:
     """Tests for configuration reporting."""
@@ -269,7 +354,8 @@ class TestAccordMetricsAdapterConfig:
         assert "events_received" in config.settings
         assert "events_sent" in config.settings
         assert "events_failed" in config.settings
-        assert "events_queued" in config.settings
+        # No agent-side queue post-fold — reported as 0
+        assert config.settings["events_queued"] == 0
 
 
 class TestAccordMetricsAdapterStatus:
@@ -304,20 +390,30 @@ class TestAccordMetricsAdapterStatus:
 
 
 class TestAccordMetricsAdapterLifecycle:
-    """Tests for adapter lifecycle (start/stop)."""
+    """Tests for adapter lifecycle (start/stop).
+
+    The substrate seam (_build_lens_client) is patched: lens-core is a
+    REQUIRED leg in 2.9.6+ and the real client needs the persist Engine
+    singleton (see test_lens_fold_integration.py for the real path).
+    """
 
     @pytest.mark.asyncio
     async def test_start_without_consent(self, mock_runtime):
-        """Test adapter starts without consent."""
+        """Adapter starts without consent — capture runs, seals are
+        consent_blocked at the substrate."""
         adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
+        fake = _mock_substrate(adapter)
 
         await adapter.start()
 
         assert adapter._running is True
         assert adapter._started_at is not None
+        assert adapter.metrics_service._lens is fake
+
+        await adapter.stop()
 
     @pytest.mark.asyncio
     async def test_start_with_consent(self, mock_runtime):
@@ -327,18 +423,29 @@ class TestAccordMetricsAdapterLifecycle:
             context=None,
             adapter_config={"consent_given": True},
         )
-
-        # Mock the HTTP calls that happen during start()
-        adapter.metrics_service._register_public_key = AsyncMock()
-        adapter.metrics_service._send_connected_event = AsyncMock()
+        fake = _mock_substrate(adapter)
 
         await adapter.start()
 
         assert adapter._running is True
-        # Service should have HTTP session
-        assert adapter.metrics_service._session is not None
+        assert adapter.metrics_service._lens is fake
 
         await adapter.stop()
+
+    @pytest.mark.asyncio
+    async def test_start_raises_when_substrate_unavailable(self, mock_runtime, monkeypatch):
+        """lens-core is REQUIRED — a missing substrate blocks adapter start
+        the same way a missing persist blocks boot."""
+        import sys
+
+        monkeypatch.setitem(sys.modules, "ciris_lens_core", None)
+        adapter = AccordMetricsAdapter(
+            runtime=mock_runtime,
+            context=None,
+        )
+
+        with pytest.raises(RuntimeError, match="ciris-lens-core is REQUIRED"):
+            await adapter.start()
 
     @pytest.mark.asyncio
     async def test_stop(self, mock_runtime):
@@ -348,16 +455,14 @@ class TestAccordMetricsAdapterLifecycle:
             context=None,
             adapter_config={"consent_given": True},
         )
-
-        # Mock the HTTP calls that happen during start/stop
-        adapter.metrics_service._register_public_key = AsyncMock()
-        adapter.metrics_service._send_connected_event = AsyncMock()
+        _mock_substrate(adapter)
 
         await adapter.start()
         await adapter.stop()
 
         assert adapter._running is False
-        assert adapter.metrics_service._session is None
+        assert adapter.metrics_service._reasoning_task.done()
+        assert adapter.metrics_service._sweep_task.done()
 
     @pytest.mark.asyncio
     async def test_run_lifecycle(self, mock_runtime):
@@ -411,13 +516,12 @@ class TestAccordMetricsAdapterIntegration:
     """Integration tests for adapter + service."""
 
     @pytest.mark.asyncio
-    async def test_full_wbd_flow_with_consent(self, mock_runtime):
-        """Test full WBD event flow with consent.
-
-        WBD deferrals bypass the trace event queue and POST directly to the
-        dedicated /accord/wbd/deferrals lens endpoint (accord contract:
-        /accord/events is for complete_trace envelopes only).
-        """
+    async def test_full_wbd_flow_with_consent(self, mock_runtime, monkeypatch):
+        """WBD deferrals ride the substrate capture path: DEFERRAL_ROUTED
+        joins the deferring thought's in-flight trace ('no second shipping
+        mechanism' — #857). Opt-in env: capture is held by default until
+        the persist floor ships the variant (CIRISPersist#203)."""
+        monkeypatch.setenv("CIRIS_ACCORD_METRICS_CAPTURE_DEFERRALS", "true")
         adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
@@ -431,49 +535,37 @@ class TestAccordMetricsAdapterIntegration:
         service = registrations[0].provider
         assert isinstance(service, AccordMetricsService)
 
-        # Service should route WBD events to the dedicated endpoint, not the
-        # trace event queue. Patch the direct-POST method and verify the
-        # payload matches lens's WBDDeferralCreate schema.
+        fake = FakeLensClient(outcomes=[{"outcome": "opened"}])
+        service._lens = fake
+
         request = make_deferral_request()
-
-        captured: Dict[str, Any] = {}
-
-        async def capture(payload, thought_id):
-            captured["payload"] = payload
-            captured["thought_id"] = thought_id
-
-        service._send_wbd_deferral = capture  # type: ignore[assignment]
-
         result = await service.send_deferral(request)
 
-        assert "WBD event recorded" in result
-        # Trace event queue must NOT receive WBD events — those have their own endpoint
-        assert len(service._event_queue) == 0
-        assert captured["thought_id"] == request.thought_id
-        payload = captured["payload"]
-        assert payload["trigger_type"] == "UNCERTAINTY"
-        assert payload["agent_id"]
-        assert payload["dilemma_description"]
-        assert payload["trace_id"] == request.task_id
-        assert payload["span_id"] == request.thought_id
+        assert result.startswith(f"wbd-{request.thought_id}-")
+        component = fake.captured[0]
+        assert component["event_type"] == "DEFERRAL_ROUTED"
+        assert component["thought_id"] == request.thought_id
+        assert component["task_id"] == request.task_id
 
     @pytest.mark.asyncio
     async def test_full_flow_without_consent(self, mock_runtime):
-        """Test flow without consent doesn't leak data."""
+        """Without consent the service is STILL registered (capture is
+        unconditional); nothing reaches the substrate before start(), and
+        post-start every seal is consent_blocked by the CEG gate."""
         adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
             adapter_config={"consent_given": False},
         )
 
-        # No services registered
+        # Registration is unconditional post-fold
         registrations = adapter.get_services_to_register()
-        assert len(registrations) == 0
+        assert len(registrations) == 1
 
-        # Direct service access also blocks events
+        # Before start() there is no substrate handle — deferral is a no-op
+        # that still returns a deferral id (WiseBus contract).
         request = make_deferral_request()
+        result = await adapter.metrics_service.send_deferral(request)
 
-        await adapter.metrics_service.send_deferral(request)
-
-        # Event dropped
-        assert len(adapter.metrics_service._event_queue) == 0
+        assert result.startswith(f"wbd-{request.thought_id}-")
+        assert adapter.metrics_service._open_thoughts == {}

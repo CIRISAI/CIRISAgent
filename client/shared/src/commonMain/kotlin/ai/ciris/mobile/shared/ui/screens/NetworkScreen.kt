@@ -7,6 +7,7 @@ import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.AgentModeSelector
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
+import ai.ciris.mobile.shared.ui.components.FederationIdCard
 import ai.ciris.mobile.shared.viewmodels.NetworkViewModel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,8 +45,7 @@ import androidx.compose.ui.unit.sp
  *   4. 10 navigation tiles — Identity / Map / Trust Graph / Peers /
  *      Interfaces / Paths / Announces / Queue / Diagnostics / Content.
  *
- * Each tile carries a "Coming Soon" badge until the corresponding sub-screen
- * lands with real Edge data. Surface is intentionally exhaustive so federation
+ * All ten sub-screens are live (T-E / T-E-D) — tiles navigate directly.
  * capability is *visible* to operators today, not deferred to "Edge 1.0 ships."
  */
 @Composable
@@ -61,15 +61,14 @@ fun NetworkScreen(
     val restartPending by viewModel.restartPending.collectAsState()
     val insufficientDisk by viewModel.insufficientDisk.collectAsState()
     val federationAddress by viewModel.federationAddress.collectAsState()
+    val federationId by viewModel.federationId.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.loadAgentMode()
-        // Seed federation address from the existing mock until Edge 1.0 wires
-        // up a real signer_key_id pymethod. The card renders the placeholder
-        // until the real value arrives.
-        if (federationAddress == null) {
-            viewModel.setFederationAddress(MOCK_NETWORK_SNAPSHOT.localIdentity.keyId)
-        }
+        // Fetch the real federation identity (signer_key_id) from Edge. If Edge
+        // is degraded/unavailable the address stays null and the card shows "—"
+        // — never a fabricated key.
+        viewModel.loadFederationIdentity()
     }
 
     // Pending-mode confirmation dialog state — apply mode change on confirm.
@@ -126,8 +125,11 @@ fun NetworkScreen(
     // verticalScroll has the same UX (scrollable, padded, spaced) but
     // composes everything eagerly — testTags reach `/tree` on Android and
     // desktop alike.
+    // Surface paints the theme background — without it the hub bleeds the
+    // host's default (white) behind the cards.
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .testable("screen_network_hub")
             .verticalScroll(rememberScrollState())
@@ -138,6 +140,10 @@ fun NetworkScreen(
 
         // ── Identity card ────────────────────────────────────────────────────
         IdentityCard(address = federationAddress)
+
+        // ── Federation ID (persist identity aggregate) — top-level, not
+        //    buried in the Identity sub-screen ─────────────────────────────────
+        FederationIdCard(federationId = federationId)
 
         // ── Mode selector card ───────────────────────────────────────────────
         ModeCard(
@@ -174,6 +180,7 @@ fun NetworkScreen(
 
         // ── 10 navigation tiles in a 2-column grid ───────────────────────────
         tilesGrid(onTileClick)
+    }
     }
 }
 
@@ -225,12 +232,11 @@ private fun IdentityCard(address: String?) {
     val clipboardManager = LocalClipboardManager.current
     // Always compose AddressRow so its `testable("text_network_identity_key")`
     // + `testableClickable("btn_network_identity_copy")` modifiers fire
-    // `onGloballyPositioned` on first paint. Falling back to the mock keyId
-    // avoids a transient race where the QA walk-test snapshots the hub
-    // before the LaunchedEffect-seeded address propagates through the
-    // StateFlow. Edge 1.0 wires the real signer_key_id.
-    val rendered: String = address?.takeIf { it.isNotBlank() }
-        ?: MOCK_NETWORK_SNAPSHOT.localIdentity.keyId
+    // `onGloballyPositioned` on first paint. When no real signer_key_id is
+    // available yet (Edge 1.0 wires it), render the honest "—" placeholder —
+    // the row still composes so the walk-test contract holds, but we never
+    // show a fabricated key.
+    val rendered: String = address?.takeIf { it.isNotBlank() } ?: "—"
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -248,48 +254,6 @@ private fun IdentityCard(address: String?) {
             )
             Spacer(Modifier.height(12.dp))
             AddressRow(address = rendered, clipboard = clipboardManager)
-            Spacer(Modifier.height(12.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                // QR placeholder
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(
-                            width = 1.dp,
-                            color = CIRISColors.AccentCyan.copy(alpha = 0.4f),
-                            shape = RoundedCornerShape(8.dp),
-                        )
-                        .testable("img_network_qr_placeholder"),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = CIRISIcons.identity,
-                        contentDescription = null,
-                        tint = CIRISColors.AccentCyan,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-                Column {
-                    Text(
-                        text = localizedString("network.identity_card.qr_label"),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = localizedString("network.stats_strip.awaiting_edge_1_0"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp,
-                    )
-                }
-            }
         }
     }
 }
@@ -435,12 +399,6 @@ private fun StatCell(tag: String, label: String, modifier: Modifier = Modifier) 
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 10.sp,
-        )
-        Text(
-            text = localizedString("network.stats_strip.awaiting_edge_1_0"),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            fontSize = 9.sp,
         )
     }
 }
@@ -608,21 +566,6 @@ private fun NavTile(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(CIRISColors.BusTool.copy(alpha = 0.15f))
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        text = localizedString("network.tiles.coming_soon_badge"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = CIRISColors.BusTool,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
             }
         }
     }
@@ -644,36 +587,6 @@ private fun humanGiB(bytes: Long): String {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Mock data — kept here for the identity card seed value until Edge 1.0 wires
-// in real PyEdge.signer_key_id() FFI. The NetworkSnapshot mock used by the
-// prior tabbed scaffold lives in `models/NetworkSnapshot.kt`.
-// ═══════════════════════════════════════════════════════════════════════════
-
-internal val MOCK_NETWORK_SNAPSHOT = ai.ciris.mobile.shared.models.NetworkSnapshot(
-    localIdentity = ai.ciris.mobile.shared.models.LocalIdentity(
-        keyId = "fed1ce5b9a3c4e8d2017a4b5c6d7e8f901234567890abcdef1234567890abcdef",
-        keyIdShort = "fed1ce5b…cdef",
-        displayName = null,
-        edgeVersion = "0.9.1",
-        hardwareBacked = false,
-    ),
-    transports = emptyList(),
-    peers = emptyList(),
-    paths = emptyList(),
-    links = emptyList(),
-    blackholeList = emptyList(),
-    recentEvents = emptyList(),
-    summary = ai.ciris.mobile.shared.models.NetworkSummary(
-        transportCount = 0,
-        transportsUp = 0,
-        peerCount = 0,
-        peersReachableNow = 0,
-        trustedPeerCount = 0,
-        activeLinkCount = 0,
-        pathCount = 0,
-        blackholeCount = 0,
-        recentEventCount = 0,
-    ),
-    generatedAt = "2026-05-28T16:43:05Z",
-)
+// MOCK_NETWORK_SNAPSHOT removed 2.9.6 — the identity card no longer seeds a
+// fabricated federation key. The real signer_key_id arrives via Edge 1.0; until
+// then the card renders the honest "—" placeholder.

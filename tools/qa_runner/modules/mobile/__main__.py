@@ -681,6 +681,7 @@ def test_ios_physical_command(args) -> int:
         test_physical_app_state,
         test_physical_full_check,
         test_physical_screenshot,
+        test_physical_ui_login,
     )
     from .test_cases import TestReport, TestResult
 
@@ -724,6 +725,7 @@ def test_ios_physical_command(args) -> int:
         "api_telemetry": test_physical_api_telemetry,
         "api_verify": test_physical_api_verify_status,
         "api_adapters": test_physical_api_adapters,
+        "ui_login": test_physical_ui_login,
         "full_check": test_physical_full_check,
     }
 
@@ -731,6 +733,7 @@ def test_ios_physical_command(args) -> int:
     test_name_map = {
         "app_launch": "app_state",
         "full_flow": "full_check",
+        "local_login": "ui_login",
     }
 
     # Build test config
@@ -1068,6 +1071,9 @@ def test_command(args) -> int:
         apk_path=args.apk,
         reinstall_app=not args.no_reinstall,
         clear_data=not args.no_clear,
+        login_mode=args.login_mode,
+        setup_username=args.setup_username,
+        setup_password=args.setup_password,
         test_email=args.email,
         test_password=test_password,
         llm_api_key=llm_api_key,
@@ -1398,6 +1404,9 @@ Available tests (iOS physical device - auto-detected or --physical):
   api_telemetry           - Login, check telemetry + service health
   api_verify              - Check CIRISVerify attestation status
   api_adapters            - List loaded adapters
+  ui_login                - Real UI login via test-automation server +
+                            navigate Interact -> Telemetry -> Interact
+                            (relaunches app with CIRIS_TEST_MODE=true)
   full_check              - Run all physical device checks (default)
 
 Examples:
@@ -1446,6 +1455,17 @@ Examples:
         "--password-file",
         default="~/.ciristest1_password",
         help="Path to file containing test account password",
+    )
+    test_parser.add_argument(
+        "--login-mode",
+        choices=["local", "google"],
+        default="google",
+        help="First-run login: 'local' creates a local account via the setup wizard "
+        "(fully driveable by the test server); 'google' uses the native overlay (default).",
+    )
+    test_parser.add_argument("--setup-username", default="admin", help="Local account username (login_mode=local)")
+    test_parser.add_argument(
+        "--setup-password", default="qa_test_password_12345", help="Local account password (login_mode=local)"
     )
     test_parser.add_argument("--llm-key", help="LLM API key for setup wizard")
     test_parser.add_argument(

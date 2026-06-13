@@ -188,7 +188,13 @@ fun SetupScreen(
                     }
                     TestAutomation.clearTextInputRequest()
                 }
-                "input_api_key" -> {
+                // Both the advanced-setup tags (input_*) and the Quick Setup
+                // tags (quick_input_*) route here: Android text input is
+                // dispatched by resourceId through this handler, so a field
+                // whose tag is absent is silently dropped (the test server
+                // still returns success). Keep these in sync with every LLM
+                // input field rendered in either flow.
+                "input_api_key", "quick_input_api_key" -> {
                     if (request.clearFirst) {
                         viewModel.setLlmApiKey(request.text)
                     } else {
@@ -196,7 +202,7 @@ fun SetupScreen(
                     }
                     TestAutomation.clearTextInputRequest()
                 }
-                "input_llm_model_text" -> {
+                "input_llm_model_text", "quick_input_llm_model_text" -> {
                     if (request.clearFirst) {
                         viewModel.setLlmModel(request.text)
                     } else {
@@ -204,7 +210,7 @@ fun SetupScreen(
                     }
                     TestAutomation.clearTextInputRequest()
                 }
-                "input_llm_base_url" -> {
+                "input_llm_base_url", "quick_input_llm_base_url" -> {
                     if (request.clearFirst) {
                         viewModel.setLlmBaseUrl(request.text)
                     } else {
@@ -3131,6 +3137,41 @@ private fun QuickSetupStep(
                     textColor = SetupColors.TextPrimary,
                     secondaryTextColor = SetupColors.TextSecondary
                 )
+
+                // Base URL input for local / OpenAI-compatible servers (Ollama,
+                // LAN inference boxes). Pre-filled with the canonical local
+                // default by setLlmProvider(); editable + automatable via the
+                // quick_input_llm_base_url test tag.
+                val showsBaseUrl = state.llmProvider in
+                    listOf("local", "local_inference", "openai_compatible", "other")
+                if (showsBaseUrl) {
+                    Text(
+                        text = "Endpoint URL (optional)",
+                        color = SetupColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    OutlinedTextField(
+                        value = state.llmBaseUrl,
+                        onValueChange = { viewModel.setLlmBaseUrl(it) },
+                        modifier = Modifier.fillMaxWidth().testable("quick_input_llm_base_url"),
+                        placeholder = {
+                            Text(
+                                SetupViewModel.LOCAL_OLLAMA_BASE_URL,
+                                color = SetupColors.TextSecondary
+                            )
+                        },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = SetupColors.TextPrimary,
+                            unfocusedTextColor = SetupColors.TextPrimary,
+                            focusedBorderColor = SetupColors.Primary,
+                            unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                            cursorColor = SetupColors.Primary
+                        )
+                    )
+                }
 
                 // API Key input (skip for keyless providers)
                 val isKeylessProvider = state.llmProvider in listOf("local", "local_inference", "LocalAI")

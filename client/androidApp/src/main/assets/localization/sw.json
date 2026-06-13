@@ -360,6 +360,11 @@
     "login_marketing_optin": "Nitumie sasisho za bidhaa na matangazo",
     "login_privacy": "Tazama Sera ya Faragha",
     "login_footer": "Inaendeshwa na CIRIS AI",
+    "login_owner_hint": "Mwisho aliyeingia: {owner}",
+    "login_reset_device": "Weka upya kifaa",
+    "login_reset_device_confirm_title": "Weka upya kifaa?",
+    "login_reset_device_confirm_body": "Hii itafuta data yote ya ndani na kurudi kwa mwongozo wa usanidi. Hatua hii haiwezi kutenduliwa.",
+    "login_reset_device_cancel": "Ghairi",
     "login_username": "Jina la mtumiaji",
     "login_password_label": "Nenosiri",
     "login_submit": "Ingia",
@@ -1732,7 +1737,27 @@
     "setup_byok_llm_desc": "Sanidi mtoa huduma wako wa AI. Ingiza ufunguo wako wa API na uchague mfano kuanza.",
     "setup_ciris_llm_desc": "CIRIS AI inafanya kazi. Unaweza kusanidi mtoa huduma wako mwenyewe kwa matumizi nje ya mtandao au faragha.",
     "setup_select_provider": "Chagua mtoa huduma",
-    "setup_validation_select_provider": "Tafadhali chagua mtoa huduma wa LLM"
+    "setup_validation_select_provider": "Tafadhali chagua mtoa huduma wa LLM",
+    "login_wrong_account_title": "Akaunti isiyo sahihi",
+    "login_wrong_account_body": "{owner}\n\nIngia kwa akaunti ya mmiliki wa kifaa, au weka upya kifaa ili kuanza upya.",
+    "login_wrong_account_body_generic": "Kifaa hiki ni cha akaunti tofauti.",
+    "login_choose_different_account": "Tumia akaunti tofauti",
+    "status_ready": "Tayari",
+    "data_community_canonical": "Jumuiya ya CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Idhini yako iko hai — inashiriki na jumuiya ya CIRIS.",
+    "data_community_consent_paused": "Imesitishwa — haishiriki kwa sasa.",
+    "data_community_label": "Jumuiya",
+    "data_community_peer_label": "Imani ya wenzao",
+    "data_community_pending": "Shirikisho linasubiri — litakuwa kitu hai cha imani jumuiya ya CIRIS itakapokuwa mtandaoni.",
+    "data_community_trust_title": "Jumuiya na Imani",
+    "data_community_trusted": "Inaaminika",
+    "data_community_untrusted": "Bado haijaaminika",
+    "trust_fabric_mismatch": "Kutolingana",
+    "trust_fabric_not_loaded": "Haijapakiwa",
+    "trust_fabric_note": "Uthibitishaji wa toleo-lililopachikwa na hash ya rejista utawaka vipengele vya msingi vitakapovitoa.",
+    "trust_fabric_pending": "Inasubiri",
+    "trust_fabric_title": "Vipengele vya msingi",
+    "trust_fabric_verified": "Imethibitishwa"
   },
   "prompts": {
     "dma": {
@@ -2324,6 +2349,17 @@
       },
       "refresh": "Onyesha upya",
       "summary": "Wenza {count} · {canonical} wa asili"
+    },
+    "federation_id": {
+      "title": "Kitambulisho cha Shirikisho",
+      "hint": "Anwani inayotumiwa na seva za rejista na lens kumfikia wakala huyu.",
+      "initializing": "Utambulisho unaanzishwa…",
+      "pubkey_label": "Ufunguo wa Ed25519",
+      "copy_key_id": "Nakili kitambulisho cha ufunguo",
+      "cap_signing": "Kusaini",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Usimbaji wa maudhui"
     }
   },
   "settings": {
@@ -2446,7 +2482,13 @@
       "wallet": "Mkoba",
       "billing": "Malipo",
       "agents_list": "Wakala",
-      "client_interface": "Kiolesura"
+      "client_interface": "Kiolesura",
+      "network_ops": "Mtandao",
+      "storage": "Hifadhi"
     }
+  },
+  "setup_validation_select_provider": "Chagua mtoa huduma wa LLM",
+  "network_ops": {
+    "open_federation_hub": "Fungua kituo cha shirikisho →"
   }
 }

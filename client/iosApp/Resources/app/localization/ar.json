@@ -360,6 +360,11 @@
     "login_marketing_optin": "أرسل لي تحديثات المنتج والإعلانات",
     "login_privacy": "عرض سياسة الخصوصية",
     "login_footer": "مدعوم من CIRIS AI",
+    "login_owner_hint": "آخر تسجيل دخول: {owner}",
+    "login_reset_device": "إعادة ضبط الجهاز",
+    "login_reset_device_confirm_title": "إعادة ضبط الجهاز؟",
+    "login_reset_device_confirm_body": "سيؤدي ذلك إلى مسح جميع البيانات المحلية والعودة إلى معالج الإعداد. لا يمكن التراجع عن هذا الإجراء.",
+    "login_reset_device_cancel": "إلغاء",
     "login_username": "اسم المستخدم",
     "login_password_label": "كلمة المرور",
     "login_submit": "تسجيل الدخول",
@@ -1732,7 +1737,27 @@
     "setup_byok_llm_desc": "قم بتكوين مزود الذكاء الاصطناعي الخاص بك. أدخل مفتاح API واختر نموذجًا للبدء.",
     "setup_ciris_llm_desc": "CIRIS AI نشط. يمكنك اختيارياً تكوين مزودك الخاص للاستخدام دون اتصال أو الخصوصية.",
     "setup_select_provider": "اختر مزوداً",
-    "setup_validation_select_provider": "يرجى اختيار مزود LLM"
+    "setup_validation_select_provider": "يرجى اختيار مزود LLM",
+    "login_wrong_account_title": "حساب خاطئ",
+    "login_wrong_account_body": "{owner}\n\nسجّل الدخول بحساب مالك الجهاز، أو أعد ضبط الجهاز للبدء من جديد.",
+    "login_wrong_account_body_generic": "هذا الجهاز يخص حسابًا آخر.",
+    "login_choose_different_account": "استخدام حساب آخر",
+    "status_ready": "جاهز",
+    "data_community_canonical": "مجتمع CIRIS (ciris-canonical)",
+    "data_community_consent_active": "موافقتك نشطة — تتم المشاركة مع مجتمع CIRIS.",
+    "data_community_consent_paused": "متوقف — لا تتم المشاركة حاليًا.",
+    "data_community_label": "المجتمع",
+    "data_community_peer_label": "ثقة النظراء",
+    "data_community_pending": "الاتحاد قيد الانتظار — يصبح كائن ثقة حيًا عندما يتصل مجتمع CIRIS.",
+    "data_community_trust_title": "المجتمع والثقة",
+    "data_community_trusted": "موثوق",
+    "data_community_untrusted": "غير موثوق بعد",
+    "trust_fabric_mismatch": "عدم تطابق",
+    "trust_fabric_not_loaded": "غير محمّل",
+    "trust_fabric_note": "يضيء التحقق من الإصدار المضمّن وتجزئة السجل عندما توفرها مكونات الركيزة.",
+    "trust_fabric_pending": "قيد الانتظار",
+    "trust_fabric_title": "مكونات الركيزة",
+    "trust_fabric_verified": "تم التحقق"
   },
   "prompts": {
     "dma": {
@@ -2324,6 +2349,17 @@
       },
       "refresh": "تحديث",
       "summary": "{count} نظراء · {canonical} أصلي"
+    },
+    "federation_id": {
+      "title": "معرّف الاتحاد",
+      "hint": "العنوان الذي تستخدمه خوادم السجل والعدسة للوصول إلى هذا الوكيل.",
+      "initializing": "جارٍ تهيئة الهوية…",
+      "pubkey_label": "مفتاح Ed25519",
+      "copy_key_id": "نسخ معرّف المفتاح",
+      "cap_signing": "التوقيع",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "تشفير المحتوى"
     }
   },
   "settings": {
@@ -2446,7 +2482,13 @@
       "wallet": "المحفظة",
       "billing": "الفواتير",
       "agents_list": "الوكلاء",
-      "client_interface": "الواجهة"
+      "client_interface": "الواجهة",
+      "network_ops": "الشبكة",
+      "storage": "التخزين"
     }
+  },
+  "setup_validation_select_provider": "اختر مزوّد LLM",
+  "network_ops": {
+    "open_federation_hub": "فتح مركز الاتحاد →"
   }
 }

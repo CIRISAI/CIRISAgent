@@ -17,7 +17,7 @@ import logging
 import os
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, Dict, Optional, Tuple
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -143,8 +143,9 @@ class CapacityResponse(BaseModel):
     cached: bool = Field(False, description="True if served from local cache rather than live lens fetch")
     # Local score — populated when the request uses ?scope=local|both.
     # Null when scope=fleet (default) so the existing client contract is
-    # unchanged. The local computation is a CCA approximation
-    # (J = k_eff · (1 − ρ) · λ · σ) over fast-to-read runtime signals.
+    # unchanged. The local computation is a CCA approximation in the
+    # Accord 1.3 form (J = μ·k_eff·λ·σ·τ, correlation folded into k_eff)
+    # over fast-to-read runtime signals.
     local_score: Optional[float] = Field(
         None, description="This occurrence's own capacity score in [0, 1]; null when scope=fleet."
     )
@@ -523,6 +524,23 @@ async def delete_lens_traces(
         local_revoked = True
         logger.info(f"Local accord consent revoked for agent {agent_id_hash} via DSAR self-service")
 
+    # CEG-native: "Revoke and Delete" is a RECANT (mistake / delete my data) — the
+    # structural primitive that triggers the DSAR deletion cascade (the lens
+    # deletion above). Emit + promote the recants attestation so the withdrawal
+    # is federation-announceable. Best-effort + flag-gated.
+    try:
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            RevocationIntent,
+            current_community_grant_id,
+            emit_community_consent_revocation,
+        )
+
+        target = current_community_grant_id()
+        if target:
+            emit_community_consent_revocation(RevocationIntent.RECANT, target, reason=deletion.reason)
+    except Exception as e:  # never break the deletion flow
+        logger.debug(f"consent-CEG: recant emit skipped: {e}")
+
     # Step 3: Audit trail
     logger.info(
         "DSAR lens deletion requested",
@@ -620,6 +638,53 @@ async def get_accord_settings(
     )
 
 
+def _apply_consent_change(adapter: Any, consent_given: bool) -> None:
+    """Apply a consent flip: adapter state + .env persistence + CEG artifact.
+
+    CEG-native consent object (#869): grant on opt-in; the switch-off is a
+    WITHDRAW (stop going forward, retain history) — NOT a recant/delete.
+    Both side-channels are best-effort and never break the settings update.
+    """
+    adapter.update_consent(consent_given)
+
+    # CRITICAL: Persist consent change to .env file so it survives restart
+    try:
+        _update_env_consent(consent_given)
+        logger.info(f"Persisted consent={consent_given} to .env file")
+    except Exception as e:
+        logger.warning(f"Failed to persist consent to .env: {e}")
+
+    try:
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            RevocationIntent,
+            current_community_grant_id,
+            emit_community_consent_grant,
+            emit_community_consent_revocation,
+        )
+
+        if consent_given:
+            emit_community_consent_grant()
+        else:
+            target = current_community_grant_id()
+            if target:
+                emit_community_consent_revocation(RevocationIntent.WITHDRAW, target)
+    except Exception as e:
+        logger.debug(f"consent-CEG: accord-settings emit skipped: {e}")
+
+
+def _apply_trace_level_change(adapter: Any, trace_level: str) -> None:
+    """Apply a trace-level change; 400 on an unknown level."""
+    from ciris_adapters.ciris_accord_metrics.services import TraceDetailLevel
+
+    try:
+        adapter.metrics_service._trace_level = TraceDetailLevel(trace_level)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid trace_level: {trace_level}",
+        )
+
+
 @router.put(
     "/accord-settings",
     responses={
@@ -651,28 +716,12 @@ async def update_accord_settings(
     changes: list[str] = []
 
     if settings.consent_given is not None:
-        adapter.update_consent(settings.consent_given)
+        _apply_consent_change(adapter, settings.consent_given)
         changes.append(f"consent_given={settings.consent_given}")
 
-        # CRITICAL: Persist consent change to .env file so it survives restart
-        try:
-            _update_env_consent(settings.consent_given)
-            logger.info(f"Persisted consent={settings.consent_given} to .env file")
-        except Exception as e:
-            logger.warning(f"Failed to persist consent to .env: {e}")
-
     if settings.trace_level is not None and hasattr(adapter, "metrics_service"):
-        svc = adapter.metrics_service
-        from ciris_adapters.ciris_accord_metrics.services import TraceDetailLevel
-
-        try:
-            svc._trace_level = TraceDetailLevel(settings.trace_level)
-            changes.append(f"trace_level={settings.trace_level}")
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid trace_level: {settings.trace_level}",
-            )
+        _apply_trace_level_change(adapter, settings.trace_level)
+        changes.append(f"trace_level={settings.trace_level}")
 
     if not changes:
         raise HTTPException(
@@ -762,106 +811,275 @@ def _capacity_base_url() -> str:
     ).rstrip("/")
 
 
-async def _compute_local_capacity(request: Request) -> Tuple[float, str]:
-    """Compute this occurrence's local CIRIS capacity as a score in [0, 1].
+# Epistemic humility constants for the OCCURRENCE (local) score.
+#
+# An occurrence grading itself can never claim certainty — a perfect 1.0
+# from a self-assessment is, definitionally, a measurement error or a
+# Goodhart artifact (the formula degenerating, not the system being
+# perfect). τ (tau) encodes that as the trust term:
+#
+#   * TAU_ATTESTED (0.95) — a live trust edge exists: either the CEG
+#     community-trust grant is in force (consent:community_trust:v1,
+#     newest-wins — the same artifact lens-core's consent gate reads) or
+#     at least one federation peer is reachable. The occurrence's claim
+#     is anchored to something outside itself, but still self-reported:
+#     capped below 1.0 forever.
+#   * TAU_ISOLATED (0.60) — no trust edge. An isolated occurrence's
+#     health claim is unattested self-report; it can be "probably fine"
+#     (0.6 · everything-else) but never "healthy" on its own say-so.
+#
+# Because J multiplies τ in, J < 1.0 BY CONSTRUCTION — no clamp needed.
+# The cohort score (CIRISLens, computed from many agents' signed traces)
+# is the only score that may legitimately approach 1.0.
+TAU_ATTESTED = 0.95
+TAU_ISOLATED = 0.60
 
-    Implements the CCA formula (Coherence Collapse Analysis, Moore 2026):
 
-        J = k_eff · (1 − ρ) · λ · σ
+def _newest_community_trust_row(engine: Any, key_id: str) -> Optional[Dict[str, Any]]:
+    """Newest attestation row on ``consent:community_trust:v1`` by key_id.
 
-    with runtime signals for each term:
-
-      * ``k_eff`` = fraction of healthy services from the service registry
-        (the 22-service microarchitecture is the ρ↓ intervention per
-        Table 5, so we approximate k directly rather than track ρ).
-      * ``(1 − ρ)`` = 1.0 constant. Modular services are architecturally
-        independent; refining this requires cross-service covariance
-        tracking which we don't have yet.
-      * ``λ`` = strictness — 1.0 if conscience + wise_authority are both
-        present AND healthy, else 0.7. Tracks whether the ethical
-        faculties are actively enforcing constraints.
-      * ``σ`` = sustainability, now grounded in ``handler_action_task_complete``
-        audit records in the last hour. Each successful task completion
-        is a "positive moment" per the Accord; emission rate above the
-        target threshold = σ at full; silence = σ at floor. Matches the
-        "gratitude token system" per Table 5 (CIRIS Agent mapping).
-
-    Returns (score_in_unit_interval, category_label). Async because the
-    audit service's ``query_audit_trail`` is async; the whole call is
-    still ~ms-scale (one bounded-row query + an in-memory registry walk).
-
-    Anti-Goodhart guardrail unchanged: never fed to the agent's own
-    context, never cached in ``ContextEnrichmentCache``.
+    Tries a dimension-scoped filter first (keeps the community-trust row
+    from falling off page 1 as per-user consent rows accumulate); falls
+    back to the unfiltered page if persist rejects the filter key.
     """
+    import json as _json
+
+    try:
+        raw = engine.list_attestations(_json.dumps({"dimension": "consent:community_trust:v1"}), None, 100, key_id)
+    except Exception:
+        raw = engine.list_attestations("{}", None, 100, key_id)
+    page = _json.loads(raw)
+    rows = [
+        r
+        for r in page.get("items", [])
+        if (r.get("attestation_envelope") or {}).get("dimension") == "consent:community_trust:v1"
+    ]
+    if not rows:
+        return None
+    rows.sort(key=lambda r: (r.get("asserted_at", ""), r.get("attestation_id", "")), reverse=True)
+    newest: Dict[str, Any] = rows[0]
+    return newest
+
+
+def _community_grant_edge() -> bool:
+    """True when the newest community-trust row is a standing DIRECTED grant.
+
+    The interim local-tier grant (sentinel counterparty, written while the
+    canonical community key is unpublished) does NOT count: a self-authored
+    row with no counterparty is precisely the solipsism τ exists to
+    discount. withdraws/recants = the edge was explicitly severed.
+    """
+    try:
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.logic.runtime.edge_runtime import get_federation_address
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            _PENDING_COMMUNITY_SENTINEL,
+        )
+
+        engine = get_persist_engine()
+        key_id = get_federation_address()
+        if engine is None or not key_id:
+            return False
+        newest = _newest_community_trust_row(engine, key_id)
+        if newest is None or newest.get("attestation_type") not in ("scores", "supersedes"):
+            return False
+        claim = ((newest.get("attestation_envelope") or {}).get("claim")) or {}
+        return claim.get("user_id") != _PENDING_COMMUNITY_SENTINEL
+    except Exception as e:
+        logger.debug(f"[capacity.trust] community-grant probe failed: {type(e).__name__}: {e}")
+        return False
+
+
+def _reachable_peer_edge() -> bool:
+    """True when the edge runtime can see at least one federation peer."""
+    try:
+        from ciris_engine.logic.runtime.edge_runtime import try_get_edge
+
+        edge = try_get_edge()
+        if edge is None:
+            return False
+        peers = getattr(edge, "list_peers", None)
+        if callable(peers):
+            return len(peers() or []) > 0
+        snapshot = getattr(edge, "metrics_snapshot", None)
+        if callable(snapshot):
+            metrics = snapshot() or {}
+            return isinstance(metrics, dict) and int(metrics.get("peers", 0) or 0) > 0
+        return False
+    except Exception as e:
+        logger.debug(f"[capacity.trust] peer probe failed: {type(e).__name__}: {e}")
+        return False
+
+
+def _occurrence_trust_edge(request: Request) -> Tuple[bool, str]:
+    """Is this occurrence's health claim anchored to a trusted peer?
+
+    Returns (attested, source) with source ∈ {"community_grant", "peer",
+    "none"}: first the CEG community-trust consent artifact (newest-wins,
+    mirroring lens-core's gate), then any reachable federation peer.
+
+    Sync FFI work runs in this thread — callers in async context must wrap
+    with ``asyncio.to_thread`` (``_compute_local_capacity`` does).
+    """
+    if _community_grant_edge():
+        return True, "community_grant"
+    if _reachable_peer_edge():
+        return True, "peer"
+    return False, "none"
+
+
+async def _probe_service_health(s: Any) -> Optional[bool]:
+    """True/False when the service exposes health; None = unmeasurable.
+
+    No health surface is missing EVIDENCE, not health — the pre-2.9.6
+    default-True here is what minted the erroneous 1.0 scores. A probe
+    that raises IS evidence of unhealth.
+    """
+    try:
+        is_healthy = getattr(s, "is_healthy", None)
+        if callable(is_healthy):
+            result = is_healthy()
+            if hasattr(result, "__await__"):
+                return bool(await result)
+            return bool(result)
+        healthy_attr = getattr(s, "healthy", None)
+        if healthy_attr is None:
+            return None
+        return bool(healthy_attr)
+    except Exception:
+        return False
+
+
+def _k_eff_terms(healthy: int, measurable: int) -> Tuple[float, float, float]:
+    """(k_raw, 1−ρ, k_eff) over the measurable services.
+
+    ρ proxy: a single failure is normal operational variance (ρ ≈ 0);
+    many failing *simultaneously* is correlated systemic stress (ρ → 1).
+    Accord 1.3 (A2): correlation enters THROUGH k_eff — the discount
+    k/(1 + ρ·(k−1)) IS the diversity term; a separate (1−ρ) factor
+    double-counted it. Our proxy form k_eff = k_raw · (1 − ρ) is
+    numerically identical to the pre-1.3 product, correctly framed.
+    """
+    k_raw = (healthy / measurable) if measurable else 0.0
+    failures = measurable - healthy
+    rho = 0.0 if measurable <= 1 else max(0.0, min(1.0, (failures - 1) / (measurable - 1)))
+    rho_complement = 1.0 - rho
+    return k_raw, rho_complement, k_raw * rho_complement
+
+
+def _lambda_from_wise_authority(services: List[Any], health_results: List[Optional[bool]]) -> float:
+    """λ strictness: 1.0 iff the Wise Authority service is present AND
+    healthy (conscience is baked into the thought processor), else 0.7."""
+    for s, h in zip(services, health_results):
+        if not h:
+            continue
+        class_name = type(s).__name__.lower()
+        svc_name = getattr(s, "service_name", "").lower()
+        if "wiseauthority" in class_name or "wise_authority" in svc_name:
+            return 1.0
+    return 0.7
+
+
+async def _compute_local_capacity(request: Request) -> Tuple[float, str, Dict[str, Any]]:
+    """Compute this OCCURRENCE's capacity score in [0, 1) — never 1.0.
+
+    Occurrence vs cohort (the load-bearing distinction):
+
+      * The OCCURRENCE score (this function) is runtime vitals — services
+        up, ethical faculties enforcing, recent positive moments —
+        self-reported by this process about itself. It is epistemically
+        capped (τ < 1) and contingent on a trust edge: an isolated
+        occurrence cannot certify its own health.
+      * The COHORT score (CIRISLens) is computed from many agents' signed
+        traces by an external evaluator. It is the only score that may
+        legitimately approach 1.0, and the only one rendered as the five
+        CIRIS factors.
+
+    Implements the trust-gated CCA approximation (Accord 1.3 form —
+    Book IX Ch 4: J = k_eff · λ · σ, where correlation enters THROUGH
+    k_eff rather than as a separate (1 − ρ̄) factor, which double-counted
+    it; our k_eff below is the raw healthy fraction discounted by the
+    correlation proxy, i.e. an approximation of k/(1 + ρ̄·(k−1))):
+
+        J = μ · k_eff · λ · σ · τ        with k_eff = k_raw · (1 − ρ_proxy)
+
+      * ``μ`` (coverage) = fraction of registry services that actually
+        expose a health surface. Missing instrumentation is missing
+        EVIDENCE, not failure — but it discounts the claim (pre-2.9.6
+        the formula treated unmeasured services as healthy, which is how
+        the erroneous 1.0s were minted).
+      * ``k_eff`` = healthy / MEASURABLE services (unknowns excluded from
+        both numerator and denominator).
+      * ``(1 − ρ)`` = correlation proxy over measurable services: one
+        failure is operational variance; many simultaneous failures are
+        correlated systemic stress.
+      * ``λ`` = strictness — 1.0 if Wise Authority is present AND healthy
+        (conscience is in-processor, so agent-running implies conscience
+        on), else 0.7.
+      * ``σ`` = sustainability from task_complete positive moments
+        (30-over-30 ramp; the ramp may reach 1.0 — τ keeps J below it).
+      * ``τ`` = trust term: TAU_ATTESTED with a live trust edge
+        (community grant or reachable peer), TAU_ISOLATED without.
+
+    Returns (score, category, components) — components carries every term
+    so the response can show its work instead of smearing one synthetic
+    scalar across the five cohort factors.
+
+    Anti-Goodhart guardrails unchanged: never fed to the agent's own
+    context, never cached in ``ContextEnrichmentCache``. The τ cap is
+    itself an anti-Goodhart device — the metric admits its own limits.
+    """
+    degraded: Dict[str, Any] = {"degraded": True}
     try:
         svc_registry = getattr(request.app.state, "service_registry", None)
         if svc_registry is None:
             # No registry = degraded state, not healthy
-            return 0.30, "high_fragility"
+            return 0.30, "high_fragility", degraded
 
-        # --- k_eff + λ probes (service registry walk) ----------------------
+        # --- health probes (service registry walk) -------------------------
         services = svc_registry.get_all_services() if hasattr(svc_registry, "get_all_services") else []
         total = max(1, len(services))
 
-        async def _probe_healthy(s: Any) -> bool:
-            try:
-                is_healthy = getattr(s, "is_healthy", None)
-                if callable(is_healthy):
-                    result = is_healthy()
-                    if hasattr(result, "__await__"):
-                        return bool(await result)
-                    return bool(result)
-                return bool(getattr(s, "healthy", True))
-            except Exception:
-                return False
-
-        health_results = await asyncio.gather(*(_probe_healthy(s) for s in services), return_exceptions=False)
-        healthy = sum(1 for h in health_results if h)
-        k_eff_frac = healthy / total
-
-        # ρ: effective pairwise correlation between constraints. True
-        # ρ needs a rolling per-service health time-series with pairwise
-        # Pearson coefficients — a follow-up. For now we use a cheap
-        # in-snapshot proxy: a single failure is normal operational
-        # variance (ρ ≈ 0); many services failing *simultaneously* is
-        # correlated systemic stress (ρ → 1). Linear ramp on the
-        # excess-over-one failures.
-        failures = total - healthy
-        if total <= 1:
-            rho = 0.0
-        else:
-            rho = max(0.0, min(1.0, (failures - 1) / (total - 1)))
-        rho_complement = 1.0 - rho
-
-        # λ: strictness is active when the Wise Authority service is
-        # healthy. The H3ERE Conscience Module is baked into the thought
-        # processor itself (not a standalone service), so "agent running"
-        # implies conscience is on — we only need to verify WA is
-        # present + healthy for the deferral channel.
-        lam = 0.7
-        for s, h in zip(services, health_results):
-            if not h:
-                continue
-            class_name = type(s).__name__.lower()
-            svc_name = getattr(s, "service_name", "").lower()
-            if "wiseauthority" in class_name or "wise_authority" in svc_name:
-                lam = 1.0
-                break
+        health_results = await asyncio.gather(*(_probe_service_health(s) for s in services), return_exceptions=False)
+        measurable = [h for h in health_results if h is not None]
+        healthy = sum(1 for h in measurable if h)
+        coverage = len(measurable) / total if total else 0.0
+        k_raw_frac, rho_complement, k_eff_frac = _k_eff_terms(healthy, len(measurable))
+        lam = _lambda_from_wise_authority(services, health_results)
 
         # --- σ from recent task_complete positive moments ------------------
         sigma = await _sigma_from_positive_moments(request)
 
-        j = k_eff_frac * rho_complement * lam * sigma
-        j = max(0.0, min(1.0, j))
+        # --- τ: trust edge (occurrence health is a relational property) ----
+        # to_thread: the probe does real persist-FFI roundtrips.
+        attested, trust_source = await asyncio.to_thread(_occurrence_trust_edge, request)
+        tau = TAU_ATTESTED if attested else TAU_ISOLATED
+
+        j = coverage * k_eff_frac * lam * sigma * tau
+        j = max(0.0, min(1.0, j))  # defensive; τ < 1 already bounds it
 
         category = (
             "high_capacity" if j >= 0.90 else "healthy" if j >= 0.75 else "moderate" if j >= 0.55 else "high_fragility"
         )
-        return j, category
+        components: Dict[str, Any] = {
+            "coverage": round(coverage, 4),
+            "k_raw": round(k_raw_frac, 4),
+            "k_eff": round(k_eff_frac, 4),
+            "rho_complement": round(rho_complement, 4),
+            "lambda": round(lam, 4),
+            "sigma": round(sigma, 4),
+            "tau_trust": round(tau, 4),
+            "trust_attested": attested,
+            "trust_source": trust_source,
+            "services_total": total,
+            "services_measurable": len(measurable),
+            "services_healthy": healthy,
+        }
+        return j, category, components
     except Exception as e:
         logger.debug(f"[capacity] local compute failed, returning degraded: {type(e).__name__}: {e}")
         # Errors = degraded state, not healthy
-        return 0.30, "high_fragility"
+        return 0.30, "high_fragility", degraded
 
 
 # σ (sustainability) maturity window — see _sigma_from_positive_moments docstring.
@@ -1069,15 +1287,25 @@ async def get_capacity(
 
     # --- Local-only: skip the lens hop entirely -----------------------------
     if scope_norm == "local":
-        local_j, local_cat = await _compute_local_capacity(request)
-        neutral_factor = CapacityFactor(score=local_j, components={}, trace_count=0, confidence="low")
+        local_j, local_cat, local_terms = await _compute_local_capacity(request)
+        # The occurrence score is ONE scalar with its term breakdown — it is
+        # NOT the five cohort factors (those are lens-computed from signed
+        # traces across the fleet). The factor slots carry the same scalar
+        # for client-shape compatibility, but each shows its work via
+        # components and stays confidence="low" (self-reported vitals).
+        occurrence_factor = CapacityFactor(score=local_j, components=local_terms, trace_count=0, confidence="low")
+        attested = bool(local_terms.get("trust_attested", False))
         parsed = CapacityResponse(
             agent_name=template,
             composite_score=local_j,
             fragility_index=0.0,
             category=local_cat,
             factors=CapacityFactors(
-                C=neutral_factor, I_int=neutral_factor, R=neutral_factor, I_inc=neutral_factor, S=neutral_factor
+                C=occurrence_factor,
+                I_int=occurrence_factor,
+                R=occurrence_factor,
+                I_inc=occurrence_factor,
+                S=occurrence_factor,
             ),
             metadata=CapacityMetadata(),
             cached=False,
@@ -1087,8 +1315,17 @@ async def get_capacity(
         return StandardResponse(
             success=True,
             data=parsed.model_dump(),
-            message=f"Local CIRIS capacity: {local_cat} (score={local_j:.3f})",
-            metadata={"timestamp": datetime.now(timezone.utc).isoformat(), "cached": False, "scope": "local"},
+            message=(
+                f"Occurrence capacity ({'attested via ' + str(local_terms.get('trust_source')) if attested else 'UNATTESTED — no trust edge'}): "
+                f"{local_cat} (score={local_j:.3f})"
+            ),
+            metadata={
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "cached": False,
+                "scope": "local",
+                "trust_attested": attested,
+                "trust_source": local_terms.get("trust_source", "none"),
+            },
         )
 
     # --- Fleet or both: fetch lens payload (cached) -------------------------
@@ -1114,15 +1351,20 @@ async def get_capacity(
 
     # If lens failed, return local-only score instead of erroring
     if lens_failed:
-        local_j, local_cat = await _compute_local_capacity(request)
-        neutral_factor = CapacityFactor(score=local_j, components={}, trace_count=0, confidence="low")
+        local_j, local_cat, local_terms = await _compute_local_capacity(request)
+        occurrence_factor = CapacityFactor(score=local_j, components=local_terms, trace_count=0, confidence="low")
+        attested = bool(local_terms.get("trust_attested", False))
         parsed = CapacityResponse(
             agent_name=template,
             composite_score=local_j,
             fragility_index=0.0,
             category=local_cat,
             factors=CapacityFactors(
-                C=neutral_factor, I_int=neutral_factor, R=neutral_factor, I_inc=neutral_factor, S=neutral_factor
+                C=occurrence_factor,
+                I_int=occurrence_factor,
+                R=occurrence_factor,
+                I_inc=occurrence_factor,
+                S=occurrence_factor,
             ),
             metadata=CapacityMetadata(),
             cached=False,
@@ -1132,14 +1374,20 @@ async def get_capacity(
         return StandardResponse(
             success=True,
             data=parsed.model_dump(),
-            message=f"Local CIRIS capacity (lens unavailable): {local_cat} (score={local_j:.3f})",
-            metadata={"timestamp": datetime.now(timezone.utc).isoformat(), "cached": False, "scope": "local_fallback"},
+            message=f"Occurrence capacity (cohort lens unavailable): {local_cat} (score={local_j:.3f})",
+            metadata={
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "cached": False,
+                "scope": "local_fallback",
+                "trust_attested": attested,
+                "trust_source": local_terms.get("trust_source", "none"),
+            },
         )
 
     local_score: Optional[float] = None
     local_category: Optional[str] = None
     if scope_norm == "both":
-        local_score, local_category = await _compute_local_capacity(request)
+        local_score, local_category, _local_terms = await _compute_local_capacity(request)
 
     # At this point payload cannot be None: either cache hit or successful fetch
     # (lens_failed returns early above)

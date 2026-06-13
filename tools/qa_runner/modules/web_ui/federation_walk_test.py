@@ -61,10 +61,11 @@ TEXT_ADD_PEER_ERROR = "text_add_peer_error"
 
 INVALID_NODE_CODE = "CIRIS-V1-INVALID"
 
-# Screen-name guesses for the desktop wait_for_screen() check after nav.
-# If your route doesn't surface a screen name, the walk still verifies via
-# the root testTag, which is the real source of truth.
-NETWORK_SCREEN_NAME = "Network"
+# The federation hub's nav target — the Global Commons layer in the Commons
+# group (2.9.6: the standalone Network surface was deleted). navigate_to() maps
+# this to the `nav_epistemic_layer_global_commons` sidebar row; verification is
+# via the NETWORK_HUB root testTag, the real source of truth.
+NETWORK_SCREEN_NAME = "Global Commons"
 
 
 class FederationWalkTest:

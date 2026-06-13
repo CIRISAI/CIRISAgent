@@ -52,13 +52,21 @@ class MobileTestConfig:
 
     # App settings
     apk_path: str = "client/androidApp/build/outputs/apk/debug/androidApp-debug.apk"
-    package_name: str = "ai.ciris.mobile"
+    package_name: str = "ai.ciris.mobile.debug"  # matches the default debug apk_path
     reinstall_app: bool = True
     clear_data: bool = True
 
     # Test account
     test_email: str = "ciristest1@gmail.com"
     test_password: str = ""  # For Google Sign-In if manual entry needed
+
+    # Login mode for first-run setup. "local" clicks Local Login → setup wizard
+    # (fully driveable via the Compose test server); "google" launches the
+    # native Google overlay, which the test server cannot drive — prefer local.
+    login_mode: str = "google"
+    # Local account created by the setup wizard (login_mode="local").
+    setup_username: str = "admin"
+    setup_password: str = "qa_test_password_12345"
 
     # LLM settings for setup
     llm_provider: str = "groq"
@@ -275,12 +283,31 @@ class MobileTestRunner:
                 return False
 
             devices = self.adb.get_devices()
-            if devices:
-                device = devices[0]
-                print(f"      Device: {device.serial} ({device.model or 'unknown'})")
-            else:
+            ready = [d for d in devices if d.state == "device"]
+            if not ready:
                 print("      ERROR: No devices found")
                 return False
+            if self.config.device_serial:
+                # Honor the requested target — do NOT silently fall back to the
+                # first device (that would run setup/wipe against the wrong one).
+                device = next((d for d in ready if d.serial == self.config.device_serial), None)
+                if device is None:
+                    print(
+                        f"      ERROR: requested device '{self.config.device_serial}' not connected "
+                        f"(connected: {[d.serial for d in ready]})"
+                    )
+                    return False
+            elif len(ready) > 1:
+                # Ambiguous: bare `adb` commands fail ('more than one device').
+                # Refuse to guess rather than wipe/install the wrong device.
+                print(
+                    f"      ERROR: {len(ready)} devices connected and no -d/--device given; "
+                    f"refusing to guess. Re-run with -d <serial>, one of: {[d.serial for d in ready]}"
+                )
+                return False
+            else:
+                device = ready[0]
+            print(f"      Device: {device.serial} ({device.model or 'unknown'})")
 
             # Initialize UI Automator
             print("[3/4] Initializing UI Automator...")
@@ -297,6 +324,9 @@ class MobileTestRunner:
                         print(f"      ERROR: APK not found: {self.config.apk_path}")
                         return False
 
+                # Force-stop first — `adb install -r` fails/hangs if the app is
+                # running (documented Samsung + emulator gotcha).
+                self.adb.force_stop_app(self.config.package_name)
                 if not self.adb.install_apk(str(apk_path)):
                     print("      ERROR: APK installation failed")
                     return False
@@ -410,6 +440,10 @@ class MobileTestRunner:
         test_config = {
             "test_email": self.config.test_email,
             "test_password": self.config.test_password,
+            "login_mode": self.config.login_mode,
+            "setup_username": self.config.setup_username,
+            "setup_password": self.config.setup_password,
+            "clear_data": self.config.clear_data,
             "llm_provider": self.config.llm_provider,
             "llm_api_key": self.config.llm_api_key,
             "test_message": self.config.test_message,

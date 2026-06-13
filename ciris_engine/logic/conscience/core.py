@@ -39,7 +39,21 @@ from .prompt_loader import get_conscience_prompt_loader
 # This prevents ethical normalization through repeated exposure.
 class ConscienceConfig(BaseModel):
     enabled: bool = Field(default=True)
-    optimization_veto_ratio: float = Field(default=10.0, description="Entropy reduction must be < this ratio")
+    # Accord 1.3 (A8) note: the Order-Maximisation Veto is a SIDE-CONSTRAINT
+    # now — optimisation gains may not purchase non-trivial losses in
+    # protected dimensions at ANY ratio. That side-constraint lives in the
+    # PDMA Step 2 Accord text the DMAs reason from. THIS check is the
+    # CIRIS-EOV torque shard (see prompts/optimization_veto_conscience.yml):
+    # the scalar measures attractor-capture magnitude (0–10), the DECISION
+    # VERB gates, and this ceiling only backstops max torque.
+    optimization_veto_ratio: float = Field(
+        default=10.0,
+        description=(
+            "EOV torque-magnitude ceiling (0-10 scale; the decision verb is the "
+            "gate, this backstops max torque). NOT the retired 1.2b OMV "
+            "benefit/loss ratio (Accord 1.3 A8)."
+        ),
+    )
     coherence_threshold: float = Field(default=0.60, description="Minimum coherence score")
     entropy_threshold: float = Field(default=0.40, description="Maximum entropy allowed")
 

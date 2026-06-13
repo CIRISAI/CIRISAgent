@@ -612,6 +612,11 @@
     "login_marketing_optin": "ਮੈਨੂੰ ਉਤਪਾਦ ਅੱਪਡੇਟ ਅਤੇ ਘੋਸ਼ਣਾਵਾਂ ਭੇਜੋ",
     "login_privacy": "ਗੋਪਨੀਯਤਾ ਨੀਤੀ ਦੇਖੋ",
     "login_footer": "CIRIS AI ਦੁਆਰਾ ਸੰਚਾਲਿਤ",
+    "login_owner_hint": "ਆਖਰੀ ਵਾਰ ਸਾਈਨ ਇਨ ਕੀਤਾ: {owner}",
+    "login_reset_device": "ਡਿਵਾਈਸ ਰੀਸੈੱਟ ਕਰੋ",
+    "login_reset_device_confirm_title": "ਡਿਵਾਈਸ ਰੀਸੈੱਟ ਕਰਨਾ ਹੈ?",
+    "login_reset_device_confirm_body": "ਇਹ ਸਾਰਾ ਸਥਾਨਕ ਡੇਟਾ ਮਿਟਾ ਦੇਵੇਗਾ ਅਤੇ ਸੈੱਟਅੱਪ ਵਿਜ਼ਾਰਡ 'ਤੇ ਵਾਪਸ ਆ ਜਾਵੇਗਾ। ਇਸ ਨੂੰ ਪਹਿਲਾਂ ਵਾਲੀ ਸਥਿਤੀ ਵਿੱਚ ਨਹੀਂ ਲਿਆਂਦਾ ਜਾ ਸਕਦਾ।",
+    "login_reset_device_cancel": "ਰੱਦ ਕਰੋ",
     "startup_waiting_backend": "ਬੈਕਐਂਡ ਦੀ ਉਡੀਕ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ... (ਕੋਸ਼ਿਸ਼ {attempt})",
     "startup_preparing": "ਵਾਤਾਵਰਨ ਤਿਆਰ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ",
     "startup_preparing_progress": "ਵਾਤਾਵਰਨ ਤਿਆਰ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ... {current}/{total}",
@@ -1824,7 +1829,27 @@
     "setup_byok_llm_desc": "ਆਪਣੇ AI ਪ੍ਰਦਾਤਾ ਨੂੰ ਕੌਂਫਿਗਰ ਕਰੋ। ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਆਪਣੀ API ਕੁੰਜੀ ਦਰਜ ਕਰੋ ਅਤੇ ਮਾਡਲ ਚੁਣੋ।",
     "setup_ciris_llm_desc": "CIRIS AI ਸਰਗਰਮ ਹੈ। ਔਫਲਾਈਨ ਵਰਤੋਂ ਜਾਂ ਗੋਪਨੀਯਤਾ ਲਈ ਵਿਕਲਪਿਕ ਤੌਰ ਤੇ ਆਪਣੇ ਪ੍ਰਦਾਤਾ ਨੂੰ ਕੌਂਫਿਗਰ ਕਰੋ।",
     "setup_select_provider": "ਪ੍ਰਦਾਤਾ ਚੁਣੋ",
-    "setup_validation_select_provider": "ਕਿਰਪਾ ਕਰਕੇ LLM ਪ੍ਰਦਾਤਾ ਚੁਣੋ"
+    "setup_validation_select_provider": "ਕਿਰਪਾ ਕਰਕੇ LLM ਪ੍ਰਦਾਤਾ ਚੁਣੋ",
+    "login_wrong_account_title": "ਗਲਤ ਖਾਤਾ",
+    "login_wrong_account_body": "{owner}\n\nਡਿਵਾਈਸ ਮਾਲਕ ਦੇ ਖਾਤੇ ਨਾਲ ਸਾਈਨ ਇਨ ਕਰੋ, ਜਾਂ ਦੁਬਾਰਾ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਡਿਵਾਈਸ ਰੀਸੈੱਟ ਕਰੋ।",
+    "login_wrong_account_body_generic": "ਇਹ ਡਿਵਾਈਸ ਕਿਸੇ ਹੋਰ ਖਾਤੇ ਨਾਲ ਸਬੰਧਤ ਹੈ।",
+    "login_choose_different_account": "ਕੋਈ ਹੋਰ ਖਾਤਾ ਵਰਤੋ",
+    "status_ready": "ਤਿਆਰ",
+    "data_community_canonical": "CIRIS ਭਾਈਚਾਰਾ (ciris-canonical)",
+    "data_community_consent_active": "ਤੁਹਾਡੀ ਸਹਿਮਤੀ ਸਰਗਰਮ ਹੈ — CIRIS ਭਾਈਚਾਰੇ ਨਾਲ ਸਾਂਝਾ ਹੋ ਰਿਹਾ ਹੈ।",
+    "data_community_consent_paused": "ਰੁਕਿਆ ਹੋਇਆ — ਇਸ ਵੇਲੇ ਸਾਂਝਾ ਨਹੀਂ ਹੋ ਰਿਹਾ।",
+    "data_community_label": "ਭਾਈਚਾਰਾ",
+    "data_community_peer_label": "ਪੀਅਰ ਭਰੋਸਾ",
+    "data_community_pending": "ਫੈਡਰੇਸ਼ਨ ਬਕਾਇਆ — CIRIS ਭਾਈਚਾਰਾ ਆਨਲਾਈਨ ਆਉਣ 'ਤੇ ਇਹ ਜੀਵੰਤ ਭਰੋਸਾ-ਵਸਤੂ ਬਣ ਜਾਵੇਗਾ।",
+    "data_community_trust_title": "ਭਾਈਚਾਰਾ ਅਤੇ ਭਰੋਸਾ",
+    "data_community_trusted": "ਭਰੋਸੇਯੋਗ",
+    "data_community_untrusted": "ਅਜੇ ਭਰੋਸੇਯੋਗ ਨਹੀਂ",
+    "trust_fabric_mismatch": "ਬੇਮੇਲ",
+    "trust_fabric_not_loaded": "ਲੋਡ ਨਹੀਂ ਹੋਇਆ",
+    "trust_fabric_note": "ਏਮਬੈਡਡ-ਵਰਜਨ ਅਤੇ ਰਜਿਸਟਰੀ ਹੈਸ਼ ਤਸਦੀਕ ਉਦੋਂ ਸਰਗਰਮ ਹੋਵੇਗੀ ਜਦੋਂ ਸਬਸਟ੍ਰੇਟ ਹਿੱਸੇ ਇਨ੍ਹਾਂ ਨੂੰ ਮੁਹੱਈਆ ਕਰਨਗੇ।",
+    "trust_fabric_pending": "ਬਕਾਇਆ",
+    "trust_fabric_title": "ਸਬਸਟ੍ਰੇਟ ਹਿੱਸੇ",
+    "trust_fabric_verified": "ਤਸਦੀਕਸ਼ੁਦਾ"
   },
   "conscience": {
     "ponder_attempted": "ਮੈਂ {action} ਕਰਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕੀਤੀ",
@@ -2324,6 +2349,17 @@
       },
       "refresh": "ਰਿਫ੍ਰੈਸ਼",
       "summary": "{count} ਪੀਅਰ · {canonical} ਕੈਨੋਨੀਕਲ"
+    },
+    "federation_id": {
+      "title": "ਫੈਡਰੇਸ਼ਨ ਆਈਡੀ",
+      "hint": "ਉਹ ਪਤਾ ਜੋ ਰਜਿਸਟਰੀ ਅਤੇ ਲੈਂਜ਼ ਸਰਵਰ ਇਸ ਏਜੰਟ ਤੱਕ ਪਹੁੰਚਣ ਲਈ ਵਰਤਦੇ ਹਨ।",
+      "initializing": "ਪਛਾਣ ਸ਼ੁਰੂ ਹੋ ਰਹੀ ਹੈ…",
+      "pubkey_label": "Ed25519 ਕੁੰਜੀ",
+      "copy_key_id": "ਕੁੰਜੀ ਆਈਡੀ ਕਾਪੀ ਕਰੋ",
+      "cap_signing": "ਦਸਤਖਤ",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "ਸਮੱਗਰੀ ਇਨਕ੍ਰਿਪਸ਼ਨ"
     }
   },
   "settings": {
@@ -2446,7 +2482,13 @@
       "wallet": "ਬਟੂਆ",
       "billing": "ਬਿੱਲਿੰਗ",
       "agents_list": "ਏਜੰਟ",
-      "client_interface": "ਇੰਟਰਫੇਸ"
+      "client_interface": "ਇੰਟਰਫੇਸ",
+      "network_ops": "ਨੈੱਟਵਰਕ",
+      "storage": "ਸਟੋਰੇਜ"
     }
+  },
+  "setup_validation_select_provider": "ਇੱਕ LLM ਪ੍ਰਦਾਤਾ ਚੁਣੋ",
+  "network_ops": {
+    "open_federation_hub": "ਫੈਡਰੇਸ਼ਨ ਹੱਬ ਖੋਲ੍ਹੋ →"
   }
 }

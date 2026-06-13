@@ -827,12 +827,12 @@ When a QA sweep against the live lens produces unexpected behavior — defer tha
 ls -lt /tmp/qa-runner-lens-traces-*/ | head -3
 
 # Find the trace for a specific thought_id
-grep -l "th_abc123" /tmp/qa-runner-lens-traces-*/accord-batch-*.json
+grep -l "th_abc123" /tmp/qa-runner-lens-traces-*/*batch-*.json
 
 # Why did the agent defer? Decode the action_result
 python3 -c "
 import json, glob
-for f in sorted(glob.glob('/tmp/qa-runner-lens-traces-*/accord-batch-*.json')):
+for f in sorted(glob.glob('/tmp/qa-runner-lens-traces-*/*batch-*.json')):
     for ev in json.load(open(f))['events']:
         if ev.get('action_executed') == 'defer':
             print(ev['thought_id'], ev.get('execution_reason', ''))
@@ -850,7 +850,7 @@ Default-off in production (env var unset). The QA runner is the only caller that
 | OAuth not working | Check callback URL format |
 | Service not found | Check ServiceRegistry capabilities |
 | WA deferral failing | Check WiseBus broadcast logic |
-| Live-lens sweep behavior unexplained | Inspect `/tmp/qa-runner-lens-traces-<ts>/accord-batch-*.json` — full reasoning stream, every LLM_CALL, every conscience scalar |
+| Live-lens sweep behavior unexplained | Inspect `/tmp/qa-runner-lens-traces-<ts>/*batch-*.json` — full reasoning stream, every LLM_CALL, every conscience scalar |
 
 ## Command Timeouts
 

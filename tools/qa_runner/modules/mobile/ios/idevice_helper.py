@@ -152,15 +152,22 @@ class IDeviceHelper(DeviceHelper):
                 udid = hw.get("udid", "")
                 conn = device.get("connectionProperties", {})
                 tunnel_state = conn.get("tunnelState", "")
+                pairing_state = conn.get("pairingState", "")
 
                 # Build UDID -> CoreDevice UUID map
                 if udid and coredevice_uuid:
                     IDeviceHelper._udid_to_coredevice[udid] = coredevice_uuid
 
+                # Apple's devicectl only sets tunnelState=connected while a
+                # command is actively running; an idle but paired USB device
+                # reports tunnelState=disconnected. Treat paired devices as
+                # reachable — the tunnel will (re)open on the next command.
+                is_reachable = tunnel_state == "connected" or pairing_state == "paired"
+
                 devices.append(
                     DeviceInfo(
                         identifier=coredevice_uuid,
-                        state="device" if tunnel_state == "connected" else "offline",
+                        state="device" if is_reachable else "offline",
                         platform=Platform.IOS,
                         name=device.get("deviceProperties", {}).get("name"),
                         os_version=device.get("deviceProperties", {}).get("osVersionNumber"),
@@ -286,13 +293,33 @@ class IDeviceHelper(DeviceHelper):
 
         return False
 
-    def launch_app(self, bundle_id: str, activity: Optional[str] = None) -> bool:
-        """Launch app on device."""
+    def launch_app(
+        self,
+        bundle_id: str,
+        activity: Optional[str] = None,
+        env_vars: Optional[Dict[str, str]] = None,
+        terminate_existing: bool = False,
+    ) -> bool:
+        """Launch app on device.
+
+        env_vars: optional environment variables to inject into the launched
+            process (e.g. ``{"CIRIS_TEST_MODE": "true"}``). devicectl accepts
+            these as a JSON object via ``--environment-variables``.
+        terminate_existing: if True, kill any running instance first so the
+            new launch picks up the env vars (devicectl will not replace env
+            on an already-running process).
+        """
         device = self._get_device_target()
 
         if self._has_devicectl:
+            cmd = ["xcrun", "devicectl", "device", "process", "launch", "--device", device]
+            if terminate_existing:
+                cmd.append("--terminate-existing")
+            if env_vars:
+                cmd.extend(["--environment-variables", json.dumps(env_vars)])
+            cmd.append(bundle_id)
             result = subprocess.run(
-                ["xcrun", "devicectl", "device", "process", "launch", "--device", device, bundle_id],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=30,

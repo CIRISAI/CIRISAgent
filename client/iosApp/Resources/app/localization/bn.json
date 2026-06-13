@@ -613,6 +613,11 @@
     "login_marketing_optin": "পণ্য আপডেট ও ঘোষণা পাঠান",
     "login_privacy": "গোপনীয়তা নীতি দেখুন",
     "login_footer": "CIRIS AI দ্বারা পরিচালিত",
+    "login_owner_hint": "সর্বশেষ সাইন ইন: {owner}",
+    "login_reset_device": "ডিভাইস রিসেট করুন",
+    "login_reset_device_confirm_title": "ডিভাইস রিসেট করবেন?",
+    "login_reset_device_confirm_body": "এটি সমস্ত স্থানীয় ডেটা মুছে দেবে এবং সেটআপ উইজার্ডে ফিরে যাবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।",
+    "login_reset_device_cancel": "বাতিল",
     "startup_waiting_backend": "ব্যাকএন্ডের জন্য অপেক্ষা করা হচ্ছে... (প্রচেষ্টা {attempt})",
     "startup_preparing": "পরিবেশ প্রস্তুত করা হচ্ছে",
     "startup_preparing_progress": "পরিবেশ প্রস্তুত করা হচ্ছে... {current}/{total}",
@@ -1825,7 +1830,27 @@
     "setup_byok_llm_desc": "আপনার AI প্রদানকারী কনফিগার করুন। শুরু করতে আপনার API কী লিখুন এবং একটি মডেল নির্বাচন করুন।",
     "setup_ciris_llm_desc": "CIRIS AI সক্রিয়। অফলাইন ব্যবহার বা গোপনীয়তার জন্য ঐচ্ছিকভাবে আপনার নিজের প্রদানকারী কনফিগার করুন।",
     "setup_select_provider": "প্রদানকারী নির্বাচন করুন",
-    "setup_validation_select_provider": "অনুগ্রহ করে একটি LLM প্রদানকারী নির্বাচন করুন"
+    "setup_validation_select_provider": "অনুগ্রহ করে একটি LLM প্রদানকারী নির্বাচন করুন",
+    "login_wrong_account_title": "ভুল অ্যাকাউন্ট",
+    "login_wrong_account_body": "{owner}\n\nডিভাইস মালিকের অ্যাকাউন্ট দিয়ে সাইন ইন করুন, অথবা আবার শুরু করতে ডিভাইস রিসেট করুন।",
+    "login_wrong_account_body_generic": "এই ডিভাইসটি অন্য একটি অ্যাকাউন্টের।",
+    "login_choose_different_account": "অন্য একটি অ্যাকাউন্ট ব্যবহার করুন",
+    "status_ready": "প্রস্তুত",
+    "data_community_canonical": "CIRIS কমিউনিটি (ciris-canonical)",
+    "data_community_consent_active": "আপনার সম্মতি সক্রিয় — CIRIS কমিউনিটির সাথে শেয়ার হচ্ছে।",
+    "data_community_consent_paused": "বিরতিতে — বর্তমানে শেয়ার হচ্ছে না।",
+    "data_community_label": "কমিউনিটি",
+    "data_community_peer_label": "পিয়ার বিশ্বাস",
+    "data_community_pending": "ফেডারেশন অপেক্ষমাণ — CIRIS কমিউনিটি অনলাইনে এলে এটি জীবন্ত বিশ্বাস-বস্তু হবে।",
+    "data_community_trust_title": "কমিউনিটি ও বিশ্বাস",
+    "data_community_trusted": "বিশ্বস্ত",
+    "data_community_untrusted": "এখনও বিশ্বস্ত নয়",
+    "trust_fabric_mismatch": "অমিল",
+    "trust_fabric_not_loaded": "লোড হয়নি",
+    "trust_fabric_note": "সাবস্ট্রেট উপাদানগুলো সরবরাহ করলে এমবেডেড-সংস্করণ ও রেজিস্ট্রি হ্যাশ যাচাই সক্রিয় হবে।",
+    "trust_fabric_pending": "অপেক্ষমাণ",
+    "trust_fabric_title": "সাবস্ট্রেট উপাদান",
+    "trust_fabric_verified": "যাচাইকৃত"
   },
   "conscience": {
     "ponder_attempted": "আমি {action} করার চেষ্টা করেছিলাম",
@@ -2325,6 +2350,17 @@
       },
       "refresh": "রিফ্রেশ",
       "summary": "{count} পিয়ার · {canonical} ক্যানোনিক্যাল"
+    },
+    "federation_id": {
+      "title": "ফেডারেশন আইডি",
+      "hint": "রেজিস্ট্রি ও লেন্স সার্ভার এই এজেন্টে পৌঁছাতে যে ঠিকানা ব্যবহার করে।",
+      "initializing": "পরিচয় চালু হচ্ছে…",
+      "pubkey_label": "Ed25519 কী",
+      "copy_key_id": "কী আইডি কপি করুন",
+      "cap_signing": "স্বাক্ষর",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "কনটেন্ট এনক্রিপশন"
     }
   },
   "settings": {
@@ -2447,7 +2483,13 @@
       "wallet": "ওয়ালেট",
       "billing": "বিলিং",
       "agents_list": "এজেন্টরা",
-      "client_interface": "ইন্টারফেস"
+      "client_interface": "ইন্টারফেস",
+      "network_ops": "নেটওয়ার্ক",
+      "storage": "স্টোরেজ"
     }
+  },
+  "setup_validation_select_provider": "একটি LLM প্রদানকারী নির্বাচন করুন",
+  "network_ops": {
+    "open_federation_hub": "ফেডারেশন হাব খুলুন →"
   }
 }

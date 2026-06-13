@@ -306,8 +306,13 @@ async def _persist_adapter_to_env(adapter_type: str) -> None:
         logger.debug(f"[AUTO_ENABLE] Could not persist {adapter_type} to .env: {e}")
 
 
-# Bootstrap adapters that are always loaded at startup (before setup wizard)
-BOOTSTRAP_ADAPTERS = {"api", "cli", "ciris_verify"}
+# Bootstrap adapters that are always loaded at startup (before setup wizard).
+# ciris_accord_metrics joined in 2.9.6 (#866): the observability spine is
+# required like verify; the accord-traces opt-in is a CEG wire artifact
+# (consent:community_trust:v1 grant), not an adapter-load decision.
+# (persist + edge are required substrate RUNTIMES, not adapters — they
+# block boot in persistence init / init_edge_runtime respectively.)
+BOOTSTRAP_ADAPTERS = {"api", "cli", "ciris_verify", "ciris_accord_metrics"}
 
 
 async def _persist_adapter_to_graph(runtime: Any, adapter_type: str, adapter_config: Any) -> None:

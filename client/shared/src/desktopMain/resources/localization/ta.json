@@ -614,6 +614,11 @@
     "login_marketing_optin": "அனுப்பு me product updates and announcements",
     "login_privacy": "காண் Privacy Policy",
     "login_footer": "CIRIS AI ஆல் இயக்கப்படுகிறது",
+    "login_owner_hint": "கடைசியாக உள்நுழைந்தவர்: {owner}",
+    "login_reset_device": "சாதனத்தை மீட்டமை",
+    "login_reset_device_confirm_title": "சாதனத்தை மீட்டமைக்கவா?",
+    "login_reset_device_confirm_body": "இது அனைத்து உள்ளூர் தரவையும் அழித்து, அமைவு வழிகாட்டிக்கு திரும்பும். இதை மீண்டும் செயல்தவிர்க்க இயலாது.",
+    "login_reset_device_cancel": "ரத்து",
     "startup_waiting_backend": "பின்தள சர்வருக்கு காத்திருக்கிறது... (முயற்சி {attempt})",
     "startup_preparing": "சூழலை தயாரிக்கிறது",
     "startup_preparing_progress": "சூழலை தயாரிக்கிறது... {current}/{total}",
@@ -1824,7 +1829,27 @@
     "setup_byok_llm_desc": "உங்கள் AI வழங்குநரை கட்டமைக்கவும். தொடங்க உங்கள் API விசையை உள்ளிட்டு ஒரு மாதிரியைத் தேர்ந்தெடுக்கவும்.",
     "setup_ciris_llm_desc": "CIRIS AI செயலில் உள்ளது. ஆஃப்லைன் பயன்பாடு அல்லது தனியுரிமைக்காக விருப்பமாக உங்கள் சொந்த வழங்குநரை கட்டமைக்கலாம்.",
     "setup_select_provider": "வழங்குநரைத் தேர்ந்தெடுக்கவும்",
-    "setup_validation_select_provider": "LLM வழங்குநரைத் தேர்ந்தெடுக்கவும்"
+    "setup_validation_select_provider": "LLM வழங்குநரைத் தேர்ந்தெடுக்கவும்",
+    "login_wrong_account_title": "தவறான கணக்கு",
+    "login_wrong_account_body": "{owner}\n\nசாதன உரிமையாளரின் கணக்குடன் உள்நுழையவும், அல்லது மீண்டும் தொடங்க சாதனத்தை மீட்டமைக்கவும்.",
+    "login_wrong_account_body_generic": "இந்தச் சாதனம் வேறொரு கணக்கைச் சேர்ந்தது.",
+    "login_choose_different_account": "வேறு கணக்கைப் பயன்படுத்து",
+    "status_ready": "தயார்",
+    "data_community_canonical": "CIRIS சமூகம் (ciris-canonical)",
+    "data_community_consent_active": "உங்கள் ஒப்புதல் செயலில் உள்ளது — CIRIS சமூகத்துடன் பகிரப்படுகிறது.",
+    "data_community_consent_paused": "இடைநிறுத்தப்பட்டது — தற்போது பகிரப்படவில்லை.",
+    "data_community_label": "சமூகம்",
+    "data_community_peer_label": "சக நம்பிக்கை",
+    "data_community_pending": "கூட்டமைப்பு நிலுவையில் — CIRIS சமூகம் இணையத்தில் வந்ததும் இது உயிருள்ள நம்பிக்கை-பொருளாகும்.",
+    "data_community_trust_title": "சமூகமும் நம்பிக்கையும்",
+    "data_community_trusted": "நம்பகமானது",
+    "data_community_untrusted": "இன்னும் நம்பப்படவில்லை",
+    "trust_fabric_mismatch": "பொருந்தவில்லை",
+    "trust_fabric_not_loaded": "ஏற்றப்படவில்லை",
+    "trust_fabric_note": "உட்பொதிந்த-பதிப்பு மற்றும் பதிவக ஹாஷ் சரிபார்ப்பு அடித்தள கூறுகள் வழங்கியதும் செயல்படும்.",
+    "trust_fabric_pending": "நிலுவையில்",
+    "trust_fabric_title": "அடித்தள கூறுகள்",
+    "trust_fabric_verified": "சரிபார்க்கப்பட்டது"
   },
   "conscience": {
     "ponder_attempted": "I முயற்சித்தது to {செயல்}",
@@ -2324,6 +2349,17 @@
       },
       "refresh": "புதுப்பி",
       "summary": "{count} பீர்கள் · {canonical} நியதி"
+    },
+    "federation_id": {
+      "title": "கூட்டமைப்பு அடையாளம்",
+      "hint": "பதிவகம் மற்றும் லென்ஸ் சேவையகங்கள் இந்த முகவரை அடைய பயன்படுத்தும் முகவரி.",
+      "initializing": "அடையாளம் தொடங்குகிறது…",
+      "pubkey_label": "Ed25519 சாவி",
+      "copy_key_id": "சாவி அடையாளத்தை நகலெடு",
+      "cap_signing": "கையொப்பம்",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "உள்ளடக்க குறியாக்கம்"
     }
   },
   "settings": {
@@ -2446,7 +2482,13 @@
       "wallet": "பணப்பை",
       "billing": "வழிகாட்டல்",
       "agents_list": "முகவர்கள்",
-      "client_interface": "இடைமுகம்"
+      "client_interface": "இடைமுகம்",
+      "network_ops": "நெட்வொர்க்",
+      "storage": "சேமிப்பு"
     }
+  },
+  "setup_validation_select_provider": "ஒரு LLM வழங்குநரைத் தேர்ந்தெடுக்கவும்",
+  "network_ops": {
+    "open_federation_hub": "ஃபெடரேஷன் மையத்தைத் திற →"
   }
 }

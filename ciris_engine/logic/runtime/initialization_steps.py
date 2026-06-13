@@ -545,6 +545,20 @@ async def _load_single_saved_adapter(
         logger.debug(f"Adapter {adapter_id} already in adapter_manager, skipping")
         return False
 
+    # Skip bootstrap-required adapter TYPES outright. Upgrade path: 2.9.5
+    # setups persisted `adapter.ciris_accord_metrics.*` rows to the graph;
+    # on 2.9.6+ the adapter is always loaded at bootstrap (#866), and the
+    # two guards above miss it (bootstrap loads bypass adapter_manager and
+    # the adapter exposes no `adapter_id` attr) — re-loading here would run
+    # TWO instances with duplicate stream subscriptions and sealed traces.
+    base_type = adapter_id.split(":", 1)[0]
+    if base_type in BOOTSTRAP_ADAPTER_TYPES:
+        logger.info(
+            f"Adapter {adapter_id} is bootstrap-required as of 2.9.6 — "
+            "skipping stale graph-persisted copy (loaded at bootstrap instead)"
+        )
+        return False
+
     # Get adapter type, config, occurrence_id, persist flag, and saved env_vars
     adapter_type_node = await config_service.get_config(f"adapter.{adapter_id}.type")
     adapter_config_node = await config_service.get_config(f"adapter.{adapter_id}.config")
@@ -620,8 +634,9 @@ async def _load_single_saved_adapter(
     return False
 
 
-# Bootstrap adapters that are always loaded at startup (skip in env fallback)
-BOOTSTRAP_ADAPTER_TYPES = {"api", "cli", "ciris_verify"}
+# Bootstrap adapters that are always loaded at startup (skip in env fallback).
+# ciris_accord_metrics is bootstrap-required as of 2.9.6 (#866 LensCore fold).
+BOOTSTRAP_ADAPTER_TYPES = {"api", "cli", "ciris_verify", "ciris_accord_metrics"}
 
 
 async def _load_adapters_from_env_fallback(

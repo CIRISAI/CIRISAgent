@@ -3,8 +3,10 @@ package ai.ciris.mobile.shared.ui.screens.federation
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.federation.FederationIdentity
+import ai.ciris.mobile.shared.models.federation.FederationIdentityResponse
 import ai.ciris.mobile.shared.models.federation.NodeCodeShareResponse
 import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.ui.components.FederationIdCard
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
 import androidx.compose.runtime.CompositionLocalProvider
@@ -38,6 +40,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * Network → Identity sub-screen (T-E-UI Batch A).
@@ -64,6 +68,7 @@ fun NetworkIdentityScreen(
 
     val identity by viewModel.identity.collectAsState()
     val nodeCode by viewModel.nodeCode.collectAsState()
+    val federationId by viewModel.federationId.collectAsState()
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
 
@@ -131,6 +136,7 @@ fun NetworkIdentityScreen(
                 StatsRow(identity = identity)
                 CapabilitiesCard(identity = identity)
                 NodeCodeCard(nodeCode = nodeCode)
+                FederationIdCard(federationId = federationId)
             }
             if (loading && identity == null) {
                 CircularProgressIndicator(

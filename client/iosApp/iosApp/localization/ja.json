@@ -360,6 +360,11 @@
     "login_marketing_optin": "製品の更新情報やお知らせを受け取る",
     "login_privacy": "プライバシーポリシーを表示",
     "login_footer": "Powered by CIRIS AI",
+    "login_owner_hint": "前回のサインイン：{owner}",
+    "login_reset_device": "デバイスをリセット",
+    "login_reset_device_confirm_title": "デバイスをリセットしますか？",
+    "login_reset_device_confirm_body": "すべてのローカルデータが消去され、セットアップウィザードに戻ります。この操作は元に戻せません。",
+    "login_reset_device_cancel": "キャンセル",
     "login_username": "ユーザー名",
     "login_password_label": "パスワード",
     "login_submit": "ログイン",
@@ -1732,7 +1737,27 @@
     "setup_byok_llm_desc": "AIプロバイダーを設定します。APIキーを入力してモデルを選択してください。",
     "setup_ciris_llm_desc": "CIRIS AIがアクティブです。オフライン使用やプライバシーのために独自のプロバイダーを設定できます。",
     "setup_select_provider": "プロバイダーを選択",
-    "setup_validation_select_provider": "LLMプロバイダーを選択してください"
+    "setup_validation_select_provider": "LLMプロバイダーを選択してください",
+    "login_wrong_account_title": "アカウントが違います",
+    "login_wrong_account_body": "{owner}\n\nデバイス所有者のアカウントでサインインするか、デバイスをリセットして最初からやり直してください。",
+    "login_wrong_account_body_generic": "このデバイスは別のアカウントに属しています。",
+    "login_choose_different_account": "別のアカウントを使用",
+    "status_ready": "準備完了",
+    "data_community_canonical": "CIRISコミュニティ (ciris-canonical)",
+    "data_community_consent_active": "同意は有効です — CIRISコミュニティと共有中。",
+    "data_community_consent_paused": "一時停止 — 現在共有していません。",
+    "data_community_label": "コミュニティ",
+    "data_community_peer_label": "ピア信頼",
+    "data_community_pending": "フェデレーション保留中 — CIRISコミュニティがオンラインになると実際の信頼オブジェクトになります。",
+    "data_community_trust_title": "コミュニティと信頼",
+    "data_community_trusted": "信頼済み",
+    "data_community_untrusted": "未信頼",
+    "trust_fabric_mismatch": "不一致",
+    "trust_fabric_not_loaded": "未読み込み",
+    "trust_fabric_note": "組み込みバージョンとレジストリハッシュの検証は、基盤コンポーネントが提供し次第有効になります。",
+    "trust_fabric_pending": "保留中",
+    "trust_fabric_title": "基盤コンポーネント",
+    "trust_fabric_verified": "検証済み"
   },
   "prompts": {
     "dma": {
@@ -2324,6 +2349,17 @@
       },
       "refresh": "更新",
       "summary": "{count} ピア · {canonical} 標準"
+    },
+    "federation_id": {
+      "title": "フェデレーションID",
+      "hint": "レジストリやレンズのサーバーがこのエージェントに到達するためのアドレス。",
+      "initializing": "アイデンティティを初期化中…",
+      "pubkey_label": "Ed25519鍵",
+      "copy_key_id": "鍵IDをコピー",
+      "cap_signing": "署名",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "コンテンツ暗号化"
     }
   },
   "settings": {
@@ -2446,7 +2482,13 @@
       "wallet": "ウォレット",
       "billing": "請求",
       "agents_list": "エージェント一覧",
-      "client_interface": "インターフェース"
+      "client_interface": "インターフェース",
+      "network_ops": "ネットワーク",
+      "storage": "ストレージ"
     }
+  },
+  "setup_validation_select_provider": "LLMプロバイダーを選択してください",
+  "network_ops": {
+    "open_federation_hub": "フェデレーションハブを開く →"
   }
 }

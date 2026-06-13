@@ -1034,6 +1034,11 @@
     "login_credentials_hint": "Nhập thông tin đăng nhập bạn tạo trong quá trình cài đặt",
     "login_first_run_welcome": "Chào mừng! Chọn cách thiết lập trợ lý AI của bạn.",
     "login_footer": "Được cung cấp bởi CIRIS AI",
+    "login_owner_hint": "Đăng nhập lần cuối: {owner}",
+    "login_reset_device": "Đặt lại thiết bị",
+    "login_reset_device_confirm_title": "Đặt lại thiết bị?",
+    "login_reset_device_confirm_body": "Thao tác này sẽ xóa tất cả dữ liệu cục bộ và quay lại trình hướng dẫn cài đặt. Hành động này không thể hoàn tác.",
+    "login_reset_device_cancel": "Hủy",
     "login_local": "Đăng nhập cục bộ",
     "login_marketing_optin": "Gửi cho tôi các bản cập nhật sản phẩm và thông báo",
     "login_password_label": "Mật khẩu",
@@ -2058,7 +2063,27 @@
     "setup_byok_llm_desc": "Cấu hình nhà cung cấp AI của bạn. Nhập khóa API và chọn mô hình để bắt đầu.",
     "setup_ciris_llm_desc": "CIRIS AI đang hoạt động. Tùy chọn cấu hình nhà cung cấp riêng để sử dụng ngoại tuyến hoặc bảo mật.",
     "setup_select_provider": "Chọn nhà cung cấp",
-    "setup_validation_select_provider": "Vui lòng chọn nhà cung cấp LLM"
+    "setup_validation_select_provider": "Vui lòng chọn nhà cung cấp LLM",
+    "login_wrong_account_title": "Sai tài khoản",
+    "login_wrong_account_body": "{owner}\n\nĐăng nhập bằng tài khoản của chủ thiết bị, hoặc đặt lại thiết bị để bắt đầu lại.",
+    "login_wrong_account_body_generic": "Thiết bị này thuộc về một tài khoản khác.",
+    "login_choose_different_account": "Dùng tài khoản khác",
+    "status_ready": "Sẵn sàng",
+    "data_community_canonical": "Cộng đồng CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Sự đồng ý của bạn đang hoạt động — đang chia sẻ với cộng đồng CIRIS.",
+    "data_community_consent_paused": "Tạm dừng — hiện không chia sẻ.",
+    "data_community_label": "Cộng đồng",
+    "data_community_peer_label": "Tin cậy ngang hàng",
+    "data_community_pending": "Liên bang đang chờ — sẽ trở thành đối tượng tin cậy thực khi cộng đồng CIRIS trực tuyến.",
+    "data_community_trust_title": "Cộng đồng & Tin cậy",
+    "data_community_trusted": "Đáng tin cậy",
+    "data_community_untrusted": "Chưa được tin cậy",
+    "trust_fabric_mismatch": "Không khớp",
+    "trust_fabric_not_loaded": "Chưa tải",
+    "trust_fabric_note": "Xác minh phiên bản nhúng và hash sổ đăng ký sẽ kích hoạt khi các thành phần nền tảng cung cấp.",
+    "trust_fabric_pending": "Đang chờ",
+    "trust_fabric_title": "Thành phần nền tảng",
+    "trust_fabric_verified": "Đã xác minh"
   },
   "network": {
     "title": "Mạng",
@@ -2324,6 +2349,17 @@
       },
       "refresh": "Làm mới",
       "summary": "{count} đồng đẳng · {canonical} chính tắc"
+    },
+    "federation_id": {
+      "title": "ID liên bang",
+      "hint": "Địa chỉ mà máy chủ registry và lens dùng để liên hệ với tác tử này.",
+      "initializing": "Đang khởi tạo danh tính…",
+      "pubkey_label": "Khóa Ed25519",
+      "copy_key_id": "Sao chép ID khóa",
+      "cap_signing": "Ký",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Mã hóa nội dung"
     }
   },
   "settings": {
@@ -2446,7 +2482,13 @@
       "wallet": "Ví",
       "billing": "Thanh Toán",
       "agents_list": "Tác Nhân",
-      "client_interface": "Giao Diện"
+      "client_interface": "Giao Diện",
+      "network_ops": "Mạng lưới",
+      "storage": "Lưu trữ"
     }
+  },
+  "setup_validation_select_provider": "Chọn nhà cung cấp LLM",
+  "network_ops": {
+    "open_federation_hub": "Mở trung tâm liên kết →"
   }
 }

@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.localization.LocalizationHelper
+import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
 import androidx.compose.foundation.clickable
@@ -43,6 +44,7 @@ fun DataManagementScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val lensIdentifier by viewModel.lensIdentifier.collectAsState()
     val accordSettings by viewModel.accordSettings.collectAsState()
+    val communityPeer by viewModel.communityPeer.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val isDeletingLensTraces by viewModel.isDeletingLensTraces.collectAsState()
     val lensDeletionResult by viewModel.lensDeletionResult.collectAsState()
@@ -352,6 +354,7 @@ fun DataManagementScreen(
 
                 DeleteTracesCard(
                     accordSettings = accordSettings,
+                    communityPeer = communityPeer,
                     isDeleting = isDeletingLensTraces,
                     isLoadingAdapter = isLoadingAdapter,
                     onDeleteClick = { showDeleteTracesDialog = true },
@@ -398,6 +401,7 @@ fun DataManagementScreen(
 @Composable
 private fun DeleteTracesCard(
     accordSettings: ai.ciris.mobile.shared.api.AccordSettingsData?,
+    communityPeer: ai.ciris.mobile.shared.models.federation.LocalPeerState?,
     isDeleting: Boolean,
     isLoadingAdapter: Boolean,
     onDeleteClick: () -> Unit,
@@ -468,6 +472,14 @@ private fun DeleteTracesCard(
                         InfoRow(localizedString("mobile.data_endpoint"), url.take(40) + if (url.length > 40) "..." else "")
                     }
                 }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                // Community & Trust — the directed CEG consent object: who the
+                // traces go to (the canonical CIRIS community peer), its trust
+                // state, and the live consent state. Renders organically as the
+                // mesh comes up (lenscore 1.0); graceful "pending" until then.
+                CommunityTrustSection(communityPeer = communityPeer, consentActive = isConsentActive)
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
@@ -581,6 +593,75 @@ private fun DeleteTracesCard(
  * Card for resetting account data while preserving the signing key.
  * This allows wallet access to be retained after reset.
  */
+/**
+ * The directed CEG consent object, shown organically: which community the
+ * traces go to (the canonical CIRIS community peer), its trust state, and the
+ * live consent state. Renders a graceful "federation pending" line until the
+ * lens registers as a federation peer (lenscore 1.0).
+ */
+@Composable
+private fun CommunityTrustSection(
+    communityPeer: ai.ciris.mobile.shared.models.federation.LocalPeerState?,
+    consentActive: Boolean,
+) {
+    val trusted = ai.ciris.mobile.shared.models.federation.PeerTrustState.TRUSTED
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.testable("community_trust_section"),
+    ) {
+        Text(
+            text = localizedString("mobile.data_community_trust_title"),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+        )
+        // Community (the directed counterparty) — always known
+        InfoRow(localizedString("mobile.data_community_label"), localizedString("mobile.data_community_canonical"))
+
+        if (communityPeer != null) {
+            // Live peer: show trust state organically
+            val isTrusted = communityPeer.trust == trusted
+            Row(
+                modifier = Modifier.fillMaxWidth().testable("community_peer_state"),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = localizedString("mobile.data_community_peer_label"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = if (isTrusted)
+                        localizedString("mobile.data_community_trusted")
+                    else
+                        localizedString("mobile.data_community_untrusted"),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isTrusted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                )
+            }
+        } else {
+            // Pre-lenscore-1.0: graceful pending state
+            Text(
+                text = localizedString("mobile.data_community_pending"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testable("community_pending"),
+            )
+        }
+
+        // The consent object's live state
+        Text(
+            text = if (consentActive)
+                localizedString("mobile.data_community_consent_active")
+            else
+                localizedString("mobile.data_community_consent_paused"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testable("community_consent_state"),
+        )
+    }
+}
+
 @Composable
 private fun ResetAccountCard(
     isResetting: Boolean,

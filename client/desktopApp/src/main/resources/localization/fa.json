@@ -366,6 +366,11 @@
     "login_marketing_optin": "أرسل لي تحديثات المنتج والإعلانات",
     "login_privacy": "عرض سياسة الخصوصية",
     "login_footer": "مدعوم من CIRIS AI",
+    "login_owner_hint": "آخرین ورود: {owner}",
+    "login_reset_device": "بازنشانی دستگاه",
+    "login_reset_device_confirm_title": "بازنشانی دستگاه؟",
+    "login_reset_device_confirm_body": "این عمل تمام داده‌های محلی را پاک می‌کند و به راه‌اندازی اولیه بازمی‌گردد. این کار قابل بازگشت نیست.",
+    "login_reset_device_cancel": "لغو",
     "login_username": "اسم المستخدم",
     "login_password_label": "كلمة المرور",
     "login_submit": "ورود",
@@ -1738,7 +1743,27 @@
     "setup_byok_llm_desc": "ارائه‌دهنده هوش مصنوعی خود را پیکربندی کنید. کلید API خود را وارد کنید و یک مدل را برای شروع انتخاب کنید.",
     "setup_ciris_llm_desc": "CIRIS AI فعال است. به صورت اختیاری ارائه‌دهنده خود را برای استفاده آفلاین یا حفظ حریم خصوصی پیکربندی کنید.",
     "setup_select_provider": "یک ارائه‌دهنده انتخاب کنید",
-    "setup_validation_select_provider": "لطفاً یک ارائه‌دهنده LLM انتخاب کنید"
+    "setup_validation_select_provider": "لطفاً یک ارائه‌دهنده LLM انتخاب کنید",
+    "login_wrong_account_title": "حساب اشتباه",
+    "login_wrong_account_body": "{owner}\n\nبا حساب مالک دستگاه وارد شوید، یا برای شروع دوباره دستگاه را بازنشانی کنید.",
+    "login_wrong_account_body_generic": "این دستگاه به حساب دیگری تعلق دارد.",
+    "login_choose_different_account": "از حساب دیگری استفاده کنید",
+    "status_ready": "آماده",
+    "data_community_canonical": "جامعه CIRIS ‏(ciris-canonical)",
+    "data_community_consent_active": "رضایت شما فعال است — در حال اشتراک‌گذاری با جامعه CIRIS.",
+    "data_community_consent_paused": "متوقف — در حال حاضر اشتراک‌گذاری نمی‌شود.",
+    "data_community_label": "جامعه",
+    "data_community_peer_label": "اعتماد همتا",
+    "data_community_pending": "فدراسیون در انتظار — با آنلاین شدن جامعه CIRIS به یک شیء اعتماد زنده تبدیل می‌شود.",
+    "data_community_trust_title": "جامعه و اعتماد",
+    "data_community_trusted": "مورد اعتماد",
+    "data_community_untrusted": "هنوز مورد اعتماد نیست",
+    "trust_fabric_mismatch": "عدم تطابق",
+    "trust_fabric_not_loaded": "بارگذاری نشده",
+    "trust_fabric_note": "با ارائه مؤلفه‌های زیرساخت، تأیید نسخه تعبیه‌شده و هش رجیستری فعال می‌شود.",
+    "trust_fabric_pending": "در انتظار",
+    "trust_fabric_title": "مؤلفه‌های زیرساخت",
+    "trust_fabric_verified": "تأیید شده"
   },
   "prompts": {
     "dma": {
@@ -2330,6 +2355,17 @@
       },
       "refresh": "تازه‌سازی",
       "summary": "{count} همتا · {canonical} متعارف"
+    },
+    "federation_id": {
+      "title": "شناسه فدراسیون",
+      "hint": "نشانی‌ای که سرورهای ثبت و لنز برای دسترسی به این عامل استفاده می‌کنند.",
+      "initializing": "در حال راه‌اندازی هویت…",
+      "pubkey_label": "کلید Ed25519",
+      "copy_key_id": "کپی شناسه کلید",
+      "cap_signing": "امضا",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "رمزگذاری محتوا"
     }
   },
   "settings": {
@@ -2452,7 +2488,13 @@
       "wallet": "کیف پول",
       "billing": "صورتحساب",
       "agents_list": "عوامل",
-      "client_interface": "رابط"
+      "client_interface": "رابط",
+      "network_ops": "شبکه",
+      "storage": "فضای ذخیره‌سازی"
     }
+  },
+  "setup_validation_select_provider": "یک ارائه‌دهنده LLM را انتخاب کنید",
+  "network_ops": {
+    "open_federation_hub": "باز کردن هاب فدراسیون →"
   }
 }

@@ -20,6 +20,7 @@ verifies the reasoning pipeline; this verifies the attestation pipeline.
 Different surfaces, different failure modes — keeping them separate makes
 either-side regressions land in the right test name.
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,6 +36,20 @@ logger = logging.getLogger(__name__)
 
 # Canonical sha256 hash format used by both stage_runtime and verify_tree.
 _HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def _version_meets_algorithm_a_floor(version: str) -> bool:
+    """True when `version` is >= 1.13 (the Algorithm A walker floor).
+
+    Numeric major.minor comparison — NOT a prefix whitelist, so new
+    verify majors pass without a test edit. Unparseable versions fail.
+    """
+    match = re.match(r"^(\d+)\.(\d+)", version)
+    if not match:
+        return False
+    major, minor = int(match.group(1)), int(match.group(2))
+    return major >= 2 or (major == 1 and minor >= 13)
+
 
 # Minimum level achievable at staged-QA time. The level depends on the
 # *broader* attestation pipeline state (TPM, network, registry), not just
@@ -151,23 +166,15 @@ class L4AttestationModule:
             errors.append("CIRISVerify library did not report `loaded=True`.")
 
         version = verify_data.get("version") or ""
-        # Algorithm A floor was originally CIRISVerify v1.13.x (verify_tree()
-        # runtime walker). v2.0 was the CanonicalBuild v2 wire bump on the
-        # register side (CIRISVerify#8); v3.0 ("Federation Ready") bumped the
-        # federation/canonical-hash surface paired with ciris-persist 2.0.x;
-        # v4.0 is the persist-3.6.x cohabitation line. Algorithm A walker
-        # contract is unchanged on the agent side across all these majors —
-        # floor is 1.13.x / 2.x / 3.x / 4.x (extend this list when verify
-        # ships a new major).
-        if not (
-            version.startswith("1.13.")
-            or version.startswith("2.")
-            or version.startswith("3.")
-            or version.startswith("4.")
-        ):
-            errors.append(
-                f"Expected ciris-verify version >=1.13.x (Algorithm A floor); got '{version}'."
-            )
+        # Algorithm A floor is CIRISVerify v1.13.0 (verify_tree() runtime
+        # walker). The walker contract is unchanged on the agent side
+        # across every major since (2.0 CanonicalBuild v2 wire, 3.0
+        # "Federation Ready", 4.0 persist-3.6.x cohabitation, 5.0
+        # edge-1.5 triple), so the gate is a true ">= 1.13" parse — a
+        # prefix whitelist here silently failed every new major (the 5.x
+        # bump broke it on 2.9.6 ship day).
+        if not _version_meets_algorithm_a_floor(version):
+            errors.append(f"Expected ciris-verify version >=1.13.x (Algorithm A floor); got '{version}'.")
 
         # The wheel-installed agent must have walked SOMETHING — even a stub
         # walk should produce > 100 modules across ciris_engine + ciris_adapters
@@ -187,9 +194,7 @@ class L4AttestationModule:
                 f"verify_tree may be running but mis-reporting."
             )
         elif not total_hash:
-            errors.append(
-                "python_total_hash is empty — verify_tree didn't populate the hash field."
-            )
+            errors.append("python_total_hash is empty — verify_tree didn't populate the hash field.")
 
         # binary_ok = self-verification of libciris_verify_ffi.so. If this is
         # False, libtss2 deps probably didn't load (or the wheel's .so is wrong).

@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.models.federation.FederationIdentity
+import ai.ciris.mobile.shared.models.federation.FederationIdentityResponse
 import ai.ciris.mobile.shared.models.federation.NodeCodeShareResponse
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.lifecycle.viewModelScope
@@ -16,9 +17,10 @@ import kotlinx.coroutines.launch
  * State:
  *  - [identity]: federation identity card (signer_key_id, crate, capabilities).
  *  - [nodeCode]: shareable NodeCode for inviting peers.
+ *  - [federationId]: persist's full identity aggregate (Federation ID card).
  *
- * Two round-trips per [load] / [refresh] — they run in parallel and either
- * one is allowed to fail independently (the other still renders).
+ * Three round-trips per [load] / [refresh] — each is allowed to fail
+ * independently (the others still render).
  *
  * No write actions on this screen: identity is sourced from Edge, NodeCode
  * is a derived view of it; the only user actions are copy-to-clipboard
@@ -36,6 +38,16 @@ class NetworkIdentityViewModel(
 
     private val _nodeCode = MutableStateFlow<NodeCodeShareResponse?>(null)
     val nodeCode: StateFlow<NodeCodeShareResponse?> = _nodeCode.asStateFlow()
+
+    /**
+     * Persist's full federation identity aggregate (Federation ID card).
+     * Best-effort companion fetch: null while loading OR when the
+     * backend reports 503 (persist identity still initializing) — the
+     * card renders an "initializing" state for both, and failures here
+     * never raise the screen-level error banner.
+     */
+    private val _federationId = MutableStateFlow<FederationIdentityResponse?>(null)
+    val federationId: StateFlow<FederationIdentityResponse?> = _federationId.asStateFlow()
 
     /** Initial load — call from a LaunchedEffect on first composition. */
     fun load() {
@@ -67,6 +79,15 @@ class NetworkIdentityViewModel(
                         if (_error.value == null) {
                             _error.value = e.message ?: "node code fetch failed"
                         }
+                    }
+                // Best-effort: returns null on 503 (persist identity
+                // still initializing); other failures are logged but
+                // never raise the error banner — the Federation ID card
+                // simply stays in its "initializing" state.
+                runCatching { apiClient.getFederationIdentityAggregate() }
+                    .onSuccess { _federationId.value = it }
+                    .onFailure { e ->
+                        PlatformLogger.e(tag, "getFederationIdentityAggregate failed: ${e.message}", e)
                     }
             } finally {
                 _loading.value = false

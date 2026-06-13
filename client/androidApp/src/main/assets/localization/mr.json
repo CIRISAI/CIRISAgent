@@ -614,6 +614,11 @@
     "login_marketing_optin": "पाठवा me product updates and announcements",
     "login_privacy": "गोपनीयता धोरण पाहा",
     "login_footer": "CIRIS AI द्वारे संचालित",
+    "login_owner_hint": "शेवटचे साइन इन: {owner}",
+    "login_reset_device": "डिव्हाइस रीसेट करा",
+    "login_reset_device_confirm_title": "डिव्हाइस रीसेट करायचे?",
+    "login_reset_device_confirm_body": "हे सर्व स्थानिक डेटा मिटवेल आणि सेटअप विझार्डवर परत जाईल. हे पूर्ववत केले जाऊ शकत नाही.",
+    "login_reset_device_cancel": "रद्द करा",
     "startup_waiting_backend": "Backend ची वाट पाहत आहे... (प्रयत्न {attempt})",
     "startup_preparing": "वातावरण तयार करत आहे",
     "startup_preparing_progress": "वातावरण तयार करत आहे... {current}/{total}",
@@ -1824,7 +1829,27 @@
     "setup_byok_llm_desc": "तुमचा AI प्रदाता कॉन्फिगर करा. सुरू करण्यासाठी तुमची API की प्रविष्ट करा आणि मॉडेल निवडा.",
     "setup_ciris_llm_desc": "CIRIS AI सक्रिय आहे. ऑफलाइन वापर किंवा गोपनीयतेसाठी वैकल्पिकरित्या तुमचा स्वतःचा प्रदाता कॉन्फिगर करा.",
     "setup_select_provider": "प्रदाता निवडा",
-    "setup_validation_select_provider": "कृपया LLM प्रदाता निवडा"
+    "setup_validation_select_provider": "कृपया LLM प्रदाता निवडा",
+    "login_wrong_account_title": "चुकीचे खाते",
+    "login_wrong_account_body": "{owner}\n\nडिव्हाइस मालकाच्या खात्याने साइन इन करा, किंवा पुन्हा सुरू करण्यासाठी डिव्हाइस रीसेट करा.",
+    "login_wrong_account_body_generic": "हे डिव्हाइस दुसऱ्या खात्याचे आहे.",
+    "login_choose_different_account": "दुसरे खाते वापरा",
+    "status_ready": "तयार",
+    "data_community_canonical": "CIRIS समुदाय (ciris-canonical)",
+    "data_community_consent_active": "तुमची संमती सक्रिय आहे — CIRIS समुदायासह सामायिक होत आहे.",
+    "data_community_consent_paused": "थांबवले — सध्या सामायिक होत नाही.",
+    "data_community_label": "समुदाय",
+    "data_community_peer_label": "समवयस्क विश्वास",
+    "data_community_pending": "फेडरेशन प्रलंबित — CIRIS समुदाय ऑनलाइन आल्यावर हे जिवंत विश्वास-वस्तू होईल.",
+    "data_community_trust_title": "समुदाय आणि विश्वास",
+    "data_community_trusted": "विश्वसनीय",
+    "data_community_untrusted": "अद्याप विश्वसनीय नाही",
+    "trust_fabric_mismatch": "विसंगती",
+    "trust_fabric_not_loaded": "लोड झाले नाही",
+    "trust_fabric_note": "एम्बेडेड-आवृत्ती आणि रजिस्ट्री हॅश पडताळणी सबस्ट्रेट घटक पुरवल्यावर सक्रिय होतील.",
+    "trust_fabric_pending": "प्रलंबित",
+    "trust_fabric_title": "सबस्ट्रेट घटक",
+    "trust_fabric_verified": "पडताळलेले"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {कृतीion}",
@@ -2324,6 +2349,17 @@
       },
       "refresh": "रिफ्रेश",
       "summary": "{count} पीयर · {canonical} कॅनॉनिकल"
+    },
+    "federation_id": {
+      "title": "फेडरेशन आयडी",
+      "hint": "रजिस्ट्री आणि लेन्स सर्व्हर या एजंटपर्यंत पोहोचण्यासाठी वापरत असलेला पत्ता.",
+      "initializing": "ओळख सुरू होत आहे…",
+      "pubkey_label": "Ed25519 की",
+      "copy_key_id": "की आयडी कॉपी करा",
+      "cap_signing": "स्वाक्षरी",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "सामग्री एनक्रिप्शन"
     }
   },
   "settings": {
@@ -2446,7 +2482,13 @@
       "wallet": "वॉलेट",
       "billing": "बिलिंग",
       "agents_list": "एजंट",
-      "client_interface": "इंटरफेस"
+      "client_interface": "इंटरफेस",
+      "network_ops": "नेटवर्क",
+      "storage": "संचयन"
     }
+  },
+  "setup_validation_select_provider": "एक LLM प्रदाता निवडा",
+  "network_ops": {
+    "open_federation_hub": "फेडरेशन हब उघडा →"
   }
 }

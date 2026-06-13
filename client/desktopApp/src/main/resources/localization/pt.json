@@ -360,6 +360,11 @@
     "login_marketing_optin": "Envie-me atualizações e anúncios de produtos",
     "login_privacy": "Ver Política de Privacidade",
     "login_footer": "Powered by CIRIS AI",
+    "login_owner_hint": "Último acesso: {owner}",
+    "login_reset_device": "Redefinir dispositivo",
+    "login_reset_device_confirm_title": "Redefinir dispositivo?",
+    "login_reset_device_confirm_body": "Isso apagará todos os dados locais e retornará ao assistente de configuração. Esta ação não pode ser desfeita.",
+    "login_reset_device_cancel": "Cancelar",
     "login_username": "Nome de usuário",
     "login_password_label": "Senha",
     "login_submit": "Entrar",
@@ -1732,7 +1737,27 @@
     "setup_byok_llm_desc": "Configure seu provedor de IA. Digite sua chave API e selecione um modelo para começar.",
     "setup_ciris_llm_desc": "CIRIS AI está ativo. Opcionalmente configure seu próprio provedor para uso offline ou privacidade.",
     "setup_select_provider": "Selecione um provedor",
-    "setup_validation_select_provider": "Por favor selecione um provedor LLM"
+    "setup_validation_select_provider": "Por favor selecione um provedor LLM",
+    "login_wrong_account_title": "Conta incorreta",
+    "login_wrong_account_body": "{owner}\n\nEntre com a conta do proprietário do dispositivo ou redefina o dispositivo para começar de novo.",
+    "login_wrong_account_body_generic": "Este dispositivo pertence a outra conta.",
+    "login_choose_different_account": "Usar outra conta",
+    "status_ready": "Pronto",
+    "data_community_canonical": "Comunidade CIRIS (ciris-canonical)",
+    "data_community_consent_active": "Seu consentimento está ativo — compartilhando com a comunidade CIRIS.",
+    "data_community_consent_paused": "Pausado — sem compartilhamento no momento.",
+    "data_community_label": "Comunidade",
+    "data_community_peer_label": "Confiança entre pares",
+    "data_community_pending": "Federação pendente — torna-se um objeto de confiança ativo quando a comunidade CIRIS estiver online.",
+    "data_community_trust_title": "Comunidade e confiança",
+    "data_community_trusted": "Confiável",
+    "data_community_untrusted": "Ainda não confiável",
+    "trust_fabric_mismatch": "Divergência",
+    "trust_fabric_not_loaded": "Não carregado",
+    "trust_fabric_note": "A verificação de versão incorporada e de hash do registro será ativada quando os componentes do substrato as fornecerem.",
+    "trust_fabric_pending": "Pendente",
+    "trust_fabric_title": "Componentes do substrato",
+    "trust_fabric_verified": "Verificado"
   },
   "prompts": {
     "dma": {
@@ -2324,6 +2349,17 @@
       },
       "refresh": "Atualizar",
       "summary": "{count} pares · {canonical} canônicos"
+    },
+    "federation_id": {
+      "title": "ID de federação",
+      "hint": "O endereço que os servidores de registry e lens usam para alcançar este agente.",
+      "initializing": "Inicializando identidade…",
+      "pubkey_label": "Chave Ed25519",
+      "copy_key_id": "Copiar ID da chave",
+      "cap_signing": "Assinatura",
+      "cap_pqc": "PQC",
+      "cap_reticulum": "Reticulum",
+      "cap_content": "Criptografia de conteúdo"
     }
   },
   "settings": {
@@ -2446,7 +2482,13 @@
       "wallet": "Carteira",
       "billing": "Faturamento",
       "agents_list": "Agentes",
-      "client_interface": "Interface"
+      "client_interface": "Interface",
+      "network_ops": "Rede",
+      "storage": "Armazenamento"
     }
+  },
+  "setup_validation_select_provider": "Selecione um provedor de LLM",
+  "network_ops": {
+    "open_federation_hub": "Abrir hub de federação →"
   }
 }

@@ -992,9 +992,46 @@ canonical = {
         for c in trace.components
     ],
 }
-signed_bytes = json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
+signed_bytes = jcs_canonicalize(canonical)   # RFC 8785 — 2.9.6 HARD cutover
 signature = ed25519_sign(signed_bytes)
 ```
+
+**2.9.6 LensCore fold — the producer moved into the substrate.** As of the
+fold (CIRISAgent#866/#857) the agent's Python trace producer is RETIRED:
+`ciris-lens-core`'s `LensClient`/`CaptureClient` owns capture → seal →
+Ed25519-sign (via the persist Engine's federation signer) →
+`receive_and_persist`. As of ciris-lens-core **1.0.1** (CIRISLensCore#43.2)
+the substrate stamps `trace_schema_version "3.0.0"` and seals with the JCS
+canonicalizer selected by the SAME `canon_version_for_trace_schema` gate the
+verifier uses (major ≥ 3 ⇒ RFC 8785) — stamp and bytes cannot skew, the
+carve-out era is closed, and the 2.9.6 JCS cutover is complete at every
+layer. (lens-core 1.0.0 transitionally stamped "2.7.9"/V1Python.) The `"3.0.0"`+JCS producer below was live
+in the agent's Python signer for the pre-fold window (commits
+9c3546dc8/2a228b4a4) and remains live in the **cirisnode adapter's private
+legacy pipeline** (`ciris_adapters/cirisnode/_legacy_trace.py`, its own wire
+counterpart) — persist's signed-epoch verify gate dispatches both eras
+correctly.
+
+**JCS canonicalization — the 2.9.6 cutover (CEG §0.9).** `signed_bytes` at
+schema era "3.0.0" is the RFC 8785 (JSON Canonicalization Scheme) byte
+sequence, produced by `ciris_verify_core::jcs` (the one blessed impl,
+shipped in ciris-verify ≥ 5.0.0; Python producers reach it via
+`ciris_verify.jcs_canonicalize`). This is byte-identical to what the Rust
+federation verifiers recompute, so the signed bytes and the verifier's
+reconstructed bytes match on **all** inputs.
+
+Pre-2.9.6 the producer used `json.dumps(canonical, sort_keys=True,
+separators=(",", ":"))`. That is **not** JCS: Python's `json.dumps` defaults to
+`ensure_ascii=True`, so every non-ASCII codepoint was emitted as a `\uXXXX`
+escape while RFC 8785 requires the minimal literal UTF-8 encoding. The two
+agree only on pure-ASCII traces; they diverge on the entire multilingual trace
+corpus (Amharic, Arabic, Chinese, …), where the legacy bytes verified locally
+but failed against any Rust verifier. 2.9.6 ships the cut across the substrate
+triple in lockstep — agent producer (`_build_canonical_message`), LensCore's
+byte-parity harness, persist's reconstruction, and verify — so there is no
+mixed-canonicalization window: a 2.9.6 signature is JCS, full stop. (For ASCII
+traces the bytes are unchanged, so already-signed historical ASCII traces still
+verify.)
 
 The `deployment_profile` block is part of the signed canonical so the
 6 cohort fields are non-forgeable post-emission. A federation peer
@@ -1017,7 +1054,8 @@ canonical is invalid even if it would happen to verify against the
 | `trace_schema_version` | Outer canonical | Per-component shape | Notes |
 |---|---|---|---|
 | `"2.7.0"` | 9 keys (no `deployment_profile`) | 4 fields: `component_type`, `data`, `event_type`, `timestamp` | The 9-field outer canonical shipped in 2.7.8.9. Persistence propagates `agent_id_hash` from envelope. |
-| `"2.7.9"` | 10 keys (adds `deployment_profile`) | 5 fields: above + `agent_id_hash` (denormalized) | Agent's wire-format emission as of release/2.7.9. Persistence reads `agent_id_hash` directly from each component AND extracts the 6 `deployment_profile` fields into denormalized `cirislens.trace_context` columns. |
+| `"2.7.9"` | 10 keys (adds `deployment_profile`) | 5 fields: above + `agent_id_hash` (denormalized) | Agent's wire-format emission 2.7.9 → pre-2.9.6. Same field layout as `"3.0.0"`; **canonicalizer is legacy Python `json.dumps(sort_keys=True, separators=(",",":"))`**. Persistence reads `agent_id_hash` directly from each component AND extracts the 6 `deployment_profile` fields into denormalized `cirislens.trace_context` columns. |
+| `"3.0.0"` | 10 keys (adds `deployment_profile`) | 5 fields: above + `agent_id_hash` (denormalized) | Agent's wire-format emission as of release/2.9.6. **Identical field layout to `"2.7.9"`; the ONLY change is the canonicalizer → RFC 8785 (JCS).** The major-version bump is the signed-bytes-bound discriminator for the canonicalizer gate (`major >= 3 ⇒ JCS`, `2.x ⇒ Python`); without it a verifier cannot tell which canonicalizer reproduces the signature. See §8 "JCS canonicalization". |
 
 The legacy 2-field shape (`{"components", "trace_level"}`, pre-2.7.8.9)
 is retired on the agent side. Persistence implementations MAY accept
@@ -1036,8 +1074,11 @@ caches `signature_key_id → public_key` for verification.
 1. Look up the public key by `signature_key_id`.
 2. Reconstruct `canonical` from the received CompleteTrace using the
    shape that matches `trace_schema_version` (table above).
-3. `ed25519_verify(public_key, canonical_bytes, signature)`.
-4. Reject the trace on signature mismatch.
+3. JCS-canonicalize the reconstructed `canonical` (RFC 8785, via
+   `ciris_verify_core::jcs`) to obtain `canonical_bytes` — the same
+   canonicalizer the producer used (2.9.6+); never `json.dumps`.
+4. `ed25519_verify(public_key, canonical_bytes, signature)`.
+5. Reject the trace on signature mismatch.
 
 The lens MUST verify before persisting; storing un-verified traces
 defeats the ledger guarantee.

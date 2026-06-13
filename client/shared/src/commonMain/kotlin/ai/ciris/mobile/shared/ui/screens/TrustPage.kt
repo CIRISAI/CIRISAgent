@@ -70,6 +70,10 @@ fun TrustPage(
     var verifyStatus by remember { mutableStateOf<VerifyStatusResponse?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Substrate fabric versions (best-effort — never blocks the trust page).
+    var fabricVersions by remember {
+        mutableStateOf<ai.ciris.mobile.shared.models.FabricVersionsResponse?>(null)
+    }
     val coroutineScope = rememberCoroutineScope()
 
     // Device attestation state (App Attest on iOS, Play Integrity on Android)
@@ -93,6 +97,15 @@ fun TrustPage(
                 onError = { error = it; loading = false }
             )
             kotlinx.coroutines.delay(5000) // Poll every 5 seconds
+        }
+    }
+
+    // Best-effort fetch of substrate fabric versions (does not gate the page).
+    LaunchedEffect(Unit) {
+        try {
+            fabricVersions = apiClient.getFabricVersions()
+        } catch (e: Exception) {
+            PlatformLogger.d("TrustPage", "Fabric versions unavailable: ${e.message}")
         }
     }
 
@@ -210,6 +223,9 @@ fun TrustPage(
                         }
                     )
 
+                    // Substrate fabric versions (persist / edge / verify / lenscore / nodecore)
+                    fabricVersions?.let { FabricVersionsCard(it) }
+
                     // Learn more link
                     Text(
                         text = localizedString("mobile.trust_learn_more"),
@@ -245,6 +261,60 @@ private suspend fun fetchVerifyStatus(
         onSuccess(result)
     } catch (e: Exception) {
         onError(e.message ?: "Failed to fetch verify status")
+    }
+}
+
+/**
+ * Substrate fabric versions — each in-process cdylib crate's runtime version +
+ * (pending) registry-hash trust status. Lights up the embedded-version /
+ * hash-match columns as the upstream embed + registry work ships; until then
+ * each component shows "pending".
+ */
+@Composable
+private fun FabricVersionsCard(fabric: ai.ciris.mobile.shared.models.FabricVersionsResponse) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testable("trust_fabric_card"),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = localizedString("mobile.trust_fabric_title"),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            fabric.components.forEach { c ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().testable("fabric_row_${c.name}"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = c.name.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            text = if (c.loaded) (c.runtimeVersion ?: "—") else localizedString("mobile.trust_fabric_not_loaded"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SemanticColors.Default.inactive,
+                        )
+                    }
+                    // Registry hash / trust status chip
+                    val (label, color) = when (c.registryHashStatus) {
+                        "verified" -> localizedString("mobile.trust_fabric_verified") to SemanticColors.Default.success
+                        "mismatch" -> localizedString("mobile.trust_fabric_mismatch") to SemanticColors.Default.error
+                        "unavailable" -> localizedString("mobile.trust_fabric_not_loaded") to SemanticColors.Default.inactive
+                        else -> localizedString("mobile.trust_fabric_pending") to SemanticColors.Default.inactive
+                    }
+                    Text(text = label, style = MaterialTheme.typography.bodySmall, color = color)
+                }
+            }
+            Text(
+                text = localizedString("mobile.trust_fabric_note"),
+                style = MaterialTheme.typography.bodySmall,
+                color = SemanticColors.Default.inactive,
+            )
+        }
     }
 }
 

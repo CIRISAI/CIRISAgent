@@ -142,11 +142,18 @@ scan). Closed: CIRISEdge#94, CIRISPersist#205, CIRISLensCore#48, CIRISVerify#67.
 
 **Still open (the honest residual):**
 1. **PyInstaller CPython payload** — `actions/setup-python` ships official CPython,
-   which gates on Win8.1+ (a handful of `PathCch*` / api-set imports). The Win7
-   tier needs the PyInstaller bundle built against a **Win7-capable CPython**
-   (the PythonWin7-class patched-official builds run 3.9–3.13 on Win7). Not yet
-   wired — the installer's Python half will still fail to launch on Win7 until
-   this lands.
+   which gates on Win8.1+ (`PathCch*` / api-set imports). The Win7 tier needs the
+   PyInstaller bundle built against a **Win7-capable CPython**. **Scaffolded** as
+   an opt-in lane: `.github/workflows/windows7-installer.yml` (`workflow_dispatch`)
+   builds `CIRIS-Setup-<ver>-win7-x64.exe` against the community-patched
+   adang1345/PythonVista (née PythonWin7) interpreter, with a **fail-closed
+   SHA256 gate** — the dispatcher must paste a hash they verified upstream or the
+   build aborts (no unverified interpreter is ever bundled). The mainline
+   universal installer stays on official CPython.
+   ⚠️ **Supply-chain go/no-go is the owner's call**: this embeds a third-party-
+   patched interpreter in a signed security/attestation product. The artifact is
+   labelled `win7-EXPERIMENTAL` and is NOT wired into Publish Release — promotion
+   is gated on (a) accepting that supply-chain and (b) the on-device test below.
 2. **On-device acceptance** — a clean Windows 7 SP1 x64 VM must install, boot to
    WORK with all 22 services, seal a trace via lens-core, and show the software
    attestation tier. This is the gate that closes #875 (the checkbox folded in

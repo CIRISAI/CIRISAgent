@@ -55,7 +55,13 @@ DisableProgramGroupPage=yes
 DisableDirPage=auto
 LicenseFile=
 OutputDir=..\..\dist
-OutputBaseFilename=CIRIS-Setup-{#CirisVersion}-x64
+; OutputSuffix lets a variant build (e.g. the experimental Win7 lane,
+; windows7-installer.yml) produce a distinctly-named artifact via
+; /DOutputSuffix=-win7. Defaults to empty for the mainline installer.
+#ifndef OutputSuffix
+#define OutputSuffix ""
+#endif
+OutputBaseFilename=CIRIS-Setup-{#CirisVersion}{#OutputSuffix}-x64
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern

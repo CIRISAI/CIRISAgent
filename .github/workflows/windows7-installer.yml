@@ -1,0 +1,185 @@
+# Windows 7 SP1 installer variant (CIRISAgent#875) — EXPERIMENTAL, opt-in.
+#
+# Produces CIRIS-Setup-<ver>-win7-x64.exe: the same Inno Setup wrapper as the
+# mainline installer, but the PyInstaller payload is built against a
+# Win7-CAPABLE CPython. `actions/setup-python` ships official CPython, which
+# gates on Windows 8.1+ (PathCch* / api-set imports) — so the mainline
+# installer's Python half cannot launch on Win7. The only practical Win7-
+# capable 3.12 is a community-patched build (adang1345/PythonVista, formerly
+# PythonWin7), which restores Win7 SP1 support to the official installer.
+#
+# ⚠️ SUPPLY-CHAIN DECISION (owner's call, NOT auto-promoted):
+#   This embeds a THIRD-PARTY-PATCHED Python interpreter into a signed CIRIS
+#   installer. That is a governance decision for a security/attestation
+#   product. This workflow therefore:
+#     • is workflow_dispatch ONLY — never runs on push/PR/tag,
+#     • FAILS CLOSED on the interpreter hash: the dispatcher MUST paste the
+#       SHA256 they verified against the upstream release; a mismatch aborts
+#       the build (no unverified binary is ever bundled),
+#     • produces a CI artifact labelled win7-EXPERIMENTAL — it is NOT wired
+#       into Publish Release. Promotion to a shipped artifact is gated on
+#       (a) the owner accepting the patched-interpreter supply-chain, and
+#       (b) the on-device Win7 SP1 VM acceptance test (the #875 closing gate).
+#
+# Until both gates clear, this lane exists to PRODUCE and TEST a Win7 build,
+# not to ship one.
+
+name: Windows 7 Installer (experimental)
+
+on:
+  workflow_dispatch:
+    inputs:
+      python_win7_version:
+        description: "PythonVista patched CPython version (must be a 3.12.x folder in adang1345/PythonVista)"
+        required: true
+        default: "3.12.13"
+      python_win7_sha256:
+        description: "SHA256 of python-<ver>-amd64-full.exe, verified by YOU against the upstream release. Build fails closed on mismatch."
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-win7-installer:
+    name: Build Windows 7 Installer (experimental)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Java 17 (Liberica — Win7-capable, for jlink + desktop JAR)
+        # Same rationale as the mainline installer job: Temurin dropped Win7;
+        # Liberica/Zulu retain it, so the trimmed jlink runtime launches on Win7.
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'liberica'
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Download + verify Win7-capable CPython (fail-closed)
+        id: win7py
+        shell: pwsh
+        run: |
+          $ver = "${{ inputs.python_win7_version }}"
+          $expected = "${{ inputs.python_win7_sha256 }}".Trim().ToLower()
+          if ($expected -notmatch '^[0-9a-f]{64}$') {
+            Write-Error "python_win7_sha256 must be a 64-hex SHA256 you verified upstream. Refusing to build."
+            exit 1
+          }
+          $url = "https://raw.githubusercontent.com/adang1345/PythonVista/master/$ver/python-$ver-amd64-full.exe"
+          $exe = "$env:RUNNER_TEMP\python-$ver-amd64-full.exe"
+          Write-Host "Fetching $url"
+          Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing -TimeoutSec 180
+          $actual = (Get-FileHash -Algorithm SHA256 $exe).Hash.ToLower()
+          Write-Host "expected: $expected"
+          Write-Host "actual:   $actual"
+          if ($actual -ne $expected) {
+            Write-Error "SHA256 MISMATCH — refusing to bundle an unverified interpreter. Aborting."
+            exit 1
+          }
+          Write-Host "Interpreter hash verified."
+          "installer_exe=$exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Silent-install the Win7 CPython + create venv
+        id: venv
+        shell: pwsh
+        run: |
+          $dir = "$env:RUNNER_TEMP\py-win7"
+          $exe = "${{ steps.win7py.outputs.installer_exe }}"
+          # Official-installer CLI (PythonVista is the official installer + Win7
+          # patches): per-user, no PATH pollution, no test suite.
+          Start-Process -FilePath $exe -ArgumentList @(
+            "/quiet", "InstallAllUsers=0", "PrependPath=0", "Include_test=0",
+            "Include_pip=1", "TargetDir=$dir") -Wait
+          $py = "$dir\python.exe"
+          if (-not (Test-Path $py)) { Write-Error "patched Python not installed at $py"; exit 1 }
+          & $py --version
+          # Build the PyInstaller venv from the PATCHED interpreter so the
+          # bundled python3xx.dll is the Win7-capable one.
+          & $py -m venv "$env:RUNNER_TEMP\venv-win7"
+          "venv=$env:RUNNER_TEMP\venv-win7" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Install Python deps into the Win7 venv
+        shell: pwsh
+        run: |
+          $py = "${{ steps.venv.outputs.venv }}\Scripts\python.exe"
+          & $py -m pip install --upgrade pip
+          & $py -m pip install -r requirements.txt
+          & $py -m pip install pyinstaller
+
+      - name: Build CIRIS Desktop UberJar
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          retry_wait_seconds: 60
+          shell: bash
+          command: |
+            cd client
+            ./gradlew :desktopApp:packageUberJarForCurrentOS --no-daemon
+            ls -lh desktopApp/build/compose/jars/
+
+      - name: Build PyInstaller bundle (under the Win7 interpreter)
+        shell: pwsh
+        run: |
+          $py = "${{ steps.venv.outputs.venv }}\Scripts\python.exe"
+          cd installers\windows
+          & $py -m PyInstaller ciris-agent.spec --noconfirm
+          Get-ChildItem dist\ciris-agent\ | Select-Object -First 20
+
+      - name: Stage bundle for Inno Setup
+        shell: bash
+        run: |
+          mkdir -p dist
+          mv installers/windows/dist/ciris-agent dist/
+          ls dist/ciris-agent/ | head -10
+
+      - name: Trim JRE via jlink (Liberica)
+        shell: pwsh
+        run: |
+          $jar = Get-ChildItem -Path 'client\desktopApp\build\compose\jars' -Filter 'CIRIS-windows-*.jar' | Select-Object -First 1
+          if (-not $jar) { Write-Error "No CIRIS-windows-*.jar found"; exit 1 }
+          .\installers\windows\bundle-jre.ps1 -JarPath $jar.FullName -OutputDir dist\runtime
+
+      - name: Fetch Universal CRT redist (KB2999226, best-effort)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $dst = "installers/windows/redist"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          $url = "https://download.microsoft.com/download/5/B/C/5BC5DBB3-652D-4DCE-B14A-475AB85EEF6E/Windows6.1-KB2999226-x64.msu"
+          try {
+            Invoke-WebRequest -Uri $url -OutFile "$dst/Windows6.1-KB2999226-x64.msu" -UseBasicParsing -TimeoutSec 120
+          } catch { Write-Warning "UCRT fetch failed ($_); Win7 users hand-provision." }
+
+      - name: Install Inno Setup
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: pwsh
+          command: choco install innosetup -y --no-progress
+
+      - name: Build installer (win7-labelled)
+        shell: pwsh
+        run: |
+          $version = python -c "exec(open('ciris_engine/constants.py').read()); print(CIRIS_VERSION.replace('-stable',''))"
+          Write-Host "Building Win7 installer for CIRIS $version"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+              "/DCirisVersion=$version" `
+              "/DOutputSuffix=-win7" `
+              installers\windows\ciris-installer.iss
+          Get-ChildItem dist\*.exe
+
+      - name: Upload Win7 installer artifact (EXPERIMENTAL)
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows7-installer-experimental
+          path: dist/CIRIS-Setup-*.exe
+          retention-days: 14

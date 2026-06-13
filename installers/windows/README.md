@@ -118,6 +118,12 @@ where the mission's highest-need users live. "If we can support arm32, we can
 support Win7." Win7 runs with honest degradations, surfaced in-app, never
 hidden.
 
+**Supported floor is Windows 8.1+.** The mainline installer targets it; Win7
+gets a separate, clearly-labelled last-resort variant (below). "If we can
+support arm32, we can support Win7" — but arm32 is a free Rust target while Win7
+needs a patched interpreter, so Win7 is *provided, not carried*: opt-in, no
+release-pipeline cost.
+
 **Substrate (done).** The whole quad is Win7-SP1-loadable as of the #881
 adoption floor — persist 5.5.5 / edge 2.2.1 / verify 5.1.3 / lens-core 1.3.0,
 each built with the Tier-3 `x86_64-win7-windows-msvc` lane (the Win8/10 std
@@ -126,7 +132,15 @@ import table — verify by *parsing the PE import directory*, not a substring
 scan). Closed: CIRISEdge#94, CIRISPersist#205, CIRISLensCore#48, CIRISVerify#67.
 
 **Installer (this tier).**
-- `MinVersion=6.1sp1` in the `.iss` — Setup refuses cleanly below Win7 SP1.
+- **Two installers, one `.iss`**: the mainline supported installer floors at
+  **Windows 8.1** (`MinVersion=6.3`) — refusing below 8.1 is correct because its
+  official-CPython payload can't launch on Win7. The separate **Win7 variant**
+  (built with `/DWin7Tier`) lowers the floor to **Win7 SP1** (`6.1sp1`) and pops
+  an up-front "unsupported, use only if Windows 8.1+ is unavailable" acknowledge-
+  ment. Market data backs this split: even in Africa (the strongest developing-
+  world proxy) Win7 is ~0.85% and falling while Win10/11 are ~99% — Win7 is a
+  genuine-but-small last-resort tail, so it stays a clearly-labelled opt-in, not
+  a first-class release artifact.
 - **JRE**: CI builds the trimmed jlink runtime from **BellSoft Liberica** JDK 17
   (`distribution: 'liberica'`), not Temurin — Temurin 17 dropped Win7; Liberica
   and Zulu retain it. `bundle-jre.ps1` soft-warns if it detects a Temurin host.

@@ -174,6 +174,7 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
               "/DCirisVersion=$version" `
               "/DOutputSuffix=-win7" `
+              "/DWin7Tier=1" `
               installers\windows\ciris-installer.iss
           Get-ChildItem dist\*.exe
 

@@ -67,11 +67,18 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Windows 7 SP1 x64 is the supported floor (CIRISAgent#875 — the whole
-; substrate quad is Win7-loadable as of the #881 adoption quad). Inno's
-; a.bspc form: 6.1sp1 = Windows 7 SP1. Setup refuses cleanly below this
-; instead of installing onto an OS the bundled runtime can't load on.
+; Two-installer model (CIRISAgent#875):
+;   * MAINLINE installer = official CPython → Windows 8.1 (6.3) floor.
+;     Refusing below 8.1 is correct: the official-CPython payload would
+;     install then fail to launch on Win7 (Win8.1+ api-set imports).
+;   * WIN7 VARIANT (built with /DWin7Tier by windows7-installer.yml, with a
+;     Win7-capable patched CPython) lowers the floor to Win7 SP1 (6.1sp1).
+;     Win7 is UNSUPPORTED/last-resort — the variant warns up front.
+#ifdef Win7Tier
 MinVersion=6.1sp1
+#else
+MinVersion=6.3
+#endif
 UninstallDisplayName={#MyAppName} {#CirisVersion}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Code signing: until an Authenticode cert is provisioned, ship unsigned
@@ -159,6 +166,27 @@ Type: filesandordirs; Name: "{app}\runtime"
 Type: filesandordirs; Name: "{app}\_internal"
 
 [Code]
+#ifdef Win7Tier
+function InitializeSetup(): Boolean;
+begin
+  // The Win7 variant is an explicit last resort. Make the user acknowledge
+  // it's unsupported and prefer the standard installer where possible —
+  // "we provide it, but only for use if Windows 8.1+ is unavailable."
+  Result := True;
+  if not WizardSilent() then
+    Result := (MsgBox(
+      'This is the UNSUPPORTED Windows 7 build of CIRIS.' #13#10 #13#10 +
+      'It is provided as a last resort for machines that cannot run a ' +
+      'newer Windows. If this PC can run Windows 8.1 or later, please ' +
+      'install the standard CIRIS installer instead — it is the supported ' +
+      'build.' #13#10 #13#10 +
+      'Windows 7 is past end-of-life and receives no security updates; ' +
+      'CIRIS runs here at the software-key attestation tier (no TPM 2.0). ' +
+      'Continue with the Windows 7 build?',
+      mbConfirmation, MB_YESNO) = IDYES);
+end;
+#endif
+
 function IsWindows7(): Boolean;
 var
   V: TWindowsVersion;

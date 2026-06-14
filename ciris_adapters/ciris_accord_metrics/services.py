@@ -570,15 +570,23 @@ class AccordMetricsService:
         wheels.)
         """
         try:
-            # import-untyped: the lens-core wheel ships no py.typed marker
-            # yet (1.1 docs ask alongside the capture_event concurrency
-            # contract) — same treatment as the other substrate imports.
-            from ciris_lens_core import LensClient  # type: ignore[import-untyped]
+            # Prefer the fabric-node wheel: ciris-server re-exports lens-core's
+            # Python surface (agent = fabric node + brain), so the agent depends
+            # on one composition. Fall back to the standalone ciris-lens-core
+            # wheel during the migration window.
+            # import-untyped: neither wheel ships a py.typed marker yet (1.1 docs
+            # ask alongside the capture_event concurrency contract) — same
+            # treatment as the other substrate imports.
+            try:
+                from ciris_server import LensClient  # type: ignore[import-untyped]
+            except ImportError:
+                from ciris_lens_core import LensClient  # type: ignore[import-untyped]
         except ImportError as e:
             raise RuntimeError(
-                "ciris-lens-core is REQUIRED in 2.9.6+ (the observability "
-                "orchestrator — CIRISAgent#866). pip install "
-                "'ciris-lens-core>=1.0.0,<2.0.0'. Import failed: " + str(e)
+                "the lens slice is REQUIRED in 2.9.6+ (the observability "
+                "orchestrator — CIRISAgent#866). Install the fabric node "
+                "(pip install ciris-server) or the standalone lens "
+                "(pip install 'ciris-lens-core>=1.0.0,<2.0.0'). Import failed: " + str(e)
             ) from e
 
         # The consent wire artifact: lens-core's gate resolves the newest

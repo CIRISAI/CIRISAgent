@@ -65,6 +65,15 @@ enum class SetupStep {
     OPTIONAL_FEATURES,
 
     /**
+     * Step (after OPTIONAL_FEATURES): Federation identity setup.
+     * Roots a federation identity in a hardware key (WebAuthn/FIDO2/Secure
+     * Enclave) and performs the CEG self-at-login ceremony via
+     * POST /v1/self/login. Optional — can be skipped on platforms without a
+     * usable hardware authenticator.
+     */
+    FEDERATION_IDENTITY_SETUP,
+
+    /**
      * Step 4: Account creation (for non-Google users) and confirmation.
      */
     ACCOUNT_AND_CONFIRMATION,
@@ -251,6 +260,28 @@ data class VerifySetupState(
 )
 
 /**
+ * State for the FEDERATION_IDENTITY_SETUP step.
+ *
+ * Tracks the hardware-key ceremony: whether the platform can mint a
+ * hardware-rooted identity, progress, the resulting identity key id, and any
+ * error. The actual key material + attestation blob are NOT held here (they are
+ * transient and sent straight to /v1/self/login).
+ */
+@Serializable
+data class FederationIdentitySetupState(
+    /** Whether the platform reports a usable hardware authenticator. */
+    val hardwareAvailable: Boolean = false,
+    /** Probe completed (so the UI knows availability is meaningful). */
+    val probed: Boolean = false,
+    val inProgress: Boolean = false,
+    /** Set once self-login admitted the identity. */
+    val admitted: Boolean = false,
+    /** Identity key id after a successful ceremony. */
+    val identityKeyId: String? = null,
+    val error: String? = null,
+)
+
+/**
  * Form state for the setup wizard.
  *
  * Source: SetupViewModel.kt:15-167
@@ -274,6 +305,9 @@ data class SetupFormState(
 
     // CIRISVerify setup state (node flow only)
     val verifySetup: VerifySetupState = VerifySetupState(),
+
+    // Federation identity setup state (FEDERATION_IDENTITY_SETUP step)
+    val federationIdentity: FederationIdentitySetupState = FederationIdentitySetupState(),
 
     // Google/Apple OAuth state
     val isGoogleAuth: Boolean = false,
@@ -435,6 +469,12 @@ data class SetupFormState(
                 true
             }
 
+            SetupStep.FEDERATION_IDENTITY_SETUP -> {
+                // Federation identity is optional — the user may skip it on
+                // platforms without a usable hardware authenticator.
+                true
+            }
+
             SetupStep.ACCOUNT_AND_CONFIRMATION -> {
                 if (isGoogleAuth) {
                     // Google user - no account creation needed
@@ -553,6 +593,11 @@ data class SetupFormState(
 
             SetupStep.OPTIONAL_FEATURES -> {
                 // Optional features - no validation required (consent is optional)
+                null
+            }
+
+            SetupStep.FEDERATION_IDENTITY_SETUP -> {
+                // Optional — never blocks proceeding.
                 null
             }
 

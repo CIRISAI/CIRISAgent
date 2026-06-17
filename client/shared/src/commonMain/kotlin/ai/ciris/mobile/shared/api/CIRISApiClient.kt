@@ -19,6 +19,13 @@ import ai.ciris.mobile.shared.models.federation.NodeCodeAddResponse
 import ai.ciris.mobile.shared.models.federation.NodeCodeShareResponse
 import ai.ciris.mobile.shared.models.federation.PeerAppearance
 import ai.ciris.mobile.shared.models.federation.PeerTrustState
+import ai.ciris.mobile.shared.models.federation.PeeringRequest
+import ai.ciris.mobile.shared.models.federation.PeeringResponse
+import ai.ciris.mobile.shared.models.federation.SelfLoginRequest
+import ai.ciris.mobile.shared.models.federation.SelfLoginResponse
+import ai.ciris.mobile.shared.models.federation.SetupRootRequest
+import ai.ciris.mobile.shared.models.federation.SetupRootResponse
+import ai.ciris.mobile.shared.models.federation.SignedKeyRecord
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
 import ai.ciris.mobile.shared.viewmodels.CheckDetail
@@ -1153,6 +1160,194 @@ class CIRISApiClient(
             decodeFederationEnvelope(response.bodyAsText(), NodeCodeAddResponse.serializer())
         } catch (e: Exception) {
             logException(method, e, "code='${code.take(20)}...'")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── Self-at-login ceremony (/v1/self/login) ─────────────────────────────
+    //
+    // CEG self-at-login: roots a federation identity in a hardware key and
+    // presents app/agent occurrences + a hardware_attestation blob. The node's
+    // self_login admits the identity and promotes the occurrences. NOT in the
+    // generated SDK yet — hand-written direct HTTP.
+
+    /**
+     * Perform the CEG self-at-login ceremony.
+     *
+     * Hits ``POST /v1/self/login``. On success the returned
+     * [SelfLoginResponse.accessToken] (if present) is applied to this client.
+     */
+    suspend fun selfLogin(request: SelfLoginRequest): SelfLoginResponse {
+        val method = "selfLogin"
+        logInfo(method, "POST $baseUrl/v1/self/login identityKey=${request.identityKeyId.take(16)}… occurrences=${request.occurrences.map { it.kind }}")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$baseUrl/v1/self/login") {
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(SelfLoginRequest.serializer(), request))
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Self-login failed: ${response.status}")
+            }
+            val parsed = decodeFederationEnvelope(response.bodyAsText(), SelfLoginResponse.serializer())
+            parsed.accessToken?.let { setAccessToken(it) }
+            parsed
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── Bilateral consent:replication peering (/v1/federation/*) ─────────────
+    //
+    // GET  /v1/federation/self-key-record → this node's SignedKeyRecord
+    // POST /v1/federation/peering         → register peer + emit consent grant
+    //
+    // The consent-objects card drives these against TWO nodes (A and B), each
+    // with its own base URL + token, so these methods take an explicit
+    // [nodeUrl]/[token] rather than relying solely on the client's current
+    // baseUrl. NOT in the generated SDK yet — hand-written direct HTTP.
+
+    /**
+     * Fetch a node's own [SignedKeyRecord].
+     *
+     * Hits ``GET {nodeUrl}/v1/federation/self-key-record``.
+     */
+    suspend fun getSelfKeyRecord(
+        nodeUrl: String = baseUrl,
+        token: String? = accessToken,
+    ): SignedKeyRecord {
+        val method = "getSelfKeyRecord"
+        logDebug(method, "GET $nodeUrl/v1/federation/self-key-record")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/federation/self-key-record") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("self-key-record fetch failed: ${response.status} for $nodeUrl")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), SignedKeyRecord.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Register a peer on [nodeUrl] and emit this node's consent:replication
+     * grant scoped to [PeeringRequest.attestationPrefixes]. Owner/admin-gated
+     * server-side.
+     *
+     * Hits ``POST {nodeUrl}/v1/federation/peering``.
+     */
+    suspend fun postPeering(
+        request: PeeringRequest,
+        nodeUrl: String = baseUrl,
+        token: String? = accessToken,
+    ): PeeringResponse {
+        val method = "postPeering"
+        logInfo(method, "POST $nodeUrl/v1/federation/peering peer=${request.peerKeyId.take(16)}… prefixes=${request.attestationPrefixes}")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$nodeUrl/v1/federation/peering") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(PeeringRequest.serializer(), request))
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("peering failed: ${response.status} for $nodeUrl")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), PeeringResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl, peer=${request.peerKeyId}")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── NodeCode bootstrap + first-run ROOT claim (CEG §0.10) ────────────────
+    //
+    // GET  {nodeUrl}/v1/federation/node-code → the node's own NodeCode (PUBLIC,
+    //      unauthenticated). Used to identity-pin a freshly-connected node: the
+    //      served code's key_id + pubkey must match the code the founder scanned.
+    // POST {nodeUrl}/v1/setup/root           → first-run ROOT claim (founder →
+    //      SYSTEM_ADMIN). Body carries the NodeCode identity-pin and is
+    //      x-ciris-* hybrid-signature-verified server-side.
+    //
+    // NOT in the generated SDK — hand-written direct HTTP, addressed by explicit
+    // [nodeUrl] so the founder flow can pin/claim a node it is not yet "on".
+
+    /**
+     * Fetch a node's own NodeCode from `GET {nodeUrl}/v1/federation/node-code`.
+     *
+     * UNAUTHENTICATED — the NodeCode is a PUBLIC bootstrap handle. The caller
+     * uses the returned [NodeCodeShareResponse.code] (decoded locally) to
+     * identity-pin the node: confirm its key_id + pubkey match the code the user
+     * scanned/pasted before trusting the connection.
+     */
+    suspend fun getNodeCode(nodeUrl: String = baseUrl): NodeCodeShareResponse {
+        val method = "getNodeCode"
+        logDebug(method, "GET $nodeUrl/v1/federation/node-code")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/federation/node-code")
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("node-code fetch failed: ${response.status} for $nodeUrl")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), NodeCodeShareResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * First-run ROOT claim — `POST {nodeUrl}/v1/setup/root`. The founder becomes
+     * `SYSTEM_ADMIN` on a fresh node (no ROOT yet) by claiming it.
+     *
+     * The [request] body carries the node's NodeCode identity-pin (CEG §0.10).
+     * The body MUST be `x-ciris-*` hybrid-signed: pass the three signature header
+     * values in [signatureHeaders] (key id + ed25519, optionally ml-dsa-65) —
+     * these are produced from the founder's hardware-rooted identity (the same
+     * one self-login used). Without them the node returns `401` (honest failure).
+     *
+     * Returns the parsed [SetupRootResponse]; on a non-2xx the response carries
+     * [SetupRootResponse.error] and this method throws after logging so callers
+     * can surface the node's message.
+     */
+    suspend fun claimRoot(
+        request: SetupRootRequest,
+        nodeUrl: String = baseUrl,
+        signatureHeaders: Map<String, String> = emptyMap(),
+    ): SetupRootResponse {
+        val method = "claimRoot"
+        logInfo(method, "POST $nodeUrl/v1/setup/root pin=${request.keyId ?: request.nodeCode?.take(20)} signed=${signatureHeaders.isNotEmpty()}")
+        val client = federationHttpClient()
+        return try {
+            val bodyText = jsonConfig.encodeToString(SetupRootRequest.serializer(), request)
+            val response = client.post("$nodeUrl/v1/setup/root") {
+                contentType(ContentType.Application.Json)
+                signatureHeaders.forEach { (k, v) -> header(k, v) }
+                setBody(bodyText)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "nodeUrl=$nodeUrl")
+                throw RuntimeException("root claim failed: ${response.status} for $nodeUrl: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(raw, SetupRootResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
             throw e
         } finally {
             client.close()

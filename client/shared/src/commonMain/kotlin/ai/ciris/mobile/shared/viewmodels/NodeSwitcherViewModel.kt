@@ -1,0 +1,338 @@
+package ai.ciris.mobile.shared.viewmodels
+
+import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.models.NodeProfile
+import ai.ciris.mobile.shared.models.federation.SetupRootRequest
+import ai.ciris.mobile.shared.platform.HardwareCredentialManager
+import ai.ciris.mobile.shared.platform.HardwareCredentialUnavailable
+import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.SecureStorage
+import ai.ciris.mobile.shared.platform.util.DecodedNodeCode
+import ai.ciris.mobile.shared.platform.util.NodeCodeCodec
+import ai.ciris.mobile.shared.platform.util.NodeCodeException
+import ai.ciris.mobile.shared.services.NodeProfileStore
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+/**
+ * Drives the first-class **node switcher** surfaced in the main page top bar.
+ *
+ * In fabric terms: the user participates in several nodes (occurrences). This
+ * VM holds the list of [NodeProfile]s, knows which one is active, and performs
+ * the *switch* — repointing the shared [CIRISApiClient] at the chosen node's
+ * base URL (via the existing [CIRISApiClient.updateBaseUrl]) and re-applying
+ * that node's session token. Reloading of the per-node UI state is the
+ * responsibility of the screens reacting to [activeProfile] changing, exactly
+ * like the existing ServerConnection reconnect path.
+ */
+class NodeSwitcherViewModel(
+    private val apiClient: CIRISApiClient,
+    private val secureStorage: SecureStorage,
+) : ViewModel() {
+
+    companion object {
+        private const val TAG = "NodeSwitcherVM"
+    }
+
+    private val store = NodeProfileStore(secureStorage)
+
+    private val _profiles = MutableStateFlow<List<NodeProfile>>(emptyList())
+    val profiles: StateFlow<List<NodeProfile>> = _profiles.asStateFlow()
+
+    private val _activeProfileId = MutableStateFlow<String?>(null)
+    val activeProfileId: StateFlow<String?> = _activeProfileId.asStateFlow()
+
+    private val _isSwitching = MutableStateFlow(false)
+    val isSwitching: StateFlow<Boolean> = _isSwitching.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+
+    val activeProfile: NodeProfile?
+        get() = _profiles.value.firstOrNull { it.id == _activeProfileId.value }
+
+    init {
+        viewModelScope.launch { reload() }
+    }
+
+    /** Reload profiles + active id from the store. */
+    suspend fun reload() {
+        _profiles.value = store.loadProfiles()
+        _activeProfileId.value = store.getActiveProfileId()
+        // If nothing is marked active yet, adopt the apiClient's current URL as
+        // an implicit profile so the switcher always reflects reality.
+        if (_activeProfileId.value == null) {
+            val current = _profiles.value.firstOrNull { it.baseUrl == apiClient.baseUrl }
+            _activeProfileId.value = current?.id
+        }
+    }
+
+    /**
+     * Add or update a node profile. Mirrors the add/edit path of
+     * ServerConnectionScreen but persists a full [NodeProfile] rather than a
+     * bare URL string.
+     */
+    fun saveProfile(name: String, baseUrl: String, sessionToken: String? = null) {
+        viewModelScope.launch {
+            val normalized = baseUrl.trim().trimEnd('/')
+            val profile = NodeProfile(
+                id = NodeProfile.idFor(normalized),
+                name = name.ifBlank { normalized },
+                baseUrl = normalized,
+                sessionToken = sessionToken,
+                lastUsedEpochMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+            )
+            _profiles.value = store.upsert(profile)
+        }
+    }
+
+    fun removeProfile(id: String) {
+        viewModelScope.launch { _profiles.value = store.remove(id) }
+    }
+
+    /**
+     * Switch the active node. Repoints the shared API client at the chosen
+     * node and applies its token, then marks it active. Screens observing
+     * [activeProfileId] should reload their data when it changes.
+     */
+    fun switchTo(profile: NodeProfile) {
+        if (_isSwitching.value) return
+        _isSwitching.value = true
+        _error.value = null
+        viewModelScope.launch {
+            try {
+                PlatformLogger.i(TAG, "[switchTo] Switching to node '${profile.name}' @ ${profile.baseUrl}")
+                apiClient.updateBaseUrl(profile.baseUrl)
+                // Apply (or clear) the node's session token on the shared client.
+                if (profile.isAuthenticated) {
+                    apiClient.setAccessToken(profile.sessionToken!!)
+                    // Keep the canonical access-token slot in sync so a cold
+                    // start restores the same node's session.
+                    secureStorage.saveAccessToken(profile.sessionToken)
+                }
+                val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                _profiles.value = store.markActive(profile.id, now)
+                _activeProfileId.value = profile.id
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "[switchTo] Failed: ${e.message}", e)
+                _error.value = "Could not switch to ${profile.name}: ${e.message}"
+            } finally {
+                _isSwitching.value = false
+            }
+        }
+    }
+
+    fun clearError() { _error.value = null }
+
+    // ─── Connect-by-NodeCode: decode → connect → identity-pin → claim ─────────
+    //
+    // The secure "become admin of a remote node" bootstrap (CEG §0.10). The
+    // founder enters a node's CIRIS-V1- code (pasted or scanned). We decode it
+    // LOCALLY (no server round-trip to learn what node it is), derive a base URL
+    // from the transport hint, connect, then identity-pin: fetch the node's own
+    // served NodeCode and refuse unless its key_id + pubkey match the decoded
+    // code. Only a pinned node is saved as a profile.
+
+    private val _bootstrap = MutableStateFlow(NodeBootstrapState())
+    val bootstrap: StateFlow<NodeBootstrapState> = _bootstrap.asStateFlow()
+
+    fun clearBootstrap() { _bootstrap.value = NodeBootstrapState() }
+
+    /**
+     * Derive a reachable base URL from a decoded code's [DecodedNodeCode.transportHint].
+     * Accepts an explicit [overrideUrl] for when the hint is absent/unusable.
+     * Normalises like [NodeProfile.idFor]. Returns null when nothing usable.
+     */
+    private fun baseUrlFor(decoded: DecodedNodeCode, overrideUrl: String?): String? {
+        val raw = overrideUrl?.takeIf { it.isNotBlank() }
+            ?: decoded.transportHint?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        return raw?.trim()?.trimEnd('/')
+    }
+
+    /**
+     * Connect to a node from a pasted/scanned NodeCode and identity-pin it.
+     *
+     * On success a verified [NodeProfile] (carrying the pinned key_id + pubkey)
+     * is saved and the bootstrap state reports [NodeBootstrapState.pinnedProfile]
+     * so the UI can offer "Claim admin" next. [overrideUrl] lets the user supply
+     * the base URL when the code carries no usable transport hint.
+     */
+    fun connectByNodeCode(code: String, name: String? = null, overrideUrl: String? = null) {
+        if (_bootstrap.value.inProgress) return
+        _bootstrap.value = NodeBootstrapState(inProgress = true, phase = BootstrapPhase.DECODING)
+        viewModelScope.launch {
+            val decoded = try {
+                NodeCodeCodec.decode(code)
+            } catch (e: NodeCodeException) {
+                PlatformLogger.w(TAG, "[connectByNodeCode] decode failed: ${e.message}")
+                _bootstrap.value = NodeBootstrapState(error = "That is not a valid node code: ${e.message}")
+                return@launch
+            }
+
+            val baseUrl = baseUrlFor(decoded, overrideUrl)
+            if (baseUrl == null) {
+                _bootstrap.value = NodeBootstrapState(
+                    decoded = decoded,
+                    error = "This code carries no reachable address — enter the node's URL to continue.",
+                    phase = BootstrapPhase.NEED_URL,
+                )
+                return@launch
+            }
+
+            _bootstrap.value = _bootstrap.value.copy(decoded = decoded, phase = BootstrapPhase.PINNING)
+            try {
+                // Identity-pin: the node must serve back a NodeCode matching the
+                // one we decoded. Refuse on any mismatch (defeats a spoof node).
+                val served = apiClient.getNodeCode(baseUrl)
+                val servedDecoded = NodeCodeCodec.decode(served.code)
+                if (servedDecoded.keyId != decoded.keyId ||
+                    servedDecoded.pubkeyEd25519Base64 != decoded.pubkeyEd25519Base64
+                ) {
+                    PlatformLogger.e(
+                        TAG,
+                        "[connectByNodeCode] PIN MISMATCH: scanned key=${decoded.keyId} served=${servedDecoded.keyId}",
+                    )
+                    _bootstrap.value = NodeBootstrapState(
+                        decoded = decoded,
+                        error = "Identity mismatch — the node at $baseUrl is NOT the one this code is for. Refusing to connect.",
+                    )
+                    return@launch
+                }
+
+                val profile = NodeProfile(
+                    id = NodeProfile.idFor(baseUrl),
+                    name = (name ?: decoded.aliasHint ?: served.aliasHint).orEmpty().ifBlank { baseUrl },
+                    baseUrl = baseUrl,
+                    lastUsedEpochMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+                    pinnedKeyId = decoded.keyId,
+                    pinnedPubkeyBase64 = decoded.pubkeyEd25519Base64,
+                )
+                _profiles.value = store.upsert(profile)
+                PlatformLogger.i(TAG, "[connectByNodeCode] pinned node '${profile.name}' @ $baseUrl key=${decoded.keyId}")
+                _bootstrap.value = NodeBootstrapState(
+                    decoded = decoded,
+                    pinnedProfile = profile,
+                    phase = BootstrapPhase.PINNED,
+                )
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "[connectByNodeCode] connect/pin failed: ${e.message}", e)
+                _bootstrap.value = NodeBootstrapState(
+                    decoded = decoded,
+                    error = "Could not reach or verify the node at $baseUrl: ${e.message}",
+                )
+            }
+        }
+    }
+
+    /**
+     * Claim admin (first-run ROOT) of a pinned node — the founder becomes
+     * SYSTEM_ADMIN. Mints/uses the hardware-rooted federation identity (the same
+     * one self-login uses) and POSTs `/v1/setup/root` with the node's NodeCode
+     * pin in the body.
+     *
+     * The body must be `x-ciris-*` hybrid-signed by that identity. Per-request
+     * signing is the known hardware blocker (CIRISAgent#887): when [hardware]
+     * cannot produce request signatures the claim is attempted UNSIGNED and the
+     * node's `401` is surfaced honestly rather than faked.
+     */
+    fun claimAdmin(
+        profile: NodeProfile,
+        hardware: HardwareCredentialManager,
+        displayName: String,
+    ) {
+        if (_bootstrap.value.claimInProgress) return
+        if (!profile.isPinned) {
+            _bootstrap.value = _bootstrap.value.copy(claimError = "This node was not identity-pinned — cannot safely claim it.")
+            return
+        }
+        _bootstrap.value = _bootstrap.value.copy(claimInProgress = true, claimError = null, claimedRole = null)
+        viewModelScope.launch {
+            try {
+                // Root (or reuse) the founder's hardware identity. This also drives
+                // self-login's attestation; here we need it to anchor the claim's
+                // signing identity.
+                val identity = try {
+                    hardware.createFederationIdentity(displayName = displayName, rpId = profile.baseUrl)
+                } catch (e: HardwareCredentialUnavailable) {
+                    PlatformLogger.w(TAG, "[claimAdmin] hardware identity unavailable: ${e.message}")
+                    null
+                }
+
+                // Build the NodeCode identity-pin body — prefer the full code form
+                // (re-encoded from the pinned identity) so the node decodes + pins it.
+                val request = SetupRootRequest(
+                    keyId = profile.pinnedKeyId,
+                    pubkeyEd25519Base64 = profile.pinnedPubkeyBase64,
+                )
+
+                // Per-request x-ciris-* signature headers. Producing these from the
+                // hardware identity is CIRISAgent#887; until then we send none and
+                // let the node reject with 401 (honest), so the wiring is complete
+                // and flips on the moment the signer lands.
+                val signatureHeaders: Map<String, String> = buildSignatureHeaders(identity)
+
+                val resp = apiClient.claimRoot(
+                    request = request,
+                    nodeUrl = profile.baseUrl,
+                    signatureHeaders = signatureHeaders,
+                )
+                PlatformLogger.i(TAG, "[claimAdmin] claimed ROOT on ${profile.baseUrl} → role=${resp.role}")
+                _bootstrap.value = _bootstrap.value.copy(
+                    claimInProgress = false,
+                    claimedRole = resp.role,
+                    claimError = if (resp.role == null) resp.error else null,
+                )
+                // Refresh the profile list (claim may have minted a session later).
+                _profiles.value = store.loadProfiles()
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "[claimAdmin] failed: ${e.message}", e)
+                _bootstrap.value = _bootstrap.value.copy(
+                    claimInProgress = false,
+                    claimError = "Claim failed: ${e.message}",
+                )
+            }
+        }
+    }
+
+    /**
+     * Build the `x-ciris-*` hybrid-signature headers for a signed claim body.
+     *
+     * KNOWN BLOCKER (CIRISAgent#887): [HardwareCredentialManager] does not yet
+     * expose a per-request signing primitive, so there is no way to produce
+     * `x-ciris-signature-ed25519` over the body here. Returns an empty map until
+     * that primitive lands; the claim then rides unsigned and the node's `401`
+     * is surfaced. The moment the signer exists, this is the single place to wire
+     * the three headers (signing-key-id, signature-ed25519, signature-ml-dsa-65).
+     */
+    @Suppress("UNUSED_PARAMETER")
+    private fun buildSignatureHeaders(
+        identity: ai.ciris.mobile.shared.platform.HardwareIdentityResult?,
+    ): Map<String, String> = emptyMap()
+}
+
+/** Phase of the NodeCode bootstrap, for driving the connect/pin/claim UI. */
+enum class BootstrapPhase { IDLE, DECODING, NEED_URL, PINNING, PINNED }
+
+/**
+ * UI state for the "add a node by NodeCode" bootstrap (connect → pin → claim).
+ */
+data class NodeBootstrapState(
+    val inProgress: Boolean = false,
+    val phase: BootstrapPhase = BootstrapPhase.IDLE,
+    /** The locally-decoded code, available as soon as decode succeeds. */
+    val decoded: DecodedNodeCode? = null,
+    /** Set once the node is reached AND identity-pinned; ready to claim/switch. */
+    val pinnedProfile: NodeProfile? = null,
+    val error: String? = null,
+    val claimInProgress: Boolean = false,
+    /** Non-null on a successful claim (e.g. "SYSTEM_ADMIN"). */
+    val claimedRole: String? = null,
+    val claimError: String? = null,
+) {
+    val isPinned: Boolean get() = pinnedProfile != null
+    val isAdminClaimed: Boolean get() = claimedRole != null
+}

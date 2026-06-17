@@ -475,7 +475,8 @@ class SetupViewModel(
                 SetupStep.NODE_AUTH -> SetupStep.PREFERENCES
                 SetupStep.PREFERENCES -> SetupStep.LLM_CONFIGURATION
                 SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
-                SetupStep.OPTIONAL_FEATURES -> SetupStep.COMPLETE
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.FEDERATION_IDENTITY_SETUP
+                SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.COMPLETE
                 else -> SetupStep.COMPLETE
             }
         } else {
@@ -522,7 +523,8 @@ class SetupViewModel(
                 SetupStep.PREFERENCES -> SetupStep.NODE_AUTH
                 SetupStep.LLM_CONFIGURATION -> SetupStep.PREFERENCES
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
-                SetupStep.COMPLETE -> SetupStep.OPTIONAL_FEATURES
+                SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.OPTIONAL_FEATURES
+                SetupStep.COMPLETE -> SetupStep.FEDERATION_IDENTITY_SETUP
                 else -> SetupStep.WELCOME
             }
         } else {
@@ -557,6 +559,103 @@ class SetupViewModel(
         if (shouldResetNodeFlow) {
             PlatformLogger.i(TAG, "previousStep: Backing out of NODE_AUTH, resetting device auth state")
             resetDeviceAuth()
+        }
+    }
+
+    // ========== Federation Identity (FEDERATION_IDENTITY_SETUP) ==========
+
+    /**
+     * Probe whether this platform can mint a hardware-rooted identity, so the
+     * step can show the hardware action vs. a "not available here" note.
+     */
+    fun probeFederationHardware(
+        hardware: ai.ciris.mobile.shared.platform.HardwareCredentialManager,
+    ) {
+        viewModelScope.launch {
+            val available = try {
+                hardware.isAvailable()
+            } catch (e: Exception) {
+                PlatformLogger.w(TAG, "probeFederationHardware failed: ${e.message}")
+                false
+            }
+            _state.value = _state.value.copy(
+                federationIdentity = _state.value.federationIdentity.copy(
+                    hardwareAvailable = available,
+                    probed = true,
+                )
+            )
+        }
+    }
+
+    /**
+     * Run the CEG self-at-login ceremony: root a federation identity in a
+     * hardware key, assert the app + agent occurrences, and POST
+     * /v1/self/login. The node's self_login admits + promotes.
+     *
+     * Optional step — failures are surfaced but never block the wizard.
+     */
+    fun runFederationIdentitySetup(
+        hardware: ai.ciris.mobile.shared.platform.HardwareCredentialManager,
+        displayName: String,
+    ) {
+        val client = apiClient as? CIRISApiClient
+        if (client == null) {
+            _state.value = _state.value.copy(
+                federationIdentity = _state.value.federationIdentity.copy(
+                    error = "Self-login unavailable: API client does not support it"
+                )
+            )
+            return
+        }
+        _state.value = _state.value.copy(
+            federationIdentity = _state.value.federationIdentity.copy(inProgress = true, error = null)
+        )
+        viewModelScope.launch {
+            try {
+                val rpId = client.baseUrl
+                val identity = hardware.createFederationIdentity(displayName = displayName, rpId = rpId)
+                val resp = client.selfLogin(
+                    ai.ciris.mobile.shared.models.federation.SelfLoginRequest(
+                        identityKeyId = identity.identityKeyId,
+                        occurrences = listOf(
+                            ai.ciris.mobile.shared.models.federation.OccurrenceAssertion(
+                                kind = "app",
+                                publicKey = identity.appOccurrencePublicKey,
+                                label = displayName,
+                            ),
+                            ai.ciris.mobile.shared.models.federation.OccurrenceAssertion(
+                                kind = "agent",
+                                publicKey = identity.agentOccurrencePublicKey,
+                            ),
+                        ),
+                        hardwareAttestation = identity.hardwareAttestation,
+                    )
+                )
+                _state.value = _state.value.copy(
+                    federationIdentity = _state.value.federationIdentity.copy(
+                        inProgress = false,
+                        admitted = resp.admitted,
+                        identityKeyId = identity.identityKeyId,
+                        error = if (resp.admitted) null else (resp.message ?: "Node did not admit the identity"),
+                    )
+                )
+            } catch (e: ai.ciris.mobile.shared.platform.HardwareCredentialUnavailable) {
+                PlatformLogger.w(TAG, "runFederationIdentitySetup: hardware unavailable: ${e.message}")
+                _state.value = _state.value.copy(
+                    federationIdentity = _state.value.federationIdentity.copy(
+                        inProgress = false,
+                        error = e.message,
+                    )
+                )
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "runFederationIdentitySetup failed: ${e.message}", e)
+                _state.value = _state.value.copy(
+                    federationIdentity = _state.value.federationIdentity.copy(
+                        inProgress = false,
+                        error = "Self-login failed: ${e.message}",
+                    )
+                )
+            }
         }
     }
 

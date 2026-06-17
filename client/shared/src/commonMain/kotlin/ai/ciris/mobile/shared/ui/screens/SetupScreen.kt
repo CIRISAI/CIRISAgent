@@ -359,6 +359,7 @@ fun SetupScreen(
                     SetupStep.PREFERENCES -> PreferencesStep(viewModel, state)
                     SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state, apiClient)
                     SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
+                    SetupStep.FEDERATION_IDENTITY_SETUP -> FederationIdentityStep(viewModel, state)
                     SetupStep.ACCOUNT_AND_CONFIRMATION -> AccountConfirmationStep(viewModel, state)
                     SetupStep.VERIFY_SETUP -> OptionalFeaturesStep(viewModel, state) // Legacy - redirects to OPTIONAL_FEATURES
                     SetupStep.COMPLETE -> CompleteStep(onSetupComplete)
@@ -2234,6 +2235,142 @@ private fun OptionalFeaturesStep(
                 }
             }
         }
+    }
+}
+
+// ========== Federation Identity Step ==========
+//
+// Roots a federation identity in a hardware key (WebAuthn/FIDO2/Secure Enclave)
+// and performs the CEG self-at-login ceremony (POST /v1/self/login). Optional —
+// skippable on platforms without a usable hardware authenticator.
+@Composable
+private fun FederationIdentityStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    modifier: Modifier = Modifier
+) {
+    val fed = state.federationIdentity
+    // Platform hardware-credential manager. Mirrors createSecureStorage() usage.
+    val hardware = remember { ai.ciris.mobile.shared.platform.createHardwareCredentialManager() }
+    LaunchedEffect(Unit) {
+        viewModel.probeFederationHardware(hardware)
+    }
+    val deviceName = remember { "CIRIS ${getPlatform()} occurrence" }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text(
+            text = "Federation identity",
+            color = SetupColors.TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Text(
+            text = "Root your federation identity in a hardware key, then admit it to this " +
+                "node. This proves the app and agent occurrences are held in real hardware " +
+                "(YubiKey, Secure Enclave, or platform passkey).",
+            color = SetupColors.TextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
+
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.InfoLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(text = "🔑", fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp))
+                    Text(
+                        text = "Hardware-rooted identity",
+                        color = SetupColors.InfoDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                when {
+                    fed.admitted -> {
+                        Text(
+                            text = "Identity admitted ✓",
+                            color = SetupColors.InfoDark,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        fed.identityKeyId?.let {
+                            Text(
+                                text = "key id: ${it.take(24)}…",
+                                color = SetupColors.InfoText,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                    fed.probed && !fed.hardwareAvailable -> {
+                        Text(
+                            text = "No hardware authenticator is available on this platform " +
+                                "yet. You can skip this step and add a federation identity later.",
+                            color = SetupColors.InfoText,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                        )
+                    }
+                    else -> {
+                        Text(
+                            text = "Tap below to create the identity. You may be prompted to " +
+                                "touch your security key or confirm a passkey.",
+                            color = SetupColors.InfoText,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        Button(
+                            onClick = { viewModel.runFederationIdentitySetup(hardware, deviceName) },
+                            enabled = !fed.inProgress,
+                            modifier = Modifier.testableClickable("btn_federation_identity") {
+                                viewModel.runFederationIdentitySetup(hardware, deviceName)
+                            }
+                        ) {
+                            if (fed.inProgress) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(if (fed.inProgress) "Setting up…" else "Use hardware key")
+                        }
+                    }
+                }
+
+                fed.error?.let { err ->
+                    Text(
+                        text = err,
+                        color = SetupColors.ErrorText,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = "This step is optional — you can continue without it.",
+            color = SetupColors.TextSecondary,
+            fontSize = 12.sp,
+        )
     }
 }
 

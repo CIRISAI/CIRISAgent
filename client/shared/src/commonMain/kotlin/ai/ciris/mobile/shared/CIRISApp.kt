@@ -36,6 +36,8 @@ import ai.ciris.mobile.shared.viewmodels.AuditViewModel
 import ai.ciris.mobile.shared.viewmodels.BillingViewModel
 import ai.ciris.mobile.shared.viewmodels.ConfigViewModel
 import ai.ciris.mobile.shared.viewmodels.ConsentViewModel
+import ai.ciris.mobile.shared.viewmodels.ConsentObjectsViewModel
+import ai.ciris.mobile.shared.viewmodels.NodeSwitcherViewModel
 import ai.ciris.mobile.shared.viewmodels.GraphMemoryViewModel
 import ai.ciris.mobile.shared.viewmodels.InteractViewModel
 import ai.ciris.mobile.shared.viewmodels.LogsViewModel
@@ -607,6 +609,13 @@ fun CIRISApp(
     }
     val serverConnectionViewModel: ServerConnectionViewModel = viewModel {
         ServerConnectionViewModel(apiClient, pythonRuntime, secureStorage)
+    }
+    // Node switcher (change #1) + consent-objects (change #3a)
+    val nodeSwitcherViewModel: NodeSwitcherViewModel = viewModel {
+        NodeSwitcherViewModel(apiClient, secureStorage)
+    }
+    val consentObjectsViewModel: ConsentObjectsViewModel = viewModel {
+        ConsentObjectsViewModel(apiClient, secureStorage)
     }
     val skillImportViewModel: SkillImportViewModel = viewModel {
         SkillImportViewModel(apiClient)
@@ -1712,6 +1721,13 @@ fun CIRISApp(
                             platformLog(TAG, "[INFO] Opening WiseAuthority page for deferrals")
                             currentScreen = Screen.WiseAuthority
                         },
+                        // Node switcher (change #1) + consent-objects (change #3a)
+                        nodeSwitcherViewModel = nodeSwitcherViewModel,
+                        onAddNode = {
+                            platformLog(TAG, "[INFO] Opening ServerConnection to add/edit a node")
+                            currentScreen = Screen.ServerConnection
+                        },
+                        consentObjectsViewModel = consentObjectsViewModel,
                         apiClient = apiClient,
                         liveBackgroundEnabled = liveBackgroundEnabled,
                         forceClassicViz = forceClassicViz,

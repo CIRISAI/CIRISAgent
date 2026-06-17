@@ -91,6 +91,16 @@ fun LoginScreen(
     observerBlocked: Boolean = false,
     showLocalLoginForm: Boolean = false,
     isFirstRun: Boolean = true,
+    // Federation-ID-first startup (CIRISAgent#887). The founder's primary entry
+    // is their long-lived hybrid federation identity. CIRISApp probes
+    // HardwareCredentialManager.currentIdentity() once and passes the result
+    // here: when non-null we show "Sign in as <key_id>"; when null we show
+    // "Create a new federation ID" (runs the FEDERATION_IDENTITY_SETUP wizard).
+    // The classic OAuth/local options remain below, unchanged.
+    federationIdentityKeyId: String? = null,
+    federationProbed: Boolean = false,
+    onFederationSignIn: () -> Unit = {},
+    onCreateFederationIdentity: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var marketingOptIn by remember { mutableStateOf(false) }
@@ -186,6 +196,20 @@ fun LoginScreen(
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
+
+                // Federation-ID-first entry (CIRISAgent#887). Shown above the
+                // classic OAuth/local options so the founder's long-lived hybrid
+                // identity is the primary sign-in. Rendered only once CIRISApp has
+                // probed currentIdentity() (federationProbed) and not while a
+                // login is in flight, so it never competes with the progress UI.
+                if (!isLoading && federationProbed) {
+                    FederationIdentitySection(
+                        keyId = federationIdentityKeyId,
+                        onSignIn = onFederationSignIn,
+                        onCreate = onCreateFederationIdentity,
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
 
                 if (isLoading) {
                     // Progress indicator
@@ -465,6 +489,96 @@ fun LoginScreen(
                 )
             }
         }
+    }
+}
+
+/**
+ * Federation-ID-first entry section (CIRISAgent#887).
+ *
+ * The founder's primary identity is a long-lived HYBRID (Ed25519 + ML-DSA-65)
+ * federation identity persisted by [HardwareCredentialManager]. CIRISApp probes
+ * `currentIdentity()` at launch and passes the result down:
+ *  - [keyId] non-null → an identity already exists → offer "Sign in as <key_id>"
+ *    (loads it as the active federation identity and proceeds to the main app).
+ *  - [keyId] null → no identity yet → offer "Create a new federation ID", which
+ *    runs the existing FEDERATION_IDENTITY_SETUP wizard that mints + persists it.
+ *
+ * This sits ABOVE the classic OAuth / local options — those remain available.
+ */
+@Composable
+private fun FederationIdentitySection(
+    keyId: String?,
+    onSignIn: () -> Unit,
+    onCreate: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.width(280.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (keyId != null) {
+            // Existing long-lived identity → first-class "Sign in as <key_id>".
+            val shortId = if (keyId.length > 16) "${keyId.take(10)}…${keyId.takeLast(4)}" else keyId
+            Text(
+                text = localizedString("mobile.login_federation_existing"),
+                color = LoginColors.White.copy(alpha = 0.8f),
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+            )
+            Button(
+                onClick = onSignIn,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = LoginColors.Accent,
+                    contentColor = LoginColors.White,
+                ),
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testableClickable("btn_federation_signin") { onSignIn() },
+            ) {
+                Text(
+                    text = localizedString("mobile.login_federation_signin_as", "key_id", shortId),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        } else {
+            // No identity yet → first-class "Create a new federation ID".
+            Text(
+                text = localizedString("mobile.login_federation_none"),
+                color = LoginColors.White.copy(alpha = 0.8f),
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+            )
+            Button(
+                onClick = onCreate,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = LoginColors.Accent,
+                    contentColor = LoginColors.White,
+                ),
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testableClickable("btn_federation_create") { onCreate() },
+            ) {
+                Text(
+                    text = localizedString("mobile.login_federation_create"),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+
+        Text(
+            text = localizedString("mobile.login_federation_or"),
+            color = LoginColors.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 

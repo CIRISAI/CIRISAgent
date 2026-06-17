@@ -459,6 +459,35 @@ fun CIRISApp(
     var ownerHint by remember { mutableStateOf<ai.ciris.mobile.shared.models.OwnerHint?>(null) }
     var observerBlocked by remember { mutableStateOf(false) }
 
+    // Federation-ID-first startup (CIRISAgent#887). The founder's primary
+    // identity is their long-lived hybrid federation identity. We probe
+    // HardwareCredentialManager.currentIdentity() ONCE at launch:
+    //  - non-null → an identity is persisted → Login offers "Sign in as <key_id>"
+    //  - null     → Login offers "Create a new federation ID" (the wizard's
+    //               FEDERATION_IDENTITY_SETUP step mints + persists it).
+    // federationProbed gates rendering so the Login section only appears once we
+    // actually know which case we're in.
+    val hardwareCredentialManager = remember {
+        ai.ciris.mobile.shared.platform.createHardwareCredentialManager()
+    }
+    var federationIdentityKeyId by remember { mutableStateOf<String?>(null) }
+    var federationProbed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val keyId = try {
+            hardwareCredentialManager.currentIdentity()?.keyId
+        } catch (e: Exception) {
+            platformLog(TAG, "[INFO][federation] currentIdentity() probe failed: ${e.message?.take(80)}")
+            null
+        }
+        federationIdentityKeyId = keyId
+        federationProbed = true
+        platformLog(
+            TAG,
+            "[INFO][federation] startup probe: " +
+                if (keyId != null) "existing identity key_id=$keyId" else "no federation identity yet",
+        )
+    }
+
     // OAuth auth state for token exchange after setup (works for both Google and Apple)
     var pendingIdToken by remember { mutableStateOf<String?>(null) }
     var pendingUserId by remember { mutableStateOf<String?>(null) }
@@ -1492,7 +1521,35 @@ fun CIRISApp(
                     ownerHint = ownerHint,
                     observerBlocked = observerBlocked,
                     showLocalLoginForm = (googleSignInCallback == null && isFirstRun == false),
-                    isFirstRun = isFirstRun ?: true
+                    isFirstRun = isFirstRun ?: true,
+                    // Federation-ID-first entry (CIRISAgent#887).
+                    federationIdentityKeyId = federationIdentityKeyId,
+                    federationProbed = federationProbed,
+                    onFederationSignIn = {
+                        // A long-lived hybrid identity is already persisted on this
+                        // device — the founder is signed in with it. Load it as the
+                        // active federation identity and proceed to the main app.
+                        platformLog(
+                            TAG,
+                            "[INFO][onFederationSignIn] Signing in with existing federation identity key_id=$federationIdentityKeyId",
+                        )
+                        loginErrorMessage = null
+                        currentScreen = Screen.Interact
+                    },
+                    onCreateFederationIdentity = {
+                        // No identity yet — run the existing FEDERATION_IDENTITY_SETUP
+                        // wizard, which mints + persists the long-lived hybrid identity
+                        // (HardwareCredentialManager.createFederationIdentity, #887).
+                        platformLog(TAG, "[INFO][onCreateFederationIdentity] No identity — entering setup wizard to mint one")
+                        loginErrorMessage = null
+                        setupViewModel.setGoogleAuthState(
+                            isAuth = false,
+                            idToken = null,
+                            email = null,
+                            userId = null,
+                        )
+                        currentScreen = Screen.Setup
+                    },
                 )
             }
 
@@ -1726,6 +1783,10 @@ fun CIRISApp(
                         onAddNode = {
                             platformLog(TAG, "[INFO] Opening ServerConnection to add/edit a node")
                             currentScreen = Screen.ServerConnection
+                        },
+                        onClaimNode = {
+                            platformLog(TAG, "[INFO] Opening ClaimNode to claim a node by NodeCode + PIN")
+                            currentScreen = Screen.ClaimNode
                         },
                         consentObjectsViewModel = consentObjectsViewModel,
                         apiClient = apiClient,
@@ -2634,6 +2695,24 @@ fun CIRISApp(
                 )
             }
 
+            Screen.ClaimNode -> {
+                // Last UI piece of the founder flow: enter a node's NodeCode +
+                // claim PIN → connect/identity-pin → claim SYSTEM_ADMIN. Drives
+                // NodeSwitcherViewModel.connectByNodeCode → claimAdmin. Reuses
+                // the long-lived hardware federation identity probed at startup.
+                PlatformLogger.d(TAG, "[Screen.ClaimNode] Rendering claim-ownership screen")
+                ClaimNodeScreen(
+                    viewModel = nodeSwitcherViewModel,
+                    hardware = hardwareCredentialManager,
+                    onBack = { currentScreen = Screen.Interact },
+                    // Claim a second node (A then B): clear bootstrap is handled
+                    // inside the screen; staying on ClaimNode re-renders fresh.
+                    onClaimedAnother = { currentScreen = Screen.ClaimNode },
+                    // Consent-objects card lives on the Interact main page.
+                    onProceedToConsent = { currentScreen = Screen.Interact },
+                )
+            }
+
             Screen.Runtime -> {
                 val runtimeData by runtimeViewModel.runtimeData.collectAsState()
                 val isRuntimeLoading by runtimeViewModel.isLoading.collectAsState()
@@ -3312,6 +3391,7 @@ fun CIRISApp(
                                 Screen.SkillStudio -> Screen.Adapters
                                 Screen.VizSettings -> Screen.Settings
                                 Screen.ServerConnection -> Screen.Interact
+                                Screen.ClaimNode -> Screen.Interact
                                 // Sub-screens of the home (Interact)
                                 Screen.Adapters,
                                 Screen.Audit,
@@ -3888,6 +3968,9 @@ private sealed class Screen {
     object VizSettings : Screen()
     object Help : Screen()
     object ServerConnection : Screen()
+    // Claim-Ownership: founder enters a node's NodeCode + claim PIN to become
+    // its SYSTEM_ADMIN (connect → identity-pin → claim). Flow-only (no sidebar).
+    object ClaimNode : Screen()
 
     // 2.9.4 — new Epistemic Commons surfaces.
     // HealthReputation ships with a real card (CellVizState-backed).
@@ -3996,7 +4079,7 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.LayerGlobalCommunities -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommunities
     Screen.LayerGlobalCommons -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons
     // Flow-only / no sidebar
-    Screen.Startup, Screen.Login, Screen.Setup, Screen.ServerConnection, Screen.Help -> null
+    Screen.Startup, Screen.Login, Screen.Setup, Screen.ServerConnection, Screen.ClaimNode, Screen.Help -> null
 }
 
 private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen = when (s) {

@@ -243,10 +243,17 @@ class NodeSwitcherViewModel(
         profile: NodeProfile,
         hardware: HardwareCredentialManager,
         displayName: String,
+        claimPin: String,
     ) {
         if (_bootstrap.value.claimInProgress) return
         if (!profile.isPinned) {
             _bootstrap.value = _bootstrap.value.copy(claimError = "This node was not identity-pinned — cannot safely claim it.")
+            return
+        }
+        if (claimPin.isBlank()) {
+            _bootstrap.value = _bootstrap.value.copy(
+                claimError = "Enter the one-time PIN shown on the node's console to claim it.",
+            )
             return
         }
         _bootstrap.value = _bootstrap.value.copy(claimInProgress = true, claimError = null, claimedRole = null)
@@ -270,6 +277,11 @@ class NodeSwitcherViewModel(
                 val request = SetupRootRequest(
                     keyId = profile.pinnedKeyId,
                     pubkeyEd25519Base64 = profile.pinnedPubkeyBase64,
+                    // One-time PIN the operator read off the node's console. It is
+                    // a field of the body that claimRoot serializes ONCE and signs
+                    // those exact bytes — so the PIN is signature-bound (signed ==
+                    // sent). A wrong/expired PIN is rejected by the node below.
+                    claimPin = claimPin.trim(),
                     founder = founder?.let {
                         ai.ciris.mobile.shared.models.federation.FounderIdentity(
                             keyId = it.keyId,
@@ -301,9 +313,20 @@ class NodeSwitcherViewModel(
                 _profiles.value = store.loadProfiles()
             } catch (e: Exception) {
                 PlatformLogger.e(TAG, "[claimAdmin] failed: ${e.message}", e)
+                // Surface a clear PIN error when the node rejected the claim PIN.
+                // The node returns 4xx with a body that mentions the pin (e.g.
+                // "invalid_claim_pin" / "claim pin"); claimRoot re-throws it.
+                val msg = e.message.orEmpty()
+                val isPinRejection = msg.contains("claim_pin", ignoreCase = true) ||
+                    msg.contains("claim pin", ignoreCase = true) ||
+                    msg.contains("invalid pin", ignoreCase = true)
                 _bootstrap.value = _bootstrap.value.copy(
                     claimInProgress = false,
-                    claimError = "Claim failed: ${e.message}",
+                    claimError = if (isPinRejection) {
+                        "The node rejected the PIN — check the one-time PIN on the node's console and try again."
+                    } else {
+                        "Claim failed: ${e.message}"
+                    },
                 )
             }
         }

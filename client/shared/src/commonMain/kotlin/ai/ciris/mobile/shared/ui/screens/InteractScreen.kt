@@ -137,6 +137,8 @@ fun InteractScreen(
     // VM is null the badge is hidden (e.g. previews / minimal hosts).
     nodeSwitcherViewModel: NodeSwitcherViewModel? = null,
     onAddNode: () -> Unit = {},  // Navigate to add/edit node (reuses ServerConnection)
+    // Claim-Ownership: drive the NodeCode + claim-PIN founder flow (Screen.ClaimNode).
+    onClaimNode: () -> Unit = {},
     // Consent-objects card (change #3a): bilateral consent:replication setup.
     consentObjectsViewModel: ConsentObjectsViewModel? = null,
     apiClient: CIRISApiClient? = null,  // For live background
@@ -415,6 +417,7 @@ fun InteractScreen(
                 NodeSwitcherBadge(
                     viewModel = nodeSwitcherViewModel,
                     onAddNode = onAddNode,
+                    onClaimNode = onClaimNode,
                     theme = theme,
                 )
             }
@@ -838,6 +841,7 @@ private fun EnhancedStatusBar(
 private fun NodeSwitcherBadge(
     viewModel: NodeSwitcherViewModel,
     onAddNode: () -> Unit,
+    onClaimNode: () -> Unit,
     theme: InteractTheme,
     modifier: Modifier = Modifier,
 ) {
@@ -923,6 +927,21 @@ private fun NodeSwitcherBadge(
                     onClick = {
                         expanded = false
                         onAddNode()
+                    },
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "+ Add / claim a node",
+                            fontSize = 13.sp,
+                            color = theme.textAccent,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
+                    modifier = Modifier.testableClickable("btn_node_claim_entry") {},
+                    onClick = {
+                        expanded = false
+                        onClaimNode()
                     },
                 )
             }

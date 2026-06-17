@@ -42,6 +42,18 @@ data class SetupRootRequest(
     @SerialName("pubkey_ed25519_base64")
     val pubkeyEd25519Base64: String? = null,
     /**
+     * One-time **claim PIN** the operator reads off THIS node's console at
+     * first-run (server body field `claim_pin`). The node mints a short-lived
+     * PIN on a fresh, unclaimed node and prints it to its console; the founder
+     * types it into the app alongside the NodeCode. It rides INSIDE the signed
+     * body (same serialize-once-then-sign discipline as the rest of the claim),
+     * so it is signature-bound — proving the claimant has live console access to
+     * the intended node, not just its (publishable) NodeCode. The node rejects
+     * the claim if the PIN is wrong/expired; that error is surfaced to the user.
+     */
+    @SerialName("claim_pin")
+    val claimPin: String? = null,
+    /**
      * The founder's long-lived HYBRID federation identity (CIRISAgent#887). The
      * node verifies the `x-ciris-signature-ed25519` / `-ml-dsa-65` headers — over
      * the EXACT serialized request body — against THESE pubkeys (Strict hybrid:

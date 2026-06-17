@@ -252,33 +252,44 @@ class NodeSwitcherViewModel(
         _bootstrap.value = _bootstrap.value.copy(claimInProgress = true, claimError = null, claimedRole = null)
         viewModelScope.launch {
             try {
-                // Root (or reuse) the founder's hardware identity. This also drives
-                // self-login's attestation; here we need it to anchor the claim's
-                // signing identity.
-                val identity = try {
+                // Mint (or reload) the founder's long-lived HYBRID federation
+                // identity (Ed25519 + ML-DSA-65). This is the claim's signing
+                // authority and is stable across launches (CIRISAgent#887).
+                val founder = try {
                     hardware.createFederationIdentity(displayName = displayName, rpId = profile.baseUrl)
+                    hardware.currentIdentity()
                 } catch (e: HardwareCredentialUnavailable) {
-                    PlatformLogger.w(TAG, "[claimAdmin] hardware identity unavailable: ${e.message}")
+                    PlatformLogger.w(TAG, "[claimAdmin] hybrid identity unavailable: ${e.message}")
                     null
                 }
 
-                // Build the NodeCode identity-pin body — prefer the full code form
-                // (re-encoded from the pinned identity) so the node decodes + pins it.
+                // Build the claim body: the NodeCode identity-pin AND the founder's
+                // hybrid pubkeys (self-attested hybrid proof-of-possession). The
+                // node verifies the two x-ciris-signature-* headers against THESE
+                // pubkeys over the exact body bytes (Strict: both required).
                 val request = SetupRootRequest(
                     keyId = profile.pinnedKeyId,
                     pubkeyEd25519Base64 = profile.pinnedPubkeyBase64,
+                    founder = founder?.let {
+                        ai.ciris.mobile.shared.models.federation.FounderIdentity(
+                            keyId = it.keyId,
+                            ed25519PubkeyB64 = it.ed25519PublicKeyB64,
+                            mlDsa65PubkeyB64 = it.mlDsa65PublicKeyB64,
+                        )
+                    },
                 )
 
-                // Per-request x-ciris-* signature headers. Producing these from the
-                // hardware identity is CIRISAgent#887; until then we send none and
-                // let the node reject with 401 (honest), so the wiring is complete
-                // and flips on the moment the signer lands.
-                val signatureHeaders: Map<String, String> = buildSignatureHeaders(identity)
-
+                // The signer hashes/signs the EXACT serialized body bytes inside
+                // claimRoot (serialize-once-sign-that-send-that). When the hybrid
+                // identity is unavailable we pass no signer and the node's 401 is
+                // surfaced honestly rather than faked.
+                val signer: (suspend (ByteArray) -> ai.ciris.mobile.shared.platform.HybridSignature)? =
+                    if (founder != null) { bytes -> hardware.sign(bytes) } else null
                 val resp = apiClient.claimRoot(
                     request = request,
                     nodeUrl = profile.baseUrl,
-                    signatureHeaders = signatureHeaders,
+                    signingKeyId = founder?.keyId,
+                    signer = signer,
                 )
                 PlatformLogger.i(TAG, "[claimAdmin] claimed ROOT on ${profile.baseUrl} → role=${resp.role}")
                 _bootstrap.value = _bootstrap.value.copy(
@@ -298,20 +309,6 @@ class NodeSwitcherViewModel(
         }
     }
 
-    /**
-     * Build the `x-ciris-*` hybrid-signature headers for a signed claim body.
-     *
-     * KNOWN BLOCKER (CIRISAgent#887): [HardwareCredentialManager] does not yet
-     * expose a per-request signing primitive, so there is no way to produce
-     * `x-ciris-signature-ed25519` over the body here. Returns an empty map until
-     * that primitive lands; the claim then rides unsigned and the node's `401`
-     * is surfaced. The moment the signer exists, this is the single place to wire
-     * the three headers (signing-key-id, signature-ed25519, signature-ml-dsa-65).
-     */
-    @Suppress("UNUSED_PARAMETER")
-    private fun buildSignatureHeaders(
-        identity: ai.ciris.mobile.shared.platform.HardwareIdentityResult?,
-    ): Map<String, String> = emptyMap()
 }
 
 /** Phase of the NodeCode bootstrap, for driving the connect/pin/claim UI. */

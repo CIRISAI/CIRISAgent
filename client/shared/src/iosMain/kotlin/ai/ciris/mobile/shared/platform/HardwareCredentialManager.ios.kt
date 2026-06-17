@@ -29,6 +29,18 @@ actual class HardwareCredentialManager actual constructor() {
                 "DeviceCheck DCAppAttest (Secure Enclave). TODO."
         )
     }
+
+    /**
+     * STUB. The real iOS signer would mint the hybrid identity in the Secure
+     * Enclave (Ed25519) + a swift-side ML-DSA-65 implementation; not wired yet.
+     */
+    actual suspend fun sign(message: ByteArray): HybridSignature {
+        throw HardwareCredentialUnavailable(
+            "iOS hybrid sign not implemented: needs Secure Enclave + ML-DSA-65. TODO."
+        )
+    }
+
+    actual suspend fun currentIdentity(): FederationIdentityPublic? = null
 }
 
 actual fun createHardwareCredentialManager(): HardwareCredentialManager =

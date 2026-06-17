@@ -614,6 +614,12 @@ class SetupViewModel(
             try {
                 val rpId = client.baseUrl
                 val identity = hardware.createFederationIdentity(displayName = displayName, rpId = rpId)
+                // Sign the self-login body with the founder's long-lived hybrid
+                // identity so the ride is hybrid-signed (CIRISAgent#887). The
+                // signer hashes the EXACT serialized body bytes inside selfLogin.
+                val founder = hardware.currentIdentity()
+                val signer: (suspend (ByteArray) -> ai.ciris.mobile.shared.platform.HybridSignature)? =
+                    if (founder != null) { bytes -> hardware.sign(bytes) } else null
                 val resp = client.selfLogin(
                     ai.ciris.mobile.shared.models.federation.SelfLoginRequest(
                         identityKeyId = identity.identityKeyId,
@@ -629,7 +635,9 @@ class SetupViewModel(
                             ),
                         ),
                         hardwareAttestation = identity.hardwareAttestation,
-                    )
+                    ),
+                    signingKeyId = founder?.keyId,
+                    signer = signer,
                 )
                 _state.value = _state.value.copy(
                     federationIdentity = _state.value.federationIdentity.copy(

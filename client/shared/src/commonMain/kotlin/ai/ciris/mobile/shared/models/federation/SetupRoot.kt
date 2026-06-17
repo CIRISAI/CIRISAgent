@@ -41,6 +41,30 @@ data class SetupRootRequest(
     /** The node's raw Ed25519 pubkey (base64) — the other decoded pin half. */
     @SerialName("pubkey_ed25519_base64")
     val pubkeyEd25519Base64: String? = null,
+    /**
+     * The founder's long-lived HYBRID federation identity (CIRISAgent#887). The
+     * node verifies the `x-ciris-signature-ed25519` / `-ml-dsa-65` headers — over
+     * the EXACT serialized request body — against THESE pubkeys (Strict hybrid:
+     * both required). Self-attested hybrid proof-of-possession.
+     */
+    val founder: FounderIdentity? = null,
+)
+
+/**
+ * The founder's hybrid public identity, embedded in the signed `/v1/setup/root`
+ * body. The two `x-ciris-signature-*` header signatures are verified against
+ * these pubkeys, so the body is bound to the keys that signed it.
+ */
+@Serializable
+data class FounderIdentity(
+    @SerialName("key_id")
+    val keyId: String,
+    /** Base64 raw Ed25519 public key (32 bytes). */
+    @SerialName("ed25519_pubkey_b64")
+    val ed25519PubkeyB64: String,
+    /** Base64 raw ML-DSA-65 (FIPS-204) public key. */
+    @SerialName("ml_dsa_65_pubkey_b64")
+    val mlDsa65PubkeyB64: String,
 )
 
 /**

@@ -28,6 +28,19 @@ actual class HardwareCredentialManager actual constructor() {
                 "Android Keystore key-attestation. TODO."
         )
     }
+
+    /**
+     * STUB. The real Android signer would mint the hybrid identity via BouncyCastle
+     * (bcprov) or Tink + Android Keystore and ML-DSA-65; not wired yet. The founder
+     * flow uses the DESKTOP actual today (CIRISAgent#887).
+     */
+    actual suspend fun sign(message: ByteArray): HybridSignature {
+        throw HardwareCredentialUnavailable(
+            "Android hybrid sign not implemented: needs BouncyCastle/Tink + ML-DSA-65. TODO."
+        )
+    }
+
+    actual suspend fun currentIdentity(): FederationIdentityPublic? = null
 }
 
 actual fun createHardwareCredentialManager(): HardwareCredentialManager =

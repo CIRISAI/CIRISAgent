@@ -25,6 +25,18 @@ actual class HardwareCredentialManager actual constructor() {
                 "navigator.credentials WebAuthn external bindings + secure origin. TODO."
         )
     }
+
+    /**
+     * STUB. The real web signer would use WebCrypto Ed25519 + a WASM ML-DSA-65
+     * implementation; not wired yet.
+     */
+    actual suspend fun sign(message: ByteArray): HybridSignature {
+        throw HardwareCredentialUnavailable(
+            "Web hybrid sign not implemented: needs WebCrypto + ML-DSA-65. TODO."
+        )
+    }
+
+    actual suspend fun currentIdentity(): FederationIdentityPublic? = null
 }
 
 actual fun createHardwareCredentialManager(): HardwareCredentialManager =

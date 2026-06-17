@@ -26,6 +26,7 @@ import ai.ciris.mobile.shared.models.federation.SelfLoginResponse
 import ai.ciris.mobile.shared.models.federation.SetupRootRequest
 import ai.ciris.mobile.shared.models.federation.SetupRootResponse
 import ai.ciris.mobile.shared.models.federation.SignedKeyRecord
+import ai.ciris.mobile.shared.platform.HybridSignature
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
 import ai.ciris.mobile.shared.viewmodels.CheckDetail
@@ -293,6 +294,12 @@ class CIRISApiClient(
 
     companion object {
         private const val TAG = "CIRISApiClient"
+
+        // Hybrid request-body signature headers (CIRISAgent#887). The node's
+        // Strict verifier requires BOTH signatures over the exact body bytes.
+        const val HDR_SIGNING_KEY_ID = "x-ciris-signing-key-id"
+        const val HDR_SIG_ED25519 = "x-ciris-signature-ed25519"
+        const val HDR_SIG_ML_DSA_65 = "x-ciris-signature-ml-dsa-65"
 
         // Mask token for logging (show first 8 and last 4 chars)
         private fun maskToken(token: String?): String {
@@ -1179,14 +1186,22 @@ class CIRISApiClient(
      * Hits ``POST /v1/self/login``. On success the returned
      * [SelfLoginResponse.accessToken] (if present) is applied to this client.
      */
-    suspend fun selfLogin(request: SelfLoginRequest): SelfLoginResponse {
+    suspend fun selfLogin(
+        request: SelfLoginRequest,
+        signingKeyId: String? = null,
+        signer: (suspend (ByteArray) -> HybridSignature)? = null,
+    ): SelfLoginResponse {
         val method = "selfLogin"
-        logInfo(method, "POST $baseUrl/v1/self/login identityKey=${request.identityKeyId.take(16)}… occurrences=${request.occurrences.map { it.kind }}")
+        logInfo(method, "POST $baseUrl/v1/self/login identityKey=${request.identityKeyId.take(16)}… occurrences=${request.occurrences.map { it.kind }} signed=${signer != null && signingKeyId != null}")
         val client = federationHttpClient()
         return try {
+            // Serialize once; sign those exact bytes; send those exact bytes.
+            val bodyText = jsonConfig.encodeToString(SelfLoginRequest.serializer(), request)
+            val signatureHeaders = buildSignatureHeaders(bodyText, signingKeyId, signer)
             val response = client.post("$baseUrl/v1/self/login") {
                 contentType(ContentType.Application.Json)
-                setBody(jsonConfig.encodeToString(SelfLoginRequest.serializer(), request))
+                signatureHeaders.forEach { (k, v) -> header(k, v) }
+                setBody(bodyText)
             }
             if (!response.status.isSuccess()) {
                 throw RuntimeException("Self-login failed: ${response.status}")
@@ -1328,13 +1343,18 @@ class CIRISApiClient(
     suspend fun claimRoot(
         request: SetupRootRequest,
         nodeUrl: String = baseUrl,
-        signatureHeaders: Map<String, String> = emptyMap(),
+        signingKeyId: String? = null,
+        signer: (suspend (ByteArray) -> HybridSignature)? = null,
     ): SetupRootResponse {
         val method = "claimRoot"
-        logInfo(method, "POST $nodeUrl/v1/setup/root pin=${request.keyId ?: request.nodeCode?.take(20)} signed=${signatureHeaders.isNotEmpty()}")
+        val willSign = signer != null && signingKeyId != null
+        logInfo(method, "POST $nodeUrl/v1/setup/root pin=${request.keyId ?: request.nodeCode?.take(20)} signed=$willSign")
         val client = federationHttpClient()
         return try {
+            // Serialize ONCE. The signature is taken over THESE exact bytes and
+            // the SAME bytes are sent on the wire — so signed bytes == wire bytes.
             val bodyText = jsonConfig.encodeToString(SetupRootRequest.serializer(), request)
+            val signatureHeaders = buildSignatureHeaders(bodyText, signingKeyId, signer)
             val response = client.post("$nodeUrl/v1/setup/root") {
                 contentType(ContentType.Application.Json)
                 signatureHeaders.forEach { (k, v) -> header(k, v) }
@@ -1352,6 +1372,33 @@ class CIRISApiClient(
         } finally {
             client.close()
         }
+    }
+
+    // ─── Hybrid request-body signing (CIRISAgent#887) ─────────────────────────
+    //
+    // THE single integration point for the founder's hybrid signature. Given the
+    // EXACT serialized request-body string [bodyText], sign its UTF-8 bytes with
+    // the founder's hybrid identity and return the three `x-ciris-*` headers the
+    // node's Strict verifier expects:
+    //   x-ciris-signing-key-id      = founder key id
+    //   x-ciris-signature-ed25519   = base64 Ed25519 sig over the body bytes
+    //   x-ciris-signature-ml-dsa-65 = base64 ML-DSA-65 sig over the body bytes
+    // Returns an empty map (claim rides unsigned → node 401, honest) when no
+    // signer/key-id is supplied.
+
+    private suspend fun buildSignatureHeaders(
+        bodyText: String,
+        signingKeyId: String?,
+        signer: (suspend (ByteArray) -> HybridSignature)?,
+    ): Map<String, String> {
+        if (signer == null || signingKeyId == null) return emptyMap()
+        // Sign the EXACT UTF-8 bytes that are sent as the body.
+        val sig = signer(bodyText.encodeToByteArray())
+        return mapOf(
+            HDR_SIGNING_KEY_ID to signingKeyId,
+            HDR_SIG_ED25519 to sig.ed25519B64,
+            HDR_SIG_ML_DSA_65 to sig.mlDsa65B64,
+        )
     }
 
     // System Status (from /v1/system/health)

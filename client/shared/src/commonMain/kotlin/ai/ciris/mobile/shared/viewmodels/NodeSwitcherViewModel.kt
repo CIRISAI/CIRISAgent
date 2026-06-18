@@ -2,9 +2,6 @@ package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.models.NodeProfile
-import ai.ciris.mobile.shared.models.federation.SetupRootRequest
-import ai.ciris.mobile.shared.platform.HardwareCredentialManager
-import ai.ciris.mobile.shared.platform.HardwareCredentialUnavailable
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.SecureStorage
 import ai.ciris.mobile.shared.platform.util.DecodedNodeCode
@@ -170,7 +167,9 @@ class NodeSwitcherViewModel(
      */
     fun connectByNodeCode(code: String, name: String? = null, overrideUrl: String? = null) {
         if (_bootstrap.value.inProgress) return
-        _bootstrap.value = NodeBootstrapState(inProgress = true, phase = BootstrapPhase.DECODING)
+        // Capture the raw CIRIS-V1- code now: the claim step hands it verbatim to
+        // the LOCAL node, which re-decodes + signs the owner-binding delegation.
+        _bootstrap.value = NodeBootstrapState(inProgress = true, phase = BootstrapPhase.DECODING, nodeCode = code)
         viewModelScope.launch {
             val decoded = try {
                 NodeCodeCodec.decode(code)
@@ -220,10 +219,12 @@ class NodeSwitcherViewModel(
                 )
                 _profiles.value = store.upsert(profile)
                 PlatformLogger.i(TAG, "[connectByNodeCode] pinned node '${profile.name}' @ $baseUrl key=${decoded.keyId}")
-                _bootstrap.value = NodeBootstrapState(
+                _bootstrap.value = _bootstrap.value.copy(
                     decoded = decoded,
                     pinnedProfile = profile,
                     phase = BootstrapPhase.PINNED,
+                    inProgress = false,
+                    error = null,
                 )
             } catch (e: Exception) {
                 PlatformLogger.e(TAG, "[connectByNodeCode] connect/pin failed: ${e.message}", e)
@@ -236,20 +237,21 @@ class NodeSwitcherViewModel(
     }
 
     /**
-     * Claim admin (first-run ROOT) of a pinned node — the founder becomes
-     * SYSTEM_ADMIN. Mints/uses the hardware-rooted federation identity (the same
-     * one self-login uses) and POSTs `/v1/setup/root` with the node's NodeCode
-     * pin in the body.
+     * Claim ownership of a pinned target node — the owner becomes SYSTEM_ADMIN.
      *
-     * The body must be `x-ciris-*` hybrid-signed by that identity. Per-request
-     * signing is the known hardware blocker (CIRISAgent#887): when [hardware]
-     * cannot produce request signatures the claim is attempted UNSIGNED and the
-     * node's `401` is surfaced honestly rather than faked.
+     * ARCHITECTURE: the app is a NODE and does NO federation crypto. It DRIVES its
+     * LOCAL node's `POST /v1/setup/claim-remote { node_code, claim_pin,
+     * cohort_scope }`. The local node decodes the NodeCode, builds +
+     * JCS-canonicalizes + HYBRID-SIGNS the owner-binding `delegates_to(user →
+     * target, infra:*)` in its substrate with the owner's identity, and POSTs it
+     * to the target node's `/v1/setup/root`. This call is a plain UNSIGNED
+     * localhost POST; the local node authenticates the operator via the session.
+     *
+     * @param profile the identity-pinned target node (its decoded NodeCode is
+     *        replayed as the `node_code` the local node claims).
      */
     fun claimAdmin(
         profile: NodeProfile,
-        hardware: HardwareCredentialManager,
-        displayName: String,
         claimPin: String,
         cohortScope: String = "self",
     ) {
@@ -264,67 +266,36 @@ class NodeSwitcherViewModel(
             )
             return
         }
-        // CIRISServer v0.4.3 REQUIRES a valid cohort_scope (self|family|community);
-        // a missing/invalid value → 400. Validate before signing so we never spend
-        // a hardware signature on a body the node will reject.
+        // The cohort scope (self|family|community) is required by the local node;
+        // a missing/invalid value → 400. Validate before the round-trip.
         if (cohortScope !in COHORT_SCOPES) {
             _bootstrap.value = _bootstrap.value.copy(
                 claimError = "Choose who this node belongs to (self, family, or community) before claiming it.",
             )
             return
         }
+        // The target node's full NodeCode (captured during connect). The local
+        // node re-decodes it and signs the owner-binding delegation against it. We
+        // need the original CIRIS-V1- string, not just the pinned halves.
+        val targetNodeCode = _bootstrap.value.nodeCode
+        if (targetNodeCode.isNullOrBlank()) {
+            _bootstrap.value = _bootstrap.value.copy(
+                claimError = "Missing the node's code — re-scan or paste the CIRIS-V1- code before claiming.",
+            )
+            return
+        }
         _bootstrap.value = _bootstrap.value.copy(claimInProgress = true, claimError = null, claimedRole = null)
         viewModelScope.launch {
             try {
-                // Mint (or reload) the founder's long-lived HYBRID federation
-                // identity (Ed25519 + ML-DSA-65). This is the claim's signing
-                // authority and is stable across launches (CIRISAgent#887).
-                val founder = try {
-                    hardware.createFederationIdentity(displayName = displayName, rpId = profile.baseUrl)
-                    hardware.currentIdentity()
-                } catch (e: HardwareCredentialUnavailable) {
-                    PlatformLogger.w(TAG, "[claimAdmin] hybrid identity unavailable: ${e.message}")
-                    null
-                }
-
-                // Build the claim body: the NodeCode identity-pin AND the founder's
-                // hybrid pubkeys (self-attested hybrid proof-of-possession). The
-                // node verifies the two x-ciris-signature-* headers against THESE
-                // pubkeys over the exact body bytes (Strict: both required).
-                val request = SetupRootRequest(
-                    keyId = profile.pinnedKeyId,
-                    pubkeyEd25519Base64 = profile.pinnedPubkeyBase64,
-                    // One-time PIN the operator read off the node's console. It is
-                    // a field of the body that claimRoot serializes ONCE and signs
-                    // those exact bytes — so the PIN is signature-bound (signed ==
-                    // sent). A wrong/expired PIN is rejected by the node below.
+                // Drive the LOCAL node to claim the target. The local node does ALL
+                // canonicalization + hybrid signing in its substrate; the app sends
+                // only the NodeCode + PIN + cohort scope over plain localhost HTTP.
+                val resp = apiClient.claimRemote(
+                    nodeCode = targetNodeCode,
                     claimPin = claimPin.trim(),
-                    // The cohort this node is being added to (self/family/community).
-                    // A serialized body field, so it rides inside the signed bytes
-                    // (signed == sent). Required by CIRISServer v0.4.3 or it 400s.
                     cohortScope = cohortScope,
-                    founder = founder?.let {
-                        ai.ciris.mobile.shared.models.federation.FounderIdentity(
-                            keyId = it.keyId,
-                            ed25519PubkeyB64 = it.ed25519PublicKeyB64,
-                            mlDsa65PubkeyB64 = it.mlDsa65PublicKeyB64,
-                        )
-                    },
                 )
-
-                // The signer hashes/signs the EXACT serialized body bytes inside
-                // claimRoot (serialize-once-sign-that-send-that). When the hybrid
-                // identity is unavailable we pass no signer and the node's 401 is
-                // surfaced honestly rather than faked.
-                val signer: (suspend (ByteArray) -> ai.ciris.mobile.shared.platform.HybridSignature)? =
-                    if (founder != null) { bytes -> hardware.sign(bytes) } else null
-                val resp = apiClient.claimRoot(
-                    request = request,
-                    nodeUrl = profile.baseUrl,
-                    signingKeyId = founder?.keyId,
-                    signer = signer,
-                )
-                PlatformLogger.i(TAG, "[claimAdmin] claimed ROOT on ${profile.baseUrl} → role=${resp.role}")
+                PlatformLogger.i(TAG, "[claimAdmin] local node claimed ${profile.baseUrl} → role=${resp.role}")
                 _bootstrap.value = _bootstrap.value.copy(
                     claimInProgress = false,
                     claimedRole = resp.role,
@@ -334,9 +305,10 @@ class NodeSwitcherViewModel(
                 _profiles.value = store.loadProfiles()
             } catch (e: Exception) {
                 PlatformLogger.e(TAG, "[claimAdmin] failed: ${e.message}", e)
-                // Surface a clear PIN error when the node rejected the claim PIN.
-                // The node returns 4xx with a body that mentions the pin (e.g.
-                // "invalid_claim_pin" / "claim pin"); claimRoot re-throws it.
+                // Surface a clear PIN error when the claim was rejected for the
+                // PIN. The local node (or, via it, the target) returns 4xx with a
+                // body that mentions the pin (e.g. "invalid_claim_pin" / "claim
+                // pin"); claimRemote re-throws it.
                 val msg = e.message.orEmpty()
                 val isPinRejection = msg.contains("claim_pin", ignoreCase = true) ||
                     msg.contains("claim pin", ignoreCase = true) ||
@@ -364,6 +336,8 @@ enum class BootstrapPhase { IDLE, DECODING, NEED_URL, PINNING, PINNED }
 data class NodeBootstrapState(
     val inProgress: Boolean = false,
     val phase: BootstrapPhase = BootstrapPhase.IDLE,
+    /** The raw CIRIS-V1- code as submitted; replayed verbatim to the local node. */
+    val nodeCode: String? = null,
     /** The locally-decoded code, available as soon as decode succeeds. */
     val decoded: DecodedNodeCode? = null,
     /** Set once the node is reached AND identity-pinned; ready to claim/switch. */

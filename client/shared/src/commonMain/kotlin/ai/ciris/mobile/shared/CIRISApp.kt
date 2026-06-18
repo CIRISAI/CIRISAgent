@@ -459,24 +459,24 @@ fun CIRISApp(
     var ownerHint by remember { mutableStateOf<ai.ciris.mobile.shared.models.OwnerHint?>(null) }
     var observerBlocked by remember { mutableStateOf(false) }
 
-    // Federation-ID-first startup (CIRISAgent#887). The founder's primary
-    // identity is their long-lived hybrid federation identity. We probe
-    // HardwareCredentialManager.currentIdentity() ONCE at launch:
-    //  - non-null → an identity is persisted → Login offers "Sign in as <key_id>"
-    //  - null     → Login offers "Create a new federation ID" (the wizard's
-    //               FEDERATION_IDENTITY_SETUP step mints + persists it).
+    // Federation-ID-first startup. The owner's federation identity lives in this
+    // device's LOCAL node (its keyring/substrate), NOT the app — the app holds no
+    // keys and signs nothing. We probe the LOCAL node's self-key-record ONCE at
+    // launch:
+    //  - present → Login offers "Sign in as <key_id>"
+    //  - absent  → Login offers "Create a new federation ID" (the wizard's
+    //              FEDERATION_IDENTITY_SETUP step drives the local node).
     // federationProbed gates rendering so the Login section only appears once we
     // actually know which case we're in.
-    val hardwareCredentialManager = remember {
-        ai.ciris.mobile.shared.platform.createHardwareCredentialManager()
-    }
     var federationIdentityKeyId by remember { mutableStateOf<String?>(null) }
     var federationProbed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         val keyId = try {
-            hardwareCredentialManager.currentIdentity()?.keyId
+            apiClient.getSelfKeyRecord(
+                ai.ciris.mobile.shared.api.CIRISApiClient.LOCAL_NODE_URL
+            ).keyId
         } catch (e: Exception) {
-            platformLog(TAG, "[INFO][federation] currentIdentity() probe failed: ${e.message?.take(80)}")
+            platformLog(TAG, "[INFO][federation] local-node self-key-record probe failed: ${e.message?.take(80)}")
             null
         }
         federationIdentityKeyId = keyId
@@ -1537,9 +1537,9 @@ fun CIRISApp(
                         currentScreen = Screen.Interact
                     },
                     onCreateFederationIdentity = {
-                        // No identity yet — run the existing FEDERATION_IDENTITY_SETUP
-                        // wizard, which mints + persists the long-lived hybrid identity
-                        // (HardwareCredentialManager.createFederationIdentity, #887).
+                        // No identity yet — run the FEDERATION_IDENTITY_SETUP wizard,
+                        // which DRIVES the local node to provision/report the owner's
+                        // federation identity (the node owns the keys, not the app).
                         platformLog(TAG, "[INFO][onCreateFederationIdentity] No identity — entering setup wizard to mint one")
                         loginErrorMessage = null
                         setupViewModel.setGoogleAuthState(
@@ -2703,7 +2703,6 @@ fun CIRISApp(
                 PlatformLogger.d(TAG, "[Screen.ClaimNode] Rendering claim-ownership screen")
                 ClaimNodeScreen(
                     viewModel = nodeSwitcherViewModel,
-                    hardware = hardwareCredentialManager,
                     onBack = { currentScreen = Screen.Interact },
                     // Claim a second node (A then B): clear bootstrap is handled
                     // inside the screen; staying on ClaimNode re-renders fresh.

@@ -23,10 +23,9 @@ import ai.ciris.mobile.shared.models.federation.PeeringRequest
 import ai.ciris.mobile.shared.models.federation.PeeringResponse
 import ai.ciris.mobile.shared.models.federation.SelfLoginRequest
 import ai.ciris.mobile.shared.models.federation.SelfLoginResponse
-import ai.ciris.mobile.shared.models.federation.SetupRootRequest
-import ai.ciris.mobile.shared.models.federation.SetupRootResponse
+import ai.ciris.mobile.shared.models.federation.ClaimRemoteRequest
+import ai.ciris.mobile.shared.models.federation.ClaimRemoteResponse
 import ai.ciris.mobile.shared.models.federation.SignedKeyRecord
-import ai.ciris.mobile.shared.platform.HybridSignature
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
 import ai.ciris.mobile.shared.viewmodels.CheckDetail
@@ -295,11 +294,14 @@ class CIRISApiClient(
     companion object {
         private const val TAG = "CIRISApiClient"
 
-        // Hybrid request-body signature headers (CIRISAgent#887). The node's
-        // Strict verifier requires BOTH signatures over the exact body bytes.
-        const val HDR_SIGNING_KEY_ID = "x-ciris-signing-key-id"
-        const val HDR_SIG_ED25519 = "x-ciris-signature-ed25519"
-        const val HDR_SIG_ML_DSA_65 = "x-ciris-signature-ml-dsa-65"
+        /**
+         * Base URL of THIS device's **local node** — the ciris-server the app
+         * runs in-process (ServerManager.serverUrl). All federation crypto
+         * (JCS canonicalization + hybrid signing) happens INSIDE that node's
+         * substrate; the app only drives it over plain localhost HTTP. The app
+         * holds NO federation keys and signs NO federation artifacts in Kotlin.
+         */
+        const val LOCAL_NODE_URL = "http://127.0.0.1:8080"
 
         // Mask token for logging (show first 8 and last 4 chars)
         private fun maskToken(token: String?): String {
@@ -1188,19 +1190,16 @@ class CIRISApiClient(
      */
     suspend fun selfLogin(
         request: SelfLoginRequest,
-        signingKeyId: String? = null,
-        signer: (suspend (ByteArray) -> HybridSignature)? = null,
     ): SelfLoginResponse {
         val method = "selfLogin"
-        logInfo(method, "POST $baseUrl/v1/self/login identityKey=${request.identityKeyId.take(16)}… occurrences=${request.occurrences.map { it.kind }} signed=${signer != null && signingKeyId != null}")
+        logInfo(method, "POST $baseUrl/v1/self/login identityKey=${request.identityKeyId.take(16)}… occurrences=${request.occurrences.map { it.kind }}")
         val client = federationHttpClient()
         return try {
-            // Serialize once; sign those exact bytes; send those exact bytes.
+            // Plain unsigned POST to the LOCAL node. Any federation signing the
+            // ceremony needs is performed by the node's substrate, not the app.
             val bodyText = jsonConfig.encodeToString(SelfLoginRequest.serializer(), request)
-            val signatureHeaders = buildSignatureHeaders(bodyText, signingKeyId, signer)
             val response = client.post("$baseUrl/v1/self/login") {
                 contentType(ContentType.Application.Json)
-                signatureHeaders.forEach { (k, v) -> header(k, v) }
                 setBody(bodyText)
             }
             if (!response.status.isSuccess()) {
@@ -1288,17 +1287,21 @@ class CIRISApiClient(
         }
     }
 
-    // ─── NodeCode bootstrap + first-run ROOT claim (CEG §0.10) ────────────────
+    // ─── NodeCode bootstrap + node-ownership claim (CEG §0.10) ────────────────
     //
     // GET  {nodeUrl}/v1/federation/node-code → the node's own NodeCode (PUBLIC,
     //      unauthenticated). Used to identity-pin a freshly-connected node: the
     //      served code's key_id + pubkey must match the code the founder scanned.
-    // POST {nodeUrl}/v1/setup/root           → first-run ROOT claim (founder →
-    //      SYSTEM_ADMIN). Body carries the NodeCode identity-pin and is
-    //      x-ciris-* hybrid-signature-verified server-side.
+    // POST {localNodeUrl}/v1/setup/claim-remote → drive the LOCAL node to claim a
+    //      remote/target node on the owner's behalf. The LOCAL node decodes the
+    //      NodeCode, builds + JCS-canonicalizes + HYBRID-SIGNS the owner-binding
+    //      delegates_to(user → target, infra:*) IN ITS SUBSTRATE with the owner's
+    //      identity, and POSTs it to the target node's /v1/setup/root. The app
+    //      performs NO crypto — it only calls claim-remote and shows the result.
     //
-    // NOT in the generated SDK — hand-written direct HTTP, addressed by explicit
-    // [nodeUrl] so the founder flow can pin/claim a node it is not yet "on".
+    // NOT in the generated SDK — hand-written direct HTTP. claim-remote is a plain
+    // UNSIGNED localhost POST: the local node authenticates the operator via the
+    // normal session, so there is no x-ciris signing in Kotlin.
 
     /**
      * Fetch a node's own NodeCode from `GET {nodeUrl}/v1/federation/node-code`.
@@ -1327,78 +1330,56 @@ class CIRISApiClient(
     }
 
     /**
-     * First-run ROOT claim — `POST {nodeUrl}/v1/setup/root`. The founder becomes
-     * `SYSTEM_ADMIN` on a fresh node (no ROOT yet) by claiming it.
+     * Drive the LOCAL node to claim a remote/target node on the owner's behalf —
+     * `POST {localNodeUrl}/v1/setup/claim-remote`.
      *
-     * The [request] body carries the node's NodeCode identity-pin (CEG §0.10).
-     * The body MUST be `x-ciris-*` hybrid-signed: pass the three signature header
-     * values in [signatureHeaders] (key id + ed25519, optionally ml-dsa-65) —
-     * these are produced from the founder's hardware-rooted identity (the same
-     * one self-login used). Without them the node returns `401` (honest failure).
+     * The body is `{ node_code, claim_pin, cohort_scope }`. The LOCAL node decodes
+     * the [nodeCode], builds + JCS-canonicalizes + HYBRID-SIGNS the owner-binding
+     * `delegates_to(user → target, infra:*)` IN ITS SUBSTRATE with the owner's
+     * identity, and POSTs it to the target node's `/v1/setup/root`. The app does
+     * NO crypto: this is a plain UNSIGNED localhost POST and the local node
+     * authenticates the operator via the normal session (Bearer [token]).
      *
-     * Returns the parsed [SetupRootResponse]; on a non-2xx the response carries
-     * [SetupRootResponse.error] and this method throws after logging so callers
-     * can surface the node's message.
+     * @param localNodeUrl base URL of THIS device's local node (defaults to
+     *        [LOCAL_NODE_URL]). NOT the target node — the local node reaches the
+     *        target itself.
+     * @return the parsed [ClaimRemoteResponse]; on a non-2xx the method throws
+     *         after logging so callers can surface the node's message.
      */
-    suspend fun claimRoot(
-        request: SetupRootRequest,
-        nodeUrl: String = baseUrl,
-        signingKeyId: String? = null,
-        signer: (suspend (ByteArray) -> HybridSignature)? = null,
-    ): SetupRootResponse {
-        val method = "claimRoot"
-        val willSign = signer != null && signingKeyId != null
-        logInfo(method, "POST $nodeUrl/v1/setup/root pin=${request.keyId ?: request.nodeCode?.take(20)} signed=$willSign")
+    suspend fun claimRemote(
+        nodeCode: String,
+        claimPin: String,
+        cohortScope: String,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ClaimRemoteResponse {
+        val method = "claimRemote"
+        logInfo(method, "POST $localNodeUrl/v1/setup/claim-remote node_code=${nodeCode.take(20)}… cohort=$cohortScope")
         val client = federationHttpClient()
         return try {
-            // Serialize ONCE. The signature is taken over THESE exact bytes and
-            // the SAME bytes are sent on the wire — so signed bytes == wire bytes.
-            val bodyText = jsonConfig.encodeToString(SetupRootRequest.serializer(), request)
-            val signatureHeaders = buildSignatureHeaders(bodyText, signingKeyId, signer)
-            val response = client.post("$nodeUrl/v1/setup/root") {
+            val request = ClaimRemoteRequest(
+                nodeCode = nodeCode,
+                claimPin = claimPin,
+                cohortScope = cohortScope,
+            )
+            val bodyText = jsonConfig.encodeToString(ClaimRemoteRequest.serializer(), request)
+            val response = client.post("$localNodeUrl/v1/setup/claim-remote") {
+                token?.let { header("Authorization", "Bearer $it") }
                 contentType(ContentType.Application.Json)
-                signatureHeaders.forEach { (k, v) -> header(k, v) }
                 setBody(bodyText)
             }
             val raw = response.bodyAsText()
             if (!response.status.isSuccess()) {
-                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "nodeUrl=$nodeUrl")
-                throw RuntimeException("root claim failed: ${response.status} for $nodeUrl: ${raw.take(200)}")
+                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "localNodeUrl=$localNodeUrl")
+                throw RuntimeException("claim-remote failed: ${response.status}: ${raw.take(200)}")
             }
-            decodeFederationEnvelope(raw, SetupRootResponse.serializer())
+            decodeFederationEnvelope(raw, ClaimRemoteResponse.serializer())
         } catch (e: Exception) {
-            logException(method, e, "nodeUrl=$nodeUrl")
+            logException(method, e, "localNodeUrl=$localNodeUrl")
             throw e
         } finally {
             client.close()
         }
-    }
-
-    // ─── Hybrid request-body signing (CIRISAgent#887) ─────────────────────────
-    //
-    // THE single integration point for the founder's hybrid signature. Given the
-    // EXACT serialized request-body string [bodyText], sign its UTF-8 bytes with
-    // the founder's hybrid identity and return the three `x-ciris-*` headers the
-    // node's Strict verifier expects:
-    //   x-ciris-signing-key-id      = founder key id
-    //   x-ciris-signature-ed25519   = base64 Ed25519 sig over the body bytes
-    //   x-ciris-signature-ml-dsa-65 = base64 ML-DSA-65 sig over the body bytes
-    // Returns an empty map (claim rides unsigned → node 401, honest) when no
-    // signer/key-id is supplied.
-
-    private suspend fun buildSignatureHeaders(
-        bodyText: String,
-        signingKeyId: String?,
-        signer: (suspend (ByteArray) -> HybridSignature)?,
-    ): Map<String, String> {
-        if (signer == null || signingKeyId == null) return emptyMap()
-        // Sign the EXACT UTF-8 bytes that are sent as the body.
-        val sig = signer(bodyText.encodeToByteArray())
-        return mapOf(
-            HDR_SIGNING_KEY_ID to signingKeyId,
-            HDR_SIG_ED25519 to sig.ed25519B64,
-            HDR_SIG_ML_DSA_65 to sig.mlDsa65B64,
-        )
     }
 
     // System Status (from /v1/system/health)

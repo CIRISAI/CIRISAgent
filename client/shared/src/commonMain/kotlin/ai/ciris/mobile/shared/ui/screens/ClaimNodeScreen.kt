@@ -1,8 +1,6 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.localization.localizedString
-import ai.ciris.mobile.shared.platform.HardwareCredentialManager
-import ai.ciris.mobile.shared.platform.createHardwareCredentialManager
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
@@ -73,7 +71,6 @@ import androidx.compose.ui.unit.sp
 fun ClaimNodeScreen(
     viewModel: NodeSwitcherViewModel,
     onBack: () -> Unit,
-    hardware: HardwareCredentialManager = remember { createHardwareCredentialManager() },
     onClaimedAnother: () -> Unit = {},
     onProceedToConsent: () -> Unit = {},
 ) {
@@ -240,9 +237,6 @@ fun ClaimNodeScreen(
                 ) {
                     viewModel.claimAdmin(
                         profile = pinned,
-                        hardware = hardware,
-                        displayName = displayNameInput.trim()
-                            .ifBlank { "CIRIS founder" },
                         claimPin = pinInput.trim(),
                         cohortScope = cohortScope,
                     )

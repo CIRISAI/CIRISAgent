@@ -2250,12 +2250,11 @@ private fun FederationIdentityStep(
     modifier: Modifier = Modifier
 ) {
     val fed = state.federationIdentity
-    // Platform hardware-credential manager. Mirrors createSecureStorage() usage.
-    val hardware = remember { ai.ciris.mobile.shared.platform.createHardwareCredentialManager() }
+    // The federation identity lives in the LOCAL node's keyring/substrate, not the
+    // app. Probe the local node for it (the app holds NO keys and signs nothing).
     LaunchedEffect(Unit) {
-        viewModel.probeFederationHardware(hardware)
+        viewModel.probeFederationIdentity()
     }
-    val deviceName = remember { "CIRIS ${getPlatform()} occurrence" }
 
     Column(
         modifier = modifier
@@ -2271,9 +2270,9 @@ private fun FederationIdentityStep(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-            text = "Root your federation identity in a hardware key, then admit it to this " +
-                "node. This proves the app and agent occurrences are held in real hardware " +
-                "(YubiKey, Secure Enclave, or platform passkey).",
+            text = "Your federation identity lives in this device's local node (its keyring / " +
+                "substrate), not in the app. The app drives the node and never holds keys or " +
+                "signs federation artifacts itself.",
             color = SetupColors.TextSecondary,
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 24.dp)
@@ -2293,7 +2292,7 @@ private fun FederationIdentityStep(
                 ) {
                     Text(text = "🔑", fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp))
                     Text(
-                        text = "Hardware-rooted identity",
+                        text = "Local-node federation identity",
                         color = SetupColors.InfoDark,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
@@ -2301,9 +2300,9 @@ private fun FederationIdentityStep(
                 }
 
                 when {
-                    fed.admitted -> {
+                    fed.admitted || (fed.probed && fed.hardwareAvailable) -> {
                         Text(
-                            text = "Identity admitted ✓",
+                            text = "Local node holds a federation identity ✓",
                             color = SetupColors.InfoDark,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
@@ -2317,29 +2316,20 @@ private fun FederationIdentityStep(
                             )
                         }
                     }
-                    fed.probed && !fed.hardwareAvailable -> {
-                        Text(
-                            text = "No hardware authenticator is available on this platform " +
-                                "yet. You can skip this step and add a federation identity later.",
-                            color = SetupColors.InfoText,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
-                        )
-                    }
                     else -> {
                         Text(
-                            text = "Tap below to create the identity. You may be prompted to " +
-                                "touch your security key or confirm a passkey.",
+                            text = "Tap below to ask this device's local node for its federation " +
+                                "identity. The app holds no keys — the node owns the identity.",
                             color = SetupColors.InfoText,
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
                         Button(
-                            onClick = { viewModel.runFederationIdentitySetup(hardware, deviceName) },
+                            onClick = { viewModel.runFederationIdentitySetup() },
                             enabled = !fed.inProgress,
                             modifier = Modifier.testableClickable("btn_federation_identity") {
-                                viewModel.runFederationIdentitySetup(hardware, deviceName)
+                                viewModel.runFederationIdentitySetup()
                             }
                         ) {
                             if (fed.inProgress) {
@@ -2350,7 +2340,7 @@ private fun FederationIdentityStep(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
-                            Text(if (fed.inProgress) "Setting up…" else "Use hardware key")
+                            Text(if (fed.inProgress) "Checking…" else "Use local-node identity")
                         }
                     }
                 }

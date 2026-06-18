@@ -91,11 +91,11 @@ fun LoginScreen(
     observerBlocked: Boolean = false,
     showLocalLoginForm: Boolean = false,
     isFirstRun: Boolean = true,
-    // Federation-ID-first startup (CIRISAgent#887). The founder's primary entry
-    // is their long-lived hybrid federation identity. CIRISApp probes
-    // HardwareCredentialManager.currentIdentity() once and passes the result
-    // here: when non-null we show "Sign in as <key_id>"; when null we show
-    // "Create a new federation ID" (runs the FEDERATION_IDENTITY_SETUP wizard).
+    // Federation-ID-first startup. The owner's federation identity lives in the
+    // LOCAL node (its keyring/substrate), not the app. CIRISApp probes the local
+    // node's self-key-record once and passes the result here: when present we show
+    // "Sign in as <key_id>"; when absent we show "Create a new federation ID"
+    // (runs the FEDERATION_IDENTITY_SETUP wizard, which drives the local node).
     // The classic OAuth/local options remain below, unchanged.
     federationIdentityKeyId: String? = null,
     federationProbed: Boolean = false,
@@ -493,15 +493,15 @@ fun LoginScreen(
 }
 
 /**
- * Federation-ID-first entry section (CIRISAgent#887).
+ * Federation-ID-first entry section.
  *
- * The founder's primary identity is a long-lived HYBRID (Ed25519 + ML-DSA-65)
- * federation identity persisted by [HardwareCredentialManager]. CIRISApp probes
- * `currentIdentity()` at launch and passes the result down:
+ * The owner's federation identity lives in this device's LOCAL node (its
+ * keyring/substrate); the app holds no keys and signs nothing. CIRISApp probes
+ * the local node's self-key-record at launch and passes the result down:
  *  - [keyId] non-null → an identity already exists → offer "Sign in as <key_id>"
  *    (loads it as the active federation identity and proceeds to the main app).
  *  - [keyId] null → no identity yet → offer "Create a new federation ID", which
- *    runs the existing FEDERATION_IDENTITY_SETUP wizard that mints + persists it.
+ *    runs the FEDERATION_IDENTITY_SETUP wizard that drives the local node.
  *
  * This sits ABOVE the classic OAuth / local options — those remain available.
  */

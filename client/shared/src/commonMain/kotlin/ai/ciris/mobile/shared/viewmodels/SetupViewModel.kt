@@ -565,22 +565,37 @@ class SetupViewModel(
     // ========== Federation Identity (FEDERATION_IDENTITY_SETUP) ==========
 
     /**
-     * Probe whether this platform can mint a hardware-rooted identity, so the
-     * step can show the hardware action vs. a "not available here" note.
+     * Probe the LOCAL node for the owner's federation identity.
+     *
+     * ARCHITECTURE: the federation identity lives in the LOCAL node's
+     * keyring/substrate, NOT the app. The app holds no keys and mints nothing.
+     * We ask the local node for its own signed key record; if it answers, the
+     * node has a usable federation identity and the step can report it.
      */
-    fun probeFederationHardware(
-        hardware: ai.ciris.mobile.shared.platform.HardwareCredentialManager,
-    ) {
+    fun probeFederationIdentity() {
+        val client = apiClient as? CIRISApiClient
+        if (client == null) {
+            _state.value = _state.value.copy(
+                federationIdentity = _state.value.federationIdentity.copy(
+                    probed = true,
+                    hardwareAvailable = false,
+                    error = "Local node unavailable: API client does not support it",
+                )
+            )
+            return
+        }
         viewModelScope.launch {
-            val available = try {
-                hardware.isAvailable()
+            val (present, keyId) = try {
+                val record = client.getSelfKeyRecord(CIRISApiClient.LOCAL_NODE_URL)
+                true to record.keyId
             } catch (e: Exception) {
-                PlatformLogger.w(TAG, "probeFederationHardware failed: ${e.message}")
-                false
+                PlatformLogger.w(TAG, "probeFederationIdentity: local node has no identity yet: ${e.message}")
+                false to null
             }
             _state.value = _state.value.copy(
                 federationIdentity = _state.value.federationIdentity.copy(
-                    hardwareAvailable = available,
+                    hardwareAvailable = present,
+                    identityKeyId = keyId,
                     probed = true,
                 )
             )
@@ -588,21 +603,29 @@ class SetupViewModel(
     }
 
     /**
-     * Run the CEG self-at-login ceremony: root a federation identity in a
-     * hardware key, assert the app + agent occurrences, and POST
-     * /v1/self/login. The node's self_login admits + promotes.
+     * Report the owner's federation identity by DRIVING the LOCAL node.
+     *
+     * The app performs NO federation crypto: it does not mint keys, build
+     * occurrences, or hybrid-sign anything. It asks the local node (which holds
+     * the identity in its substrate) for its signed key record and surfaces it.
+     *
+     * GAP (flagged honestly): CIRISServer does not yet expose a dedicated
+     * *user-identity provisioning* endpoint to MINT/ensure the owner's identity
+     * on demand — the local node is expected to already hold it (created at node
+     * setup). The remaining piece is (a) a local-node `POST /v1/self/identity`
+     * (or equivalent) to provision the owner identity, and (b) hardware custody
+     * of the keyring via ciris-keyring's PKCS#11 / YubiKey path. Until then this
+     * step only reports an existing local-node identity; it never re-introduces
+     * Kotlin key minting.
      *
      * Optional step — failures are surfaced but never block the wizard.
      */
-    fun runFederationIdentitySetup(
-        hardware: ai.ciris.mobile.shared.platform.HardwareCredentialManager,
-        displayName: String,
-    ) {
+    fun runFederationIdentitySetup() {
         val client = apiClient as? CIRISApiClient
         if (client == null) {
             _state.value = _state.value.copy(
                 federationIdentity = _state.value.federationIdentity.copy(
-                    error = "Self-login unavailable: API client does not support it"
+                    error = "Local node unavailable: API client does not support it"
                 )
             )
             return
@@ -612,55 +635,30 @@ class SetupViewModel(
         )
         viewModelScope.launch {
             try {
-                val rpId = client.baseUrl
-                val identity = hardware.createFederationIdentity(displayName = displayName, rpId = rpId)
-                // Sign the self-login body with the founder's long-lived hybrid
-                // identity so the ride is hybrid-signed (CIRISAgent#887). The
-                // signer hashes the EXACT serialized body bytes inside selfLogin.
-                val founder = hardware.currentIdentity()
-                val signer: (suspend (ByteArray) -> ai.ciris.mobile.shared.platform.HybridSignature)? =
-                    if (founder != null) { bytes -> hardware.sign(bytes) } else null
-                val resp = client.selfLogin(
-                    ai.ciris.mobile.shared.models.federation.SelfLoginRequest(
-                        identityKeyId = identity.identityKeyId,
-                        occurrences = listOf(
-                            ai.ciris.mobile.shared.models.federation.OccurrenceAssertion(
-                                kind = "app",
-                                publicKey = identity.appOccurrencePublicKey,
-                                label = displayName,
-                            ),
-                            ai.ciris.mobile.shared.models.federation.OccurrenceAssertion(
-                                kind = "agent",
-                                publicKey = identity.agentOccurrencePublicKey,
-                            ),
-                        ),
-                        hardwareAttestation = identity.hardwareAttestation,
-                    ),
-                    signingKeyId = founder?.keyId,
-                    signer = signer,
-                )
+                // Ask the LOCAL node for the owner's federation identity. The node
+                // does all canonicalization/signing in its substrate; the app only
+                // reads the public key record over plain localhost HTTP.
+                val record = client.getSelfKeyRecord(CIRISApiClient.LOCAL_NODE_URL)
                 _state.value = _state.value.copy(
                     federationIdentity = _state.value.federationIdentity.copy(
                         inProgress = false,
-                        admitted = resp.admitted,
-                        identityKeyId = identity.identityKeyId,
-                        error = if (resp.admitted) null else (resp.message ?: "Node did not admit the identity"),
-                    )
-                )
-            } catch (e: ai.ciris.mobile.shared.platform.HardwareCredentialUnavailable) {
-                PlatformLogger.w(TAG, "runFederationIdentitySetup: hardware unavailable: ${e.message}")
-                _state.value = _state.value.copy(
-                    federationIdentity = _state.value.federationIdentity.copy(
-                        inProgress = false,
-                        error = e.message,
+                        admitted = true,
+                        hardwareAvailable = true,
+                        identityKeyId = record.keyId,
+                        error = null,
                     )
                 )
             } catch (e: Exception) {
-                PlatformLogger.e(TAG, "runFederationIdentitySetup failed: ${e.message}", e)
+                // No local-node identity yet AND no provisioning endpoint to mint
+                // one (see GAP above). Report honestly; do NOT mint keys in Kotlin.
+                PlatformLogger.w(TAG, "runFederationIdentitySetup: local node has no identity / no provisioning endpoint: ${e.message}")
                 _state.value = _state.value.copy(
                     federationIdentity = _state.value.federationIdentity.copy(
                         inProgress = false,
-                        error = "Self-login failed: ${e.message}",
+                        admitted = false,
+                        error = "This device's local node has no federation identity yet, and there is no " +
+                            "local-node user-identity provisioning endpoint to create one. (Remaining work: " +
+                            "a local-node provision endpoint + ciris-keyring YubiKey/PKCS#11 custody.)",
                     )
                 )
             }

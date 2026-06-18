@@ -166,11 +166,11 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation("io.ktor:ktor-client-cio:3.0.3")
-                // BouncyCastle — ML-DSA-65 (FIPS-204 level 3) for the founder's
-                // hybrid federation signer (CIRISAgent#887). 1.79 ships the final
-                // FIPS-204 `ML-DSA-65` algorithm + `MLDSAParameterSpec.ml_dsa_65`
-                // (NOT the round-3 Dilithium candidate).
-                implementation("org.bouncycastle:bcprov-jdk18on:1.79")
+                // NOTE: federation crypto (JCS canonicalization + hybrid signing)
+                // is performed entirely by THIS device's local ciris-server node in
+                // its substrate. The app drives the node over localhost HTTP and
+                // holds NO federation keys, so there is no BouncyCastle / ML-DSA
+                // dependency here anymore.
             }
         }
 
@@ -191,8 +191,6 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
-                // BC verifier for the hybrid-signer round-trip test (#887).
-                implementation("org.bouncycastle:bcprov-jdk18on:1.79")
             }
         }
     }

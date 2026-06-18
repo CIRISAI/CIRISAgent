@@ -36,6 +36,13 @@ class NodeSwitcherViewModel(
 
     companion object {
         private const val TAG = "NodeSwitcherVM"
+
+        /**
+         * The valid cohort scopes for a node-ownership claim (CIRISServer v0.4.3):
+         * who the owner is adding the node to. CIRISServer validates the
+         * `cohort_scope` body field against exactly these values (else `400`).
+         */
+        val COHORT_SCOPES = listOf("self", "family", "community")
     }
 
     private val store = NodeProfileStore(secureStorage)
@@ -244,6 +251,7 @@ class NodeSwitcherViewModel(
         hardware: HardwareCredentialManager,
         displayName: String,
         claimPin: String,
+        cohortScope: String = "self",
     ) {
         if (_bootstrap.value.claimInProgress) return
         if (!profile.isPinned) {
@@ -253,6 +261,15 @@ class NodeSwitcherViewModel(
         if (claimPin.isBlank()) {
             _bootstrap.value = _bootstrap.value.copy(
                 claimError = "Enter the one-time PIN shown on the node's console to claim it.",
+            )
+            return
+        }
+        // CIRISServer v0.4.3 REQUIRES a valid cohort_scope (self|family|community);
+        // a missing/invalid value → 400. Validate before signing so we never spend
+        // a hardware signature on a body the node will reject.
+        if (cohortScope !in COHORT_SCOPES) {
+            _bootstrap.value = _bootstrap.value.copy(
+                claimError = "Choose who this node belongs to (self, family, or community) before claiming it.",
             )
             return
         }
@@ -282,6 +299,10 @@ class NodeSwitcherViewModel(
                     // those exact bytes — so the PIN is signature-bound (signed ==
                     // sent). A wrong/expired PIN is rejected by the node below.
                     claimPin = claimPin.trim(),
+                    // The cohort this node is being added to (self/family/community).
+                    // A serialized body field, so it rides inside the signed bytes
+                    // (signed == sent). Required by CIRISServer v0.4.3 or it 400s.
+                    cohortScope = cohortScope,
                     founder = founder?.let {
                         ai.ciris.mobile.shared.models.federation.FounderIdentity(
                             keyId = it.keyId,

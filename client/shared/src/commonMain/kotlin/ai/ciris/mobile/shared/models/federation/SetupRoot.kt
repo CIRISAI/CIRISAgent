@@ -54,6 +54,18 @@ data class SetupRootRequest(
     @SerialName("claim_pin")
     val claimPin: String? = null,
     /**
+     * The **cohort scope** the owner is adding this node to (CIRISServer v0.4.3).
+     * One of `"self"` | `"family"` | `"community"` — "part of adding a node is
+     * specifying whether you are adding it to yourself, your family, or a
+     * community". CIRISServer's `POST /v1/setup/root` REQUIRES this top-level
+     * field and validates it server-side (a missing/invalid value → `400`).
+     *
+     * It is a field of the body that claimRoot serializes ONCE and signs those
+     * exact bytes — so cohort_scope is signature-bound (signed == sent).
+     */
+    @SerialName("cohort_scope")
+    val cohortScope: String = "self",
+    /**
      * The founder's long-lived HYBRID federation identity (CIRISAgent#887). The
      * node verifies the `x-ciris-signature-ed25519` / `-ml-dsa-65` headers — over
      * the EXACT serialized request body — against THESE pubkeys (Strict hybrid:

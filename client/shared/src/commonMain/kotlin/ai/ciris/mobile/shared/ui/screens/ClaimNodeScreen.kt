@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -81,6 +82,9 @@ fun ClaimNodeScreen(
     var codeInput by remember { mutableStateOf("") }
     var pinInput by remember { mutableStateOf("") }
     var displayNameInput by remember { mutableStateOf("") }
+    // CIRISServer v0.4.3: who this node is being added to (self/family/community).
+    // Default to "self" but make the founder pick before claiming.
+    var cohortScope by remember { mutableStateOf("self") }
 
     // While the connect-or-claim pipeline is running we disable the button.
     val inFlight = bootstrap.inProgress || bootstrap.claimInProgress
@@ -172,6 +176,18 @@ fun ClaimNodeScreen(
                     .testable("field_claim_node_displayname"),
             )
 
+            Spacer(Modifier.height(16.dp))
+
+            // ── Cohort-scope picker (CIRISServer v0.4.3) ──────────────────────
+            // "Part of adding a node is specifying whether you are adding it to
+            // yourself, your family, or a community." Required by the node or the
+            // claim 400s. The selection rides inside the signed body.
+            CohortScopeSelector(
+                selected = cohortScope,
+                onSelect = { cohortScope = it },
+                enabled = !inFlight && !claimed,
+            )
+
             Spacer(Modifier.height(20.dp))
 
             // ── Claim button: connectByNodeCode → (PINNED) → claimAdmin ───────
@@ -228,6 +244,7 @@ fun ClaimNodeScreen(
                         displayName = displayNameInput.trim()
                             .ifBlank { "CIRIS founder" },
                         claimPin = pinInput.trim(),
+                        cohortScope = cohortScope,
                     )
                 }
             }
@@ -301,6 +318,71 @@ fun ClaimNodeScreen(
                 )
             }
         }
+    }
+}
+
+/**
+ * Cohort-scope picker — "Add this node to: Yourself / Your family / A community".
+ *
+ * A simple radio group (least-churn, follows the screen's existing flat Compose
+ * style). The chosen value (`self` | `family` | `community`) is what
+ * [NodeSwitcherViewModel.claimAdmin] places in the signed claim body's
+ * `cohort_scope`, which CIRISServer v0.4.3 requires.
+ */
+@Composable
+private fun CohortScopeSelector(
+    selected: String,
+    onSelect: (String) -> Unit,
+    enabled: Boolean,
+) {
+    // value → label-key (localized; fallback-to-key is fine).
+    val options = listOf(
+        "self" to "mobile.claim_node_cohort_self",
+        "family" to "mobile.claim_node_cohort_family",
+        "community" to "mobile.claim_node_cohort_community",
+    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = localizedString("mobile.claim_node_cohort_label"),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(6.dp))
+        options.forEach { (value, labelKey) ->
+            val isSel = value == selected
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp)
+                    .testableClickable("radio_cohort_$value") {
+                        if (enabled) onSelect(value)
+                    },
+            ) {
+                RadioButton(
+                    selected = isSel,
+                    onClick = { if (enabled) onSelect(value) },
+                    enabled = enabled,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = localizedString(labelKey),
+                    fontSize = 14.sp,
+                    color = if (enabled) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = localizedString("mobile.claim_node_cohort_note"),
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

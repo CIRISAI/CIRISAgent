@@ -99,6 +99,41 @@ class NodeSwitcherViewModel(
     }
 
     /**
+     * Rename a saved node profile in place (keeps URL, token and any identity
+     * pin — [NodeProfileStore.upsert] merges by id). Used by the Manage Nodes
+     * CRUD surface. No-op for a blank name or an unknown id.
+     */
+    fun renameProfile(id: String, newName: String) {
+        val name = newName.trim()
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            val existing = _profiles.value.firstOrNull { it.id == id } ?: return@launch
+            _profiles.value = store.upsert(existing.copy(name = name))
+        }
+    }
+
+    /**
+     * Re-token a profile: replace the stored session token (or clear it when
+     * [token] is blank). Manage Nodes "retoken" affordance. Note [NodeProfileStore.upsert]
+     * preserves an existing token when the incoming one is null, so an explicit
+     * clear writes the profile directly rather than via upsert.
+     */
+    fun retokenProfile(id: String, token: String?) {
+        viewModelScope.launch {
+            val existing = _profiles.value.firstOrNull { it.id == id } ?: return@launch
+            val trimmed = token?.trim()?.takeIf { it.isNotBlank() }
+            _profiles.value = if (trimmed == null) {
+                // Explicit clear: upsert would preserve the old token, so go
+                // through remove + re-add to drop it.
+                store.remove(id)
+                store.upsert(existing.copy(sessionToken = null))
+            } else {
+                store.upsert(existing.copy(sessionToken = trimmed))
+            }
+        }
+    }
+
+    /**
      * Switch the active node. Repoints the shared API client at the chosen
      * node and applies its token, then marks it active. Screens observing
      * [activeProfileId] should reload their data when it changes.

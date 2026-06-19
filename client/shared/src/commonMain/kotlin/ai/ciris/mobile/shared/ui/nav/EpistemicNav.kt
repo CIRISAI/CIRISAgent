@@ -158,6 +158,23 @@ sealed class NavSurface(
     object Trust : NavSurface("trust", "Trust", CIRISIcons.shield,
         labelKey = "nav.surface.trust",)
 
+    /**
+     * Nodes — the first-class node-management surface (promoted from the
+     * in-page node-switcher dropdown). Lists/adds/edits/removes the saved fabric
+     * [ai.ciris.mobile.shared.models.NodeProfile]s and switches the active node.
+     * Live (no gate) — it manages locally-held profiles.
+     */
+    object Nodes : NavSurface("nodes", "Nodes", CIRISIcons.bus,
+        labelKey = "nav.surface.nodes",)
+
+    /**
+     * Manage Consent — view + manage the consent objects this device holds
+     * (bilateral consent:replication peering today; user-data consent:state via
+     * the existing Consent surface). Live (no gate).
+     */
+    object ManageConsent : NavSurface("manage-consent", "Manage Consent", CIRISIcons.lock,
+        labelKey = "nav.surface.manage_consent",)
+
     object Wallet : NavSurface("wallet", "Wallet", CIRISIcons.keySecure,
         labelKey = "nav.surface.wallet",)
     object Billing : NavSurface(
@@ -347,6 +364,8 @@ val MANAGE_GROUP = NavGroup(
     icon = CIRISIcons.handler,
     surfaces = listOf(
         NavSurface.HealthReputation,
+        NavSurface.Nodes,           // first-class node management (CRUD + switch)
+        NavSurface.ManageConsent,   // consent:replication + user-data consent
         NavSurface.Users,
         NavSurface.Adapters,
         // The substrate operator-infra trio: Edge / Verify / Persist.

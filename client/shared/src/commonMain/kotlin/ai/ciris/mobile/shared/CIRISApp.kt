@@ -2712,6 +2712,33 @@ fun CIRISApp(
                 )
             }
 
+            Screen.ManageNodes -> {
+                // First-class node-management CRUD surface (Manage group). Reuses
+                // NodeSwitcherViewModel for list/add/edit/remove/switch; routes to
+                // the ClaimNode flow for owner-binding.
+                PlatformLogger.d(TAG, "[Screen.ManageNodes] Rendering manage-nodes screen")
+                ManageNodesScreen(
+                    viewModel = nodeSwitcherViewModel,
+                    onBack = { currentScreen = Screen.Interact },
+                    onClaimNode = { currentScreen = Screen.ClaimNode },
+                )
+            }
+
+            Screen.ManageConsent -> {
+                // Consent-objects management (Manage group). Reuses
+                // ConsentObjectsViewModel for the bilateral consent:replication
+                // peering; links to the existing user-data Consent surface.
+                PlatformLogger.d(TAG, "[Screen.ManageConsent] Rendering manage-consent screen")
+                ManageConsentScreen(
+                    viewModel = consentObjectsViewModel,
+                    onBack = { currentScreen = Screen.Interact },
+                    onOpenUserConsent = { currentScreen = Screen.Consent },
+                    // No node-side peering-revoke (withdraws) endpoint yet — flag
+                    // for upstream. Flip when CIRISServer ships it.
+                    revokeEndpointAvailable = false,
+                )
+            }
+
             Screen.Runtime -> {
                 val runtimeData by runtimeViewModel.runtimeData.collectAsState()
                 val isRuntimeLoading by runtimeViewModel.isLoading.collectAsState()
@@ -3971,6 +3998,12 @@ private sealed class Screen {
     // its SYSTEM_ADMIN (connect → identity-pin → claim). Flow-only (no sidebar).
     object ClaimNode : Screen()
 
+    // Node management (CRUD over saved NodeProfiles) — first-class Manage-group
+    // surface, promoted from the in-page node-switcher dropdown.
+    object ManageNodes : Screen()
+    // Consent management (consent:replication peering + user-data consent).
+    object ManageConsent : Screen()
+
     // 2.9.4 — new Epistemic Commons surfaces.
     // HealthReputation ships with a real card (CellVizState-backed).
     // The other six are Coming Soon placeholders pinned to their substrate issue.
@@ -4062,6 +4095,8 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.Consent -> ai.ciris.mobile.shared.ui.nav.NavSurface.Consent
     Screen.Trust -> ai.ciris.mobile.shared.ui.nav.NavSurface.Trust
     Screen.NetworkOps -> ai.ciris.mobile.shared.ui.nav.NavSurface.NetworkOps
+    Screen.ManageNodes -> ai.ciris.mobile.shared.ui.nav.NavSurface.Nodes
+    Screen.ManageConsent -> ai.ciris.mobile.shared.ui.nav.NavSurface.ManageConsent
     Screen.Storage -> ai.ciris.mobile.shared.ui.nav.NavSurface.Storage
     Screen.Billing -> ai.ciris.mobile.shared.ui.nav.NavSurface.Billing
     Screen.Wallet -> ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet
@@ -4107,6 +4142,8 @@ private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen
     ai.ciris.mobile.shared.ui.nav.NavSurface.Consent -> Screen.Consent
     ai.ciris.mobile.shared.ui.nav.NavSurface.Trust -> Screen.Trust
     ai.ciris.mobile.shared.ui.nav.NavSurface.NetworkOps -> Screen.NetworkOps
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Nodes -> Screen.ManageNodes
+    ai.ciris.mobile.shared.ui.nav.NavSurface.ManageConsent -> Screen.ManageConsent
     ai.ciris.mobile.shared.ui.nav.NavSurface.Storage -> Screen.Storage
     ai.ciris.mobile.shared.ui.nav.NavSurface.Billing -> Screen.Billing
     ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet -> Screen.Wallet

@@ -227,12 +227,17 @@ class TestHelperFunctions:
 
     @pytest.mark.xdist_group(name="incident_handler_injection")
     def test_add_incident_capture_handler_to_specific_logger(self, specific_logger, log_dir, mock_time_service):
-        assert len(specific_logger.handlers) == 0
+        # Assert the *delta* (exactly one handler added), not an absolute count.
+        # "test_specific_logger" is a process-global logger; under pytest-xdist a
+        # prior test on the same worker can leak handlers onto it (the teardown
+        # strip in conftest is best-effort), so a brittle ``== 0`` precondition
+        # flakes. This mirrors the already-robust sibling test_add..._to_root.
+        num_initial_handlers = len(specific_logger.handlers)
         handler = add_incident_capture_handler(
             logger_instance=specific_logger, log_dir=str(log_dir), time_service=mock_time_service
         )
 
-        assert len(specific_logger.handlers) == 1
+        assert len(specific_logger.handlers) == num_initial_handlers + 1
         assert handler in specific_logger.handlers
 
     @pytest.mark.xdist_group(name="incident_handler_injection")

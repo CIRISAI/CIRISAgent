@@ -96,7 +96,21 @@ class TestRouterOrdering:
 
     def test_router_registration_order_in_app(self):
         """Test that system_extensions router is registered before system router."""
+        import importlib
+
         from ciris_engine.logic.adapters.api.app import create_app
+        from ciris_engine.logic.adapters.api.routes import system_extensions
+
+        # Rebuild the route module from source before asserting. create_app()
+        # reads ``system_extensions.router`` at call time; under pytest-xdist a
+        # *different* test on the same worker can leak a module-level patch onto
+        # that attribute (e.g. a mock that errored before its cleanup ran),
+        # which makes create_app() register an empty router and yields the
+        # flaky "step route not found" failure. Reloading restores the real
+        # router (and self-heals worker state) so this structural test is
+        # immune to that cross-test leak. Does not reproduce single-process,
+        # only under -n parallelism — see PR #890 shard 7/8.
+        importlib.reload(system_extensions)
 
         # This is a structural test - we create the app and verify the router order
         app = create_app()

@@ -72,6 +72,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
 import ai.ciris.mobile.shared.platform.openUrlInBrowser
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -2238,11 +2239,14 @@ private fun OptionalFeaturesStep(
     }
 }
 
-// ========== Federation Identity Step ==========
+// ========== Federation Identity Step (Create your federation ID) ==========
 //
-// Roots a federation identity in a hardware key (WebAuthn/FIDO2/Secure Enclave)
-// and performs the CEG self-at-login ceremony (POST /v1/self/login). Optional —
-// skippable on platforms without a usable hardware authenticator.
+// MINTS the founder's hardware-rooted USER federation identity by DRIVING this
+// device's local ciris-server: POST /v1/self/identity. The local node does ALL
+// the crypto (keygen + sealing + genesis-object signing) in its substrate,
+// custodied by a YubiKey / TPM·SE / software seed; the app holds NO keys and
+// signs nothing — it only POSTs the mint and surfaces the public result (the
+// CIRIS-V2-… fedcode + key_id + hardware tier).
 @Composable
 private fun FederationIdentityStep(
     viewModel: SetupViewModel,
@@ -2250,10 +2254,21 @@ private fun FederationIdentityStep(
     modifier: Modifier = Modifier
 ) {
     val fed = state.federationIdentity
-    // The federation identity lives in the LOCAL node's keyring/substrate, not the
-    // app. Probe the local node for it (the app holds NO keys and signs nothing).
+    val clipboardManager = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+
+    // Probe the local node first: if it already holds an identity we don't offer
+    // to mint a duplicate, we just report it. The app holds NO keys.
     LaunchedEffect(Unit) {
         viewModel.probeFederationIdentity()
+    }
+
+    // Reset the "Copied" pill shortly after a copy.
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1800)
+            copied = false
+        }
     }
 
     Column(
@@ -2263,16 +2278,14 @@ private fun FederationIdentityStep(
             .verticalScroll(rememberScrollState())
     ) {
         Text(
-            text = "Federation identity",
+            text = localizedString("mobile.federation_create_title"),
             color = SetupColors.TextPrimary,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-            text = "Your federation identity lives in this device's local node (its keyring / " +
-                "substrate), not in the app. The app drives the node and never holds keys or " +
-                "signs federation artifacts itself.",
+            text = localizedString("mobile.federation_create_explainer"),
             color = SetupColors.TextSecondary,
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 24.dp)
@@ -2292,7 +2305,7 @@ private fun FederationIdentityStep(
                 ) {
                     Text(text = "🔑", fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp))
                     Text(
-                        text = "Local-node federation identity",
+                        text = localizedString("mobile.federation_create_card_title"),
                         color = SetupColors.InfoDark,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
@@ -2300,31 +2313,162 @@ private fun FederationIdentityStep(
                 }
 
                 when {
-                    fed.admitted || (fed.probed && fed.hardwareAvailable) -> {
+                    // Minted just now (or local node already holds one) → show the
+                    // resulting fedcode + key_id + hardware tier.
+                    fed.minted || fed.admitted || (fed.probed && fed.hardwareAvailable) -> {
                         Text(
-                            text = "Local node holds a federation identity ✓",
+                            text = if (fed.minted) {
+                                localizedString("mobile.federation_create_minted")
+                            } else {
+                                localizedString("mobile.federation_create_exists")
+                            },
                             color = SetupColors.InfoDark,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 10.dp),
                         )
+
+                        // The shareable fedcode — prominent, monospace, copyable.
+                        fed.fedcode?.let { code ->
+                            Text(
+                                text = localizedString("mobile.federation_create_fedcode_label"),
+                                color = SetupColors.InfoText,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.White.copy(alpha = 0.6f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp, bottom = 8.dp)
+                            ) {
+                                Text(
+                                    text = code,
+                                    color = SetupColors.InfoDark,
+                                    fontSize = 13.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(10.dp),
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(code))
+                                    copied = true
+                                },
+                                modifier = Modifier.testableClickable("btn_federation_copy_fedcode") {
+                                    clipboardManager.setText(AnnotatedString(code))
+                                    copied = true
+                                }
+                            ) {
+                                Text(
+                                    if (copied) {
+                                        localizedString("mobile.federation_create_copied")
+                                    } else {
+                                        localizedString("mobile.federation_create_copy")
+                                    }
+                                )
+                            }
+                        }
+
                         fed.identityKeyId?.let {
                             Text(
-                                text = "key id: ${it.take(24)}…",
+                                text = localizedString("mobile.federation_create_keyid", "key_id", it),
+                                color = SetupColors.InfoText,
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                        fed.hardwareLabel?.let {
+                            Text(
+                                text = localizedString("mobile.federation_create_hardware", "hardware", it),
                                 color = SetupColors.InfoText,
                                 fontSize = 12.sp,
                                 modifier = Modifier.padding(top = 4.dp)
                             )
                         }
                     }
+
+                    // Not minted yet → the mint UX: optional label + backend choice
+                    // + the "Create my federation ID" button.
                     else -> {
                         Text(
-                            text = "Tap below to ask this device's local node for its federation " +
-                                "identity. The app holds no keys — the node owns the identity.",
+                            text = localizedString("mobile.federation_create_prompt"),
                             color = SetupColors.InfoText,
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
+
+                        // Optional display-name label.
+                        OutlinedTextField(
+                            value = fed.label,
+                            onValueChange = { viewModel.setFederationLabel(it) },
+                            label = { Text(localizedString("mobile.federation_create_label_hint")) },
+                            singleLine = true,
+                            enabled = !fed.inProgress,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                                .testable("input_federation_label"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = SetupColors.TextPrimary,
+                                unfocusedTextColor = SetupColors.TextPrimary,
+                                focusedBorderColor = SetupColors.Primary,
+                                unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                                cursorColor = SetupColors.Primary
+                            )
+                        )
+
+                        // Backend custody choice. `null` = let the local node use its
+                        // configured default (the recommended path).
+                        Text(
+                            text = localizedString("mobile.federation_create_backend_label"),
+                            color = SetupColors.InfoText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        val backends = listOf(
+                            null to localizedString("mobile.federation_create_backend_default"),
+                            "pkcs11" to localizedString("mobile.federation_create_backend_yubikey"),
+                            "platform-sealed" to localizedString("mobile.federation_create_backend_sealed"),
+                            "software" to localizedString("mobile.federation_create_backend_software"),
+                        )
+                        Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                            backends.forEach { (value, label) ->
+                                val selected = fed.backend == value
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (selected) SetupColors.Primary.copy(alpha = 0.18f) else Color.Transparent,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp)
+                                        .testableClickable("backend_${value ?: "default"}") {
+                                            viewModel.setFederationBackend(value)
+                                        }
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                    ) {
+                                        RadioButton(
+                                            selected = selected,
+                                            onClick = { viewModel.setFederationBackend(value) },
+                                            enabled = !fed.inProgress,
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = label,
+                                            color = SetupColors.InfoDark,
+                                            fontSize = 13.sp,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         Button(
                             onClick = { viewModel.runFederationIdentitySetup() },
                             enabled = !fed.inProgress,
@@ -2340,7 +2484,13 @@ private fun FederationIdentityStep(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
-                            Text(if (fed.inProgress) "Checking…" else "Use local-node identity")
+                            Text(
+                                if (fed.inProgress) {
+                                    localizedString("mobile.federation_create_minting")
+                                } else {
+                                    localizedString("mobile.federation_create_button")
+                                }
+                            )
                         }
                     }
                 }
@@ -2357,7 +2507,7 @@ private fun FederationIdentityStep(
         }
 
         Text(
-            text = "This step is optional — you can continue without it.",
+            text = localizedString("mobile.federation_create_optional"),
             color = SetupColors.TextSecondary,
             fontSize = 12.sp,
         )

@@ -603,20 +603,39 @@ class SetupViewModel(
     }
 
     /**
-     * Report the owner's federation identity by DRIVING the LOCAL node.
+     * Set the optional human display name for the federation identity. Flows into
+     * the local node's `POST /v1/self/identity` as `label` → the FSD-002
+     * `label-fingerprint` key_id.
+     */
+    fun setFederationLabel(label: String) {
+        _state.value = _state.value.copy(
+            federationIdentity = _state.value.federationIdentity.copy(label = label)
+        )
+    }
+
+    /**
+     * Set the custody backend hint for the mint: `pkcs11` (YubiKey),
+     * `platform-sealed` (TPM / Secure Enclave), `software` (dev), or `null` to
+     * let the local node use its configured default. The local node chooses the
+     * real backend; this is only a hint it may honor.
+     */
+    fun setFederationBackend(backend: String?) {
+        _state.value = _state.value.copy(
+            federationIdentity = _state.value.federationIdentity.copy(backend = backend)
+        )
+    }
+
+    /**
+     * **Create the founder's federation ID by DRIVING the LOCAL node** to MINT a
+     * hardware-rooted USER identity — `POST /v1/self/identity`.
      *
      * The app performs NO federation crypto: it does not mint keys, build
-     * occurrences, or hybrid-sign anything. It asks the local node (which holds
-     * the identity in its substrate) for its signed key record and surfaces it.
-     *
-     * GAP (flagged honestly): CIRISServer does not yet expose a dedicated
-     * *user-identity provisioning* endpoint to MINT/ensure the owner's identity
-     * on demand — the local node is expected to already hold it (created at node
-     * setup). The remaining piece is (a) a local-node `POST /v1/self/identity`
-     * (or equivalent) to provision the owner identity, and (b) hardware custody
-     * of the keyring via ciris-keyring's PKCS#11 / YubiKey path. Until then this
-     * step only reports an existing local-node identity; it never re-introduces
-     * Kotlin key minting.
+     * occurrences, or hybrid-sign anything. The local ciris-server mints the
+     * hybrid Ed25519 + ML-DSA-65 keypair IN ITS SUBSTRATE — custodied by a
+     * YubiKey (PKCS#11), TPM/Secure-Enclave (platform-sealed), or a software seed
+     * (dev) per the server's config / the optional backend hint — and returns the
+     * public result (key_id + `CIRIS-V2-…` fedcode + pubkeys + hardware_type),
+     * which the app surfaces.
      *
      * Optional step — failures are surfaced but never block the wizard.
      */
@@ -630,35 +649,44 @@ class SetupViewModel(
             )
             return
         }
+        val fed = _state.value.federationIdentity
         _state.value = _state.value.copy(
-            federationIdentity = _state.value.federationIdentity.copy(inProgress = true, error = null)
+            federationIdentity = fed.copy(inProgress = true, error = null)
         )
         viewModelScope.launch {
             try {
-                // Ask the LOCAL node for the owner's federation identity. The node
-                // does all canonicalization/signing in its substrate; the app only
-                // reads the public key record over plain localhost HTTP.
-                val record = client.getSelfKeyRecord(CIRISApiClient.LOCAL_NODE_URL)
+                // DRIVE the LOCAL node to mint the owner's federation identity. The
+                // node does all crypto (keygen, sealing, genesis-object signing) in
+                // its substrate; the app only POSTs over plain localhost HTTP and
+                // surfaces the public result. NO keys/crypto in Kotlin.
+                val minted = client.mintUserIdentity(
+                    label = fed.label.trim().ifBlank { null },
+                    backend = fed.backend,
+                    localNodeUrl = CIRISApiClient.LOCAL_NODE_URL,
+                )
                 _state.value = _state.value.copy(
                     federationIdentity = _state.value.federationIdentity.copy(
                         inProgress = false,
                         admitted = true,
+                        minted = true,
                         hardwareAvailable = true,
-                        identityKeyId = record.keyId,
+                        identityKeyId = minted.keyId,
+                        fedcode = minted.fedcode,
+                        hardwareLabel = minted.hardwareLabel,
                         error = null,
                     )
                 )
             } catch (e: Exception) {
-                // No local-node identity yet AND no provisioning endpoint to mint
-                // one (see GAP above). Report honestly; do NOT mint keys in Kotlin.
-                PlatformLogger.w(TAG, "runFederationIdentitySetup: local node has no identity / no provisioning endpoint: ${e.message}")
+                // The mint failed (no owner session, backend unavailable, etc.).
+                // Report honestly; do NOT fall back to minting keys in Kotlin.
+                PlatformLogger.w(TAG, "runFederationIdentitySetup: mint via local node failed: ${e.message}")
                 _state.value = _state.value.copy(
                     federationIdentity = _state.value.federationIdentity.copy(
                         inProgress = false,
                         admitted = false,
-                        error = "This device's local node has no federation identity yet, and there is no " +
-                            "local-node user-identity provisioning endpoint to create one. (Remaining work: " +
-                            "a local-node provision endpoint + ciris-keyring YubiKey/PKCS#11 custody.)",
+                        minted = false,
+                        error = "Couldn't create your federation ID on this device's local node: " +
+                            "${e.message ?: "unknown error"}",
                     )
                 )
             }

@@ -8,6 +8,8 @@ import ai.ciris.mobile.shared.models.federation.FederationContentResponse
 import ai.ciris.mobile.shared.models.federation.FederationIdentity
 import ai.ciris.mobile.shared.models.federation.FederationIdentityResponse
 import ai.ciris.mobile.shared.models.federation.FederationMetricsResponse
+import ai.ciris.mobile.shared.models.federation.MintIdentityRequest
+import ai.ciris.mobile.shared.models.federation.MintedIdentity
 import ai.ciris.mobile.shared.models.federation.FederationPeerAppearanceUpdateRequest
 import ai.ciris.mobile.shared.models.federation.FederationPeerDetailResponse
 import ai.ciris.mobile.shared.models.federation.FederationPeerListResponse
@@ -1248,6 +1250,69 @@ class CIRISApiClient(
             decodeFederationEnvelope(response.bodyAsText(), SignedKeyRecord.serializer())
         } catch (e: Exception) {
             logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Drive THIS device's LOCAL node to **mint the founder's hardware-rooted
+     * USER federation identity** — `POST {localNodeUrl}/v1/self/identity`.
+     *
+     * The app performs NO crypto. The local ciris-server mints the hybrid
+     * Ed25519 + ML-DSA-65 keypair in its keyring/substrate, custodied per the
+     * chosen [backend] (`pkcs11`=YubiKey / `platform-sealed`=TPM·SE /
+     * `software`=dev), writes the genesis CEG object to its outbox, and returns
+     * the public result: the `key_id`, the shareable `CIRIS-V2-…` [fedcode], the
+     * pubkeys, and the honest `hardware_type`. This is a plain owner-session
+     * POST (Bearer [token]); there is no x-ciris signing in Kotlin.
+     *
+     * Mirrors `CIRISServer/src/identity.rs` `self_identity_handler`. All request
+     * fields are optional — the node defaults the backend to `platform-sealed`
+     * and the alias to `<node>-user`.
+     *
+     * @param label optional human display name → the `label-fingerprint` key_id.
+     * @param backend optional custody hint: `pkcs11` | `platform-sealed` |
+     *        `software`. Unknown values are rejected by the node (400).
+     * @param provision for `pkcs11`: provision an empty PIV slot via `ykman`.
+     * @param pivSlot for `pkcs11`: the PIV slot (default `9c`).
+     * @param localNodeUrl base URL of THIS device's local node ([LOCAL_NODE_URL]).
+     */
+    suspend fun mintUserIdentity(
+        label: String? = null,
+        backend: String? = null,
+        provision: Boolean? = null,
+        pivSlot: String? = null,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): MintedIdentity {
+        val method = "mintUserIdentity"
+        logInfo(method, "POST $localNodeUrl/v1/self/identity backend=${backend ?: "(default)"} label=${label ?: "(none)"}")
+        val client = federationHttpClient()
+        return try {
+            val request = MintIdentityRequest(
+                backend = backend,
+                label = label,
+                provision = provision,
+                pivSlot = pivSlot,
+            )
+            val bodyText = jsonConfig.encodeToString(MintIdentityRequest.serializer(), request)
+            val response = client.post("$localNodeUrl/v1/self/identity") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyText)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "localNodeUrl=$localNodeUrl")
+                throw RuntimeException("mint identity failed: ${response.status}: ${raw.take(200)}")
+            }
+            // The node returns a FLAT JSON object (no `{"data": …}` envelope);
+            // decodeFederationEnvelope tolerates the unwrapped shape.
+            decodeFederationEnvelope(raw, MintedIdentity.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl")
             throw e
         } finally {
             client.close()

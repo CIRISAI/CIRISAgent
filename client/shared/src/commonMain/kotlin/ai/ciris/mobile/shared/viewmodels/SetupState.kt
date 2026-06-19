@@ -279,6 +279,20 @@ data class FederationIdentitySetupState(
     /** Identity key id after a successful ceremony. */
     val identityKeyId: String? = null,
     val error: String? = null,
+    // ── Mint inputs (driven into the local node's POST /v1/self/identity) ──
+    /** Optional human display name → the local node's `label-fingerprint` key_id. */
+    val label: String = "",
+    /** Custody backend hint sent to the local node: `pkcs11` | `platform-sealed`
+     *  | `software`. `null` → let the local node use its configured default. */
+    val backend: String? = null,
+    // ── Mint result (the public surface returned by the local node) ──
+    /** True once the local node minted a USER identity (vs only reporting one). */
+    val minted: Boolean = false,
+    /** The shareable `CIRIS-V2-…` fedcode the local node returned. */
+    val fedcode: String? = null,
+    /** The honest hardware-tier label ("YubiKey" / "TPM / Secure Enclave" /
+     *  "software") the local node reported. */
+    val hardwareLabel: String? = null,
 )
 
 /**

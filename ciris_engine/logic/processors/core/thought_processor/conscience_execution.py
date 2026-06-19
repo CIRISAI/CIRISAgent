@@ -9,6 +9,7 @@ Captures detailed results from all 6 consciences:
 - Ethical Faculties (non-exempt): Entropy, Coherence, OptimizationVeto, EpistemicHumility
 """
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
@@ -201,26 +202,24 @@ class ConscienceExecutionPhase:
         optimization_veto_prompt: Optional[str] = None
         epistemic_humility_prompt: Optional[str] = None
 
-        # Get consciences from registry
-        for entry in self.conscience_registry.get_consciences():
-            conscience = entry.conscience
-            cb = entry.circuit_breaker
+        # Dispatch all conscience checks CONCURRENTLY (issue #889). The four
+        # epistemic consciences (Entropy/Coherence/OptimizationVeto/
+        # EpistemicHumility) each make an INDEPENDENT LLM call; a sequential
+        # await-loop serialized 4 LLM round-trips per thought, dominating
+        # cycle time on slow/edge inference. They have no inter-dependency
+        # (each reads the same final_action + context), so gather them.
+        # Results are processed below in priority order, preserving the
+        # original break-on-first-failure override precedence exactly.
+        entries = self.conscience_registry.get_consciences()
+        check_results = await asyncio.gather(
+            *(self._run_single_conscience(entry, final_action, context) for entry in entries)
+        )
 
-            try:
-                if cb:
-                    cb.check_and_raise()
-                result = await conscience.check(final_action, context)
-                if cb:
-                    cb.record_success()
-                conscience_checks_ran += 1
-            except CircuitBreakerError as e:
-                logger.warning(f"conscience {entry.name} unavailable: {e}")
+        for entry, result in zip(entries, check_results):
+            if result is None:
+                # Circuit breaker open or check errored (already logged in helper).
                 continue
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"conscience {entry.name} error: {e}", exc_info=True)
-                if cb:
-                    cb.record_failure()
-                continue
+            conscience_checks_ran += 1
 
             # Aggregate epistemic metrics from conscience results
             if result.entropy_score is not None:
@@ -417,6 +416,35 @@ class ConscienceExecutionPhase:
             evaluation_time_ms=None,
             resource_usage=None,
         )
+
+    async def _run_single_conscience(
+        self, entry: Any, action: ActionSelectionDMAResult, context: Any
+    ) -> Optional[Any]:
+        """Run one conscience.check() with circuit-breaker handling.
+
+        Returns the check result, or ``None`` if the circuit breaker is open
+        or the check errored (both already logged). Used to dispatch the
+        epistemic consciences CONCURRENTLY via ``asyncio.gather`` (issue #889)
+        — the override precedence is applied by the caller, which processes
+        results in priority order.
+        """
+        conscience = entry.conscience
+        cb = entry.circuit_breaker
+        try:
+            if cb:
+                cb.check_and_raise()
+            result = await conscience.check(action, context)
+            if cb:
+                cb.record_success()
+            return result
+        except CircuitBreakerError as e:
+            logger.warning(f"conscience {entry.name} unavailable: {e}")
+            return None
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"conscience {entry.name} error: {e}", exc_info=True)
+            if cb:
+                cb.record_failure()
+            return None
 
     async def _check_single_bypass_conscience(
         self, entry: Any, current_action: ActionSelectionDMAResult, context: Any

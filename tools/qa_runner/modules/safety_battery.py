@@ -403,6 +403,14 @@ class SafetyBatteryTests:
         # non-fatal if endpoints unavailable). See FSD §3.3.
         await self._capture_agent_identity()
 
+        # Register the detailed + full_traces ACCORD metrics adapters so the
+        # capture bundle exports the FULL reasoning corpus (raw prompts +
+        # completions), not just hashed 'detailed' traces. The QA server boots
+        # the startup adapter at 'generic' (lens shipper) for safety_battery;
+        # the full corpus only lands when a full_traces instance is registered.
+        # Mirrors model_eval's multi-adapter setup (best-effort, non-fatal).
+        await self._ensure_accord_metrics_adapters()
+
         cell = manifest["cell"]
         questions = manifest["questions"]
         self.console.print(
@@ -487,6 +495,53 @@ class SafetyBatteryTests:
         admin_token = getattr(transport, "api_key", None)
         if not admin_token:
             return
+
+    async def _ensure_accord_metrics_adapters(self) -> None:
+        """Register the detailed + full_traces ACCORD metrics adapter instances.
+
+        The QA server boots one accord_metrics adapter at 'generic' (the lens
+        shipper) for safety_battery. The full reasoning corpus — raw prompts +
+        completions, for the Coherence Ratchet and fine-tuning — only lands when
+        a ``full_traces`` instance is ALSO registered (TraceDetailLevel.FULL_TRACES
+        keeps all prompts/reasoning/context; 'detailed' hashes them). Mirrors
+        ``model_eval``'s multi-adapter setup so the capture bundle exports all
+        three levels. Best-effort: a registration failure must not fail the run.
+        """
+        transport = getattr(self.client, "_transport", None)
+        if transport is None:
+            return
+        base_url = getattr(transport, "base_url", f"http://localhost:{self.api_port}")
+        admin_token = getattr(transport, "api_key", None)
+        if not admin_token:
+            self.console.print("[yellow]ACCORD full-trace adapters skipped: no auth token[/yellow]")
+            return
+
+        headers = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
+        adapters = [("accord_detailed", "detailed"), ("accord_full", "full_traces")]
+        self.console.print("[dim]Registering ACCORD metrics adapters (detailed + full_traces)[/dim]")
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as http:
+                for adapter_id, trace_level in adapters:
+                    url = f"{base_url}/v1/system/adapters/ciris_accord_metrics?adapter_id={adapter_id}"
+                    payload = {
+                        "config": {
+                            "adapter_id": adapter_id,
+                            "trace_level": trace_level,
+                            "consent_given": True,
+                            "consent_timestamp": "2025-01-01T00:00:00Z",
+                            "flush_interval_seconds": 5,
+                        },
+                        "persist": False,
+                    }
+                    resp = await http.post(url, json=payload, headers=headers)
+                    if resp.status_code in (200, 409):
+                        self.console.print(f"[dim]  {adapter_id}: {trace_level} ready[/dim]")
+                    else:
+                        self.console.print(
+                            f"[yellow]  {adapter_id}: HTTP {resp.status_code} {resp.text[:160]}[/yellow]"
+                        )
+        except Exception as exc:  # noqa: BLE001 — best-effort, never fail the run
+            self.console.print(f"[yellow]ACCORD adapter registration failed ({type(exc).__name__}): {exc}[/yellow]")
 
         identity_data: Dict[str, Any] = {}
         # Best-effort identity + health probes for the manifest. Either

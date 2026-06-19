@@ -1014,6 +1014,7 @@ class APIServerManager:
         # or during live model eval where we want a full multilingual research export.
         accord_metrics_requested = any(m == QAModule.ACCORD_METRICS for m in self.modules)
         model_eval_requested = any(m == QAModule.MODEL_EVAL for m in self.modules)
+        safety_battery_requested = any(m == QAModule.SAFETY_BATTERY for m in self.modules)
         accord_metrics_enabled = accord_metrics_requested or model_eval_requested or self.config.live_lens
         if accord_metrics_enabled:
             # Load base accord_metrics adapter alongside the main adapter
@@ -1025,10 +1026,15 @@ class APIServerManager:
             env["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
             # Use short flush interval for QA (5 seconds instead of 60)
             env["CIRIS_ACCORD_METRICS_FLUSH_INTERVAL"] = "5"
-            # Keep the startup adapter at generic so model-eval can explicitly register
-            # the detailed and full_traces adapters after auth. That yields exactly three
-            # active accord_metrics instances: generic, detailed, full_traces.
-            trace_level = "generic" if model_eval_requested else "detailed"
+            # Keep the startup adapter at generic so model-eval AND safety-battery
+            # can explicitly register the detailed + full_traces adapters after auth.
+            # That yields three accord_metrics instances: generic (lens shipper),
+            # detailed, and full_traces — the last carrying raw prompts+completions
+            # for the Coherence Ratchet / fine-tuning corpus. Registering the extra
+            # adapters (not overriding to a single 'detailed' level) is the design;
+            # safety_battery previously got the single-level override, so its capture
+            # bundles only ever held hashed traces (no full text).
+            trace_level = "generic" if (model_eval_requested or safety_battery_requested) else "detailed"
             env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = trace_level
             # Set live lens endpoint explicitly
             if self.config.live_lens:

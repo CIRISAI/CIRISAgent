@@ -224,6 +224,39 @@ def cleanup_after_test(request):
 
 
 @pytest.fixture(autouse=True, scope="function")
+def strip_leaked_incident_handlers():
+    """Remove any IncidentCaptureHandler left on a process-global logger after a
+    test, so it cannot leak onto the next test sharing the xdist worker process.
+
+    Root cause of the recurring 'incident_handler_injection' / logging-pollution
+    flake (git: e8a16d764, 3f254498f): ``add_incident_capture_handler()`` does
+    ``target_logger.addHandler(handler)`` on a process-global logger, and not
+    every test removes it. Under pytest-xdist the leaked handler then shows up on
+    the next test's logger — e.g. ``assert len(specific_logger.handlers) == 0``
+    sees 2. Stripping the leak at teardown fixes it at the source instead of
+    per-test ``xdist_group`` whack-a-mole. Surgical: only the IncidentCaptureHandler
+    subclass is removed, so ``caplog`` and other handlers are left untouched.
+    """
+    yield
+    import logging as _logging
+
+    try:
+        from ciris_engine.logic.utils.incident_capture_handler import IncidentCaptureHandler
+    except Exception:  # pragma: no cover - module always importable in-tree
+        return
+
+    loggers = [_logging.getLogger()]
+    loggers += [_logging.getLogger(name) for name in list(_logging.Logger.manager.loggerDict)]
+    for lg in loggers:
+        handlers = getattr(lg, "handlers", None)
+        if not handlers:
+            continue
+        kept = [h for h in handlers if not isinstance(h, IncidentCaptureHandler)]
+        if len(kept) != len(handlers):
+            lg.handlers = kept
+
+
+@pytest.fixture(autouse=True, scope="function")
 def clear_asyncio_module_state():
     """
     Clear module-level asyncio state to prevent cross-test contamination.

@@ -5,6 +5,7 @@ import ai.ciris.mobile.shared.localization.localizedString
 import androidx.compose.foundation.layout.imePadding
 import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
+import ai.ciris.mobile.shared.models.safety.AgeBand
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
 import ai.ciris.mobile.shared.platform.LocalInferenceCapability
 import ai.ciris.mobile.shared.platform.PlatformLogger
@@ -361,6 +362,7 @@ fun SetupScreen(
                     SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state, apiClient)
                     SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
                     SetupStep.FEDERATION_IDENTITY_SETUP -> FederationIdentityStep(viewModel, state)
+                    SetupStep.AGE_RANGE -> AgeRangeStep(viewModel, state)
                     SetupStep.ACCOUNT_AND_CONFIRMATION -> AccountConfirmationStep(viewModel, state)
                     SetupStep.VERIFY_SETUP -> OptionalFeaturesStep(viewModel, state) // Legacy - redirects to OPTIONAL_FEATURES
                     SetupStep.COMPLETE -> CompleteStep(onSetupComplete)
@@ -2508,6 +2510,165 @@ private fun FederationIdentityStep(
 
         Text(
             text = localizedString("mobile.federation_create_optional"),
+            color = SetupColors.TextSecondary,
+            fontSize = 12.sp,
+        )
+    }
+}
+
+/**
+ * **AGE_RANGE step — the foundational protective gate.** You have a federation
+ * ID; now STATE YOUR AGE RANGE, then you're on the fabric. Safety is built in
+ * FIRST, ahead of content.
+ *
+ * A clear age-range selector (Under 18 / 18+ — matching `age.rs::AgeBand`'s
+ * `minor` / `adult`) with a child-safe explainer. On select, the local node
+ * records the subject-signed self-declared assurance
+ * (`POST /v1/safety/age-assurance`). The app does NO crypto. Declining/erroring
+ * never traps the user — the protective default is `minor`.
+ */
+@Composable
+private fun AgeRangeStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    modifier: Modifier = Modifier
+) {
+    val age = state.ageRange
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text(
+            text = localizedString("mobile.age_range_title"),
+            color = SetupColors.TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Text(
+            text = localizedString("mobile.age_range_explainer"),
+            color = SetupColors.TextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 20.dp)
+        )
+
+        // The two protective bands. The server models exactly two: minor / adult
+        // (age.rs::AgeBand). "Under 18" maps to `minor`; "18 or older" to `adult`.
+        val options = listOf(
+            AgeBand.MINOR to ("minor" to localizedString("mobile.age_range_minor")),
+            AgeBand.ADULT to ("adult" to localizedString("mobile.age_range_adult")),
+        )
+        Column(modifier = Modifier.padding(bottom = 16.dp)) {
+            options.forEach { (band, meta) ->
+                val (token, label) = meta
+                val selected = age.selectedBandToken == token
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (selected) SetupColors.Primary.copy(alpha = 0.18f) else SetupColors.InfoLight,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .testableClickable("age_band_$token") {
+                            if (!age.inProgress) viewModel.setAgeRange(band)
+                        }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp)
+                    ) {
+                        RadioButton(
+                            selected = selected,
+                            onClick = { if (!age.inProgress) viewModel.setAgeRange(band) },
+                            enabled = !age.inProgress,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = label,
+                            color = SetupColors.InfoDark,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+        }
+
+        // Child-safe explainer card — honest framing kept TRUE (matches the
+        // age.rs honesty discipline: protective default; self-declared; the
+        // subject controls their own band; misdeclaration is never punitive).
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.InfoLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(text = "🛡️", fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp))
+                    Text(
+                        text = localizedString("mobile.age_range_card_title"),
+                        color = SetupColors.InfoDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    text = localizedString("mobile.age_range_card_body"),
+                    color = SetupColors.InfoText,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                )
+
+                when {
+                    age.inProgress -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 12.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = SetupColors.Primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = localizedString("mobile.age_range_saving"),
+                                color = SetupColors.InfoText,
+                                fontSize = 12.sp,
+                            )
+                        }
+                    }
+                    age.recorded -> {
+                        Text(
+                            text = localizedString("mobile.age_range_saved"),
+                            color = SetupColors.InfoDark,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                }
+
+                age.error?.let { err ->
+                    Text(
+                        text = err,
+                        color = SetupColors.ErrorText,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = localizedString("mobile.age_range_footnote"),
             color = SetupColors.TextSecondary,
             fontSize = 12.sp,
         )

@@ -646,6 +646,9 @@ fun CIRISApp(
     val consentObjectsViewModel: ConsentObjectsViewModel = viewModel {
         ConsentObjectsViewModel(apiClient, secureStorage)
     }
+    val safetyViewModel: ai.ciris.mobile.shared.viewmodels.SafetyViewModel = viewModel {
+        ai.ciris.mobile.shared.viewmodels.SafetyViewModel(apiClient)
+    }
     val skillImportViewModel: SkillImportViewModel = viewModel {
         SkillImportViewModel(apiClient)
     }
@@ -2739,6 +2742,28 @@ fun CIRISApp(
                 )
             }
 
+            Screen.Moderation -> {
+                // Holistic SAFETY surface — moderation as a delegable DUTY.
+                // Drives the local node's /v1/safety/{moderation,named-moderator}.
+                PlatformLogger.d(TAG, "[Screen.Moderation] Rendering moderation screen")
+                ModerationScreen(
+                    viewModel = safetyViewModel,
+                    onBack = { currentScreen = Screen.Interact },
+                    // The delegate-moderate-duty flow lives on Family → Delegation.
+                    onOpenDelegation = { currentScreen = Screen.Delegation },
+                )
+            }
+
+            Screen.ChildSafety -> {
+                // Holistic SAFETY surface — child-safety / per-group watchlist +
+                // the protective posture. Drives /v1/safety/{watchlist,status}.
+                PlatformLogger.d(TAG, "[Screen.ChildSafety] Rendering child-safety screen")
+                ChildSafetyScreen(
+                    viewModel = safetyViewModel,
+                    onBack = { currentScreen = Screen.Interact },
+                )
+            }
+
             Screen.Runtime -> {
                 val runtimeData by runtimeViewModel.runtimeData.collectAsState()
                 val isRuntimeLoading by runtimeViewModel.isLoading.collectAsState()
@@ -4004,6 +4029,11 @@ private sealed class Screen {
     // Consent management (consent:replication peering + user-data consent).
     object ManageConsent : Screen()
 
+    // Holistic SAFETY surface (CIRISServer v0.4.6 /v1/safety/*) — moderation +
+    // child-safety as first-class fabric primitives, built ahead of content.
+    object Moderation : Screen()
+    object ChildSafety : Screen()
+
     // 2.9.4 — new Epistemic Commons surfaces.
     // HealthReputation ships with a real card (CellVizState-backed).
     // The other six are Coming Soon placeholders pinned to their substrate issue.
@@ -4097,6 +4127,8 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.NetworkOps -> ai.ciris.mobile.shared.ui.nav.NavSurface.NetworkOps
     Screen.ManageNodes -> ai.ciris.mobile.shared.ui.nav.NavSurface.Nodes
     Screen.ManageConsent -> ai.ciris.mobile.shared.ui.nav.NavSurface.ManageConsent
+    Screen.Moderation -> ai.ciris.mobile.shared.ui.nav.NavSurface.Moderation
+    Screen.ChildSafety -> ai.ciris.mobile.shared.ui.nav.NavSurface.ChildSafety
     Screen.Storage -> ai.ciris.mobile.shared.ui.nav.NavSurface.Storage
     Screen.Billing -> ai.ciris.mobile.shared.ui.nav.NavSurface.Billing
     Screen.Wallet -> ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet
@@ -4144,6 +4176,10 @@ private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen
     ai.ciris.mobile.shared.ui.nav.NavSurface.NetworkOps -> Screen.NetworkOps
     ai.ciris.mobile.shared.ui.nav.NavSurface.Nodes -> Screen.ManageNodes
     ai.ciris.mobile.shared.ui.nav.NavSurface.ManageConsent -> Screen.ManageConsent
+    // Safety parent routes to its first child (Moderation); the two leaves map 1:1.
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Safety -> Screen.Moderation
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Moderation -> Screen.Moderation
+    ai.ciris.mobile.shared.ui.nav.NavSurface.ChildSafety -> Screen.ChildSafety
     ai.ciris.mobile.shared.ui.nav.NavSurface.Storage -> Screen.Storage
     ai.ciris.mobile.shared.ui.nav.NavSurface.Billing -> Screen.Billing
     ai.ciris.mobile.shared.ui.nav.NavSurface.Wallet -> Screen.Wallet

@@ -1,6 +1,22 @@
 package ai.ciris.mobile.shared.api
 
 import ai.ciris.mobile.shared.models.*
+import ai.ciris.mobile.shared.models.safety.AgeBand
+import ai.ciris.mobile.shared.models.safety.AgeStatusResponse
+import ai.ciris.mobile.shared.models.safety.AssuranceLevel
+import ai.ciris.mobile.shared.models.safety.ModerationDuty
+import ai.ciris.mobile.shared.models.safety.ModerationPayload
+import ai.ciris.mobile.shared.models.safety.ModerationRequest
+import ai.ciris.mobile.shared.models.safety.ModerationResponse
+import ai.ciris.mobile.shared.models.safety.NamedModeratorResponse
+import ai.ciris.mobile.shared.models.safety.SafetyStatusResponse
+import ai.ciris.mobile.shared.models.safety.SetAgeRequest
+import ai.ciris.mobile.shared.models.safety.SetAgeResponse
+import ai.ciris.mobile.shared.models.safety.WatchlistClass
+import ai.ciris.mobile.shared.models.safety.WatchlistListResponse
+import ai.ciris.mobile.shared.models.safety.WatchlistMode
+import ai.ciris.mobile.shared.models.safety.WatchlistRequest
+import ai.ciris.mobile.shared.models.safety.WatchlistResponse
 import ai.ciris.mobile.shared.models.federation.EdgePeerReachability
 import ai.ciris.mobile.shared.models.federation.EdgeReachabilityEntry
 import ai.ciris.mobile.shared.models.federation.FederationContentRequest
@@ -1441,6 +1457,280 @@ class CIRISApiClient(
             decodeFederationEnvelope(raw, ClaimRemoteResponse.serializer())
         } catch (e: Exception) {
             logException(method, e, "localNodeUrl=$localNodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── Holistic SAFETY surface (/v1/safety/*) — CIRISServer v0.4.6 ──────────
+    //
+    // The safety cards drive THIS device's local node only. The app holds NO
+    // keys and performs NO crypto: every signing / admission decision is made by
+    // the node's substrate. These are plain localhost requests (Bearer [token]
+    // for the owner session); there is no x-ciris signing in Kotlin.
+    //
+    // Mirrors CIRISServer/src/safety/{age,moderation,named,watchlist}.rs exactly.
+    // Hand-written direct HTTP (not in the generated SDK).
+
+    /**
+     * **Set the caller's self-declared age band** — the onboarding "state your
+     * age range" step. `POST {localNodeUrl}/v1/safety/age-assurance`.
+     *
+     * Mirrors `age.rs::set_age` (`SetAgeRequest { subject_key_id, band, level? }`).
+     * Only the `self` level is settable here — the node rejects provider/
+     * government with 400 (a subject cannot self-mint verified adulthood). The
+     * node signs + promotes the assurance; the subject controls their own level
+     * and misdeclaration NEVER slashes (it routes to adjudication).
+     */
+    suspend fun setAgeAssurance(
+        subjectKeyId: String,
+        band: AgeBand,
+        level: AssuranceLevel? = null,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): SetAgeResponse {
+        val method = "setAgeAssurance"
+        logInfo(method, "POST $localNodeUrl/v1/safety/age-assurance subject=${subjectKeyId.take(16)}… band=$band")
+        val client = federationHttpClient()
+        return try {
+            val request = SetAgeRequest(subjectKeyId = subjectKeyId, band = band, level = level)
+            val response = client.post("$localNodeUrl/v1/safety/age-assurance") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(SetAgeRequest.serializer(), request))
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("set age-assurance failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(raw, SetAgeResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Read an identity's current age assurance** —
+     * `GET {nodeUrl}/v1/safety/age-assurance/{key_id}`. Mirrors `age.rs::get_age`
+     * (`AgeStatusResponse { key_id, assurance? }`). `assurance` is null when none
+     * is on record — callers MUST treat null PROTECTIVELY (default to minor).
+     */
+    suspend fun getAgeAssurance(
+        keyId: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): AgeStatusResponse {
+        val method = "getAgeAssurance"
+        logDebug(method, "GET $nodeUrl/v1/safety/age-assurance/$keyId")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/safety/age-assurance/$keyId") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("get age-assurance failed: ${response.status} for $keyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), AgeStatusResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "keyId=$keyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **The aggregate protective posture/status** for an identity —
+     * `GET {nodeUrl}/v1/safety/status/{key_id}`. Mirrors `age.rs::safety_status`
+     * (`{ key_id, age_assurance?, honesty{…} }`). The honesty block is kept TRUE
+     * by the server and surfaced verbatim by the child-safety card.
+     */
+    suspend fun getSafetyStatus(
+        keyId: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): SafetyStatusResponse {
+        val method = "getSafetyStatus"
+        logDebug(method, "GET $nodeUrl/v1/safety/status/$keyId")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/safety/status/$keyId") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("get safety status failed: ${response.status} for $keyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), SafetyStatusResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "keyId=$keyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **File a ModerationEvent** — `POST {nodeUrl}/v1/safety/moderation`. Mirrors
+     * `moderation.rs::moderation` (`ModerationRequest { signer_key_id,
+     * community_key_id, duty, allegation_type, target_key_ids[], payload }`).
+     *
+     * Admitted IFF the signer holds the duty (`moderate`/`takedown`/`review`) or
+     * sits on a live delegated chain (the §11.10 gate, enforced by the node).
+     * Non-holders get 403 — "the duty is held or delegated, never assumed". The
+     * app does no crypto; the node decides authority.
+     */
+    suspend fun fileModeration(
+        signerKeyId: String,
+        communityKeyId: String,
+        duty: ModerationDuty,
+        allegationType: String,
+        targetKeyIds: List<String> = emptyList(),
+        note: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ModerationResponse {
+        val method = "fileModeration"
+        logInfo(method, "POST $nodeUrl/v1/safety/moderation community=${communityKeyId.take(16)}… duty=$duty allegation=$allegationType")
+        val client = federationHttpClient()
+        return try {
+            val request = ModerationRequest(
+                signerKeyId = signerKeyId,
+                communityKeyId = communityKeyId,
+                duty = duty,
+                allegationType = allegationType,
+                targetKeyIds = targetKeyIds,
+                payload = note?.let { ModerationPayload(note = it) },
+            )
+            val response = client.post("$nodeUrl/v1/safety/moderation") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(ModerationRequest.serializer(), request))
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("file moderation failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(raw, ModerationResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **The named-moderator existence status** for a community —
+     * `GET {nodeUrl}/v1/safety/named-moderator/{community_key_id}`. Mirrors
+     * `named.rs::named_status` (`{ community_key_id, existence{verdict…},
+     * fails_secure }`). The verdict is one of `operate` / `auto_promote` /
+     * `quiesce` (FAIL SECURE — better no group than an unmoderated one).
+     */
+    suspend fun getNamedModerator(
+        communityKeyId: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): NamedModeratorResponse {
+        val method = "getNamedModerator"
+        logDebug(method, "GET $nodeUrl/v1/safety/named-moderator/$communityKeyId")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/safety/named-moderator/$communityKeyId") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("named-moderator fetch failed: ${response.status} for $communityKeyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), NamedModeratorResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "communityKeyId=$communityKeyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **The current watchlist enables for a group** —
+     * `GET {nodeUrl}/v1/safety/watchlist/{group_key_id}`. Mirrors
+     * `watchlist.rs::list_enables` (`{ group_key_id, enables[], honesty{…} }`).
+     * The honesty block (per-group/never-global, cannot reach private content,
+     * hashes operator-provisioned) is surfaced verbatim by the child-safety card.
+     */
+    suspend fun getWatchlist(
+        groupKeyId: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): WatchlistListResponse {
+        val method = "getWatchlist"
+        logDebug(method, "GET $nodeUrl/v1/safety/watchlist/$groupKeyId")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/safety/watchlist/$groupKeyId") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("watchlist fetch failed: ${response.status} for $groupKeyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), WatchlistListResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "groupKeyId=$groupKeyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Enable or disable a per-group content watchlist** —
+     * `POST {nodeUrl}/v1/safety/watchlist`. Mirrors `watchlist.rs::watchlist`'s
+     * flattened body (`signer_key_id` + the flattened `WatchlistEnable`).
+     *
+     * Opt-in, default OFF, per-group, NEVER global. `moderate`-gated; CSAM
+     * additionally `takedown`-gated (a CSAM match auto-files a takedown). Pass
+     * `enabled=false` to turn a watchlist OFF (the node emits a `withdraws` —
+     * consent requires revocability). Non-authorized signers get 403.
+     */
+    suspend fun setWatchlist(
+        signerKeyId: String,
+        groupKeyId: String,
+        watchlistId: String,
+        watchlistClass: WatchlistClass,
+        enabled: Boolean,
+        mode: WatchlistMode,
+        routeToModerator: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): WatchlistResponse {
+        val method = "setWatchlist"
+        logInfo(method, "POST $nodeUrl/v1/safety/watchlist group=${groupKeyId.take(16)}… id=$watchlistId enabled=$enabled class=$watchlistClass")
+        val client = federationHttpClient()
+        return try {
+            val request = WatchlistRequest(
+                signerKeyId = signerKeyId,
+                groupKeyId = groupKeyId,
+                watchlistId = watchlistId,
+                watchlistClass = watchlistClass,
+                enabled = enabled,
+                mode = mode,
+                routeToModerator = routeToModerator,
+            )
+            val response = client.post("$nodeUrl/v1/safety/watchlist") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(WatchlistRequest.serializer(), request))
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("set watchlist failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(raw, WatchlistResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
             throw e
         } finally {
             client.close()

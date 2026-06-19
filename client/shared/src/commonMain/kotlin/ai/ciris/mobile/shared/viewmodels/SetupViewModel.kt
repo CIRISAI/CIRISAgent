@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.CIRISApiClientProtocol
 import ai.ciris.mobile.shared.api.LocationResultData
+import ai.ciris.mobile.shared.models.safety.AgeBand
 
 private const val TAG = "SetupViewModel"
 
@@ -476,7 +477,10 @@ class SetupViewModel(
                 SetupStep.PREFERENCES -> SetupStep.LLM_CONFIGURATION
                 SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.FEDERATION_IDENTITY_SETUP
-                SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.COMPLETE
+                // You have an ID — now STATE YOUR AGE RANGE (the foundational
+                // protective gate), THEN you're on the fabric.
+                SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.AGE_RANGE
+                SetupStep.AGE_RANGE -> SetupStep.COMPLETE
                 else -> SetupStep.COMPLETE
             }
         } else {
@@ -524,7 +528,8 @@ class SetupViewModel(
                 SetupStep.LLM_CONFIGURATION -> SetupStep.PREFERENCES
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
                 SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.OPTIONAL_FEATURES
-                SetupStep.COMPLETE -> SetupStep.FEDERATION_IDENTITY_SETUP
+                SetupStep.AGE_RANGE -> SetupStep.FEDERATION_IDENTITY_SETUP
+                SetupStep.COMPLETE -> SetupStep.AGE_RANGE
                 else -> SetupStep.WELCOME
             }
         } else {
@@ -686,6 +691,85 @@ class SetupViewModel(
                         admitted = false,
                         minted = false,
                         error = "Couldn't create your federation ID on this device's local node: " +
+                            "${e.message ?: "unknown error"}",
+                    )
+                )
+            }
+        }
+    }
+
+    // ========== Age Range (AGE_RANGE — the foundational protective gate) ======
+
+    /**
+     * **State your age range** — drive THIS device's LOCAL node to record the
+     * founder's self-declared age band (`POST /v1/safety/age-assurance`, self
+     * level). The app performs NO crypto: the local node signs + promotes the
+     * subject-signed `age_self_declared:{band}:v1` assurance in its substrate.
+     *
+     * The subject controls their OWN band: misdeclaration NEVER slashes (it
+     * routes to adjudication). This sets PROTECTIVE defaults ahead of content —
+     * a `minor` band is gated out of adult content fabric-wide.
+     *
+     * Resolves the subject key_id from the just-minted federation identity (or a
+     * pre-existing one the local node reported). If no identity is available the
+     * step records the selection locally and surfaces an honest error — the band
+     * can be (re)stated from the Safety surface once an ID exists.
+     */
+    fun setAgeRange(band: AgeBand) {
+        val client = apiClient as? CIRISApiClient
+        // Always reflect the selection immediately for responsive UI.
+        _state.value = _state.value.copy(
+            ageRange = _state.value.ageRange.copy(
+                selectedBandToken = if (band == AgeBand.MINOR) "minor" else "adult",
+                error = null,
+            )
+        )
+        if (client == null) {
+            _state.value = _state.value.copy(
+                ageRange = _state.value.ageRange.copy(
+                    error = "Local node unavailable: API client does not support it"
+                )
+            )
+            return
+        }
+        val subjectKeyId = _state.value.federationIdentity.identityKeyId
+        if (subjectKeyId.isNullOrBlank()) {
+            // No federation ID yet — we cannot key the assurance. Honest: do NOT
+            // pretend it was recorded. The user can state it later from Safety.
+            _state.value = _state.value.copy(
+                ageRange = _state.value.ageRange.copy(
+                    recorded = false,
+                    error = "No federation identity yet — your age range will be saved once " +
+                        "your ID is created. You can set it from the Safety surface anytime.",
+                )
+            )
+            return
+        }
+        _state.value = _state.value.copy(
+            ageRange = _state.value.ageRange.copy(inProgress = true, error = null)
+        )
+        viewModelScope.launch {
+            try {
+                val resp = client.setAgeAssurance(
+                    subjectKeyId = subjectKeyId,
+                    band = band,
+                    localNodeUrl = CIRISApiClient.LOCAL_NODE_URL,
+                )
+                _state.value = _state.value.copy(
+                    ageRange = _state.value.ageRange.copy(
+                        inProgress = false,
+                        recorded = true,
+                        dimension = resp.dimension,
+                        error = null,
+                    )
+                )
+            } catch (e: Exception) {
+                PlatformLogger.w(TAG, "setAgeRange: record via local node failed: ${e.message}")
+                _state.value = _state.value.copy(
+                    ageRange = _state.value.ageRange.copy(
+                        inProgress = false,
+                        recorded = false,
+                        error = "Couldn't record your age range on this device's local node: " +
                             "${e.message ?: "unknown error"}",
                     )
                 )

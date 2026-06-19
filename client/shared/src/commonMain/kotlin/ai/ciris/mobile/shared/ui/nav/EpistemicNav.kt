@@ -175,6 +175,39 @@ sealed class NavSurface(
     object ManageConsent : NavSurface("manage-consent", "Manage Consent", CIRISIcons.lock,
         labelKey = "nav.surface.manage_consent",)
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Safety group — the holistic SAFETY surface (CIRISServer v0.4.6
+    // /v1/safety/*). Safety is built in FIRST, ahead of content: a Discord /
+    // Facebook / Wikipedia / YouTube superset where moderation + child-safety
+    // are first-class fabric primitives, not bolt-ons. Live (no gate) — the
+    // node ships the endpoints today; the app only drives the local node.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Moderation — file a ModerationEvent (`POST /v1/safety/moderation`), see the
+     * named-moderator existence status (`GET /v1/safety/named-moderator/{c}`),
+     * and the delegable-duty concept. Moderation is a DUTY, not a role.
+     */
+    object Moderation : NavSurface("moderation", "Moderation", CIRISIcons.handler,
+        labelKey = "nav.surface.moderation",)
+
+    /**
+     * Child Safety — per-group content watchlist (opt-in, default OFF, NEVER
+     * global; `POST/GET /v1/safety/watchlist`) + the protective posture
+     * (`GET /v1/safety/status`). Honest framing is load-bearing.
+     */
+    object ChildSafety : NavSurface("child-safety", "Child Safety", CIRISIcons.shield,
+        labelKey = "nav.surface.child_safety",)
+
+    /**
+     * Safety (top-level surface) — the umbrella over Moderation + Child Safety.
+     * Navigating to the parent routes to its first child (Moderation).
+     */
+    object Safety : NavSurface(
+        id = "safety", label = "Safety", icon = CIRISIcons.shield,
+        children = listOf(Moderation, ChildSafety),
+        labelKey = "nav.surface.safety",)
+
     object Wallet : NavSurface("wallet", "Wallet", CIRISIcons.keySecure,
         labelKey = "nav.surface.wallet",)
     object Billing : NavSurface(
@@ -358,6 +391,23 @@ val AGENT_GROUP = NavGroup(
     ),
         labelKey = "nav.group.agent",)
 
+/**
+ * The holistic SAFETY group — safety built in FIRST, ahead of content
+ * (CIRISServer v0.4.6, the `/v1/safety/` routes). Placed high in the nav (right after
+ * Agent) to reflect that the superset's safety layer is foundational, not a
+ * bolt-on. Both leaves ship live (the node has the endpoints; the app drives
+ * the local node, no crypto in the app).
+ */
+val SAFETY_GROUP = NavGroup(
+    id = "safety",
+    label = "Safety",
+    icon = CIRISIcons.shield,
+    surfaces = listOf(
+        NavSurface.Moderation,
+        NavSurface.ChildSafety,
+    ),
+        labelKey = "nav.group.safety",)
+
 val MANAGE_GROUP = NavGroup(
     id = "manage",
     label = "Manage",
@@ -416,7 +466,7 @@ val CLIENT_GROUP = NavGroup(
 
 /** All groups in display order. The scale-organized Commons group absorbs what
  *  used to be the separate Federation group (deleted 2.9.6). */
-val EPISTEMIC_NAV_GROUPS = listOf(AGENT_GROUP, MANAGE_GROUP, COMMONS_GROUP, CLIENT_GROUP)
+val EPISTEMIC_NAV_GROUPS = listOf(AGENT_GROUP, SAFETY_GROUP, MANAGE_GROUP, COMMONS_GROUP, CLIENT_GROUP)
 
 /**
  * Walk the entire surface tree (depth-first) — used by routers needing the

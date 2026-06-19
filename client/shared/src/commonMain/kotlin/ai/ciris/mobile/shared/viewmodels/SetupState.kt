@@ -74,6 +74,17 @@ enum class SetupStep {
     FEDERATION_IDENTITY_SETUP,
 
     /**
+     * Step (after FEDERATION_IDENTITY_SETUP): **state your age range** — the
+     * foundational protective gate. Now that you have a federation ID, you
+     * self-declare an age band (`minor` / `adult`) which the local node records
+     * as a subject-signed `age_assurance` (self level). This sets protective
+     * defaults FIRST, ahead of any content: minors are gated out of adult
+     * content. Drives `POST /v1/safety/age-assurance` against the local node.
+     * Misdeclaration NEVER slashes — the subject controls their own band.
+     */
+    AGE_RANGE,
+
+    /**
      * Step 4: Account creation (for non-Google users) and confirmation.
      */
     ACCOUNT_AND_CONFIRMATION,
@@ -296,6 +307,28 @@ data class FederationIdentitySetupState(
 )
 
 /**
+ * State for the AGE_RANGE onboarding step (the foundational protective gate).
+ *
+ * The app holds NO keys: the selected band is sent to THIS device's local node
+ * (`POST /v1/safety/age-assurance`, self level) which signs + records it. This
+ * state only tracks the user's selection + the in-flight/result of that drive.
+ * `null` [selectedBand] = not yet chosen.
+ */
+@Serializable
+data class AgeRangeSetupState(
+    /** The user's chosen band as the server token (`minor` / `adult`), or null
+     *  if not yet selected. Kept as the raw token to avoid leaking the safety
+     *  enum into the serializable setup state. */
+    val selectedBandToken: String? = null,
+    val inProgress: Boolean = false,
+    /** Set once the local node recorded the self-declared assurance. */
+    val recorded: Boolean = false,
+    /** The `age_self_declared:{band}:v1` dimension the node returned. */
+    val dimension: String? = null,
+    val error: String? = null,
+)
+
+/**
  * Form state for the setup wizard.
  *
  * Source: SetupViewModel.kt:15-167
@@ -322,6 +355,9 @@ data class SetupFormState(
 
     // Federation identity setup state (FEDERATION_IDENTITY_SETUP step)
     val federationIdentity: FederationIdentitySetupState = FederationIdentitySetupState(),
+
+    // Age-range step state (AGE_RANGE step — the foundational protective gate)
+    val ageRange: AgeRangeSetupState = AgeRangeSetupState(),
 
     // Google/Apple OAuth state
     val isGoogleAuth: Boolean = false,
@@ -489,6 +525,14 @@ data class SetupFormState(
                 true
             }
 
+            SetupStep.AGE_RANGE -> {
+                // The foundational protective gate. Always allow proceeding —
+                // declining to state resolves to the PROTECTIVE default (minor)
+                // and a band can be (re)stated later from the Safety surface.
+                // A failed record (node offline) must never trap the user.
+                true
+            }
+
             SetupStep.ACCOUNT_AND_CONFIRMATION -> {
                 if (isGoogleAuth) {
                     // Google user - no account creation needed
@@ -612,6 +656,11 @@ data class SetupFormState(
 
             SetupStep.FEDERATION_IDENTITY_SETUP -> {
                 // Optional — never blocks proceeding.
+                null
+            }
+
+            SetupStep.AGE_RANGE -> {
+                // Never blocks proceeding (declining = protective default).
                 null
             }
 

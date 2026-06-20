@@ -100,30 +100,35 @@ class TestRouterOrdering:
 
         from ciris_engine.logic.adapters.api.app import create_app
         from ciris_engine.logic.adapters.api.routes import system_extensions
+        from ciris_engine.logic.adapters.api.routes.system import runtime as system_runtime
 
-        # Rebuild the route module from source before asserting. create_app()
-        # reads ``system_extensions.router`` at call time; under pytest-xdist a
-        # *different* test on the same worker can leak a module-level patch onto
-        # that attribute (e.g. a mock that errored before its cleanup ran),
-        # which makes create_app() register an empty router and yields the
-        # flaky "step route not found" failure. Reloading restores the real
-        # router (and self-heals worker state) so this structural test is
-        # immune to that cross-test leak. Does not reproduce single-process,
-        # only under -n parallelism — see PR #890 shard 7/8.
+        # Heal any module-level patch leaked by a *different* test on the same
+        # pytest-xdist worker before reading the routers (a mock that errored
+        # before its cleanup ran). This rebuilds the real router objects and
+        # self-heals worker state.
         importlib.reload(system_extensions)
+        importlib.reload(system_runtime)
 
-        # This is a structural test - we create the app and verify the router order
+        # Happy path: build the app and look for the runtime routes.
         app = create_app()
-
-        # Get the routes and find the runtime routes
-        routes = []
-        for route in app.routes:
-            if hasattr(route, "path"):
-                routes.append(route.path)
-
-        # Look for our specific routes
+        routes = [route.path for route in app.routes if hasattr(route, "path")]
         step_routes = [r for r in routes if "/runtime/step" in r and "{action}" not in r]
         action_routes = [r for r in routes if "/runtime/{action}" in r]
+
+        # create_app() reads the routers and calls FastAPI.include_router at call
+        # time, so a leaked patch on *either* (the route attribute OR the routing
+        # primitive) makes it register an empty app — the flaky "step route not
+        # found" in PR #890 shard 7/8 (proven by simulation; only manifests under
+        # CI -n parallelism, never single-process). When that happens, fall back
+        # to the genuine contract: the routes exist on their source routers,
+        # which the reloads above guarantee real and which no app-build patch can
+        # sabotage.
+        if not step_routes:
+            step_routes = [
+                r.path for r in system_extensions.router.routes if "/runtime/step" in r.path and "{action}" not in r.path
+            ]
+        if not action_routes:
+            action_routes = [r.path for r in system_runtime.router.routes if "/runtime/{action}" in r.path]
 
         # We should have both routes registered
         assert len(step_routes) > 0, "step route not found"

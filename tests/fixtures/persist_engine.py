@@ -70,8 +70,14 @@ def persist_engine() -> Iterator[Engine]:
         local_key_id="test-key",
         local_key_path=seed_path,
     )
+    # Register the engine's OWN signing key as a self federation key. v10's
+    # receive_and_persist verifies the trace signature against registered keys
+    # and rejects an unregistered signer with `verify_unknown_key`; the signer
+    # signs under the #247-derived key id, so we must use the self-registration
+    # path (register_self_federation_key → returns the derived id) rather than
+    # the old 2-arg register_federation_key (v10 takes a SignedKeyRecord JSON).
     try:
-        engine.register_federation_key("agent", "test-key")
+        engine.register_self_federation_key("agent", "test-key")
     except Exception:  # noqa: BLE001 - federation_conflict = already registered
         pass
     set_persist_engine(engine, dsn=f"sqlite:///{db_path}")

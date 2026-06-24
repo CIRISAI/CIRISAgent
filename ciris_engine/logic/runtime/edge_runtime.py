@@ -70,17 +70,19 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             "Call ciris_engine.logic.persistence.initialize_database() first."
         )
 
-    try:
-        # `import-not-found` covers the wheel-absent case (CI without the
-        # ciris-edge wheel installed); `import-untyped` covers the case
-        # where it IS installed but ships no py.typed marker (current
-        # 1.0.x state); `unused-ignore` keeps both contexts green —
-        # whichever of the first two doesn't apply in a given environment.
-        import ciris_edge  # type: ignore[import-not-found, import-untyped, unused-ignore]
-    except ImportError as e:
+    # One-wheel seam (#896): the edge runtime constructor re-hosts from the
+    # consolidated ``ciris_server`` wheel (falling back to the standalone
+    # ``ciris_edge`` wheel). Sourcing it from the SAME wheel as the persist
+    # Engine gives one PyO3 type registry, so the Engine passed below is the
+    # same registered Rust type Edge expects — no ``'Engine' object is not an
+    # instance of 'Engine'`` cohabitation refusal (CIRISEdge#22).
+    from ciris_engine.logic.persistence._substrate import init_edge_runtime
+
+    if init_edge_runtime is None:
         raise RuntimeError(
-            "ciris-edge not importable but is REQUIRED for 2.9.4+. Pin ciris-edge>=2.0.2,<3.0.0 in requirements.txt."
-        ) from e
+            "edge runtime constructor not importable but is REQUIRED for 2.9.4+. "
+            "Install ciris-server (one wheel) or pin ciris-edge>=2.0.2,<3.0.0 in requirements.txt."
+        )
 
     identity_dir.mkdir(parents=True, exist_ok=True)
     identity_path = identity_dir / "edge_identity.rid"
@@ -94,7 +96,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     agent_mode_value = get_agent_mode_broker().current_mode().value
 
     try:
-        edge = ciris_edge.ciris_edge.init_edge_runtime(
+        edge = init_edge_runtime(
             engine,
             str(identity_path),
             listen_addr=listen_addr,

@@ -283,7 +283,7 @@ class TestAuditServiceMetrics(BaseMetricsTest):
         import base64
         import hashlib
 
-        from ciris_persist import Engine, reset_engine  # type: ignore[import-untyped]
+        from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import ed25519
 

@@ -60,7 +60,7 @@ async def audit_service(memory_bus, temp_db, time_service):
     import base64
     from unittest.mock import MagicMock, patch
 
-    from ciris_persist import Engine, reset_engine  # type: ignore[import-untyped]
+    from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ed25519
 

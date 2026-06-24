@@ -928,7 +928,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     signing_key_id = os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
 
     try:
-        from ciris_persist import Engine  # type: ignore[import-untyped]
+        from ciris_engine.logic.persistence._substrate import Engine  # one-wheel seam (#896)
     except ImportError:
         logger.warning(
             "ciris-persist not importable; 2.9.0 absorption disabled. Pin ciris-persist>=1.6.4 in requirements.txt."
@@ -1000,7 +1000,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     # fire untouched.
     if os.environ.get("PYTEST_CURRENT_TEST"):
         try:
-            from ciris_persist import reset_engine
+            from ciris_engine.logic.persistence._substrate import reset_engine  # one-wheel seam (#896)
 
             reset_engine()
         except Exception:  # noqa: BLE001 - best-effort test teardown
@@ -1098,7 +1098,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
                             )
                 # Retry with fresh state
                 try:
-                    from ciris_persist import reset_engine
+                    from ciris_engine.logic.persistence._substrate import reset_engine  # one-wheel seam (#896)
 
                     reset_engine()
                 except Exception as reset_err:

@@ -29,7 +29,7 @@ from typing import Iterator
 
 import pytest
 
-from ciris_persist import Engine  # type: ignore[import-untyped]
+from ciris_engine.logic.persistence._substrate import Engine  # type: ignore[import-untyped]
 
 
 @pytest.fixture

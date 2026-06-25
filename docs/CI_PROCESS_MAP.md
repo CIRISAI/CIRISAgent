@@ -1,59 +1,65 @@
-# CIRIS Engine - Continuous Integration (CI) Process Map
+# CIRIS Ecosystem - Continuous Integration (CI) Process Map
 
-The CI/CD pipeline for the CIRIS Engine is a massive, multi-stage matrix designed to produce a highly verified 2.9.7+ image. It guarantees that every component across the ecosystem (Server, Agent, Leviculum Edge networking, and Persistence models) undergoes rigorous cross-platform fan-out, QA, and conformance checks. The pipeline orchestrates the execution of nearly 15,000 unit tests and verifies end-to-end functionality via robust staging and integration processes.
+The CI/CD pipeline for the CIRIS Ecosystem is a massive, multi-stage matrix designed to produce a highly verified 2.9.7+ image. It guarantees that the core ecosystem flow undergoes rigorous cross-platform fan-out, QA, and conformance checks.
 
-## 1. Pre-Flight & Static Analysis
-The first gate focuses on ensuring basic code integrity and verifying structural evidence logic before spinning up heavy testing matrices.
+To ensure absolute integrity, the CI process strictly evaluates the dependency chain from the foundation up: starting at **CIRISVerify**, moving through **CIRISPersist**, **CIRISEdge**, **CIRISServer**, and culminating in the **CIRISAgent**. Across this entire chain, the pipeline orchestrates the execution of over **15,000 unit tests** and verifies end-to-end functionality via robust staging and integration processes.
 
-* **Localization Guard**: A critical stdlib-only guard is executed (`tools/dev/check_localization_sync.py`). This guarantees reference coverage and mirror parity for Android/iOS bundles (ensuring keys referenced in Kotlin exist and translate properly in `en.json`).
-* **D27 Conformance Gate**: Enforces structural runtime safety by ensuring runtime code does not mistakenly depend on its own documentation (`tools/dev/check_no_runtime_md_reference.py`).
-* **Strict Type Checking (MyPy)**: Complete static type analysis utilizing `mypy` against the strict `mypy.ini` configuration for the entire `ciris_engine`.
+---
 
-## 2. Mass Test Sharding (Unit Tests)
-The engine’s massive test suite (~11,500 tests) is processed efficiently using parallel execution to minimize feedback latency.
+## 1. CIRISConformance (Ecosystem Matrix & Contract Governance)
+While not a deployable binary itself, CIRISConformance dictates the integration boundaries and testing contracts for the entire CI lifecycle. It defines the reference matrices that the underlying substrate elements (Verify, Persist, Edge) must satisfy before any combination is allowed to boot.
 
-* **8-Way Parallel Execution Matrix**: Tests are dynamically split into 8 independent, parallel jobs using `pytest-split`.
-* **Deep Code Coverage**: Results from all 8 parallel workers are consolidated into a comprehensive `coverage.xml` manifest.
-* **Test Optimization Tracking**: Durations and slowest-test artifacts are collected continuously to highlight the top 1% slowest tests and detect potential regressions.
+* **CI Stages & Steps:**
+  * **Adversarial Fire-Tests:** Executes isolated attack vectors against the substrate data-access surfaces (ensuring caller scope admission and hardware-backed attestation holds under duress).
+  * **Matrix Alignment Validation:** Enforces strict compatibility floors between dependent projects to prevent cross-library (`PyO3`/`UniFFI`) initialization skew.
 
-## 3. Advanced Persistence & State Testing
-The pipeline exercises dual backend configurations simultaneously to ensure data integrity and structural parity.
+## 2. CIRISVerify (Cryptographic & Trust Foundation)
+As the bedrock of the ecosystem, CIRISVerify handles structural evidence, attestation, and cryptographic signing. Code cannot progress unless the trust layer is absolutely flawless.
 
-* **PostgreSQL Dual Backend Tests**: Tests are aggressively run against a Dockerized PostgreSQL database to ensure equivalence between the lightweight internal SQLite implementation and the highly available PostgreSQL model used in distributed deployments.
-* **Database Spin Up / Tear Down**: Verifies automated backend provision sequences and rollback logic.
+* **CI Stages & Steps:**
+  * **Pre-Flight:** AST-level verification and D27 Conformance Gates (ensuring runtime code does not depend on `.md` documentation).
+  * **Static Analysis:** Strict `mypy` type checking across all cryptographic modules.
+  * **Multi-Arch Compilation:** Builds the underlying C/Rust FFI extensions (`.so`, `.dylib`, `.dll`) for `x86_64` and `aarch64`.
+* **Test Coverage:** ~1,500 tests.
+  * Focuses heavily on key generation, signature determinism, and isolated hardware-security-module (TPM2) mock testing.
 
-## 4. Staged Quality Assurance (QA)
-Staged QA evaluates the compiled application locally exactly as a customer would experience the release (acting as a byte-for-byte install parity check).
+## 3. CIRISPersist (Data & State Management)
+Operating immediately above the trust layer, CIRISPersist ensures data durability, secure local storage, and database schema compatibility across platforms.
 
-* **Cross-Platform Install Parity Assertion**: Validates that the active repository logic is fundamentally identical to what is packaged inside built `.whl` artifacts.
-* **Dual-Backend Conformance Sweep (`qa_runner`)**: Full UI, API, and system execution checks run iteratively against both SQLite and PostgreSQL backends on the staged `venv`.
-* **Upgrade-Compat Fixture Capture**: Ensures zero regressions when databases are upgraded between minor/major schemas across releases.
+* **CI Stages & Steps:**
+  * **Dual-Backend Conformance Sweep:** Tests are aggressively run against both Dockerized **PostgreSQL** (distributed) and **SQLite** (local/mobile) to ensure absolute functional parity.
+  * **Upgrade-Compat Fixture Capture:** Evaluates database migration logic. Snapshots of legacy schemas are loaded and migrated to guarantee zero data loss across upgrades.
+  * **Cross-Platform Parity Assertion:** Validates that data serialized on Windows x64 can be losslessly read by macOS ARM64 and Linux runtimes.
+* **Test Coverage:** ~2,500 tests.
+  * Focuses on ACID compliance, concurrent locking, multi-threaded isolation, and I/O performance regressions.
 
-## 5. Leviculum Vendor & Edge Integration
-The Edge routing module integration represents a massive layer of complexity for mesh-network functionality.
+## 4. CIRISEdge (Mesh Networking & Federation)
+The routing and networking tier. This project integrates deeply with external transport vendors and manages the complex, decentralized peer-to-peer logic.
 
-* **Leviculum Edge / Reticulum-rs Vendor**: Edge libraries (like `ciris_edge` which leverages the underlying Rust implementations of Leviculum/Reticulum for robust packet radio/LoRa/TCP-loopback support) are deeply integrated. Tests run across the unified interface to ensure proper cryptographic mesh-routing and network addressing.
-* **FFI & Runtime Parity**: Edge 1.x / 2.x C-ABI integrations via `PyO3/UniFFI` are directly vetted on all operating systems.
+* **CI Stages & Steps:**
+  * **Leviculum Vendor Integration:** Deep integration testing with the `Reticulum-rs` and `Leviculum` Rust vendor libraries. Validates the FFI boundary (`PyO3/UniFFI`) for TCP-loopback, LoRa, and Packet Radio transport stubs.
+  * **Network Mesh Simulation:** Spawns virtualized local topologies to test `CIRIS-V1` NodeCode peer discovery and cryptographic routing table propagation.
+  * **Latency & Drain Assertions:** Checks event loop stalls and asserts that `flush()` and `stop()` mechanisms drain queues within strict millisecond thresholds.
+* **Test Coverage:** ~3,000 tests.
+  * Covers byte-level packet encoding, asynchronous stream handling, SAS (Short Authentication String) verification, and network boundary fuzzing.
 
-## 6. Multi-Platform Artifact Generation
-With code fully proven, cross-platform wheels (binaries/executables) are concurrently forged.
+## 5. CIRISServer (Headless Operations & Administration)
+The centralized or localized headless engine that orchestrates the persistence and edge layers, handling API requests, A2A (Agent-to-Agent) negotiations, and heavy background tasks.
 
-* **Wheel Generation Matrix**: Dedicated matrix builds concurrently forge OS-specific `.whl` binaries across `Windows x64`, `Linux x64`, and `macOS ARM64`.
-* **Headless Generation**: Specifically constructs headless server binaries targeting streamlined background/Docker deployments.
-* **CIRIS Desktop UberJar / PyInstaller**: Generates full offline distributions via PyInstaller and packs standalone installers utilizing the `Inno Setup` compiler with bundled, trimmed JRE implementations.
+* **CI Stages & Steps:**
+  * **API Conformance:** Full HTTP/REST and Server-Sent Events (SSE) surface testing (e.g., `/v1/federation/*`, `/a2a` endpoints). Validates token-tier gating (Observer vs. Admin).
+  * **Headless Generation:** Constructs optimized headless binaries utilizing `PyInstaller` tailored for Docker and headless Linux environments.
+  * **Docker Multi-Arch Images:** Container registry logic creates, layers, signs, and pushes multi-architecture images (`amd64`/`arm64`) directly onto the GitHub Container Registry.
+* **Test Coverage:** ~3,500 tests.
+  * Tests focus on rate-limiting, CORS policies, streaming event serialization, concurrent task processing (`asyncio` limits), and backend provisioning.
 
-## 7. Registry & Conformance Verification (CIRISRegistry)
-The agent operates via a strictly vetted trust layer. Unsigned software will not execute on client endpoints.
+## 6. CIRISAgent (User Experience & Mobile Interfaces)
+The culmination of the ecosystem. The Agent integrates all lower-level services into a cohesive, user-facing client application and desktop/mobile interface.
 
-* **Canonical Runtime Tree Formulation**: Generates canonical hashes of the exact directory layout.
-* **Manifest Cryptographic Signing**: Both the Python runtime manifest and Mobile `Resources.zip` layout manifests are signed.
-* **CIRISRegistry Verification Contract**: Builds are officially registered via `ciris-build-sign` tool ensuring compliance checks against `CIRISVerify v2.0.3+` pass and allow for deployment distribution.
-* **CIRISManager Notification**: Central management hubs are notified of release success and monitor subsequent deployment waves.
-
-## 8. Release Strategy (Finalization)
-Finally, production-ready artifacts are securely uploaded to their distribution points.
-
-* **PyPI / Alias Packaging**: Packages are indexed and delivered securely.
-* **Docker Multi-Arch Images**: Container registry logic creates, layers, signs, and pushes multi-architecture images directly onto the GitHub Container Registry.
-* **Mobile/Android Deployments**: `Chaquopy` integrated APKs natively executing the verified wheels are produced.
-* **GitHub Releases**: An aggregated, tagged version combines the Mobile APKs, Windows Installer, and generated Manifests into the official user-facing release channel.
+* **CI Stages & Steps:**
+  * **Localization Guard:** A critical stdlib-only guard (`tools/dev/check_localization_sync.py`) executed to guarantee reference coverage and mirror parity across 29 locales for Android/iOS Kotlin/Swift bundles (preventing raw key renders like `setup_error_signing_unavailable_title`).
+  * **Staged Quality Assurance (QA - `qa_runner`):** Full UI, Agent-Mode capability (CLIENT/PROXY/SERVER), and workflow simulation tests. This acts as a byte-for-byte install parity check mimicking exactly what a user installs.
+  * **CIRISRegistry Verification:** Generates canonical hashes of the `Resources.zip` and Python runtime tree. Signs the build manifests with `ciris-build-sign` to satisfy the `CIRISVerify v2.0.3+` contract.
+  * **Final Output Generation:** Compiles the cross-platform wheels, the `Chaquopy` Android APKs, the Desktop UberJar, and the `Inno Setup` Windows Installer. Aggregates these into the final GitHub Release.
+* **Test Coverage:** ~4,500+ tests.
+  * Sharded 8-ways for speed. Focuses on UI bridging, complex capability execution, safety interpretation sweeps, and end-to-end integration across all 5 projects.

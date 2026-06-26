@@ -610,6 +610,32 @@ class AccordMetricsService:
                 "initialize_database() must run before the accord_metrics adapter starts."
             )
 
+        # KEY DIAGNOSTICS (#896): lens traces are Ed25519-signed via the Engine
+        # and v10's receive_and_persist verifies the signer key_id against the
+        # registered federation keys, rejecting an unknown signer with
+        # `verify_unknown_key`. Log every candidate identity so a mismatch
+        # (e.g. the trace signed by the audit key while only the edge federation
+        # key is registered) is obvious without re-deriving it from a stack trace.
+        try:
+            _engine_local_kid = engine.local_key_id()
+        except Exception as _e:  # noqa: BLE001
+            _engine_local_kid = f"<err: {_e}>"
+        try:
+            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+            _audit_kid = get_unified_signing_key().key_id
+        except Exception as _e:  # noqa: BLE001
+            _audit_kid = f"<err: {_e}>"
+        logger.info(
+            "[LENS_KEY_DIAG] constructing LensClient: engine.local_key_id=%s | "
+            "consent_attesting_key_id(get_federation_address)=%s | "
+            "unified_signing_key.key_id=%s | trace_level=%s",
+            _engine_local_kid,
+            consent_key_id,
+            _audit_kid,
+            self._trace_level.value,
+        )
+
         try:
             return LensClient(
                 self._consent_timestamp if self._consent_given else None,

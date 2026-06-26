@@ -583,9 +583,10 @@ class AccordMetricsService:
                 from ciris_lens_core import LensClient  # type: ignore[import-not-found, import-untyped, unused-ignore]
         except ImportError as e:
             raise RuntimeError(
-                "ciris-lens-core is REQUIRED in 2.9.6+ (the observability "
-                "orchestrator — CIRISAgent#866). pip install "
-                "'ciris-lens-core>=1.0.0,<2.0.0'. Import failed: " + str(e)
+                "LensClient is REQUIRED in 2.9.6+ (the observability "
+                "orchestrator — CIRISAgent#866). It re-hosts from the "
+                "ciris-server one wheel (#896); install ciris-server, or "
+                "ciris-lens-core for partial dev envs. Import failed: " + str(e)
             ) from e
 
         # The consent wire artifact: lens-core's gate resolves the newest

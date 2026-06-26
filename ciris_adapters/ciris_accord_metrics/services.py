@@ -570,10 +570,17 @@ class AccordMetricsService:
         wheels.)
         """
         try:
-            # import-untyped: the lens-core wheel ships no py.typed marker
-            # yet (1.1 docs ask alongside the capture_event concurrency
-            # contract) — same treatment as the other substrate imports.
-            from ciris_lens_core import LensClient  # type: ignore[import-untyped]
+            # One wheel (#896): LensClient re-hosts from ciris_server so the
+            # trace pipeline shares the SAME persist Engine the agent runs on.
+            # Pulling it from standalone ciris_lens_core (which Requires
+            # ciris-persist) reinstalls a second persist wheel alongside the
+            # one wheel — a dual-registry cohabitation that makes the seal's
+            # signer key invisible to the agent's Engine.receive_and_persist
+            # (verify_unknown_key). Fall back to standalone for partial dev envs.
+            try:
+                from ciris_server import LensClient  # type: ignore[import-not-found, import-untyped, unused-ignore]
+            except ImportError:
+                from ciris_lens_core import LensClient  # type: ignore[import-not-found, import-untyped, unused-ignore]
         except ImportError as e:
             raise RuntimeError(
                 "ciris-lens-core is REQUIRED in 2.9.6+ (the observability "

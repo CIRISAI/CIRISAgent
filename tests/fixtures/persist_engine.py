@@ -63,21 +63,31 @@ def persist_engine() -> Iterator[Engine]:
     seed_path = db_path + ".seed"
     with open(seed_path, "wb") as sf:
         sf.write(os.urandom(32))
+    # Hybrid (Ed25519 + ML-DSA-65) signer. persist 10.1.1 (CIRISPersist#275)
+    # verifies federation emits Ed25519 + ML-DSA-65 Strict: an Ed25519-only
+    # engine leaves register_self's ML-DSA pubkey absent and downstream verify
+    # fails. A real federation node carries both keys — production
+    # (db/core.py) does, and the conformance suite does; mirror it here.
+    pqc_seed_path = db_path + ".pqc"
+    with open(pqc_seed_path, "wb") as pf:
+        pf.write(os.urandom(32))
 
     engine = Engine(
         f"sqlite:///{db_path}",
         "test-key",
         local_key_id="test-key",
         local_key_path=seed_path,
+        local_pqc_key_id="test-key-pqc",
+        local_pqc_key_path=pqc_seed_path,
     )
     # Register the engine's OWN signing key as a self federation key. v10's
     # receive_and_persist verifies the trace signature against registered keys
-    # and rejects an unregistered signer with `verify_unknown_key`; the signer
-    # signs under the #247-derived key id, so we must use the self-registration
-    # path (register_self_federation_key → returns the derived id) rather than
-    # the old 2-arg register_federation_key (v10 takes a SignedKeyRecord JSON).
+    # and rejects an unregistered signer with `verify_unknown_key`. Use the
+    # self-registration path (5-arg register_self_federation_key, per
+    # CIRISConformance conftest) — not the old 2-arg register_federation_key
+    # (v10 takes a SignedKeyRecord JSON).
     try:
-        engine.register_self_federation_key("agent", "test-key")
+        engine.register_self_federation_key("agent", "test-key", None, None, None)
     except Exception:  # noqa: BLE001 - federation_conflict = already registered
         pass
     set_persist_engine(engine, dsn=f"sqlite:///{db_path}")
@@ -86,7 +96,7 @@ def persist_engine() -> Iterator[Engine]:
         yield engine
     finally:
         _release_persist_engine()
-        for path in (db_path, seed_path):
+        for path in (db_path, seed_path, pqc_seed_path):
             try:
                 os.unlink(path)
             except OSError:

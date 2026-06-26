@@ -20,17 +20,17 @@ environments that do not have the one wheel installed.
 from __future__ import annotations
 
 try:
-    from ciris_server import Engine, NotFound, reset_engine  # type: ignore[import-untyped]
-    from ciris_server.edge import init_edge_runtime  # type: ignore[import-untyped]
+    from ciris_server import Engine, NotFound, reset_engine  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    from ciris_server.edge import init_edge_runtime  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
     SUBSTRATE_SOURCE = "ciris_server"
 except ImportError:  # pragma: no cover - dev env without the consolidated wheel
-    from ciris_persist import Engine, NotFound, reset_engine  # type: ignore[import-untyped]
+    from ciris_persist import Engine, NotFound, reset_engine  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
     try:
-        from ciris_edge.ciris_edge import init_edge_runtime  # type: ignore[import-not-found, import-untyped]
+        from ciris_edge.ciris_edge import init_edge_runtime  # type: ignore[import-not-found, import-untyped, unused-ignore]
     except ImportError:  # edge wheel absent — edge_runtime raises its own RuntimeError
-        init_edge_runtime = None  # type: ignore[assignment]
+        init_edge_runtime = None  # type: ignore[assignment, unused-ignore]
 
     SUBSTRATE_SOURCE = "ciris_persist"
 

@@ -32,18 +32,22 @@ NON_ASCII_CONTENT = "ከመጀመሪያው 你好"
 
 XFAIL_REASON = "CIRISLensCore#43: LensClient needs the Engine capsule handshake in pip cohabitation"
 
-# One-wheel (#896) adoption surfaced a v10-specific gap in the seal→sign→persist
-# path: ciris-server's persist v10 `receive_and_persist` verifies the trace
-# signature against registered keys and rejects the LensClient-stamped trace
-# with `verify_unknown_key` — the trace's stamped key_id and v10's #247
-# derived-key verification don't line up yet (registering the self key via
-# register_self_federation_key is necessary but not sufficient; the fix lives in
-# the LensClient trace-stamping path, not the agent). Tracked: CIRISAgent#896
-# lens-fold follow-up. The cohabitation half is solved by the one wheel.
+# Fixture limitation (not a product bug): v10's receive_and_persist verifies the
+# trace signature against the registered #247-DERIVED federation key_id
+# `<label>-<fp>`. The LensClient stamps the trace with get_unified_signing_key()
+# / get_federation_address(), which derive from edge.signer_key_id() (the
+# derived id, CIRISEdge#203 / edge 7.0.6+). This bare-Engine fixture does NOT
+# init the edge runtime, so get_federation_address() returns None and the
+# stamped id can't match the registered derived id → verify_unknown_key. The
+# PRODUCTION path IS fixed: edge_runtime registers the self key via
+# register_self_federation_key and edge stamps the derived id (validated by the
+# Staged QA live-trace path). Wiring a full edge into this unit fixture is the
+# lens-fold follow-up (CIRISAgent#896).
 V10_RECEIVE_VERIFY_GAP = (
-    "one-wheel v10 receive_and_persist rejects the LensClient-signed trace with "
-    "verify_unknown_key (key_id stamping vs #247 derived-key verification); "
-    "lens-fold follow-up, see CIRISAgent#896"
+    "bare-Engine fixture has no edge runtime, so the LensClient stamps without "
+    "the edge-derived federation key_id and v10 receive_and_persist rejects it "
+    "(verify_unknown_key). Production is fixed via edge_runtime "
+    "register_self_federation_key; see CIRISAgent#896 lens-fold follow-up"
 )
 
 

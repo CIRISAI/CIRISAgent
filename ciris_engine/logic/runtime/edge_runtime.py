@@ -147,8 +147,17 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         # rejects unregistered attesting keys with federation_invalid_argument.
         # Re-registration of the same key raises federation_conflict — benign.
         try:
-            engine.register_federation_key("agent", key_id)
-            logger.info("Federation signer key registered with persist: %s", key_id)
+            # v10 self-key registration (CIRISConformance conftest pattern):
+            # register_self_federation_key registers the engine's OWN signer
+            # under the #247-derived federation key_id `<label>-<fp>` — the same
+            # id edge.signer_key_id() stamps (CIRISEdge#203, edge 7.0.6+) and
+            # the id v10's receive_and_persist verifies trace signatures against.
+            # The old 2-arg register_federation_key took (type, key_id); v10's
+            # takes a SignedKeyRecord JSON, so that call silently no-op'd and
+            # left the signer unregistered → lens receive_and_persist rejected
+            # every trace with `verify_unknown_key`.
+            derived_kid = engine.register_self_federation_key("agent", key_id, None, None, None)
+            logger.info("Federation self key registered with persist: %s (derived %s)", key_id, derived_kid)
         except Exception as reg_exc:
             if "conflict" in str(reg_exc).lower():
                 logger.debug("Federation signer key already registered: %s", key_id)

@@ -122,6 +122,17 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         if _lang_guidance:
             messages.append({"role": "system", "content": _lang_guidance})
 
+        # Round-1 prohibition context (#910): name prohibited trajectories in
+        # reasoning BEFORE the WiseBus gate. Derived from PROHIBITED_CAPABILITIES
+        # at assembly time (single source of truth) + localized. Round-1 DMAs
+        # ONLY — NOT ASPDMA/recursive: a named trajectory flows forward via the
+        # existing output path rather than being restated at every step.
+        from ciris_engine.logic.utils.localization import get_prohibition_guidance
+
+        _prohibitions = get_prohibition_guidance(self.prompt_loader.language)
+        if _prohibitions:
+            messages.append({"role": "system", "content": _prohibitions})
+
         # Check for template override of system_prompt (e.g., HE-300 format instructions)
         template_system_override = None
         if isinstance(self.prompts, dict):

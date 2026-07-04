@@ -369,6 +369,57 @@ def get_language_guidance(lang_code: str) -> str:
     return raw.strip()
 
 
+def get_prohibition_guidance(lang_code: str) -> str:
+    """Return the round-1 DMA prohibition-context block for LLM prompts (#910).
+
+    The category list + severity tier are read from ``PROHIBITED_CAPABILITIES``
+    at call time (single source of truth — this can never drift from the WiseBus
+    gate). Each category's short what/why is localized: ``prompts.prohibitions.
+    <CATEGORY>`` in ``{lang}.json`` when present, else the English base
+    ``CATEGORY_GUIDANCE``. The framing (header + tier labels) is likewise
+    localized with English fallback. A category present in the gate but missing
+    a description still surfaces (generic fallback), so new prohibitions can
+    never silently drop out of the reasoning context.
+
+    Injected into PDMA/CSDMA/DSDMA only (NOT ASPDMA/recursive passes): a
+    prohibited trajectory named in round-1 output flows forward into ASPDMA and
+    conscience via the existing output path, rather than being restated at every
+    step. Callers append the result as a system message only when non-empty.
+    """
+    from ciris_engine.logic.buses.prohibitions import (
+        CATEGORY_GUIDANCE,
+        PROHIBITED_CAPABILITIES,
+        PROHIBITION_HEADER_EN,
+        PROHIBITION_TIER_MODULE_EN,
+        PROHIBITION_TIER_NEVER_EN,
+        ProhibitionSeverity,
+        get_prohibition_severity,
+    )
+
+    never: list[str] = []
+    module: list[str] = []
+    for category in PROHIBITED_CAPABILITIES:
+        desc = get_string(lang_code, f"prompts.prohibitions.{category}", default="").strip()
+        if not desc:
+            desc = CATEGORY_GUIDANCE.get(category, "Outside this agent's scope.")
+        line = f"- {desc}"
+        if get_prohibition_severity(category) == ProhibitionSeverity.NEVER_ALLOWED:
+            never.append(line)
+        else:
+            module.append(line)
+
+    header = get_string(lang_code, "prompts.prohibitions._header", default="").strip() or PROHIBITION_HEADER_EN
+    tier_never = get_string(lang_code, "prompts.prohibitions._tier_never", default="").strip() or PROHIBITION_TIER_NEVER_EN
+    tier_module = get_string(lang_code, "prompts.prohibitions._tier_module", default="").strip() or PROHIBITION_TIER_MODULE_EN
+
+    blocks = [header]
+    if never:
+        blocks.append(tier_never + "\n" + "\n".join(never))
+    if module:
+        blocks.append(tier_module + "\n" + "\n".join(module))
+    return "\n\n".join(blocks)
+
+
 def get_preferred_language() -> str:
     """Get the preferred language from environment.
 

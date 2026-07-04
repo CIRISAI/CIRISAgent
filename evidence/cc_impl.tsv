@@ -1,0 +1,27 @@
+# CIRISAgent evidence registry — impl: tier (CIRISConstitution#17 / CIRISAgent#911)
+# The sibling spec-map manifest CIRISConstitution's check_claims.py resolves
+# cross-repo `impl:CIRISAgent#911` pointers against (see CIRISConstitution
+# constitution/EVIDENCE.md). Validated in CI by tools/check_evidence.py: every
+# CIRISAgent `path#symbol` MUST AST-resolve at this repo ref — a moved/renamed/
+# deleted symbol is a build failure (a spec-regression test), so a Constitution
+# `impl:` pointer can never silently rot.
+#
+# Columns: decimal_id  claim_id  repo  path#symbol  status
+#   status = impl      : the agent implements it; symbol resolves here.
+#            staged    : spec-ahead / pending merge (e.g. #910 until it lands).
+#            substrate : owned by the fabric node (ciris-server / persist / lens),
+#                        NOT the agent — the Constitution should retag off
+#                        impl:CIRISAgent. Row carries no agent symbol (repo=—).
+#            normative : spec-only, no code implementation (repo=—).
+# Rows with repo=— (substrate/normative) are informational — not resolved.
+decimal_id	claim_id	repo	path#symbol	status
+1.3	CLM-pdma-ordermax	CIRISAgent	ciris_engine/logic/conscience/core.py#OptimizationVetoConscience.check	impl
+1.3	CLM-pdma-ordermax	CIRISAgent	ciris_engine/logic/conscience/thought_depth_guardrail.py#ThoughtDepthGuardrail.check	impl
+1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/handlers/control/defer_handler.py#DeferHandler.handle	impl
+8.8.9	CLM-discrimination-gate	CIRISAgent	ciris_engine/logic/buses/wise_bus.py#WiseBus._validate_capability	impl
+8.8.9	CLM-discrimination-gate	CIRISAgent	ciris_engine/logic/utils/localization.py#get_prohibition_guidance	staged
+—	CLM-h3ere-steppoints	CIRISAgent	ciris_engine/schemas/services/runtime_control.py#StepPoint	impl
+6.2.3.1	CLM-sigma-attest	—	—	substrate
+1.2	CLM-admission	—	—	substrate
+1.13.3	CLM-adversary	—	—	normative
+1.13.3.3	CLM-adversary-classes	—	—	normative

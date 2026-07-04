@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
 from ciris_engine.logic.formatters import (
+    append_round1_accord_blocks,
     format_parent_task_chain,
     format_system_prompt_blocks,
     format_system_snapshot,
@@ -14,7 +15,6 @@ from ciris_engine.logic.formatters import (
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import get_accord_text
 from ciris_engine.protocols.dma.base import CSDMAProtocol
 from ciris_engine.schemas.dma.results import CSDMAResult
 from ciris_engine.schemas.runtime.models import ImageContent
@@ -109,29 +109,13 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         """
         messages: List[JSONDict] = []
 
-        # Add accord based on mode (centralized in get_accord_text)
-        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        accord_text = get_accord_text(accord_mode)
-        if accord_text:
-            messages.append({"role": "system", "content": accord_text})
-        # Per-language guidance — empty for most languages, populated for
-        # locales where systematic terminology gaps were observed (am as
-        # of 2.7.6). See ciris_engine.logic.utils.localization.get_language_guidance.
-        from ciris_engine.logic.utils.localization import get_language_guidance
-        _lang_guidance = get_language_guidance(self.prompt_loader.language)
-        if _lang_guidance:
-            messages.append({"role": "system", "content": _lang_guidance})
-
-        # Round-1 prohibition context (#910): name prohibited trajectories in
-        # reasoning BEFORE the WiseBus gate. Derived from PROHIBITED_CAPABILITIES
-        # at assembly time (single source of truth) + localized. Round-1 DMAs
-        # ONLY — NOT ASPDMA/recursive: a named trajectory flows forward via the
-        # existing output path rather than being restated at every step.
-        from ciris_engine.logic.utils.localization import get_prohibition_guidance
-
-        _prohibitions = get_prohibition_guidance(self.prompt_loader.language)
-        if _prohibitions:
-            messages.append({"role": "system", "content": _prohibitions})
+        # Round-1 DMA system blocks — ACCORD + per-language guidance +
+        # prohibition context (#910) — via the shared helper (NOT ASPDMA).
+        append_round1_accord_blocks(
+            messages,
+            language=self.prompt_loader.language,
+            accord_mode=self.prompt_loader.get_accord_mode(self.prompt_template_data),
+        )
 
         # Check for template override of system_prompt (e.g., HE-300 format instructions)
         template_system_override = None

@@ -72,10 +72,20 @@ def test_localized_override_is_used(monkeypatch) -> None:
 
 
 def test_round1_dmas_inject_but_aspdma_does_not() -> None:
-    """Round-1 DMAs inject the block; ASPDMA/recursive passes must not (#910)."""
+    """Round-1 DMAs inject the block via the shared helper; ASPDMA must not (#910).
+
+    The accord + language-guidance + prohibition append is centralized in
+    formatters.append_round1_accord_blocks (de-duplicated). Round-1 DMAs call it;
+    the prohibition injection lives inside it; ASPDMA/recursive passes deliberately
+    do NOT call it (they keep accord + language guidance, no prohibitions).
+    """
+    helper_src = (_DMA_DIR.parent / "formatters" / "prompt_blocks.py").read_text()
+    assert "get_prohibition_guidance" in helper_src, "helper must inject the prohibition block"
+
     for fn in ("pdma.py", "csdma.py", "dsdma_base.py"):
         src = (_DMA_DIR / fn).read_text()
-        assert "get_prohibition_guidance" in src, f"round-1 {fn} should inject prohibitions"
+        assert "append_round1_accord_blocks" in src, f"round-1 {fn} should call the round-1 helper"
     for fn in ("dsaspdma.py", "tsaspdma.py"):
         src = (_DMA_DIR / fn).read_text()
+        assert "append_round1_accord_blocks" not in src, f"ASPDMA {fn} must NOT use the round-1 helper"
         assert "get_prohibition_guidance" not in src, f"ASPDMA {fn} must NOT inject prohibitions"

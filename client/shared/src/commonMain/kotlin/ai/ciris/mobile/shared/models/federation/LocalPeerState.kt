@@ -88,6 +88,8 @@ data class LocalPeerState(
     val keyId: String,
     @SerialName("pubkey_ed25519_base64")
     val pubkeyEd25519Base64: String,
+    @SerialName("pubkey_ml_dsa_65_base64")
+    val pubkeyMlDsa65Base64: String? = null,
     val canonical: Boolean,
     val trust: PeerTrustState,
     @SerialName("first_seen")

@@ -47,6 +47,21 @@ data class ClaimRemoteRequest(
      */
     @SerialName("cohort_scope")
     val cohortScope: String,
+    /**
+     * OPTIONAL owner login password — sent ONLY on the loopback **self-claim** so
+     * the local node sets the ROOT cert's password, giving the owner a SYSTEM_ADMIN
+     * session via `POST /v1/auth/login` (the prerequisite for approving a
+     * device-auth grant). Never sent when claiming a remote node.
+     */
+    @SerialName("owner_password")
+    val ownerPassword: String? = null,
+    /**
+     * OPTIONAL friendly owner username (self-claim only) → stamped as the ROOT
+     * cert's name so the owner can log in with it (e.g. `eric`) instead of the
+     * derived wa_id.
+     */
+    @SerialName("owner_username")
+    val ownerUsername: String? = null,
 )
 
 /**

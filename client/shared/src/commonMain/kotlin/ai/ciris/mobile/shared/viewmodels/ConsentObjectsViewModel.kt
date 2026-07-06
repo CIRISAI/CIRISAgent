@@ -4,8 +4,6 @@ import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.models.NodeProfile
 import ai.ciris.mobile.shared.models.federation.PeeringRequest
 import ai.ciris.mobile.shared.platform.PlatformLogger
-import ai.ciris.mobile.shared.platform.SecureStorage
-import ai.ciris.mobile.shared.services.NodeProfileStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -56,7 +54,6 @@ data class ConsentObjectsState(
  */
 class ConsentObjectsViewModel(
     private val apiClient: CIRISApiClient,
-    private val secureStorage: SecureStorage,
 ) : ViewModel() {
 
     companion object {
@@ -64,8 +61,6 @@ class ConsentObjectsViewModel(
         val DEFAULT_A_TO_B_PREFIXES = listOf("capacity:")
         val DEFAULT_B_TO_A_PREFIXES = listOf("health:")
     }
-
-    private val store = NodeProfileStore(secureStorage)
 
     private val _state = MutableStateFlow(ConsentObjectsState())
     val state: StateFlow<ConsentObjectsState> = _state.asStateFlow()
@@ -75,14 +70,34 @@ class ConsentObjectsViewModel(
     }
 
     /**
-     * Pick node A (active) and node B (most-recent other) from the saved
-     * profiles. The card lets the user re-pick; this is just the default.
+     * Default the two peering endpoints LIVE from the local node's owned-nodes
+     * projection (#125 — no client-side profile cache): node A = this local node,
+     * node B = the first owned REMOTE node, if any. The card lets the user re-pick.
+     *
+     * NOTE: owned REMOTE nodes carry no reachable endpoint yet (just a key_id), so
+     * a live B has an empty [NodeProfile.baseUrl] and the bilateral peering POSTs
+     * are part of the OUT-OF-SCOPE mesh-addressing phase; the card surfaces the
+     * pair but the cross-node grant needs the mesh transport to land first.
      */
     suspend fun loadNodes() {
-        val profiles = store.loadProfiles()
-        val activeId = store.getActiveProfileId()
-        val a = profiles.firstOrNull { it.id == activeId } ?: profiles.firstOrNull()
-        val b = profiles.firstOrNull { it.id != a?.id }
+        val owned = try {
+            apiClient.getOwnedNodes()
+        } catch (e: Exception) {
+            PlatformLogger.w(TAG, "[loadNodes] owned-nodes unavailable (${e.message})")
+            null
+        }
+        val a = NodeProfile(
+            id = NodeProfile.idFor(CIRISApiClient.LOCAL_NODE_URL),
+            name = "This device",
+            baseUrl = CIRISApiClient.LOCAL_NODE_URL,
+            sessionToken = apiClient.getAccessToken(),
+            pinnedKeyId = owned?.nodes?.firstOrNull { it.isSelf }?.keyId,
+            isLocal = true,
+            isOwned = true,
+        )
+        val b = owned?.nodes?.firstOrNull { !it.isSelf }?.let { on ->
+            NodeProfile(id = on.keyId, name = on.keyId, baseUrl = "", pinnedKeyId = on.keyId, isOwned = true)
+        }
         _state.value = _state.value.copy(nodeA = a, nodeB = b)
     }
 

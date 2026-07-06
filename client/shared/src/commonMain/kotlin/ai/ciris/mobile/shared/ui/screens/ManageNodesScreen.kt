@@ -1,17 +1,24 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.NodeProfile
+import ai.ciris.mobile.shared.platform.DirectoryPickerDialog
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
+import ai.ciris.mobile.shared.ui.screens.graph.NodeGraphView
 import ai.ciris.mobile.shared.viewmodels.BootstrapPhase
+import ai.ciris.mobile.shared.viewmodels.ConsentObjectsState
+import ai.ciris.mobile.shared.viewmodels.ConsentObjectsViewModel
+import ai.ciris.mobile.shared.viewmodels.DelegationsViewModel
 import ai.ciris.mobile.shared.viewmodels.NodeSwitcherViewModel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +34,7 @@ import androidx.compose.foundation.background
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,7 +63,8 @@ import androidx.compose.ui.unit.sp
  *
  * In fabric terms there is no "server list" — the user participates in several
  * **nodes** (their local node, node A, node B, …). This screen is the CRUD over
- * the persisted [NodeProfile]s held by [ai.ciris.mobile.shared.services.NodeProfileStore]:
+ * the LIVE [NodeProfile]s held in memory by [NodeSwitcherViewModel] (read from the
+ * local node's owned-nodes projection each session; not persisted — CIRISServer#125):
  *
  *  - **list** every node (name, URL, key_id, pinned status, active marker)
  *  - **add** a node by NodeCode (identity-pinned via
@@ -78,24 +87,18 @@ fun ManageNodesScreen(
     onBack: () -> Unit,
     /** Navigate to the claim-ownership flow (ClaimNodeScreen). */
     onClaimNode: () -> Unit,
+    /** Navigate to the guided "Add Federation ID" catch-up flow (AddFederationIdScreen).
+     *  Only surfaced when the logged-in owner has NO fed-ID. */
+    onAddFederationId: () -> Unit = {},
+    /** Delegations (owner → agent edges) — drives the graph's delegation/agent vertices. */
+    delegationsViewModel: DelegationsViewModel? = null,
+    /** consent:replication peering (node ↔ node) — drives the graph's consent edges. */
+    consentObjectsViewModel: ConsentObjectsViewModel? = null,
+    /** Shared API client — powers the live neural background behind the graph. */
+    apiClient: CIRISApiClient? = null,
 ) {
-    val profiles by viewModel.profiles.collectAsState()
-    val activeId by viewModel.activeProfileId.collectAsState()
-    val isSwitching by viewModel.isSwitching.collectAsState()
-    val error by viewModel.error.collectAsState()
-    val bootstrap by viewModel.bootstrap.collectAsState()
-
-    // Add-by-* panel state.
-    var showAddByCode by remember { mutableStateOf(false) }
-    var showAddByUrl by remember { mutableStateOf(false) }
-    var codeInput by remember { mutableStateOf("") }
-    var codeUrlOverride by remember { mutableStateOf("") }
-    var urlName by remember { mutableStateOf("") }
-    var urlInput by remember { mutableStateOf("") }
-
-    // Per-row edit state — id of the profile currently being edited (rename).
-    var editingId by remember { mutableStateOf<String?>(null) }
-    var editName by remember { mutableStateOf("") }
+    // graph ⇄ list toggle — defaults to GRAPH (the headline node-mesh view).
+    var view by remember { mutableStateOf("graph") }
 
     Scaffold(
         topBar = {
@@ -120,18 +123,128 @@ fun ManageNodesScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(padding),
         ) {
-            Text(
-                text = localizedString("mobile.manage_nodes_subtitle"),
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // ── Graph / List segmented selector ──────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                ViewTab("Graph", view == "graph", "btn_nodes_view_graph") { view = "graph" }
+                ViewTab("List", view == "list", "btn_nodes_view_list") { view = "list" }
+            }
 
-            error?.let { msg ->
+            if (view == "graph") {
+                val profiles by viewModel.profiles.collectAsState()
+                val activeId by viewModel.activeProfileId.collectAsState()
+                val delegations = if (delegationsViewModel != null) {
+                    delegationsViewModel.delegations.collectAsState().value
+                } else {
+                    emptyList()
+                }
+                val consent = if (consentObjectsViewModel != null) {
+                    consentObjectsViewModel.state.collectAsState().value
+                } else {
+                    ConsentObjectsState()
+                }
+                NodeGraphView(
+                    profiles = profiles,
+                    activeProfileId = activeId,
+                    delegations = delegations,
+                    consent = consent,
+                    apiClient = apiClient,
+                    onSwitchNode = { viewModel.switchTo(it) },
+                    onRemoveNode = { viewModel.removeProfile(it.id) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 16.dp),
+                )
+            } else {
+                NodesListView(
+                    viewModel = viewModel,
+                    onClaimNode = onClaimNode,
+                    onAddFederationId = onAddFederationId,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+/** One segmented selector button. Selected = filled-tonal, unselected = outlined. */
+@Composable
+private fun RowScope.ViewTab(
+    label: String,
+    selected: Boolean,
+    testTag: String,
+    onClick: () -> Unit,
+) {
+    if (selected) {
+        FilledTonalButton(
+            onClick = onClick,
+            modifier = Modifier.weight(1f).testableClickable(testTag) { onClick() },
+        ) {
+            Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = Modifier.weight(1f).testableClickable(testTag) { onClick() },
+        ) {
+            Text(label, fontSize = 12.sp)
+        }
+    }
+}
+
+/**
+ * The LIST half of the toggle — the original Manage Nodes CRUD surface, intact.
+ */
+@Composable
+private fun NodesListView(
+    viewModel: NodeSwitcherViewModel,
+    onClaimNode: () -> Unit,
+    onAddFederationId: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val profiles by viewModel.profiles.collectAsState()
+    val activeId by viewModel.activeProfileId.collectAsState()
+    val isSwitching by viewModel.isSwitching.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val notice by viewModel.notice.collectAsState()
+    val bootstrap by viewModel.bootstrap.collectAsState()
+
+    // USB node-list save/restore folder pickers (private/offline sneakernet).
+    var showSaveUsbPicker by remember { mutableStateOf(false) }
+    var showRestoreUsbPicker by remember { mutableStateOf(false) }
+
+    // Add-by-* panel state.
+    var showAddByCode by remember { mutableStateOf(false) }
+    var showAddByUrl by remember { mutableStateOf(false) }
+    var codeInput by remember { mutableStateOf("") }
+    var codeUrlOverride by remember { mutableStateOf("") }
+    var urlName by remember { mutableStateOf("") }
+    var urlInput by remember { mutableStateOf("") }
+
+    // Per-row edit state — id of the profile currently being edited (rename).
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var editName by remember { mutableStateOf("") }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = localizedString("mobile.manage_nodes_subtitle"),
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        error?.let { msg ->
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer,
                     shape = RoundedCornerShape(6.dp),
@@ -153,6 +266,29 @@ fun ManageNodesScreen(
                     }
                 }
             }
+
+        notice?.let { msg ->
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                shape = RoundedCornerShape(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = msg,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { viewModel.clearNotice() }) {
+                        Text(localizedString("mobile.common_close"))
+                    }
+                }
+            }
+        }
 
             // ── Node list ────────────────────────────────────────────────────
             if (profiles.isEmpty()) {
@@ -337,8 +473,81 @@ fun ManageNodesScreen(
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── Add Federation ID (WAs-need-fed-IDs migration, catch-up flow) ─
+            // For a node owned the legacy way (a password/OAuth WA with NO fed-ID):
+            // route to the GUIDED AddFederationIdScreen (name → announce decision →
+            // confirm) instead of a bare one-tap mint. Shown ONLY when the logged-in
+            // owner has no fed-ID (ownerHasFedId == false); hidden once they have one
+            // (true) or when it can't be determined (null — fail-closed).
+            val ownerHasFedId by viewModel.ownerHasFedId.collectAsState()
+            if (ownerHasFedId == false) {
+                OutlinedButton(
+                    onClick = onAddFederationId,
+                    modifier = Modifier.fillMaxWidth().testable("btn_add_federation_id"),
+                ) {
+                    Icon(CIRISIcons.keySecure, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(localizedString("mobile.manage_nodes_upgrade_fed_id"))
+                }
+                Text(
+                    text = localizedString("mobile.manage_nodes_upgrade_fed_id_note"),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Spacer(Modifier.height(12.dp))
+            }
+
+            // ── Carry your nodes to another device (USB sneakernet) ──────────
+            // Private/offline owners don't announce, so owned-node bindings never
+            // self-replicate to their other devices. Save the node list to a USB
+            // folder here and restore it on the other device — no federation
+            // announce required.
+            Text(
+                text = localizedString("mobile.manage_nodes_usb_title"),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+            )
+            Text(
+                text = localizedString("mobile.manage_nodes_usb_note"),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { showSaveUsbPicker = true },
+                    modifier = Modifier.weight(1f).testable("btn_nodes_save_usb"),
+                ) {
+                    Text(localizedString("mobile.manage_nodes_save_usb"))
+                }
+                OutlinedButton(
+                    onClick = { showRestoreUsbPicker = true },
+                    modifier = Modifier.weight(1f).testable("btn_nodes_restore_usb"),
+                ) {
+                    Text(localizedString("mobile.manage_nodes_restore_usb"))
+                }
+            }
         }
-    }
+
+    DirectoryPickerDialog(
+        show = showSaveUsbPicker,
+        onDirectoryPicked = { dir ->
+            showSaveUsbPicker = false
+            if (dir.isNotBlank()) viewModel.saveNodeListToUsb(dir)
+        },
+        onDismiss = { showSaveUsbPicker = false },
+    )
+    DirectoryPickerDialog(
+        show = showRestoreUsbPicker,
+        onDirectoryPicked = { dir ->
+            showRestoreUsbPicker = false
+            if (dir.isNotBlank()) viewModel.restoreNodeListFromUsb(dir)
+        },
+        onDismiss = { showRestoreUsbPicker = false },
+    )
 }
 
 @Composable

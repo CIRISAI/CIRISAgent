@@ -91,16 +91,6 @@ fun LoginScreen(
     observerBlocked: Boolean = false,
     showLocalLoginForm: Boolean = false,
     isFirstRun: Boolean = true,
-    // Federation-ID-first startup. The owner's federation identity lives in the
-    // LOCAL node (its keyring/substrate), not the app. CIRISApp probes the local
-    // node's self-key-record once and passes the result here: when present we show
-    // "Sign in as <key_id>"; when absent we show "Create a new federation ID"
-    // (runs the FEDERATION_IDENTITY_SETUP wizard, which drives the local node).
-    // The classic OAuth/local options remain below, unchanged.
-    federationIdentityKeyId: String? = null,
-    federationProbed: Boolean = false,
-    onFederationSignIn: () -> Unit = {},
-    onCreateFederationIdentity: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var marketingOptIn by remember { mutableStateOf(false) }
@@ -197,19 +187,13 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Federation-ID-first entry (CIRISAgent#887). Shown above the
-                // classic OAuth/local options so the founder's long-lived hybrid
-                // identity is the primary sign-in. Rendered only once CIRISApp has
-                // probed currentIdentity() (federationProbed) and not while a
-                // login is in flight, so it never competes with the progress UI.
-                if (!isLoading && federationProbed) {
-                    FederationIdentitySection(
-                        keyId = federationIdentityKeyId,
-                        onSignIn = onFederationSignIn,
-                        onCreate = onCreateFederationIdentity,
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                }
+                // NOTE: there is deliberately NO federation-identity sign-in option
+                // on the login screen. The fedID is NOT a login method — it is the
+                // founder's identity, MINTED in the first-run wizard (account + fedID
+                // bound together) and accessed ONLY via the associated user-account
+                // session (log in below → that session unlocks the fedID). A
+                // credential-less "sign in as <fedID>" door was a security hole.
+                // First-run users are auto-routed to the setup wizard upstream.
 
                 if (isLoading) {
                     // Progress indicator
@@ -489,96 +473,6 @@ fun LoginScreen(
                 )
             }
         }
-    }
-}
-
-/**
- * Federation-ID-first entry section.
- *
- * The owner's federation identity lives in this device's LOCAL node (its
- * keyring/substrate); the app holds no keys and signs nothing. CIRISApp probes
- * the local node's self-key-record at launch and passes the result down:
- *  - [keyId] non-null → an identity already exists → offer "Sign in as <key_id>"
- *    (loads it as the active federation identity and proceeds to the main app).
- *  - [keyId] null → no identity yet → offer "Create a new federation ID", which
- *    runs the FEDERATION_IDENTITY_SETUP wizard that drives the local node.
- *
- * This sits ABOVE the classic OAuth / local options — those remain available.
- */
-@Composable
-private fun FederationIdentitySection(
-    keyId: String?,
-    onSignIn: () -> Unit,
-    onCreate: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier.width(280.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        if (keyId != null) {
-            // Existing long-lived identity → first-class "Sign in as <key_id>".
-            val shortId = if (keyId.length > 16) "${keyId.take(10)}…${keyId.takeLast(4)}" else keyId
-            Text(
-                text = localizedString("mobile.login_federation_existing"),
-                color = LoginColors.White.copy(alpha = 0.8f),
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-            )
-            Button(
-                onClick = onSignIn,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = LoginColors.Accent,
-                    contentColor = LoginColors.White,
-                ),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testableClickable("btn_federation_signin") { onSignIn() },
-            ) {
-                Text(
-                    text = localizedString("mobile.login_federation_signin_as", "key_id", shortId),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        } else {
-            // No identity yet → first-class "Create a new federation ID".
-            Text(
-                text = localizedString("mobile.login_federation_none"),
-                color = LoginColors.White.copy(alpha = 0.8f),
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-            )
-            Button(
-                onClick = onCreate,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = LoginColors.Accent,
-                    contentColor = LoginColors.White,
-                ),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testableClickable("btn_federation_create") { onCreate() },
-            ) {
-                Text(
-                    text = localizedString("mobile.login_federation_create"),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        }
-
-        Text(
-            text = localizedString("mobile.login_federation_or"),
-            color = LoginColors.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 4.dp),
-        )
     }
 }
 

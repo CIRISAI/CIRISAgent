@@ -76,13 +76,24 @@ sealed class NavSurface(
 
     object Tools : NavSurface("tools", "Tools", CIRISIcons.tools,
         labelKey = "nav.surface.tools",)
+    // Node form: Services is a node-infra keeper; the agent-only Tools child is
+    // dropped from the surfaced tree (the Tools object remains defined for
+    // route compatibility).
     object Services : NavSurface(
         id = "services", label = "Services", icon = CIRISIcons.bus,
-        children = listOf(Tools),
         labelKey = "nav.surface.services",)
 
     object Logs : NavSurface("logs", "Logs", CIRISIcons.log,
         labelKey = "nav.surface.logs",)
+
+    /**
+     * Transport — node transports + serial LoRa (RNode) radio configuration. A
+     * node-infra surface: shows the node's current Reticulum transport/peers
+     * (read-only) and an owner-gated radio config form persisting `net.radio.*`
+     * config. Radio activation is desktop-only. Live (no gate).
+     */
+    object Transport : NavSurface("transport", "Transport", CIRISIcons.bus,
+        labelKey = "nav.surface.transport",)
     object Telemetry : NavSurface(
         id = "telemetry", label = "Telemetry", icon = CIRISIcons.telemetry,
         children = listOf(Logs),
@@ -174,6 +185,69 @@ sealed class NavSurface(
      */
     object ManageConsent : NavSurface("manage-consent", "Manage Consent", CIRISIcons.lock,
         labelKey = "nav.surface.manage_consent",)
+
+    /**
+     * Contacts / Identities — browsable list of known federation identities
+     * (the local node's peer store). Used both as a first-class explore surface
+     * and as the picker when delegating to an existing fed-ID. Live (no gate).
+     */
+    object Contacts : NavSurface("contacts", "Contacts", CIRISIcons.person,
+        labelKey = "nav.surface.contacts",)
+
+    /**
+     * Delegations — who the owner has authorized to act on their behalf (active
+     * device-authorization grants), plus approve-a-new / revoke. The
+     * human-consent gate for an agent acting on-behalf-of. Live (no gate).
+     */
+    object Delegations : NavSurface("delegations", "Delegations", CIRISIcons.keySecure,
+        labelKey = "nav.surface.delegations",)
+
+    /**
+     * Identity Management — manage your self fed-ID + the roster of devices
+     * (occurrences) bound to it, add a new device, revoke a lost / stolen one, or
+     * "log in as yourself on another device". Laptop-loss resilience (§5.6.8.8 /
+     * §11.7). The app holds no keys; the node signs. Live (no gate).
+     */
+    object IdentityManagement : NavSurface("identity-management", "My Identity", CIRISIcons.identity,
+        labelKey = "nav.surface.identity_management",)
+
+    /**
+     * Accord — the HUMANITY_ACCORD constitutional surface (CIRISServer #41). The
+     * entrenched accord family + its `quorum:2/3` kill-switch consensus protocol,
+     * the FIPS / hardware-attested holder roster, and the pending invocations
+     * (with the CC 4.2.1 per-kind visual treatment) the local holder may concur
+     * on. Read view + owner-gated concur; the app holds no keys. Live (no gate).
+     */
+    object Accord : NavSurface("accord", "Trust Root", CIRISIcons.shield,
+        labelKey = "nav.surface.accord",)
+
+    /**
+     * Provision Accord Holder — the foolproof guided flow (CIRISServer #41, the
+     * safe-mesh custody floor). A would-be accord holder mints their portable-2FA
+     * HUMANITY_ACCORD identity from an already-FIPS-approved FIPS YubiKey + a
+     * chosen ML-DSA USB path, producing the holder record + custody attestation
+     * the node owner then registers. Drives the loopback-only
+     * `POST /v1/accord/provision-holder`; the app holds no keys (the node does the
+     * crypto). Reachable from the Accord screen + the Manage group. Live (no gate).
+     */
+    object ProvisionAccordHolder : NavSurface(
+        id = "provision-accord-holder", label = "Provision Holder", icon = CIRISIcons.keySecure,
+        labelKey = "nav.surface.provision_accord_holder",
+    )
+
+    /**
+     * Accord Genesis Ceremony — the foolproof guided wizard (CIRISServer #41) that
+     * stands up a NEW mesh's 2-of-3 human kill-switch: 3 humans, each a primary
+     * SEAT + a cold SPARE (6 keys). Provisions + registers each key, then the 3
+     * primaries cosign the family envelope and the node assembles the genesis (the
+     * cold-start bake artifact). Reachable from the Accord screen ONLY when no
+     * accord family exists yet. Drives the loopback + owner-gated accord endpoints;
+     * the app holds no keys (the re-inserted YubiKey signs). Live (no gate).
+     */
+    object AccordCeremony : NavSurface(
+        id = "accord-ceremony", label = "Genesis Ceremony", icon = CIRISIcons.shield,
+        labelKey = "nav.surface.accord_ceremony",
+    )
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Safety group — the holistic SAFETY surface (CIRISServer v0.4.6
@@ -376,20 +450,60 @@ data class NavGroup(
     val labelKey: String? = null,
 )
 
+/**
+ * The AGENT group — the agent's own brain cards, re-applied on top of the
+ * inherited server (node) nav shell. This is the FULL agent client = the node
+ * client + the agent's cards. The server pruned these pure agent/brain surfaces
+ * for its standalone AI-free node build; here they are surfaced again so the
+ * agent's Interact reasoning-stream chat, sessions, tasks/scheduler, tools,
+ * task-memory and the agent Settings sub-tree (LLM / System / Runtime / Config /
+ * Skills) are reachable. Node-observation infra (GraphMemory, WiseAuthority,
+ * Telemetry+Logs, Services, System/Runtime/Config) also lives in the [NODE_GROUP]
+ * below; a few surfaces (GraphMemory via Memory's child, System/Runtime/Config via
+ * AgentSettings' children) intentionally appear in both — the agent framing (a
+ * Settings sub-tree, a Memory→Graph card) alongside the node-infra framing.
+ */
 val AGENT_GROUP = NavGroup(
     id = "agent",
     label = "Agent",
-    icon = CIRISIcons.identity,
+    icon = CIRISIcons.thought,
     surfaces = listOf(
-        NavSurface.Interact,        // + Sessions
-        NavSurface.Tickets,         // + Scheduler
-        NavSurface.Services,        // + Tools
-        NavSurface.Telemetry,       // + Logs
-        NavSurface.Memory,          // + Graph
-        NavSurface.WiseAuthority,
+        NavSurface.Interact,        // + Sessions (agent chat / reasoning stream)
+        NavSurface.Tickets,         // + Scheduler (agent tasks)
+        NavSurface.Tools,           // agent tools
+        NavSurface.Memory,          // + Graph (agent task memory)
         NavSurface.AgentSettings,   // + LLM, System, Runtime, Config, Skills
     ),
         labelKey = "nav.group.agent",)
+
+/**
+ * The node-observation group (was "Agent"). This client is the standalone,
+ * AI-free CIRIS node client (agent optional): the pure agent/brain cards
+ * (Interact/Sessions, Tickets/Scheduler, Tools, Skills, LLM/Agent settings,
+ * the agent task Memory card) are pruned from the nav. The keepers are the
+ * generic node-observation + node-infra surfaces:
+ *   - GraphMemory (the memory graph) and WiseAuthority (escalations/deferrals)
+ *     moved here from the old Agent group.
+ *   - Telemetry (+ Logs), Services, and System/Runtime/Config — node-infra,
+ *     surfaced directly (previously buried under the agent Settings sub-tree).
+ * The dropped NavSurface objects remain defined (route compatibility) but are
+ * no longer surfaced in any group.
+ */
+val NODE_GROUP = NavGroup(
+    id = "node",
+    label = "Node",
+    icon = CIRISIcons.identity,
+    surfaces = listOf(
+        NavSurface.GraphMemory,     // memory graph (moved from Agent)
+        NavSurface.WiseAuthority,   // escalations / deferrals (moved from Agent)
+        NavSurface.Telemetry,       // + Logs (node-infra)
+        NavSurface.Transport,       // node transports + LoRa/RNode radio config
+        NavSurface.Services,        // node-infra (Tools child dropped)
+        NavSurface.System,          // node-infra (lifted out of agent Settings)
+        NavSurface.Runtime,         // node-infra (lifted out of agent Settings)
+        NavSurface.Config,          // node-infra (lifted out of agent Settings)
+    ),
+        labelKey = "nav.group.node",)
 
 /**
  * The holistic SAFETY group — safety built in FIRST, ahead of content
@@ -414,8 +528,13 @@ val MANAGE_GROUP = NavGroup(
     icon = CIRISIcons.handler,
     surfaces = listOf(
         NavSurface.HealthReputation,
+        NavSurface.Contacts,        // known federation identities (peer store browser)
+        NavSurface.IdentityManagement, // my self fed-ID + device roster (occurrences)
         NavSurface.Nodes,           // first-class node management (CRUD + switch)
         NavSurface.ManageConsent,   // consent:replication + user-data consent
+        NavSurface.Delegations,     // device-auth grants — authorize an agent on-behalf
+        NavSurface.Accord,          // HUMANITY_ACCORD — constitutional 2/3 kill-switch
+        NavSurface.ProvisionAccordHolder, // mint a portable-2FA accord-holder identity
         NavSurface.Users,
         NavSurface.Adapters,
         // The substrate operator-infra trio: Edge / Verify / Persist.
@@ -439,6 +558,8 @@ val COMMONS_GROUP = NavGroup(
     icon = CIRISIcons.globe,
     accentHex = "#C96A38", // CIRISColors.BusTool — shares the federation accent
     surfaces = listOf(
+        // LayerAgent (Agent/Self) re-applied for the full agent client — the
+        // agent's own self-scope layer hub.
         NavSurface.LayerAgent,
         NavSurface.LayerFamily,
         NavSurface.LayerLocalCommunity,
@@ -454,6 +575,9 @@ val COMMONS_GROUP = NavGroup(
 // (redundant with LayerGlobalCommons) and "Trust Topology" (subsumed by the
 // per-scope Trust sections + NetworkTrustGraph) were removed entirely.
 
+// CLIENT_GROUP — re-applied for the full agent client. Its surfaces (AgentsList,
+// ClientInterface) are pure agent/client cards the server dropped for its
+// standalone AI-free node build; here they are surfaced again.
 val CLIENT_GROUP = NavGroup(
     id = "client",
     label = "Client",
@@ -465,8 +589,12 @@ val CLIENT_GROUP = NavGroup(
         labelKey = "nav.group.client",)
 
 /** All groups in display order. The scale-organized Commons group absorbs what
- *  used to be the separate Federation group (deleted 2.9.6). */
-val EPISTEMIC_NAV_GROUPS = listOf(AGENT_GROUP, SAFETY_GROUP, MANAGE_GROUP, COMMONS_GROUP, CLIENT_GROUP)
+ *  used to be the separate Federation group (deleted 2.9.6). This is the FULL
+ *  agent client: the re-applied AGENT_GROUP (agent brain cards) leads, followed
+ *  by the inherited node-observation NODE_GROUP and the shared Safety / Manage /
+ *  Commons shells, with the re-applied CLIENT_GROUP last. */
+val EPISTEMIC_NAV_GROUPS =
+    listOf(AGENT_GROUP, NODE_GROUP, SAFETY_GROUP, MANAGE_GROUP, COMMONS_GROUP, CLIENT_GROUP)
 
 /**
  * Walk the entire surface tree (depth-first) — used by routers needing the

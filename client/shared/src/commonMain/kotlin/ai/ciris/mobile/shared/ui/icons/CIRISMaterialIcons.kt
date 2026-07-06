@@ -6575,3 +6575,112 @@ val CIRISMaterialIcons.Filled.CIRISMoreVert: ImageVector
         }.build()
         return _cirisMoreVert!!
     }
+
+// ─── CIRISNode (server / rack box) ──────────────────────────────────────────────
+// Distinct vertex glyph for a NODE: a stacked server box with two slots + LEDs.
+
+private var _cirisNode: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISNode: ImageVector
+    get() {
+        if (_cirisNode != null) return _cirisNode!!
+        _cirisNode = ImageVector.Builder(
+            name = "Filled.CIRISNode",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Outer chassis
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(4f, 4f)
+                lineTo(18f, 4f)
+                lineTo(18f, 18f)
+                lineTo(4f, 18f)
+                close()
+            }
+            // Slot divider
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(4f, 11f)
+                lineTo(18f, 11f)
+            }
+            // Status LEDs (top + bottom slot)
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(14f, 6.5f); lineTo(16f, 6.5f); lineTo(16f, 8.5f); lineTo(14f, 8.5f); close()
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(14f, 13.5f); lineTo(16f, 13.5f); lineTo(16f, 15.5f); lineTo(14f, 15.5f); close()
+            }
+        }.build()
+        return _cirisNode!!
+    }
+
+// ─── CIRISRobot (agent head + antenna) ──────────────────────────────────────────
+// Distinct vertex glyph for an AGENT: a robot head with antenna, eyes + mouth.
+
+private var _cirisRobot: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISRobot: ImageVector
+    get() {
+        if (_cirisRobot != null) return _cirisRobot!!
+        _cirisRobot = ImageVector.Builder(
+            name = "Filled.CIRISRobot",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Antenna
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 3f)
+                lineTo(11f, 6f)
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(10f, 2f); lineTo(12f, 2f); lineTo(12f, 4f); lineTo(10f, 4f); close()
+            }
+            // Head
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(5f, 6f)
+                lineTo(17f, 6f)
+                lineTo(17f, 17f)
+                lineTo(5f, 17f)
+                close()
+            }
+            // Eyes
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(8f, 9.5f); lineTo(10f, 9.5f); lineTo(10f, 11.5f); lineTo(8f, 11.5f); close()
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(12f, 9.5f); lineTo(14f, 9.5f); lineTo(14f, 11.5f); lineTo(12f, 11.5f); close()
+            }
+            // Mouth
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 14f)
+                lineTo(14f, 14f)
+            }
+        }.build()
+        return _cirisRobot!!
+    }

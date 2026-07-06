@@ -11,9 +11,11 @@ import kotlinx.serialization.Serializable
  * persisted handle the user holds to switch between the nodes they participate
  * in (node A, node B, …) without re-typing URLs or re-authenticating.
  *
- * Persisted (encrypted) via [ai.ciris.mobile.shared.services.NodeProfileStore].
- * The [sessionToken] is the bearer token already minted for this node; it is
- * sensitive and lives only in [ai.ciris.mobile.shared.platform.SecureStorage].
+ * Held LIVE in memory by [ai.ciris.mobile.shared.viewmodels.NodeSwitcherViewModel]
+ * — the node list is read from the local node's owned-nodes projection each
+ * session and is no longer persisted client-side (CIRISServer#125). The
+ * [sessionToken] is the bearer token minted for this node; it is sensitive and
+ * kept in memory only for the live session.
  */
 @Serializable
 data class NodeProfile(
@@ -36,6 +38,17 @@ data class NodeProfile(
     val pinnedKeyId: String? = null,
     /** Pinned raw Ed25519 pubkey (base64) of the node — the other half of the pin. */
     val pinnedPubkeyBase64: String? = null,
+    /**
+     * True for THIS device's local node (the one the app launches + drives at
+     * [ai.ciris.mobile.shared.api.CIRISApiClient.LOCAL_NODE_URL]). CEG-derived
+     * entries set this from the owned-nodes `is_self` flag.
+     */
+    val isLocal: Boolean = false,
+    /**
+     * True when this node is owned by the current fed ID (a CEG `delegates_to`
+     * owner-binding is present). Set by the CEG-native owned-nodes projection.
+     */
+    val isOwned: Boolean = false,
 ) {
     /** True if this profile carries an identity pin (added + verified via NodeCode). */
     val isPinned: Boolean get() = !pinnedKeyId.isNullOrBlank() && !pinnedPubkeyBase64.isNullOrBlank()

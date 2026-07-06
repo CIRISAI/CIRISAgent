@@ -21,6 +21,27 @@ interface CIRISApiClientProtocol {
     fun setAccessToken(token: String)
 
     /**
+     * Wire the node-vs-agent gate ([ai.ciris.mobile.shared.models.ClientMode])
+     * into the API client. Derived ONCE from the `/v1/system/health` capability
+     * probe (see [ai.ciris.mobile.shared.models.clientModeFrom]) and pushed in
+     * by `CIRISApp` right after it is computed. While the client runs against a
+     * bare ciris-server NODE, the API client short-circuits AGENT-only cognitive
+     * endpoints (history / billing / LLM config / WA status / adapters / capacity
+     * / agent audit / verify-status) — the node doesn't serve them, so calling
+     * them just floods 404/405. Default no-op so test fakes need not implement it.
+     */
+    fun setClientMode(mode: ai.ciris.mobile.shared.models.ClientMode) {
+        // Default no-op for test fakes.
+    }
+
+    /**
+     * True once the gate has been probed AND the server is a bare node. Pollers
+     * may check this to skip an AGENT-only call entirely (belt-and-suspenders
+     * with the API-client short-circuit). Defaults to false (un-probed / fake).
+     */
+    fun isNodeMode(): Boolean = false
+
+    /**
      * Log current token state for debugging auth issues.
      * Call this when troubleshooting 401 errors.
      */

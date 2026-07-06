@@ -127,21 +127,34 @@ class ServerConnectionViewModel(
      */
     private suspend fun checkConnectionStatus() {
         try {
+            // SERVER health is the MANDATORY signal: a reachable node reporting
+            // status "ok" IS connected. The agent's `cognitive_state` is OPTIONAL
+            // enrichment — present only when an agent runs ON TOP of the server — so
+            // its ABSENCE must never hold the connection in CONNECTING. (The agent
+            // inherits the server client; server health is required, agent health is
+            // not.) getSystemStatus hits the server's /v1/system/health, which the
+            // bare node answers with status "ok" and the agent enriches.
             val status = apiClient.getSystemStatus()
+            val serverOk = status.status.equals("ok", ignoreCase = true)
             val cogState = status.cognitive_state?.uppercase() ?: ""
 
-            if (cogState in listOf("WORK", "SETUP", "WAKEUP", "PLAY", "SOLITUDE", "DREAM")) {
-                _connectionStatus.value = if (_isLocalServer.value) {
-                    ConnectionStatus.CONNECTED_LOCAL
-                } else {
-                    ConnectionStatus.CONNECTED_REMOTE
+            when {
+                cogState == "SHUTDOWN" -> {
+                    _connectionStatus.value = ConnectionStatus.ERROR
+                    _errorMessage.value = "Server is shutting down"
                 }
-                _errorMessage.value = null
-            } else if (cogState == "SHUTDOWN") {
-                _connectionStatus.value = ConnectionStatus.ERROR
-                _errorMessage.value = "Server is shutting down"
-            } else {
-                _connectionStatus.value = ConnectionStatus.CONNECTING
+                // Connected on server health alone, OR on a live agent cognitive state.
+                serverOk || cogState in listOf("WORK", "SETUP", "WAKEUP", "PLAY", "SOLITUDE", "DREAM") -> {
+                    _connectionStatus.value = if (_isLocalServer.value) {
+                        ConnectionStatus.CONNECTED_LOCAL
+                    } else {
+                        ConnectionStatus.CONNECTED_REMOTE
+                    }
+                    _errorMessage.value = null
+                }
+                else -> {
+                    _connectionStatus.value = ConnectionStatus.CONNECTING
+                }
             }
         } catch (e: Exception) {
             logError("checkConnectionStatus", "Health check failed: ${e.message}")

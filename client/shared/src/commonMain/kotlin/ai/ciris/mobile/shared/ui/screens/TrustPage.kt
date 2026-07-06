@@ -76,6 +76,14 @@ fun TrustPage(
     }
     val coroutineScope = rememberCoroutineScope()
 
+    // NODE-vs-AGENT gate. On a bare fabric node the substrate still serves a
+    // read-only GET /v1/system/verify-status (CIRISVerify is part of the node),
+    // so the attestation tiers DO load and render honestly. What does NOT apply
+    // on a node is the AGENT/mobile device-attestation flow (Play Integrity /
+    // App Attest) — that is gated off below so the page renders cleanly without
+    // firing an agent-only callback or churning a 5s poll.
+    val isNode = apiClient.isNodeMode()
+
     // Device attestation state (App Attest on iOS, Play Integrity on Android)
     var deviceAttestationResult by remember { mutableStateOf<DeviceAttestationResult?>(null) }
     var deviceAttestationLoading by remember { mutableStateOf(false) }
@@ -83,7 +91,9 @@ fun TrustPage(
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
 
-    // Fetch verify status on mount and poll every 5 seconds while on trust page
+    // Fetch verify status on mount. AGENT mode polls every 5s (live attestation);
+    // NODE mode fetches once — a node's substrate attestation is effectively
+    // static, so a 5s poll would only churn the log without new information.
     LaunchedEffect(Unit) {
         while (true) {
             fetchVerifyStatus(
@@ -96,6 +106,7 @@ fun TrustPage(
                 },
                 onError = { error = it; loading = false }
             )
+            if (isNode) break // node: single fetch, no 5s poll
             kotlinx.coroutines.delay(5000) // Poll every 5 seconds
         }
     }
@@ -110,9 +121,11 @@ fun TrustPage(
     }
 
     // Only trigger device attestation if level_pending=true (backend needs it)
-    // Otherwise use the cached result from the backend
+    // Otherwise use the cached result from the backend. NEVER on a node: the
+    // Play Integrity / App Attest flow is an AGENT/mobile concern; a fabric
+    // node attests via its substrate (already reflected in verify-status).
     LaunchedEffect(verifyStatus?.levelPending, deviceAttestationCallback) {
-        val needsAttestation = verifyStatus?.levelPending == true
+        val needsAttestation = !isNode && verifyStatus?.levelPending == true
         if (needsAttestation && deviceAttestationCallback != null && deviceAttestationResult == null) {
             PlatformLogger.d("TrustPage", " level_pending=true, triggering device attestation...")
             deviceAttestationLoading = true
@@ -211,7 +224,7 @@ fun TrustPage(
                     val status = verifyStatus!!
 
                     // Header card with summary
-                    TrustSummaryCard(status = status, deviceAttestationResult = deviceAttestationResult)
+                    TrustSummaryCard(status = status, deviceAttestationResult = deviceAttestationResult, isNode = isNode)
 
                     // 5 Expandable Tier Cards - consolidated view
                     TierCardsSection(
@@ -371,7 +384,8 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
 @Composable
 private fun TrustSummaryCard(
     status: VerifyStatusResponse,
-    deviceAttestationResult: DeviceAttestationResult? = null
+    deviceAttestationResult: DeviceAttestationResult? = null,
+    isNode: Boolean = false
 ) {
     // WE declare the level from verify's status claims — verify no longer
     // claims a level itself (status.maxLevel is verify's removed level claim,
@@ -443,17 +457,21 @@ private fun TrustSummaryCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                status.agentVersion?.let { agentVer ->
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = textColor.copy(alpha = 0.1f)
-                    ) {
-                        Text(
-                            text = localizedString("mobile.trust_agent_ver").replace("{version}", agentVer),
-                            fontSize = 12.sp,
-                            color = textColor,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                // Agent version is an AGENT-only field — a fabric node has no
+                // agent, so the badge is suppressed in node mode.
+                if (!isNode) {
+                    status.agentVersion?.let { agentVer ->
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = textColor.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                text = localizedString("mobile.trust_agent_ver").replace("{version}", agentVer),
+                                fontSize = 12.sp,
+                                color = textColor,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
                 status.version?.let { version ->

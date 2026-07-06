@@ -17,6 +17,7 @@ import ai.ciris.mobile.shared.viewmodels.BubbleEmoji
 import ai.ciris.mobile.shared.viewmodels.CreditStatus
 import ai.ciris.mobile.shared.viewmodels.InteractViewModel
 import ai.ciris.mobile.shared.viewmodels.LlmHealthStatus
+import ai.ciris.mobile.shared.viewmodels.ModerationViewModel
 import ai.ciris.mobile.shared.viewmodels.TimelineEvent
 import ai.ciris.mobile.shared.viewmodels.TrustStatus
 import ai.ciris.mobile.shared.viewmodels.WalletStatus
@@ -141,6 +142,10 @@ fun InteractScreen(
     onClaimNode: () -> Unit = {},
     // Consent-objects card (change #3a): bilateral consent:replication setup.
     consentObjectsViewModel: ConsentObjectsViewModel? = null,
+    // Reverse-quorum moderation (CC 0.5.1 §4.5.13): drives the per-content
+    // "⋯ / report" proposal affordance + the 48-hour-window proposal sheet.
+    // When null, the affordance is hidden (e.g. previews / minimal hosts).
+    moderationViewModel: ModerationViewModel? = null,
     apiClient: CIRISApiClient? = null,  // For live background
     liveBackgroundEnabled: Boolean = false,  // From settings
     // User override: when true, force the legacy cylinder viz regardless of
@@ -217,6 +222,10 @@ fun InteractScreen(
 
     // File picker state
     var showFilePicker by remember { mutableStateOf(false) }
+
+    // Reverse-quorum moderation: the content id the user is currently
+    // proposing a moderation action against (null = sheet closed).
+    var moderationTargetId by remember { mutableStateOf<String?>(null) }
 
     // Visualization legend state (separate from emoji legend)
     var showVizLegend by remember { mutableStateOf(false) }
@@ -589,7 +598,17 @@ fun InteractScreen(
                         isDarkMode = isDarkMode,
                     )
                 } else {
-                    ChatMessageList(messages = messages, transparentBackground = liveBackgroundEnabled)
+                    ChatMessageList(
+                        messages = messages,
+                        transparentBackground = liveBackgroundEnabled,
+                        // Only expose the moderation affordance when a VM is wired.
+                        onModerate = if (moderationViewModel != null) {
+                            { id ->
+                                moderationViewModel.reset()
+                                moderationTargetId = id
+                            }
+                        } else null,
+                    )
                 }
             }
 
@@ -710,6 +729,17 @@ fun InteractScreen(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 16.dp, bottom = 140.dp)
+            )
+        }
+
+        // Reverse-quorum moderation proposal sheet (CC 0.5.1 §4.5.13).
+        // Opens when the user taps the per-content "⋯ / report" affordance.
+        val modTarget = moderationTargetId
+        if (moderationViewModel != null && modTarget != null) {
+            ModerationProposalSheet(
+                targetId = modTarget,
+                viewModel = moderationViewModel,
+                onDismiss = { moderationTargetId = null },
             )
         }
     } // End of Box
@@ -1695,7 +1725,10 @@ private fun EmptyStateView(
 private fun ChatMessageList(
     messages: List<ChatMessage>,
     modifier: Modifier = Modifier,
-    transparentBackground: Boolean = false
+    transparentBackground: Boolean = false,
+    // Reverse-quorum moderation: tapped per-content "⋯ / report" affordance.
+    // Null hides the affordance (no moderation VM wired).
+    onModerate: ((String) -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
 
@@ -1723,8 +1756,8 @@ private fun ChatMessageList(
             // Use distinctBy to prevent duplicate key crashes if same ID appears twice
             items(messages.reversed().distinctBy { it.id }, key = { it.id }) { message ->
                 when (message.type) {
-                    MessageType.USER -> UserChatBubble(message, bubbleMaxWidth = bubbleMaxWidth)
-                    MessageType.AGENT -> AgentChatBubble(message, bubbleMaxWidth = bubbleMaxWidth)
+                    MessageType.USER -> UserChatBubble(message, bubbleMaxWidth = bubbleMaxWidth, onModerate = onModerate)
+                    MessageType.AGENT -> AgentChatBubble(message, bubbleMaxWidth = bubbleMaxWidth, onModerate = onModerate)
                     MessageType.SYSTEM -> SystemMessage(message, bubbleMaxWidth = bubbleMaxWidth)
                     MessageType.ERROR -> ErrorMessage(message, bubbleMaxWidth = bubbleMaxWidth)
                     MessageType.ACTION -> ActionBubble(message, bubbleMaxWidth = bubbleMaxWidth)
@@ -1750,7 +1783,8 @@ private fun ChatMessageList(
 private fun UserChatBubble(
     message: ChatMessage,
     modifier: Modifier = Modifier,
-    bubbleMaxWidth: Dp = 280.dp  // Default for backwards compat
+    bubbleMaxWidth: Dp = 280.dp,  // Default for backwards compat
+    onModerate: ((String) -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -1799,17 +1833,52 @@ private fun UserChatBubble(
                 )
             }
 
-            // Timestamp (from item_chat_user.xml:34-42)
-            Text(
-                text = formatTimestamp(message.timestamp),
+            // Timestamp + moderation affordance (from item_chat_user.xml:34-42)
+            Row(
                 modifier = Modifier
                     .align(Alignment.End)
                     .padding(top = 4.dp),
-                fontSize = 10.sp,
-                color = Color(0xFFBFDBFE)
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = formatTimestamp(message.timestamp),
+                    fontSize = 10.sp,
+                    color = Color(0xFFBFDBFE)
+                )
+                if (onModerate != null) {
+                    ModerationAffordance(
+                        contentId = message.id,
+                        tint = Color(0xFFBFDBFE),
+                        onModerate = onModerate,
+                    )
+                }
+            }
         }
     }
+}
+
+/**
+ * Discreet per-content "⋯ / report" moderation affordance (CC 0.5.1
+ * §4.5.13). Tapping opens the reverse-quorum proposal sheet for this
+ * piece of content. Tagged ``btn_moderate_<contentId>`` so automation
+ * can target a specific message. Plain "⋯" literal, no new icon.
+ */
+@Composable
+private fun ModerationAffordance(
+    contentId: String,
+    tint: Color,
+    onModerate: (String) -> Unit,
+) {
+    Text(
+        text = "⋯",
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold,
+        color = tint,
+        modifier = Modifier
+            .testableClickable("btn_moderate_$contentId") { onModerate(contentId) }
+            .padding(horizontal = 4.dp),
+    )
 }
 
 /**
@@ -1820,7 +1889,8 @@ private fun UserChatBubble(
 private fun AgentChatBubble(
     message: ChatMessage,
     modifier: Modifier = Modifier,
-    bubbleMaxWidth: Dp = 280.dp  // Default for backwards compat
+    bubbleMaxWidth: Dp = 280.dp,  // Default for backwards compat
+    onModerate: ((String) -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -1859,15 +1929,27 @@ private fun AgentChatBubble(
                 )
             }
 
-            // Timestamp (from item_chat_agent.xml:34-42)
-            Text(
-                text = formatTimestamp(message.timestamp),
+            // Timestamp + moderation affordance (from item_chat_agent.xml:34-42)
+            Row(
                 modifier = Modifier
                     .align(Alignment.End)
                     .padding(top = 4.dp),
-                fontSize = 10.sp,
-                color = Color(0xFF9CA3AF)
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = formatTimestamp(message.timestamp),
+                    fontSize = 10.sp,
+                    color = Color(0xFF9CA3AF)
+                )
+                if (onModerate != null) {
+                    ModerationAffordance(
+                        contentId = message.id,
+                        tint = Color(0xFF9CA3AF),
+                        onModerate = onModerate,
+                    )
+                }
+            }
         }
     }
 }

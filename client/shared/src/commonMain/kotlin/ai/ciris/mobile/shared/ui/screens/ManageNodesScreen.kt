@@ -462,7 +462,7 @@ private fun NodesListView(
             // ── Claim ownership affordance ───────────────────────────────────
             Button(
                 onClick = onClaimNode,
-                modifier = Modifier.fillMaxWidth().testable("btn_manage_nodes_claim"),
+                modifier = Modifier.fillMaxWidth().testableClickable("btn_manage_nodes_claim") { onClaimNode() },
             ) {
                 Icon(CIRISIcons.keySecure, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))

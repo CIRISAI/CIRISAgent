@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.AnnounceDecisionCard
@@ -102,6 +103,19 @@ fun AddFederationIdScreen(
         FederationIdentitySetupState.REJECTED_GENERIC_LABELS
     val labelHasError = labelTrimmed.isEmpty() || labelIsGeneric
     val canConfirm = !labelHasError && !inProgress
+
+    // Test automation: route /input requests into the label field (the pattern
+    // SetupScreen/LoginScreen/InteractScreen use — without this, /input on
+    // input_fed_label "succeeds" but the Compose state never updates).
+    val textInputRequest by TestAutomation.textInputRequests.collectAsState()
+    LaunchedEffect(textInputRequest) {
+        textInputRequest?.let { request ->
+            if (request.testTag == "input_fed_label") {
+                label = if (request.clearFirst) request.text else label + request.text
+                TestAutomation.clearTextInputRequest()
+            }
+        }
+    }
 
     // Leave on a clean completion; re-arm for retry if the upgrade errored.
     LaunchedEffect(submitted, inProgress, error) {

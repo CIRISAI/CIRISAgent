@@ -1383,7 +1383,12 @@ Available tests (Android):
   app_launch        - Test that app launches and shows login screen
   google_signin     - Test Google Sign-In flow with test account
   local_login       - Test local login (BYOK mode)
-  setup_wizard      - Test completing the setup wizard
+  setup_wizard      - Node-client first-run wizard (WELCOME -> ACCOUNT ->
+                      FED-ID w/ announce-gate assertions -> AGE_RANGE),
+                      driven via the in-app test server
+  catchup_add_fedid - Catch-up "Add Federation ID" flow (Manage Nodes ->
+                      btn_add_federation_id; tolerated SKIP when the entry
+                      isn't rendered)
   chat_interaction  - Test sending a message and receiving response
   full_flow         - Run complete end-to-end flow (default)
 
@@ -1532,6 +1537,7 @@ Examples:
             "google_signin",
             "local_login",
             "setup_wizard",
+            "catchup_add_fedid",
             "chat_interaction",
         ]:
             # Reparse with 'test' prepended

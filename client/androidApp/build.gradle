@@ -6,9 +6,20 @@ plugins {
     id "org.jetbrains.compose"
 }
 
+// yubikit-android 3.1.0 transitively requests kotlin-stdlib 2.2.10 (metadata 2.2.0),
+// unreadable by the project's Kotlin 2.0.21 compiler. Pin stdlib to the compiler's
+// own version (same fix as shared/build.gradle.kts).
+configurations.all {
+    resolutionStrategy {
+        force "org.jetbrains.kotlin:kotlin-stdlib:2.0.21",
+              "org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21",
+              "org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.0.21"
+    }
+}
+
 android {
     namespace "ai.ciris.mobile"
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "ai.ciris.mobile"

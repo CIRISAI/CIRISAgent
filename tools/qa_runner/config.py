@@ -318,6 +318,7 @@ class QAConfig:
     # tests/safety/{lang_eng}_{domain}/v{N}_*_arc.json and runs each question
     # through the agent via /v1/agent/interact. See CIRISNodeCore SCHEMA.md §11.
     safety_battery_lang: str = "am"  # ISO 639-1 from manifest.json
+    safety_battery_limit: int = 0  # run only the first N questions (0 = all)
     safety_battery_domain: str = "mental_health"  # cell's domain axis
     safety_battery_template: str = "default"  # template_id for the agent persona
 

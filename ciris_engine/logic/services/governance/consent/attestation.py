@@ -322,6 +322,23 @@ def canonical_community_key_id() -> Optional[str]:
                 return str(key)
     except Exception:  # pragma: no cover - defensive
         pass
+    # Substrate fallback: persist v13.4.0+ genesis-bakes the canonical server
+    # (ciris-canonical-1) into the CEG on node boot; when this engine carries
+    # that row (post node-fold, or a seeded install), read it directly — the
+    # fabric produced the record, the agent just consumes it. Bare agent
+    # engines (no node boot) return [] here and we stay unpublished.
+    try:
+        import json as _json
+
+        engine = _resolve_engine()
+        if engine is not None:
+            rows = _json.loads(engine.list_canonical_servers() or "[]")
+            for row in rows:
+                key = row.get("key_id") if isinstance(row, dict) else None
+                if key:
+                    return str(key)
+    except Exception:  # pragma: no cover - defensive (engine absent / pre-v13 substrate)
+        pass
     return None
 
 
@@ -348,13 +365,21 @@ class StructuralAttestationInput(BaseModel):
     attestation_envelope: StructuralAttestationEnvelope = Field(..., description="Structural envelope")
 
 
-def build_community_consent_grant(attesting_key_id: str, community_key_id: str) -> LocalAttestationInput:
-    """Build the directed traces-consent grant (scores, subject = community)."""
+def build_community_consent_grant(
+    attesting_key_id: str, community_key_id: str, granted_at: Optional[str] = None
+) -> LocalAttestationInput:
+    """Build the directed traces-consent grant (scores, subject = community).
+
+    ``granted_at`` carries the ORIGINAL consent time when migrating a legacy
+    consent artifact (.env / adapter-config) — the CEG object must preserve
+    when the human actually consented, not when the migration ran.
+    """
     claim = ConsentClaim(
         user_id=community_key_id,  # the directed counterparty (the canonical community)
         stream="community_trust",
         categories=["accord_traces"],
         state="active",
+        granted_at=granted_at,
     )
     envelope = ConsentAttestationEnvelope(
         dimension=_COMMUNITY_TRUST_DIMENSION,
@@ -432,7 +457,7 @@ def current_community_grant_id() -> Optional[str]:
 _PENDING_COMMUNITY_SENTINEL = "ciris:canonical-community:pending"
 
 
-def emit_community_consent_grant() -> Optional[str]:
+def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[str]:
     """Best-effort emit the traces-consent grant. Returns attestation_id.
 
     This is THE consent wire artifact (2.9.6 #866): lens-core's consent gate
@@ -456,12 +481,22 @@ def emit_community_consent_grant() -> Optional[str]:
         return None
     community = canonical_community_key_id()
     try:
-        grant = build_community_consent_grant(key_id, community or _PENDING_COMMUNITY_SENTINEL)
+        grant = build_community_consent_grant(key_id, community or _PENDING_COMMUNITY_SENTINEL, granted_at=granted_at)
         if community:
             attestation_id = engine.attestation_upsert_local(_directed_payload(grant, community))  # type: ignore[attr-defined]
             logger.info(
                 "consent-CEG: emitted directed traces-consent grant %s → community %s", attestation_id, community
             )
+            # The directed grant IS the CEG promotion event self→community —
+            # promote it to federation tier so the counterparty can actually
+            # receive it (a local-tier row never leaves the occurrence).
+            # Best-effort, mirroring the revocation path: deferred in CLIENT
+            # mode (no PQC signer); the local row still gates the seal.
+            try:
+                engine.attestation_promote(attestation_id)  # type: ignore[attr-defined]
+                logger.info("consent-CEG: promoted directed grant %s to federation tier", attestation_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.info("consent-CEG: directed grant promote deferred (non-fatal): %s", exc)
         else:
             attestation_id = engine.attestation_upsert_local(grant.model_dump_json())  # type: ignore[attr-defined]
             logger.info(

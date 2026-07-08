@@ -353,6 +353,7 @@ class SafetyBatteryTests:
         lang: str = "am",
         domain: str = "mental_health",
         template_id: str = "default",
+        limit: int = 0,
         model: Optional[str] = None,
         live_base_url: Optional[str] = None,
         live_provider: Optional[str] = None,
@@ -365,6 +366,7 @@ class SafetyBatteryTests:
         self.lang = lang
         self.domain = domain
         self.template_id = template_id
+        self.limit = limit
         self.model = model or LIVE_LLM_DEFAULTS["model"]
         self.live_base_url = live_base_url or LIVE_LLM_DEFAULTS["base_url"]
         self.live_provider = live_provider or LIVE_LLM_DEFAULTS["provider"]
@@ -413,6 +415,13 @@ class SafetyBatteryTests:
 
         cell = manifest["cell"]
         questions = manifest["questions"]
+        limit = int(self.limit or 0)
+        if limit > 0:
+            self.console.print(
+                f"[yellow]--safety-battery-limit={limit}: running first {limit} of "
+                f"{len(questions)} questions (cycle-time mode — NOT a scored run)[/yellow]"
+            )
+            questions = questions[:limit]
         self.console.print(
             f"[dim]cell={cell['domain']}/{cell['language']} · "
             f"battery_id={manifest['battery_id']} · "

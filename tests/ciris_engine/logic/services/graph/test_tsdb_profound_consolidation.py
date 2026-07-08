@@ -13,7 +13,7 @@ The legacy test suite (raw-SQL inserts of daily summaries, assertions
 against `profound_compressed` JSON markers in graph_nodes) no longer
 maps to any real code path.
 
-Tests preserved: `SummaryCompressor` unit tests (pure logic, no
+Tests preserved: orchestration + month-boundary tests (no
 persistence). New tests: orchestration smoke tests for
 `_run_profound_consolidation`.
 """
@@ -25,7 +25,6 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from ciris_engine.logic.services.graph.tsdb_consolidation import TSDBConsolidationService
-from ciris_engine.logic.services.graph.tsdb_consolidation.compressor import SummaryCompressor
 from ciris_engine.schemas.services.graph.tsdb_models import SummaryAttributes
 
 
@@ -54,140 +53,6 @@ def tsdb_service(mock_memory_bus, mock_time_service, persist_engine):
     # Set a very low target to force compression decisions
     service._profound_target_mb_per_day = 0.000001  # 1 byte/day
     return service
-
-
-class TestSummaryCompressor:
-    """Test the compression logic — pure schema-level tests, no persistence."""
-
-    def test_compress_metrics(self):
-        """Test metric compression keeps only significant values."""
-        compressor = SummaryCompressor(target_mb_per_day=1.0)
-
-        attrs = SummaryAttributes(
-            period_start=datetime(2025, 7, 1, tzinfo=timezone.utc),
-            period_end=datetime(2025, 7, 2, tzinfo=timezone.utc),
-            consolidation_level="extensive",
-            total_interactions=1000,
-            unique_services=50,
-            total_tasks=200,
-            total_thoughts=500,
-        )
-
-        result = compressor.compress_summary(attrs)
-        compressed = result.compressed_attributes
-
-        # Should have compressed metrics
-        assert compressed.compressed_metrics is not None
-        assert "ti" in compressed.compressed_metrics  # total_interactions -> ti
-        assert "us" in compressed.compressed_metrics  # unique_services -> us
-        assert "tt" in compressed.compressed_metrics  # total_tasks -> tt
-        assert "tth" in compressed.compressed_metrics  # total_thoughts -> tth
-
-        # Original fields should be zeroed out
-        assert compressed.total_interactions == 0
-        assert compressed.unique_services == 0
-        assert compressed.total_tasks == 0
-        assert compressed.total_thoughts == 0
-
-    def test_compress_descriptions(self):
-        """Test description compression removes verbosity."""
-        compressor = SummaryCompressor(target_mb_per_day=1.0)
-
-        attrs = SummaryAttributes(
-            period_start=datetime(2025, 7, 1, tzinfo=timezone.utc),
-            period_end=datetime(2025, 7, 2, tzinfo=timezone.utc),
-            consolidation_level="extensive",
-            messages_by_channel={
-                "channel_123": {"count": 100, "description": "Long channel description"},
-                "channel_456": {"count": 50, "other_data": "stuff"},
-            },
-            participants={
-                "user_1": {
-                    "message_count": 25,
-                    "author_name": "Very Long Username That Should Be Truncated",
-                    "extra_field": "data",
-                }
-            },
-            dominant_patterns=["pattern1", "pattern2", "pattern3", "pattern4", "pattern5", "pattern6"],
-            significant_events=["event" + str(i) for i in range(15)],
-        )
-
-        result = compressor.compress_summary(attrs)
-        compressed = result.compressed_attributes
-
-        # Channels should only have counts
-        assert compressed.messages_by_channel["channel_123"] == 100
-        assert compressed.messages_by_channel["channel_456"] == 50
-
-        # Participants compressed
-        user = compressed.participants["user_1"]
-        assert user["msg_count"] == 25
-        assert len(user["name"]) <= 20
-        assert "extra_field" not in user
-
-        # Patterns and events should be limited
-        assert len(compressed.dominant_patterns) <= 5
-        assert len(compressed.significant_events) <= 10
-
-    def test_remove_redundancy(self):
-        """Test redundancy removal."""
-        compressor = SummaryCompressor(target_mb_per_day=1.0)
-
-        attrs = SummaryAttributes(
-            period_start=datetime(2025, 7, 1, tzinfo=timezone.utc),
-            period_end=datetime(2025, 7, 2, tzinfo=timezone.utc),
-            consolidation_level="extensive",
-            total_interactions=1000,
-            unique_services=50,
-            total_tasks=200,
-            total_thoughts=500,
-            dominant_patterns=["pattern1", "pattern2"],
-            significant_events=["event1", "event2"],
-        )
-
-        result = compressor.compress_summary(attrs)
-        compressed = result.compressed_attributes
-
-        # Should have compressed metrics
-        assert compressed.compressed_metrics is not None
-
-        # Original metric fields should be zeroed after compression
-        assert compressed.total_interactions == 0
-        assert compressed.unique_services == 0
-        assert compressed.total_tasks == 0
-        assert compressed.total_thoughts == 0
-
-    def test_estimate_daily_size(self):
-        """Test daily size estimation."""
-        compressor = SummaryCompressor(target_mb_per_day=1.0)
-
-        summaries = [
-            SummaryAttributes(
-                period_start=datetime(2025, 7, 1, tzinfo=timezone.utc),
-                period_end=datetime(2025, 7, 2, tzinfo=timezone.utc),
-                consolidation_level="extensive",
-                dominant_patterns=["A" * 256] * 4,  # ~1KB
-            ),
-            SummaryAttributes(
-                period_start=datetime(2025, 7, 2, tzinfo=timezone.utc),
-                period_end=datetime(2025, 7, 3, tzinfo=timezone.utc),
-                consolidation_level="extensive",
-                dominant_patterns=["B" * 512] * 4,  # ~2KB
-            ),
-            SummaryAttributes(
-                period_start=datetime(2025, 7, 3, tzinfo=timezone.utc),
-                period_end=datetime(2025, 7, 4, tzinfo=timezone.utc),
-                consolidation_level="extensive",
-                dominant_patterns=["C" * 256] * 4,  # ~1KB
-            ),
-        ]
-
-        # Total approximately 4KB over 30 days
-        daily_mb = compressor.estimate_daily_size(summaries, 30)
-
-        # Should be a small positive value
-        assert daily_mb > 0
-        assert daily_mb < 1.0  # Less than 1MB/day
 
 
 class TestProfoundConsolidationOrchestration:

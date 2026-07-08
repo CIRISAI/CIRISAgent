@@ -5,13 +5,10 @@ Provides lightweight SQL translation to support both SQLite and PostgreSQL
 backends with a single connection string configuration.
 """
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 from urllib.parse import unquote, urlparse
 
 from ciris_engine.logic.persistence.db.types import Dialect
-
-if TYPE_CHECKING:
-    from ciris_engine.logic.persistence.db.query_builder import QueryBuilder
 
 
 def parse_postgres_url(url: str) -> tuple[str, str, str, int, str, str, str]:
@@ -307,38 +304,6 @@ DO UPDATE SET {updates}
                     # Convert keys to list since dict_keys/odict_keys don't support indexing
                     return row[list(keys)[0]]
             return None
-
-    def get_query_builder(self) -> "QueryBuilder":
-        """Get a query builder for this dialect.
-
-        Returns:
-            QueryBuilder instance configured for this dialect
-        """
-        from ciris_engine.logic.persistence.db.query_builder import QueryBuilder
-
-        return QueryBuilder(self)
-
-    def insert_ignore_node_sql(self) -> str:
-        """Get INSERT OR IGNORE SQL for graph_nodes.
-
-        Handles dialect-specific conflict resolution for the graph_nodes table.
-        Uses PRIMARY KEY constraint (node_id, scope).
-
-        Returns:
-            SQL string with ? placeholders (will be translated by cursor wrapper)
-        """
-        return self.get_query_builder().insert_ignore_node()
-
-    def insert_ignore_edge_sql(self) -> str:
-        """Get INSERT OR IGNORE SQL for graph_edges.
-
-        Handles dialect-specific conflict resolution for the graph_edges table.
-        Uses PRIMARY KEY constraint (edge_id).
-
-        Returns:
-            SQL string with ? placeholders (will be translated by cursor wrapper)
-        """
-        return self.get_query_builder().insert_ignore_edge()
 
 
 # Global adapter instance

@@ -167,6 +167,14 @@ class QARunner:
                 base_url=f"http://localhost:{port}",
                 api_port=port,
                 database_backends=None,  # Don't pass this recursively
+                # staged_env is deliberately RESET (matching the historical
+                # field-by-field copy, which always dropped it): the server
+                # manager launches `python main.py` from the checkout, and
+                # the staged job's byte-parity hash gate guarantees the tree
+                # equals the wheel. Inheriting it flips the launch onto the
+                # staged `ciris-server` console script, which fails with
+                # "No module named 'main'" in CI (latent script bug).
+                staged_env=None,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -804,6 +812,14 @@ class QARunner:
                 # backend. Both backends always produce ≥2 of these per run.
                 # Environmental; tracked at CIRISAgent#836.
                 "check_full: manifest integrity verification FAILED",
+                # XFAIL this cut (CIRISServer#121, still open in 0.5.87):
+                # persist v10+ ingest is hybrid-strict but the substrate's
+                # lens SEAL path signs Ed25519-only, so trace-shipping is
+                # rejected at receive_and_persist with verify_hybrid_required.
+                # Local capture/seal/consent are unaffected. REMOVE this
+                # pattern the moment the fix ships so the red returns if the
+                # seal regresses.
+                "verify_hybrid_required",
                 # QA/CI hosts have no TPM and no hardware Ed25519 key, so the
                 # CIRISVerify FFI key probe + TPM TCTI context creation log
                 # ERROR and fall back to software — expected, not a failure.

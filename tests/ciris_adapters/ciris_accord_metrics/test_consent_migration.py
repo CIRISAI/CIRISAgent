@@ -58,7 +58,7 @@ def test_grant_carries_original_timestamp(monkeypatch, tmp_path):
         side_effect=fake_emit,
     ):
         with patch.object(adapter.metrics_service, "start", return_value=asyncio.sleep(0)):
-            asyncio.get_event_loop().run_until_complete(adapter.start())
+            asyncio.run(adapter.start())
 
     assert captured["granted_at"] == _TS
 
@@ -73,7 +73,7 @@ def test_successful_migration_deletes_legacy_sources(monkeypatch, tmp_path):
         return_value="att-123",
     ):
         with patch.object(adapter.metrics_service, "start", return_value=asyncio.sleep(0)):
-            asyncio.get_event_loop().run_until_complete(adapter.start())
+            asyncio.run(adapter.start())
 
     # 1. process env purged
     assert "CIRIS_ACCORD_METRICS_CONSENT" not in os.environ
@@ -97,7 +97,7 @@ def test_failed_emit_preserves_legacy_sources(monkeypatch, tmp_path):
         return_value=None,
     ):
         with patch.object(adapter.metrics_service, "start", return_value=asyncio.sleep(0)):
-            asyncio.get_event_loop().run_until_complete(adapter.start())
+            asyncio.run(adapter.start())
 
     assert os.environ.get("CIRIS_ACCORD_METRICS_CONSENT") == "true"
     assert "CIRIS_ACCORD_METRICS_CONSENT=true" in (tmp_path / ".env").read_text(encoding="utf-8")
@@ -117,7 +117,7 @@ def test_post_migration_boot_derives_consent_from_ceg(monkeypatch, tmp_path):
             return_value="att-123",
         ):
             with patch.object(adapter.metrics_service, "start", return_value=asyncio.sleep(0)):
-                asyncio.get_event_loop().run_until_complete(adapter.start())
+                asyncio.run(adapter.start())
 
     assert adapter._consent_given is True
 

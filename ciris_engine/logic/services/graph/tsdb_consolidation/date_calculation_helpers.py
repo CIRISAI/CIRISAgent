@@ -6,9 +6,33 @@ All functions are timezone-aware and use UTC.
 """
 
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Tuple
+from typing import Any, Optional, Tuple
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
+
+
+def parse_datetime_field(value: Any) -> Optional[datetime]:
+    """Parse datetime field from database.
+
+    Handles both PostgreSQL datetime objects and SQLite TEXT strings.
+    (Relocated from sql_builders.py when the SQL builders were deleted —
+    the substrate owns consolidation SQL; this pure parser is still live.)
+
+    Args:
+        value: Raw value from database (datetime object or ISO string)
+
+    Returns:
+        datetime object with UTC timezone, or None if value is None
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        # PostgreSQL returns datetime object - ensure it has timezone
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    else:
+        # SQLite returns string - parse it
+        return datetime.fromisoformat(value.replace("Z", UTC_TIMEZONE_SUFFIX))
 
 
 def calculate_week_period(now: datetime) -> Tuple[datetime, datetime]:

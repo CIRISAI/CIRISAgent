@@ -783,10 +783,15 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
     test_setup_wizard_flow):
 
         WELCOME → ACCOUNT_AND_CONFIRMATION (username/password/confirm)
-        → FEDERATION_IDENTITY_SETUP → AGE_RANGE → COMPLETE
+        → FEDERATION_IDENTITY_SETUP → [LLM_CONFIGURATION] → AGE_RANGE → COMPLETE
 
-    There is NO LLM-provider step on this path. The federation-identity step
-    hosts the AnnounceDecisionCard:
+    LLM_CONFIGURATION appears only on AGENT builds (CIRISBuild.HAS_AGENT):
+    the step is probed for after the fed-ID step and handled when present —
+    prefer the CIRIS-hosted option if rendered (OAuth path), else BYOK with
+    the configured provider+key (llm_provider/llm_api_key), else the keyless
+    "local" (Ollama) provider so the wizard can proceed without a real key.
+    Node-client builds skip straight to AGE_RANGE. The federation-identity
+    step hosts the AnnounceDecisionCard:
       - input_fedid_label          — REQUIRED, non-generic fed-ID name
       - toggle_announce_ownership  — the pivotal announce switch
       - toggle_trace_opt_in        — trace opt-in, GATED: composed ONLY while
@@ -798,6 +803,9 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
     - announce: flip the announce switch ON (default True)
     - trace_opt_in: tick the trace checkbox after announcing (default True)
     - age_band: "adult" | "minor" (default "adult")
+    - llm_provider / llm_api_key: BYOK provider+key for the agent build's
+      LLM_CONFIGURATION step (default groq / key from ~/.groq_key when the
+      runner found one; keyless "local" fallback when no key)
     - clear_data: clear app data if the app must be (re)launched (default True)
 
     Standalone-safe: if the app/test server isn't up it launches the app
@@ -813,6 +821,8 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
     announce = config.get("announce", True)
     trace_opt_in = config.get("trace_opt_in", True)
     age_band = config.get("age_band", "adult")
+    llm_provider = config.get("llm_provider", "groq")
+    llm_api_key = config.get("llm_api_key", "")
 
     def fail(step: str, detail: str) -> TestReport:
         path = f"/tmp/ciris_setup_fail_{int(time.time())}.png"
@@ -828,12 +838,12 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
 
     try:
         # ── Step 0: reach the wizard via the test server ──────────────────
-        print("  [1/6] Connecting to in-app test server...")
+        print("  [1/7] Connecting to in-app test server...")
         client = connect_test_server(adb, config, launch_if_needed=True, clear_data=config.get("clear_data", True))
         if not client:
             return fail("connect", "in-app test-automation server unreachable (debug build required)")
 
-        print("  [2/6] Waiting for Login/Setup screen (first boot can take 60-120s+)...")
+        print("  [2/7] Waiting for Login/Setup screen (first boot can take 60-120s+)...")
         landed = client.wait_for_any_screen(["Login", "Setup"], timeout=180.0, interval=1.5)
         if landed is None:
             return fail("land", f"never reached Login/Setup (screen={client.screen()!r})")
@@ -859,7 +869,7 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                 return fail("login", f"did not reach Setup wizard (screen={client.screen()!r})")
 
         # ── Step 1: WELCOME → Continue ────────────────────────────────────
-        print("  [3/6] WELCOME → btn_next")
+        print("  [3/7] WELCOME → btn_next")
         if not client.wait_for_element("btn_next", timeout=15):
             return fail("welcome", "btn_next not found on WELCOME step")
         if not _click_or_tap(client, adb, "btn_next"):
@@ -867,7 +877,7 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
         time.sleep(0.5)
 
         # ── Step 2: ACCOUNT_AND_CONFIRMATION ──────────────────────────────
-        print(f"  [4/6] ACCOUNT: {username} / ******** (+ confirm)")
+        print(f"  [4/7] ACCOUNT: {username} / ******** (+ confirm)")
         if not client.wait_for_element("input_username", timeout=10):
             return fail("account", "input_username not found on account step")
         # Small settles between inputs: the Kotlin side consumes ONE pending
@@ -887,7 +897,7 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
         time.sleep(0.5)
 
         # ── Step 3: FEDERATION_IDENTITY_SETUP + announce-gate assertions ──
-        print(f"  [5/6] FED-ID: label={fed_label!r}, announce={announce}, trace={trace_opt_in}")
+        print(f"  [5/7] FED-ID: label={fed_label!r}, announce={announce}, trace={trace_opt_in}")
         if not client.wait_for_element("input_fedid_label", timeout=10):
             return fail("fedid", "input_fedid_label not found on federation-identity step")
 
@@ -921,9 +931,49 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
             return fail("fedid", "failed to click btn_next on federation-identity step")
         time.sleep(0.5)
 
+        # ── Step 3.5: LLM_CONFIGURATION (agent build only) ─────────────────
+        # Agent builds (CIRISBuild.HAS_AGENT) insert the LLM step after the
+        # fed-ID; node-client builds go straight to AGE_RANGE. Probe for the
+        # provider dropdown and handle the step only when it composed.
+        if client.wait_for_element("input_llm_provider", timeout=6):
+            print(f"  [6/7] LLM_CONFIGURATION: provider={llm_provider!r}, key={'set' if llm_api_key else 'none'}")
+            if client.is_visible("btn_use_free_ai"):
+                # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
+                if not _click_or_tap(client, adb, "btn_use_free_ai"):
+                    return fail("llm", "failed to click btn_use_free_ai on LLM step")
+                time.sleep(0.3)
+            elif llm_api_key:
+                # BYOK: pick the configured provider from the dropdown, then key.
+                if not _click_or_tap(client, adb, "input_llm_provider"):
+                    return fail("llm", "failed to open LLM provider dropdown")
+                menu_tag = f"menu_provider_{llm_provider}"
+                if not client.wait_for_element(menu_tag, timeout=5):
+                    return fail("llm", f"{menu_tag} not found in provider dropdown")
+                if not _click_or_tap(client, adb, menu_tag):
+                    return fail("llm", f"failed to click {menu_tag}")
+                time.sleep(0.5)
+                if not client.input("input_api_key", llm_api_key):
+                    return fail("llm", "failed to input LLM API key")
+                time.sleep(0.5)
+            else:
+                # No key available: keyless "local" (Ollama) provider lets the
+                # wizard proceed and the backend start without a real key.
+                if not _click_or_tap(client, adb, "input_llm_provider"):
+                    return fail("llm", "failed to open LLM provider dropdown")
+                if not client.wait_for_element("menu_provider_local", timeout=5):
+                    return fail("llm", "menu_provider_local not found in provider dropdown")
+                if not _click_or_tap(client, adb, "menu_provider_local"):
+                    return fail("llm", "failed to click menu_provider_local")
+                time.sleep(0.5)
+            if not _click_or_tap(client, adb, "btn_next"):
+                return fail("llm", "failed to click btn_next on LLM step")
+            time.sleep(0.5)
+        else:
+            print("  [6/7] LLM_CONFIGURATION not present (node-client build) — continuing")
+
         # ── Step 4: AGE_RANGE (final step → COMPLETE) ─────────────────────
         band_tag = f"age_band_{age_band}"
-        print(f"  [6/6] AGE_RANGE: {band_tag} → finish")
+        print(f"  [7/7] AGE_RANGE: {band_tag} → finish")
         if not client.wait_for_element(band_tag, timeout=10):
             return fail("age_range", f"{band_tag} not found on age-range step")
         if not _click_or_tap(client, adb, band_tag):
@@ -957,7 +1007,7 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
             result=TestResult.PASSED,
             duration=time.time() - start_time,
             message=(
-                "Node-client wizard completed (WELCOME → ACCOUNT → FED-ID → AGE_RANGE); "
+                "First-run wizard completed (WELCOME → ACCOUNT → FED-ID → [LLM] → AGE_RANGE); "
                 f"announce-gate verified both ways; {completed_via}"
             ),
             screenshots=screenshots,

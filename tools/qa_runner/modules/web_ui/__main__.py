@@ -261,12 +261,16 @@ class DesktopAppTestRunner:
         Node-client first-run order (SetupViewModel / SetupScreen, 2.9.x):
 
             WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP
-            → AGE_RANGE → COMPLETE
+            → [LLM_CONFIGURATION] → AGE_RANGE → COMPLETE
 
-        There is NO LLM provider/key step on the node-client path — that
-        step is agent/OAuth-only. This flow drives the reframed
-        federation-identity step whose announce decision is a first-class
-        `AnnounceDecisionCard`:
+        LLM_CONFIGURATION appears only on AGENT builds (CIRISBuild.HAS_AGENT):
+        it is probed for after the fed-ID step and handled when present —
+        prefer the CIRIS-hosted option if rendered (OAuth path), else the
+        keyless "local" (Ollama) provider (the desktop QA backend runs
+        --mock-llm, so the values only need to satisfy the wizard's gating).
+        Node-client builds skip straight to AGE_RANGE. This flow drives the
+        reframed federation-identity step whose announce decision is a
+        first-class `AnnounceDecisionCard`:
           - `toggle_announce_ownership` — the pivotal announce switch
           - `toggle_trace_opt_in` — trace opt-in, GATED: only present/enabled
             once announce is ON (verified explicitly below)
@@ -369,6 +373,37 @@ class DesktopAppTestRunner:
             await asyncio.sleep(0.5)
 
         await self.run_test("fedid_continue", fedid_continue)
+
+        # ── Step 3.5: LLM_CONFIGURATION (agent build only) ────────────
+        async def llm_configuration_step():
+            self._log("Probing for LLM_CONFIGURATION (agent builds only)")
+            if not await self.helper.wait_for_element("input_llm_provider", timeout=6000):
+                # Node-client build: no LLM step on this path — AGE_RANGE next.
+                if await self.helper.is_element_visible(f"age_band_{age_band}"):
+                    self._log("No LLM step (node-client build) — continuing to AGE_RANGE")
+                    return
+                raise RuntimeError("Neither LLM step nor AGE_RANGE appeared after fed-ID step")
+            if await self.helper.is_element_visible("btn_use_free_ai"):
+                # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
+                self._log("LLM: choosing CIRIS-hosted option (btn_use_free_ai)")
+                if not await self.helper.click("btn_use_free_ai"):
+                    raise RuntimeError("Failed to click btn_use_free_ai on LLM step")
+            else:
+                # Keyless "local" (Ollama) provider — satisfies gating without a
+                # real key; the --mock-llm backend ignores the values anyway.
+                self._log("LLM: selecting keyless 'local' provider")
+                if not await self.helper.click("input_llm_provider"):
+                    raise RuntimeError("Failed to open LLM provider dropdown")
+                if not await self.helper.wait_for_element("menu_provider_local", timeout=4000):
+                    raise RuntimeError("menu_provider_local not found in provider dropdown")
+                if not await self.helper.click("menu_provider_local"):
+                    raise RuntimeError("Failed to select menu_provider_local")
+            await asyncio.sleep(0.3)
+            if not await self.helper.click("btn_next"):
+                raise RuntimeError("Failed to click btn_next on LLM step")
+            await asyncio.sleep(0.5)
+
+        await self.run_test("llm_configuration", llm_configuration_step)
 
         # ── Step 4: AGE_RANGE (final → COMPLETE) ──────────────────────
         async def age_range_step():

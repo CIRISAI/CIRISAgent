@@ -625,12 +625,30 @@ private fun StepIndicators(
     // Node-client first-run flow (both branches): account-first 4-step path
     //   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP →
     //   AGE_RANGE  (→ COMPLETE)
-    val steps = listOf(
-        SetupStep.WELCOME to "1",
-        SetupStep.ACCOUNT_AND_CONFIRMATION to "2",
-        SetupStep.FEDERATION_IDENTITY_SETUP to "3",
-        SetupStep.AGE_RANGE to "4"
-    )
+    // Agent build (CIRISBuild.HAS_AGENT): LLM_CONFIGURATION is inserted after
+    // the fed-ID (5-step path). NOTE: the visual order here does NOT match the
+    // SetupStep enum's ordinal order (LLM_CONFIGURATION is declared before
+    // ACCOUNT_AND_CONFIRMATION), so active/complete state is computed from the
+    // POSITION in this list when the current step is one of the listed steps;
+    // ordinal comparison is kept as the fallback for off-path steps (COMPLETE,
+    // legacy NODE_AUTH/QUICK_SETUP flows).
+    val steps = if (CIRISBuild.HAS_AGENT) {
+        listOf(
+            SetupStep.WELCOME to "1",
+            SetupStep.ACCOUNT_AND_CONFIRMATION to "2",
+            SetupStep.FEDERATION_IDENTITY_SETUP to "3",
+            SetupStep.LLM_CONFIGURATION to "4",
+            SetupStep.AGE_RANGE to "5"
+        )
+    } else {
+        listOf(
+            SetupStep.WELCOME to "1",
+            SetupStep.ACCOUNT_AND_CONFIRMATION to "2",
+            SetupStep.FEDERATION_IDENTITY_SETUP to "3",
+            SetupStep.AGE_RANGE to "4"
+        )
+    }
+    val currentFlowIndex = steps.indexOfFirst { it.first == currentStep }
 
     Row(
         modifier = modifier.testable("setup_step_indicators"),
@@ -638,8 +656,8 @@ private fun StepIndicators(
         verticalAlignment = Alignment.CenterVertically
     ) {
         steps.forEachIndexed { index, (step, number) ->
-            val isActive = currentStep >= step
-            val isComplete = currentStep > step
+            val isActive = if (currentFlowIndex >= 0) currentFlowIndex >= index else currentStep >= step
+            val isComplete = if (currentFlowIndex >= 0) currentFlowIndex > index else currentStep > step
             val stepName = step.name.lowercase()
 
             Box(
@@ -666,7 +684,7 @@ private fun StepIndicators(
                         .width(48.dp)
                         .height(2.dp)
                         .background(
-                            color = if (currentStep > step) SetupColors.Primary else SetupColors.GrayLight
+                            color = if (isComplete) SetupColors.Primary else SetupColors.GrayLight
                         )
                 )
             }

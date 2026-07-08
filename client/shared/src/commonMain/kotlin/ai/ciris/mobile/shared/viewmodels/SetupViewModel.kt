@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.mobile.shared.CIRISBuild
 import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.models.*
 import ai.ciris.mobile.shared.platform.PlatformLogger
@@ -528,15 +529,27 @@ class SetupViewModel(
         // same account-first sequence:
         //   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP →
         //   AGE_RANGE → COMPLETE
+        //
+        // AGENT BUILD (CIRISBuild.HAS_AGENT): the brain needs an LLM, so the
+        // LLM_CONFIGURATION step (CIRIS proxy vs BYOK provider/key) is inserted
+        // after the fed-ID:
+        //   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP →
+        //   LLM_CONFIGURATION → AGE_RANGE → COMPLETE
+        // Gated with the flag (not a forked when) so this file stays mergeable
+        // with the upstream node client.
         val nextStep = if (currentState.isNodeFlow) {
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.ACCOUNT_AND_CONFIRMATION
                 // Account created — now MINT YOUR FEDERATION ID (associated to the
                 // just-created user).
                 SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.FEDERATION_IDENTITY_SETUP
-                // You have an ID — now STATE YOUR AGE RANGE (the foundational
-                // protective gate), THEN you're on the fabric.
-                SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.AGE_RANGE
+                // You have an ID — agent builds configure the brain's LLM next;
+                // the node client goes straight to the protective age gate.
+                SetupStep.FEDERATION_IDENTITY_SETUP ->
+                    if (CIRISBuild.HAS_AGENT) SetupStep.LLM_CONFIGURATION else SetupStep.AGE_RANGE
+                // Now STATE YOUR AGE RANGE (the foundational protective gate),
+                // THEN you're on the fabric.
+                SetupStep.LLM_CONFIGURATION -> SetupStep.AGE_RANGE
                 SetupStep.AGE_RANGE -> SetupStep.COMPLETE
                 else -> SetupStep.COMPLETE
             }
@@ -545,7 +558,9 @@ class SetupViewModel(
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.ACCOUNT_AND_CONFIRMATION
                 SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.FEDERATION_IDENTITY_SETUP
-                SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.AGE_RANGE
+                SetupStep.FEDERATION_IDENTITY_SETUP ->
+                    if (CIRISBuild.HAS_AGENT) SetupStep.LLM_CONFIGURATION else SetupStep.AGE_RANGE
+                SetupStep.LLM_CONFIGURATION -> SetupStep.AGE_RANGE
                 SetupStep.AGE_RANGE -> SetupStep.COMPLETE
                 else -> SetupStep.COMPLETE
             }
@@ -567,12 +582,16 @@ class SetupViewModel(
         // Node-client back-button mirrors the account-first forward path:
         //   COMPLETE → AGE_RANGE → FEDERATION_IDENTITY_SETUP →
         //   ACCOUNT_AND_CONFIRMATION → WELCOME
+        // Agent build (CIRISBuild.HAS_AGENT) inserts LLM_CONFIGURATION between
+        // AGE_RANGE and FEDERATION_IDENTITY_SETUP, mirroring nextStep().
         val prevStep = if (currentState.isNodeFlow) {
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.WELCOME
                 SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.WELCOME
                 SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.ACCOUNT_AND_CONFIRMATION
-                SetupStep.AGE_RANGE -> SetupStep.FEDERATION_IDENTITY_SETUP
+                SetupStep.LLM_CONFIGURATION -> SetupStep.FEDERATION_IDENTITY_SETUP
+                SetupStep.AGE_RANGE ->
+                    if (CIRISBuild.HAS_AGENT) SetupStep.LLM_CONFIGURATION else SetupStep.FEDERATION_IDENTITY_SETUP
                 SetupStep.COMPLETE -> SetupStep.AGE_RANGE
                 else -> SetupStep.WELCOME
             }
@@ -581,7 +600,9 @@ class SetupViewModel(
                 SetupStep.WELCOME -> SetupStep.WELCOME
                 SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.WELCOME
                 SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.ACCOUNT_AND_CONFIRMATION
-                SetupStep.AGE_RANGE -> SetupStep.FEDERATION_IDENTITY_SETUP
+                SetupStep.LLM_CONFIGURATION -> SetupStep.FEDERATION_IDENTITY_SETUP
+                SetupStep.AGE_RANGE ->
+                    if (CIRISBuild.HAS_AGENT) SetupStep.LLM_CONFIGURATION else SetupStep.FEDERATION_IDENTITY_SETUP
                 SetupStep.COMPLETE -> SetupStep.AGE_RANGE
                 else -> SetupStep.WELCOME
             }

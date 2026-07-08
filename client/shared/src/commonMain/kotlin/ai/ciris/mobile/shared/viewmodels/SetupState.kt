@@ -671,10 +671,23 @@ data class SetupFormState(
                         providerLower.startsWith("local inference")
                     isKeyless || llmApiKey.isNotEmpty()
                 } else if (setupMode == SetupMode.LOCAL_ON_DEVICE) {
-                    // On-device inference — the capability probe already gated
-                    // the UI option, and the Python adapter probes at runtime.
-                    // No API key required.
-                    true
+                    // LOCAL_ON_DEVICE is ALSO the node-client *default* mode (the
+                    // node client never renders this step, so the default was
+                    // harmless there). On the agent build the step is a real
+                    // choice: proceed key-free only when the on-device provider
+                    // (or a keyless local server) was actually selected — any
+                    // other provider here is effectively BYOK and follows the
+                    // keyless-or-key rule. Prevents the untouched default
+                    // (provider "OpenAI", no key) from shipping a broken agent
+                    // LLM config ("Agent processor not initialized").
+                    val providerLower = llmProvider.lowercase()
+                    val isOnDevice = providerLower == "mobile_local" ||
+                        providerLower.startsWith("mobile local")
+                    val isKeyless = providerLower == "localai" ||
+                        providerLower == "local" ||
+                        providerLower == "local_inference" ||
+                        providerLower.startsWith("local inference")
+                    isOnDevice || isKeyless || llmApiKey.isNotEmpty()
                 } else {
                     false // No mode selected
                 }
@@ -814,6 +827,8 @@ data class SetupFormState(
                 val providerLower = llmProvider.lowercase()
                 val isKeylessProvider = providerLower == "localai" ||
                     providerLower == "local" ||
+                    providerLower == "local_inference" ||
+                    providerLower.startsWith("local inference") ||
                     providerLower == "mobile_local" ||
                     providerLower.startsWith("mobile local")
                 when {
@@ -821,6 +836,11 @@ data class SetupFormState(
                     setupMode == SetupMode.CIRIS_PROXY && googleIdToken == null ->
                         LocalizationHelper.getString("setup_validation_google_required")
                     setupMode == SetupMode.BYOK && !isKeylessProvider && llmApiKey.isEmpty() ->
+                        LocalizationHelper.getString("setup_validation_api_key_required")
+                    // LOCAL_ON_DEVICE is the node-client default mode; on the agent
+                    // build a non-local provider without a key is an incomplete BYOK
+                    // config (mirrors canProceedFromCurrentStep).
+                    setupMode == SetupMode.LOCAL_ON_DEVICE && !isKeylessProvider && llmApiKey.isEmpty() ->
                         LocalizationHelper.getString("setup_validation_api_key_required")
                     else -> null
                 }

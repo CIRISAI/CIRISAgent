@@ -486,7 +486,7 @@ private fun NodesListView(
             if (ownerHasFedId == false) {
                 OutlinedButton(
                     onClick = onAddFederationId,
-                    modifier = Modifier.fillMaxWidth().testable("btn_add_federation_id"),
+                    modifier = Modifier.fillMaxWidth().testableClickable("btn_add_federation_id") { onAddFederationId() },
                 ) {
                     Icon(CIRISIcons.keySecure, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))

@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testable
+import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.AnnounceDecisionCard
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
@@ -123,7 +124,7 @@ fun AddFederationIdScreen(
                     if (!LocalIsCompactWindow.current) {
                         IconButton(
                             onClick = onBack,
-                            modifier = Modifier.testable("btn_add_fedid_back"),
+                            modifier = Modifier.testableClickable("btn_add_fedid_back") { onBack() },
                         ) {
                             Icon(
                                 imageVector = CIRISIcons.arrowBack,
@@ -228,21 +229,24 @@ fun AddFederationIdScreen(
             }
 
             // ── Step 3: confirm ──────────────────────────────────────────────
+            // Shared by the Button and the test-automation click registry
+            // (testableClickable), mirroring the SetupScreen btn_next pattern.
+            val onConfirm = {
+                if (canConfirm) {
+                    submitted = true
+                    viewModel.upgradeToFedId(
+                        label = labelTrimmed,
+                        announce = announce,
+                        traceOptIn = traceOptIn,
+                    )
+                }
+            }
             Button(
-                onClick = {
-                    if (canConfirm) {
-                        submitted = true
-                        viewModel.upgradeToFedId(
-                            label = labelTrimmed,
-                            announce = announce,
-                            traceOptIn = traceOptIn,
-                        )
-                    }
-                },
+                onClick = onConfirm,
                 enabled = canConfirm,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testable("btn_add_fedid_confirm"),
+                    .testableClickable("btn_add_fedid_confirm") { onConfirm() },
             ) {
                 if (inProgress) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)

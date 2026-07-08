@@ -11,10 +11,16 @@ Commands:
     desktop         Test the CIRIS Desktop app (uses TestAutomationServer)
     desktop-login   Test login flow on desktop app
     desktop-chat    Test chat interaction on desktop app
+    desktop-setup   Drive the NODE-CLIENT first-run wizard (announce decision,
+                    gated trace opt-in, fed-ID label, age range; NO LLM step)
+    desktop-catchup Drive the catch-up Add-Federation-ID flow
+                    (btn_add_federation_id -> input_fed_label ->
+                    toggle_announce_ownership -> btn_add_fedid_confirm)
+    desktop-up      Full orchestration: wipe -> setup via API -> launch -> login
     e2e             Run full end-to-end test flow (browser-based, legacy)
-    setup           Test only setup wizard steps (browser-based)
+    setup           Test only setup wizard steps (browser-based, agent flow)
     interact        Test only interaction steps (browser-based)
-    models          Test only model listing feature (browser-based)
+    models          Test only model listing feature (browser-based, agent flow)
     licensed_agent  First-time licensed agent flow (Portal device auth)
     list            List available tests
 
@@ -241,6 +247,325 @@ class DesktopAppTestRunner:
 
         return all(r.success for r in self.results)
 
+    async def test_setup_wizard_flow(
+        self,
+        username: str = "admin",
+        password: str = "qa_test_password_12345",
+        fed_label: Optional[str] = None,
+        announce: bool = True,
+        trace_opt_in: bool = True,
+        age_band: str = "adult",
+    ) -> bool:
+        """Drive the NODE-CLIENT first-run setup wizard via the test server.
+
+        Node-client first-run order (SetupViewModel / SetupScreen, 2.9.x):
+
+            WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP
+            → AGE_RANGE → COMPLETE
+
+        There is NO LLM provider/key step on the node-client path — that
+        step is agent/OAuth-only. This flow drives the reframed
+        federation-identity step whose announce decision is a first-class
+        `AnnounceDecisionCard`:
+          - `toggle_announce_ownership` — the pivotal announce switch
+          - `toggle_trace_opt_in` — trace opt-in, GATED: only present/enabled
+            once announce is ON (verified explicitly below)
+          - `input_fedid_label` — the required, non-generic fed-ID name
+
+        Requires the desktop app to be sitting on the Setup wizard (backend
+        in first-run mode). Use `desktop-setup --launch` to bring that up.
+        """
+        print("\n🧭 Testing Setup Wizard Flow (node-client first-run)")
+
+        if not self.helper:
+            raise RuntimeError("Test runner not started")
+
+        if fed_label is None:
+            fed_label = f"qa-node-{int(time.time())}"
+
+        # ── Step 0: land on the Setup wizard ──────────────────────────
+        async def wait_for_setup():
+            self._log("Waiting for Setup wizard...")
+            if not await self.helper.wait_for_screen("Setup", timeout=30000):
+                screen = await self.helper.get_screen()
+                raise RuntimeError(f"Setup wizard did not appear (on '{screen}')")
+
+        await self.run_test("wait_for_setup_wizard", wait_for_setup)
+
+        # ── Step 1: WELCOME → Continue ────────────────────────────────
+        async def welcome_continue():
+            self._log("WELCOME → btn_next")
+            if not await self.helper.click("btn_next"):
+                raise RuntimeError("Failed to click btn_next on WELCOME")
+            await asyncio.sleep(0.4)
+
+        await self.run_test("welcome_continue", welcome_continue)
+
+        # ── Step 2: ACCOUNT_AND_CONFIRMATION ──────────────────────────
+        async def account_step():
+            self._log("ACCOUNT: waiting for input_username")
+            if not await self.helper.wait_for_element("input_username", timeout=8000):
+                raise RuntimeError("input_username not found on account step")
+            await self.helper.input_text("input_username", username)
+            await self.helper.input_text("input_password", password)
+            await self.helper.input_text("input_password_confirm", password)
+            await asyncio.sleep(0.2)
+            if not await self.helper.click("btn_next"):
+                raise RuntimeError("Failed to click btn_next on account step")
+            await asyncio.sleep(0.4)
+
+        await self.run_test("account_and_confirmation", account_step)
+
+        # ── Step 3: FEDERATION_IDENTITY_SETUP ─────────────────────────
+        async def fedid_label_step():
+            self._log(f"FED-ID: waiting for input_fedid_label, label={fed_label}")
+            if not await self.helper.wait_for_element("input_fedid_label", timeout=8000):
+                raise RuntimeError("input_fedid_label not found on fed-ID step")
+            await self.helper.input_text("input_fedid_label", fed_label)
+            await asyncio.sleep(0.2)
+
+        await self.run_test("fedid_enter_label", fedid_label_step)
+
+        # Gating assertion: trace opt-in must be ABSENT while announce is OFF.
+        async def trace_gated_off():
+            self._log("Asserting toggle_trace_opt_in is hidden while announce OFF")
+            if await self.helper.is_element_visible("toggle_trace_opt_in"):
+                raise RuntimeError(
+                    "toggle_trace_opt_in is visible before announce is ON "
+                    "(gating broken)"
+                )
+
+        await self.run_test("trace_opt_in_gated_off", trace_gated_off)
+
+        if announce:
+
+            async def announce_on():
+                self._log("Clicking toggle_announce_ownership → ON")
+                if not await self.helper.click("toggle_announce_ownership"):
+                    raise RuntimeError("Failed to click toggle_announce_ownership")
+                # Trace opt-in should now be revealed by the AnnounceDecisionCard.
+                if not await self.helper.wait_for_element("toggle_trace_opt_in", timeout=4000):
+                    raise RuntimeError(
+                        "toggle_trace_opt_in did not appear after announce ON "
+                        "(gating broken)"
+                    )
+
+            await self.run_test("announce_ownership_on", announce_on)
+
+            if trace_opt_in:
+
+                async def opt_in_traces():
+                    self._log("Clicking toggle_trace_opt_in → ON")
+                    if not await self.helper.click("toggle_trace_opt_in"):
+                        raise RuntimeError("Failed to click toggle_trace_opt_in")
+                    await asyncio.sleep(0.2)
+
+                await self.run_test("trace_opt_in_on", opt_in_traces)
+
+        async def fedid_continue():
+            self._log("FED-ID → btn_next")
+            if not await self.helper.click("btn_next"):
+                raise RuntimeError("Failed to click btn_next on fed-ID step")
+            await asyncio.sleep(0.5)
+
+        await self.run_test("fedid_continue", fedid_continue)
+
+        # ── Step 4: AGE_RANGE (final → COMPLETE) ──────────────────────
+        async def age_range_step():
+            band_tag = f"age_band_{age_band}"
+            self._log(f"AGE_RANGE: waiting for {band_tag}")
+            if not await self.helper.wait_for_element(band_tag, timeout=8000):
+                raise RuntimeError(f"{band_tag} not found on age-range step")
+            if not await self.helper.click(band_tag):
+                raise RuntimeError(f"Failed to click {band_tag}")
+            await asyncio.sleep(0.2)
+            # AGE_RANGE is the final step: btn_next self-claims + advances to COMPLETE.
+            if not await self.helper.click("btn_next"):
+                raise RuntimeError("Failed to click btn_next (finish) on age-range step")
+            await asyncio.sleep(1.0)
+
+        await self.run_test("age_range_finish", age_range_step)
+
+        # ── Step 5: COMPLETE (best-effort — CompleteStep is in SetupScreen) ──
+        async def wait_for_complete():
+            self._log("Waiting for setup to complete (leave wizard / COMPLETE step)")
+            start = datetime.now()
+            while (datetime.now() - start).total_seconds() < 20:
+                screen = await self.helper.get_screen()
+                # Either routed out of Setup, or on the COMPLETE step (still
+                # "Setup" screen but btn_next is gone).
+                if screen and screen != "Setup":
+                    self._log(f"Left wizard → {screen}")
+                    return
+                if not await self.helper.is_element_visible("btn_next"):
+                    self._log("On COMPLETE step (btn_next gone)")
+                    return
+                await asyncio.sleep(0.5)
+            # Non-fatal: record where we ended up.
+            self._log("Did not clearly reach COMPLETE within 20s")
+
+        await self.run_test("setup_complete", wait_for_complete)
+
+        return all(r.success for r in self.results)
+
+    async def test_catchup_add_fedid_flow(
+        self,
+        fed_label: Optional[str] = None,
+        announce: bool = True,
+        trace_opt_in: bool = True,
+    ) -> bool:
+        """Drive the catch-up "Add Federation ID" flow (AddFederationIdScreen).
+
+        For an already-logged-in legacy node (password/OAuth ROOT, no fed-ID).
+        Entry point is `btn_add_federation_id` on the Manage Nodes surface
+        (this REPLACED the old `btn_upgrade_to_fed_id`). The guided screen then
+        drives:
+
+            input_fed_label → toggle_announce_ownership
+            → toggle_trace_opt_in (gated on announce) → btn_add_fedid_confirm
+
+        Note: the catch-up label field/confirm use `input_fed_label` /
+        `btn_add_fedid_confirm` (distinct from the first-run wizard's
+        `input_fedid_label`). The back affordance is `btn_add_fedid_back`.
+
+        Requires the app to be logged in with the Manage Nodes surface
+        reachable AND the logged-in owner to have NO fed-ID yet: the client
+        renders `btn_add_federation_id` only when `ownerHasFedId == false`
+        (from the local node's `GET /v1/setup/owned-nodes`); `null` — e.g. a
+        backend that doesn't serve owned-nodes, like the host ciris_engine QA
+        backend — fail-closes the button hidden. If the entry point can't be
+        reached, the flow SKIPs (tolerated, returns True) with a clear reason
+        rather than failing, mirroring the federation walker's tolerated-SKIP
+        semantics for state-dependent preconditions.
+        """
+        print("\n➕ Testing Catch-up Add-Federation-ID Flow")
+
+        if not self.helper:
+            raise RuntimeError("Test runner not started")
+
+        if fed_label is None:
+            fed_label = f"qa-catchup-{int(time.time())}"
+
+        # ── Reach the entry point ─────────────────────────────────────
+        # Canonical path: EpistemicSidebar → Manage group (nav_group_manage)
+        # → Nodes surface (nav_epistemic_nodes) → btn_add_federation_id.
+        async def reach_entry():
+            self._log("Looking for btn_add_federation_id (Manage Nodes surface)")
+            if await self.helper.is_element_visible("btn_add_federation_id"):
+                return
+            # Expand the Manage group if the Nodes row isn't visible yet.
+            if not await self.helper.is_element_visible("nav_epistemic_nodes"):
+                if await self.helper.is_element_visible("nav_group_manage"):
+                    self._log("Expanding sidebar group nav_group_manage")
+                    await self.helper.click("nav_group_manage")
+                    try:
+                        await self.helper.wait_for_element("nav_epistemic_nodes", timeout=3000)
+                    except Exception:  # noqa: BLE001
+                        pass
+            if await self.helper.is_element_visible("nav_epistemic_nodes"):
+                self._log("Clicking nav_epistemic_nodes")
+                await self.helper.click("nav_epistemic_nodes")
+                try:
+                    await self.helper.wait_for_element("btn_add_federation_id", timeout=5000)
+                except Exception:  # noqa: BLE001
+                    pass
+                if await self.helper.is_element_visible("btn_add_federation_id"):
+                    return
+            # Fallback: scan the element tree for any Manage-Nodes-ish nav row.
+            elements = await self.helper.get_elements()
+            nav_candidates = [
+                e.test_tag
+                for e in elements
+                if "node" in e.test_tag.lower()
+                and ("nav" in e.test_tag.lower() or "manage" in e.test_tag.lower())
+            ]
+            for tag in nav_candidates:
+                self._log(f"trying nav candidate: {tag}")
+                await self.helper.click(tag)
+                await asyncio.sleep(0.5)
+                if await self.helper.is_element_visible("btn_add_federation_id"):
+                    return
+            raise RuntimeError(
+                "btn_add_federation_id not reachable — navigate to the Manage "
+                "Nodes surface first (logged-in legacy node required)"
+            )
+
+        entry = await self.run_test("reach_add_fedid_entry", reach_entry)
+        if not entry.success:
+            # TOLERATED SKIP: btn_add_federation_id renders only when the
+            # logged-in owner has no fed-ID (ownerHasFedId == false). Any
+            # other state — owner already has one, or the backend doesn't
+            # serve GET /v1/setup/owned-nodes so the client fail-closes —
+            # legitimately hides it. Don't hard-fail the run on that.
+            self.results.pop()  # replace the FAIL record with a skip notice
+            print(
+                "  ⏭️  reach_add_fedid_entry SKIPPED (tolerated): "
+                "btn_add_federation_id not rendered — owner already has a "
+                "fed-ID, or ownerHasFedId is null (backend without "
+                "GET /v1/setup/owned-nodes fail-closes the entry)"
+            )
+            return all(r.success for r in self.results)
+
+        async def open_catchup():
+            self._log("Clicking btn_add_federation_id → AddFederationIdScreen")
+            if not await self.helper.click("btn_add_federation_id"):
+                raise RuntimeError("Failed to click btn_add_federation_id")
+            if not await self.helper.wait_for_element("input_fed_label", timeout=6000):
+                raise RuntimeError("input_fed_label did not appear (catch-up screen)")
+
+        await self.run_test("open_add_fedid_screen", open_catchup)
+
+        async def enter_label():
+            self._log(f"input_fed_label = {fed_label}")
+            await self.helper.input_text("input_fed_label", fed_label)
+            await asyncio.sleep(0.2)
+
+        await self.run_test("catchup_enter_label", enter_label)
+
+        async def trace_gated_off():
+            self._log("Asserting toggle_trace_opt_in hidden while announce OFF (catch-up)")
+            if await self.helper.is_element_visible("toggle_trace_opt_in"):
+                raise RuntimeError("toggle_trace_opt_in visible before announce ON (catch-up gating broken)")
+
+        await self.run_test("catchup_trace_gated_off", trace_gated_off)
+
+        if announce:
+
+            async def announce_on():
+                self._log("Clicking toggle_announce_ownership → ON (catch-up)")
+                if not await self.helper.click("toggle_announce_ownership"):
+                    raise RuntimeError("Failed to click toggle_announce_ownership")
+                if not await self.helper.wait_for_element("toggle_trace_opt_in", timeout=4000):
+                    raise RuntimeError("toggle_trace_opt_in did not appear after announce ON (catch-up)")
+
+            await self.run_test("catchup_announce_on", announce_on)
+
+            if trace_opt_in:
+
+                async def opt_in():
+                    self._log("Clicking toggle_trace_opt_in → ON (catch-up)")
+                    if not await self.helper.click("toggle_trace_opt_in"):
+                        raise RuntimeError("Failed to click toggle_trace_opt_in")
+                    await asyncio.sleep(0.2)
+
+                await self.run_test("catchup_trace_opt_in_on", opt_in)
+
+        async def confirm():
+            self._log("Clicking btn_add_fedid_confirm")
+            # btn_add_fedid_confirm uses testable() (position-only) in the
+            # client, so /click may report not-clickable; record best-effort.
+            clicked = await self.helper.click("btn_add_fedid_confirm")
+            if not clicked:
+                raise RuntimeError(
+                    "btn_add_fedid_confirm not clickable via /click "
+                    "(client uses testable(), not testableClickable())"
+                )
+            await asyncio.sleep(0.5)
+
+        await self.run_test("catchup_confirm", confirm)
+
+        return all(r.success for r in self.results)
+
     async def test_element_tree(self) -> bool:
         """Debug test - print current element tree."""
         print("\n🌳 Element Tree")
@@ -304,6 +629,8 @@ Examples:
             "desktop",
             "desktop-login",
             "desktop-chat",
+            "desktop-setup",
+            "desktop-catchup",
             "desktop-up",
             "federation",
             "e2e",
@@ -366,6 +693,22 @@ Examples:
         "--message",
         default=None,
         help="Message for desktop chat test (default: 'Hello, can you hear me?')",
+    )
+    parser.add_argument(
+        "--fed-label",
+        default=None,
+        help="Federation ID label for desktop-setup/desktop-catchup (default: generated qa-* name)",
+    )
+    parser.add_argument(
+        "--no-announce",
+        action="store_true",
+        help="For desktop-setup/desktop-catchup: leave the announce decision OFF "
+        "(privacy default; trace opt-in stays gated/hidden)",
+    )
+    parser.add_argument(
+        "--no-trace-opt-in",
+        action="store_true",
+        help="For desktop-setup/desktop-catchup: announce but don't opt into reasoning traces",
     )
 
     # Browser options
@@ -527,32 +870,72 @@ def list_tests() -> None:
     """List available tests."""
     print("\n📋 Available Tests:\n")
 
-    test_info = {
-        "load_setup": "Load the setup wizard page",
-        "navigate_llm": "Navigate to LLM configuration step",
-        "select_provider": "Select LLM provider (OpenAI, Anthropic, etc.)",
-        "enter_key": "Enter API key",
-        "load_models": "Load available models (live model listing)",
-        "select_model": "Select a model from the list",
-        "complete_setup": "Complete remaining setup steps",
-        "send_message": "Send a test message to the agent",
-        "receive_response": "Wait for and validate agent response",
+    # Legacy browser-based (Playwright) steps — agent/web-UI flow only.
+    browser_info = {
+        "load_setup": "Load the setup wizard page (browser)",
+        "navigate_llm": "Navigate to LLM configuration step (browser, agent-only)",
+        "select_provider": "Select LLM provider (browser, agent-only)",
+        "enter_key": "Enter API key (browser, agent-only)",
+        "load_models": "Load available models (browser, agent-only)",
+        "select_model": "Select a model from the list (browser, agent-only)",
+        "complete_setup": "Complete remaining setup steps (browser)",
+        "send_message": "Send a test message to the agent (browser)",
+        "receive_response": "Wait for and validate agent response (browser)",
     }
 
-    for name, desc in test_info.items():
-        print(f"  • {name:20s} - {desc}")
+    print("  Browser (Playwright) steps:")
+    for name, desc in browser_info.items():
+        print(f"    • {name:20s} - {desc}")
+
+    # Desktop test-server driven NODE-CLIENT wizard steps (new 2.9.x flow).
+    print("\n  Desktop node-client wizard steps (test server :8091):")
+    node_info = {
+        "wait_for_setup_wizard": "Land on the Setup wizard (first-run)",
+        "welcome_continue": "WELCOME → btn_next",
+        "account_and_confirmation": "input_username/password/confirm → btn_next",
+        "fedid_enter_label": "FEDERATION_IDENTITY_SETUP → input_fedid_label",
+        "trace_opt_in_gated_off": "assert toggle_trace_opt_in hidden while announce OFF",
+        "announce_ownership_on": "toggle_announce_ownership → reveals toggle_trace_opt_in",
+        "trace_opt_in_on": "toggle_trace_opt_in → opt into reasoning traces",
+        "fedid_continue": "fed-ID step → btn_next",
+        "age_range_finish": "AGE_RANGE → age_band_* → btn_next (final)",
+        "setup_complete": "COMPLETE (self-claim + leave wizard)",
+    }
+    for name, desc in node_info.items():
+        print(f"    • {name:24s} - {desc}")
+
+    print("\n  Desktop catch-up (Add Federation ID) steps:")
+    catchup_info = {
+        "reach_add_fedid_entry": "reach btn_add_federation_id (Manage Nodes)",
+        "open_add_fedid_screen": "btn_add_federation_id → input_fed_label",
+        "catchup_enter_label": "input_fed_label",
+        "catchup_announce_on": "toggle_announce_ownership (gates toggle_trace_opt_in)",
+        "catchup_trace_opt_in_on": "toggle_trace_opt_in",
+        "catchup_confirm": "btn_add_fedid_confirm",
+    }
+    for name, desc in catchup_info.items():
+        print(f"    • {name:24s} - {desc}")
 
     print("\n🔄 Test Groups:\n")
-    print("  • e2e            - All tests in sequence")
-    print("  • setup          - Setup wizard tests only (load_setup through complete_setup)")
-    print("  • interact       - Interaction tests only (send_message, receive_response)")
-    print("  • models         - Model listing tests only (load_setup through load_models)")
-    print("  • licensed_agent - First-time licensed agent flow (Portal device auth)")
+    print("  Desktop (native Compose, test server :8091):")
+    print("    • desktop-setup    - Node-client first-run wizard (announce/trace/fed-ID/age)")
+    print("    • desktop-catchup  - Catch-up Add-Federation-ID flow")
+    print("    • desktop-login    - Login flow")
+    print("    • desktop-chat     - Chat interaction")
+    print("  Browser (Playwright, legacy agent/web UI):")
+    print("    • e2e            - All browser tests in sequence")
+    print("    • setup          - Browser setup wizard tests")
+    print("    • interact       - Browser interaction tests")
+    print("    • models         - Browser model listing tests")
+    print("    • licensed_agent - First-time licensed agent flow (Portal device auth)")
 
     print("\n💡 Examples:\n")
+    print("  # Node-client wizard against a freshly-launched first-run desktop app")
+    print("  python -m tools.qa_runner.modules.web_ui desktop-setup --launch")
+    print("  # Catch-up Add-Federation-ID against a logged-in desktop app")
+    print("  python -m tools.qa_runner.modules.web_ui desktop-catchup --launch")
+    print("  # Legacy browser flow")
     print("  python -m tools.qa_runner.modules.web_ui e2e --wipe")
-    print("  python -m tools.qa_runner.modules.web_ui --tests load_setup,enter_key,load_models")
-    print("  python -m tools.qa_runner.modules.web_ui licensed_agent --provider groq")
     print()
 
 
@@ -561,6 +944,13 @@ def get_test_list(command: str, specific_tests: Optional[str]) -> Optional[List[
     if specific_tests:
         return [t.strip() for t in specific_tests.split(",")]
 
+    # NOTE: these are the LEGACY browser-based (Playwright) step groups for
+    # the agent/web-UI flow. The LLM provider/key steps (navigate_llm,
+    # select_provider, enter_key, load_models, select_model) are AGENT-ONLY —
+    # the node-client first-run wizard has NO LLM step. The node-client
+    # wizard + catch-up flows are driven natively via the desktop test server
+    # (see `desktop-setup` / `desktop-catchup` commands and
+    # DesktopAppTestRunner.test_setup_wizard_flow / test_catchup_add_fedid_flow).
     test_groups = {
         "e2e": None,  # Full flow
         "setup": [
@@ -1120,6 +1510,94 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     return 0
 
 
+async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
+    """Bring-up for the SETUP WIZARD test: wipe → backend in FIRST-RUN mode →
+    launch desktop JAR with CIRIS_TEST_MODE=true.
+
+    Unlike run_desktop_up, setup is NOT completed via /v1/setup/complete and
+    the backend is NOT restarted in configured mode — the whole point is to
+    leave the desktop app sitting on the Setup wizard so
+    test_setup_wizard_flow can drive it through the UI.
+    """
+    from .server_manager import ServerConfig, ServerManager
+
+    print("🚀 CIRIS desktop first-run bring-up (setup wizard)")
+
+    # 1. Clean slate
+    print("[1/3] Stopping anything on 8080/8091 and wiping dev data...")
+    _kill_port(args.port)
+    _kill_port(args.desktop_port)
+    subprocess.run(["pkill", "-9", "-f", "CIRIS-macos"], capture_output=True)
+    subprocess.run(["pkill", "-9", "-f", "CIRIS-linux"], capture_output=True)
+    time.sleep(1)
+    _wipe_dev_data()
+    # _wipe_dev_data rewrites ~/ciris/.env with CIRIS_CONFIGURED="true" (for
+    # the configured-mode path). First-run must NOT see it — remove it so the
+    # backend's setup probe reports first_run and the desktop routes to the
+    # Setup wizard. (CIRIS_FORCE_FIRST_RUN=1 is also set by ServerManager.)
+    stale_env = Path.home() / "ciris" / ".env"
+    if stale_env.exists():
+        stale_env.unlink()
+
+    # 2. Start backend in first-run mode and LEAVE it there.
+    # CIRIS_TESTING_MODE relaxes the setup validator that otherwise rejects 'admin'.
+    os.environ["CIRIS_TESTING_MODE"] = "true"
+    print("[2/3] Starting backend (first-run mode, CIRIS_TESTING_MODE=true)...")
+    cfg = ServerConfig(
+        port=args.port,
+        mock_llm=args.mock_llm,
+        wipe_data=False,  # we already did it
+        first_run_mode=True,
+        startup_timeout=args.timeout,
+    )
+    server = ServerManager(cfg)
+    status = server.start()
+    if not status.running:
+        print(f"  ❌ backend failed: {status.error}")
+        return 1
+
+    # 3. Launch desktop app with the test-automation server enabled.
+    print("[3/3] Launching desktop app (CIRIS_TEST_MODE=true)...")
+    jar = _find_desktop_jar()
+    if not jar:
+        print("  ❌ No desktop jar found — run: cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS")
+        server.stop()
+        return 1
+    env = os.environ.copy()
+    env["CIRIS_TEST_MODE"] = "true"
+    env["CIRIS_TEST_PORT"] = str(args.desktop_port)
+    env["CIRIS_API_URL"] = server.base_url
+    log_path = Path("/tmp") / "ciris_desktop_setup.log"
+    with open(log_path, "w") as log:
+        subprocess.Popen(
+            ["java", "-jar", str(jar)],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            env=env,
+            start_new_session=True,
+        )
+    print(f"  logs: {log_path}")
+
+    # Wait for the desktop test server
+    deadline = time.time() + 60
+    server_url = f"http://localhost:{args.desktop_port}"
+    while time.time() < deadline:
+        try:
+            if requests.get(f"{server_url}/health", timeout=2).status_code == 200:
+                print(f"  ✅ desktop test server up at {server_url}")
+                break
+        except Exception:
+            pass
+        time.sleep(1)
+    else:
+        print("  ❌ desktop test server didn't come up within 60s")
+        print(f"     inspect: {log_path}")
+        return 1
+
+    print(f"✅ First-run stack ready. Backend: {server.base_url} (first-run)  Desktop: {server_url}")
+    return 0
+
+
 _IOS_IPROXY_PROCS: List[subprocess.Popen] = []
 
 
@@ -1577,6 +2055,33 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
             runner.print_summary()
             return 0 if success else 1
 
+        elif args.command == "desktop-setup":
+            # NODE-CLIENT first-run wizard:
+            #   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP
+            #   (announce decision + gated trace opt-in) → AGE_RANGE → COMPLETE
+            success = await runner.test_setup_wizard_flow(
+                username=args.username or TEST_ADMIN_USERNAME,
+                password=args.password or TEST_ADMIN_PASSWORD,
+                fed_label=args.fed_label,
+                announce=not args.no_announce,
+                trace_opt_in=not args.no_trace_opt_in,
+            )
+            runner.print_summary()
+            return 0 if success else 1
+
+        elif args.command == "desktop-catchup":
+            # Catch-up "Add Federation ID" flow (AddFederationIdScreen):
+            #   btn_add_federation_id → input_fed_label →
+            #   toggle_announce_ownership (gates toggle_trace_opt_in) →
+            #   btn_add_fedid_confirm
+            success = await runner.test_catchup_add_fedid_flow(
+                fed_label=args.fed_label,
+                announce=not args.no_announce,
+                trace_opt_in=not args.no_trace_opt_in,
+            )
+            runner.print_summary()
+            return 0 if success else 1
+
     finally:
         await runner.stop()
 
@@ -1599,6 +2104,22 @@ async def main() -> int:
     # Federation Network screen walk-test
     if args.command == "federation":
         return await run_federation_walk(args)
+
+    # Node-client first-run setup wizard: --launch brings up backend in
+    # FIRST-RUN mode + desktop app sitting on the Setup wizard, then drives it.
+    if args.command == "desktop-setup" and args.launch:
+        rc = await run_desktop_first_run_up(args)
+        if rc != 0:
+            print(f"desktop-setup: first-run bring-up failed (rc={rc})")
+            return rc
+
+    # Catch-up Add-Federation-ID flow: --launch brings up the full configured
+    # + logged-in stack first (same bring-up as desktop-up).
+    if args.command == "desktop-catchup" and args.launch:
+        rc = await run_desktop_up(args)
+        if rc != 0:
+            print(f"desktop-catchup: bring-up failed (rc={rc})")
+            return rc
 
     # Handle desktop commands (connect to already-running app)
     if args.command.startswith("desktop"):

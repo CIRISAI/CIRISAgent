@@ -4300,13 +4300,22 @@ private fun CIRISTopBar(
 }
 
 /**
- * The default post-auth landing screen. This is the FULL agent client (the node
- * client + the agent's cards): the agent chat (Screen.Interact) is a first-class
- * surfaced nav card (AGENT_GROUP → NavSurface.Interact), so the app opens on the
- * agent's reasoning-stream chat. The node-management surface (NavSurface.Nodes →
- * Screen.ManageNodes) remains reachable from the Manage group.
+ * The default post-auth landing screen.
+ *
+ * - **Node client (CIRISBuild.HAS_AGENT == false):** the agent chat
+ *   (Screen.Interact) is not a surfaced nav card, so the app opens on the
+ *   node-management surface (the Nodes card, NavSurface.Nodes). The Interact
+ *   screen object remains defined and reachable; it is simply not the landing
+ *   destination and not in the sidebar.
+ * - **Agent build (HAS_AGENT == true):** the full agent client — the agent chat
+ *   (AGENT_GROUP → NavSurface.Interact) is a first-class surfaced card, so the
+ *   app opens on the reasoning-stream chat. Node management stays reachable from
+ *   the Manage group.
+ *
+ * Gated on the flag so the agent's adoption is a single HAS_AGENT flip.
  */
-private val HOME_SCREEN: Screen = Screen.Interact
+private val HOME_SCREEN: Screen =
+    if (CIRISBuild.HAS_AGENT) Screen.Interact else Screen.ManageNodes
 
 /**
  * Navigation screens
@@ -4352,14 +4361,13 @@ private sealed class Screen {
     // its SYSTEM_ADMIN (connect → identity-pin → claim). Flow-only (no sidebar).
     object ClaimNode : Screen()
 
+    // Node management (CRUD over saved NodeProfiles) — first-class Manage-group
+    // surface, promoted from the in-page node-switcher dropdown.
+    object ManageNodes : Screen()
     // Add Federation ID (catch-up): an existing logged-in owner whose node has NO
     // fed-ID (legacy WA claim) adds one via the session-authed upgrade path
     // (mint → /v1/self/upgrade-owner). Flow-only (reached from Manage Nodes).
     object AddFederationId : Screen()
-
-    // Node management (CRUD over saved NodeProfiles) — first-class Manage-group
-    // surface, promoted from the in-page node-switcher dropdown.
-    object ManageNodes : Screen()
     // Consent management (consent:replication peering + user-data consent).
     object ManageConsent : Screen()
     // Contacts / Identities — browse the local node's known federation peer store;

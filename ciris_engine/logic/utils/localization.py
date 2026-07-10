@@ -229,6 +229,11 @@ def get_string(
         result = _resolve_key(en_data, key)
         if result is not None:
             logger.info(f"[LOCALIZATION] Fallback to English for key '{key}' (requested lang={lang_code})")
+        elif default is not None:
+            # Caller supplied an explicit default → absence is expected and handled
+            # (e.g. optional prompts.prohibitions.* keys that fill in per-language
+            # as the localization pass lands). Don't spam WARNING on every call.
+            logger.debug(f"[LOCALIZATION] Key '{key}' not localized ({lang_code}/en); using caller default")
         else:
             logger.warning(f"[LOCALIZATION] Key '{key}' not found in {lang_code} or English")
 
@@ -375,11 +380,15 @@ def get_prohibition_guidance(lang_code: str) -> str:
     The category list + severity tier are read from ``PROHIBITED_CAPABILITIES``
     at call time (single source of truth — this can never drift from the WiseBus
     gate). Each category's short what/why is localized: ``prompts.prohibitions.
-    <CATEGORY>`` in ``{lang}.json`` when present, else the English base
-    ``CATEGORY_GUIDANCE``. The framing (header + tier labels) is likewise
-    localized with English fallback. A category present in the gate but missing
-    a description still surfaces (generic fallback), so new prohibitions can
-    never silently drop out of the reasoning context.
+    <CATEGORY>`` in ``{lang}.json`` when present. The English base prompt falls
+    back to ``CATEGORY_GUIDANCE`` (and English framing) for anything un-localized,
+    so on English no prohibition ever silently drops out of the reasoning context.
+    For every OTHER language an un-localized category/framing string is omitted,
+    not emitted in English — a localized DMA prompt must stay pure (the streaming
+    localization gate enforces this). Enforcement is unaffected either way: the
+    WiseBus gate blocks every prohibited capability regardless; this block is
+    reasoning-context priming that fills in per language as ``prompts.prohibitions.*``
+    is translated.
 
     Injected into PDMA/CSDMA/DSDMA only (NOT ASPDMA/recursive passes): a
     prohibited trajectory named in round-1 output flows forward into ASPDMA and
@@ -396,11 +405,24 @@ def get_prohibition_guidance(lang_code: str) -> str:
         get_prohibition_severity,
     )
 
+    # English fallback is used ONLY for the English base prompt. For any other
+    # language, an un-localized category/framing string is OMITTED rather than
+    # emitted in English — a localized DMA prompt must never be polluted with
+    # English (the streaming localization gate enforces this, and it is the
+    # house localization discipline). Enforcement is unaffected: the WiseBus
+    # gate blocks every prohibited capability regardless of this block, which is
+    # reasoning-context priming only. Each prohibition surfaces in a non-English
+    # prompt as soon as prompts.prohibitions.* is translated for that language
+    # (tracked for the localization pass).
+    is_english = lang_code == "en"
+
     never: list[str] = []
     module: list[str] = []
     for category in PROHIBITED_CAPABILITIES:
         desc = get_string(lang_code, f"prompts.prohibitions.{category}", default="").strip()
         if not desc:
+            if not is_english:
+                continue
             desc = CATEGORY_GUIDANCE.get(category, "Outside this agent's scope.")
         line = f"- {desc}"
         if get_prohibition_severity(category) == ProhibitionSeverity.NEVER_ALLOWED:
@@ -408,15 +430,27 @@ def get_prohibition_guidance(lang_code: str) -> str:
         else:
             module.append(line)
 
-    header = get_string(lang_code, "prompts.prohibitions._header", default="").strip() or PROHIBITION_HEADER_EN
-    tier_never = get_string(lang_code, "prompts.prohibitions._tier_never", default="").strip() or PROHIBITION_TIER_NEVER_EN
-    tier_module = get_string(lang_code, "prompts.prohibitions._tier_module", default="").strip() or PROHIBITION_TIER_MODULE_EN
+    # Nothing localized for this (non-English) language yet → no block at all.
+    if not never and not module:
+        return ""
 
-    blocks = [header]
+    def _framing(key: str, en_default: str) -> str:
+        localized = get_string(lang_code, key, default="").strip()
+        if localized:
+            return localized
+        return en_default if is_english else ""
+
+    header = _framing("prompts.prohibitions._header", PROHIBITION_HEADER_EN)
+    tier_never = _framing("prompts.prohibitions._tier_never", PROHIBITION_TIER_NEVER_EN)
+    tier_module = _framing("prompts.prohibitions._tier_module", PROHIBITION_TIER_MODULE_EN)
+
+    blocks: list[str] = []
+    if header:
+        blocks.append(header)
     if never:
-        blocks.append(tier_never + "\n" + "\n".join(never))
+        blocks.append((tier_never + "\n" if tier_never else "") + "\n".join(never))
     if module:
-        blocks.append(tier_module + "\n" + "\n".join(module))
+        blocks.append((tier_module + "\n" if tier_module else "") + "\n".join(module))
     return "\n\n".join(blocks)
 
 

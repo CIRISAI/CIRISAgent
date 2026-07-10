@@ -95,6 +95,17 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
 
     agent_mode_value = get_agent_mode_broker().current_mode().value
 
+    # Federation delivery (CIRISAgent#915). The embedded edge must carry an
+    # ACTIVE Reticulum transport for CEG traces to reach the canonical mesh;
+    # the wheel defaults enable_transport OFF. Turn it on when delivery is
+    # enabled (default), matching compose's transport node. On ciris-server
+    # >=0.5.92 (CIRISEdge#296 / CIRISPersist#402) init_edge_runtime then
+    # AUTO-SEEDS the canonical TCP dial from persist's baked
+    # canonical_bootstrap_hints() — zero caller glue, exactly like
+    # compose::serve — so the agent edge dials + roots ciris-canonical-1 at
+    # boot. Opt out with CIRIS_FEDERATION_DELIVERY=false.
+    _delivery_on = os.environ.get("CIRIS_FEDERATION_DELIVERY", "true").strip().lower() not in ("0", "false", "no", "off")
+
     try:
         edge = init_edge_runtime(
             engine,
@@ -102,6 +113,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             listen_addr=listen_addr,
             bootstrap_peers=bootstrap_peers,
             agent_mode=agent_mode_value,
+            enable_transport=_delivery_on,
         )
     except TypeError as e:
         # PyO3 cross-crate PyClass identity failure — Edge v0.9.1's bundled
@@ -185,6 +197,37 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         register_organic_announce_subscriber(seeder=None)
     except Exception as exc:
         logger.warning("Organic-announce subscriber registration failed (non-fatal): %s", exc)
+
+    # Federation delivery controller (CIRISServer#205 / CIRISAgent#915).
+    # With transport enabled above, ciris-server >=0.5.92 auto-seeds + roots the
+    # canonical dial at init (CIRISEdge#296); this ONE call then starts the
+    # ReplicationRuntime + reconcile loop + announce logger that actually ships
+    # the agent's sealed CEG traces to the rooted canonical peer. Without it the
+    # trace chain seals locally but nothing reaches the mesh. Default ON (consent
+    # still gates what ships at the seal); opt out with CIRIS_FEDERATION_DELIVERY=false.
+    if _delivery_on:
+        try:
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            start_fd = getattr(ciris_server, "start_federation_delivery", None)
+            if start_fd is None:
+                logger.info(
+                    "Federation delivery controller unavailable in this ciris_server build "
+                    "(need >=0.5.92); CEG traces seal locally but are not shipped to the canonical mesh."
+                )
+            else:
+                _n_targets = start_fd(cadence_seconds=15, announce_logger=True)
+                logger.info(
+                    "Federation delivery controller started (canonical CEG replication + announce rooting); "
+                    "admitted canonical targets=%s",
+                    _n_targets,
+                )
+        except Exception as exc:  # noqa: BLE001 — best-effort, never block boot
+            logger.warning(
+                "Federation delivery controller start failed (non-fatal): %s: %s",
+                type(exc).__name__,
+                str(exc)[:200],
+            )
 
 
 def _seed_bootstrap_peers_into_edge(seeder: Optional[Any], edge: Any) -> None:

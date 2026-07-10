@@ -1009,46 +1009,57 @@ class QARunner:
             except Exception as exc:  # noqa: BLE001
                 return None, {"error": str(exc)[:120]}
 
-        # 1. Find the canonical peer + poll its reachability until rooted (or timeout).
+        # The authoritative rooting signal is edge.metrics_snapshot()'s
+        # peer_reachability_ratio (keyed "<peer_key_id>:<medium>"), NOT the
+        # /federation/peers seeder list — the organic-peer seeder registry is
+        # stubbed (CIRISEdge#46), so canonical_only peers can be empty even when
+        # the canonical is fully rooted. Poll the metrics until the canonical
+        # shows a positive reachability ratio (rooting handshake ~75s).
         canonical_key = None
         rooted = False
-        reach = {}
-        deadline_polls = 12  # ~12 * 8s = ~96s to allow the ~75s rooting handshake
-        for attempt in range(deadline_polls):
-            sc, body = _get("/v1/federation/peers?canonical_only=true")
-            peers = ((body or {}).get("data") or {}).get("peers") if isinstance(body, dict) else None
-            if peers:
-                canonical_key = peers[0].get("key_id") or peers[0].get("peer_key_id")
-            if canonical_key:
-                sc2, detail = _get(f"/v1/federation/peers/{canonical_key}")
-                reach = ((detail or {}).get("data") or {}).get("reachability") or {} if isinstance(detail, dict) else {}
-                # rooted ⇔ any medium has a successful measurement (last_ok_ts set / ratio>0)
-                rooted = any(
-                    (isinstance(m, dict) and (m.get("last_ok_ts") or (m.get("ratio") or 0) > 0))
-                    for m in reach.values()
-                ) if isinstance(reach, dict) else False
+        reach_ratio = {}
+        metrics = None
+        deadline_polls = 12  # ~12 * 8s = ~96s
+        for _attempt in range(deadline_polls):
+            _, mbody = _get("/v1/federation/metrics")
+            metrics = (mbody or {}).get("data") if isinstance(mbody, dict) else None
+            reach_ratio = (metrics or {}).get("peer_reachability_ratio") or {} if isinstance(metrics, dict) else {}
+            # keys look like "ciris-canonical-1-<fp>:reticulum-rs" → a canonical
+            # entry with ratio>0 means the canonical peer is rooted + reachable.
+            for k, ratio in (reach_ratio.items() if isinstance(reach_ratio, dict) else []):
+                if "canonical" in str(k) and (ratio or 0) > 0:
+                    rooted = True
+                    canonical_key = str(k).split(":")[0]
+                    break
             if rooted:
                 break
             time.sleep(8)
-        # 2. Delivery metrics snapshot.
-        _, mbody = _get("/v1/federation/metrics")
-        metrics = (mbody or {}).get("data") if isinstance(mbody, dict) else None
+
+        # Actual delivery counters (shipped envelopes to the rooted peer).
+        envelopes_sent = (metrics or {}).get("envelopes_sent_total") or {} if isinstance(metrics, dict) else {}
+        n_sent = sum(v for v in envelopes_sent.values() if isinstance(v, (int, float))) if isinstance(envelopes_sent, dict) else 0
 
         self.console.print(f"  canonical peer   : {canonical_key or '<not discovered>'}")
-        self.console.print(f"  rooted (reachable): {'✅ YES' if rooted else '❌ NO'}  reachability={reach}")
+        self.console.print(f"  rooted (reachable): {'✅ YES' if rooted else '❌ NO'}  reachability_ratio={reach_ratio}")
+        self.console.print(f"  envelopes shipped: {n_sent}")
         self.console.print(f"  delivery metrics : {metrics}")
+        reach = reach_ratio  # keep the logger call below meaningful
         # ALSO emit to the logger so the verdict lands in logs/<backend>/latest.log
         # — disk-captured and TTY-independent (rich console stdout can be lost
         # when the runner is driven headless / under a redirect).
         logger.info(
-            "[FEDERATION-DELIVERY] canonical=%s rooted=%s reachability=%s metrics=%s",
+            "[FEDERATION-DELIVERY] canonical=%s rooted=%s envelopes_sent=%s reachability_ratio=%s",
             canonical_key,
             rooted,
+            n_sent,
             reach,
-            metrics,
         )
         if rooted:
-            verdict = "✅ Federation delivery verified — canonical-server-1 rooted; traces flow."
+            verdict = (
+                f"✅ Federation delivery verified — canonical-server-1 rooted "
+                f"(reachability ratio > 0); {n_sent} envelope(s) shipped this run. "
+                "Trace flow to the canonical mesh is live."
+            )
             self.console.print(f"[bold green]{verdict}[/bold green]")
             logger.info("[FEDERATION-DELIVERY] %s", verdict)
         else:

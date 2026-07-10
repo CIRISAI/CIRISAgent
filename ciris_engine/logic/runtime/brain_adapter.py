@@ -46,9 +46,15 @@ _SUBSTRATE_PREFIXES = (
     "/v1/system/health",
 )
 
-# Brain surface — the cognitive/agent routes the node does not have, proxied to
-# the sibling :8080. Kept as explicit top-level prefixes so the node's native
-# substrate routes always win on overlap (we never proxy a substrate prefix).
+# Brain surface — the cognitive/agent routes the node does NOT serve, proxied to
+# the sibling :8080. The py_adapter proxy is prefix-catch-all (`/v1/X/{*rest}`),
+# so a proxied prefix cannot coexist with ANY node-native route under it — the
+# router panics ("Insertion failed due to conflict"). So we proxy ONLY prefixes
+# with no node-native subroutes; the substrate surface the node serves natively
+# (federation/self/accord/auth/config/health + memory-READ + my-data/capacity +
+# system/health) is deliberately excluded. Overlapping brain halves (memory
+# WRITES, system LLM-status) reach :8080 directly for now — folding them under
+# 4243 needs per-method proxying (follow-up), not a prefix catch-all.
 _BRAIN_PREFIXES = (
     "/v1/agent",
     "/v1/interact",
@@ -60,14 +66,10 @@ _BRAIN_PREFIXES = (
     "/v1/transparency",
     "/v1/scheduler",
     "/v1/emergency",
-    "/v1/consent",
     "/v1/dsar",
     "/v1/partnership",
     "/v1/billing",
     "/v1/connectors",
-    "/v1/memory",      # writes + the agent's graph surface (node has memory-READ; overlap → node wins on GET)
-    "/v1/system",      # runtime-control / LLM status (system/health stays node-native above)
-    "/v1/my-data",
 )
 
 

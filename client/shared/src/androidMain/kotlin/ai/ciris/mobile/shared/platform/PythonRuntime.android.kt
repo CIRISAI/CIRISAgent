@@ -6,6 +6,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.net.HttpURLConnection
 import java.net.URL
 import org.json.JSONObject
@@ -190,11 +193,54 @@ actual class PythonRuntime : PythonRuntimeProtocol {
         @Volatile
         private var _outputLineCallback: ((String) -> Unit)? = null
 
+        // ── First-run ownership claim PIN / NodeCode, captured from the local
+        // node's console banner via the logcat stream. The PIN is CONSOLE-ONLY
+        // (never served over HTTP); the logcat reader in MainActivity is the
+        // Android equivalent of owning the launched process's stdout. Companion
+        // (JVM-static) so the capture survives activity recreation, like the
+        // rest of the logcat-derived state above.
+        private val _localClaimPin = MutableStateFlow<String?>(null)
+        private val _localNodeCode = MutableStateFlow<String?>(null)
+
+        /** One-time claim PIN: two dash-separated groups of 4 Crockford-base32
+         *  chars (alphabet 0-9 A-Z minus I, L, O, U), as rendered by the node. */
+        private val CLAIM_PIN_REGEX = Regex("[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}")
+
+        /** NodeCode handle the node prints: `CIRIS-V1-...` (dashes/alnum). */
+        private val NODE_CODE_REGEX = Regex("CIRIS-V1-[0-9A-Za-z\\-]+")
+
+        /**
+         * Parse one console line for the node's "OWNERSHIP UNCLAIMED" banner and,
+         * when found, latch the one-time CLAIM PIN and/or the NodeCode into the
+         * StateFlows the setup flow reads. Idempotent — first match wins.
+         */
+        private fun parseOwnershipBanner(line: String) {
+            if (_localClaimPin.value == null && line.contains("CLAIM PIN", ignoreCase = true)) {
+                val after = line.substringAfter(":", "").substringAfter("CLAIM PIN", "")
+                val pin = CLAIM_PIN_REGEX.find(after.ifBlank { line })?.value
+                if (pin != null) {
+                    Log.i(TAG, "Captured one-time CLAIM PIN from node banner (console-only).")
+                    _localClaimPin.value = pin
+                }
+            }
+            if (_localNodeCode.value == null && line.contains("NodeCode", ignoreCase = true)) {
+                val code = NODE_CODE_REGEX.find(line)?.value
+                if (code != null) {
+                    Log.i(TAG, "Captured NodeCode from node banner: ${code.take(24)}…")
+                    _localNodeCode.value = code
+                }
+            }
+        }
+
         /**
          * Forward a line from logcat to the output callback.
          * Called from MainActivity's logcat reader.
          */
         fun forwardLogLine(line: String) {
+            // Capture the first-run ownership claim PIN / NodeCode from the
+            // node's "OWNERSHIP UNCLAIMED" banner so the setup flow can
+            // self-claim this local node on COMPLETE.
+            parseOwnershipBanner(line)
             _outputLineCallback?.invoke(line)
         }
 
@@ -205,6 +251,12 @@ actual class PythonRuntime : PythonRuntimeProtocol {
             _outputLineCallback = callback
         }
     }
+
+    // Ownership claim PIN / NodeCode, latched by the companion's logcat-line
+    // parser (parseOwnershipBanner). Instance overrides expose the shared
+    // (JVM-static) flows through the PythonRuntimeProtocol surface.
+    override val localClaimPin: StateFlow<String?> get() = _localClaimPin.asStateFlow()
+    override val localNodeCode: StateFlow<String?> get() = _localNodeCode.asStateFlow()
 
     private var pythonInitialized = false
     private var serverStarted = false

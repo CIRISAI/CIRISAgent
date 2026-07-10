@@ -1,5 +1,8 @@
 package ai.ciris.mobile.shared.platform
 
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+
 /**
  * Protocol/interface for Python runtime operations.
  * Allows dependency injection and testability without subclassing expect classes.
@@ -98,5 +101,33 @@ interface PythonRuntimeProtocol {
      */
     fun setOutputLineCallback(callback: ((String) -> Unit)?) {
         // Default no-op — platforms override as needed
+    }
+
+    /**
+     * The one-time CLAIM PIN the LOCAL node prints to its console on a fresh,
+     * unclaimed boot (the "OWNERSHIP UNCLAIMED" banner), captured from the node's
+     * stdout. `null` until a banner is seen (or on platforms that do not launch a
+     * local node). The first-run setup flow reads this to self-claim ownership of
+     * the local node on COMPLETE.
+     *
+     * Console-only by design — the PIN is NEVER served over HTTP, so capturing it
+     * from the process the app itself launched is the only client-side path.
+     *
+     * Default: a constant empty flow (platforms that drive a local node override).
+     */
+    val localClaimPin: StateFlow<String?>
+        get() = EMPTY_CLAIM_PIN
+
+    /**
+     * THIS node's own NodeCode, if the node printed it alongside the unclaimed
+     * banner. May be `null` even when [localClaimPin] is set — in that case the
+     * NodeCode is fetched at claim time via `GET /v1/federation/node-code`.
+     */
+    val localNodeCode: StateFlow<String?>
+        get() = EMPTY_NODE_CODE
+
+    companion object {
+        private val EMPTY_CLAIM_PIN: StateFlow<String?> = MutableStateFlow(null)
+        private val EMPTY_NODE_CODE: StateFlow<String?> = MutableStateFlow(null)
     }
 }

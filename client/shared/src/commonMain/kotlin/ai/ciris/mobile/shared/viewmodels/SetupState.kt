@@ -65,9 +65,35 @@ enum class SetupStep {
     OPTIONAL_FEATURES,
 
     /**
-     * Step 4: Account creation (for non-Google users) and confirmation.
+     * Account creation (for non-Google users) and confirmation.
+     *
+     * NODE-CLIENT first-run: this is now step 2 (account-first) — the robust,
+     * existing local-account creation step runs BEFORE the federation ID so the
+     * fed-ID and node ownership are associated to the just-created user. Declared
+     * here (ahead of FEDERATION_IDENTITY_SETUP / AGE_RANGE) so the ordinal order
+     * used by the step indicator matches the visual flow.
      */
     ACCOUNT_AND_CONFIRMATION,
+
+    /**
+     * Step (after ACCOUNT_AND_CONFIRMATION): Federation identity setup.
+     * Roots a federation identity in a hardware key (WebAuthn/FIDO2/Secure
+     * Enclave) and performs the CEG self-at-login ceremony via
+     * POST /v1/self/login. Optional — can be skipped on platforms without a
+     * usable hardware authenticator.
+     */
+    FEDERATION_IDENTITY_SETUP,
+
+    /**
+     * Step (after FEDERATION_IDENTITY_SETUP): **state your age range** — the
+     * foundational protective gate. Now that you have a federation ID, you
+     * self-declare an age band (`minor` / `adult`) which the local node records
+     * as a subject-signed `age_assurance` (self level). This sets protective
+     * defaults FIRST, ahead of any content: minors are gated out of adult
+     * content. Drives `POST /v1/safety/age-assurance` against the local node.
+     * Misdeclaration NEVER slashes — the subject controls their own band.
+     */
+    AGE_RANGE,
 
     /**
      * Step 4b (Node flow only): Optional CIRISVerify download and configuration.
@@ -251,6 +277,165 @@ data class VerifySetupState(
 )
 
 /**
+ * State for the FEDERATION_IDENTITY_SETUP step.
+ *
+ * Tracks the hardware-key ceremony: whether the platform can mint a
+ * hardware-rooted identity, progress, the resulting identity key id, and any
+ * error. The actual key material + attestation blob are NOT held here (they are
+ * transient and sent straight to /v1/self/login).
+ */
+@Serializable
+data class FederationIdentitySetupState(
+    /** Whether the platform reports a usable hardware authenticator. */
+    val hardwareAvailable: Boolean = false,
+    /** Probe completed (so the UI knows availability is meaningful). */
+    val probed: Boolean = false,
+    val inProgress: Boolean = false,
+    /** Set once self-login admitted the identity. */
+    val admitted: Boolean = false,
+    /** Identity key id after a successful ceremony. */
+    val identityKeyId: String? = null,
+    val error: String? = null,
+    // ── Mint inputs (driven into the local node's POST /v1/self/identity) ──
+    /** REQUIRED unique identity name → the local node's `label-fingerprint`
+     *  key_id. Must be non-blank and not a generic default (see [isLabelValid]);
+     *  this is the single canonical name the user's federation identity is keyed
+     *  by, so an empty/generic value would collide identities across devices. */
+    val label: String = "",
+    /** Custody backend hint. ALWAYS `null` now — the only option is the SECURE
+     *  one: the substrate auto-picks the most secure custody available
+     *  (YubiKey → TPM/Secure-Enclave → software). The UI exposes no selection. */
+    val backend: String? = null,
+    // ── Associate-existing-Fed-ID path (adopt prior crypto — same user) ──
+    /** The user chose "associate existing Fed ID" instead of minting a new one. */
+    val associateExisting: Boolean = false,
+    /** The existing federation key_id (or fedcode) to associate. */
+    val associateKeyId: String = "",
+    // ── Mint result (the public surface returned by the local node) ──
+    /** True once the local node minted a USER identity (vs only reporting one). */
+    val minted: Boolean = false,
+    /** The shareable `CIRIS-V2-…` fedcode the local node returned. */
+    val fedcode: String? = null,
+    /** The honest hardware-tier label ("YubiKey" / "TPM / Secure Enclave" /
+     *  "software") the local node reported. */
+    val hardwareLabel: String? = null,
+) {
+    /**
+     * Is the entered [label] a usable, UNIQUE federation-identity name?
+     *
+     * The label is now REQUIRED (it names + keys the user's federation identity,
+     * via the local node's `derive_key_id(label, pubkey)`). We reject:
+     *  - blank / whitespace-only input (a name is mandatory), and
+     *  - the generic node defaults `ciris-client` / `ciris-client-user`, which
+     *    caused TWO machines to mint DIFFERENT identities under the SAME alias —
+     *    the collision this gate exists to prevent. The user must choose a
+     *    meaningful, unique name (e.g. `firstname-lastname-v1`).
+     */
+    fun isLabelValid(): Boolean {
+        val trimmed = label.trim()
+        if (trimmed.isEmpty()) return false
+        return trimmed.lowercase() !in REJECTED_GENERIC_LABELS
+    }
+
+    companion object {
+        /**
+         * Generic default labels that MUST NOT name a federation identity. These
+         * are the node-launch `--key-id` (`ciris-client`) and the identity it
+         * would derive by default (`ciris-client-user`); reusing them across
+         * devices collides distinct identities under one alias. Matched
+         * case-insensitively against the trimmed label.
+         */
+        val REJECTED_GENERIC_LABELS = setOf("ciris-client", "ciris-client-user")
+    }
+}
+
+/**
+ * State for the AGE_RANGE onboarding step (the foundational protective gate).
+ *
+ * The app holds NO keys: the selected band is sent to THIS device's local node
+ * (`POST /v1/safety/age-assurance`, self level) which signs + records it. This
+ * state only tracks the user's selection + the in-flight/result of that drive.
+ * `null` [selectedBand] = not yet chosen.
+ */
+@Serializable
+data class AgeRangeSetupState(
+    /** The user's chosen band as the server token (`minor` / `adult`), or null
+     *  if not yet selected. Kept as the raw token to avoid leaking the safety
+     *  enum into the serializable setup state. */
+    val selectedBandToken: String? = null,
+    val inProgress: Boolean = false,
+    /** Set once the local node recorded the self-declared assurance. */
+    val recorded: Boolean = false,
+    /** The `age_self_declared:{band}:v1` dimension the node returned. */
+    val dimension: String? = null,
+    val error: String? = null,
+)
+
+/**
+ * State for the UNDER-18 STEWARDSHIP request (CIRIS Constitution 0.5.1 §2580 —
+ * the minor-stewardship rule).
+ *
+ * When the founder self-declares the `minor` age band they MUST NOT self-claim
+ * ownership; instead the wizard produces a **stewardship request** the minor
+ * hands to an over-18 adult. The adult's signature on a live
+ * `delegates_to(adult-user → minor-user)` (CC 2.4.1) IS the agreement to be the
+ * accountable responsible party (CC 0.5.1 §2580). Until a live adult steward
+ * accepts, the minor's account is **fail-secure**: it cannot operate. If the
+ * steward is ever withdrawn/superseded-without-replacement the account pauses
+ * until re-stewarded — identical posture to a steward-less node/agent.
+ *
+ * The app holds NO keys. This state only tracks the hand-off artifact (a claim
+ * URL + PIN, mirroring the delegation-offer shape) and the in-flight/result of
+ * generating it. The adult ACCEPTS out-of-band on their own device/session.
+ */
+@Serializable
+data class MinorStewardshipState(
+    val inProgress: Boolean = false,
+    /** True once a hand-off stewardship request artifact has been generated. */
+    val requested: Boolean = false,
+    /** The claim URL the minor hands to their adult steward (the adult opens it
+     *  on their own device to ACCEPT and sign `delegates_to(adult → minor)`). */
+    val requestUrl: String? = null,
+    /** The short human-handover PIN the adult enters to accept stewardship. */
+    val requestPin: String? = null,
+    /** Seconds until the request PIN expires. */
+    val expiresIn: Long = 0,
+    /** True once a live adult steward has accepted (account unlocked). Stays
+     *  false through the wizard — acceptance happens out-of-band — so the
+     *  account remains fail-secure until the steward signs. */
+    val stewardAccepted: Boolean = false,
+    val error: String? = null,
+)
+
+/**
+ * State for the LOCAL-node ownership self-claim performed on setup COMPLETE.
+ *
+ * After the local account + federation ID exist, the setup flow drives the LOCAL
+ * node to claim ownership so the just-created user becomes the node's ROOT/owner.
+ * The app holds NO keys: the local node builds + signs the owner-binding in its
+ * substrate (`POST /v1/setup/claim-remote` self-targeted → its own
+ * `/v1/setup/root`). This state only tracks the in-flight/result for the UI.
+ */
+@Serializable
+data class NodeOwnershipClaimState(
+    val inProgress: Boolean = false,
+    /** True once the local node bound this user as ROOT/owner. */
+    val claimed: Boolean = false,
+    /** The bridged role on success (`SYSTEM_ADMIN`). */
+    val role: String? = null,
+    /** The claimed `wa_id` on success. */
+    val waId: String? = null,
+    /** Human-readable failure reason (e.g. "claim PIN not captured"). */
+    val error: String? = null,
+    /**
+     * Non-fatal soft notice from the optional federation-announce opt-in. The
+     * claim itself already succeeded; the announce can be retried later, so a
+     * failure here is surfaced (not fatal). Null when not attempted / succeeded.
+     */
+    val announceNotice: String? = null,
+)
+
+/**
  * Form state for the setup wizard.
  *
  * Source: SetupViewModel.kt:15-167
@@ -274,6 +459,20 @@ data class SetupFormState(
 
     // CIRISVerify setup state (node flow only)
     val verifySetup: VerifySetupState = VerifySetupState(),
+
+    // Federation identity setup state (FEDERATION_IDENTITY_SETUP step)
+    val federationIdentity: FederationIdentitySetupState = FederationIdentitySetupState(),
+
+    // Age-range step state (AGE_RANGE step — the foundational protective gate)
+    val ageRange: AgeRangeSetupState = AgeRangeSetupState(),
+
+    // Under-18 stewardship request state (CC 0.5.1 §2580). Populated only when
+    // the founder self-declares the `minor` band; the minor cannot self-claim
+    // ownership and must hand an adult a stewardship request to be accepted.
+    val minorStewardship: MinorStewardshipState = MinorStewardshipState(),
+
+    // LOCAL-node ownership self-claim state (driven on setup COMPLETE)
+    val ownershipClaim: NodeOwnershipClaimState = NodeOwnershipClaimState(),
 
     // Google/Apple OAuth state
     val isGoogleAuth: Boolean = false,
@@ -302,8 +501,12 @@ data class SetupFormState(
     @kotlinx.serialization.Transient
     val selectedLocation: LocationSearchResult? = null,
 
-    // LLM mode selection (CIRIS_PROXY or BYOK)
-    val setupMode: SetupMode? = null,
+    // Setup mode. Defaults to LOCAL_ON_DEVICE: this is the AI-free CIRIS NODE
+    // client (agent optional), so there is no LLM/proxy choice — the node always
+    // runs locally. This makes needsLocalAccountStep()=true + showLocalUserFields()
+    // =true, so first-run ALWAYS asks for a local login/account to associate the
+    // fed-ID + node ownership to (the agent inherits this; it only adds the brain).
+    val setupMode: SetupMode? = SetupMode.LOCAL_ON_DEVICE,
 
     // LLM configuration (for BYOK mode)
     val llmProvider: String = "OpenAI",      // "OpenAI", "Anthropic", "LocalAI", "Azure OpenAI"
@@ -315,6 +518,41 @@ data class SetupFormState(
     val username: String = "",
     val email: String = "",
     val userPassword: String = "",
+    val userPasswordConfirm: String = "",
+
+    /**
+     * OPTIONAL friendly per-device name (e.g. "Mac mini") — distinct from the
+     * federation-identity label (which names the human's fed-ID). Empty is
+     * allowed. There is no server field for this on the wizard's mint/claim
+     * requests today, so it is persisted as a CLIENT-SIDE preference and used to
+     * label "this device" in the UI. See [SetupViewModel.setDeviceName].
+     */
+    val deviceName: String = "",
+
+    /**
+     * Opt IN to an EXTERNAL hardware token (YubiKey / PKCS#11) as the custody
+     * root for the federation identity. Defaults OFF: the mint then requests the
+     * platform ladder — TPM/Secure-Enclave when available, software (keychain /
+     * sealed-at-rest) as the last resort — which works on every device without a
+     * token. Turning this ON routes the mint to pkcs11; if no token is present the
+     * node falls back DOWN the same ladder rather than failing (server-side).
+     *
+     * Was defaulted ON + hard-mapped to pkcs11, which 500'd on any machine without
+     * a YubiKey (libykcs11 missing) — see CIRISServer 0.5.61. The full priority is:
+     * YubiKey (if available AND selected) → TPM/SE (if available) → software.
+     */
+    val secureWith2FA: Boolean = false,
+
+    /**
+     * Opt IN to ANNOUNCING this owner to the federation. Defaults OFF
+     * (privacy-first): ownership is self-scoped — full personal/self-family use,
+     * the owner's nodes sync across their own devices, invisible to the
+     * federation. Turning this ON promotes the owner-binding self→FEDERATION and
+     * enables the node's identity announce (POST /v1/federation/announce) so the
+     * community can find and federate with this node. Takes effect on next boot;
+     * applied best-effort post-claim (see [SetupViewModel.claimLocalNodeOwnership]).
+     */
+    val announceOwnership: Boolean = false,
 
     // Accord Metrics opt-in (for AI alignment research)
     // Data shared: reasoning scores, decision patterns, LLM provider/API base URL
@@ -379,6 +617,18 @@ data class SetupFormState(
     }
 
     /**
+     * Did the founder self-declare the `minor` (under-18) age band?
+     *
+     * When true the minor-stewardship rule (CC 0.5.1 §2580) applies: the minor
+     * MUST NOT self-claim ownership and must instead hand an over-18 adult a
+     * stewardship request. Drives the AGE_RANGE step's under-18 branch and the
+     * fail-secure skip of the local-node self-claim on COMPLETE.
+     */
+    fun isMinorBand(): Boolean {
+        return ageRange.selectedBandToken == "minor"
+    }
+
+    /**
      * Check if local user account fields should be shown.
      * Source: SetupViewModel.kt:133-135
      */
@@ -421,10 +671,23 @@ data class SetupFormState(
                         providerLower.startsWith("local inference")
                     isKeyless || llmApiKey.isNotEmpty()
                 } else if (setupMode == SetupMode.LOCAL_ON_DEVICE) {
-                    // On-device inference — the capability probe already gated
-                    // the UI option, and the Python adapter probes at runtime.
-                    // No API key required.
-                    true
+                    // LOCAL_ON_DEVICE is ALSO the node-client *default* mode (the
+                    // node client never renders this step, so the default was
+                    // harmless there). On the agent build the step is a real
+                    // choice: proceed key-free only when the on-device provider
+                    // (or a keyless local server) was actually selected — any
+                    // other provider here is effectively BYOK and follows the
+                    // keyless-or-key rule. Prevents the untouched default
+                    // (provider "OpenAI", no key) from shipping a broken agent
+                    // LLM config ("Agent processor not initialized").
+                    val providerLower = llmProvider.lowercase()
+                    val isOnDevice = providerLower == "mobile_local" ||
+                        providerLower.startsWith("mobile local")
+                    val isKeyless = providerLower == "localai" ||
+                        providerLower == "local" ||
+                        providerLower == "local_inference" ||
+                        providerLower.startsWith("local inference")
+                    isOnDevice || isKeyless || llmApiKey.isNotEmpty()
                 } else {
                     false // No mode selected
                 }
@@ -435,13 +698,38 @@ data class SetupFormState(
                 true
             }
 
+            SetupStep.FEDERATION_IDENTITY_SETUP -> {
+                // The federation identity is the ONE canonical "you" established at
+                // wizard time, so a meaningful, UNIQUE name is now REQUIRED before
+                // proceeding (an empty name made the node fall back to the generic
+                // `ciris-client-user`, colliding two machines under one alias).
+                // An already-minted/associated identity (which carries its own
+                // label/key) may proceed regardless.
+                federationIdentity.minted ||
+                    federationIdentity.admitted ||
+                    federationIdentity.isLabelValid()
+            }
+
+            SetupStep.AGE_RANGE -> {
+                // The foundational protective gate. ADULTS proceed freely —
+                // declining to state resolves to the PROTECTIVE default and a
+                // band can be (re)stated later from the Safety surface; a failed
+                // record (node offline) must never trap the user.
+                //
+                // MINORS are fail-secure (CC 0.5.1 §2580): an under-18 user MUST
+                // NOT self-claim ownership, so finishing requires that a
+                // stewardship request has been generated to hand to an adult.
+                if (isMinorBand()) minorStewardship.requested else true
+            }
+
             SetupStep.ACCOUNT_AND_CONFIRMATION -> {
                 if (isGoogleAuth) {
                     // Google user - no account creation needed
                     true
                 } else {
-                    // Local user - validate username/password
-                    username.isNotEmpty() && userPassword.length >= 8
+                    // Local user - validate username/password (+ confirmation match)
+                    username.isNotEmpty() && userPassword.length >= 8 &&
+                        userPassword == userPasswordConfirm
                 }
             }
 
@@ -539,6 +827,8 @@ data class SetupFormState(
                 val providerLower = llmProvider.lowercase()
                 val isKeylessProvider = providerLower == "localai" ||
                     providerLower == "local" ||
+                    providerLower == "local_inference" ||
+                    providerLower.startsWith("local inference") ||
                     providerLower == "mobile_local" ||
                     providerLower.startsWith("mobile local")
                 when {
@@ -546,6 +836,11 @@ data class SetupFormState(
                     setupMode == SetupMode.CIRIS_PROXY && googleIdToken == null ->
                         LocalizationHelper.getString("setup_validation_google_required")
                     setupMode == SetupMode.BYOK && !isKeylessProvider && llmApiKey.isEmpty() ->
+                        LocalizationHelper.getString("setup_validation_api_key_required")
+                    // LOCAL_ON_DEVICE is the node-client default mode; on the agent
+                    // build a non-local provider without a key is an incomplete BYOK
+                    // config (mirrors canProceedFromCurrentStep).
+                    setupMode == SetupMode.LOCAL_ON_DEVICE && !isKeylessProvider && llmApiKey.isEmpty() ->
                         LocalizationHelper.getString("setup_validation_api_key_required")
                     else -> null
                 }
@@ -556,12 +851,40 @@ data class SetupFormState(
                 null
             }
 
+            SetupStep.FEDERATION_IDENTITY_SETUP -> {
+                // A unique, meaningful identity name is required (unless an
+                // identity was already minted/associated this session).
+                if (federationIdentity.minted || federationIdentity.admitted) {
+                    null
+                } else {
+                    val trimmed = federationIdentity.label.trim()
+                    when {
+                        trimmed.isEmpty() ->
+                            LocalizationHelper.getString("setup_validation_fedid_label_required")
+                        trimmed.lowercase() in FederationIdentitySetupState.REJECTED_GENERIC_LABELS ->
+                            LocalizationHelper.getString("setup_validation_fedid_label_generic")
+                        else -> null
+                    }
+                }
+            }
+
+            SetupStep.AGE_RANGE -> {
+                // Adults: never blocked. Minors: must generate a stewardship
+                // request (fail-secure, CC 0.5.1 §2580) before finishing.
+                if (isMinorBand() && !minorStewardship.requested) {
+                    LocalizationHelper.getString("setup_validation_minor_steward_required")
+                } else {
+                    null
+                }
+            }
+
             SetupStep.ACCOUNT_AND_CONFIRMATION -> {
                 if (!isGoogleAuth) {
                     when {
                         username.isEmpty() -> LocalizationHelper.getString("setup_validation_username_required")
                         userPassword.isEmpty() -> LocalizationHelper.getString("setup_validation_password_required")
                         userPassword.length < 8 -> LocalizationHelper.getString("setup_validation_password_length")
+                        userPassword != userPasswordConfirm -> LocalizationHelper.getString("setup_validation_password_mismatch")
                         else -> null
                     }
                 } else {

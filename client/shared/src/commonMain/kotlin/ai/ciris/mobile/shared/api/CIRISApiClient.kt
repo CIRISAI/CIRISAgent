@@ -1,6 +1,22 @@
 package ai.ciris.mobile.shared.api
 
 import ai.ciris.mobile.shared.models.*
+import ai.ciris.mobile.shared.models.safety.AgeBand
+import ai.ciris.mobile.shared.models.safety.AgeStatusResponse
+import ai.ciris.mobile.shared.models.safety.AssuranceLevel
+import ai.ciris.mobile.shared.models.safety.ModerationDuty
+import ai.ciris.mobile.shared.models.safety.ModerationPayload
+import ai.ciris.mobile.shared.models.safety.ModerationRequest
+import ai.ciris.mobile.shared.models.safety.ModerationResponse
+import ai.ciris.mobile.shared.models.safety.NamedModeratorResponse
+import ai.ciris.mobile.shared.models.safety.SafetyStatusResponse
+import ai.ciris.mobile.shared.models.safety.SetAgeRequest
+import ai.ciris.mobile.shared.models.safety.SetAgeResponse
+import ai.ciris.mobile.shared.models.safety.WatchlistClass
+import ai.ciris.mobile.shared.models.safety.WatchlistListResponse
+import ai.ciris.mobile.shared.models.safety.WatchlistMode
+import ai.ciris.mobile.shared.models.safety.WatchlistRequest
+import ai.ciris.mobile.shared.models.safety.WatchlistResponse
 import ai.ciris.mobile.shared.models.federation.EdgePeerReachability
 import ai.ciris.mobile.shared.models.federation.EdgeReachabilityEntry
 import ai.ciris.mobile.shared.models.federation.FederationContentRequest
@@ -8,6 +24,9 @@ import ai.ciris.mobile.shared.models.federation.FederationContentResponse
 import ai.ciris.mobile.shared.models.federation.FederationIdentity
 import ai.ciris.mobile.shared.models.federation.FederationIdentityResponse
 import ai.ciris.mobile.shared.models.federation.FederationMetricsResponse
+import ai.ciris.mobile.shared.models.federation.MintIdentityRequest
+import ai.ciris.mobile.shared.models.federation.MintedIdentity
+import ai.ciris.mobile.shared.models.federation.OwnedNodesDto
 import ai.ciris.mobile.shared.models.federation.FederationPeerAppearanceUpdateRequest
 import ai.ciris.mobile.shared.models.federation.FederationPeerDetailResponse
 import ai.ciris.mobile.shared.models.federation.FederationPeerListResponse
@@ -19,6 +38,13 @@ import ai.ciris.mobile.shared.models.federation.NodeCodeAddResponse
 import ai.ciris.mobile.shared.models.federation.NodeCodeShareResponse
 import ai.ciris.mobile.shared.models.federation.PeerAppearance
 import ai.ciris.mobile.shared.models.federation.PeerTrustState
+import ai.ciris.mobile.shared.models.federation.PeeringRequest
+import ai.ciris.mobile.shared.models.federation.PeeringResponse
+import ai.ciris.mobile.shared.models.federation.SelfLoginRequest
+import ai.ciris.mobile.shared.models.federation.SelfLoginResponse
+import ai.ciris.mobile.shared.models.federation.ClaimRemoteRequest
+import ai.ciris.mobile.shared.models.federation.ClaimRemoteResponse
+import ai.ciris.mobile.shared.models.federation.SignedKeyRecord
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
 import ai.ciris.mobile.shared.viewmodels.CheckDetail
@@ -57,6 +83,7 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -82,6 +109,21 @@ data class AdapterLoadResult(
     val success: Boolean,
     val adapterId: String?,
     val message: String?
+)
+
+/**
+ * Result of a CC 4.5.13 reverse-quorum moderation PROPOSAL (the
+ * open-labeling / report→`scores` path — anyone MAY propose).
+ *
+ * Both fields are best-effort: the server route is not yet implemented
+ * (see [CIRISApiClient.proposeModeration]) so [contributionId] /
+ * [windowClosesAt] may be null even on a 2xx. The 48-hour window is the
+ * constitutional default — the UI states it regardless of whether the
+ * server echoes a concrete close time.
+ */
+data class ModerationProposalResult(
+    val contributionId: String? = null,
+    val windowClosesAt: String? = null,
 )
 
 /**
@@ -165,7 +207,8 @@ private fun ConfigValue.toDisplayString(): String {
  * All methods include comprehensive error logging for debugging.
  */
 class CIRISApiClient(
-    baseUrl: String = "http://127.0.0.1:8080",
+    // Default to the local ciris-server node read API (node base :4242 → API :4243).
+    baseUrl: String = "http://127.0.0.1:4243",
     private var accessToken: String? = null
 ) : CIRISApiClientProtocol {
 
@@ -176,6 +219,32 @@ class CIRISApiClient(
      */
     var baseUrl: String = baseUrl
         private set
+
+    // ─── The node-vs-agent gate (see CIRISApiClientProtocol.setClientMode) ────
+    // Held here so EVERY poller that shares this client benefits from one gate.
+    // null = not probed yet (treated as agent — existing behavior unchanged).
+    private var clientMode: ai.ciris.mobile.shared.models.ClientMode? = null
+
+    override fun setClientMode(mode: ai.ciris.mobile.shared.models.ClientMode) {
+        clientMode = mode
+        logInfo("setClientMode", "API client gate set to $mode")
+    }
+
+    override fun isNodeMode(): Boolean = clientMode?.isNode == true
+
+    /**
+     * Short-circuit guard for AGENT-only cognitive endpoints. Returns true (and
+     * logs a single quiet debug line) when the client is running against a bare
+     * NODE that does not serve [method]'s endpoint — the caller then returns an
+     * empty/default value instead of issuing the HTTP call that would 404/405.
+     */
+    private fun nodeSkip(method: String): Boolean {
+        if (clientMode?.isNode == true) {
+            logDebug(method, "[GATE] NODE mode — skipping agent-only endpoint")
+            return true
+        }
+        return false
+    }
 
     /**
      * Update the base URL for API calls.
@@ -286,6 +355,15 @@ class CIRISApiClient(
 
     companion object {
         private const val TAG = "CIRISApiClient"
+
+        /**
+         * Base URL of THIS device's **local node** — the ciris-server the app
+         * runs in-process (ServerManager.serverUrl). All federation crypto
+         * (JCS canonicalization + hybrid signing) happens INSIDE that node's
+         * substrate; the app only drives it over plain localhost HTTP. The app
+         * holds NO federation keys and signs NO federation artifacts in Kotlin.
+         */
+        const val LOCAL_NODE_URL = "http://127.0.0.1:4243"
 
         // Mask token for logging (show first 8 and last 4 chars)
         private fun maskToken(token: String?): String {
@@ -556,6 +634,8 @@ class CIRISApiClient(
 
     override suspend fun getMessages(limit: Int): List<ChatMessage> {
         val method = "getMessages"
+        // AGENT-only: GET /v1/agent/history is 404 on a bare node (no brain).
+        if (nodeSkip(method)) return emptyList()
         val authHeaderValue = authHeader()
         logDebug(method, "Fetching messages: limit=$limit, hasAuthHeader=${authHeaderValue != null}, " +
                 "tokenPresent=${accessToken != null}, tokenPreview=${maskToken(accessToken)}")
@@ -745,15 +825,26 @@ class CIRISApiClient(
      * pattern used by [getAgentMode] / [getSystemStatus] — created per-call
      * so a stuck request never poisons unrelated traffic.
      */
-    private fun federationHttpClient(): io.ktor.client.HttpClient =
+    // Default timeout suits quick federation GETs. Touch-gated ceremony calls
+    // (provision-holder / family cosign) pass a LONG timeout: slot 9c with touch
+    // policy ALWAYS needs a physical touch per Ed25519 sign, and provisioning does
+    // three (USB ML-DSA wrap-challenge, holder record, custody attestation) — each
+    // a session-open + PIN + human-touch-wait + sign round-trip. 30s is far too
+    // short for three human touches; the request (and idle socket) must wait.
+    private fun federationHttpClient(
+        requestTimeoutMillis: Long = 30_000,
+    ): io.ktor.client.HttpClient =
         io.ktor.client.HttpClient {
             install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
             install(io.ktor.client.plugins.HttpTimeout) {
-                requestTimeoutMillis = 30_000
+                this.requestTimeoutMillis = requestTimeoutMillis
                 connectTimeoutMillis = 10_000
-                socketTimeoutMillis = 30_000
+                socketTimeoutMillis = requestTimeoutMillis
             }
         }
+
+    /** Timeout for touch-gated YubiKey ceremony calls (3 touches × human latency). */
+    private val ceremonyTimeoutMillis: Long = 180_000
 
     /**
      * Decode the ``{"data": <T>}`` envelope used by every federation
@@ -1056,6 +1147,78 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Propose a moderation action on a piece of content — the CC 4.5.13
+     * **reverse-quorum open-labeling path**. ANYONE (any adult member)
+     * MAY propose; this is deliberately NOT the authoritative duty-holder
+     * action (that is the gated ``POST /v1/safety/moderation``). It files
+     * a report→``scores`` Contribution against [targetId] and opens the
+     * **48-hour participation window** within which a present
+     * moderator/steward may act unilaterally, else the community
+     * (reverse-quorum of live responders) decides.
+     *
+     * [action] is the wire token — one of ``report`` | ``takedown`` |
+     * ``question`` (see [ai.ciris.mobile.shared.viewmodels.ModerationAction]).
+     * [reason] is an optional free-form rationale.
+     *
+     * Hits ``POST /v1/safety/reports`` — the FSD/MODERATION_CHILD_SAFETY.md
+     * §4.4 "report → surface → act" surface. **NOTE: this server route is
+     * NOT YET IMPLEMENTED** (there is no ``src/safety/report.rs`` today;
+     * only ``/v1/safety/moderation``, the gated duty-holder action). This
+     * client targets the FSD-specified path so the UI affordance ships
+     * ahead of the route; see the round report for the exact contract the
+     * server must honor. The body is tolerant of either a ``{"data": …}``
+     * envelope or a bare object on response.
+     */
+    suspend fun proposeModeration(
+        targetId: String,
+        action: String,
+        reason: String? = null,
+    ): ModerationProposalResult {
+        val method = "proposeModeration"
+        logInfo(method, "POST /v1/safety/reports target=$targetId action=$action reason=${reason?.take(40)}")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$baseUrl/v1/safety/reports") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(
+                    JsonObject.serializer(),
+                    buildJsonObject {
+                        // The CC 4.5.5 target — content/contributor the report names.
+                        put("target_key_id", targetId)
+                        // report | takedown | question (the proposed action).
+                        put("action", action)
+                        // The open-labeling allegation token; rides `scores`.
+                        put("allegation_type", "moderation:proposed:$action")
+                        if (!reason.isNullOrBlank()) put("reason", reason)
+                    },
+                ))
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Moderation proposal failed: ${response.status}")
+            }
+            // Tolerant parse — the window/contribution id may or may not be
+            // echoed (the route is not yet live). Absence is not an error:
+            // the 48h window is the constitutional default.
+            val rawBody = response.bodyAsText()
+            val root = runCatching { Json.parseToJsonElement(rawBody).jsonObject }.getOrNull()
+            val data = root?.get("data")?.let {
+                runCatching { it.jsonObject }.getOrNull()
+            } ?: root
+            ModerationProposalResult(
+                contributionId = data?.get("contribution_id")?.jsonPrimitive?.contentOrNull
+                    ?: data?.get("attestation_id")?.jsonPrimitive?.contentOrNull,
+                windowClosesAt = data?.get("window_closes_at")?.jsonPrimitive?.contentOrNull,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "target=$targetId action=$action")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
     // ─── NodeCode share/add (/v1/system/peers/*) ─────────────────────────────
     //
     // NodeCode is the BOOTSTRAP UX for adding a peer; SAS verification
@@ -1159,6 +1322,2337 @@ class CIRISApiClient(
         }
     }
 
+    // ─── Self-at-login ceremony (/v1/self/login) ─────────────────────────────
+    //
+    // CEG self-at-login: roots a federation identity in a hardware key and
+    // presents app/agent occurrences + a hardware_attestation blob. The node's
+    // self_login admits the identity and promotes the occurrences. NOT in the
+    // generated SDK yet — hand-written direct HTTP.
+
+    /**
+     * Perform the CEG self-at-login ceremony.
+     *
+     * Hits ``POST /v1/self/login``. On success the returned
+     * [SelfLoginResponse.accessToken] (if present) is applied to this client.
+     */
+    suspend fun selfLogin(
+        request: SelfLoginRequest,
+    ): SelfLoginResponse {
+        val method = "selfLogin"
+        logInfo(method, "POST $baseUrl/v1/self/login identityKey=${request.identityKeyId.take(16)}… occurrences=${request.occurrences.map { it.kind }}")
+        val client = federationHttpClient()
+        return try {
+            // Plain unsigned POST to the LOCAL node. Any federation signing the
+            // ceremony needs is performed by the node's substrate, not the app.
+            val bodyText = jsonConfig.encodeToString(SelfLoginRequest.serializer(), request)
+            val response = client.post("$baseUrl/v1/self/login") {
+                contentType(ContentType.Application.Json)
+                setBody(bodyText)
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Self-login failed: ${response.status}")
+            }
+            val parsed = decodeFederationEnvelope(response.bodyAsText(), SelfLoginResponse.serializer())
+            parsed.accessToken?.let { setAccessToken(it) }
+            parsed
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── Bilateral consent:replication peering (/v1/federation/*) ─────────────
+    //
+    // GET  /v1/federation/self-key-record → this node's SignedKeyRecord
+    // POST /v1/federation/peering         → register peer + emit consent grant
+    //
+    // The consent-objects card drives these against TWO nodes (A and B), each
+    // with its own base URL + token, so these methods take an explicit
+    // [nodeUrl]/[token] rather than relying solely on the client's current
+    // baseUrl. NOT in the generated SDK yet — hand-written direct HTTP.
+
+    /**
+     * Fetch a node's own [SignedKeyRecord].
+     *
+     * Hits ``GET {nodeUrl}/v1/federation/self-key-record``.
+     */
+    suspend fun getSelfKeyRecord(
+        nodeUrl: String = baseUrl,
+        token: String? = accessToken,
+    ): SignedKeyRecord {
+        val method = "getSelfKeyRecord"
+        logDebug(method, "GET $nodeUrl/v1/federation/self-key-record")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/federation/self-key-record") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("self-key-record fetch failed: ${response.status} for $nodeUrl")
+            }
+            // ciris-server returns the CANONICAL persist SignedKeyRecord, which nests
+            // the fields under `record` ({"record":{"key_id":…,"pubkey_ed25519_base64":…}}).
+            // The flat client model expects `key_id` at the top, so map the nested
+            // shape here (tolerating a flat body too). We only need the identity fields.
+            val text = response.bodyAsText()
+            val root = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                .parseToJsonElement(text).jsonObject
+            val rec = root["record"]?.jsonObject ?: root
+            val keyId = rec["key_id"]?.jsonPrimitive?.contentOrNull
+                ?: throw RuntimeException("self-key-record missing key_id")
+            SignedKeyRecord(
+                keyId = keyId,
+                publicKey = rec["pubkey_ed25519_base64"]?.jsonPrimitive?.contentOrNull,
+                signature = rec["scrub_signature_classical"]?.jsonPrimitive?.contentOrNull,
+                algorithm = rec["algorithm"]?.jsonPrimitive?.contentOrNull,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Lightweight liveness probe for the local **ciris-server** node read API.
+     *
+     * Issues a raw `GET {nodeUrl}/v1/identity`. Any HTTP response — including a
+     * non-2xx like 404/401 — means the node process is up and serving, so this
+     * returns true. Only a transport/connection failure (node not running)
+     * returns false. Used by startup to degrade gracefully when richer endpoints
+     * (e.g. /v1/setup/status) are unavailable on a node that is otherwise up.
+     */
+    suspend fun isLocalNodeUp(nodeUrl: String = baseUrl): Boolean {
+        val client = federationHttpClient()
+        return try {
+            client.get("$nodeUrl/v1/identity")
+            true
+        } catch (_: Exception) {
+            false
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Drive THIS device's LOCAL node to **mint the founder's hardware-rooted
+     * USER federation identity** — `POST {localNodeUrl}/v1/self/identity`.
+     *
+     * The app performs NO crypto. The local ciris-server mints the hybrid
+     * Ed25519 + ML-DSA-65 keypair in its keyring/substrate, custodied per the
+     * chosen [backend] (`pkcs11`=YubiKey / `platform-sealed`=TPM·SE /
+     * `software`=dev), writes the genesis CEG object to its outbox, and returns
+     * the public result: the `key_id`, the shareable `CIRIS-V2-…` [fedcode], the
+     * pubkeys, and the honest `hardware_type`. This is a plain owner-session
+     * POST (Bearer [token]); there is no x-ciris signing in Kotlin.
+     *
+     * Mirrors `CIRISServer/src/identity.rs` `self_identity_handler`. All request
+     * fields are optional — the node defaults the backend to `platform-sealed`
+     * and the alias to `<node>-user`.
+     *
+     * @param label optional human display name → the `label-fingerprint` key_id.
+     * @param backend optional custody hint: `pkcs11` | `platform-sealed` |
+     *        `software`. Unknown values are rejected by the node (400).
+     * @param provision for `pkcs11`: provision an empty PIV slot via `ykman`.
+     * @param pivSlot for `pkcs11`: the PIV slot (default `9c`).
+     * @param localNodeUrl base URL of THIS device's local node ([LOCAL_NODE_URL]).
+     */
+    suspend fun mintUserIdentity(
+        label: String? = null,
+        backend: String? = null,
+        provision: Boolean? = null,
+        pivSlot: String? = null,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): MintedIdentity {
+        val method = "mintUserIdentity"
+        logInfo(method, "POST $localNodeUrl/v1/self/identity backend=${backend ?: "(default)"} label=${label ?: "(none)"}")
+        val client = federationHttpClient()
+        return try {
+            val request = MintIdentityRequest(
+                backend = backend,
+                label = label,
+                provision = provision,
+                pivSlot = pivSlot,
+            )
+            val bodyText = jsonConfig.encodeToString(MintIdentityRequest.serializer(), request)
+            val response = client.post("$localNodeUrl/v1/self/identity") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyText)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "localNodeUrl=$localNodeUrl")
+                throw RuntimeException("mint identity failed: ${response.status}: ${raw.take(200)}")
+            }
+            // The node returns a FLAT JSON object (no `{"data": …}` envelope);
+            // decodeFederationEnvelope tolerates the unwrapped shape.
+            decodeFederationEnvelope(raw, MintedIdentity.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Register a peer on [nodeUrl] and emit this node's consent:replication
+     * grant scoped to [PeeringRequest.attestationPrefixes]. Owner/admin-gated
+     * server-side.
+     *
+     * Hits ``POST {nodeUrl}/v1/federation/peering``.
+     */
+    suspend fun postPeering(
+        request: PeeringRequest,
+        nodeUrl: String = baseUrl,
+        token: String? = accessToken,
+    ): PeeringResponse {
+        val method = "postPeering"
+        logInfo(method, "POST $nodeUrl/v1/federation/peering peer=${request.peerKeyId.take(16)}… prefixes=${request.attestationPrefixes}")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$nodeUrl/v1/federation/peering") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(PeeringRequest.serializer(), request))
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("peering failed: ${response.status} for $nodeUrl")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), PeeringResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl, peer=${request.peerKeyId}")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── NodeCode bootstrap + node-ownership claim (CEG §0.10) ────────────────
+    //
+    // GET  {nodeUrl}/v1/federation/node-code → the node's own NodeCode (PUBLIC,
+    //      unauthenticated). Used to identity-pin a freshly-connected node: the
+    //      served code's key_id + pubkey must match the code the founder scanned.
+    // POST {localNodeUrl}/v1/setup/claim-remote → drive the LOCAL node to claim a
+    //      remote/target node on the owner's behalf. The LOCAL node decodes the
+    //      NodeCode, builds + JCS-canonicalizes + HYBRID-SIGNS the owner-binding
+    //      delegates_to(user → target, infra:*) IN ITS SUBSTRATE with the owner's
+    //      identity, and POSTs it to the target node's /v1/setup/root. The app
+    //      performs NO crypto — it only calls claim-remote and shows the result.
+    //
+    // NOT in the generated SDK — hand-written direct HTTP. claim-remote is a plain
+    // UNSIGNED localhost POST: the local node authenticates the operator via the
+    // normal session, so there is no x-ciris signing in Kotlin.
+
+    /**
+     * Fetch a node's own NodeCode from `GET {nodeUrl}/v1/federation/node-code`.
+     *
+     * UNAUTHENTICATED — the NodeCode is a PUBLIC bootstrap handle. The caller
+     * uses the returned [NodeCodeShareResponse.code] (decoded locally) to
+     * identity-pin the node: confirm its key_id + pubkey match the code the user
+     * scanned/pasted before trusting the connection.
+     */
+    suspend fun getNodeCode(nodeUrl: String = baseUrl): NodeCodeShareResponse {
+        val method = "getNodeCode"
+        logDebug(method, "GET $nodeUrl/v1/federation/node-code")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/federation/node-code")
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("node-code fetch failed: ${response.status} for $nodeUrl")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), NodeCodeShareResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * The CEG-native node list — `GET {nodeUrl}/v1/setup/owned-nodes`. Returns the
+     * nodes owned by this node's bound owner (its fed ID), PROJECTED from the
+     * `delegates_to(user → node)` owner-binding objects in the graph (NOT a
+     * client-side store). By construction the local node appears once self-claimed.
+     */
+    suspend fun getOwnedNodes(nodeUrl: String = LOCAL_NODE_URL): OwnedNodesDto {
+        val method = "getOwnedNodes"
+        logDebug(method, "GET $nodeUrl/v1/setup/owned-nodes")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/setup/owned-nodes")
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("owned-nodes fetch failed: ${response.status} for $nodeUrl")
+            }
+            jsonConfig.decodeFromString(OwnedNodesDto.serializer(), response.bodyAsText())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Drive the LOCAL node to claim a remote/target node on the owner's behalf —
+     * `POST {localNodeUrl}/v1/setup/claim-remote`.
+     *
+     * The body is `{ node_code, claim_pin, cohort_scope }`. The LOCAL node decodes
+     * the [nodeCode], builds + JCS-canonicalizes + HYBRID-SIGNS the owner-binding
+     * `delegates_to(user → target, infra:*)` IN ITS SUBSTRATE with the owner's
+     * identity, and POSTs it to the target node's `/v1/setup/root`. The app does
+     * NO crypto: this is a plain UNSIGNED localhost POST and the local node
+     * authenticates the operator via the normal session (Bearer [token]).
+     *
+     * @param localNodeUrl base URL of THIS device's local node (defaults to
+     *        [LOCAL_NODE_URL]). NOT the target node — the local node reaches the
+     *        target itself.
+     * @return the parsed [ClaimRemoteResponse]; on a non-2xx the method throws
+     *         after logging so callers can surface the node's message.
+     */
+    suspend fun claimRemote(
+        nodeCode: String,
+        claimPin: String,
+        cohortScope: String,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+        ownerPassword: String? = null,
+        ownerUsername: String? = null,
+    ): ClaimRemoteResponse {
+        val method = "claimRemote"
+        logInfo(method, "POST $localNodeUrl/v1/setup/claim-remote node_code=${nodeCode.take(20)}… cohort=$cohortScope ownerPw=${ownerPassword != null}")
+        val client = federationHttpClient()
+        return try {
+            val request = ClaimRemoteRequest(
+                nodeCode = nodeCode,
+                claimPin = claimPin,
+                cohortScope = cohortScope,
+                ownerPassword = ownerPassword,
+                ownerUsername = ownerUsername,
+            )
+            val bodyText = jsonConfig.encodeToString(ClaimRemoteRequest.serializer(), request)
+            val response = client.post("$localNodeUrl/v1/setup/claim-remote") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyText)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "localNodeUrl=$localNodeUrl")
+                throw RuntimeException("claim-remote failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(raw, ClaimRemoteResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Upgrade an existing (already-owned) node to a fed-ID owner-binding** —
+     * `POST {localNodeUrl}/v1/self/upgrade-owner`. The WAs-need-fed-IDs migration:
+     * a node owned the legacy way (a password/OAuth ROOT WA with NO fed-ID) is
+     * re-rooted on a fed-ID by persisting `delegates_to(fed-ID → node)` — the
+     * existing login is PRESERVED (non-destructive owner-binding model).
+     *
+     * PREREQ: a fed-ID must already be minted on the node ([mintUserIdentity]) and
+     * [token] must be the EXISTING owner's session (password/OAuth login). Returns
+     * `{ owner, node_key_id, owner_binding_attestation_id }`.
+     */
+    suspend fun upgradeOwnerToFedId(
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): String {
+        val method = "upgradeOwnerToFedId"
+        logInfo(method, "POST $localNodeUrl/v1/self/upgrade-owner")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$localNodeUrl/v1/self/upgrade-owner") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "localNodeUrl=$localNodeUrl")
+                throw RuntimeException("upgrade-owner failed: ${response.status}: ${raw.take(200)}")
+            }
+            raw
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Record the bound owner's self-declared age band** — `POST {localNodeUrl}/v1/self/age`.
+     * The wizard-time, loopback + owner-session path (the app does NO crypto): the
+     * LOCAL node records the self-declared age for its bound owner fed-ID in its
+     * substrate. Run AFTER the claim (the owner must exist) with the owner session.
+     * [band] is `"minor"` | `"adult"`. Returns the raw JSON.
+     */
+    suspend fun setAgeSelf(
+        band: String,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): String {
+        val method = "setAgeSelf"
+        logInfo(method, "POST $localNodeUrl/v1/self/age band=$band")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$localNodeUrl/v1/self/age") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody("{\"band\":\"$band\"}")
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "localNodeUrl=$localNodeUrl")
+                throw RuntimeException("set-age failed: ${response.status}: ${raw.take(200)}")
+            }
+            raw
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Opt IN to the federation** — `POST {localNodeUrl}/v1/federation/announce`.
+     * Ownership is self-scoped (private) by default; this promotes the owner-binding
+     * self→FEDERATION and enables the node's identity announce so the community can
+     * find and federate with it. Owner-session-gated + loopback-only; idempotent and
+     * takes effect on the node's NEXT boot. Run AFTER the claim (the owner must
+     * exist) with the owner session. Returns the parsed [AnnounceOwnershipResponse].
+     */
+    suspend fun announceOwnership(
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AnnounceOwnershipResponse {
+        val method = "announceOwnership"
+        logInfo(method, "POST $localNodeUrl/v1/federation/announce")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$localNodeUrl/v1/federation/announce") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "localNodeUrl=$localNodeUrl")
+                throw RuntimeException("announce failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(raw, ai.ciris.mobile.shared.models.federation.AnnounceOwnershipResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── Delegations (device-authorization grants) — owner authorizes an agent ──
+    //
+    // The owner approves a device code an agent generated out-of-band, minting a
+    // delegated `dgrant:` token (owner authority + actor attribution). These drive
+    // the local node only (owner session); the in-memory grant registry is the
+    // interim home until the substrate-native delegation surface lands.
+
+    /** List the owner's LIVE delegations — `GET {nodeUrl}/v1/auth/device/grants`. */
+    suspend fun listDelegations(
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): List<ai.ciris.mobile.shared.models.federation.DelegationDto> {
+        val method = "listDelegations"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/auth/device/grants") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("list delegations failed: ${response.status}: ${raw.take(160)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.DelegationsResponse.serializer(),
+                raw,
+            ).grants
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Create a delegation the owner hands to an agent —
+     * `POST {nodeUrl}/v1/auth/device/delegate`. The owner names a `label` and
+     * chooses `mode`: `"create"` mints a fresh agent fed-ID, `"existing"` binds
+     * an `existingKeyId`. Owner-session-gated. Returns a claim URL + PIN to hand
+     * over (the agent then claims via `POST /v1/auth/device/claim`).
+     */
+    suspend fun createDelegation(
+        label: String,
+        mode: String, // "create" | "existing"
+        existingKeyId: String? = null,
+        scope: List<String> = listOf("owner:act-on-behalf"),
+        constraints: ai.ciris.mobile.shared.models.federation.DelegationConstraints? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.CreateDelegationResponse {
+        val method = "createDelegation"
+        logInfo(method, "POST $nodeUrl/v1/auth/device/delegate mode=$mode label=$label")
+        val client = federationHttpClient()
+        return try {
+            val scopeJson = scope.joinToString(",", "[", "]") { "\"$it\"" }
+            val keyField = existingKeyId?.takeIf { it.isNotBlank() }
+                ?.let { ",\"existing_key_id\":\"${it.trim()}\"" } ?: ""
+            val constraintsField = constraints?.takeIf { !it.isUnconstrained() }
+                ?.let { ",\"constraints\":${encodeDelegationConstraints(it)}" } ?: ""
+            val body = "{\"mode\":\"${mode.trim()}\",\"label\":\"${label.trim()}\"" +
+                "$keyField,\"scope\":$scopeJson$constraintsField}"
+            val response = client.post("$nodeUrl/v1/auth/device/delegate") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                // Full body — never truncate a server error (the createDelegation-500
+                // lesson: the load-bearing verify_hybrid_required / attesting_key_id
+                // detail lived past char 160). The node also logs it server-side.
+                throw RuntimeException("create delegation failed: ${response.status}: $raw")
+            }
+            val parsed = jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.CreateDelegationResponse.serializer(),
+                raw,
+            )
+            // Best-effort transparency: if the offer body didn't embed the grant's
+            // characteristics but the node sent the compact `x-ciris-delegation`
+            // response header, parse it so the owner can review what they granted.
+            if (parsed.delegation == null) {
+                response.headers["x-ciris-delegation"]?.let { hdr ->
+                    runCatching {
+                        jsonConfig.decodeFromString(
+                            ai.ciris.mobile.shared.models.federation.GrantCharacteristics.serializer(),
+                            hdr,
+                        )
+                    }.getOrNull()?.let { return parsed.copy(delegation = it) }
+                }
+            }
+            parsed
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Hand-encode [DelegationConstraints] to compact JSON, matching this file's
+     * hand-built-body convention. The tri-state [actionsAllow] is preserved
+     * exactly: absent when `null`, `[]` when read-only, else the subset — so the
+     * node sees the owner's intent verbatim. [actionsDeny] is emitted only when
+     * non-empty; [goal] is JSON-string-escaped.
+     */
+    private fun encodeDelegationConstraints(
+        c: ai.ciris.mobile.shared.models.federation.DelegationConstraints,
+    ): String {
+        val parts = mutableListOf<String>()
+        c.actionsAllow?.let { list ->
+            parts += "\"actions_allow\":" + list.joinToString(",", "[", "]") { "\"$it\"" }
+        }
+        if (c.actionsDeny.isNotEmpty()) {
+            parts += "\"actions_deny\":" + c.actionsDeny.joinToString(",", "[", "]") { "\"$it\"" }
+        }
+        c.goal?.takeIf { it.isNotBlank() }?.let { goal ->
+            val escaped = goal.replace("\\", "\\\\").replace("\"", "\\\"")
+            parts += "\"goal\":\"$escaped\""
+        }
+        return "{" + parts.joinToString(",") + "}"
+    }
+
+    /**
+     * Approve a pending device code — `POST {nodeUrl}/v1/auth/device/approve`.
+     * The owner enters the `user_code` the agent showed them; approving mints the
+     * delegated token. Owner-session-gated; this is the human-consent gate.
+     *
+     * Optional [constraints] TIGHTEN the grant on approval (the server can only
+     * narrow, never widen) — same shape as the issue path.
+     */
+    suspend fun approveDeviceCode(
+        userCode: String,
+        constraints: ai.ciris.mobile.shared.models.federation.DelegationConstraints? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): String {
+        val method = "approveDeviceCode"
+        logInfo(method, "POST $nodeUrl/v1/auth/device/approve user_code=$userCode")
+        val client = federationHttpClient()
+        return try {
+            val constraintsField = constraints?.takeIf { !it.isUnconstrained() }
+                ?.let { ",\"constraints\":${encodeDelegationConstraints(it)}" } ?: ""
+            val response = client.post("$nodeUrl/v1/auth/device/approve") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody("{\"user_code\":\"${userCode.trim()}\"$constraintsField}")
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("approve failed: ${response.status}: ${raw.take(160)}")
+            }
+            raw
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /** Revoke all delegations to a client — `POST {nodeUrl}/v1/auth/device/revoke`. */
+    suspend fun revokeDelegation(
+        clientId: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): String {
+        val method = "revokeDelegation"
+        logInfo(method, "POST $nodeUrl/v1/auth/device/revoke client_id=$clientId")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$nodeUrl/v1/auth/device/revoke") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody("{\"client_id\":\"${clientId.trim()}\"}")
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("revoke failed: ${response.status}: ${raw.take(160)}")
+            }
+            raw
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── Self-occurrence enrollment (/v1/self/occurrence*) — CIRISServer #76 ─────
+    //
+    // "Manage my self + log in as myself on another device" (src/auth/occurrence.rs,
+    // CEG §5.6.8.8 / §11.7). A "self" is a roster of occurrence rows over ONE root
+    // fed-ID; any ACTIVE occurrence stands in for the self, so a second device makes
+    // the founder's identity survive the loss of the first.
+    //
+    //   GET  /v1/self/occurrences?identity_key_id=… → roster (PUBLIC, unauthenticated)
+    //   POST /v1/self/occurrence                     → ADD a device (federation-signed)
+    //   POST /v1/self/occurrence/revoke              → REVOKE a device (federation-signed)
+    //
+    // The ADD / REVOKE are federation-signed requests. The app holds NO keys and
+    // performs NO crypto: it drives the LOCAL node with a plain owner-session POST and
+    // the node signs with the user's resolved fed-ID signer — the SAME posture as the
+    // consent / peering / claim-remote / delegation cards (see [createDelegation],
+    // [claimRemote], [selfLogin]). There is no x-ciris signing in Kotlin.
+
+    /**
+     * The device roster — `GET {nodeUrl}/v1/self/occurrences?identity_key_id=…`.
+     *
+     * UNAUTHENTICATED by design: an occurrence roster is public §5.6.8.8 binding
+     * metadata (pubkeys + device_class), same posture as the self-key-record. Returns
+     * the currently-ACTIVE occurrences (admitted, not revoked) of [identityKeyId].
+     */
+    suspend fun getSelfOccurrences(
+        identityKeyId: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+    ): ai.ciris.mobile.shared.models.federation.SelfOccurrencesResponse {
+        val method = "getSelfOccurrences"
+        logDebug(method, "GET $nodeUrl/v1/self/occurrences identity=${identityKeyId.take(16)}…")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/self/occurrences") {
+                url { parameters.append("identity_key_id", identityKeyId) }
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("self-occurrences fetch failed: ${response.status}: ${raw.take(160)}")
+            }
+            decodeFederationEnvelope(
+                raw,
+                ai.ciris.mobile.shared.models.federation.SelfOccurrencesResponse.serializer(),
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl, identity=$identityKeyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Add a device as an occurrence — `POST {nodeUrl}/v1/self/occurrence`.
+     *
+     * Federation-signed by the live primary (the user's fed-ID). The app sends a
+     * plain owner-session POST to the LOCAL node; the node signs the body with the
+     * resolved user signer (same as [createDelegation] / [claimRemote]). When the new
+     * device's signing key is not yet in the directory, supply [request.occurrenceKeyRecord]
+     * to admit it via the fail-secure proof-of-possession gate.
+     */
+    suspend fun addOccurrence(
+        request: ai.ciris.mobile.shared.models.federation.AddOccurrenceRequest,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AddOccurrenceResponse {
+        val method = "addOccurrence"
+        logInfo(
+            method,
+            "POST $nodeUrl/v1/self/occurrence identity=${request.identityKeyId.take(16)}… " +
+                "occurrence=${request.occurrence.occurrenceKeyId.take(16)}… class=${request.occurrence.deviceClass}",
+        )
+        val client = federationHttpClient()
+        return try {
+            val bodyText = jsonConfig.encodeToString(
+                ai.ciris.mobile.shared.models.federation.AddOccurrenceRequest.serializer(),
+                request,
+            )
+            val response = client.post("$nodeUrl/v1/self/occurrence") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyText)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("add occurrence failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(
+                raw,
+                ai.ciris.mobile.shared.models.federation.AddOccurrenceResponse.serializer(),
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl, identity=${request.identityKeyId}")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Revoke a (lost / stolen) device — `POST {nodeUrl}/v1/self/occurrence/revoke`.
+     *
+     * Federation-signed by a SURVIVING occurrence (or the root). For a STOLEN device
+     * you must sign with a different surviving key — never the compromised one
+     * (CEG §11.7.4). The app sends a plain owner-session POST to the LOCAL node; the
+     * node signs with the resolved user signer.
+     */
+    suspend fun revokeOccurrence(
+        identityKeyId: String,
+        occurrenceKeyId: String,
+        reason: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.RevokeOccurrenceResponse {
+        val method = "revokeOccurrence"
+        logInfo(
+            method,
+            "POST $nodeUrl/v1/self/occurrence/revoke identity=${identityKeyId.take(16)}… " +
+                "occurrence=${occurrenceKeyId.take(16)}…",
+        )
+        val client = federationHttpClient()
+        return try {
+            val bodyText = jsonConfig.encodeToString(
+                ai.ciris.mobile.shared.models.federation.RevokeOccurrenceRequest.serializer(),
+                ai.ciris.mobile.shared.models.federation.RevokeOccurrenceRequest(
+                    identityKeyId = identityKeyId,
+                    occurrenceKeyId = occurrenceKeyId,
+                    reason = reason?.takeIf { it.isNotBlank() },
+                ),
+            )
+            val response = client.post("$nodeUrl/v1/self/occurrence/revoke") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyText)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("revoke occurrence failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(
+                raw,
+                ai.ciris.mobile.shared.models.federation.RevokeOccurrenceResponse.serializer(),
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl, identity=$identityKeyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Create a **portable software identity occurrence** — `POST {nodeUrl}/v1/self/
+     * occurrence/portable`.
+     *
+     * The LOCAL node mints a fresh *software* hybrid keyset INTO [targetDir] (a USB
+     * folder the user picked) and binds it as a primary-authorized occurrence of the
+     * owner's self. The app passes only the PATH; the node writes the seeds + does
+     * the crypto. NO private bytes are returned. Owner-session POST (Bearer [token])
+     * + loopback-only.
+     *
+     * A software keyset is inherently insecure — the explicitly-accepted bootstrap
+     * trade-off (surfaced in the UI danger sublabel + the on-disk manifest).
+     *
+     * Mirrors `CIRISServer/src/auth/portable_occurrence.rs`.
+     */
+    suspend fun createPortableOccurrence(
+        targetDir: String,
+        label: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.PortableOccurrenceResponse {
+        val method = "createPortableOccurrence"
+        logInfo(method, "POST $nodeUrl/v1/self/occurrence/portable target=$targetDir label=${label ?: "(none)"}")
+        val client = federationHttpClient()
+        return try {
+            val bodyText = jsonConfig.encodeToString(
+                ai.ciris.mobile.shared.models.federation.PortableOccurrenceRequest.serializer(),
+                ai.ciris.mobile.shared.models.federation.PortableOccurrenceRequest(
+                    targetDir = targetDir,
+                    label = label?.takeIf { it.isNotBlank() },
+                ),
+            )
+            val response = client.post("$nodeUrl/v1/self/occurrence/portable") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyText)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("create portable occurrence failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(
+                raw,
+                ai.ciris.mobile.shared.models.federation.PortableOccurrenceResponse.serializer(),
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl, targetDir=$targetDir")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Associate an existing fed-ID** as THIS device's active user identity —
+     * `POST {nodeUrl}/v1/self/associate`.
+     *
+     * Directory path: [sourceDir] points at a folder holding a portable software
+     * keyset; the node installs it as this device's user fed-ID (so this device
+     * signs as that occurrence). YubiKey path ([yubikey] = true) is server-GATED in
+     * this pass (returns 501 until the on-device token read is wired). Owner-session
+     * POST + loopback-only.
+     */
+    suspend fun associateFedId(
+        sourceDir: String? = null,
+        yubikey: Boolean = false,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AssociateResponse {
+        val method = "associateFedId"
+        logInfo(method, "POST $nodeUrl/v1/self/associate source=${sourceDir ?: "(none)"} yubikey=$yubikey")
+        val client = federationHttpClient()
+        return try {
+            val bodyText = jsonConfig.encodeToString(
+                ai.ciris.mobile.shared.models.federation.AssociateRequest.serializer(),
+                ai.ciris.mobile.shared.models.federation.AssociateRequest(
+                    sourceDir = sourceDir?.takeIf { it.isNotBlank() },
+                    yubikey = yubikey,
+                ),
+            )
+            val response = client.post("$nodeUrl/v1/self/associate") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyText)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("associate fed-ID failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(
+                raw,
+                ai.ciris.mobile.shared.models.federation.AssociateResponse.serializer(),
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl, sourceDir=$sourceDir")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── HUMANITY_ACCORD surface (/v1/accord*) — CIRISServer #41 (src/accord.rs) ─
+    //
+    // The constitutional safe-mesh floor: a hardware-attested holder roster that
+    // jointly holds a `quorum:2/3` kill-switch over invocations (CC 4.2.1). The app
+    // drives the LOCAL node only (owner session); it holds NO keys and performs NO
+    // crypto. `concur` just POSTs — the node's resolved local holder signer signs.
+
+    /** The accord family + consensus protocol — `GET {nodeUrl}/v1/accord/family`. */
+    suspend fun getAccordFamily(
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AccordFamilyDto? {
+        val method = "getAccordFamily"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/accord/family") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            val raw = response.bodyAsText()
+            // 404 / empty body = no accord family established yet.
+            if (response.status == HttpStatusCode.NotFound || raw.isBlank()) {
+                return null
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("get accord family failed: ${response.status}: ${raw.take(160)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AccordFamilyDto.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /** The accord holder registry — `GET {nodeUrl}/v1/accord-holders`. */
+    suspend fun getAccordHolders(
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AccordHoldersResponse {
+        val method = "getAccordHolders"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/accord-holders") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("get accord holders failed: ${response.status}: ${raw.take(160)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AccordHoldersResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /** Pending accord invocations + quorum status — `GET {nodeUrl}/v1/accord/invocations`. */
+    suspend fun getAccordInvocations(
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): List<ai.ciris.mobile.shared.models.federation.AccordInvocationDto> {
+        val method = "getAccordInvocations"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/accord/invocations") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("get accord invocations failed: ${response.status}: ${raw.take(160)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AccordInvocationsResponse.serializer(),
+                raw,
+            ).invocations
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Concur on a pending invocation as an accord holder —
+     * `POST {nodeUrl}/v1/accord/invocation/concur`. Owner-session-gated. The app
+     * holds NO keys: it posts the holder's fed [holderKeyId] + [mldsaUsbPath] + PIN
+     * and the node RE-OPENS the holder's YubiKey + USB-wrapped ML-DSA and produces
+     * the cosignature over the pending invocation's canonical bytes (mirrors
+     * admit-node). Touch-gated — a touch-required slot 9c BLOCKS the call until tapped.
+     */
+    suspend fun concurInvocation(
+        invocationKind: String,
+        invocationId: String,
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AccordConcurResponse {
+        val method = "concurInvocation"
+        logInfo(method, "POST $nodeUrl/v1/accord/invocation/concur kind=$invocationKind id=$invocationId holder=$holderKeyId usb=$mldsaUsbPath")
+        // Touch-gated (slot 9c is touch-ALWAYS) — long timeout + the caller prompts.
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            val bodyJson = buildJsonObject {
+                put("invocation_kind", JsonPrimitive(invocationKind.trim()))
+                put("invocation_id", JsonPrimitive(invocationId.trim()))
+                put("key_id", JsonPrimitive(holderKeyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+            }
+            val response = client.post("$nodeUrl/v1/accord/invocation/concur") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("concur failed: ${response.status}: ${raw.take(160)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AccordConcurResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * The surfaced NON-BINDING accord events (completed drills + announcements) —
+     * `GET {nodeUrl}/v1/accord/events` (CIRISServer#41). Public read.
+     */
+    suspend fun listAccordEvents(
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AccordEventsResponse {
+        val method = "listAccordEvents"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/accord/events") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("list accord events failed: ${response.status}: ${raw.take(160)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AccordEventsResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * The read-only halt-latch state (the enforceable kill-switch) —
+     * `GET {nodeUrl}/v1/accord/halt-status` (CIRISServer#41). Public read; drives
+     * the unmissable ACTIVE-HALT banner. Never writes or clears the latch.
+     */
+    suspend fun getAccordHaltStatus(
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AccordHaltStatusResponse {
+        val method = "getAccordHaltStatus"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/accord/halt-status") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("get halt-status failed: ${response.status}: ${raw.take(160)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AccordHaltStatusResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Initiate a drill** — `POST {nodeUrl}/v1/accord/drill` (owner-session-gated,
+     * holder action). A drill is a NON-BINDING rehearsal of the 2-of-3 kill-switch
+     * delivery path; it accumulates cosignatures toward quorum via
+     * `/v1/accord/invocation/concur` and, on reaching it, is surfaced in
+     * `/v1/accord/events` — it NEVER halts. Mirrors [concurInvocation]'s no-crypto
+     * posture: the node builds + signs the drill invocation with its resolved local
+     * holder signer; the app sends no crypto.
+     */
+    suspend fun initiateDrill(
+        invocationId: String,
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AccordConcurResponse {
+        val method = "initiateDrill"
+        logInfo(method, "POST $nodeUrl/v1/accord/drill id=$invocationId holder=$holderKeyId usb=$mldsaUsbPath")
+        // Touch-gated (slot 9c is touch-ALWAYS) — long timeout + the caller prompts.
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            // The node synthesizes the (non-binding) drill invocation from the id and
+            // produces the initiating cosignature from the holder's YubiKey + USB — the
+            // app holds no keys and fabricates no signed envelope.
+            val bodyJson = buildJsonObject {
+                put("invocation_id", JsonPrimitive(invocationId.trim()))
+                put("key_id", JsonPrimitive(holderKeyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+            }
+            val response = client.post("$nodeUrl/v1/accord/drill") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("initiate drill failed: ${response.status}: ${raw.take(200)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AccordConcurResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Raise a halt** — `POST {nodeUrl}/v1/accord/halt` (owner-session-gated, holder
+     * action). RAISES a 2-of-3 CONSTITUTIONAL kill-switch invocation: the node synthesizes
+     * the constitutional invocation from [invocationId] and produces THIS holder's initiating
+     * cosignature from their YubiKey + USB. That single signature is **sub-quorum** — it does
+     * NOT latch anything; it gossips and the other holders cosign via
+     * `/v1/accord/invocation/concur`, and the 2-of-3-completing signature is what latches the
+     * halt. The binding twin of [initiateDrill]; the app holds no keys.
+     */
+    suspend fun initiateHalt(
+        invocationId: String,
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AccordConcurResponse {
+        val method = "initiateHalt"
+        logInfo(method, "POST $nodeUrl/v1/accord/halt id=$invocationId holder=$holderKeyId usb=$mldsaUsbPath")
+        // Touch-gated (slot 9c is touch-ALWAYS) — long timeout + the caller prompts.
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            val bodyJson = buildJsonObject {
+                put("invocation_id", JsonPrimitive(invocationId.trim()))
+                put("key_id", JsonPrimitive(holderKeyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+            }
+            val response = client.post("$nodeUrl/v1/accord/halt") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("raise halt failed: ${response.status}: ${raw.take(200)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AccordConcurResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Post an announce** — `POST {nodeUrl}/v1/accord/announce` (owner-session-gated,
+     * holder action). An announce is a single-holder `notify` message (threshold 1 —
+     * complete on a valid signature); it is gossiped + surfaced in `/v1/accord/events`
+     * and NEVER halts. Mirrors [concurInvocation]'s no-crypto posture: the node builds
+     * + signs the notify (binding the [message] to the payload hash) with its resolved
+     * local holder signer; the app sends only the plaintext.
+     */
+    suspend fun initiateAnnounce(
+        message: String,
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AccordAnnounceResponse {
+        val method = "initiateAnnounce"
+        logInfo(method, "POST $nodeUrl/v1/accord/announce len=${message.length} holder=$holderKeyId usb=$mldsaUsbPath")
+        // Touch-gated (slot 9c is touch-ALWAYS) — long timeout + the caller prompts.
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            // The node synthesizes the `notify` invocation binding this message and
+            // produces the cosignature from the holder's YubiKey + USB (app holds no keys).
+            val bodyJson = buildJsonObject {
+                put("message", JsonPrimitive(message))
+                put("key_id", JsonPrimitive(holderKeyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+            }
+            val response = client.post("$nodeUrl/v1/accord/announce") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("initiate announce failed: ${response.status}: ${raw.take(200)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AccordAnnounceResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Provision a portable accord holder** —
+     * `POST {nodeUrl}/v1/accord/provision-holder`. The loopback-only setup route
+     * behind the guided "Provision Accord Holder" flow (CIRISServer#41).
+     *
+     * The node opens the holder's ALREADY-FIPS-approved YubiKey (slot-9c Ed25519),
+     * AEAD-wraps a fresh ML-DSA-65 seed to [mldsaUsbPath] (unwrappable only by the
+     * YubiKey via touch + PIN), and mints the holder record + the portable_2fa
+     * custody attestation. The app does NO crypto — it only POSTs to the loopback
+     * endpoint; the substrate does everything.
+     *
+     * The ONE user choice is [mldsaUsbPath] (the USB directory). [userPin] is
+     * optional (the token may prompt out of band); [pivSlot] defaults to `9c`.
+     *
+     * Touching the physical YubiKey (PIN + touch) is the real authority; a
+     * touch-required token BLOCKS the call until tapped. On success the holder
+     * asks the node owner to register them (`POST /v1/accord/holder`).
+     */
+    suspend fun provisionAccordHolder(
+        keyId: String,
+        mldsaUsbPath: String,
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AccordProvisionResponse {
+        val method = "provisionAccordHolder"
+        logInfo(method, "POST $nodeUrl/v1/accord/provision-holder key_id=$keyId usb=$mldsaUsbPath")
+        // Touch-gated: slot 9c (touch policy ALWAYS) needs a physical touch per
+        // Ed25519 sign — provisioning does THREE (USB ML-DSA wrap-challenge, holder
+        // record, custody attestation). Long timeout + the caller surfaces the
+        // "touch each blink (~3×)" prompt.
+        logInfo(method, "this needs ~3 YubiKey touches (slot 9c is touch-ALWAYS); waiting up to ${ceremonyTimeoutMillis / 1000}s")
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            val bodyJson = buildJsonObject {
+                put("key_id", JsonPrimitive(keyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+            }
+            val response = client.post("$nodeUrl/v1/accord/provision-holder") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("provision holder failed: ${response.status}: ${raw.take(220)}")
+            }
+            val parsed = jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AccordProvisionResponse.serializer(),
+                raw,
+            )
+            logInfo(method, "provisioned key_id=${parsed.keyId} (custody=${parsed.custodyAttestation != null})")
+            parsed
+        } catch (e: Exception) {
+            val hint = if (e is io.ktor.client.plugins.HttpRequestTimeoutException) {
+                " — timed out waiting for YubiKey touches; touch the key EACH time it blinks (≈3×) and retry"
+            } else {
+                ""
+            }
+            logException(method, e, "nodeUrl=$nodeUrl$hint")
+            throw RuntimeException("${e.message ?: "provision failed"}$hint", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Admit a node to the trust root** — `POST {nodeUrl}/v1/accord/admit-node`
+     * (loopback, CIRISServer#140 / CIRISVerify#162). The accord holder (A1) RE-OPENS
+     * their YubiKey + USB-wrapped ML-DSA and **scrub-signs** the target node's
+     * registration (+ emits their own `steward,accord_holder` anchor). The node
+     * writes the resulting **genesis seed object** to a predictable outbox path and
+     * returns it. The app holds NO keys — the touch on the YubiKey IS consent.
+     * 1-of-N bootstrap: a single holder suffices (a trust EXTENSION, not the 2/3
+     * kill-switch). The target's pubkeys come from the node's self-key-record.
+     */
+    suspend fun admitNode(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        targetKeyId: String,
+        targetEd25519Base64: String,
+        targetMlDsa65Base64: String,
+        targetIdentityType: String = "node",
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AdmitNodeResponse {
+        val method = "admitNode"
+        logInfo(method, "POST $nodeUrl/v1/accord/admit-node holder=$holderKeyId target=$targetKeyId usb=$mldsaUsbPath")
+        logInfo(method, "needs a YubiKey touch (slot 9c is touch-ALWAYS) for the scrub + anchor signatures; waiting up to ${ceremonyTimeoutMillis / 1000}s")
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            val target = buildJsonObject {
+                put("key_id", JsonPrimitive(targetKeyId.trim()))
+                put("pubkey_ed25519_base64", JsonPrimitive(targetEd25519Base64.trim()))
+                put("pubkey_ml_dsa_65_base64", JsonPrimitive(targetMlDsa65Base64.trim()))
+                put("identity_type", JsonPrimitive(targetIdentityType.trim().ifBlank { "node" }))
+            }
+            val bodyJson = buildJsonObject {
+                put("key_id", JsonPrimitive(holderKeyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+                put("target", target)
+            }
+            val response = client.post("$nodeUrl/v1/accord/admit-node") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("admit node failed: ${response.status}: ${raw.take(220)}")
+            }
+            val parsed = jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AdmitNodeResponse.serializer(),
+                raw,
+            )
+            logInfo(method, "admitted target=$targetKeyId → saved seed to ${parsed.savedTo}")
+            parsed
+        } catch (e: Exception) {
+            val hint = if (e is io.ktor.client.plugins.HttpRequestTimeoutException) {
+                " — timed out waiting for the YubiKey touch; touch the key when it blinks and retry"
+            } else {
+                ""
+            }
+            logException(method, e, "nodeUrl=$nodeUrl$hint")
+            throw RuntimeException("${e.message ?: "admit node failed"}$hint", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **List canonical servers** — `GET {nodeUrl}/v1/accord/canonical/servers`
+     * (CIRISServer#164). The rock-solid mesh-seed anchors: nodes whose registration
+     * an accord holder scrub-signed AND flagged `canonical`. Visible to everyone.
+     */
+    suspend fun listCanonicalServers(
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.CanonicalServersResponse {
+        val method = "listCanonicalServers"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/accord/canonical/servers") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("list canonical servers failed: ${response.status}: ${raw.take(220)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.CanonicalServersResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            ai.ciris.mobile.shared.models.federation.CanonicalServersResponse()
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Add a canonical server** — `POST {nodeUrl}/v1/accord/canonical/add`
+     * (loopback, CIRISServer#164). The accord holder RE-OPENS their YubiKey +
+     * USB-wrapped ML-DSA and **scrub-signs** the target node's registration, ALSO
+     * flagging it `canonical` so it becomes a mesh-seed anchor. Same hardware inputs
+     * as [admitNode], plus the target's pubkeys and an OPTIONAL bootstrap transport
+     * ([transportKind] + [destination]) recorded as the canonical server's address.
+     * 1-of-N: a single holder suffices. The app holds NO keys — the touch IS consent.
+     */
+    suspend fun addCanonicalServer(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        targetKeyId: String,
+        targetEd25519Base64: String,
+        targetMlDsa65Base64: String,
+        targetIdentityType: String = "node",
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        transportKind: String? = null,
+        destination: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.AddCanonicalServerResponse {
+        val method = "addCanonicalServer"
+        logInfo(method, "POST $nodeUrl/v1/accord/canonical/add holder=$holderKeyId target=$targetKeyId usb=$mldsaUsbPath")
+        logInfo(method, "needs a YubiKey touch (slot 9c is touch-ALWAYS) for the scrub signature; waiting up to ${ceremonyTimeoutMillis / 1000}s")
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            val target = buildJsonObject {
+                put("key_id", JsonPrimitive(targetKeyId.trim()))
+                put("pubkey_ed25519_base64", JsonPrimitive(targetEd25519Base64.trim()))
+                put("pubkey_ml_dsa_65_base64", JsonPrimitive(targetMlDsa65Base64.trim()))
+                put("identity_type", JsonPrimitive(targetIdentityType.trim().ifBlank { "node" }))
+            }
+            val bodyJson = buildJsonObject {
+                put("key_id", JsonPrimitive(holderKeyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+                put("target", target)
+                transportKind?.takeIf { it.isNotBlank() }?.let { put("transport_kind", JsonPrimitive(it.trim())) }
+                destination?.takeIf { it.isNotBlank() }?.let { put("destination", JsonPrimitive(it.trim())) }
+            }
+            val response = client.post("$nodeUrl/v1/accord/canonical/add") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("add canonical server failed: ${response.status}: ${raw.take(220)}")
+            }
+            val parsed = jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.AddCanonicalServerResponse.serializer(),
+                raw,
+            )
+            logInfo(method, "added canonical=${parsed.canonicalKeyId} → seed saved to ${parsed.seedSavedTo}")
+            parsed
+        } catch (e: Exception) {
+            val hint = if (e is io.ktor.client.plugins.HttpRequestTimeoutException) {
+                " — timed out waiting for the YubiKey touch; touch the key when it blinks and retry"
+            } else {
+                ""
+            }
+            logException(method, e, "nodeUrl=$nodeUrl$hint")
+            throw RuntimeException("${e.message ?: "add canonical server failed"}$hint", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Withdraw a canonical server** — `POST {nodeUrl}/v1/accord/canonical/withdraw`
+     * (CIRISServer#164). DESTRUCTIVE: needs a 2-of-3 accord proposal (a second/third
+     * holder must co-sign) — a lone holder cannot complete it. [proposalDigest] names
+     * the accord proposal this withdrawal is authorized under.
+     */
+    suspend fun withdrawCanonical(
+        keyId: String,
+        proposalDigest: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.CanonicalWithdrawResponse {
+        val method = "withdrawCanonical"
+        logInfo(method, "POST $nodeUrl/v1/accord/canonical/withdraw key_id=$keyId")
+        val client = federationHttpClient()
+        return try {
+            val bodyJson = buildJsonObject {
+                put("key_id", JsonPrimitive(keyId.trim()))
+                put("proposal_digest", JsonPrimitive(proposalDigest.trim()))
+            }
+            val response = client.post("$nodeUrl/v1/accord/canonical/withdraw") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("withdraw canonical failed: ${response.status}: ${raw.take(220)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.CanonicalWithdrawResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw RuntimeException(e.message ?: "withdraw canonical failed", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **List withdrawn / superseded canonical servers** —
+     * `GET {nodeUrl}/v1/accord/canonical/withdrawals` (CIRISServer#164). The audit
+     * log of canonical records that were withdrawn or superseded. Visible to everyone.
+     */
+    suspend fun listCanonicalWithdrawals(
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.CanonicalWithdrawalsResponse {
+        val method = "listCanonicalWithdrawals"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/accord/canonical/withdrawals") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("list canonical withdrawals failed: ${response.status}: ${raw.take(220)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.CanonicalWithdrawalsResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            ai.ciris.mobile.shared.models.federation.CanonicalWithdrawalsResponse()
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Propose a canonical server (co-scrub scrub #1)** —
+     * `POST {nodeUrl}/v1/accord/canonical/propose` (CIRISServer#174). The local accord
+     * holder (A1) RE-OPENS their YubiKey + USB-wrapped ML-DSA and scrub-signs the
+     * target as `canonical`, producing a 1-scrub **partial** that does NOT yet confer
+     * canonical (m-of-n). The node saves + gossips it to accord peers; hand / gossip it
+     * to the next holder to [cosignCanonicalServer]. Same hardware + body shape as
+     * [addCanonicalServer]. The app holds NO keys — the YubiKey touch is consent.
+     */
+    suspend fun proposeCanonicalServer(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        targetKeyId: String,
+        targetEd25519Base64: String,
+        targetMlDsa65Base64: String,
+        targetIdentityType: String = "node",
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        transportKind: String? = null,
+        destination: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.ProposeCanonicalResponse {
+        val method = "proposeCanonicalServer"
+        logInfo(method, "POST $nodeUrl/v1/accord/canonical/propose holder=$holderKeyId target=$targetKeyId usb=$mldsaUsbPath")
+        logInfo(method, "needs a YubiKey touch (slot 9c is touch-ALWAYS) for the scrub signature; waiting up to ${ceremonyTimeoutMillis / 1000}s")
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            val target = buildJsonObject {
+                put("key_id", JsonPrimitive(targetKeyId.trim()))
+                put("pubkey_ed25519_base64", JsonPrimitive(targetEd25519Base64.trim()))
+                put("pubkey_ml_dsa_65_base64", JsonPrimitive(targetMlDsa65Base64.trim()))
+                put("identity_type", JsonPrimitive(targetIdentityType.trim().ifBlank { "node" }))
+            }
+            val bodyJson = buildJsonObject {
+                put("key_id", JsonPrimitive(holderKeyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+                put("target", target)
+                transportKind?.takeIf { it.isNotBlank() }?.let { put("transport_kind", JsonPrimitive(it.trim())) }
+                destination?.takeIf { it.isNotBlank() }?.let { put("destination", JsonPrimitive(it.trim())) }
+            }
+            val response = client.post("$nodeUrl/v1/accord/canonical/propose") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("propose canonical failed: ${response.status}: ${raw.take(220)}")
+            }
+            val parsed = jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.ProposeCanonicalResponse.serializer(),
+                raw,
+            )
+            logInfo(method, "proposed ${parsed.targetKeyId} scrubs=${parsed.distinctScrubCount} gossiped_to=${parsed.gossipedTo}")
+            parsed
+        } catch (e: Exception) {
+            val hint = if (e is io.ktor.client.plugins.HttpRequestTimeoutException) {
+                " — timed out waiting for the YubiKey touch; touch the key when it blinks and retry"
+            } else {
+                ""
+            }
+            logException(method, e, "nodeUrl=$nodeUrl$hint")
+            throw RuntimeException("${e.message ?: "propose canonical failed"}$hint", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Cosign a canonical co-scrub** — `POST {nodeUrl}/v1/accord/canonical/cosign`
+     * (CIRISServer#174). THIS holder (e.g. B1) RE-OPENS their YubiKey + USB ML-DSA and
+     * appends their scrub to the [partial] over the BYTE-IDENTICAL envelope (verify's
+     * `append_scrub`). [partial] MUST be the verbatim `SignedKeyRecord` JSON from a
+     * [proposeCanonicalServer] / prior cosign (a pending entry's `partial`, or a pasted
+     * one) — it is submitted UNCHANGED so the canonical bytes match. At the family
+     * m-of-n the record is adopted (`conferred`); else the advanced partial is returned.
+     */
+    suspend fun cosignCanonicalServer(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        partial: JsonElement,
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.CosignCanonicalResponse {
+        val method = "cosignCanonicalServer"
+        logInfo(method, "POST $nodeUrl/v1/accord/canonical/cosign holder=$holderKeyId usb=$mldsaUsbPath")
+        logInfo(method, "needs a YubiKey touch (slot 9c is touch-ALWAYS) for the scrub signature; waiting up to ${ceremonyTimeoutMillis / 1000}s")
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            val bodyJson = buildJsonObject {
+                put("key_id", JsonPrimitive(holderKeyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+                // Submit the partial VERBATIM — never re-encode the signed envelope.
+                put("partial", partial)
+            }
+            val response = client.post("$nodeUrl/v1/accord/canonical/cosign") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("cosign canonical failed: ${response.status}: ${raw.take(220)}")
+            }
+            val parsed = jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.CosignCanonicalResponse.serializer(),
+                raw,
+            )
+            logInfo(method, "cosigned ${parsed.targetKeyId} scrubs=${parsed.distinctScrubCount} conferred=${parsed.conferred} gossiped_to=${parsed.gossipedTo}")
+            parsed
+        } catch (e: Exception) {
+            val hint = if (e is io.ktor.client.plugins.HttpRequestTimeoutException) {
+                " — timed out waiting for the YubiKey touch; touch the key when it blinks and retry"
+            } else {
+                ""
+            }
+            logException(method, e, "nodeUrl=$nodeUrl$hint")
+            throw RuntimeException("${e.message ?: "cosign canonical failed"}$hint", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **List pending canonical co-scrubs** —
+     * `GET {nodeUrl}/v1/accord/canonical/pending` (CIRISServer#174). The co-scrub
+     * partials this node holds that are still short of the family m-of-n (arrived via
+     * accord gossip or a local propose). Backs the Trust Root's "Pending co-signs"
+     * section. Read-only; never throws (returns empty on any error).
+     */
+    suspend fun listPendingCoscrubs(
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): List<ai.ciris.mobile.shared.models.federation.PendingCoscrubDto> {
+        val method = "listPendingCoscrubs"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/accord/canonical/pending") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("list pending co-scrubs failed: ${response.status}: ${raw.take(220)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.PendingCoscrubsResponse.serializer(),
+                raw,
+            ).pending
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            emptyList()
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Supersede a canonical server** — `POST {nodeUrl}/v1/accord/canonical/supersede`
+     * (CIRISServer#174). DESTRUCTIVE / 2-of-3: admits the successor [newRecord] (a full
+     * A1-scrubbed `SignedKeyRecord`, assembled by the add-canonical / co-scrub ceremony)
+     * BEFORE tombstoning [oldKeyId] with `superseded_by`, so the canonical set is never
+     * momentarily empty. [proposalDigest] names the authorizing accord proposal; persist
+     * re-tallies it. [newRecord] rides verbatim (never re-encoded). Mirrors
+     * [withdrawCanonical].
+     */
+    suspend fun supersedeCanonical(
+        oldKeyId: String,
+        newRecord: JsonElement,
+        proposalDigest: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.CanonicalSupersedeResponse {
+        val method = "supersedeCanonical"
+        logInfo(method, "POST $nodeUrl/v1/accord/canonical/supersede old_key_id=$oldKeyId")
+        val client = federationHttpClient()
+        return try {
+            val bodyJson = buildJsonObject {
+                put("old_key_id", JsonPrimitive(oldKeyId.trim()))
+                // The successor record VERBATIM — never re-encode the signed envelope.
+                put("new_record", newRecord)
+                put("proposal_digest", JsonPrimitive(proposalDigest.trim()))
+            }
+            val response = client.post("$nodeUrl/v1/accord/canonical/supersede") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("supersede canonical failed: ${response.status}: ${raw.take(220)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.CanonicalSupersedeResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw RuntimeException(e.message ?: "supersede canonical failed", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **YubiKey readiness** — `GET {nodeUrl}/v1/accord/yubikey-status` (loopback).
+     * Reports whether an inserted YubiKey is ready for accord provisioning (detected,
+     * FIPS-approved, slot 9C key + certificate) + the PIN/PUK tries remaining, so the
+     * ceremony UI can show "YUBI DETECTED — FIPS COMPLIANT — 9C PROVISIONED — READY".
+     * Never throws on a missing token — returns `detected=false` with a hint.
+     */
+    suspend fun getYubiKeyStatus(
+        nodeUrl: String = LOCAL_NODE_URL,
+    ): ai.ciris.mobile.shared.models.federation.YubiKeyStatus {
+        val method = "getYubiKeyStatus"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/accord/yubikey-status")
+            val raw = response.bodyAsText()
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.YubiKeyStatus.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            ai.ciris.mobile.shared.models.federation.YubiKeyStatus(
+                detected = false,
+                hint = "couldn't reach the node's YubiKey probe: ${e.message}",
+            )
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Is [token] a LIVE user-account session on the node? Probes `GET /v1/auth/me`
+     * (HTTP 200 ⇒ the opaque `sess:` token resolves to an active `wa_cert` row;
+     * 401 ⇒ unknown/expired/revoked). This is the gate behind "sign in as <fedID>":
+     * the founder's federation identity is accessible ONLY via the associated
+     * user-account session, never as a credential-less door. The node separately
+     * refuses to SIGN with the fedID without a live owner session (server-side
+     * `resolve_user_signer` choke point), so this client check mirrors that.
+     */
+    suspend fun hasLiveSession(
+        token: String,
+        nodeUrl: String = baseUrl,
+    ): Boolean {
+        val method = "hasLiveSession"
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/auth/me") {
+                header("Authorization", "Bearer $token")
+            }
+            val ok = response.status.value == 200
+            logInfo(method, "session probe → HTTP ${response.status.value} (live=$ok)")
+            ok
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            false
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Register an accord holder** — `POST {nodeUrl}/v1/accord/holder`
+     * (owner-session-gated). Admits a holder's self-signed `accord_holder`
+     * [holderRecord] (+ the optional `portable_2fa` [custodyAttestation] from
+     * provisioning, verified against the pinned Yubico root). The two artifacts
+     * are the verbatim ones [provisionAccordHolder] returned; the app never
+     * inspects them. Used by the genesis ceremony to register each of the 6 keys.
+     */
+    suspend fun registerAccordHolder(
+        holderRecord: kotlinx.serialization.json.JsonElement,
+        custodyAttestation: kotlinx.serialization.json.JsonElement? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ) {
+        val method = "registerAccordHolder"
+        logInfo(method, "POST $nodeUrl/v1/accord/holder")
+        val client = federationHttpClient()
+        try {
+            val bodyJson = buildJsonObject {
+                put("key_record", holderRecord)
+                custodyAttestation?.let { put("custody_attestation", it) }
+            }
+            val response = client.post("$nodeUrl/v1/accord/holder") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("register holder failed: ${response.status}: ${raw.take(220)}")
+            }
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Build the genesis family envelope** —
+     * `POST {nodeUrl}/v1/accord/genesis/envelope` (owner-gated). Returns the
+     * canonical, JCS-significant envelope over the PRIMARY [memberKeyIds] (fixed
+     * order). The holders co-sign it byte-for-byte; the app NEVER rebuilds it.
+     */
+    suspend fun genesisEnvelope(
+        memberKeyIds: List<String>,
+        familyName: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.GenesisEnvelopeResponse {
+        val method = "genesisEnvelope"
+        logInfo(method, "POST $nodeUrl/v1/accord/genesis/envelope members=${memberKeyIds.size}")
+        val client = federationHttpClient()
+        return try {
+            val bodyJson = buildJsonObject {
+                familyName?.takeIf { it.isNotBlank() }?.let { put("family_name", JsonPrimitive(it)) }
+                put("member_key_ids", JsonArray(memberKeyIds.map { JsonPrimitive(it.trim()) }))
+            }
+            val response = client.post("$nodeUrl/v1/accord/genesis/envelope") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("genesis envelope failed: ${response.status}: ${raw.take(220)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.GenesisEnvelopeResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Cosign the genesis family envelope** —
+     * `POST {nodeUrl}/v1/accord/family/cosign` (loopback-only, `pkcs11`-gated).
+     * One PRIMARY holder RE-INSERTS their YubiKey; the node re-opens it + the
+     * USB-wrapped ML-DSA half and cosigns the verbatim [envelope]. The physical
+     * touch IS the holder's consent. Returns `{ signature, member }` — the app
+     * collects them and relays them to [genesisAssemble]. The app does NO crypto.
+     */
+    suspend fun cosignAccordFamily(
+        keyId: String,
+        mldsaUsbPath: String,
+        envelope: kotlinx.serialization.json.JsonElement,
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.CosignFamilyResponse {
+        val method = "cosignAccordFamily"
+        logInfo(method, "POST $nodeUrl/v1/accord/family/cosign key_id=$keyId usb=$mldsaUsbPath")
+        // Touch-gated like provisioning: re-opens the YubiKey + signs the envelope
+        // (slot 9c touch-ALWAYS). Long timeout + touch-each-blink prompt.
+        logInfo(method, "this needs YubiKey touch(es) (slot 9c is touch-ALWAYS); waiting up to ${ceremonyTimeoutMillis / 1000}s")
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            val bodyJson = buildJsonObject {
+                put("key_id", JsonPrimitive(keyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("envelope", envelope)
+                put("pkcs11", pkcs11)
+            }
+            val response = client.post("$nodeUrl/v1/accord/family/cosign") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("cosign family failed: ${response.status}: ${raw.take(220)}")
+            }
+            logInfo(method, "cosigned key_id=$keyId")
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.CosignFamilyResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            val hint = if (e is io.ktor.client.plugins.HttpRequestTimeoutException) {
+                " — timed out waiting for YubiKey touch; touch the key EACH time it blinks and retry"
+            } else {
+                ""
+            }
+            logException(method, e, "nodeUrl=$nodeUrl$hint")
+            throw RuntimeException("${e.message ?: "cosign failed"}$hint", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Assemble the genesis** — `POST {nodeUrl}/v1/accord/genesis/assemble`
+     * (owner-gated). Verifies the 2-of-3 founder quorum over the verbatim
+     * [envelope] using the collected [founders] (`ThresholdMember`s) + [signatures]
+     * (`ThresholdSignature`s) from [cosignAccordFamily], then returns the assembled
+     * genesis — the cold-start bake artifact (CIRISVerify#107) the operator SAVES.
+     */
+    suspend fun genesisAssemble(
+        envelope: kotlinx.serialization.json.JsonElement,
+        founders: List<kotlinx.serialization.json.JsonElement>,
+        signatures: List<kotlinx.serialization.json.JsonElement>,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.GenesisAssembleResponse {
+        val method = "genesisAssemble"
+        logInfo(method, "POST $nodeUrl/v1/accord/genesis/assemble founders=${founders.size} sigs=${signatures.size}")
+        val client = federationHttpClient()
+        return try {
+            val bodyJson = buildJsonObject {
+                put("envelope", envelope)
+                put("founders", JsonArray(founders))
+                put("signatures", JsonArray(signatures))
+            }
+            val response = client.post("$nodeUrl/v1/accord/genesis/assemble") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("genesis assemble failed: ${response.status}: ${raw.take(220)}")
+            }
+            jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.GenesisAssembleResponse.serializer(),
+                raw,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    // ─── Holistic SAFETY surface (/v1/safety/*) — CIRISServer v0.4.6 ──────────
+    //
+    // The safety cards drive THIS device's local node only. The app holds NO
+    // keys and performs NO crypto: every signing / admission decision is made by
+    // the node's substrate. These are plain localhost requests (Bearer [token]
+    // for the owner session); there is no x-ciris signing in Kotlin.
+    //
+    // Mirrors CIRISServer/src/safety/{age,moderation,named,watchlist}.rs exactly.
+    // Hand-written direct HTTP (not in the generated SDK).
+
+    /**
+     * **Set the caller's self-declared age band** — the onboarding "state your
+     * age range" step. `POST {localNodeUrl}/v1/safety/age-assurance`.
+     *
+     * Mirrors `age.rs::set_age` (`SetAgeRequest { subject_key_id, band, level? }`).
+     * Only the `self` level is settable here — the node rejects provider/
+     * government with 400 (a subject cannot self-mint verified adulthood). The
+     * node signs + promotes the assurance; the subject controls their own level
+     * and misdeclaration NEVER slashes (it routes to adjudication).
+     */
+    suspend fun setAgeAssurance(
+        subjectKeyId: String,
+        band: AgeBand,
+        level: AssuranceLevel? = null,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): SetAgeResponse {
+        val method = "setAgeAssurance"
+        logInfo(method, "POST $localNodeUrl/v1/safety/age-assurance subject=${subjectKeyId.take(16)}… band=$band")
+        val client = federationHttpClient()
+        return try {
+            val request = SetAgeRequest(subjectKeyId = subjectKeyId, band = band, level = level)
+            val response = client.post("$localNodeUrl/v1/safety/age-assurance") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(SetAgeRequest.serializer(), request))
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("set age-assurance failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(raw, SetAgeResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Read an identity's current age assurance** —
+     * `GET {nodeUrl}/v1/safety/age-assurance/{key_id}`. Mirrors `age.rs::get_age`
+     * (`AgeStatusResponse { key_id, assurance? }`). `assurance` is null when none
+     * is on record — callers MUST treat null PROTECTIVELY (default to minor).
+     */
+    suspend fun getAgeAssurance(
+        keyId: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): AgeStatusResponse {
+        val method = "getAgeAssurance"
+        logDebug(method, "GET $nodeUrl/v1/safety/age-assurance/$keyId")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/safety/age-assurance/$keyId") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("get age-assurance failed: ${response.status} for $keyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), AgeStatusResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "keyId=$keyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **The aggregate protective posture/status** for an identity —
+     * `GET {nodeUrl}/v1/safety/status/{key_id}`. Mirrors `age.rs::safety_status`
+     * (`{ key_id, age_assurance?, honesty{…} }`). The honesty block is kept TRUE
+     * by the server and surfaced verbatim by the child-safety card.
+     */
+    suspend fun getSafetyStatus(
+        keyId: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): SafetyStatusResponse {
+        val method = "getSafetyStatus"
+        logDebug(method, "GET $nodeUrl/v1/safety/status/$keyId")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/safety/status/$keyId") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("get safety status failed: ${response.status} for $keyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), SafetyStatusResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "keyId=$keyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **File a ModerationEvent** — `POST {nodeUrl}/v1/safety/moderation`. Mirrors
+     * `moderation.rs::moderation` (`ModerationRequest { signer_key_id,
+     * community_key_id, duty, allegation_type, target_key_ids[], payload }`).
+     *
+     * Admitted IFF the signer holds the duty (`moderate`/`takedown`/`review`) or
+     * sits on a live delegated chain (the §11.10 gate, enforced by the node).
+     * Non-holders get 403 — "the duty is held or delegated, never assumed". The
+     * app does no crypto; the node decides authority.
+     */
+    suspend fun fileModeration(
+        signerKeyId: String,
+        communityKeyId: String,
+        duty: ModerationDuty,
+        allegationType: String,
+        targetKeyIds: List<String> = emptyList(),
+        note: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ModerationResponse {
+        val method = "fileModeration"
+        logInfo(method, "POST $nodeUrl/v1/safety/moderation community=${communityKeyId.take(16)}… duty=$duty allegation=$allegationType")
+        val client = federationHttpClient()
+        return try {
+            val request = ModerationRequest(
+                signerKeyId = signerKeyId,
+                communityKeyId = communityKeyId,
+                duty = duty,
+                allegationType = allegationType,
+                targetKeyIds = targetKeyIds,
+                payload = note?.let { ModerationPayload(note = it) },
+            )
+            val response = client.post("$nodeUrl/v1/safety/moderation") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(ModerationRequest.serializer(), request))
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("file moderation failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(raw, ModerationResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **The named-moderator existence status** for a community —
+     * `GET {nodeUrl}/v1/safety/named-moderator/{community_key_id}`. Mirrors
+     * `named.rs::named_status` (`{ community_key_id, existence{verdict…},
+     * fails_secure }`). The verdict is one of `operate` / `auto_promote` /
+     * `quiesce` (FAIL SECURE — better no group than an unmoderated one).
+     */
+    suspend fun getNamedModerator(
+        communityKeyId: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): NamedModeratorResponse {
+        val method = "getNamedModerator"
+        logDebug(method, "GET $nodeUrl/v1/safety/named-moderator/$communityKeyId")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/safety/named-moderator/$communityKeyId") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("named-moderator fetch failed: ${response.status} for $communityKeyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), NamedModeratorResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "communityKeyId=$communityKeyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **The current watchlist enables for a group** —
+     * `GET {nodeUrl}/v1/safety/watchlist/{group_key_id}`. Mirrors
+     * `watchlist.rs::list_enables` (`{ group_key_id, enables[], honesty{…} }`).
+     * The honesty block (per-group/never-global, cannot reach private content,
+     * hashes operator-provisioned) is surfaced verbatim by the child-safety card.
+     */
+    suspend fun getWatchlist(
+        groupKeyId: String,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): WatchlistListResponse {
+        val method = "getWatchlist"
+        logDebug(method, "GET $nodeUrl/v1/safety/watchlist/$groupKeyId")
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/safety/watchlist/$groupKeyId") {
+                token?.let { header("Authorization", "Bearer $it") }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("watchlist fetch failed: ${response.status} for $groupKeyId")
+            }
+            decodeFederationEnvelope(response.bodyAsText(), WatchlistListResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "groupKeyId=$groupKeyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Enable or disable a per-group content watchlist** —
+     * `POST {nodeUrl}/v1/safety/watchlist`. Mirrors `watchlist.rs::watchlist`'s
+     * flattened body (`signer_key_id` + the flattened `WatchlistEnable`).
+     *
+     * Opt-in, default OFF, per-group, NEVER global. `moderate`-gated; CSAM
+     * additionally `takedown`-gated (a CSAM match auto-files a takedown). Pass
+     * `enabled=false` to turn a watchlist OFF (the node emits a `withdraws` —
+     * consent requires revocability). Non-authorized signers get 403.
+     */
+    suspend fun setWatchlist(
+        signerKeyId: String,
+        groupKeyId: String,
+        watchlistId: String,
+        watchlistClass: WatchlistClass,
+        enabled: Boolean,
+        mode: WatchlistMode,
+        routeToModerator: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): WatchlistResponse {
+        val method = "setWatchlist"
+        logInfo(method, "POST $nodeUrl/v1/safety/watchlist group=${groupKeyId.take(16)}… id=$watchlistId enabled=$enabled class=$watchlistClass")
+        val client = federationHttpClient()
+        return try {
+            val request = WatchlistRequest(
+                signerKeyId = signerKeyId,
+                groupKeyId = groupKeyId,
+                watchlistId = watchlistId,
+                watchlistClass = watchlistClass,
+                enabled = enabled,
+                mode = mode,
+                routeToModerator = routeToModerator,
+            )
+            val response = client.post("$nodeUrl/v1/safety/watchlist") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(jsonConfig.encodeToString(WatchlistRequest.serializer(), request))
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("set watchlist failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(raw, WatchlistResponse.serializer())
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
     // System Status (from /v1/system/health)
     // Uses direct HTTP to support dynamic baseUrl changes
     override suspend fun getSystemStatus(): SystemStatus {
@@ -1216,6 +3710,55 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e, "url=$baseUrl")
             throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Probe the node's structured server health at `/v1/health` (unauthenticated —
+     * liveness is public). Returns the [NodeHealth] facts that drive the universal
+     * client's node-vs-agent gate ([ai.ciris.mobile.shared.models.ClientMode]) and
+     * the version-mismatch banner: the node `version`, its `role`
+     * (`"fabric-node"` for a bare node), and the optional `cognitive_state` (present
+     * only when an agent enriches the endpoint).
+     */
+    suspend fun getNodeHealth(): NodeHealth {
+        val method = "getNodeHealth"
+        logDebug(method, "Probing node health at $baseUrl/v1/health")
+
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/health") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Node health failed: ${response.status}")
+            }
+
+            val body = response.bodyAsText()
+            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            val data = json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
+
+            val cognitiveState = data?.get("cognitive_state")?.jsonPrimitive?.contentOrNull
+            var serviceCount = 0
+            data?.get("services")?.jsonObject?.forEach { (_, _) -> serviceCount++ }
+
+            NodeHealth(
+                status = data?.get("status")?.jsonPrimitive?.contentOrNull ?: "unknown",
+                role = data?.get("role")?.jsonPrimitive?.contentOrNull,
+                version = data?.get("version")?.jsonPrimitive?.contentOrNull,
+                cognitiveState = cognitiveState,
+                serviceCount = serviceCount
+            )
         } finally {
             client.close()
         }
@@ -2019,7 +4562,13 @@ class CIRISApiClient(
         refresh: Boolean = false
     ): VerifyStatusResponse {
         val method = "getVerifyStatus"
-        logDebug(method, "Fetching CIRISVerify status (hasPlayIntegrity=${playIntegrityToken != null})")
+        // NODE mode: the ciris-server fabric node serves a read-only
+        // `GET /v1/system/verify-status` (src/health.rs verify_status_router) —
+        // CIRISVerify is part of the node substrate, so it reports loaded +
+        // the node's derived federation key_id + custody class + attestation
+        // checks. (The agent path below uses /v1/auth/attestation, which on a
+        // bare node is a POST-only EMIT route and 405s on a GET.)
+        logDebug(method, "Fetching CIRISVerify status (node=${isNodeMode()}, hasPlayIntegrity=${playIntegrityToken != null})")
 
         // Uses cached attestation from auth service - should be fast
         // Full attestation with Play Integrity may take longer
@@ -2036,7 +4585,10 @@ class CIRISApiClient(
         return try {
             // Use auth/attestation endpoint for cached attestation (fast, no network calls)
             // Falls back to setup/verify-status only during first-run setup with Play Integrity
-            val url = if (playIntegrityToken != null && playIntegrityNonce != null) {
+            val url = if (isNodeMode()) {
+                // Fabric node: the read-only verify-status route on the substrate.
+                "$baseUrl/v1/system/verify-status"
+            } else if (playIntegrityToken != null && playIntegrityNonce != null) {
                 // Full attestation with Play Integrity - use setup endpoint (first-run only)
                 "$baseUrl/v1/setup/verify-status?mode=full&play_integrity_token=$playIntegrityToken&play_integrity_nonce=$playIntegrityNonce"
             } else if (refresh) {
@@ -2510,6 +5062,17 @@ class CIRISApiClient(
      */
     override suspend fun getLlmConfig(): LlmConfigData {
         val method = "getLlmConfig"
+        // AGENT-only: LLM config is 404 on a bare node (no brain to configure).
+        if (nodeSkip(method)) return LlmConfigData(
+            provider = "",
+            baseUrl = null,
+            model = "",
+            apiKeySet = false,
+            isCirisProxy = false,
+            backupBaseUrl = null,
+            backupModel = null,
+            backupApiKeySet = false,
+        )
         logDebug(method, "Fetching current LLM configuration")
         logDebug(method, "Auth header: ${authHeader()}")
 
@@ -2669,6 +5232,17 @@ class CIRISApiClient(
 
     override suspend fun getCredits(): CreditStatusData {
         val method = "getCredits"
+        // AGENT-only: billing/credits is 404 on a bare node. Report "free / no
+        // billing" so the node UI shows no purchase prompts.
+        if (nodeSkip(method)) return CreditStatusData(
+            hasCredit = true,
+            creditsRemaining = 0,
+            freeUsesRemaining = 0,
+            dailyFreeUsesRemaining = null,
+            totalUses = 0,
+            planName = null,
+            purchaseRequired = false,
+        )
         logDebug(method, "Fetching credit status")
 
         return try {
@@ -2747,6 +5321,12 @@ class CIRISApiClient(
 
     override suspend fun listAdapters(): AdaptersListData {
         val method = "listAdapters"
+        // AGENT-only: GET /v1/system/adapters is 404 on a bare node.
+        if (nodeSkip(method)) return AdaptersListData(
+            adapters = emptyList(),
+            totalCount = 0,
+            runningCount = 0,
+        )
         logInfo(method, "Listing adapters")
 
         return try {
@@ -3485,6 +6065,16 @@ class CIRISApiClient(
 
     suspend fun getWAStatus(): WAStatusData {
         val method = "getWAStatus"
+        // AGENT-only: the WA (Wise Authority) status endpoint is 404 on a bare
+        // node. Report an inactive WA service.
+        if (nodeSkip(method)) return WAStatusData(
+            serviceHealthy = false,
+            activeWAs = 0,
+            pendingDeferrals = 0,
+            deferrals24h = 0,
+            averageResolutionTimeMinutes = 0.0,
+            timestamp = null,
+        )
         logInfo(method, "Fetching WA status")
 
         return try {
@@ -3548,6 +6138,9 @@ class CIRISApiClient(
 
     suspend fun getWalletStatus(): ai.ciris.mobile.shared.ui.screens.WalletStatusResponse {
         val method = "getWalletStatus"
+        // AGENT-only: the wallet/billing balance endpoint is 404 on a bare node.
+        // Defaults = "no wallet" (all fields default to the no-wallet state).
+        if (nodeSkip(method)) return ai.ciris.mobile.shared.ui.screens.WalletStatusResponse()
         logInfo(method, "Fetching wallet status")
 
         return try {
@@ -4278,7 +6871,9 @@ class CIRISApiClient(
 
     suspend fun getSystemHealth(): SystemHealthData {
         val method = "getSystemHealth"
-        logInfo(method, "Fetching system health")
+        // Per-poll fetch (every 30s) — debug; the INFO line below fires only when
+        // something is actually wrong, so a steady status=ok node doesn't spam.
+        logDebug(method, "Fetching system health")
 
         return try {
             // Use direct HTTP call to properly parse warnings
@@ -4325,7 +6920,15 @@ class CIRISApiClient(
             // Parse degraded_mode flag
             val degradedMode = data["degraded_mode"]?.jsonPrimitive?.boolean ?: false
 
-            logInfo(method, "System health: status=$status, cognitiveState=$cognitiveState, warnings=${warnings.size}, degradedMode=$degradedMode")
+            // Only surface at INFO when something is actually wrong (status not
+            // ok, degraded mode, or warnings present). A steady "status=ok" every
+            // 30s is noise → debug.
+            val healthMsg = "System health: status=$status, cognitiveState=$cognitiveState, warnings=${warnings.size}, degradedMode=$degradedMode"
+            if (status != "ok" || degradedMode || warnings.isNotEmpty()) {
+                logInfo(method, healthMsg)
+            } else {
+                logDebug(method, healthMsg)
+            }
 
             SystemHealthData(
                 status = status,
@@ -5333,6 +7936,13 @@ class CIRISApiClient(
             offset: Int = 0
         ): AuditEntriesData {
             val method = "getAuditEntries"
+            // AGENT-only: the agent audit feed is 404 on a bare node.
+            if (nodeSkip(method)) return AuditEntriesData(
+                entries = emptyList(),
+                total = 0,
+                offset = offset,
+                limit = limit,
+            )
             logDebug(method, "Fetching audit entries: severity=$severity, outcome=$outcome, limit=$limit, offset=$offset")
 
             return try {
@@ -8457,6 +11067,20 @@ data class SystemHealthData(
     val cognitiveState: String,
     val warnings: List<SystemWarning> = emptyList(),
     val degradedMode: Boolean = false  // True when no working LLM provider
+)
+
+/**
+ * Structured server health from `/v1/health` — the facts the universal client's
+ * node-vs-agent gate keys off (see [ai.ciris.mobile.shared.models.ClientMode]).
+ * A bare node reports `role="fabric-node"` with no [cognitiveState] and an empty
+ * service map; an agent enriches the endpoint with [cognitiveState] + services.
+ */
+data class NodeHealth(
+    val status: String,
+    val role: String?,
+    val version: String?,
+    val cognitiveState: String?,
+    val serviceCount: Int
 )
 
 data class UnifiedTelemetryData(

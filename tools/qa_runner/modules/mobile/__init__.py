@@ -20,6 +20,7 @@ from .device_helper import (
 )
 from .test_cases import (
     test_app_launch,
+    test_catchup_add_fedid,
     test_chat_interaction,
     test_full_flow,
     test_google_signin,
@@ -80,6 +81,7 @@ __all__ = [
     "test_google_signin",
     "test_local_login",
     "test_setup_wizard",
+    "test_catchup_add_fedid",
     "test_chat_interaction",
     "test_full_flow",
     # iOS test functions

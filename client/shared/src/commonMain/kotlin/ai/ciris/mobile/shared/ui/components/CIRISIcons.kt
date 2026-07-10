@@ -111,6 +111,10 @@ object CIRISIcons {
     val handler: ImageVector get() = CIRISMaterialIcons.Filled.CIRISHandler       // Action handler
     val graph: ImageVector get() = CIRISMaterialIcons.Filled.CIRISGraph           // Memory graph
     val agent: ImageVector get() = CIRISMaterialIcons.Filled.CIRISAgent           // Wise Authority
+
+    // === Node-mesh vertex glyphs (distinct per kind) ===
+    val nodeBox: ImageVector get() = CIRISMaterialIcons.Filled.CIRISNode          // Server / node box
+    val robot: ImageVector get() = CIRISMaterialIcons.Filled.CIRISRobot           // Agent (robot head)
     val bus: ImageVector get() = CIRISMaterialIcons.Filled.CIRISBus               // Message bus
     val stage: ImageVector get() = CIRISMaterialIcons.Filled.CIRISStage           // Pipeline stage
 

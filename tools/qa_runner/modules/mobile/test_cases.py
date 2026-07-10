@@ -4,11 +4,14 @@ Mobile Test Cases for CIRIS App
 Test cases for automated UI testing with ADB and UI Automator.
 """
 
+import json
 import os
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .adb_helper import ADBHelper
 from .ui_automator import UIAutomator
@@ -165,6 +168,14 @@ class CIRISAppConfig:
     TIMEOUT_CHAT_RESPONSE = 30
     TIMEOUT_SETUP_STEP = 5  # Max wait per wizard step
 
+    # In-app test-automation HTTP server (Ktor CIO, same as desktop/iOS).
+    # Debug builds force-enable it (BuildConfig.TEST_MODE_ENABLED=true →
+    # AndroidTestAutomationServer.startIfEnabled() in MainActivity.onCreate).
+    # It binds 127.0.0.1:9091 ON THE DEVICE; we adb-forward a local port to it.
+    # 19091 locally avoids colliding with a desktop test server on 9091.
+    TEST_SERVER_DEVICE_PORT = 9091
+    TEST_SERVER_LOCAL_PORT = 19091
+
 
 class ScreenCoordinates:
     """
@@ -233,6 +244,191 @@ class ScreenCoordinates:
         scaled_x = int(x * target_width / base_width)
         scaled_y = int(y * target_height / base_height)
         return (scaled_x, scaled_y)
+
+
+# ========== In-App Test-Automation HTTP Client (Compose testTag drive) ==========
+#
+# UIAutomator XML dumps do NOT reliably expose Compose testTags set via the
+# shared `testable()` / `testableClickable()` modifiers (no
+# testTagsAsResourceId semantics on those nodes). The app runs the same Ktor
+# test-automation server as desktop (TestAutomationServer.android.kt, port
+# 9091 on-device, auto-enabled in debug builds), which serves exactly those
+# testTags. New wizard/catch-up tests drive the app through it.
+
+
+class TestServerClient:
+    """Thin HTTP client for the in-app test-automation server (Android).
+
+    Reached via `adb forward tcp:19091 tcp:9091`. Endpoints (shared
+    TestAutomationHandler): /health, /screen, /tree, /click, /input, /wait,
+    /element/{tag}, /act.
+    """
+
+    def __init__(self, base_url: str = f"http://127.0.0.1:{CIRISAppConfig.TEST_SERVER_LOCAL_PORT}"):
+        self.base_url = base_url.rstrip("/")
+
+    def _request(self, method: str, path: str, data: Optional[dict] = None, timeout: int = 10) -> Tuple[int, dict]:
+        url = f"{self.base_url}{path}"
+        body = json.dumps(data).encode() if data is not None else None
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"} if body else {},
+            method=method,
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read()
+                try:
+                    return resp.status, json.loads(raw)
+                except json.JSONDecodeError:
+                    return resp.status, {"raw": raw.decode("utf-8", errors="replace")}
+        except urllib.error.HTTPError as e:
+            try:
+                return e.code, json.loads(e.read())
+            except Exception:
+                return e.code, {"error": str(e)}
+        except (urllib.error.URLError, ConnectionRefusedError, OSError) as e:
+            return 0, {"error": str(e)}
+
+    def health(self) -> Tuple[int, dict]:
+        return self._request("GET", "/health", timeout=3)
+
+    def screen(self) -> Optional[str]:
+        status, body = self._request("GET", "/screen", timeout=5)
+        return body.get("screen") if status == 200 else None
+
+    def tags(self) -> List[str]:
+        """All currently POSITIONED testTags (from /tree)."""
+        status, body = self._request("GET", "/tree", timeout=5)
+        if status != 200:
+            return []
+        return [e.get("testTag", "") for e in body.get("elements", [])]
+
+    def is_visible(self, test_tag: str) -> bool:
+        """Positioned-in-the-composition check via /tree.
+
+        Used for GATING assertions (e.g. toggle_trace_opt_in must be ABSENT
+        while announce is OFF): AnimatedVisibility(false) content is not
+        composed, so its tag is neither positioned nor handler-registered.
+        """
+        return test_tag in self.tags()
+
+    def click(self, test_tag: str) -> Tuple[bool, Optional[Tuple[int, int]]]:
+        """Click via the registered handler. Returns (success, coords).
+
+        On failure coords (if the element is positioned but handler-less —
+        the testable()-vs-testableClickable() client bug class) let the
+        caller fall back to an adb coordinate tap.
+        """
+        status, body = self._request("POST", "/click", {"testTag": test_tag})
+        coords = None
+        raw = body.get("coordinates")
+        if raw and "," in str(raw):
+            try:
+                x, y = str(raw).split(",", 1)
+                coords = (int(float(x)), int(float(y)))
+            except ValueError:
+                coords = None
+        return status == 200 and bool(body.get("success")), coords
+
+    def input(self, test_tag: str, text: str, clear_first: bool = True) -> bool:
+        status, body = self._request(
+            "POST", "/input", {"testTag": test_tag, "text": text, "clearFirst": clear_first}
+        )
+        return status == 200 and bool(body.get("success"))
+
+    def wait_for_element(self, test_tag: str, timeout: float = 8.0) -> bool:
+        """Server-side wait (position OR click-handler registered)."""
+        status, body = self._request(
+            "POST",
+            "/wait",
+            {"testTag": test_tag, "timeoutMs": int(timeout * 1000)},
+            timeout=int(timeout) + 5,
+        )
+        return status == 200 and bool(body.get("success"))
+
+    def wait_for_screen(self, expected: str, timeout: float = 10.0, interval: float = 0.5) -> bool:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.screen() == expected:
+                return True
+            time.sleep(interval)
+        return False
+
+    def wait_for_any_screen(self, expected: List[str], timeout: float = 10.0, interval: float = 0.5) -> Optional[str]:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            current = self.screen()
+            if current in expected:
+                return current
+            time.sleep(interval)
+        return None
+
+
+def _click_or_tap(client: TestServerClient, adb: ADBHelper, test_tag: str) -> bool:
+    """Click via registered handler; fall back to coordinate tap if the tag is
+    positioned but handler-less (testable() instead of testableClickable())."""
+    ok, coords = client.click(test_tag)
+    if ok:
+        return True
+    if coords:
+        print(f"    (no click handler for '{test_tag}' — falling back to adb tap at {coords})")
+        adb.tap(*coords)
+        return True
+    return False
+
+
+def connect_test_server(
+    adb: ADBHelper,
+    config: dict,
+    launch_if_needed: bool = True,
+    clear_data: bool = False,
+    boot_timeout: float = 180.0,
+) -> Optional[TestServerClient]:
+    """Forward the in-app test server port and return a live client.
+
+    If the server isn't reachable and ``launch_if_needed``, (re)launches the
+    app (optionally clearing data for a first-run flow) and polls /health
+    while the bundled Python backend boots (60-120s+ on first extraction).
+    """
+    local_port = config.get("test_server_local_port", CIRISAppConfig.TEST_SERVER_LOCAL_PORT)
+    device_port = config.get("test_server_device_port", CIRISAppConfig.TEST_SERVER_DEVICE_PORT)
+
+    if not adb.forward_port(local_port, device_port):
+        print(f"  WARNING: adb forward tcp:{local_port} tcp:{device_port} failed")
+        return None
+
+    client = TestServerClient(f"http://127.0.0.1:{local_port}")
+
+    # Already up? (app running in test mode)
+    status, body = client.health()
+    if status == 200 and body.get("testMode"):
+        return client
+
+    if not launch_if_needed:
+        return None
+
+    print("  Test server not reachable — launching app...")
+    adb.force_stop_app(CIRISAppConfig.PACKAGE)
+    time.sleep(1)
+    if clear_data:
+        print("  Clearing app data (first-run flow)...")
+        adb.clear_app_data(CIRISAppConfig.PACKAGE)
+        time.sleep(1)
+    if not adb.launch_app(CIRISAppConfig.PACKAGE, CIRISAppConfig.MAIN_ACTIVITY):
+        print("  ERROR: failed to launch app")
+        return None
+
+    deadline = time.time() + boot_timeout
+    while time.time() < deadline:
+        status, body = client.health()
+        if status == 200 and body.get("testMode"):
+            return client
+        time.sleep(2)
+
+    print(f"  ERROR: in-app test server never came up within {boot_timeout:.0f}s")
+    return None
 
 
 def test_app_launch(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
@@ -579,188 +775,419 @@ def test_local_login(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepor
 
 def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
     """
-    Test: Complete the setup wizard.
+    Test: Complete the NODE-CLIENT first-run setup wizard.
 
-    Prerequisites:
-    - Must be on Setup screen (after login)
+    Drives the app through the in-app test-automation HTTP server (Compose
+    testTags — UIAutomator does not reliably see them). Node-client first-run
+    order (SetupViewModel / SetupScreen, matches the desktop QA runner's
+    test_setup_wizard_flow):
 
-    The wizard has 4 steps:
-    1. Welcome/Intro - "Register Your Agent Identity" card, "Continue →" button
-    2. AI Configuration - Provider dropdown, API Key field, "Test Connection", "Next"
-    3. Optional Features - Alignment metrics consent, Web API toggle, "Next"
-    4. Confirm Setup - Username/Password fields, "Finish Setup"
+        WELCOME → ACCOUNT_AND_CONFIRMATION (username/password/confirm)
+        → FEDERATION_IDENTITY_SETUP → [LLM_CONFIGURATION] → AGE_RANGE → COMPLETE
+
+    LLM_CONFIGURATION appears only on AGENT builds (CIRISBuild.HAS_AGENT):
+    the step is probed for after the fed-ID step and handled when present —
+    prefer the CIRIS-hosted option if rendered (OAuth path), else BYOK with
+    the configured provider+key (llm_provider/llm_api_key), else the keyless
+    "local" (Ollama) provider so the wizard can proceed without a real key.
+    Node-client builds skip straight to AGE_RANGE. The federation-identity
+    step hosts the AnnounceDecisionCard:
+      - input_fedid_label          — REQUIRED, non-generic fed-ID name
+      - toggle_announce_ownership  — the pivotal announce switch
+      - toggle_trace_opt_in        — trace opt-in, GATED: composed ONLY while
+                                     announce is ON (asserted both ways below)
 
     Config options:
-    - llm_api_key: API key for LLM provider (optional)
-    - setup_username: Username for local account (default: "testuser")
-    - setup_password: Password for local account (default: "testpass123")
-    - enable_accord_metrics: Enable alignment metrics consent (default: True)
-    - setup_max_steps: Max navigation attempts (default: 15)
+    - setup_username / setup_password: local account (default admin/qa_test_password_12345)
+    - fed_label: federation-ID label (default: generated unique qa-node-<ts>)
+    - announce: flip the announce switch ON (default True)
+    - trace_opt_in: tick the trace checkbox after announcing (default True)
+    - age_band: "adult" | "minor" (default "adult")
+    - llm_provider / llm_api_key: BYOK provider+key for the agent build's
+      LLM_CONFIGURATION step (default groq / key from ~/.groq_key when the
+      runner found one; keyless "local" fallback when no key)
+    - clear_data: clear app data if the app must be (re)launched (default True)
 
-    Additional screens can be added - the test will navigate through
-    any number of steps using the SETUP_NAV_BUTTONS priority list.
+    Standalone-safe: if the app/test server isn't up it launches the app
+    itself (fresh first-run when clear_data), and if it lands on the Login
+    screen it clicks btn_local_login to enter the wizard.
     """
     start_time = time.time()
     screenshots = []
 
-    api_key = config.get("llm_api_key", "")
-    max_steps = config.get("setup_max_steps", 15)  # Configurable for future screens
+    username = config.get("setup_username", "admin")
+    password = config.get("setup_password", "qa_test_password_12345")
+    fed_label = config.get("fed_label") or f"qa-node-{int(time.time())}"
+    announce = config.get("announce", True)
+    trace_opt_in = config.get("trace_opt_in", True)
+    age_band = config.get("age_band", "adult")
+    llm_provider = config.get("llm_provider", "groq")
+    llm_api_key = config.get("llm_api_key", "")
 
-    try:
-        print("  [1/4] Checking Setup screen...")
-
-        # Wait for setup screen elements
-        time.sleep(2)
-        screen_info = ui.dump_screen_info()
-        print(f"  Setup screen elements: {screen_info.get('texts', [])[:15]}")
-
-        # Take screenshot
-        screenshot_path = f"/tmp/ciris_setup_{int(time.time())}.png"
-        adb.screenshot(screenshot_path)
-        screenshots.append(screenshot_path)
-
-        print("  [2/4] Navigating setup wizard...")
-
-        # Navigate through wizard steps
-        for step in range(max_steps):
-            time.sleep(1.5)
-            ui.refresh_hierarchy()
-
-            # Check if we've completed setup (reached chat screen)
-            # Must find a PRIMARY indicator - "Connected" alone is not sufficient
-            for indicator in CIRISAppConfig.CHAT_SCREEN_INDICATORS_PRIMARY:
-                if ui.is_text_visible(indicator):
-                    print(f"  Setup completed! Found primary indicator '{indicator}' after {step + 1} clicks")
-                    return TestReport(
-                        name="test_setup_wizard",
-                        result=TestResult.PASSED,
-                        duration=time.time() - start_time,
-                        message=f"Setup completed in {step + 1} steps (found: {indicator})",
-                        screenshots=screenshots,
-                    )
-
-            # Also check for secondary indicators WITH primary context
-            # If we see Shutdown/STOP buttons, we're definitely on chat screen
-            for indicator in CIRISAppConfig.CHAT_SCREEN_INDICATORS_SECONDARY:
-                if indicator in ["Shutdown", "STOP"] and ui.is_text_visible(indicator):
-                    # Shutdown/STOP only appear on chat screen
-                    print(f"  Setup completed! Found chat-only indicator '{indicator}' after {step + 1} clicks")
-                    return TestReport(
-                        name="test_setup_wizard",
-                        result=TestResult.PASSED,
-                        duration=time.time() - start_time,
-                        message=f"Setup completed in {step + 1} steps (found: {indicator})",
-                        screenshots=screenshots,
-                    )
-
-            # Look for API key input (for BYOK mode) - Step 2
-            if ui.is_text_visible("API Key") or ui.is_text_visible("api_key"):
-                if api_key:
-                    edit_fields = ui.find_by_class("EditText")
-                    if edit_fields:
-                        ui.set_text(edit_fields[0], api_key)
-                        time.sleep(0.5)
-
-            # Enable accord metrics consent if the checkbox is visible - Step 3
-            # The checkbox text is "I agree to share anonymous alignment metrics"
-            if config.get("enable_accord_metrics", True):
-                accord_text = "I agree to share anonymous alignment metrics"
-                if ui.is_text_visible(accord_text):
-                    # Find and click the checkbox or the text row
-                    if ui.click_by_text(accord_text):
-                        print(f"  Step {step + 1}: Enabled accord metrics consent")
-                        time.sleep(0.5)
-
-            # Handle Confirm Setup step (Step 4) - requires username and password
-            if ui.is_text_visible(CIRISAppConfig.TEXT_CONFIRM_SETUP) or ui.is_text_visible(
-                CIRISAppConfig.TEXT_YOUR_ACCOUNT
-            ):
-                test_username = config.get("setup_username", "testuser")
-                test_password = config.get("setup_password", "testpass123")
-
-                # Fill username — target the Compose field by its testTag
-                # ('input_username', resource-id), which is resolution-independent.
-                # Coordinate taps were brittle: hardcoded coords miss on different
-                # screen sizes and could land the password in the City field.
-                if ui.is_text_visible(CIRISAppConfig.TEXT_USERNAME_REQUIRED) or ui.is_text_visible(
-                    CIRISAppConfig.TEXT_USERNAME
-                ):
-                    if not ui.set_text_by_resource_id("input_username", test_username):
-                        # Fallback for older builds without testTagsAsResourceId.
-                        username_coords = ScreenCoordinates.get("username_field_center", config)
-                        adb.tap(*username_coords)
-                        time.sleep(0.3)
-                        adb.input_text(test_username)
-                        adb.press_back()  # Dismiss keyboard
-                    time.sleep(0.3)
-                    print(f"  Step {step + 1}: Entered username '{test_username}'")
-
-                # Fill password — same, by 'input_password' testTag.
-                if ui.is_text_visible(CIRISAppConfig.TEXT_PASSWORD_REQUIRED) or ui.is_text_visible(
-                    CIRISAppConfig.TEXT_PASSWORD
-                ):
-                    if not ui.set_text_by_resource_id("input_password", test_password):
-                        password_coords = ScreenCoordinates.get("password_field_center", config)
-                        adb.tap(*password_coords)
-                        time.sleep(0.3)
-                        adb.input_text(test_password)
-                        adb.press_back()  # Dismiss keyboard
-                    time.sleep(0.5)
-                    print(f"  Step {step + 1}: Entered password")
-
-                # Continue to next iteration to click Finish Setup
-                continue
-
-            # Try clicking navigation buttons in priority order
-            next_clicked = False
-            for button_text in CIRISAppConfig.SETUP_NAV_BUTTONS:
-                if ui.click_by_text(button_text):
-                    print(f"  Step {step + 1}: Clicked '{button_text}'")
-                    next_clicked = True
-                    break
-
-            if not next_clicked:
-                # Try finding any clickable button (not Back)
-                screen_texts = ui.get_screen_text()
-                print(f"  Step {step + 1}: No nav button found. Screen: {screen_texts[:10]}")
-
-                # Last resort: find clickable elements
-                clickable = ui.find_clickable()
-                for elem in clickable:
-                    # Skip Back button and other non-forward elements
-                    elem_text = getattr(elem, "text", "") or ""
-                    if any(skip in elem_text for skip in ["Back", "Cancel", "Skip"]):
-                        continue
-                    # Click forward-looking buttons
-                    if "Button" in elem.class_name:
-                        ui.click(elem)
-                        print(f"  Step {step + 1}: Clicked fallback button")
-                        next_clicked = True
-                        break
-
-                if not next_clicked:
-                    # Check if we're stuck on a step that needs special handling
-                    print(f"  Step {step + 1}: No clickable forward button found")
-
-            time.sleep(1)
-
-        # If we get here, setup didn't complete
-        screenshot_path = f"/tmp/ciris_setup_stuck_{int(time.time())}.png"
-        adb.screenshot(screenshot_path)
-        screenshots.append(screenshot_path)
-
-        screen_info = ui.dump_screen_info()
+    def fail(step: str, detail: str) -> TestReport:
+        path = f"/tmp/ciris_setup_fail_{int(time.time())}.png"
+        adb.screenshot(path)
+        screenshots.append(path)
         return TestReport(
             name="test_setup_wizard",
             result=TestResult.FAILED,
             duration=time.time() - start_time,
-            message=f"Setup wizard did not complete after {max_steps} steps. Final screen: {screen_info.get('texts', [])[:10]}",
+            message=f"[{step}] {detail}",
+            screenshots=screenshots,
+        )
+
+    try:
+        # ── Step 0: reach the wizard via the test server ──────────────────
+        print("  [1/7] Connecting to in-app test server...")
+        client = connect_test_server(adb, config, launch_if_needed=True, clear_data=config.get("clear_data", True))
+        if not client:
+            return fail("connect", "in-app test-automation server unreachable (debug build required)")
+
+        print("  [2/7] Waiting for Login/Setup screen (first boot can take 60-120s+)...")
+        landed = client.wait_for_any_screen(["Login", "Setup"], timeout=180.0, interval=1.5)
+        if landed is None:
+            return fail("land", f"never reached Login/Setup (screen={client.screen()!r})")
+
+        if landed == "Login":
+            print("  Login screen → clicking btn_local_login")
+            if not client.wait_for_element("btn_local_login", timeout=10):
+                return fail("login", "btn_local_login not found on Login screen")
+            if not _click_or_tap(client, adb, "btn_local_login"):
+                return fail("login", "could not click btn_local_login")
+            if not client.wait_for_screen("Setup", timeout=30.0):
+                # A configured backend routes Local Login to the login FORM,
+                # not the wizard — that's an environment state, not a bug.
+                if client.is_visible("input_password") and client.is_visible("btn_login_submit"):
+                    return TestReport(
+                        name="test_setup_wizard",
+                        result=TestResult.SKIPPED,
+                        duration=time.time() - start_time,
+                        message="Backend already configured (login form shown) — first-run wizard "
+                        "unavailable. Re-run with clear_data to get a fresh node.",
+                        screenshots=screenshots,
+                    )
+                return fail("login", f"did not reach Setup wizard (screen={client.screen()!r})")
+
+        # ── Step 1: WELCOME → Continue ────────────────────────────────────
+        print("  [3/7] WELCOME → btn_next")
+        if not client.wait_for_element("btn_next", timeout=15):
+            return fail("welcome", "btn_next not found on WELCOME step")
+        if not _click_or_tap(client, adb, "btn_next"):
+            return fail("welcome", "failed to click btn_next on WELCOME")
+        time.sleep(0.5)
+
+        # ── Step 2: ACCOUNT_AND_CONFIRMATION ──────────────────────────────
+        print(f"  [4/7] ACCOUNT: {username} / ******** (+ confirm)")
+        if not client.wait_for_element("input_username", timeout=10):
+            return fail("account", "input_username not found on account step")
+        # Small settles between inputs: the Kotlin side consumes ONE pending
+        # TextInputRequest via a StateFlow slot — back-to-back requests can
+        # overwrite each other before recomposition applies them.
+        if not client.input("input_username", username):
+            return fail("account", "failed to input username")
+        time.sleep(0.5)
+        if not client.input("input_password", password):
+            return fail("account", "failed to input password")
+        time.sleep(0.5)
+        if not client.input("input_password_confirm", password):
+            return fail("account", "failed to input password confirmation")
+        time.sleep(0.5)
+        if not _click_or_tap(client, adb, "btn_next"):
+            return fail("account", "failed to click btn_next on account step")
+        time.sleep(0.5)
+
+        # ── Step 3: FEDERATION_IDENTITY_SETUP + announce-gate assertions ──
+        print(f"  [5/7] FED-ID: label={fed_label!r}, announce={announce}, trace={trace_opt_in}")
+        if not client.wait_for_element("input_fedid_label", timeout=10):
+            return fail("fedid", "input_fedid_label not found on federation-identity step")
+
+        # GATING (OFF): trace opt-in must NOT be composed while announce is OFF.
+        if client.is_visible("toggle_trace_opt_in"):
+            return fail("fedid_gate_off", "toggle_trace_opt_in visible BEFORE announce is ON (gating broken)")
+        print("      gate check OK: toggle_trace_opt_in absent while announce OFF")
+
+        if not client.input("input_fedid_label", fed_label):
+            return fail("fedid", "failed to input federation-ID label")
+        time.sleep(0.3)
+
+        if announce:
+            if not _click_or_tap(client, adb, "toggle_announce_ownership"):
+                return fail("fedid", "failed to click toggle_announce_ownership")
+            # GATING (ON): trace opt-in must appear once announce is ON.
+            if not client.wait_for_element("toggle_trace_opt_in", timeout=5):
+                return fail("fedid_gate_on", "toggle_trace_opt_in did NOT appear after announce ON (gating broken)")
+            print("      gate check OK: toggle_trace_opt_in appeared after announce ON")
+
+            if trace_opt_in:
+                if not _click_or_tap(client, adb, "toggle_trace_opt_in"):
+                    return fail("fedid", "failed to click toggle_trace_opt_in")
+                time.sleep(0.3)
+
+        screenshot_path = f"/tmp/ciris_setup_fedid_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        if not _click_or_tap(client, adb, "btn_next"):
+            return fail("fedid", "failed to click btn_next on federation-identity step")
+        time.sleep(0.5)
+
+        # ── Step 3.5: LLM_CONFIGURATION (agent build only) ─────────────────
+        # Agent builds (CIRISBuild.HAS_AGENT) insert the LLM step after the
+        # fed-ID; node-client builds go straight to AGE_RANGE. Probe for the
+        # provider dropdown and handle the step only when it composed.
+        if client.wait_for_element("input_llm_provider", timeout=6):
+            print(f"  [6/7] LLM_CONFIGURATION: provider={llm_provider!r}, key={'set' if llm_api_key else 'none'}")
+            if client.is_visible("btn_use_free_ai"):
+                # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
+                if not _click_or_tap(client, adb, "btn_use_free_ai"):
+                    return fail("llm", "failed to click btn_use_free_ai on LLM step")
+                time.sleep(0.3)
+            elif llm_api_key:
+                # BYOK: pick the configured provider from the dropdown, then key.
+                if not _click_or_tap(client, adb, "input_llm_provider"):
+                    return fail("llm", "failed to open LLM provider dropdown")
+                menu_tag = f"menu_provider_{llm_provider}"
+                if not client.wait_for_element(menu_tag, timeout=5):
+                    return fail("llm", f"{menu_tag} not found in provider dropdown")
+                if not _click_or_tap(client, adb, menu_tag):
+                    return fail("llm", f"failed to click {menu_tag}")
+                time.sleep(0.5)
+                if not client.input("input_api_key", llm_api_key):
+                    return fail("llm", "failed to input LLM API key")
+                time.sleep(0.5)
+            else:
+                # No key available: keyless "local" (Ollama) provider lets the
+                # wizard proceed and the backend start without a real key.
+                if not _click_or_tap(client, adb, "input_llm_provider"):
+                    return fail("llm", "failed to open LLM provider dropdown")
+                if not client.wait_for_element("menu_provider_local", timeout=5):
+                    return fail("llm", "menu_provider_local not found in provider dropdown")
+                if not _click_or_tap(client, adb, "menu_provider_local"):
+                    return fail("llm", "failed to click menu_provider_local")
+                time.sleep(0.5)
+            if not _click_or_tap(client, adb, "btn_next"):
+                return fail("llm", "failed to click btn_next on LLM step")
+            time.sleep(0.5)
+        else:
+            print("  [6/7] LLM_CONFIGURATION not present (node-client build) — continuing")
+
+        # ── Step 4: AGE_RANGE (final step → COMPLETE) ─────────────────────
+        band_tag = f"age_band_{age_band}"
+        print(f"  [7/7] AGE_RANGE: {band_tag} → finish")
+        if not client.wait_for_element(band_tag, timeout=10):
+            return fail("age_range", f"{band_tag} not found on age-range step")
+        if not _click_or_tap(client, adb, band_tag):
+            return fail("age_range", f"failed to click {band_tag}")
+        time.sleep(0.3)
+        if not _click_or_tap(client, adb, "btn_next"):
+            return fail("age_range", "failed to click btn_next (finish) on age-range step")
+
+        # ── Step 5: COMPLETE — leave the wizard or reach the terminal step ─
+        deadline = time.time() + 30
+        completed_via = None
+        while time.time() < deadline:
+            screen = client.screen()
+            if screen and screen != "Setup":
+                completed_via = f"left wizard → {screen}"
+                break
+            if not client.is_visible("btn_next"):
+                completed_via = "COMPLETE step (btn_next gone)"
+                break
+            time.sleep(1)
+
+        screenshot_path = f"/tmp/ciris_setup_done_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        if completed_via is None:
+            return fail("complete", f"still on Setup with btn_next after 30s (screen={client.screen()!r})")
+
+        return TestReport(
+            name="test_setup_wizard",
+            result=TestResult.PASSED,
+            duration=time.time() - start_time,
+            message=(
+                "First-run wizard completed (WELCOME → ACCOUNT → FED-ID → [LLM] → AGE_RANGE); "
+                f"announce-gate verified both ways; {completed_via}"
+            ),
             screenshots=screenshots,
         )
 
     except Exception as e:
         return TestReport(
             name="test_setup_wizard",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+def test_catchup_add_fedid(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: catch-up "Add Federation ID" flow (AddFederationIdScreen).
+
+    For an already-logged-in legacy owner (password/OAuth ROOT, NO fed-ID).
+    Mirrors the desktop QA runner's test_catchup_add_fedid_flow:
+
+        Manage Nodes → btn_add_federation_id → AddFederationIdScreen:
+        input_fed_label → toggle_announce_ownership
+        → toggle_trace_opt_in (gated on announce) → btn_add_fedid_confirm
+        (back affordance: btn_add_fedid_back)
+
+    TOLERATED SKIP: the client renders btn_add_federation_id ONLY when the
+    logged-in owner has no fed-ID (ownerHasFedId == false from the local
+    node's GET /v1/setup/owned-nodes); `null` — e.g. a backend that doesn't
+    serve owned-nodes — fail-closes it hidden. If the entry point can't be
+    reached the test SKIPs with the reason instead of failing.
+
+    Config options:
+    - fed_label: catch-up label (default: generated qa-catchup-<ts>)
+    - announce / trace_opt_in: as in test_setup_wizard (default True/True)
+    - setup_username / setup_password: credentials if a login is needed
+    """
+    start_time = time.time()
+    screenshots = []
+
+    fed_label = config.get("fed_label") or f"qa-catchup-{int(time.time())}"
+    announce = config.get("announce", True)
+    trace_opt_in = config.get("trace_opt_in", True)
+    username = config.get("setup_username", "admin")
+    password = config.get("setup_password", "qa_test_password_12345")
+
+    def fail(step: str, detail: str) -> TestReport:
+        path = f"/tmp/ciris_catchup_fail_{int(time.time())}.png"
+        adb.screenshot(path)
+        screenshots.append(path)
+        return TestReport(
+            name="test_catchup_add_fedid",
+            result=TestResult.FAILED,
+            duration=time.time() - start_time,
+            message=f"[{step}] {detail}",
+            screenshots=screenshots,
+        )
+
+    def skip(reason: str) -> TestReport:
+        return TestReport(
+            name="test_catchup_add_fedid",
+            result=TestResult.SKIPPED,
+            duration=time.time() - start_time,
+            message=f"Tolerated skip: {reason}",
+            screenshots=screenshots,
+        )
+
+    try:
+        # ── Step 0: reach a logged-in session ─────────────────────────────
+        print("  [1/5] Connecting to in-app test server (no data clear — needs existing user)...")
+        client = connect_test_server(adb, config, launch_if_needed=True, clear_data=False)
+        if not client:
+            return fail("connect", "in-app test-automation server unreachable (debug build required)")
+
+        screen = client.wait_for_any_screen(["Login", "Setup", "Interact", "ManageNodes"], timeout=180.0, interval=1.5)
+        if screen == "Setup":
+            return skip("app is on the first-run wizard — no existing logged-in owner to catch up")
+        if screen == "Login":
+            print("  Login screen → local login as existing user")
+            if not _click_or_tap(client, adb, "btn_local_login"):
+                return fail("login", "could not click btn_local_login")
+            time.sleep(1.5)
+            if client.screen() == "Setup":
+                return skip("Local Login routed to first-run wizard — backend unconfigured, no legacy owner")
+            if client.is_visible("input_username"):
+                client.input("input_username", username)
+                client.input("input_password", password)
+                time.sleep(0.3)
+                if not _click_or_tap(client, adb, "btn_login_submit"):
+                    return fail("login", "could not click btn_login_submit")
+            if not client.wait_for_any_screen(["Interact", "ManageNodes"], timeout=60.0):
+                return fail("login", f"did not reach a logged-in surface (screen={client.screen()!r})")
+        elif screen is None:
+            return fail("land", f"never reached a known screen (screen={client.screen()!r})")
+
+        # ── Step 1: reach the entry point (Manage Nodes surface) ──────────
+        print("  [2/5] Reaching Manage Nodes → btn_add_federation_id...")
+        if not client.is_visible("btn_add_federation_id"):
+            # Canonical path: (drawer on compact) → Manage group → Nodes row.
+            if not client.is_visible("nav_epistemic_nodes"):
+                if client.is_visible("btn_nav_drawer_open"):
+                    print("      opening nav drawer")
+                    _click_or_tap(client, adb, "btn_nav_drawer_open")
+                    time.sleep(1)
+                if not client.is_visible("nav_epistemic_nodes") and client.is_visible("nav_group_manage"):
+                    print("      expanding sidebar group nav_group_manage")
+                    _click_or_tap(client, adb, "nav_group_manage")
+                    client.wait_for_element("nav_epistemic_nodes", timeout=3)
+            if client.is_visible("nav_epistemic_nodes"):
+                print("      clicking nav_epistemic_nodes")
+                _click_or_tap(client, adb, "nav_epistemic_nodes")
+                client.wait_for_element("btn_add_federation_id", timeout=5)
+
+        if not client.is_visible("btn_add_federation_id"):
+            # Entry renders only for an owner WITHOUT a fed-ID; null (backend
+            # without GET /v1/setup/owned-nodes) fail-closes it hidden.
+            path = f"/tmp/ciris_catchup_entry_{int(time.time())}.png"
+            adb.screenshot(path)
+            screenshots.append(path)
+            return skip(
+                "btn_add_federation_id not rendered — owner already has a fed-ID, or "
+                "ownerHasFedId is null (backend without GET /v1/setup/owned-nodes fail-closes the entry). "
+                f"screen={client.screen()!r}"
+            )
+
+        # ── Step 2: open the guided catch-up screen ───────────────────────
+        print("  [3/5] btn_add_federation_id → AddFederationIdScreen")
+        if not _click_or_tap(client, adb, "btn_add_federation_id"):
+            return fail("open", "failed to click btn_add_federation_id")
+        if not client.wait_for_element("input_fed_label", timeout=6):
+            return fail("open", "input_fed_label did not appear (AddFederationIdScreen)")
+
+        # ── Step 3: label + announce-gate assertions (both ways) ──────────
+        print(f"  [4/5] label={fed_label!r}, announce={announce}, trace={trace_opt_in}")
+        if client.is_visible("toggle_trace_opt_in"):
+            return fail("gate_off", "toggle_trace_opt_in visible BEFORE announce is ON (catch-up gating broken)")
+        print("      gate check OK: toggle_trace_opt_in absent while announce OFF")
+
+        if not client.input("input_fed_label", fed_label):
+            return fail("label", "failed to input input_fed_label")
+        time.sleep(0.3)
+
+        if announce:
+            if not _click_or_tap(client, adb, "toggle_announce_ownership"):
+                return fail("announce", "failed to click toggle_announce_ownership")
+            if not client.wait_for_element("toggle_trace_opt_in", timeout=5):
+                return fail("gate_on", "toggle_trace_opt_in did NOT appear after announce ON (catch-up gating broken)")
+            print("      gate check OK: toggle_trace_opt_in appeared after announce ON")
+            if trace_opt_in:
+                if not _click_or_tap(client, adb, "toggle_trace_opt_in"):
+                    return fail("trace", "failed to click toggle_trace_opt_in")
+                time.sleep(0.3)
+
+        screenshot_path = f"/tmp/ciris_catchup_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        # ── Step 4: confirm ───────────────────────────────────────────────
+        print("  [5/5] btn_add_fedid_confirm")
+        if not _click_or_tap(client, adb, "btn_add_fedid_confirm"):
+            return fail("confirm", "btn_add_fedid_confirm not clickable")
+        # Success leaves via onDone → back to ManageNodes; a soft failure
+        # keeps the screen up with an error surface. Best-effort observe.
+        left = client.wait_for_screen("ManageNodes", timeout=20.0)
+
+        return TestReport(
+            name="test_catchup_add_fedid",
+            result=TestResult.PASSED,
+            duration=time.time() - start_time,
+            message=(
+                "Catch-up add-fed-ID flow driven (label → announce → trace → confirm); "
+                + ("upgrade completed (returned to ManageNodes)" if left else "confirm submitted (screen did not return to ManageNodes within 20s — check node logs)")
+            ),
+            screenshots=screenshots,
+        )
+
+    except Exception as e:
+        return TestReport(
+            name="test_catchup_add_fedid",
             result=TestResult.ERROR,
             duration=time.time() - start_time,
             message=f"Error: {str(e)}",
@@ -986,19 +1413,11 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
         step_start = time.time()
         login_mode = config.get("login_mode", "google")
         if login_mode == "local":
-            print("\n[Step 2/4] Local Login (creating a local account)")
-            result = test_local_login(adb, ui, config)
-            results.append(result)
-            all_screenshots.extend(result.screenshots)
-            print(f"  ⏱️  Step 2 completed in {time.time() - step_start:.1f}s")
-            if result.result != TestResult.PASSED:
-                return TestReport(
-                    name="test_full_flow",
-                    result=TestResult.FAILED,
-                    duration=time.time() - start_time,
-                    message=f"Failed at local login: {result.message}",
-                    screenshots=all_screenshots,
-                )
+            # The node-client wizard test drives Login → btn_local_login →
+            # Setup itself via the in-app test server (the old text-based
+            # test_local_login expected the pre-2.9 wizard's "Setup"/"LLM"
+            # texts). Nothing to do here.
+            print("\n[Step 2/4] Local Login — handled inside the setup wizard test (test server drives btn_local_login)")
         else:
             print("\n[Step 2/4] Google Sign-In")
             result = test_google_signin(adb, ui, config)

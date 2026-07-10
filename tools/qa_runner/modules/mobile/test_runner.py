@@ -20,6 +20,7 @@ from .test_cases import (  # Screen navigation tests (new in 1.9.2)
     TestResult,
     test_all_screens,
     test_app_launch,
+    test_catchup_add_fedid,
     test_chat_interaction,
     test_connect_node,
     test_connect_node_auth,
@@ -374,6 +375,7 @@ class MobileTestRunner:
             "google_signin": test_google_signin,
             "local_login": test_local_login,
             "setup_wizard": test_setup_wizard,
+            "catchup_add_fedid": test_catchup_add_fedid,
             "chat_interaction": test_chat_interaction,
             "full_flow": test_full_flow,
             # Screen navigation tests (new in 1.9.2)

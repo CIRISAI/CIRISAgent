@@ -187,6 +187,14 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // NOTE: there is deliberately NO federation-identity sign-in option
+                // on the login screen. The fedID is NOT a login method — it is the
+                // founder's identity, MINTED in the first-run wizard (account + fedID
+                // bound together) and accessed ONLY via the associated user-account
+                // session (log in below → that session unlocks the fedID). A
+                // credential-less "sign in as <fedID>" door was a security hole.
+                // First-run users are auto-routed to the setup wizard upstream.
+
                 if (isLoading) {
                     // Progress indicator
                     CircularProgressIndicator(

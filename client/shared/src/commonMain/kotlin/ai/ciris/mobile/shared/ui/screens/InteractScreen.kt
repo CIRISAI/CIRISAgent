@@ -17,6 +17,7 @@ import ai.ciris.mobile.shared.viewmodels.BubbleEmoji
 import ai.ciris.mobile.shared.viewmodels.CreditStatus
 import ai.ciris.mobile.shared.viewmodels.InteractViewModel
 import ai.ciris.mobile.shared.viewmodels.LlmHealthStatus
+import ai.ciris.mobile.shared.viewmodels.ModerationViewModel
 import ai.ciris.mobile.shared.viewmodels.TimelineEvent
 import ai.ciris.mobile.shared.viewmodels.TrustStatus
 import ai.ciris.mobile.shared.viewmodels.WalletStatus
@@ -91,6 +92,12 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.SystemWarning
+import ai.ciris.mobile.shared.models.NodeProfile
+import ai.ciris.mobile.shared.viewmodels.ConsentObjectsViewModel
+import ai.ciris.mobile.shared.viewmodels.GrantDirectionState
+import ai.ciris.mobile.shared.viewmodels.NodeSwitcherViewModel
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import ai.ciris.mobile.shared.ui.screens.graph.CellVisualization
 import ai.ciris.mobile.shared.ui.screens.graph.CellVizConfig
 import ai.ciris.mobile.shared.ui.screens.graph.GraphColors
@@ -127,6 +134,18 @@ fun InteractScreen(
     onOpenLLMSettings: () -> Unit = {},  // Navigate to LLM Settings screen
     onOpenSessions: () -> Unit = {},  // Navigate to sessions screen
     onOpenWiseAuthority: () -> Unit = {},  // Navigate to WA/deferrals screen
+    // Node switcher (change #1): first-class node profiles + switch. When the
+    // VM is null the badge is hidden (e.g. previews / minimal hosts).
+    nodeSwitcherViewModel: NodeSwitcherViewModel? = null,
+    onAddNode: () -> Unit = {},  // Navigate to add/edit node (reuses ServerConnection)
+    // Claim-Ownership: drive the NodeCode + claim-PIN founder flow (Screen.ClaimNode).
+    onClaimNode: () -> Unit = {},
+    // Consent-objects card (change #3a): bilateral consent:replication setup.
+    consentObjectsViewModel: ConsentObjectsViewModel? = null,
+    // Reverse-quorum moderation (CC 0.5.1 §4.5.13): drives the per-content
+    // "⋯ / report" proposal affordance + the 48-hour-window proposal sheet.
+    // When null, the affordance is hidden (e.g. previews / minimal hosts).
+    moderationViewModel: ModerationViewModel? = null,
     apiClient: CIRISApiClient? = null,  // For live background
     liveBackgroundEnabled: Boolean = false,  // From settings
     // User override: when true, force the legacy cylinder viz regardless of
@@ -203,6 +222,10 @@ fun InteractScreen(
 
     // File picker state
     var showFilePicker by remember { mutableStateOf(false) }
+
+    // Reverse-quorum moderation: the content id the user is currently
+    // proposing a moderation action against (null = sheet closed).
+    var moderationTargetId by remember { mutableStateOf<String?>(null) }
 
     // Visualization legend state (separate from emoji legend)
     var showVizLegend by remember { mutableStateOf(false) }
@@ -396,6 +419,27 @@ fun InteractScreen(
                 theme = theme
             )
 
+            // Node switcher (change #1) — first-class control to hold + switch
+            // between fabric nodes (A, B, …). Mirrors the badge-row pattern: a
+            // compact pill in a Surface that opens a dropdown of node profiles.
+            if (nodeSwitcherViewModel != null && visualizationMode != VisualizationMode.FOREGROUND) {
+                NodeSwitcherBadge(
+                    viewModel = nodeSwitcherViewModel,
+                    onAddNode = onAddNode,
+                    onClaimNode = onClaimNode,
+                    theme = theme,
+                )
+            }
+
+            // Consent-objects card (change #3a) — bilateral consent:replication
+            // across the two connected nodes. Hidden in FG (inspect mode).
+            if (consentObjectsViewModel != null && visualizationMode != VisualizationMode.FOREGROUND) {
+                ConsentObjectsCard(
+                    viewModel = consentObjectsViewModel,
+                    theme = theme,
+                )
+            }
+
             // FG detail panel is rendered as a side overlay INSIDE the
             // chat-area Box (see below) rather than inline here, so it
             // anchors left/right based on where the user tapped instead
@@ -554,7 +598,17 @@ fun InteractScreen(
                         isDarkMode = isDarkMode,
                     )
                 } else {
-                    ChatMessageList(messages = messages, transparentBackground = liveBackgroundEnabled)
+                    ChatMessageList(
+                        messages = messages,
+                        transparentBackground = liveBackgroundEnabled,
+                        // Only expose the moderation affordance when a VM is wired.
+                        onModerate = if (moderationViewModel != null) {
+                            { id ->
+                                moderationViewModel.reset()
+                                moderationTargetId = id
+                            }
+                        } else null,
+                    )
                 }
             }
 
@@ -677,6 +731,17 @@ fun InteractScreen(
                     .padding(end = 16.dp, bottom = 140.dp)
             )
         }
+
+        // Reverse-quorum moderation proposal sheet (CC 0.5.1 §4.5.13).
+        // Opens when the user taps the per-content "⋯ / report" affordance.
+        val modTarget = moderationTargetId
+        if (moderationViewModel != null && modTarget != null) {
+            ModerationProposalSheet(
+                targetId = modTarget,
+                viewModel = moderationViewModel,
+                onDismiss = { moderationTargetId = null },
+            )
+        }
     } // End of Box
 }
 
@@ -789,6 +854,279 @@ private fun EnhancedStatusBar(
                 Text(localizedString("mobile.interact_stop"), fontSize = 9.sp, color = Color.White)
             }
         }
+    }
+}
+
+/**
+ * Node switcher badge (change #1).
+ *
+ * First-class control on the main page to hold + switch between fabric nodes.
+ * "Switching" repoints the shared API client at another node (a different
+ * occurrence) and re-applies its session — identity/consent are CEG operations
+ * rooted in the owner's key, not a client/server handshake. Mirrors the
+ * status-bar badge pattern (compact Surface pill) and opens a DropdownMenu of
+ * saved [NodeProfile]s plus an "Add node" action that reuses ServerConnection.
+ */
+@Composable
+private fun NodeSwitcherBadge(
+    viewModel: NodeSwitcherViewModel,
+    onAddNode: () -> Unit,
+    onClaimNode: () -> Unit,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier,
+) {
+    val profiles by viewModel.profiles.collectAsState()
+    val activeId by viewModel.activeProfileId.collectAsState()
+    val isSwitching by viewModel.isSwitching.collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+
+    val active = profiles.firstOrNull { it.id == activeId }
+    val label = active?.name ?: "Select node"
+
+    Surface(
+        color = theme.surface,
+        shadowElevation = if (theme.isDark) 0.dp else 1.dp,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
+            Surface(
+                onClick = { expanded = true },
+                shape = RoundedCornerShape(4.dp),
+                color = theme.textAccent.copy(alpha = 0.12f),
+                modifier = Modifier.testableClickable("btn_node_switcher") { expanded = true },
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (isSwitching) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(10.dp),
+                            strokeWidth = 1.5.dp,
+                            color = theme.textAccent,
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(
+                                    color = if (active != null) theme.statusConnected else theme.statusDisconnected,
+                                    shape = CircleShape,
+                                )
+                        )
+                    }
+                    Text(
+                        text = "Node: $label",
+                        fontSize = 10.sp,
+                        color = theme.textPrimary,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(text = "▾", fontSize = 9.sp, color = theme.textSecondary)
+                }
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                profiles.forEach { profile ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    text = profile.name + if (profile.id == activeId) "  (active)" else "",
+                                    fontSize = 13.sp,
+                                    fontWeight = if (profile.id == activeId) FontWeight.Bold else FontWeight.Normal,
+                                )
+                                Text(
+                                    text = profile.baseUrl,
+                                    fontSize = 10.sp,
+                                    color = theme.textSecondary,
+                                )
+                            }
+                        },
+                        onClick = {
+                            expanded = false
+                            if (profile.id != activeId) viewModel.switchTo(profile)
+                        },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text("+ Add node", fontSize = 13.sp, color = theme.textAccent) },
+                    onClick = {
+                        expanded = false
+                        onAddNode()
+                    },
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "+ Add / claim a node",
+                            fontSize = 13.sp,
+                            color = theme.textAccent,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
+                    modifier = Modifier.testableClickable("btn_node_claim_entry") {},
+                    onClick = {
+                        expanded = false
+                        onClaimNode()
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Consent-objects card (change #3a).
+ *
+ * Drives the bilateral `consent:replication` setup across the two connected
+ * nodes. Fetches each node's self-key-record, then POSTs `/v1/federation/peering`
+ * in each direction (A grants to B, B grants to A). The grant is ratified iff
+ * both directions are granted; both are shown independently.
+ */
+@Composable
+private fun ConsentObjectsCard(
+    viewModel: ConsentObjectsViewModel,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier,
+) {
+    val state by viewModel.state.collectAsState()
+
+    Surface(
+        color = theme.surface,
+        shape = RoundedCornerShape(8.dp),
+        shadowElevation = if (theme.isDark) 0.dp else 1.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "🤝", fontSize = 16.sp, modifier = Modifier.padding(end = 6.dp))
+                Text(
+                    text = "Consent objects",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = theme.textPrimary,
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                if (state.isRatified) {
+                    Text(
+                        text = "Ratified ✓",
+                        fontSize = 11.sp,
+                        color = theme.statusConnected,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
+            Text(
+                text = "Bilateral consent:replication across two nodes.",
+                fontSize = 11.sp,
+                color = theme.textSecondary,
+                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+            )
+
+            // Node A / Node B
+            NodeRow("A", state.nodeA?.name, state.nodeA?.baseUrl, theme)
+            NodeRow("B", state.nodeB?.name, state.nodeB?.baseUrl, theme)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Both directions
+            GrantDirectionRow("A → B  (capacity:)", state.aToB, theme)
+            GrantDirectionRow("B → A  (health:)", state.bToA, theme)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { viewModel.runBilateralPeering() },
+                enabled = state.canRun,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(34.dp)
+                    .testableClickable("btn_consent_peering") { viewModel.runBilateralPeering() },
+            ) {
+                if (state.isRunning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    text = if (state.isRunning) "Setting up consent…" else "Set up bilateral consent",
+                    fontSize = 12.sp,
+                )
+            }
+
+            state.message?.let {
+                Text(
+                    text = it,
+                    fontSize = 11.sp,
+                    color = if (state.isRatified) theme.statusConnected else theme.textSecondary,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            state.error?.let {
+                Text(
+                    text = it,
+                    fontSize = 11.sp,
+                    color = theme.statusDisconnected,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NodeRow(
+    tag: String,
+    name: String?,
+    url: String?,
+    theme: InteractTheme,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 1.dp),
+    ) {
+        Text(
+            text = "Node $tag:",
+            fontSize = 11.sp,
+            color = theme.textSecondary,
+            modifier = Modifier.width(56.dp),
+        )
+        Text(
+            text = if (name != null) "$name (${url ?: "?"})" else "— not selected —",
+            fontSize = 11.sp,
+            color = if (name != null) theme.textPrimary else theme.statusWarning,
+        )
+    }
+}
+
+@Composable
+private fun GrantDirectionRow(
+    label: String,
+    state: GrantDirectionState,
+    theme: InteractTheme,
+) {
+    val (symbol, color) = when (state) {
+        GrantDirectionState.GRANTED -> "✓" to theme.statusConnected
+        GrantDirectionState.FAILED -> "✗" to theme.statusDisconnected
+        GrantDirectionState.IN_PROGRESS -> "…" to theme.statusWarning
+        GrantDirectionState.IDLE -> "•" to theme.textSecondary
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 1.dp),
+    ) {
+        Text(text = symbol, fontSize = 12.sp, color = color, modifier = Modifier.width(20.dp))
+        Text(text = label, fontSize = 11.sp, color = theme.textPrimary)
     }
 }
 
@@ -1387,7 +1725,10 @@ private fun EmptyStateView(
 private fun ChatMessageList(
     messages: List<ChatMessage>,
     modifier: Modifier = Modifier,
-    transparentBackground: Boolean = false
+    transparentBackground: Boolean = false,
+    // Reverse-quorum moderation: tapped per-content "⋯ / report" affordance.
+    // Null hides the affordance (no moderation VM wired).
+    onModerate: ((String) -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
 
@@ -1415,8 +1756,8 @@ private fun ChatMessageList(
             // Use distinctBy to prevent duplicate key crashes if same ID appears twice
             items(messages.reversed().distinctBy { it.id }, key = { it.id }) { message ->
                 when (message.type) {
-                    MessageType.USER -> UserChatBubble(message, bubbleMaxWidth = bubbleMaxWidth)
-                    MessageType.AGENT -> AgentChatBubble(message, bubbleMaxWidth = bubbleMaxWidth)
+                    MessageType.USER -> UserChatBubble(message, bubbleMaxWidth = bubbleMaxWidth, onModerate = onModerate)
+                    MessageType.AGENT -> AgentChatBubble(message, bubbleMaxWidth = bubbleMaxWidth, onModerate = onModerate)
                     MessageType.SYSTEM -> SystemMessage(message, bubbleMaxWidth = bubbleMaxWidth)
                     MessageType.ERROR -> ErrorMessage(message, bubbleMaxWidth = bubbleMaxWidth)
                     MessageType.ACTION -> ActionBubble(message, bubbleMaxWidth = bubbleMaxWidth)
@@ -1442,7 +1783,8 @@ private fun ChatMessageList(
 private fun UserChatBubble(
     message: ChatMessage,
     modifier: Modifier = Modifier,
-    bubbleMaxWidth: Dp = 280.dp  // Default for backwards compat
+    bubbleMaxWidth: Dp = 280.dp,  // Default for backwards compat
+    onModerate: ((String) -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -1491,17 +1833,52 @@ private fun UserChatBubble(
                 )
             }
 
-            // Timestamp (from item_chat_user.xml:34-42)
-            Text(
-                text = formatTimestamp(message.timestamp),
+            // Timestamp + moderation affordance (from item_chat_user.xml:34-42)
+            Row(
                 modifier = Modifier
                     .align(Alignment.End)
                     .padding(top = 4.dp),
-                fontSize = 10.sp,
-                color = Color(0xFFBFDBFE)
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = formatTimestamp(message.timestamp),
+                    fontSize = 10.sp,
+                    color = Color(0xFFBFDBFE)
+                )
+                if (onModerate != null) {
+                    ModerationAffordance(
+                        contentId = message.id,
+                        tint = Color(0xFFBFDBFE),
+                        onModerate = onModerate,
+                    )
+                }
+            }
         }
     }
+}
+
+/**
+ * Discreet per-content "⋯ / report" moderation affordance (CC 0.5.1
+ * §4.5.13). Tapping opens the reverse-quorum proposal sheet for this
+ * piece of content. Tagged ``btn_moderate_<contentId>`` so automation
+ * can target a specific message. Plain "⋯" literal, no new icon.
+ */
+@Composable
+private fun ModerationAffordance(
+    contentId: String,
+    tint: Color,
+    onModerate: (String) -> Unit,
+) {
+    Text(
+        text = "⋯",
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold,
+        color = tint,
+        modifier = Modifier
+            .testableClickable("btn_moderate_$contentId") { onModerate(contentId) }
+            .padding(horizontal = 4.dp),
+    )
 }
 
 /**
@@ -1512,7 +1889,8 @@ private fun UserChatBubble(
 private fun AgentChatBubble(
     message: ChatMessage,
     modifier: Modifier = Modifier,
-    bubbleMaxWidth: Dp = 280.dp  // Default for backwards compat
+    bubbleMaxWidth: Dp = 280.dp,  // Default for backwards compat
+    onModerate: ((String) -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -1551,15 +1929,27 @@ private fun AgentChatBubble(
                 )
             }
 
-            // Timestamp (from item_chat_agent.xml:34-42)
-            Text(
-                text = formatTimestamp(message.timestamp),
+            // Timestamp + moderation affordance (from item_chat_agent.xml:34-42)
+            Row(
                 modifier = Modifier
                     .align(Alignment.End)
                     .padding(top = 4.dp),
-                fontSize = 10.sp,
-                color = Color(0xFF9CA3AF)
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = formatTimestamp(message.timestamp),
+                    fontSize = 10.sp,
+                    color = Color(0xFF9CA3AF)
+                )
+                if (onModerate != null) {
+                    ModerationAffordance(
+                        contentId = message.id,
+                        tint = Color(0xFF9CA3AF),
+                        onModerate = onModerate,
+                    )
+                }
+            }
         }
     }
 }

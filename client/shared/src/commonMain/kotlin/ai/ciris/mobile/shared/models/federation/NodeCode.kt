@@ -40,6 +40,27 @@ data class NodeCodeAddRequest(
 )
 
 /**
+ * Response body for ``GET /v1/setup/owned-nodes`` — the CEG-native node list.
+ *
+ * The nodes owned by this node's bound owner (its fed ID), projected from the
+ * ``delegates_to(user → node)`` owner-binding objects in the graph. [owner] is
+ * the bound owner's fed-ID key_id (``null`` when the node is unclaimed).
+ */
+@Serializable
+data class OwnedNodesDto(
+    val owner: String? = null,
+    val nodes: List<OwnedNodeDto> = emptyList(),
+)
+
+@Serializable
+data class OwnedNodeDto(
+    @SerialName("key_id")
+    val keyId: String,
+    @SerialName("is_self")
+    val isSelf: Boolean = false,
+)
+
+/**
  * Response body for ``POST /v1/system/peers/add-from-code``.
  *
  * Returns the resulting [LocalPeerState] (organic, ``trust=UNKNOWN``)

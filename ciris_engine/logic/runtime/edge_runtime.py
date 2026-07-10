@@ -222,12 +222,70 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
                     "admitted canonical targets=%s",
                     _n_targets,
                 )
+                _spawn_delivery_rooting_probe(engine, edge)
         except Exception as exc:  # noqa: BLE001 — best-effort, never block boot
             logger.warning(
                 "Federation delivery controller start failed (non-fatal): %s: %s",
                 type(exc).__name__,
                 str(exc)[:200],
             )
+
+
+def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
+    """One-shot background observability for the trace-delivery last mile.
+
+    Rooting (Reticulum reachability) and envelope shipping are two layers: a peer
+    can be transport-rooted (knows_peer / peer_reachability_ratio>0) yet ship 0
+    envelopes if its KEM/KEX pubkeys (x25519 + ML-KEM-768) are not in persist's
+    federation directory — resolve_peer_kex_pubkeys() returns None, so the
+    replication runtime cannot seal an envelope for it. The connect handshake is
+    meant to fetch the peer's encryption_pubkeys block from the peer and store it;
+    this probe records, once the canonical roots, whether that block is resolvable
+    — turning "reachable but 0 envelopes" from a mystery into a logged fact.
+    Best-effort, daemon, non-fatal; only runs when delivery is enabled.
+    """
+    import threading
+
+    def _probe() -> None:
+        import time as _t
+
+        try:
+            import json as _json
+
+            canon = _json.loads(engine.list_canonical_servers() or "[]")
+            if not canon:
+                return
+            ckey = canon[0].get("key_id")
+            if not ckey:
+                return
+            deadline = 120
+            waited = 0
+            while waited < deadline:
+                _t.sleep(10)
+                waited += 10
+                try:
+                    rooted = bool(edge.knows_peer(ckey))
+                except Exception:  # noqa: BLE001
+                    rooted = False
+                if rooted:
+                    try:
+                        kex = edge.resolve_peer_kex_pubkeys(ckey)
+                    except Exception as kex_exc:  # noqa: BLE001
+                        kex = f"<error: {kex_exc}>"
+                    logger.info(
+                        "[DELIVERY-PROBE] canonical %s ROOTED after ~%ss; resolve_peer_kex_pubkeys=%s "
+                        "(None ⇒ peer encryption_pubkeys not stored from the connect handshake → "
+                        "replication cannot seal envelopes; this is the 'reachable but 0 envelopes' cause)",
+                        ckey,
+                        waited,
+                        "PRESENT" if isinstance(kex, dict) else kex,
+                    )
+                    return
+            logger.info("[DELIVERY-PROBE] canonical %s did not root within %ss", ckey, deadline)
+        except Exception as exc:  # noqa: BLE001 — pure diagnostics, never disturb boot
+            logger.debug("[DELIVERY-PROBE] probe error (non-fatal): %s", exc)
+
+    threading.Thread(target=_probe, name="delivery-rooting-probe", daemon=True).start()
 
 
 def _seed_bootstrap_peers_into_edge(seeder: Optional[Any], edge: Any) -> None:

@@ -478,6 +478,11 @@ class QARunner:
             self._filter_helper.stop_monitoring()
             self.console.print("[cyan]⏹️  SSE monitoring stopped[/cyan]")
 
+        # Verify CEG trace delivery to canonical-server-1 BEFORE stopping the
+        # server (needs the live edge + API). Only when --federation-delivery.
+        if self.config.federation_delivery:
+            self._verify_federation_delivery()
+
         # Stop server if we started it
         if self.config.auto_start_server:
             self.server_manager.stop()
@@ -977,6 +982,84 @@ class QARunner:
         except Exception as e:
             self.console.print(f"[red]Authentication error: {e}[/red]")
             return False
+
+    def _verify_federation_delivery(self) -> bool:
+        """Verify CEG traces reached canonical-server-1 (the Reticulum delivery path).
+
+        Distinct from the live-lens HTTP tee: this asserts the edge's
+        start_federation_delivery controller actually rooted the canonical peer
+        and shipped to it. Polls the federation API (rooting takes ~60-90s after
+        boot, so retry): GET /v1/federation/peers?canonical_only=true for the
+        canonical key_id + its Edge reachability, and GET /v1/federation/metrics
+        for delivery counters. Best-effort + non-fatal — reports, never crashes
+        the run.
+        """
+        self.console.print("\n" + "=" * 60)
+        self.console.print("[bold cyan]🛰️  Federation delivery verification (canonical-server-1)[/bold cyan]")
+        self.console.print("=" * 60)
+        if not self.token:
+            self._authenticate()
+        headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+        base = self.config.base_url
+
+        def _get(path: str):
+            try:
+                r = requests.get(f"{base}{path}", headers=headers, timeout=10)
+                return r.status_code, (r.json() if r.headers.get("content-type", "").startswith("application/json") else None)
+            except Exception as exc:  # noqa: BLE001
+                return None, {"error": str(exc)[:120]}
+
+        # 1. Find the canonical peer + poll its reachability until rooted (or timeout).
+        canonical_key = None
+        rooted = False
+        reach = {}
+        deadline_polls = 12  # ~12 * 8s = ~96s to allow the ~75s rooting handshake
+        for attempt in range(deadline_polls):
+            sc, body = _get("/v1/federation/peers?canonical_only=true")
+            peers = ((body or {}).get("data") or {}).get("peers") if isinstance(body, dict) else None
+            if peers:
+                canonical_key = peers[0].get("key_id") or peers[0].get("peer_key_id")
+            if canonical_key:
+                sc2, detail = _get(f"/v1/federation/peers/{canonical_key}")
+                reach = ((detail or {}).get("data") or {}).get("reachability") or {} if isinstance(detail, dict) else {}
+                # rooted ⇔ any medium has a successful measurement (last_ok_ts set / ratio>0)
+                rooted = any(
+                    (isinstance(m, dict) and (m.get("last_ok_ts") or (m.get("ratio") or 0) > 0))
+                    for m in reach.values()
+                ) if isinstance(reach, dict) else False
+            if rooted:
+                break
+            time.sleep(8)
+        # 2. Delivery metrics snapshot.
+        _, mbody = _get("/v1/federation/metrics")
+        metrics = (mbody or {}).get("data") if isinstance(mbody, dict) else None
+
+        self.console.print(f"  canonical peer   : {canonical_key or '<not discovered>'}")
+        self.console.print(f"  rooted (reachable): {'✅ YES' if rooted else '❌ NO'}  reachability={reach}")
+        self.console.print(f"  delivery metrics : {metrics}")
+        # ALSO emit to the logger so the verdict lands in logs/<backend>/latest.log
+        # — disk-captured and TTY-independent (rich console stdout can be lost
+        # when the runner is driven headless / under a redirect).
+        logger.info(
+            "[FEDERATION-DELIVERY] canonical=%s rooted=%s reachability=%s metrics=%s",
+            canonical_key,
+            rooted,
+            reach,
+            metrics,
+        )
+        if rooted:
+            verdict = "✅ Federation delivery verified — canonical-server-1 rooted; traces flow."
+            self.console.print(f"[bold green]{verdict}[/bold green]")
+            logger.info("[FEDERATION-DELIVERY] %s", verdict)
+        else:
+            verdict = (
+                "⚠️  canonical-server-1 not rooted within the poll window. "
+                "Check: canonical_peer address (persist#404 :4242), Node A on 0.5.92, "
+                "edge #296 seed line in logs/latest.log."
+            )
+            self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
+            logger.warning("[FEDERATION-DELIVERY] %s", verdict)
+        return rooted
 
     def _setup_oauth_test_user(self) -> bool:
         """Create/verify OAuth test user in database for billing integration tests."""

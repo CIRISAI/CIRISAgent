@@ -155,6 +155,18 @@ Available modules:
         help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for accord_metrics tests",
     )
 
+    # Federation delivery verification (the Reticulum trace-flow path to canonical-server-1)
+    parser.add_argument(
+        "--federation-delivery",
+        action="store_true",
+        help="Boot the QA server with CEG federation delivery enabled (dials the canonical peer) and, after the run, verify traces reached canonical-server-1 (rooting + delivery metrics).",
+    )
+    parser.add_argument(
+        "--canonical-peer",
+        default="108.61.242.236:4242",
+        help="Canonical edge bootstrap peer host:port for --federation-delivery (default 108.61.242.236:4242; overrides a stale baked :4243 hint via edge #296 union).",
+    )
+
     # Live CIRISNode configuration (for cirisnode tests)
     parser.add_argument(
         "--live-node",
@@ -627,6 +639,8 @@ def main():
         live_provider=live_provider,
         # Live Lens configuration (for accord_metrics tests)
         live_lens=args.live_lens,
+        federation_delivery=args.federation_delivery,
+        canonical_peer=args.canonical_peer,
         # Staged-env mode (server runs from canonical-staged-tree wheel in a venv)
         staged_env=staged_env,
         # Live CIRISNode configuration (for cirisnode tests)

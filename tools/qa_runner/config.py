@@ -281,6 +281,19 @@ class QAConfig:
     # When True, uses https://lens.ciris-services-1.ai/lens-api/api/v1 instead of mock logshipper
     live_lens: bool = False
 
+    # Federation delivery verification (--federation-delivery).
+    # The live-lens tee captures the HTTP lens-shipping path; this instead
+    # exercises + verifies the Reticulum FEDERATION DELIVERY path
+    # (edge start_federation_delivery → canonical-server-1). When set, the QA
+    # server boots with CIRIS_FEDERATION_DELIVERY=true and dials `canonical_peer`
+    # as a bootstrap peer (edge #296 unions it past any stale baked hint), then
+    # after the run the runner asserts the canonical peer rooted + traces
+    # delivered (GET /v1/federation/peers + /v1/federation/metrics).
+    federation_delivery: bool = False
+    # Correct canonical edge address (persist#404). The baked hint may still
+    # carry the stale :4243 until the 0.5.93 re-bake; this overrides it.
+    canonical_peer: str = "108.61.242.236:4242"
+
     # Live CIRISNode configuration (--live-node flag for cirisnode tests)
     # When True, runs additional tests against live CIRISNode server
     live_node: bool = False

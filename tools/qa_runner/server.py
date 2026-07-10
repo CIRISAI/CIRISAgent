@@ -1036,6 +1036,22 @@ class APIServerManager:
             # bundles only ever held hashed traces (no full text).
             trace_level = "generic" if (model_eval_requested or safety_battery_requested) else "detailed"
             env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = trace_level
+
+        # Federation delivery (Reticulum trace-flow to canonical-server-1).
+        # Distinct from the HTTP lens shipping above: this drives the embedded
+        # edge's start_federation_delivery controller. Needs consent-sealed
+        # traces (the accord block above sets CONSENT=true), an ACTIVE transport
+        # (CIRIS_FEDERATION_DELIVERY=true → enable_transport at edge init), and a
+        # dial target. edge #296 auto-seeds the canonical dial from persist's
+        # baked hint; we also pass the correct canonical peer explicitly so a
+        # stale baked :4243 (pre persist#404 re-bake) is unioned past.
+        if self.config.federation_delivery:
+            env["CIRIS_FEDERATION_DELIVERY"] = "true"
+            env["CIRIS_EDGE_BOOTSTRAP_PEERS"] = self.config.canonical_peer
+            self.console.print(
+                f"[cyan]🛰️  Federation delivery ON → dialing canonical peer {self.config.canonical_peer} "
+                f"(will verify trace flow to canonical-server-1 after run)[/cyan]"
+            )
             # Set live lens endpoint explicitly
             if self.config.live_lens:
                 env["CIRIS_ACCORD_METRICS_ENDPOINT"] = "https://lens.ciris-services-1.ai/lens-api/api/v1"

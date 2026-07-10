@@ -35,14 +35,6 @@ from ciris_engine.schemas.services.graph.tsdb_models import SummaryAttributes
 from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
 
-from .consolidators import (
-    AuditConsolidator,
-    ConversationConsolidator,
-    MemoryConsolidator,
-    MetricsConsolidator,
-    TaskConsolidator,
-    TraceConsolidator,
-)
 from .edge_manager import EdgeManager
 from .period_manager import PeriodManager
 from .query_manager import QueryManager
@@ -87,14 +79,6 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
         self._period_manager = PeriodManager(consolidation_interval_hours)
         self._query_manager = QueryManager(memory_bus, db_path=db_path)
         self._edge_manager = EdgeManager(db_path=db_path)
-
-        # Initialize all consolidators
-        self._metrics_consolidator = MetricsConsolidator(memory_bus)
-        self._memory_consolidator = MemoryConsolidator(memory_bus)
-        self._task_consolidator = TaskConsolidator(memory_bus)
-        self._conversation_consolidator = ConversationConsolidator(memory_bus, time_service)
-        self._trace_consolidator = TraceConsolidator(memory_bus)
-        self._audit_consolidator = AuditConsolidator(memory_bus, time_service)
 
         self._consolidation_interval = timedelta(hours=consolidation_interval_hours)
         self._raw_retention = timedelta(hours=raw_retention_hours)
@@ -486,7 +470,7 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
         import json as _json
 
         from ciris_engine.logic.persistence.models.graph import get_persist_engine
-        from ciris_engine.logic.services.graph.tsdb_consolidation.sql_builders import parse_datetime_field
+        from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import parse_datetime_field
 
         engine = get_persist_engine()
         if engine is None:

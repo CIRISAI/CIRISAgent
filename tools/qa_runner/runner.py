@@ -1009,66 +1009,94 @@ class QARunner:
             except Exception as exc:  # noqa: BLE001
                 return None, {"error": str(exc)[:120]}
 
-        # The authoritative rooting signal is edge.metrics_snapshot()'s
-        # peer_reachability_ratio (keyed "<peer_key_id>:<medium>"), NOT the
-        # /federation/peers seeder list — the organic-peer seeder registry is
-        # stubbed (CIRISEdge#46), so canonical_only peers can be empty even when
-        # the canonical is fully rooted. Poll the metrics until the canonical
-        # shows a positive reachability ratio (rooting handshake ~75s).
-        canonical_key = None
-        rooted = False
-        reach_ratio = {}
+        # AUTHORITATIVE rooting = the edge's Reticulum rooted-peer map
+        # (edge.knows_peer), surfaced by the server-side delivery-rooting probe
+        # into logs/<backend>/latest.log. peer_reachability_ratio from
+        # /federation/metrics is NOT that signal — it reflects an HTTP/persist
+        # reachability layer and can read 1.0 while the Reticulum fabric roots
+        # nobody (Node A rejecting every announce with rooting_unknown_key_id,
+        # CIRISServer#216). So we treat reachability_ratio as ADVISORY only and
+        # take rooting + KEX from the probe.
+        #
+        # 1. Metrics: envelopes shipped (the real delivery counter) + advisory ratio.
         metrics = None
-        deadline_polls = 12  # ~12 * 8s = ~96s
-        for _attempt in range(deadline_polls):
+        for _attempt in range(4):
             _, mbody = _get("/v1/federation/metrics")
             metrics = (mbody or {}).get("data") if isinstance(mbody, dict) else None
-            reach_ratio = (metrics or {}).get("peer_reachability_ratio") or {} if isinstance(metrics, dict) else {}
-            # keys look like "ciris-canonical-1-<fp>:reticulum-rs" → a canonical
-            # entry with ratio>0 means the canonical peer is rooted + reachable.
-            for k, ratio in (reach_ratio.items() if isinstance(reach_ratio, dict) else []):
-                if "canonical" in str(k) and (ratio or 0) > 0:
-                    rooted = True
-                    canonical_key = str(k).split(":")[0]
-                    break
-            if rooted:
+            if metrics:
                 break
-            time.sleep(8)
-
-        # Actual delivery counters (shipped envelopes to the rooted peer).
+            time.sleep(5)
+        reach_ratio = (metrics or {}).get("peer_reachability_ratio") or {} if isinstance(metrics, dict) else {}
         envelopes_sent = (metrics or {}).get("envelopes_sent_total") or {} if isinstance(metrics, dict) else {}
         n_sent = sum(v for v in envelopes_sent.values() if isinstance(v, (int, float))) if isinstance(envelopes_sent, dict) else 0
 
-        self.console.print(f"  canonical peer   : {canonical_key or '<not discovered>'}")
-        self.console.print(f"  rooted (reachable): {'✅ YES' if rooted else '❌ NO'}  reachability_ratio={reach_ratio}")
-        self.console.print(f"  envelopes shipped: {n_sent}")
-        self.console.print(f"  delivery metrics : {metrics}")
-        reach = reach_ratio  # keep the logger call below meaningful
-        # ALSO emit to the logger so the verdict lands in logs/<backend>/latest.log
-        # — disk-captured and TTY-independent (rich console stdout can be lost
-        # when the runner is driven headless / under a redirect).
+        # 2. Authoritative transport rooting + KEX from the [DELIVERY-PROBE] line
+        #    the server logs once the canonical roots (or times out at 120s).
+        backend = (self.database_backends[0] if getattr(self, "database_backends", None) else "sqlite")
+        probe_log = Path(f"logs/{backend}/latest.log")
+        transport_rooted: Optional[bool] = None  # None = probe verdict not yet available
+        kex_state = "unknown"
+        canonical_key = None
+        for _attempt in range(12):  # ~12 * 8s — give the 120s probe time to land its verdict
+            try:
+                text = probe_log.read_text(errors="ignore") if probe_log.exists() else ""
+            except Exception:  # noqa: BLE001
+                text = ""
+            probe_lines = [ln for ln in text.splitlines() if "[DELIVERY-PROBE]" in ln]
+            if probe_lines:
+                last = probe_lines[-1]
+                if "ROOTED" in last:
+                    transport_rooted = True
+                    kex_state = "PRESENT" if "=PRESENT" in last else ("None" if "=None" in last else "unknown")
+                    m = re.search(r"canonical (\S+)", last)
+                    canonical_key = m.group(1) if m else None
+                    break
+                if "did not root" in last:
+                    transport_rooted = False
+                    m = re.search(r"canonical (\S+)", last)
+                    canonical_key = m.group(1) if m else None
+                    break
+            time.sleep(8)
+
+        self.console.print(f"  canonical peer      : {canonical_key or '<from probe>'}")
+        rooted_str = "✅ YES" if transport_rooted else ("❌ NO" if transport_rooted is False else "❓ probe verdict not found")
+        self.console.print(f"  transport-rooted    : {rooted_str}  (edge.knows_peer — authoritative)")
+        self.console.print(f"  peer KEX resolvable : {kex_state}  (encryption_pubkeys stored from connect)")
+        self.console.print(f"  envelopes shipped   : {n_sent}")
+        self.console.print(f"  reachability_ratio  : {reach_ratio}  (advisory — HTTP/persist layer, NOT transport rooting)")
+        self.console.print(f"  delivery metrics    : {metrics}")
         logger.info(
-            "[FEDERATION-DELIVERY] canonical=%s rooted=%s envelopes_sent=%s reachability_ratio=%s",
+            "[FEDERATION-DELIVERY] canonical=%s transport_rooted=%s kex=%s envelopes_sent=%s reachability_ratio_advisory=%s",
             canonical_key,
-            rooted,
+            transport_rooted,
+            kex_state,
             n_sent,
-            reach,
+            reach_ratio,
         )
-        if rooted:
+
+        rooted = bool(transport_rooted)
+        if transport_rooted and n_sent > 0:
             verdict = (
-                f"✅ Federation delivery verified — canonical-server-1 rooted "
-                f"(reachability ratio > 0); {n_sent} envelope(s) shipped this run. "
-                "Trace flow to the canonical mesh is live."
+                f"✅ Federation delivery LIVE — canonical rooted (edge.knows_peer) and "
+                f"{n_sent} envelope(s) shipped. Trace flow to the canonical mesh confirmed."
             )
             self.console.print(f"[bold green]{verdict}[/bold green]")
             logger.info("[FEDERATION-DELIVERY] %s", verdict)
-        else:
+        elif transport_rooted:
             verdict = (
-                "⚠️  canonical-server-1 not rooted within the poll window. "
-                "Check: canonical_peer address (persist#404 :4242), Node A on 0.5.92, "
-                "edge #296 seed line in logs/latest.log."
+                "⚠️  Canonical is transport-rooted but 0 envelopes shipped — "
+                f"KEX resolvable={kex_state}. If KEX=None, the peer's encryption_pubkeys "
+                "were not stored from the connect handshake (can't seal envelopes)."
             )
             self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
+            logger.warning("[FEDERATION-DELIVERY] %s", verdict)
+        else:
+            verdict = (
+                "❌ Canonical NOT transport-rooted (edge.knows_peer=false). Node A rejects the "
+                "announce (rooting_unknown_key_id) — its AV-42 peer registry is empty (CIRISServer#216). "
+                "reachability_ratio may still read >0 but that is the HTTP/persist layer, not the fabric."
+            )
+            self.console.print(f"[bold red]{verdict}[/bold red]")
             logger.warning("[FEDERATION-DELIVERY] %s", verdict)
         return rooted
 

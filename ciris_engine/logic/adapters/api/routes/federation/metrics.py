@@ -85,11 +85,20 @@ async def get_federation_metrics(
         logger.warning("edge.metrics_snapshot() failed: %s", exc)
         return JSONResponse(status_code=503, content=EDGE_UNAVAILABLE_BODY)
 
-    try:
-        subscriber_count = int(edge.inline_text_subscriber_count())
-    except Exception as exc:
-        logger.warning("edge.inline_text_subscriber_count() failed: %s", exc)
+    # inline_text_subscriber_count is a newer edge surface; older/pinned edge
+    # wheels (e.g. the 0.5.9x line) do not expose it. Treat "method absent" as
+    # 0 at debug — a version-capability gap, not a per-request runtime error —
+    # so a metrics poller doesn't spam WARNING every scrape.
+    _subscriber_fn = getattr(edge, "inline_text_subscriber_count", None)
+    if _subscriber_fn is None:
+        logger.debug("edge has no inline_text_subscriber_count() (older edge wheel); reporting 0")
         subscriber_count = 0
+    else:
+        try:
+            subscriber_count = int(_subscriber_fn())
+        except Exception as exc:
+            logger.warning("edge.inline_text_subscriber_count() failed: %s", exc)
+            subscriber_count = 0
 
     if not isinstance(snapshot, Mapping):
         logger.warning(

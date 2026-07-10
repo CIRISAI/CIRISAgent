@@ -332,7 +332,7 @@ def canonical_community_key_id() -> Optional[str]:
 
         engine = _resolve_engine()
         if engine is not None:
-            rows = _json.loads(engine.list_canonical_servers() or "[]")
+            rows = _json.loads(engine.list_canonical_servers() or "[]")  # type: ignore[attr-defined]
             for row in rows:
                 key = row.get("key_id") if isinstance(row, dict) else None
                 if key:

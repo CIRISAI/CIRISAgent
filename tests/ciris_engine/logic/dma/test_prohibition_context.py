@@ -55,20 +55,24 @@ def test_new_category_without_description_still_surfaces(monkeypatch) -> None:
 
 
 def test_localized_override_is_used(monkeypatch) -> None:
-    """A {lang}.json prompts.prohibitions.<CATEGORY> override replaces the English base."""
+    """A {lang}.json prompts.prohibitions.<CATEGORY> override is used verbatim, and
+    the block is looked up in the target language ONLY (no English fallback leak)."""
     import ciris_engine.logic.utils.localization as L
 
-    real = L.get_string
-
-    def fake(lang, key, default=""):
-        if key == "prompts.prohibitions.MEDICAL":
-            return "LOCALIZED-MEDICAL-WHY"
-        return real(lang, key, default=default)
-
-    monkeypatch.setattr(L, "get_string", fake)
+    # The block resolves against the language's OWN bundle (no cross-language
+    # English fallback). Simulate a language 'xx' whose bundle localizes only
+    # MEDICAL — the localized value must appear, and the un-localized categories
+    # must be omitted (not English-filled), so no English base leaks in.
+    monkeypatch.setattr(
+        L,
+        "_get_language_data",
+        lambda lang: {"prompts": {"prohibitions": {"MEDICAL": "LOCALIZED-MEDICAL-WHY"}}},
+    )
     block = get_prohibition_guidance("xx")
     assert "LOCALIZED-MEDICAL-WHY" in block
     assert CATEGORY_GUIDANCE["MEDICAL"] not in block  # English base overridden
+    # No English fallback for the other (un-localized) categories on a non-en lang.
+    assert CATEGORY_GUIDANCE["FINANCIAL"] not in block
 
 
 def test_round1_dmas_inject_but_aspdma_does_not() -> None:
@@ -89,3 +93,62 @@ def test_round1_dmas_inject_but_aspdma_does_not() -> None:
         src = (_DMA_DIR / fn).read_text()
         assert "append_round1_accord_blocks" not in src, f"ASPDMA {fn} must NOT use the round-1 helper"
         assert "get_prohibition_guidance" not in src, f"ASPDMA {fn} must NOT inject prohibitions"
+
+
+# --- CI-red guard: every supported language must FULLY localize the block -----
+#
+# CIRISAgent#916 / the #912 regression: an un-localized prompts.prohibitions.*
+# key used to fall back to English and silently pollute a non-English DMA prompt
+# (Staged QA all_1 caught it at runtime, but only for `am`). These tests make an
+# incomplete or English-leaking prohibition localization a HARD CI FAILURE for
+# EVERY supported language — so this class of gap can never ship silently again.
+#
+# The key-parity half is already enforced by test_localization_completeness
+# (adding prompts.prohibitions.* to en.json requires every {lang}.json to carry
+# them). These add the SEMANTIC half: the rendered block must contain all
+# categories and must not be English for a non-English language.
+import json as _json
+from pathlib import Path as _Path
+
+_LOCALIZED_DIR = _Path(__file__).resolve().parents[4] / "ciris_engine" / "data" / "localized"
+
+
+def _supported_languages() -> list[str]:
+    manifest = _json.loads((_LOCALIZED_DIR / "manifest.json").read_text(encoding="utf-8"))
+    return sorted(manifest.get("languages", {}).keys())
+
+
+# Latin-script languages can't be script-checked; parity + non-identity still apply.
+_NON_LATIN_SCRIPT = {
+    "am": "ሀ-፿", "ar": "؀-ۿ", "bn": "ঀ-৿",
+    "fa": "؀-ۿ", "hi": "ऀ-ॿ", "ja": "぀-ヿ一-鿿",
+    "ko": "가-힯", "mr": "ऀ-ॿ", "my": "က-႟",
+    "pa": "਀-੿", "ru": "Ѐ-ӿ", "ta": "஀-௿",
+    "te": "ఀ-౿", "th": "฀-๿", "uk": "Ѐ-ӿ",
+    "ur": "؀-ۿ", "zh": "一-鿿",
+}
+
+
+def test_prohibition_block_fully_localized_every_language() -> None:
+    """Each supported language must render ALL categories — none omitted for a
+    missing translation (the #912 omit-path must never trigger in shipped code)."""
+    import re
+
+    expected = len(PROHIBITED_CAPABILITIES)
+    en_block = get_prohibition_guidance("en")
+    failures: list[str] = []
+    for lang in _supported_languages():
+        block = get_prohibition_guidance(lang)
+        if not block.strip():
+            failures.append(f"{lang}: prohibition block EMPTY (no prompts.prohibitions.* localized)")
+            continue
+        n = len([ln for ln in block.splitlines() if ln.startswith("- ")])
+        if n != expected:
+            failures.append(f"{lang}: {n}/{expected} categories rendered — un-localized categories omitted")
+        if lang != "en":
+            if block == en_block:
+                failures.append(f"{lang}: block byte-identical to English (not translated)")
+            script = _NON_LATIN_SCRIPT.get(lang)
+            if script and not re.search(f"[{script}]", block):
+                failures.append(f"{lang}: no {lang}-script characters in block (English placeholder?)")
+    assert not failures, "prohibition localization incomplete:\n  " + "\n  ".join(failures)

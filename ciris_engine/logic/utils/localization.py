@@ -416,13 +416,26 @@ def get_prohibition_guidance(lang_code: str) -> str:
     # (tracked for the localization pass).
     is_english = lang_code == "en"
 
+    # Look up in THIS language only — no cross-language English fallback. get_string
+    # would fall back requested-lang -> English -> default, which (now that en.json
+    # carries prompts.prohibitions.*) would serve English into every non-English
+    # prompt and pollute it. We want localized-or-omitted, so resolve directly
+    # against the language's own bundle.
+    lang_data = _get_language_data(lang_code)
+
+    def _local(key: str) -> str:
+        value = _resolve_key(lang_data, key)
+        return value.strip() if isinstance(value, str) else ""
+
     never: list[str] = []
     module: list[str] = []
     for category in PROHIBITED_CAPABILITIES:
-        desc = get_string(lang_code, f"prompts.prohibitions.{category}", default="").strip()
+        desc = _local(f"prompts.prohibitions.{category}")
         if not desc:
             if not is_english:
                 continue
+            # en.json is the English source; the constant is a last-ditch guard
+            # if a category were somehow absent from the bundle.
             desc = CATEGORY_GUIDANCE.get(category, "Outside this agent's scope.")
         line = f"- {desc}"
         if get_prohibition_severity(category) == ProhibitionSeverity.NEVER_ALLOWED:
@@ -435,7 +448,7 @@ def get_prohibition_guidance(lang_code: str) -> str:
         return ""
 
     def _framing(key: str, en_default: str) -> str:
-        localized = get_string(lang_code, key, default="").strip()
+        localized = _local(key)
         if localized:
             return localized
         return en_default if is_english else ""

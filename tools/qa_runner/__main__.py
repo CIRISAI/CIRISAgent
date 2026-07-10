@@ -293,6 +293,15 @@ Available modules:
         ),
     )
     parser.add_argument(
+        "--safety-battery-limit",
+        type=int,
+        default=0,
+        help=(
+            "Run only the first N battery questions (0 = all). "
+            "Cycle-time lever for trace-flow troubleshooting."
+        ),
+    )
+    parser.add_argument(
         "--safety-battery-domain",
         default="mental_health",
         help=(
@@ -641,6 +650,7 @@ def main():
         ],
         model_eval_questions_file=(args.model_eval_questions_file or None),
         safety_battery_lang=args.safety_battery_lang,
+        safety_battery_limit=args.safety_battery_limit,
         safety_battery_domain=args.safety_battery_domain,
         safety_battery_template=args.safety_battery_template,
         safety_interpret_capture_dir=args.safety_interpret_capture_dir,

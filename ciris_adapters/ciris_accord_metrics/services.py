@@ -570,15 +570,23 @@ class AccordMetricsService:
         wheels.)
         """
         try:
-            # import-untyped: the lens-core wheel ships no py.typed marker
-            # yet (1.1 docs ask alongside the capture_event concurrency
-            # contract) — same treatment as the other substrate imports.
-            from ciris_lens_core import LensClient  # type: ignore[import-untyped]
+            # One wheel (#896): LensClient re-hosts from ciris_server so the
+            # trace pipeline shares the SAME persist Engine the agent runs on.
+            # Pulling it from standalone ciris_lens_core (which Requires
+            # ciris-persist) reinstalls a second persist wheel alongside the
+            # one wheel — a dual-registry cohabitation that makes the seal's
+            # signer key invisible to the agent's Engine.receive_and_persist
+            # (verify_unknown_key). Fall back to standalone for partial dev envs.
+            try:
+                from ciris_server import LensClient  # type: ignore[import-not-found, import-untyped, unused-ignore]
+            except ImportError:
+                from ciris_lens_core import LensClient  # type: ignore[import-not-found, import-untyped, unused-ignore]
         except ImportError as e:
             raise RuntimeError(
-                "ciris-lens-core is REQUIRED in 2.9.6+ (the observability "
-                "orchestrator — CIRISAgent#866). pip install "
-                "'ciris-lens-core>=1.0.0,<2.0.0'. Import failed: " + str(e)
+                "LensClient is REQUIRED in 2.9.6+ (the observability "
+                "orchestrator — CIRISAgent#866). It re-hosts from the "
+                "ciris-server one wheel (#896); install ciris-server, or "
+                "ciris-lens-core for partial dev envs. Import failed: " + str(e)
             ) from e
 
         # The consent wire artifact: lens-core's gate resolves the newest
@@ -609,6 +617,32 @@ class AccordMetricsService:
                 "LensClient construction requires the persist Engine singleton — "
                 "initialize_database() must run before the accord_metrics adapter starts."
             )
+
+        # KEY DIAGNOSTICS (#896): lens traces are Ed25519-signed via the Engine
+        # and v10's receive_and_persist verifies the signer key_id against the
+        # registered federation keys, rejecting an unknown signer with
+        # `verify_unknown_key`. Log every candidate identity so a mismatch
+        # (e.g. the trace signed by the audit key while only the edge federation
+        # key is registered) is obvious without re-deriving it from a stack trace.
+        try:
+            _engine_local_kid = engine.local_key_id()
+        except Exception as _e:  # noqa: BLE001
+            _engine_local_kid = f"<err: {_e}>"
+        try:
+            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+            _audit_kid = get_unified_signing_key().key_id
+        except Exception as _e:  # noqa: BLE001
+            _audit_kid = f"<err: {_e}>"
+        logger.info(
+            "[LENS_KEY_DIAG] constructing LensClient: engine.local_key_id=%s | "
+            "consent_attesting_key_id(get_federation_address)=%s | "
+            "unified_signing_key.key_id=%s | trace_level=%s",
+            _engine_local_kid,
+            consent_key_id,
+            _audit_kid,
+            self._trace_level.value,
+        )
 
         try:
             return LensClient(

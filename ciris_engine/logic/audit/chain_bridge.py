@@ -198,7 +198,7 @@ def run(
     }
 
     if engine is None:
-        from ciris_persist import Engine  # type: ignore[import-untyped]
+        from ciris_engine.logic.persistence._substrate import Engine  # one-wheel seam (#896)
         engine = Engine(f"sqlite:///{engine_db.resolve()}", key_id)
 
     # v1.5.4 helpers: persist owns canonicalization; agent signs externally.

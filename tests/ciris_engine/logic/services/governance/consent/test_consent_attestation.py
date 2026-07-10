@@ -140,6 +140,13 @@ def persist_engine(tmp_path, monkeypatch):
     # Run inside tmp_path with relative DSN/seed names — the persist sqlite DSN
     # parser mishandles an absolute path after `sqlite://`.
     monkeypatch.chdir(tmp_path)
+    # Un-pin the process-singleton engine so each fixture instance gets a
+    # FRESH engine bound to THIS tmp dir (handle-free reset, persist #88).
+    # Without it a prior test's engine (same relative DSN, different cwd) is
+    # reused and register_federation_key hits federation_conflict — surfaced
+    # whenever collection order changes.
+    if hasattr(ciris_persist, "reset_engine"):
+        ciris_persist.reset_engine()
     (tmp_path / "ed.seed").write_bytes(os.urandom(32))
     engine = Engine(
         "sqlite://rt.db?mode=rwc",

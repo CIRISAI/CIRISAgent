@@ -818,24 +818,24 @@ class TestAccordMetricsServiceLifecycle:
 
     @pytest.mark.asyncio
     async def test_start_raises_when_lens_core_unimportable(self, monkeypatch):
-        # None in sys.modules makes `from ciris_lens_core import LensClient`
-        # raise ImportError — the "wheel not installed" shape.
+        # LensClient now re-hosts from the ciris-server one wheel (#896), with
+        # a ciris_lens_core fallback. Block BOTH so the import raises ImportError
+        # — the "no lens wheel installed" shape.
+        monkeypatch.setitem(sys.modules, "ciris_server", None)
         monkeypatch.setitem(sys.modules, "ciris_lens_core", None)
         service = AccordMetricsService()
 
-        with pytest.raises(RuntimeError, match="ciris-lens-core is REQUIRED"):
+        with pytest.raises(RuntimeError, match="LensClient is REQUIRED"):
             await service.start()
 
     @pytest.mark.asyncio
     async def test_start_raises_when_lens_client_construction_fails(self, monkeypatch):
-        boom_mod = types.ModuleType("ciris_lens_core")
-
         class _BoomLensClient:
             def __init__(self, *args: Any, **kwargs: Any) -> None:
-                raise RuntimeError("no process Engine — host must construct ciris_persist.Engine first")
+                raise RuntimeError("no process Engine — host must construct the Engine first")
 
-        boom_mod.LensClient = _BoomLensClient  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "ciris_lens_core", boom_mod)
+        # LensClient is imported from ciris_server (one wheel, #896); patch it there.
+        monkeypatch.setattr("ciris_server.LensClient", _BoomLensClient, raising=False)
         service = AccordMetricsService()
 
         with pytest.raises(RuntimeError, match="LensClient construction failed"):

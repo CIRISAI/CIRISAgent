@@ -76,7 +76,7 @@ class TestGraphAuditService:
         import hashlib
 
         import ciris_engine.logic.persistence.models.graph as _graph_mod
-        from ciris_persist import Engine, reset_engine  # type: ignore[import-untyped]
+        from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
 
         from ciris_engine.logic.persistence.models.graph import set_persist_engine
 

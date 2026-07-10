@@ -27,7 +27,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 
-from ciris_persist import Engine, NotFound  # type: ignore[import-untyped]
+from ciris_engine.logic.persistence._substrate import Engine, NotFound  # one-wheel seam (#896)
 
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.services.graph_core import (

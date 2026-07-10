@@ -86,6 +86,10 @@ class AccordMetricsAdapter(Service):
 
         # Extract config from kwargs
         adapter_config = kwargs.get("adapter_config", {})
+        # Kept for the consent migration (start() purges the legacy consent
+        # fields from these once the CEG grant is confirmed).
+        self._adapter_config = adapter_config
+        self._adapter_id = kwargs.get("adapter_id") or adapter_config.get("adapter_id") or "ciris_accord_metrics"
 
         # Check consent state from config OR environment variables (for QA testing)
         # Uses backward-compatible helper that checks both ACCORD and legacy COVENANT env vars
@@ -200,10 +204,103 @@ class AccordMetricsAdapter(Service):
         self._running = True
         self._started_at = datetime.now(timezone.utc)
 
+        # CONSENT: the CEG grant (consent:community_trust:v1) is THE consent
+        # artifact (2.9.6 #866). Boot order:
+        #   1. A standing CEG grant makes this a consenting boot — post-migration
+        #      installs carry no legacy consent sources at all.
+        #   2. Otherwise a LEGACY consent source (adapter-config consent_given /
+        #      CIRIS_ACCORD_METRICS_CONSENT env, incl. old COVENANT aliases) is
+        #      MIGRATED: emit the grant carrying the ORIGINAL consent timestamp,
+        #      and on confirmed success DELETE the legacy sources (os.environ,
+        #      the persistent .env lines, and the adapter-config graph fields) —
+        #      a migration, not a dual-write. Idempotent + self-healing: a later
+        #      boot where the canonical community key HAS become resolvable
+        #      upgrades the row to the directed grant.
+        if not self._consent_given:
+            try:
+                from ciris_engine.logic.services.governance.consent.attestation import (
+                    current_community_grant_id,
+                )
+
+                if current_community_grant_id():
+                    self._consent_given = True
+                    logger.info("   consent derived from standing CEG community grant (post-migration boot)")
+            except Exception as exc:  # noqa: BLE001 — best-effort
+                logger.debug(f"   consent-CEG read skipped ({type(exc).__name__}): {exc}")
+
         if self._consent_given:
+            try:
+                from ciris_engine.logic.services.governance.consent.attestation import (
+                    emit_community_consent_grant,
+                )
+
+                attestation_id = emit_community_consent_grant(granted_at=self._consent_timestamp)
+                if attestation_id:
+                    logger.info(f"   consent-CEG migration: community grant upserted ({attestation_id})")
+                    self._purge_legacy_consent_sources()
+                else:
+                    logger.info("   consent-CEG migration: emit no-op (engine/key unavailable or kill-switch)")
+            except Exception as exc:  # noqa: BLE001 — best-effort, never block adapter start
+                logger.warning(f"   consent-CEG migration failed ({type(exc).__name__}): {exc}")
             logger.info("✅ AccordMetricsAdapter STARTED - collecting metrics")
         else:
             logger.info("AccordMetricsAdapter started pre-consent — capture active, sharing gated at the substrate seal")
+
+    def _purge_legacy_consent_sources(self) -> None:
+        """Delete the legacy consent artifacts once the CEG grant is confirmed.
+
+        Sources (all best-effort, each independently):
+        1. Process env: CIRIS_ACCORD_METRICS_CONSENT[_TIMESTAMP] + the legacy
+           CIRIS_COVENANT_METRICS_* aliases.
+        2. The persistent .env file (CIRIS_CONFIG_DIR/.env — the file
+           my_data._update_env_consent used to write), so the vars don't
+           resurrect on the next boot.
+        3. The adapter-config graph fields (adapter.<id>.consent_given /
+           consent_timestamp via the runtime config service) — the graph-based
+           consent object.
+        The CEG row is the single consent source afterwards (step 1 of start()).
+        """
+        env_keys = [
+            f"CIRIS_{fam}_METRICS_{suffix}"
+            for fam in ("ACCORD", "COVENANT")
+            for suffix in ("CONSENT", "CONSENT_TIMESTAMP")
+        ]
+        # 1. process env
+        for k in env_keys:
+            if k in os.environ:
+                os.environ.pop(k, None)
+                logger.info(f"   consent migration: removed {k} from process env")
+        # 2. persistent .env
+        try:
+            from pathlib import Path
+
+            env_path = Path(os.environ.get("CIRIS_CONFIG_DIR", ".")) / ".env"
+            if env_path.exists():
+                lines = env_path.read_text(encoding="utf-8").splitlines(keepends=True)
+                kept = [ln for ln in lines if not any(ln.strip().startswith(f"{k}=") for k in env_keys)]
+                if len(kept) != len(lines):
+                    env_path.write_text("".join(kept), encoding="utf-8")
+                    logger.info(
+                        f"   consent migration: removed {len(lines) - len(kept)} legacy consent line(s) from {env_path}"
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"   consent migration: .env purge failed ({type(exc).__name__}): {exc}")
+        # 3. adapter-config graph fields (best-effort; config service optional)
+        try:
+            if isinstance(self._adapter_config, dict):
+                self._adapter_config.pop("consent_given", None)
+                self._adapter_config.pop("consent_timestamp", None)
+            config_service = getattr(self.runtime, "config_service", None)
+            if config_service is not None and hasattr(config_service, "delete_config"):
+                import asyncio
+
+                for key in ("consent_given", "consent_timestamp"):
+                    coro = config_service.delete_config(f"adapter.{self._adapter_id}.{key}")
+                    if asyncio.iscoroutine(coro):
+                        asyncio.get_event_loop().create_task(coro)
+                logger.info("   consent migration: cleared adapter-config graph consent fields")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"   consent migration: graph-config purge skipped ({type(exc).__name__}): {exc}")
 
     async def stop(self) -> None:
         """Stop the Accord Metrics adapter."""

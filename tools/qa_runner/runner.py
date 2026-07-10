@@ -154,68 +154,27 @@ class QARunner:
         self.server_managers: Dict[str, APIServerManager] = {}
         for backend in self.database_backends:
             port = self.config.api_port if backend == "sqlite" else self.config.postgres_api_port
-            # Create a copy of config with the right port
-            backend_config = QAConfig(
+            # Copy the CLI config, overriding ONLY the backend-specific
+            # fields. dataclasses.replace ensures every OTHER field — present
+            # and future — flows through automatically. (The previous
+            # field-by-field QAConfig(...) enumeration silently dropped any
+            # newly added field: model_eval filters and safety_battery_lang
+            # each hit it before, and safety_battery_limit hit it again.)
+            import dataclasses
+
+            backend_config = dataclasses.replace(
+                self.config,
                 base_url=f"http://localhost:{port}",
                 api_port=port,
-                admin_username=self.config.admin_username,
-                admin_password=self.config.admin_password,
-                oauth_test_user_id=self.config.oauth_test_user_id,
-                oauth_test_email=self.config.oauth_test_email,
-                oauth_test_provider=self.config.oauth_test_provider,
-                oauth_test_external_id=self.config.oauth_test_external_id,
-                billing_enabled=self.config.billing_enabled,
-                billing_api_key=self.config.billing_api_key,
-                billing_api_url=self.config.billing_api_url,
-                parallel_tests=self.config.parallel_tests,
-                max_workers=self.config.max_workers,
-                timeout=self.config.timeout,
-                retry_count=self.config.retry_count,
-                retry_delay=self.config.retry_delay,
-                verbose=self.config.verbose,
-                json_output=self.config.json_output,
-                html_report=self.config.html_report,
-                report_dir=self.config.report_dir,
-                auto_start_server=self.config.auto_start_server,
-                server_startup_timeout=self.config.server_startup_timeout,
-                mock_llm=self.config.mock_llm,
-                adapter=self.config.adapter,
                 database_backends=None,  # Don't pass this recursively
-                postgres_url=self.config.postgres_url,
-                postgres_api_port=self.config.postgres_api_port,
-                # Live LLM configuration
-                live_api_key=self.config.live_api_key,
-                live_model=self.config.live_model,
-                live_base_url=self.config.live_base_url,
-                live_provider=self.config.live_provider,
-                # Live Lens configuration
-                live_lens=self.config.live_lens,
-                # Data management
-                wipe_data=self.config.wipe_data,
-                # Memory benchmark configuration
-                message_count=self.config.message_count,
-                concurrent_channels=self.config.concurrent_channels,
-                # Model eval configuration — propagate so the runner's
-                # backend-specific config (which self.config gets re-bound
-                # to at line ~129) doesn't lose the CLI-passed filters.
-                # Without this, `--model-eval-languages en` and
-                # `--model-eval-questions History` silently reset to the
-                # 4-language × 6-question defaults.
-                model_eval_languages=self.config.model_eval_languages,
-                model_eval_concurrency=self.config.model_eval_concurrency,
-                model_eval_profile_memory=self.config.model_eval_profile_memory,
-                model_eval_question_categories=self.config.model_eval_question_categories,
-                model_eval_questions_file=self.config.model_eval_questions_file,
-                # Safety battery configuration — same backend-config preservation
-                # rationale as the model_eval block above.
-                safety_battery_lang=self.config.safety_battery_lang,
-                safety_battery_domain=self.config.safety_battery_domain,
-                safety_battery_template=self.config.safety_battery_template,
-                safety_interpret_capture_dir=self.config.safety_interpret_capture_dir,
-                safety_interpret_criteria_file=self.config.safety_interpret_criteria_file,
-                safety_interpret_openrouter_key_file=self.config.safety_interpret_openrouter_key_file,
-                safety_interpret_judge_model=self.config.safety_interpret_judge_model,
-                setup_template_id=self.config.setup_template_id,
+                # staged_env is deliberately RESET (matching the historical
+                # field-by-field copy, which always dropped it): the server
+                # manager launches `python main.py` from the checkout, and
+                # the staged job's byte-parity hash gate guarantees the tree
+                # equals the wheel. Inheriting it flips the launch onto the
+                # staged `ciris-server` console script, which fails with
+                # "No module named 'main'" in CI (latent script bug).
+                staged_env=None,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -1456,6 +1415,7 @@ class QARunner:
                         lang=getattr(self.config, "safety_battery_lang", "am"),
                         domain=getattr(self.config, "safety_battery_domain", "mental_health"),
                         template_id=getattr(self.config, "safety_battery_template", "default"),
+                        limit=getattr(self.config, "safety_battery_limit", 0),
                         model=self.config.live_model,
                         live_base_url=self.config.live_base_url,
                         live_provider=self.config.live_provider,

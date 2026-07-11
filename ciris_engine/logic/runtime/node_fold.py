@@ -124,3 +124,23 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     if not node_up:
         raise RuntimeError("node fold: read-API did not bind 127.0.0.1:4243 (node-fails ⇒ agent-fails)")
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 ✅")
+
+    # Last trace-flow domino: publish this node's self-occurrence (with derived
+    # content-encryption pubkeys) so peers can resolve our KEX and seal traces to
+    # us. Runs here — after the node key is registered (FK) — idempotent every
+    # boot; no-op until the wheel (>=0.5.99) exposes the verify enc-derive.
+    try:
+        import datetime
+
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.logic.runtime.self_occurrence import publish_self_occurrence
+
+        engine = get_persist_engine()
+        if engine is not None and resolved_key:
+            publish_self_occurrence(
+                engine,
+                resolved_key,
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            )
+    except Exception as exc:  # noqa: BLE001 — best-effort, never break boot
+        logger.warning("Node fold: self-occurrence publish hook failed (non-fatal): %s", exc)

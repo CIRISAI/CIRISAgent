@@ -11,6 +11,11 @@ import tempfile
 os.environ["CIRIS_IMPORT_MODE"] = "true"
 os.environ["CIRIS_MOCK_LLM"] = "true"
 os.environ["CIRIS_TESTING_MODE"] = "true"  # Enable fallback admin credentials for tests
+# Unit tests never boot the real node fold (ciris-server serve on 4243): since
+# 0.5.113 the fold is fail-fast (node-fails => agent-fails) and requires a live
+# embedded edge (init_edge_runtime) + SQLite engine, which bare unit tests do
+# not stand up. Staged QA / integration boots override this explicitly.
+os.environ.setdefault("CIRIS_NODE_FOLD", "false")
 # Pin language to English so handler-content assertions stay stable regardless
 # of the developer's local CIRIS_PREFERRED_LANGUAGE in .env. Tests that
 # intentionally exercise localization can override via monkeypatch.

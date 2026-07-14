@@ -46,13 +46,13 @@ from ciris_engine.logic.audit.persist_signing import (
     resolve_tenant_id as _audit_tenant_id,
     sign_with_verifier as _audit_sign,
 )
-from ciris_engine.logic.audit.verifier import AuditVerifier
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.base_graph_service import BaseGraphService
 from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
 from ciris_engine.protocols.services import AuditService as AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+from ciris_engine.schemas.audit.verification import CompleteVerificationResult
 from ciris_engine.schemas.runtime.audit import AuditActionContext, AuditRequest
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ServiceType
 from ciris_engine.schemas.runtime.memory import TimeSeriesDataPoint
@@ -188,12 +188,11 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         self._recent_entries: List[AuditRequest] = []
         self._max_cached_entries = cache_size
 
-        # Hash chain components — A3 cutover: writes go through persist's
+        # Hash chain — A3 cutover: writes go through persist's
         # cirislens_audit_log substrate (`_write_to_persist_chain`); reads
-        # go through `verifier` which delegates to persist's
+        # go through `_verify_complete_chain` which delegates to persist's
         # `audit_verify_chain`. The legacy AuditHashChain /
         # AuditSignatureManager / raw sqlite3 connection are gone.
-        self.verifier: Optional[AuditVerifier] = None
 
         # Export buffer
         self._export_buffer: List[AuditRequest] = []
@@ -248,9 +247,8 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         else:
             self._start_time = datetime.now()
 
-        # Initialize hash chain if enabled
-        if self.enable_hash_chain:
-            await self._initialize_hash_chain()
+        # Hash chain needs no Python-side init — persist owns the
+        # cirislens_audit_log table, signing keys, and chain state.
 
         # Create export directory if needed
         if self.export_path:
@@ -657,11 +655,100 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
 
         return audit_entries[start:end]
 
+    def _verify_complete_chain(self) -> CompleteVerificationResult:
+        """Walk the full audit chain via persist's `audit_verify_chain`.
+
+        Inlined from the deleted `logic/audit/verifier.py` shim (#896):
+        persist owns the chain state; the agent shapes persist's outcome
+        into the existing CompleteVerificationResult schema. Persist
+        combines hash + signature verification under a single outcome,
+        so both flags report the same value.
+        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        start_time = self._time_service.now() if self._time_service else datetime.now()
+
+        try:
+            engine = get_persist_engine()
+            if engine is None:
+                raise RuntimeError("persist engine not wired")
+
+            tenant_id = _audit_tenant_id()
+
+            # Resolve the chain tail. audit_list_entries paginates DESC by
+            # recorded_at — NOT by sequence_number — so take the max over a
+            # window (same rationale as _refresh_persist_chain_state).
+            filter_json = json.dumps({"tenant_id": tenant_id})
+            cursor_json = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
+            raw_list = engine.audit_list_entries(filter_json, cursor_json, 256)
+            parsed = json.loads(raw_list) if isinstance(raw_list, (bytes, str)) else raw_list
+            items = (parsed.get("items") if isinstance(parsed, dict) else parsed) or []
+            last_seq = max(
+                (int(it.get("sequence_number", 0)) for it in items if isinstance(it, dict)),
+                default=0,
+            )
+
+            end_time = self._time_service.now() if self._time_service else datetime.now()
+            verification_time = int((end_time - start_time).total_seconds() * 1000)
+
+            if last_seq < 1:
+                return CompleteVerificationResult(
+                    valid=True,
+                    entries_verified=0,
+                    hash_chain_valid=True,
+                    signatures_valid=True,
+                    verification_time_ms=verification_time,
+                    summary="Empty audit log",
+                )
+
+            raw = engine.audit_verify_chain(tenant_id, 1, last_seq)
+            payload = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            outcome = payload.get("outcome", {}) if isinstance(payload, dict) else {}
+            walked = int(payload.get("entries_walked", 0)) if isinstance(payload, dict) else 0
+            ok = isinstance(outcome, dict) and outcome.get("outcome") == "ok"
+
+            errors: List[str] = []
+            if not ok and isinstance(outcome, dict):
+                at_seq = outcome.get("at_sequence")
+                reason = outcome.get("reason", "unknown")
+                detail = outcome.get("detail", "")
+                errors.append(f"chain break at sequence {at_seq}: {reason} ({detail})")
+
+            end_time = self._time_service.now() if self._time_service else datetime.now()
+            verification_time = int((end_time - start_time).total_seconds() * 1000)
+
+            if ok:
+                logger.info(f"Audit verification passed: {walked} entries in {verification_time}ms")
+            else:
+                logger.error(f"Audit verification FAILED: {errors}")
+
+            return CompleteVerificationResult(
+                valid=ok,
+                entries_verified=walked,
+                hash_chain_valid=ok,
+                signatures_valid=ok,
+                verification_time_ms=verification_time,
+                hash_chain_errors=errors,
+                signature_errors=[],
+            )
+        except Exception as e:
+            end_time = self._time_service.now() if self._time_service else datetime.now()
+            verification_time = int((end_time - start_time).total_seconds() * 1000)
+            logger.exception("persist audit_verify_chain failed")
+            return CompleteVerificationResult(
+                valid=False,
+                entries_verified=0,
+                hash_chain_valid=False,
+                signatures_valid=False,
+                verification_time_ms=verification_time,
+                error=f"verify_complete_chain error: {type(e).__name__}: {e}",
+            )
+
     async def verify_audit_integrity(self) -> VerificationReport:
         """Verify the integrity of the audit trail."""
         start_time = self._time_service.now() if self._time_service else datetime.now()
 
-        if not self.enable_hash_chain or not self.verifier:
+        if not self.enable_hash_chain:
             return VerificationReport(
                 verified=False,
                 total_entries=0,
@@ -675,7 +762,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             )
 
         try:
-            result = await asyncio.to_thread(self.verifier.verify_complete_chain)
+            result = await asyncio.to_thread(self._verify_complete_chain)
             end_time = self._time_service.now() if self._time_service else datetime.now()
 
             # Extract all errors
@@ -718,7 +805,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         """Generate a comprehensive audit verification report."""
         start_time = self._time_service.now() if self._time_service else datetime.now()
 
-        if not self.enable_hash_chain or not self.verifier:
+        if not self.enable_hash_chain:
             return VerificationReport(
                 verified=False,
                 total_entries=0,
@@ -1169,22 +1256,6 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         except Exception as e:
             logger.error(f"Failed to create trace correlation: {e}", exc_info=True)
             # Don't fail the audit operation if trace creation fails
-
-    async def _initialize_hash_chain(self) -> None:
-        """Wire up the persist-routed audit chain.
-
-        A3 cutover: persist owns the cirislens_audit_log table + signing
-        keys + chain state. The agent just needs a verifier handle for the
-        verify_complete_chain code path. There's no Python-side table init,
-        no signing-key bootstrap, no per-process SQLite connection.
-        """
-        if not self._time_service:
-            raise RuntimeError("TimeService is None — cannot initialize audit verifier")
-        self.verifier = AuditVerifier(str(self.db_path), self._time_service)
-        # Verifier's initialize is a no-op now (persist owns the table) but
-        # we keep the call for symmetry with the legacy lifecycle.
-        await asyncio.to_thread(self.verifier.initialize)
-        logger.info("Audit hash chain wired through persist substrate")
 
     async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[JSONDict]:
         """Add an entry to the hash chain via persist.

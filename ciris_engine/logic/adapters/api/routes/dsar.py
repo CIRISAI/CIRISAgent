@@ -16,12 +16,11 @@ from typing import Annotated, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from ciris_engine.logic.persistence.models.dsar import (
-    create_dsar_ticket,
-    get_dsar_ticket,
-    list_dsar_tickets_by_email,
-    list_dsar_tickets_by_status,
-    update_dsar_ticket_status,
+from ciris_engine.logic.persistence.models.tickets import (
+    create_ticket,
+    get_ticket,
+    list_tickets,
+    update_ticket_status,
 )
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
@@ -40,6 +39,106 @@ from ..models import StandardResponse, TokenData
 CurrentUserDep = Annotated[TokenData, Depends(get_current_user)]
 
 router = APIRouter(prefix="/dsar", tags=["DSAR"])
+
+# ---------------------------------------------------------------------------
+# DSAR ↔ universal-ticket vocabulary (migration 008).
+#
+# The DSAR API keeps its GDPR-facing vocabulary (pending_review / rejected,
+# access|delete|export|correct) while the tickets substrate speaks the
+# universal one (pending / cancelled, DSAR_* SOPs). The mapping lives here —
+# the API layer is its only consumer (#896 shim deletion).
+# ---------------------------------------------------------------------------
+
+_SOP_BY_REQUEST_TYPE = {
+    "access": "DSAR_ACCESS",
+    "delete": "DSAR_DELETE",
+    "export": "DSAR_EXPORT",
+    "correct": "DSAR_RECTIFY",
+}
+
+_TICKET_STATUS_BY_DSAR = {
+    "pending_review": "pending",
+    "in_progress": "in_progress",
+    "completed": "completed",
+    "rejected": "cancelled",
+    "cancelled": "cancelled",
+}
+
+_DSAR_STATUS_BY_TICKET = {
+    "pending": "pending_review",
+    "assigned": "in_progress",
+    "in_progress": "in_progress",
+    "completed": "completed",
+    "cancelled": "rejected",
+    "failed": "rejected",
+    "blocked": "in_progress",
+    "deferred": "pending_review",
+}
+
+
+def _ticket_to_dsar_record(ticket: dict[str, Any]) -> dict[str, Any]:
+    """Shape a universal-ticket row into the DSAR API's record format."""
+    metadata = ticket.get("metadata") or {}
+    return {
+        "ticket_id": ticket["ticket_id"],
+        "request_type": metadata.get("legacy_request_type", ticket["sop"].replace("DSAR_", "").lower()),
+        "email": ticket["email"],
+        "user_identifier": ticket.get("user_identifier"),
+        "details": metadata.get("legacy_details") or ticket.get("notes"),
+        "urgent": (ticket.get("priority") or 5) >= 9,
+        "status": _DSAR_STATUS_BY_TICKET.get(ticket["status"], "pending_review"),
+        "submitted_at": ticket["submitted_at"],
+        "estimated_completion": ticket.get("deadline"),
+        "last_updated": ticket["last_updated"],
+        "notes": ticket.get("notes"),
+        "automated": ticket.get("automated", False),
+        "access_package": metadata.get("access_package"),
+        "export_package": metadata.get("export_package"),
+    }
+
+
+def _get_dsar_record(ticket_id: str) -> Optional[dict[str, Any]]:
+    """Retrieve a DSAR ticket via the universal tickets substrate."""
+    ticket = get_ticket(ticket_id)
+    return _ticket_to_dsar_record(ticket) if ticket else None
+
+
+def _store_dsar_ticket(
+    *,
+    ticket_id: str,
+    request_type: str,
+    email: str,
+    status: str,
+    submitted_at: datetime,
+    estimated_completion: datetime,
+    automated: bool,
+    user_identifier: Optional[str] = None,
+    details: Optional[str] = None,
+    urgent: bool = False,
+    access_package: Optional[dict[str, Any]] = None,
+    export_package: Optional[dict[str, Any]] = None,
+) -> bool:
+    """Persist a DSAR request as a universal ticket (GDPR tracking requirement)."""
+    return create_ticket(
+        ticket_id=ticket_id,
+        sop=_SOP_BY_REQUEST_TYPE.get(request_type.lower(), "DSAR_ACCESS"),
+        ticket_type="dsar",
+        email=email,
+        status=_TICKET_STATUS_BY_DSAR.get(status, "pending"),
+        priority=9 if urgent else 5,
+        user_identifier=user_identifier,
+        submitted_at=submitted_at,
+        deadline=estimated_completion,
+        metadata={
+            "legacy_request_type": request_type,
+            "legacy_details": details or "",
+            "access_package": access_package,
+            "export_package": export_package,
+            "stages": {},
+        },
+        notes=details,
+        automated=automated,
+    )
 
 
 class DSARRequest(BaseModel):
@@ -331,7 +430,7 @@ async def submit_dsar(
     request_status = "completed" if is_automated and (access_package or export_package) else "pending_review"
 
     # Store in database - CRITICAL: must succeed for GDPR compliance
-    persistence_success = create_dsar_ticket(
+    persistence_success = _store_dsar_ticket(
         ticket_id=ticket_id,
         request_type=request.request_type,
         email=request.email,
@@ -424,7 +523,7 @@ async def check_dsar_status(ticket_id: str) -> StandardResponse:
 
     Anyone with the ticket ID can check status (like a tracking number).
     """
-    record = get_dsar_ticket(ticket_id)
+    record = _get_dsar_record(ticket_id)
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -471,10 +570,10 @@ async def list_dsar_requests(
         )
 
     # Get pending and in-progress requests from database
-    all_pending = []
+    all_pending: list[dict[str, Any]] = []
     for status_filter in ["pending_review", "in_progress"]:
-        tickets = list_dsar_tickets_by_status(status_filter)
-        all_pending.extend(tickets)
+        tickets = list_tickets(ticket_type="dsar", status=_TICKET_STATUS_BY_DSAR[status_filter])
+        all_pending.extend(_ticket_to_dsar_record(t) for t in tickets)
 
     # Format for response
     pending_requests = [
@@ -525,7 +624,7 @@ async def update_dsar_status(
         )
 
     # Check if ticket exists
-    record = get_dsar_ticket(ticket_id)
+    record = _get_dsar_record(ticket_id)
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -540,7 +639,7 @@ async def update_dsar_status(
         )
 
     # Update the record in database
-    update_dsar_ticket_status(ticket_id, new_status, notes)
+    update_ticket_status(ticket_id, _TICKET_STATUS_BY_DSAR[new_status], notes=notes)
 
     # Log the update
     import logging
@@ -587,7 +686,7 @@ async def get_deletion_status(
     Anyone with the ticket ID can check status (like a tracking number).
     """
     # Verify ticket exists and is a deletion request
-    record = get_dsar_ticket(ticket_id)
+    record = _get_dsar_record(ticket_id)
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

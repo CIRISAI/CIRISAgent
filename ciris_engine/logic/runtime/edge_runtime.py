@@ -258,9 +258,14 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
             ckey = canon[0].get("key_id")
             if not ckey:
                 return
-            deadline = 120
+            # Rooting is announce-driven and observed at ~130s on the canonical
+            # (the agent cold-start-roots the peer off its RNS announce, not off a
+            # reply), so a 120s window expired ~10s BEFORE rooting and reported a
+            # false "did not root". Give rooting 240s.
+            root_deadline = 240
             waited = 0
-            while waited < deadline:
+            rooted = False
+            while waited < root_deadline:
                 _t.sleep(10)
                 waited += 10
                 try:
@@ -268,20 +273,44 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                 except Exception:  # noqa: BLE001
                     rooted = False
                 if rooted:
-                    try:
-                        kex = edge.resolve_peer_kex_pubkeys(ckey)
-                    except Exception as kex_exc:  # noqa: BLE001
-                        kex = f"<error: {kex_exc}>"
+                    logger.info("[DELIVERY-PROBE] canonical %s ROOTED after ~%ss", ckey, waited)
+                    break
+            if not rooted:
+                logger.info("[DELIVERY-PROBE] canonical %s did not root within %ss", ckey, root_deadline)
+                return
+
+            # KEX does NOT appear at rooting — it lands only once an inbound
+            # IdentityOccurrence anti-entropy round from the peer completes (which
+            # needs the peer to REPLY over a rooted return path). So poll KEX for a
+            # window AFTER rooting rather than sampling once. If it never flips to
+            # PRESENT, the peer is not answering our replication rounds — the
+            # "rooted but 0 envelopes" blocker is on the peer's reply path, not here.
+            kex_deadline = 180
+            kex_waited = 0
+            while kex_waited < kex_deadline:
+                try:
+                    kex = edge.resolve_peer_kex_pubkeys(ckey)
+                except Exception as kex_exc:  # noqa: BLE001
+                    kex = f"<error: {kex_exc}>"
+                if isinstance(kex, dict):
                     logger.info(
-                        "[DELIVERY-PROBE] canonical %s ROOTED after ~%ss; resolve_peer_kex_pubkeys=%s "
-                        "(None ⇒ peer encryption_pubkeys not stored from the connect handshake → "
-                        "replication cannot seal envelopes; this is the 'reachable but 0 envelopes' cause)",
+                        "[DELIVERY-PROBE] canonical %s KEX PRESENT after ~%ss post-root — "
+                        "IdentityOccurrence round synced; replication can now seal envelopes",
                         ckey,
-                        waited,
-                        "PRESENT" if isinstance(kex, dict) else kex,
+                        kex_waited,
                     )
                     return
-            logger.info("[DELIVERY-PROBE] canonical %s did not root within %ss", ckey, deadline)
+                _t.sleep(15)
+                kex_waited += 15
+            logger.info(
+                "[DELIVERY-PROBE] canonical %s ROOTED but KEX still None after %ss post-root — "
+                "the peer is not replying to our anti-entropy rounds (IdentityOccurrence never syncs → "
+                "resolve_peer_kex_pubkeys None → replication cannot seal). Blocker is the peer's "
+                "replication reply path (peer roots us only as advisory, or its responder is unwired), "
+                "NOT the agent.",
+                ckey,
+                kex_deadline,
+            )
         except Exception as exc:  # noqa: BLE001 — pure diagnostics, never disturb boot
             logger.debug("[DELIVERY-PROBE] probe error (non-fatal): %s", exc)
 

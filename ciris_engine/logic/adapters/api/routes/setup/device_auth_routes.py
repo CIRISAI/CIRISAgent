@@ -1,7 +1,10 @@
-"""Device authentication and package download endpoints for CIRIS setup.
+"""Licensed package download endpoint for CIRIS setup.
 
-This module provides endpoints for the device auth flow with CIRISPortal,
-including connect-node, status polling, and licensed package download.
+The device auth flow (connect-node, connect-node/status, reset-device-auth)
+is served natively by the local ciris-server node on port 4243; the Kotlin
+client drives those endpoints on the node directly. Only the licensed
+package download remains on the brain (:8080) — the node has no route for
+it yet.
 """
 
 import hashlib
@@ -9,292 +12,23 @@ import logging
 import os
 import shutil
 import tempfile
-import time
 import zipfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Dict
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 
 from ciris_engine.schemas.api.responses import SuccessResponse
 
 from .._common import RESPONSES_500
 from .dependencies import SetupOnlyDep
-from .device_auth import (
-    ALLOWED_PORTAL_HOSTS,
-    _clear_device_auth_session,
-    _load_device_auth_session,
-    _register_self_custody_key,
-    _save_device_auth_session,
-    _submit_attestation_inline,
-    _validate_portal_url,
-)
-from .models import (
-    ConnectNodeRequest,
-    ConnectNodeResponse,
-    ConnectNodeStatusResponse,
-    DownloadPackageRequest,
-    DownloadPackageResponse,
-)
+from .device_auth import ALLOWED_PORTAL_HOSTS
+from .models import DownloadPackageRequest, DownloadPackageResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-@router.post("/connect-node", responses=RESPONSES_500, dependencies=[SetupOnlyDep])
-async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeResponse]:
-    """Initiate device auth via CIRISPortal.
-
-    The user provides a Portal URL directly. This endpoint:
-    1. Checks for existing non-expired device auth session (reuses if found)
-    2. Normalizes the Portal URL (adds https:// if needed)
-    3. Calls Portal's POST /api/device/authorize with agent info
-    4. Persists the session so it survives app restarts
-    5. Returns verification URL for user to open in browser
-
-    CRITICAL: Device codes are persisted to survive app restarts. If user
-    pays for a license in browser and app restarts, we must continue polling
-    with the SAME device code, not request a new one.
-
-    This endpoint is accessible without authentication during first-run.
-    """
-    import httpx
-
-    raw_portal_url = req.node_url.strip().rstrip("/")
-    # Normalize URL — add https:// if no scheme provided
-    if not raw_portal_url.startswith("http://") and not raw_portal_url.startswith("https://"):
-        raw_portal_url = f"https://{raw_portal_url}"
-
-    # Validate and sanitize portal URL (SSRF protection)
-    # Returns reconstructed URL from validated components only
-    try:
-        portal_url = _validate_portal_url(raw_portal_url)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid portal URL: {e}",
-        )
-
-    # Check for existing non-expired session — reuse it if found
-    existing_session = _load_device_auth_session()
-    if existing_session and existing_session.get("portal_url") == portal_url:
-        # Log a SHA-256 prefix of the device_code rather than the code itself.
-        # Even truncated, the code is user-influenced (came through a Portal
-        # flow the caller initiated) and shouldn't land in logs verbatim.
-        import hashlib
-
-        _code_fp = hashlib.sha256(existing_session["device_code"].encode("utf-8")).hexdigest()[:12]
-        logger.info("Reusing existing device auth session (code_fp=%s)", _code_fp)
-        remaining = int(existing_session["expires_at"] - time.time())
-        return SuccessResponse(
-            data=ConnectNodeResponse(
-                verification_uri_complete=existing_session["verification_uri_complete"],
-                device_code=existing_session["device_code"],
-                user_code=existing_session.get("user_code", ""),
-                portal_url=portal_url,
-                expires_in=max(remaining, 0),
-                interval=existing_session.get("interval", 5),
-            )
-        )
-
-    device_auth_endpoint = "/api/device/authorize"
-
-    # For first-run setup, we send empty agent_info since we're provisioning a new agent.
-    # Existing agents reconnecting would include their hash and public key here.
-    agent_info: Dict[str, Any] = {}
-
-    # Call Portal's device authorize endpoint directly
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            auth_resp = await client.post(
-                f"{portal_url}{device_auth_endpoint}",
-                json={
-                    "portal_url": portal_url,
-                    "agent_info": agent_info,
-                },
-            )
-            auth_resp.raise_for_status()
-            auth_data = auth_resp.json()
-    except httpx.HTTPError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to initiate device auth with Portal at {portal_url}: {e}",
-        )
-
-    # If Portal returned a challenge_nonce, submit attestation inline
-    # before returning to the client. This keeps KMP simple.
-    challenge_nonce = auth_data.get("challenge_nonce")
-    if challenge_nonce:
-        await _submit_attestation_inline(
-            challenge_nonce=challenge_nonce,
-            device_code=auth_data["device_code"],
-            portal_url=portal_url,
-        )
-
-    # Persist the session so it survives app restarts
-    device_code = auth_data["device_code"]
-    expires_in = auth_data.get("expires_in", 900)
-    interval = auth_data.get("interval", 5)
-    verification_uri = auth_data["verification_uri_complete"]
-    user_code = auth_data.get("user_code", "")
-
-    _save_device_auth_session(
-        device_code=device_code,
-        portal_url=portal_url,
-        verification_uri_complete=verification_uri,
-        user_code=user_code,
-        expires_in=expires_in,
-        interval=interval,
-    )
-
-    return SuccessResponse(
-        data=ConnectNodeResponse(
-            verification_uri_complete=verification_uri,
-            device_code=device_code,
-            user_code=user_code,
-            portal_url=portal_url,
-            expires_in=expires_in,
-            interval=interval,
-        )
-    )
-
-
-@router.get("/connect-node/status", responses=RESPONSES_500, dependencies=[SetupOnlyDep])
-async def connect_node_status(device_code: str, portal_url: str) -> SuccessResponse[ConnectNodeStatusResponse]:
-    """Poll device auth status.
-
-    Called periodically by the setup wizard to check if the user has
-    completed the device auth flow in the Portal browser UI.
-
-    Args:
-        device_code: Opaque device code from /connect-node
-        portal_url: Portal URL to poll (from node manifest)
-
-    Returns:
-        Status: pending (keep polling), complete (key ready), or error.
-    """
-    import httpx
-
-    logger.info("[connect-node/status] Poll request received")
-
-    # Validate portal URL and get sanitized base URL (SSRF protection)
-    try:
-        safe_base_url = _validate_portal_url(portal_url)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid portal URL: {e}",
-        )
-
-    # Construct URL from sanitized base + hardcoded path (not user input)
-    token_url = f"{safe_base_url}/api/device/token"
-    logger.info("[connect-node/status] Calling Portal token endpoint")
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            logger.info("[connect-node/status] Making POST request to Portal...")
-            token_resp = await client.post(
-                token_url,
-                json={"device_code": device_code},
-            )
-            logger.info("[connect-node/status] Portal response status: %s", token_resp.status_code)
-            logger.info("[connect-node/status] Portal response headers: %s", dict(token_resp.headers))
-
-            # 428 = authorization_pending (RFC 8628)
-            if token_resp.status_code == 428:
-                logger.info("[connect-node/status] Portal returned 428 (authorization_pending) - keep polling")
-                logger.info("[connect-node/status] ========== RETURNING PENDING ==========")
-                return SuccessResponse(data=ConnectNodeStatusResponse(status="pending"))
-
-            if token_resp.status_code == 403:
-                # Authorization denied — clear session so user can retry
-                _clear_device_auth_session()
-                return SuccessResponse(data=ConnectNodeStatusResponse(status="error"))
-
-            if token_resp.status_code != 200:
-                body = (
-                    token_resp.json()
-                    if token_resp.headers.get("content-type", "").startswith("application/json")
-                    else {}
-                )
-                error_desc = body.get("error_description", body.get("error", f"HTTP {token_resp.status_code}"))
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"Portal token endpoint error: {error_desc}",
-                )
-
-            data = token_resp.json()
-    except httpx.HTTPError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to poll Portal token endpoint: {e}",
-        )
-
-    # Success — extract provisioned data
-    # NOTE: Portal no longer sends signing keys (FSD-002 self-custody)
-    # Agent generates its own key and registers the PUBLIC key with Portal
-    agent_record = data.get("agent_record", {})
-    licensed_package = data.get("licensed_package") or {}
-    registration_challenge = data.get("registration_challenge")  # Hex-encoded challenge from Portal
-
-    # Log what Portal returned for debugging (non-sensitive metadata only)
-    logger.info(
-        "[connect-node/status] Portal returned agent_record=%s, has_challenge=%s",
-        bool(agent_record),
-        bool(registration_challenge),
-    )
-
-    # SELF-CUSTODY KEY REGISTRATION (FSD-002)
-    # The agent's Ed25519 key was generated by CIRISVerify at startup.
-    # We now register our PUBLIC key with Portal - the private key NEVER leaves the agent.
-    logger.info("[connect-node/status] Starting self-custody key registration")
-    key_id = await _register_self_custody_key(device_code, portal_url, registration_challenge)
-
-    if key_id:
-        logger.info("[connect-node/status] === KEY REGISTRATION SUCCESS ===")
-        logger.info("[connect-node/status] Self-custody key registered: key_id=%s", key_id)
-    else:
-        logger.warning("[connect-node/status] === KEY REGISTRATION FAILED ===")
-        logger.warning("[connect-node/status] Self-custody key registration failed (non-fatal for community mode)")
-
-    # Clear device auth session — flow completed successfully
-    _clear_device_auth_session()
-    logger.info("Device auth flow completed successfully")
-
-    return SuccessResponse(
-        data=ConnectNodeStatusResponse(
-            status="complete",
-            template=agent_record.get("identity_template"),
-            adapters=agent_record.get("approved_adapters"),
-            org_id=data.get("org_id"),  # May be in top-level response now
-            signing_key_b64=None,  # REMOVED: No private keys from Portal (self-custody)
-            key_id=key_id,  # From self-custody registration
-            stewardship_tier=agent_record.get("stewardship_tier"),
-            package_download_url=licensed_package.get("download_url"),
-            package_template_id=licensed_package.get("template_id"),
-        )
-    )
-
-
-@router.post("/reset-device-auth", responses=RESPONSES_500, dependencies=[SetupOnlyDep])
-async def reset_device_auth() -> SuccessResponse[Dict[str, Any]]:
-    """Reset device auth session state.
-
-    Called when user backs out of the node auth flow (e.g., after timeout or cancel).
-    This clears any stale device auth session to allow a fresh retry.
-
-    No authentication required since this only affects local session state.
-    """
-    logger.info("Resetting device auth session (user backed out of node auth flow)")
-    _clear_device_auth_session()
-
-    return SuccessResponse(
-        data={
-            "status": "reset",
-            "message": "Device auth session cleared",
-        }
-    )
 
 
 @router.post("/download-package", responses=RESPONSES_500, dependencies=[SetupOnlyDep])

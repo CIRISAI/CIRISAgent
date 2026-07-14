@@ -6,14 +6,16 @@ CIRISEdge 1.0 PyO3 calls (via ``edge_runtime.get_edge()``) plus the
 Surface (all under ``/v1/federation``):
 
 - ``GET    /identity``                          (OBSERVER+)
-- ``GET    /peers``                             (OBSERVER+)
-- ``GET    /peers/{key_id}``                    (OBSERVER+)
 - ``GET    /peers/{key_id}/sas``                (OBSERVER+)
 - ``PUT    /peers/{key_id}/trust``              (SYSTEM_ADMIN)
 - ``PUT    /peers/{key_id}/appearance``         (SYSTEM_ADMIN)
 - ``GET    /metrics``                           (OBSERVER+)
 - ``POST   /content/{content_id}``              (SYSTEM_ADMIN)
 - ``GET    /events/{channel}``                  (OBSERVER+, SSE long-poll)
+
+Peer list + detail reads (``GET /peers``, ``GET /peers/{key_id}``) are
+served natively by the local ciris-server node on port 4243; clients
+hit the node directly for those.
 
 The router is exported as ``router`` and registered in
 ``routes/__init__.py`` so ``app.py`` includes it with the standard

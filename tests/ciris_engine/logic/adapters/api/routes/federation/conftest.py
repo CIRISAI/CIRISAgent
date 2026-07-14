@@ -212,15 +212,16 @@ def make_app(monkeypatch):
         override_observer: bool = True,
     ) -> TestClient:
         # Patch on every module that imports try_get_edge directly.
+        # (peers.py no longer does — its list/detail reads moved to the
+        # local ciris-server node; only trust/appearance writes remain.)
         from ciris_engine.logic.adapters.api.routes.federation import (
             content as content_mod,
             identity as identity_mod,
             metrics as metrics_mod,
-            peers as peers_mod,
             sas as sas_mod,
         )
 
-        for mod in (content_mod, identity_mod, metrics_mod, peers_mod, sas_mod):
+        for mod in (content_mod, identity_mod, metrics_mod, sas_mod):
             monkeypatch.setattr(mod, "try_get_edge", lambda e=edge: e)
 
         app = FastAPI()

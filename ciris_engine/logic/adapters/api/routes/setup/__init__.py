@@ -9,14 +9,14 @@ Modules:
 - status.py: /status endpoint (~35 lines)
 - providers.py: /providers, /templates, /adapters endpoints (~70 lines)
 - llm_routes.py: /models, /validate-llm, /list-models endpoints (~130 lines)
-- device_auth_routes.py: /connect-node, /download-package endpoints (~350 lines)
+- device_auth_routes.py: /download-package endpoint (device auth flow moved to the node on :4243)
 - config.py: /config GET/PUT endpoints (~90 lines)
 - complete.py: /complete endpoint and user creation helpers (~450 lines)
 - attestation.py: Verification endpoints delegating to auth service (~560 lines)
 - models.py: Pydantic schemas for all setup endpoints (~430 lines)
 - helpers.py: Adapter/template/password helpers (~260 lines)
 - llm_validation.py: LLM provider/model validation (~620 lines)
-- device_auth.py: Node connection session helpers (~420 lines)
+- device_auth.py: Portal host allowlist shared with download-package
 - dependencies.py: Shared FastAPI dependencies (~25 lines)
 - constants.py: Shared constants (~20 lines)
 
@@ -30,16 +30,6 @@ from . import attestation, complete, config, device_auth_routes, llm_routes, loc
 
 # Complete helpers - imported from complete.py module
 from .complete import _create_founding_partnership, _create_setup_users, _save_setup_config
-
-# Device auth helpers - imported from device_auth.py module
-from .device_auth import (
-    _clear_device_auth_session,
-    _get_device_auth_session_path,
-    _load_device_auth_session,
-    _register_self_custody_key,
-    _save_device_auth_session,
-    _submit_attestation_inline,
-)
 
 # Helpers - imported from helpers.py module
 from .helpers import (
@@ -77,9 +67,6 @@ from .models import (
     AgentTemplate,
     AppAttestVerifyRequest,
     ChangePasswordRequest,
-    ConnectNodeRequest,
-    ConnectNodeResponse,
-    ConnectNodeStatusResponse,
     CreateUserRequest,
     DownloadPackageRequest,
     DownloadPackageResponse,
@@ -120,9 +107,6 @@ __all__ = [
     "AgentTemplate",
     "AppAttestVerifyRequest",
     "ChangePasswordRequest",
-    "ConnectNodeRequest",
-    "ConnectNodeResponse",
-    "ConnectNodeStatusResponse",
     "CreateUserRequest",
     "DownloadPackageRequest",
     "DownloadPackageResponse",
@@ -156,13 +140,6 @@ __all__ = [
     "_build_fallback_response",
     "_list_models_for_provider",
     "_fetch_live_models",
-    # Device auth helpers
-    "_get_device_auth_session_path",
-    "_load_device_auth_session",
-    "_save_device_auth_session",
-    "_clear_device_auth_session",
-    "_submit_attestation_inline",
-    "_register_self_custody_key",
     # Complete helpers (for test compatibility)
     "_save_setup_config",
     "_create_setup_users",

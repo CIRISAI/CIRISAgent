@@ -72,6 +72,38 @@ DEFAULT_BINARY_PATHS = {
     ],
 }
 
+def _resolve_ciris_server_ffi_path() -> Optional[Path]:
+    """Resolve the CIRISVerify FFI library bundled in the ciris-server wheel.
+
+    CIRISServer#232 (resolved, ciris-server >= 0.5.114): the substrate wheel's
+    ``_native.abi3.so`` exports the full ``ciris_verify_*`` C-ABI symbol
+    surface, so the agent can dlopen the substrate's own binary instead of
+    requiring the standalone ``ciris-verify`` wheel for desktop FFI
+    (CIRISAgent#917). Returns None when ciris-server is absent or predates
+    ``verify_ffi_path()`` — callers fall back to the standalone wheel path.
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    except ImportError:
+        return None
+
+    verify_ffi_path = getattr(ciris_server, "verify_ffi_path", None)
+    if verify_ffi_path is None:
+        # Older ciris-server without CIRISServer#232's export.
+        return None
+
+    try:
+        path = Path(verify_ffi_path())
+    except Exception:
+        # Defensive: a broken substrate resolver must never take down the
+        # loader — the standalone-wheel fallback below still works.
+        return None
+
+    if path.exists():
+        return path
+    return None
+
+
 # Map Rust LicenseStatus enum variants (serde string serialization) to Python IntEnum
 _RUST_STATUS_MAP = {
     "LicensedProfessional": LicenseStatus.LICENSED_PROFESSIONAL,
@@ -355,7 +387,19 @@ class CIRISVerify:
             if candidate.exists():
                 return candidate
 
-        # Wheel-distributed location (PRIMARY desktop path post-2.8.2):
+        # Substrate wheel (PREFERRED desktop path post-2.9.7, CIRISAgent#917):
+        # ciris-server >= 0.5.114 exposes the bundled `_native.abi3.so` via
+        # `verify_ffi_path()` (CIRISServer#232 resolved). It exports all
+        # ciris_verify_* C symbols, so the agent prefers the substrate's own
+        # binary and only falls back to the standalone ciris-verify wheel
+        # below. No suffix filtering needed — the platform-tagged ciris-server
+        # wheel is correct-platform by construction.
+        server_ffi = _resolve_ciris_server_ffi_path()
+        if server_ffi is not None:
+            return server_ffi
+
+        # Wheel-distributed location (standalone-wheel FALLBACK post-2.9.7;
+        # was the primary desktop path 2.8.2 → 2.9.6):
         # the `ciris-verify` PyPI package (a Requires-Dist of `ciris-agent`)
         # installs the binary into site-packages/ciris_verify/
         # libciris_verify_ffi.{so,dylib,dll}. Version-pinned via

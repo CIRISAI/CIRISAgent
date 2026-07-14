@@ -86,6 +86,10 @@ def test_find_binary_skips_wrong_platform_in_module_dir_falls_through_to_wheel(
     monkeypatch.setitem(client_module.DEFAULT_BINARY_PATHS, "Linux", [])
     monkeypatch.setattr(CIRISVerify, "_is_ios", staticmethod(lambda: False))
     monkeypatch.setattr(CIRISVerify, "_is_android", staticmethod(lambda: False))
+    # Neutralize the ciris-server substrate branch — on dev hosts/CI the real
+    # wheel is installed and would resolve before the standalone-wheel
+    # fallback under test here.
+    monkeypatch.setattr(client_module, "_resolve_ciris_server_ffi_path", lambda: None)
 
     # Inject a fake `ciris_verify` module whose .__file__ points at wheel_init.
     fake_pkg = types.ModuleType("ciris_verify")
@@ -138,6 +142,9 @@ def test_find_binary_skips_wrong_platform_in_wheel_dir_raises_not_found(
     monkeypatch.setitem(client_module.DEFAULT_BINARY_PATHS, "Linux", [])
     monkeypatch.setattr(CIRISVerify, "_is_ios", staticmethod(lambda: False))
     monkeypatch.setattr(CIRISVerify, "_is_android", staticmethod(lambda: False))
+    # Neutralize the ciris-server substrate branch — on dev hosts/CI the real
+    # wheel is installed and would resolve before the raise under test here.
+    monkeypatch.setattr(client_module, "_resolve_ciris_server_ffi_path", lambda: None)
 
     fake_pkg = types.ModuleType("ciris_verify")
     fake_pkg.__file__ = str(wheel_init)
@@ -146,6 +153,78 @@ def test_find_binary_skips_wrong_platform_in_wheel_dir_raises_not_found(
     verifier = object.__new__(CIRISVerify)
     with pytest.raises(BinaryNotFoundError):
         CIRISVerify._find_binary(verifier, explicit_path=None)
+
+
+def test_find_binary_prefers_ciris_server_wheel_over_standalone(monkeypatch, tmp_path):
+    """CIRISAgent#917 loader rewire — the ciris-server substrate wheel wins.
+
+    CIRISServer#232 resolved: ciris_server.verify_ffi_path() returns the
+    wheel's `_native.abi3.so`, which exports the full ciris_verify_* C-ABI
+    surface. When both the substrate wheel and the standalone ciris-verify
+    wheel are installed, the loader must prefer the substrate binary and use
+    the standalone wheel only as fallback.
+    """
+    import ciris_adapters.ciris_verify.ffi_bindings.client as client_module
+    from ciris_adapters.ciris_verify.ffi_bindings.client import CIRISVerify
+
+    module_dir = tmp_path / "module"
+    module_dir.mkdir()
+    module_file = module_dir / "client.py"
+    module_file.write_text("# test module marker\n")
+    # No binary in module_dir — desktop wheel-install shape post-2.8.2.
+
+    server_native = tmp_path / "server" / "_native.abi3.so"
+    server_native.parent.mkdir()
+    server_native.write_bytes(b"\x7fELF")
+
+    standalone_dir = tmp_path / "standalone"
+    standalone_dir.mkdir()
+    standalone_init = standalone_dir / "__init__.py"
+    standalone_init.write_text("")
+    standalone_so = standalone_dir / "libciris_verify_ffi.so"
+    standalone_so.write_bytes(b"\x7fELF")
+
+    monkeypatch.setattr(client_module, "__file__", str(module_file))
+    monkeypatch.setattr(client_module.platform, "system", lambda: "Linux")
+    monkeypatch.setitem(client_module.DEFAULT_BINARY_PATHS, "Linux", [])
+    monkeypatch.setattr(CIRISVerify, "_is_ios", staticmethod(lambda: False))
+    monkeypatch.setattr(CIRISVerify, "_is_android", staticmethod(lambda: False))
+    monkeypatch.setattr(
+        client_module, "_resolve_ciris_server_ffi_path", lambda: server_native
+    )
+
+    fake_pkg = types.ModuleType("ciris_verify")
+    fake_pkg.__file__ = str(standalone_init)
+    monkeypatch.setitem(sys.modules, "ciris_verify", fake_pkg)
+
+    verifier = object.__new__(CIRISVerify)
+    selected = CIRISVerify._find_binary(verifier, explicit_path=None)
+
+    assert selected == server_native, (
+        f"Loader picked {selected}, expected the ciris-server substrate "
+        f"binary at {server_native}. The standalone ciris-verify wheel is "
+        "the fallback, not the preferred path (CIRISAgent#917)."
+    )
+
+
+def test_resolve_ciris_server_ffi_path_absent_server_returns_none(monkeypatch):
+    """When ciris-server is not importable, the resolver must return None
+    (loader falls through to the standalone wheel) rather than raising."""
+    import builtins
+
+    import ciris_adapters.ciris_verify.ffi_bindings.client as client_module
+
+    real_import = builtins.__import__
+
+    def _blocked_import(name, *args, **kwargs):
+        if name == "ciris_server":
+            raise ImportError("ciris_server blocked for test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.delitem(sys.modules, "ciris_server", raising=False)
+    monkeypatch.setattr(builtins, "__import__", _blocked_import)
+
+    assert client_module._resolve_ciris_server_ffi_path() is None
 
 
 def test_verify_binary_integrity_checks_magic():

@@ -859,11 +859,33 @@ def update_python_bindings(version: str, tmpdir: Path, ios: bool = True) -> None
         # the FFI-loader patches only.
         AGENT_MANAGED = {"client.py", "__init__.py"}
 
+        # Deleted in the 2.9.7 DRY cut (CIRISAgent#896): every capability
+        # these upstream helpers provided has a verified substrate symbol in
+        # the ciris-server wheel (federation_session_initiate/respond,
+        # ReconsiderDosGuard, verify_locale_inclusion_json,
+        # verify_skill_import_manifest_b64, persist-internal admit,
+        # ciris_verify_wrap_dek_*), and their attach_to() surface was never
+        # called anywhere in the agent. Do NOT re-vendor them from the
+        # upstream wheel on the next bump.
+        DELETED_UPSTREAM_HELPERS = {
+            "_wheel_hybrid_kex.py",
+            "_wheel_key_grant.py",
+            "_wheel_locale_merkle.py",
+            "_wheel_reconsider_dos.py",
+            "_wheel_skill_import.py",
+            "_operational_admit.py",
+            "_bin_sign.py",
+            "_bin_verify.py",
+        }
+
         # Update Android / agent wrapper (skip AGENT_MANAGED files)
         ANDROID_PYTHON_DIR.mkdir(parents=True, exist_ok=True)
         for py_file in src_dir.glob("*.py"):
             if py_file.name in AGENT_MANAGED:
                 print(f"  -> Android: {py_file.name} (SKIPPED — agent-managed enhanced version)")
+                continue
+            if py_file.name in DELETED_UPSTREAM_HELPERS:
+                print(f"  -> Android: {py_file.name} (SKIPPED — deleted in 2.9.7 DRY cut, substrate owns it)")
                 continue
             dest_file = ANDROID_PYTHON_DIR / py_file.name
             shutil.copy2(py_file, dest_file)

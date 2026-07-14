@@ -891,27 +891,33 @@ class CIRISApiClient(
      *  - [canonicalOnly]: restrict to canonical (rock-solid) peers.
      *  - [trust]: restrict to one [PeerTrustState] vocabulary value.
      *
-     * Hits ``GET /v1/federation/peers``.
+     * Hits ``GET /v1/federation/peers`` on the LOCAL NODE (:4243) —
+     * the ciris-server substrate serves the peer list natively. The
+     * node ignores ``canonical_only``/``trust`` query params, so both
+     * filters are applied client-side after decode.
      */
     suspend fun listFederationPeers(
         canonicalOnly: Boolean? = null,
         trust: PeerTrustState? = null,
     ): FederationPeerListResponse {
         val method = "listFederationPeers"
-        logDebug(method, "GET /v1/federation/peers canonicalOnly=$canonicalOnly trust=${trust?.wire}")
+        logDebug(method, "GET $LOCAL_NODE_URL/v1/federation/peers canonicalOnly=$canonicalOnly trust=${trust?.wire}")
         val client = federationHttpClient()
         return try {
-            val response = client.get("$baseUrl/v1/federation/peers") {
+            val response = client.get("$LOCAL_NODE_URL/v1/federation/peers") {
                 authHeader()?.let { header("Authorization", it) }
-                if (canonicalOnly != null) parameter("canonical_only", canonicalOnly.toString())
-                if (trust != null) parameter("trust", trust.wire)
             }
             if (!response.status.isSuccess()) {
                 throw RuntimeException("Federation peer list failed: ${response.status}")
             }
-            decodeFederationEnvelope(response.bodyAsText(), FederationPeerListResponse.serializer())
+            val decoded = decodeFederationEnvelope(response.bodyAsText(), FederationPeerListResponse.serializer())
+            // Node ignores the filter params — filter locally instead.
+            var peers = decoded.peers
+            if (canonicalOnly == true) peers = peers.filter { it.canonical }
+            if (trust != null) peers = peers.filter { it.trust == trust }
+            FederationPeerListResponse(peers = peers, total = peers.size)
         } catch (e: Exception) {
-            logException(method, e, "url=$baseUrl")
+            logException(method, e, "url=$LOCAL_NODE_URL")
             throw e
         } finally {
             client.close()
@@ -919,18 +925,23 @@ class CIRISApiClient(
     }
 
     /**
-     * Fetch one peer's [LocalPeerState] plus [EdgePeerReachability].
+     * Fetch one peer's [LocalPeerState].
      *
-     * Hits ``GET /v1/federation/peers/{keyId}``. Surfaces 404 (peer
-     * unknown locally) and 503 (Edge unavailable) as exceptions; the
-     * caller decides whether to retry or render a not-found shell.
+     * Hits ``GET /v1/federation/peers/{keyId}`` on the LOCAL NODE
+     * (:4243). Surfaces 404 (peer unknown locally) as an exception;
+     * the caller decides whether to retry or render a not-found shell.
+     *
+     * NOTE: the node does not enrich with the Edge per-medium
+     * reachability snapshot the brain route used to add, so
+     * [FederationPeerDetailResponse.reachability] may be null/empty —
+     * the UI already renders that as "unknown".
      */
     suspend fun getFederationPeer(keyId: String): FederationPeerDetailResponse {
         val method = "getFederationPeer"
-        logDebug(method, "GET /v1/federation/peers/$keyId")
+        logDebug(method, "GET $LOCAL_NODE_URL/v1/federation/peers/$keyId")
         val client = federationHttpClient()
         return try {
-            val response = client.get("$baseUrl/v1/federation/peers/$keyId") {
+            val response = client.get("$LOCAL_NODE_URL/v1/federation/peers/$keyId") {
                 authHeader()?.let { header("Authorization", it) }
             }
             if (!response.status.isSuccess()) {
@@ -4749,10 +4760,15 @@ class CIRISApiClient(
     }
 
     // ========== Connect to Node (Device Auth Flow) ==========
+    //
+    // The three device-auth endpoints (connect-node, connect-node/status,
+    // reset-device-auth) are served natively by the LOCAL NODE substrate
+    // (ciris-server, :4243) — same paths, same .device_auth_session.json
+    // semantics. Only download-package stays on the brain (:8080).
 
     /**
      * Initiate device auth with a CIRISNode.
-     * Calls POST /v1/setup/connect-node on the local agent API.
+     * Calls POST /v1/setup/connect-node on the local node (:4243).
      */
     suspend fun connectToNode(nodeUrl: String): ConnectNodeResult {
         val method = "connectToNode"
@@ -4767,7 +4783,7 @@ class CIRISApiClient(
         }
 
         return try {
-            val response = client.post("$baseUrl/v1/setup/connect-node") {
+            val response = client.post("$LOCAL_NODE_URL/v1/setup/connect-node") {
                 contentType(ContentType.Application.Json)
                 setBody(mapOf("node_url" to nodeUrl))
             }
@@ -4809,15 +4825,14 @@ class CIRISApiClient(
 
     /**
      * Poll device auth status.
-     * Calls GET /v1/setup/connect-node/status on the local agent API.
+     * Calls GET /v1/setup/connect-node/status on the local node (:4243).
      */
     suspend fun pollNodeAuthStatus(deviceCode: String, portalUrl: String): NodeAuthPollResult {
         val method = "pollNodeAuthStatus"
         logInfo(method, "========== POLL START ==========")
         logInfo(method, "deviceCode: ${deviceCode.take(16)}...")
         logInfo(method, "portalUrl: $portalUrl")
-        logInfo(method, "baseUrl: $baseUrl")
-        val fullUrl = "$baseUrl/v1/setup/connect-node/status"
+        val fullUrl = "$LOCAL_NODE_URL/v1/setup/connect-node/status"
         logInfo(method, "Full URL: $fullUrl")
 
         val client = HttpClient {
@@ -4876,8 +4891,8 @@ class CIRISApiClient(
 
     /**
      * Reset device auth session on server.
-     * Calls POST /v1/setup/reset-device-auth on the local agent API.
-     * Used when user backs out of NODE_AUTH flow to clear stale server state.
+     * Calls POST /v1/setup/reset-device-auth on the local node (:4243).
+     * Used when user backs out of NODE_AUTH flow to clear stale node state.
      */
     suspend fun resetDeviceAuthOnServer(): Boolean {
         val method = "resetDeviceAuthOnServer"
@@ -4892,7 +4907,7 @@ class CIRISApiClient(
         }
 
         return try {
-            val response = client.post("$baseUrl/v1/setup/reset-device-auth") {
+            val response = client.post("$LOCAL_NODE_URL/v1/setup/reset-device-auth") {
                 contentType(ContentType.Application.Json)
                 setBody("{}")
             }

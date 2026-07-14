@@ -108,13 +108,14 @@ class BrainAdapter:
         daemon thread so this sync hook returns promptly and the node's lifecycle
         proceeds; the node parks until shutdown.
         """
-        if self._runtime_boot is None:
+        runtime_boot = self._runtime_boot
+        if runtime_boot is None:
             logger.error("BrainAdapter.start: no runtime_boot injected — cognitive loop will NOT run")
             return
 
         def _boot() -> None:
             try:
-                self._handle = self._runtime_boot()
+                self._handle = runtime_boot()
                 logger.info("BrainAdapter: cognitive runtime booted on the sibling listener (%s)", self._upstream)
             except Exception:  # noqa: BLE001 — surface, node stays up serving substrate
                 logger.exception("BrainAdapter: cognitive runtime boot FAILED")

@@ -4,7 +4,7 @@ Secrets Encryption QA tests.
 Tests the secrets encryption system including:
 - Hardware capabilities detection (CIRISVerify v1.6.0+)
 - Key storage mode detection (hardware vs software)
-- Encryption module functionality
+- Persist secrets crypto substrate (Engine.secrets_*)
 - Secrets service integration
 """
 
@@ -42,7 +42,7 @@ class SecretsEncryptionTests:
             ("Get CIRISVerify Status", self.test_verify_status),
             ("Check Hardware Key Storage Mode", self.test_key_storage_mode),
             ("Check Encryption Capabilities", self.test_encryption_capabilities),
-            ("Test Encryption Module Direct", self.test_encryption_module),
+            ("Test Persist Secrets Crypto Direct", self.test_encryption_module),
             ("Check Secrets Service Health", self.test_secrets_service_health),
             ("Verify Telemetry Reports Secrets", self.test_telemetry_secrets),
         ]
@@ -124,36 +124,53 @@ class SecretsEncryptionTests:
         self.console.print(f"     [dim]Hardware type: {hardware_type}[/dim]")
 
     async def test_encryption_module(self) -> None:
-        """Test encryption module directly (no network call)."""
+        """Test persist's secrets crypto substrate directly (no network call).
+
+        2.9.7 (#896): the agent-side SecretsEncryption shim was deleted —
+        persist's Engine owns AES-256-GCM crypto. Exercise the
+        `Engine.secrets_*` surface on a throwaway sqlite-backed engine.
+        """
+        import json
+        import os
+        import tempfile
+
         try:
-            from ciris_engine.logic.secrets.encryption import SecretsEncryption
+            from ciris_engine.logic.persistence._substrate import Engine
+        except ImportError as e:
+            raise ValueError(f"Could not import persist Engine: {e}")
 
-            # Create encryption instance in auto mode
-            encryption = SecretsEncryption(key_storage_mode="auto")
+        with tempfile.NamedTemporaryFile(suffix="-qa-secrets.db", delete=False) as f:
+            db_path = f.name
+        engine = None
+        try:
+            # persist's Engine is a process-singleton; the QA runner process
+            # holds no engine (the server runs in a subprocess), so a private
+            # throwaway engine is safe here.
+            engine = Engine(f"sqlite:///{db_path}", "qa-secrets-key")
+            engine.secrets_rotate_master_key(None, "qa_runner")
 
-            # Get capabilities
-            caps = encryption.get_hardware_capabilities()
+            if not engine.secrets_test_encryption():
+                raise ValueError("Engine.secrets_test_encryption() returned False")
+            self.console.print(f"     [dim]secrets_test_encryption: OK[/dim]")
 
-            self.console.print(f"     [dim]Hardware available: {caps.get('hardware_available')}[/dim]")
-            self.console.print(f"     [dim]Native encryption: {caps.get('native_encryption')}[/dim]")
-            self.console.print(f"     [dim]Symmetric derivation: {caps.get('symmetric_derivation')}[/dim]")
-            self.console.print(f"     [dim]Signing derivation: {caps.get('signing_derivation')}[/dim]")
-            self.console.print(f"     [dim]Key storage mode: {encryption.key_storage_mode}[/dim]")
-
-            # Test encryption round-trip (encrypt_secret takes string or bytes)
+            # Test encryption round-trip via the direct crypto surface
             test_data = "QA test secret data for encryption verification"
-            encrypted, salt, nonce = encryption.encrypt_secret(test_data)
-            decrypted = encryption.decrypt_secret(encrypted, salt, nonce)
-
-            # Compare - handle both bytes and string return types
-            decrypted_str = decrypted.decode() if isinstance(decrypted, bytes) else decrypted
-            if decrypted_str != test_data:
+            ciphertext = engine.secrets_encrypt(test_data)
+            decrypted = engine.secrets_decrypt(ciphertext)
+            if decrypted != test_data:
                 raise ValueError("Encryption round-trip failed: data mismatch")
-
             self.console.print(f"     [dim]Encryption round-trip: OK[/dim]")
 
-        except ImportError as e:
-            raise ValueError(f"Could not import encryption module: {e}")
+            stats = json.loads(engine.secrets_get_service_stats())
+            self.console.print(f"     [dim]Encryption enabled: {stats.get('encryption_enabled')}[/dim]")
+            self.console.print(f"     [dim]Hardware key active: {stats.get('hardware_key_active')}[/dim]")
+        finally:
+            if engine is not None:
+                engine.close()
+            try:
+                os.unlink(db_path)
+            except OSError:
+                pass
 
     async def test_secrets_service_health(self) -> None:
         """Test secrets service health via telemetry."""

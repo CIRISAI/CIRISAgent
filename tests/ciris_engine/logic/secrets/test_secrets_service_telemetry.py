@@ -8,7 +8,6 @@ import pytest_asyncio
 
 from ciris_engine.logic.secrets.filter import SecretsFilter
 from ciris_engine.logic.secrets.service import SecretsService
-from ciris_engine.logic.secrets.store import SecretsStore
 from ciris_engine.schemas.secrets.core import PatternStats, SecretRecord
 
 
@@ -24,8 +23,9 @@ class TestSecretsServiceTelemetry:
 
     @pytest.fixture
     def mock_store(self):
-        """Create a mock secrets store."""
-        mock = Mock(spec=SecretsStore)
+        """Create a mock storage backend (post-#896 the service IS the store;
+        tests override the `.store` alias to isolate persist calls)."""
+        mock = Mock()
         mock.encryption_enabled = True
         mock.list_secrets = AsyncMock(
             return_value=[
@@ -79,7 +79,8 @@ class TestSecretsServiceTelemetry:
     @pytest_asyncio.fixture
     async def secrets_service(self, mock_time_service, mock_store, mock_filter):
         """Create the secrets service."""
-        service = SecretsService(time_service=mock_time_service, store=mock_store, filter_obj=mock_filter)
+        service = SecretsService(time_service=mock_time_service, filter_obj=mock_filter)
+        service.store = mock_store
         await service.start()
         service._start_time = mock_time_service.now()
         return service

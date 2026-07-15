@@ -1515,14 +1515,15 @@ class CIRISRuntime(ServicePropertyMixin):
             return
 
         try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
             from ciris_engine.schemas.audit import EventPayload
 
-            # Get signing key info - be defensive, attestation may not have completed
+            # Get signing key info — the engine's local signer (2.9.7: the
+            # ONE signer identity). Be defensive: engine may not be wired yet.
             key_id = "unknown"
             try:
-                signing_key = get_unified_signing_key()
-                key_id = signing_key.key_id if signing_key.has_key else "pending"
+                engine = get_persist_engine()
+                key_id = str(engine.local_derived_key_id()) if engine is not None else "pending"
             except Exception:
                 pass  # Key not available yet, that's fine
 

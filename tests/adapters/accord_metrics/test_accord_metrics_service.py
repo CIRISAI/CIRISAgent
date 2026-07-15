@@ -286,11 +286,11 @@ class TestLocalCopyDirInit:
 
 
 class TestAccordMetricsServiceAnonymization:
-    """Agent ID anonymization — signing-key hash with agent_id fallback.
+    """Agent ID anonymization — engine-signer hash with agent_id fallback.
 
-    The autouse conftest mock replaces the unified signing key with a stub
-    lacking public_key_bytes, so _compute_instance_hash exercises the
-    fallback-id hashing path (the test/no-vault behavior).
+    2.9.7 (second-signer removal): _compute_instance_hash derives from the
+    persist Engine's local signing pubkey when an engine is wired; the
+    fallback-id hashing path only fires without an engine.
     """
 
     def test_anonymize_agent_id(self):
@@ -306,15 +306,41 @@ class TestAccordMetricsServiceAnonymization:
 
         assert service._anonymize_agent_id("test-agent-123") == service._anonymize_agent_id("test-agent-123")
 
-    def test_anonymize_different_ids_different_hashes(self):
+    def test_anonymize_is_per_instance_when_engine_wired(self):
+        """With a wired engine, the hash is per-INSTANCE (engine signing key),
+        so different agent names map to the SAME instance hash."""
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
         service = AccordMetricsService()
 
-        assert service._anonymize_agent_id("agent-1") != service._anonymize_agent_id("agent-2")
+        if get_persist_engine() is not None:
+            assert service._anonymize_agent_id("agent-1") == service._anonymize_agent_id("agent-2")
+        else:
+            # No engine — fallback hashes the agent_id, distinct per name.
+            assert service._anonymize_agent_id("agent-1") != service._anonymize_agent_id("agent-2")
+
+    def test_anonymize_different_ids_different_hashes_without_engine(self):
+        """Without a wired engine, the fallback hashes the agent_id."""
+        from unittest.mock import patch
+
+        service = AccordMetricsService()
+
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=None,
+        ):
+            assert service._anonymize_agent_id("agent-1") != service._anonymize_agent_id("agent-2")
 
     def test_compute_instance_hash_no_key_no_fallback_is_unknown(self):
+        from unittest.mock import patch
+
         service = AccordMetricsService()
 
-        assert service._compute_instance_hash(fallback_id=None) == "unknown"
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=None,
+        ):
+            assert service._compute_instance_hash(fallback_id=None) == "unknown"
 
     def test_set_agent_id(self):
         service = AccordMetricsService()

@@ -34,8 +34,8 @@ XFAIL_REASON = "CIRISLensCore#43: LensClient needs the Engine capsule handshake 
 
 # Fixture limitation (not a product bug): v10's receive_and_persist verifies the
 # trace signature against the registered #247-DERIVED federation key_id
-# `<label>-<fp>`. The LensClient stamps the trace with get_unified_signing_key()
-# / get_federation_address(), which derive from edge.signer_key_id() (the
+# `<label>-<fp>`. The LensClient stamps the trace with the engine's
+# local signer / get_federation_address(), which derive from edge.signer_key_id() (the
 # derived id, CIRISEdge#203 / edge 7.0.6+). This bare-Engine fixture does NOT
 # init the edge runtime, so get_federation_address() returns None and the
 # stamped id can't match the registered derived id → verify_unknown_key. The

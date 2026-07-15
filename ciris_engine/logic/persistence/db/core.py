@@ -4,10 +4,7 @@ import threading
 from pathlib import Path
 from typing import Any, Optional, Tuple, cast
 
-from ciris_engine.logic.config.db_paths import (
-    get_audit_db_full_path,
-    get_sqlite_db_full_path,
-)
+from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 
 logger = logging.getLogger(__name__)
 
@@ -372,53 +369,10 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             except Exception:
                 logger.exception("A0a migration failed; persist engine wired anyway")
 
-        # 2.9.0 A0b: bridge the legacy audit chain into persist's
-        # cirislens_audit_log. Sentinel-gated like A0a; runs once on
-        # first 2.9.0 boot. Tolerant: if CIRISVerify isn't ready yet
-        # (early-boot ordering) or if the legacy audit DB is absent
-        # (fresh deployment with no legacy chain), log + skip.
-        audit_sentinel = sentinel_dir / ".audit_bridged"
-        # Resolve the legacy audit DB from config (database.audit_db) so a
-        # deployment that customised audit_db still bridges its chain —
-        # don't assume the default sentinel_dir/ciris_audit.db location.
-        try:
-            legacy_audit_db = Path(get_audit_db_full_path())
-        except Exception:  # pragma: no cover - defensive
-            legacy_audit_db = sentinel_dir / "ciris_audit.db"
-        if not audit_sentinel.exists() and legacy_audit_db.exists():
-            try:
-                # Bundled under ciris_engine/ so the in-place upgrade path is
-                # reachable from Chaquopy on Android too — tools/ isn't in
-                # the mobile extractPackages list (CIRISAgent#780).
-                from ciris_engine.logic.audit.chain_bridge import run as run_bridge
-
-                logger.info("A0b audit-bridge sentinel absent — running chain bridge")
-                result = run_bridge(
-                    engine_db=Path(db_path),
-                    audit_db=legacy_audit_db,
-                    dry_run=False,
-                    engine=engine,
-                )
-                audit_sentinel.write_text(
-                    f'{{"bridge_id":"{result.bridge_id}",'
-                    f'"legacy_terminal_seq":{result.legacy_terminal_seq},'
-                    f'"legacy_db_sha256":"{result.legacy_db_sha256}"}}'
-                )
-                logger.info(
-                    "A0b audit bridge complete: legacy_seq=%d bridge_id=%s",
-                    result.legacy_terminal_seq,
-                    result.bridge_id,
-                )
-            except Exception:
-                # CIRISVerify availability + signing-key access are
-                # ordering-sensitive at boot; we don't block startup on
-                # bridge failure. Next boot retries (sentinel absent).
-                logger.exception("A0b audit bridge failed; persist engine wired anyway")
-        elif not legacy_audit_db.exists():
-            logger.debug(
-                "no legacy audit DB at %s — fresh deployment, no chain to bridge",
-                legacy_audit_db,
-            )
+        # 2.9.7 (second-signer removal): the A0b legacy audit-chain bridge is
+        # GONE. It signed its genesis entry with the deleted CIRISVerify
+        # "agent-{sha12}" identity; pre-2.9.0 installs must upgrade through
+        # a 2.9.x release that still ships the bridge before landing here.
 
     # Wire the engine into persistence.models.graph.
     from ciris_engine.logic.persistence.models import graph as graph_persistence

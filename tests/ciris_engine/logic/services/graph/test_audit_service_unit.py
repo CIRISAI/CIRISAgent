@@ -42,39 +42,15 @@ class TestGraphAuditService:
         self, mock_time_service: Mock, mock_memory_bus: Mock
     ) -> AsyncGenerator[GraphAuditService, None]:
         """Create GraphAuditService instance."""
+        import os as _os
         import tempfile
-        from unittest.mock import MagicMock, patch
 
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-
-        # Generate real Ed25519 keypair for testing
-        private_key = ed25519.Ed25519PrivateKey.generate()
-        public_key = private_key.public_key()
-        pub_bytes = public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        )
-
-        # Mock the CIRISVerify verifier singleton with real key operations
-        mock_verifier = MagicMock()
-        mock_verifier.has_key_sync.return_value = True
-        mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
-
-        # sign_ed25519_sync returns real signature
-        def mock_sign(data: bytes) -> bytes:
-            return private_key.sign(data)
-
-        mock_verifier.sign_ed25519_sync.side_effect = mock_sign
-
-        # A3 cutover: wire a real persist engine pointed at a temp DB so
-        # the audit service's audit_record_entry calls land in
-        # cirislens_audit_log. Same pattern as test_audit_service.py —
-        # capture+restore module-globals on teardown so cross-test
-        # isolation is preserved.
-        import base64
-        import hashlib
-
+        # A3 cutover / 2.9.7 second-signer removal: wire a real persist
+        # engine WITH a local signing identity (mirroring db/core.py's
+        # _construct_engine) pointed at a temp DB. The audit service signs
+        # via engine.local_sign — no CIRISVerify mock is needed. Same
+        # pattern as test_audit_service.py — capture+restore module-globals
+        # on teardown so cross-test isolation is preserved.
         import ciris_engine.logic.persistence.models.graph as _graph_mod
         from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
 
@@ -82,34 +58,34 @@ class TestGraphAuditService:
 
         _prior_engine = _graph_mod._engine
         _prior_dsn = _graph_mod._engine_dsn
-        fingerprint = hashlib.sha256(pub_bytes).hexdigest()[:12]
-        key_id = f"agent-{fingerprint}"
         with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as _pf:
             persist_db_path = _pf.name
+        seed_path = persist_db_path + ".seed"
+        with open(seed_path, "wb") as _sf:
+            _sf.write(_os.urandom(32))
+        pqc_seed_path = persist_db_path + ".pqc"
+        with open(pqc_seed_path, "wb") as _qf:
+            _qf.write(_os.urandom(32))
         reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
-        persist_engine = Engine(f"sqlite:///{persist_db_path}", key_id)
-        persist_engine.register_public_key(
-            signature_key_id=key_id,
-            public_key_b64=base64.b64encode(pub_bytes).decode(),
-            algorithm="ed25519",
-            description="test fixture audit key",
-            added_by="test",
+        persist_engine = Engine(
+            f"sqlite:///{persist_db_path}",
+            "test-audit-key",
+            local_key_id="test-audit-key",
+            local_key_path=seed_path,
+            local_pqc_key_id="test-audit-key-pqc",
+            local_pqc_key_path=pqc_seed_path,
         )
         set_persist_engine(persist_engine, dsn=f"sqlite:///{persist_db_path}")
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch(
-                "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
-                return_value=mock_verifier,
-            ):
-                service = GraphAuditService(
-                    memory_bus=mock_memory_bus,
-                    time_service=mock_time_service,
-                    retention_days=30,
-                    db_path=f"{temp_dir}/test_audit.db",  # Use temporary database
-                    export_path=f"{temp_dir}/audit_export.jsonl",  # Provide export path
-                )
-                yield service
+            service = GraphAuditService(
+                memory_bus=mock_memory_bus,
+                time_service=mock_time_service,
+                retention_days=30,
+                db_path=f"{temp_dir}/test_audit.db",  # Use temporary database
+                export_path=f"{temp_dir}/audit_export.jsonl",  # Provide export path
+            )
+            yield service
             # Ensure service is stopped if it was started
             try:
                 if hasattr(service, "_started") and service._started:
@@ -125,12 +101,11 @@ class TestGraphAuditService:
         # Restore prior persist engine state (cross-test isolation)
         _graph_mod._engine = _prior_engine
         _graph_mod._engine_dsn = _prior_dsn
-        try:
-            import os as _os
-
-            _os.unlink(persist_db_path)
-        except OSError:
-            pass
+        for _p in (persist_db_path, seed_path, pqc_seed_path):
+            try:
+                _os.unlink(_p)
+            except OSError:
+                pass
 
     @pytest.mark.asyncio
     async def test_start_stop(self, audit_service: GraphAuditService) -> None:

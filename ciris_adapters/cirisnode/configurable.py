@@ -362,19 +362,16 @@ class CIRISNodeConfigurableAdapter:
 
         device_auth_result = config.get("device_auth_result", {})
 
-        # Import signing key into ciris_verify (preferred) or save to disk (fallback)
+        # SELF-CUSTODY (FSD-002 / 2.9.7): provisioned private keys are not
+        # accepted. The agent's signing identity is the persist Engine's local
+        # Ed25519 signer; only PUBLIC keys are registered with Portal/Node.
         signing_key_b64 = device_auth_result.get("signing_key_b64")
         if signing_key_b64:
-            try:
-                from ciris_engine.logic.audit.signing_protocol import UnifiedSigningKey
-
-                # Use load_provisioned_key which imports into ciris_verify if available
-                unified_key = UnifiedSigningKey()
-                unified_key.load_provisioned_key(signing_key_b64)
-                logger.info(f"Imported signing key into secure storage (key_id={unified_key.key_id})")
-            except Exception as e:
-                logger.error(f"Failed to save signing key: {e}")
-                return False
+            logger.error(
+                "Provisioned signing keys are not supported (FSD-002 self-custody): "
+                "the agent generates its own key and registers only the public half."
+            )
+            return False
 
         self._applied_config = config.copy()
 

@@ -41,11 +41,7 @@ if TYPE_CHECKING:
     from ciris_engine.schemas.audit.core import EventPayload, AuditLogEntry
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
-from ciris_engine.logic.audit.persist_signing import (
-    get_signer_material as _audit_signer_material,
-    resolve_tenant_id as _audit_tenant_id,
-    sign_with_verifier as _audit_sign,
-)
+from ciris_engine.logic.audit import resolve_tenant_id as _audit_tenant_id
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.base_graph_service import BaseGraphService
 from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
@@ -94,31 +90,11 @@ def _resolve_action_type(event_type: str) -> str:
     return AuditEventType.SYSTEM_EVENT.value
 
 
-# CIRISVerify briefly blocks signing-key access while a tree attestation runs
-# (typically at startup). It surfaces a retryable AttestationInProgressError;
-# the signal itself suggests retrying after ~500ms. The agent_configured
-# audit event fires during startup, sometimes BEFORE CIRISVerify finishes
-# attestation; under the postgres backend's per-op latency on a shared CI
-# runner that initial window can stretch past ten retries × 500ms = 5s.
-# Budget bumped to 30 × 500ms = 15s, which comfortably covers observed
-# attestation completion on the dual-backend matrix.
-_AUDIT_SIGN_MAX_RETRIES = 30
+# 2.9.7: audit entries are signed by the persist Engine's local signer
+# (engine.local_sign) — CIRISVerify is out of the audit write path, so the
+# only retryable failure left is a chain-state desync ("sequence gap").
+_AUDIT_SIGN_MAX_RETRIES = 3
 _AUDIT_SIGN_RETRY_DELAY_S = 0.5
-
-
-def _attestation_in_progress_error() -> Optional[type]:
-    """Return CIRISVerify's AttestationInProgressError type, if available.
-
-    ciris_verify is an optional adapter, so the type is resolved
-    dynamically — mirrors logic/audit/signing_protocol.py.
-    """
-    try:
-        import ciris_adapters.ciris_verify as ciris_verify
-
-        err = getattr(ciris_verify, "AttestationInProgressError", None)
-        return err if isinstance(err, type) else None
-    except ImportError:
-        return None
 
 
 class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareServiceProtocol):
@@ -1275,11 +1251,8 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             return None
 
         # The persist-chain write mutates no chain state (_next_seq /
-        # _last_entry_hash_b64) until its final audit_record_entry, and
-        # AttestationInProgressError is raised before that point — so the
-        # whole write is safe to retry while CIRISVerify finishes attesting.
-        attestation_in_progress = _attestation_in_progress_error()
-
+        # _last_entry_hash_b64) until its final audit_record_entry — so the
+        # whole write is safe to retry on a chain-state desync.
         async with self._hash_chain_lock:
             for attempt in range(_AUDIT_SIGN_MAX_RETRIES):
                 try:
@@ -1287,39 +1260,22 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                 except Exception as e:
                     last_attempt = attempt >= _AUDIT_SIGN_MAX_RETRIES - 1
                     msg = str(e)
-                    # The signing wrapper may re-raise CIRISVerify's
-                    # AttestationInProgressError as a generic exception that
-                    # only carries the message — match the type OR the message.
-                    is_attestation = (
-                        attestation_in_progress is not None
-                        and isinstance(e, attestation_in_progress)
-                    ) or "attestation in progress" in msg.lower()
                     # persist raises "chain integrity: sequence gap ..." when
                     # the cached _next_seq has drifted from the chain tail.
                     # Self-heal: drop the cache so the retry re-reads the head
                     # — otherwise one drift cascades into unbounded failures.
                     is_chain_desync = "chain integrity" in msg or "sequence gap" in msg
 
-                    if last_attempt or not (is_attestation or is_chain_desync):
+                    if last_attempt or not is_chain_desync:
                         logger.exception("Failed to add to persist audit chain")
                         return None
 
-                    if is_chain_desync:
-                        logger.warning(
-                            "audit chain desync (%s) — re-syncing chain state from persist and retrying",
-                            msg,
-                        )
-                        self._next_seq = None
-                        self._last_entry_hash_b64 = None
-                    else:
-                        logger.debug(
-                            "persist audit chain write deferred (attestation in progress); "
-                            "retry %d/%d in %.1fs",
-                            attempt + 1,
-                            _AUDIT_SIGN_MAX_RETRIES,
-                            _AUDIT_SIGN_RETRY_DELAY_S,
-                        )
-                        await asyncio.sleep(_AUDIT_SIGN_RETRY_DELAY_S)
+                    logger.warning(
+                        "audit chain desync (%s) — re-syncing chain state from persist and retrying",
+                        msg,
+                    )
+                    self._next_seq = None
+                    self._last_entry_hash_b64 = None
             return None
 
     def _write_to_persist_chain(self, entry: AuditRequest) -> JSONDict:
@@ -1342,7 +1298,12 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         if self._next_seq is None or self._last_entry_hash_b64 is None:
             self._refresh_persist_chain_state(engine)
 
-        _pubkey_bytes, actor_id_b64, signing_key_id = _audit_signer_material()
+        # 2.9.7: sign with the persist Engine's federation-registered local
+        # signer — the ONE signer identity. local_derived_key_id() is the id
+        # the substrate verifies against (bare aliases and the old CIRISVerify
+        # "agent-{sha12}" ids land verify_unknown_key on peer nodes).
+        actor_id_b64 = engine.local_public_key_b64()
+        signing_key_id = engine.local_derived_key_id()
         tenant_id = _audit_tenant_id()
 
         recorded_at = entry.timestamp.isoformat().replace("+00:00", "Z")
@@ -1382,7 +1343,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
 
         sign_canon = engine.audit_canonicalize_for_signing(json.dumps(persist_entry))
         sign_bytes = sign_canon if isinstance(sign_canon, bytes) else sign_canon.encode()
-        signature_b64 = base64.b64encode(_audit_sign(sign_bytes)).decode()
+        signature_b64 = base64.b64encode(engine.local_sign(sign_bytes)).decode()
         persist_entry["signature"] = signature_b64
 
         engine.audit_record_entry(json.dumps(persist_entry))

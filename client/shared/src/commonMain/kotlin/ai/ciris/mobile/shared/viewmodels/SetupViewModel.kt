@@ -99,9 +99,15 @@ class SetupViewModel(
             googleEmail = email,
             googleUserId = userId,
             oauthProvider = provider,
-            // Setup mode: CIRIS_PROXY for Google/Apple OAuth, BYOK otherwise
+            // Setup mode: CIRIS_PROXY for Google/Apple OAuth, BYOK otherwise.
+            // Preserve only an EXPLICIT LLM-mode choice (BYOK / CIRIS_PROXY). The
+            // default is LOCAL_ON_DEVICE (non-null), so a bare `!= null` guard
+            // would ALWAYS win and a ciris-eligible OAuth would never get
+            // CIRIS_PROXY — the "forced BYOK despite Google login" bug. Treat the
+            // LOCAL_ON_DEVICE default as "unchosen" so OAuth eligibility applies.
             setupMode = when {
-                _state.value.setupMode != null -> _state.value.setupMode
+                _state.value.setupMode == SetupMode.BYOK ||
+                    _state.value.setupMode == SetupMode.CIRIS_PROXY -> _state.value.setupMode
                 isCirisEligible -> SetupMode.CIRIS_PROXY
                 else -> SetupMode.BYOK
             },

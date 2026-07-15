@@ -572,12 +572,8 @@ def test_count_thoughts_database_error(temp_db):
 
 
 def test_delete_thoughts_by_ids_success(temp_db: str):
-    """delete_thoughts_by_ids is a soft no-op after the 2.9.0 persist absorption.
-
-    Persist 1.5.19 does not expose `thought_delete`; the function logs
-    a warning and returns 0 rather than attempting a raw-sqlite3 delete
-    that would race the substrate. See CIRISPersist follow-up.
-    """
+    """delete_thoughts_by_ids hard-deletes via persist's thought_delete
+    (v1.5.20+, CIRISPersist#60). Requested rows go, others remain."""
     thoughts = [
         create_test_thought("del-t1", "occ1", db_path=temp_db),
         create_test_thought("del-t2", "occ1", db_path=temp_db),
@@ -588,44 +584,54 @@ def test_delete_thoughts_by_ids_success(temp_db: str):
 
     deleted = delete_thoughts_by_ids(["del-t1", "del-t2"])
 
-    # Soft no-op: returns 0; rows remain.
-    assert deleted == 0
-    assert get_thought_by_id("del-t1", "occ1") is not None
-    assert get_thought_by_id("del-t2", "occ1") is not None
+    assert deleted == 2
+    assert get_thought_by_id("del-t1", "occ1") is None
+    assert get_thought_by_id("del-t2", "occ1") is None
     assert get_thought_by_id("del-t3", "occ1") is not None
+
+
+def test_delete_thoughts_by_ids_leaves_first(temp_db: str):
+    """A parent thought with children is deleted leaves-first so the
+    persist parent_thought_id self-FK never rejects the delete."""
+    # root(depth 0) -> child(depth 1) -> grand(depth 2), same task
+    root = create_test_thought(
+        "chain-root", "occ1", task_id="chain-task", db_path=temp_db,
+        thought_depth=0, parent_thought_id=None,
+    )
+    child = create_test_thought(
+        "chain-child", "occ1", task_id="chain-task",
+        thought_depth=1, parent_thought_id="chain-root",
+    )
+    grand = create_test_thought(
+        "chain-grand", "occ1", task_id="chain-task",
+        thought_depth=2, parent_thought_id="chain-child",
+    )
+    for t in (root, child, grand):
+        add_thought(t)
+
+    # Delete only the root id; descendants are cascaded leaves-first.
+    deleted = delete_thoughts_by_ids(["chain-root"])
+
+    assert deleted == 3
+    assert get_thought_by_id("chain-root", "occ1") is None
+    assert get_thought_by_id("chain-child", "occ1") is None
+    assert get_thought_by_id("chain-grand", "occ1") is None
+
+
+def test_delete_thoughts_by_ids_idempotent(temp_db: str):
+    """Deleting an already-deleted / missing id is a harmless no-count."""
+    t = create_test_thought("del-once", "occ1", db_path=temp_db)
+    add_thought(t)
+
+    assert delete_thoughts_by_ids(["del-once"]) == 1
+    # Second pass: row gone -> 0 deleted, no error.
+    assert delete_thoughts_by_ids(["del-once"]) == 0
+    assert delete_thoughts_by_ids(["never-existed"]) == 0
 
 
 def test_delete_thoughts_by_ids_empty_list(temp_db: str):
     """Test delete with empty list."""
     deleted = delete_thoughts_by_ids([], "occ1")
-
-    assert deleted == 0
-
-
-def test_delete_thoughts_by_ids_occurrence_isolation(temp_db: str):
-    """Test that delete respects occurrence boundaries."""
-    # Create thoughts with different IDs but same base name in different occurrences
-    thoughts = [
-        create_test_thought("del-occ1-t1", "occ1", db_path=temp_db),
-        create_test_thought("del-occ2-t1", "occ2", db_path=temp_db),
-    ]
-    for t in thoughts:
-        add_thought(t)
-
-    # Try to delete occ2 thought using occ1 context (should not delete)
-    deleted = delete_thoughts_by_ids(["del-occ2-t1"], "occ1")
-
-    assert deleted == 0  # Should not delete thought from different occurrence
-
-    # Verify both still exist in their respective occurrences
-    assert get_thought_by_id("del-occ1-t1", "occ1") is not None
-    assert get_thought_by_id("del-occ2-t1", "occ2") is not None
-
-
-def test_delete_thoughts_by_ids_database_error():
-    """Soft no-op semantics: persist 1.5.19 has no thought_delete; the
-    function logs and returns 0 regardless of the engine state."""
-    deleted = delete_thoughts_by_ids(["t1"], "occ1")
 
     assert deleted == 0
 

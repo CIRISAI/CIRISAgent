@@ -719,10 +719,9 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
         """
         try:
             # Post-A1 absorption (CIRISAgent#763): count tsdb_data nodes via
-            # persist's graph substrate. Persist's `cirisgraph_query_nodes`
-            # doesn't expose a count-only aggregate yet (CIRISPersist#65), so
-            # we paginate and count locally. Bounded by the metric retention
-            # window — practical pagination terminates quickly.
+            # persist's graph substrate. persist's `cirisgraph_count_nodes`
+            # (v1.5.25, CIRISPersist#65) is the count-only aggregate — no
+            # local pagination needed.
             from ciris_engine.logic.persistence.models.graph import get_persist_engine
             import json
 
@@ -731,24 +730,10 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
                 logger.debug("persist engine not wired, returning 0 metric count")
                 return 0
 
-            count = 0
-            cursor_json = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
             # persist NodeFilter requires `scope` (AV-47); tsdb_data metric
-            # nodes are always written at GraphScope.LOCAL.
+            # nodes are always written at GraphScope.LOCAL. Returns a raw int.
             filter_json = json.dumps({"node_type": "tsdb_data", "scope": "LOCAL"})
-            while True:
-                raw = engine.cirisgraph_query_nodes(filter_json, cursor_json, 500)
-                parsed = json.loads(raw) if isinstance(raw, str) else raw
-                items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
-                count += len(items)
-                if len(items) < 500:
-                    break
-                last = items[-1]
-                cursor_json = json.dumps({
-                    "version": "v1",
-                    "last_ts": str(last.get("updated_at", "")),
-                    "last_id": str(last.get("node_id", "")),
-                })
+            count = int(engine.cirisgraph_count_nodes(filter_json))
 
             logger.debug(f"Total metric count from graph nodes: {count}")
             return count

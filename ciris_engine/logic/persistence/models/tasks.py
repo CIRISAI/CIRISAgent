@@ -667,29 +667,15 @@ def delete_tasks_by_ids(task_ids: List[str]) -> bool:
 
     engine = _get_engine()
     deleted_count = 0
-    fk_blocked: List[str] = []
     for tid in task_ids:
         try:
             ok = engine.task_delete(tid)
         except Exception as e:
-            # Persist 1.5.19 has no `thought_delete` API, so tasks with
-            # child thoughts can't be cascade-deleted. Mark for soft-delete
-            # fallback and continue. Tracked upstream as a CIRISPersist
-            # follow-up — until then maintenance leaves stale rows in
-            # place rather than crashing the cleanup pass.
-            err = str(e).lower()
-            if "foreign key" in err or "conflict" in err:
-                fk_blocked.append(tid)
-                logger.warning(
-                    "task_delete(%s) blocked by FK (child thoughts exist); "
-                    "soft-cancelling instead pending CIRISPersist thought_delete API.",
-                    tid,
-                )
-                try:
-                    engine.task_update_status(tid, TaskStatus.FAILED.value, None)
-                except Exception as inner_e:
-                    logger.warning("task_update_status fallback for %s failed: %s", tid, inner_e)
-                continue
+            # persist's `task_delete` cascades the task's child thoughts via
+            # migration V035, so the old "FK-blocked by child thoughts"
+            # soft-cancel fallback no longer applies. A Conflict here means
+            # some *other* row still references the task — log it honestly
+            # rather than masking a stale row as a successful cancel.
             logger.exception(f"Failed to delete task {tid}: {e}")
             continue
         if ok:
@@ -697,11 +683,6 @@ def delete_tasks_by_ids(task_ids: List[str]) -> bool:
 
     if deleted_count > 0:
         logger.info(f"Successfully deleted {deleted_count} task(s) with IDs: {task_ids}.")
-        return True
-    if fk_blocked:
-        logger.warning(
-            "Soft-cancelled %d task(s) with FK-blocked children: %s", len(fk_blocked), fk_blocked
-        )
         return True
     logger.warning(f"No tasks found with IDs: {task_ids} for deletion (or they were already deleted).")
     return False

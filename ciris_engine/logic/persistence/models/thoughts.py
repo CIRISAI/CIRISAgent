@@ -455,21 +455,62 @@ def delete_thoughts_by_ids(
 ) -> int:
     """Delete thoughts by a list of IDs. Returns the number deleted.
 
-    Persist 1.5.19 does not expose a `thought_delete` API. Production code
-    that hits this path relies on the `task_delete` → thoughts cascade or
-    on persist's bulk cleanup. We keep the symbol so legacy imports don't
-    crash, log a warning when called with anything to delete, and return
-    0. See the upstream CIRISPersist follow-up for `thought_delete`.
+    Routed through persist's `thought_delete` (available since persist
+    v1.5.20; CIRISPersist#60). persist enforces a self-FK on
+    `parent_thought_id`, so a thought that still has children can't be
+    deleted directly — persist rejects it with a Conflict. For each
+    requested id we therefore enumerate its subtree via
+    `thought_get_descendants` (persist returns root + descendants ordered
+    `thought_depth ASC`) and delete in reverse-depth order — leaves first,
+    root last — which satisfies the FK. `thought_delete` is idempotent, so
+    overlapping subtrees or repeated ids are harmless.
+
+    `occurrence_id` is accepted for signature compatibility only. persist
+    keys thoughts globally by id and `thought_delete` takes only a
+    thought_id, so the caller-supplied ids are deleted directly — callers
+    (archival, stale-wakeup, solitude, invalid-context cleanup) pass ids
+    they have already scoped to the right occurrence, and those ids
+    routinely belong to the `__shared__` occurrence rather than the
+    parameter default.
     """
-    if thought_ids:
-        logger.warning(
-            "delete_thoughts_by_ids called on %d thoughts for occurrence %s, "
-            "but persist 1.5.19 has no thought_delete API. No-op; rely on "
-            "cascade via task_delete or upstream `thought_delete` issue.",
-            len(thought_ids),
-            occurrence_id,
-        )
-    return 0
+    if not thought_ids:
+        return 0
+
+    engine = _get_engine()
+    deleted = 0
+    for root_id in thought_ids:
+        # Enumerate the subtree (root + transitive descendants) so we can
+        # delete leaves-first and never trip the parent_thought_id self-FK.
+        try:
+            desc_raw = engine.thought_get_descendants(root_id)
+            descendants = json.loads(desc_raw) if isinstance(desc_raw, str) else desc_raw
+        except Exception as e:
+            logger.warning("thought_get_descendants(%s) failed: %s", root_id, e)
+            descendants = None
+        if not isinstance(descendants, list) or not descendants:
+            # Missing/already-deleted root — fall back to the id itself;
+            # thought_delete is idempotent so this is safe.
+            descendants = [{"thought_id": root_id, "thought_depth": 0}]
+
+        # Leaves-first: delete deepest thoughts before their parents so the
+        # `parent_thought_id` self-FK never rejects the delete.
+        for row in sorted(
+            (r for r in descendants if isinstance(r, dict)),
+            key=lambda r: r.get("thought_depth", 0),
+            reverse=True,
+        ):
+            tid = str(row.get("thought_id", ""))
+            if not tid:
+                continue
+            try:
+                if engine.thought_delete(tid):
+                    deleted += 1
+            except Exception as e:
+                logger.warning("thought_delete(%s) failed: %s", tid, e)
+
+    if deleted:
+        logger.info("Deleted %d thought(s) for occurrence %s", deleted, occurrence_id)
+    return deleted
 
 
 def count_thoughts(occurrence_id: str = "default") -> int:

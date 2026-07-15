@@ -355,19 +355,24 @@ task syncPythonSources(type: Exec) {
     }
 }
 
-// Copy backend localization JSON files to ciris_engine/data/localized/
-// This ensures the Python backend has access to localized strings
-task syncBackendLocalization(type: Copy) {
-    description = "Copy localization JSON files to Python package data"
-
-    from("../../localization") {
-        include "*.json"
+// Copy backend localization JSON files to ciris_engine/data/localized/.
+// NOTE: this MUST NOT be a `type: Copy` task with `into data/localized` — Gradle
+// treats that dir as the task's output and CLEANS stale files it didn't produce,
+// which wipes stage_runtime's checked-in polyglot/ACCORD/guide *.txt (105 files)
+// and leaves the on-device PDMA unable to resolve {{POLYGLOT_PDMA_FRAMING}}
+// (data/localized ends up JSON-only while the un-owned dma/prompts/localized
+// survives — the exact asymmetry that caused this). A plain `copy {}` inside a
+// doLast merges the JSON WITHOUT owning/cleaning the shared dir.
+task syncBackendLocalization {
+    description = "Merge localization JSON into the staged Python package data (non-destructive)"
+    dependsOn syncPythonSources
+    doLast {
+        copy {
+            from("../../localization") { include "*.json" }
+            into "${buildDir}/python-src/ciris_engine/data/localized"
+        }
     }
-    into "${buildDir}/python-src/ciris_engine/data/localized"
 }
-
-// Make syncBackendLocalization run after syncPythonSources
-syncBackendLocalization.dependsOn syncPythonSources
 
 // Chaquopy's extractPackages only extracts directories that contain __init__.py.
 // Resource-only dirs (localized accord/guide .txt, polyglot block .txt, per-language

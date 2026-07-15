@@ -49,6 +49,7 @@ GRATITUDE_SIGNALED / CREDIT_GENERATED).
 """
 
 import asyncio
+import base64
 import hashlib
 import logging
 import os
@@ -441,33 +442,36 @@ class AccordMetricsService:
         }
 
     def _compute_instance_hash(self, fallback_id: Optional[str] = None) -> str:
-        """Compute unique instance hash from the unified signing key.
+        """Compute unique instance hash from the persist Engine's local signer.
 
-        Uses the CIRISVerify-backed unified key's public bytes so the hash is
-        unique per agent INSTANCE, not per template name — and stable across
-        the LensCore fold (the same derivation the pre-fold Python signer
-        used, preserving DSAR/lens-identifier continuity even though trace
-        SIGNATURES now come from the persist federation key via
-        `engine.signer()`).
+        2.9.7 (second-signer removal): derived from the engine's federation
+        signing pubkey (`engine.local_public_key_b64()`) — the SAME identity
+        that signs traces + audit entries. This CHANGES the instance hash /
+        DSAR-lens identifier from the pre-2.9.7 CIRISVerify-key derivation;
+        accepted breakage, one signer identity.
+
+        Must stay in sync with
+        ciris_engine/logic/adapters/api/routes/my_data.py.
 
         Args:
-            fallback_id: If signing key unavailable, hash this ID instead (for tests)
+            fallback_id: If the engine is unavailable, hash this ID instead (for tests)
 
         Returns:
-            SHA-256 hash of signing key's public key (first 16 chars),
-            or hash of fallback_id if provided and no signing key,
+            SHA-256 hash of the signer's raw public key bytes (first 16 chars),
+            or hash of fallback_id if provided and no engine,
             or "unknown" if neither available.
         """
         try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-            unified_key = get_unified_signing_key()
-            pubkey_bytes = unified_key.public_key_bytes
-            return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
+            engine = get_persist_engine()
+            if engine is not None:
+                pubkey_bytes = base64.b64decode(engine.local_public_key_b64())
+                return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
         except Exception as e:
-            logger.debug(f"Could not compute instance hash from signing key: {e}")
+            logger.debug(f"Could not compute instance hash from engine signer: {e}")
 
-        # Fallback for tests/environments without signing key
+        # Fallback for tests/environments without a wired engine
         if fallback_id:
             return hashlib.sha256(fallback_id.encode()).hexdigest()[:16]
 
@@ -621,26 +625,24 @@ class AccordMetricsService:
         # KEY DIAGNOSTICS (#896): lens traces are Ed25519-signed via the Engine
         # and v10's receive_and_persist verifies the signer key_id against the
         # registered federation keys, rejecting an unknown signer with
-        # `verify_unknown_key`. Log every candidate identity so a mismatch
-        # (e.g. the trace signed by the audit key while only the edge federation
-        # key is registered) is obvious without re-deriving it from a stack trace.
+        # `verify_unknown_key`. 2.9.7: there is ONE signer identity — the
+        # engine's local signer; the derived id is the federation-registered
+        # form the substrate verifies against.
         try:
             _engine_local_kid = engine.local_key_id()
         except Exception as _e:  # noqa: BLE001
             _engine_local_kid = f"<err: {_e}>"
         try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
-
-            _audit_kid = get_unified_signing_key().key_id
+            _engine_derived_kid = engine.local_derived_key_id()
         except Exception as _e:  # noqa: BLE001
-            _audit_kid = f"<err: {_e}>"
+            _engine_derived_kid = f"<err: {_e}>"
         logger.info(
             "[LENS_KEY_DIAG] constructing LensClient: engine.local_key_id=%s | "
-            "consent_attesting_key_id(get_federation_address)=%s | "
-            "unified_signing_key.key_id=%s | trace_level=%s",
+            "engine.local_derived_key_id=%s | "
+            "consent_attesting_key_id(get_federation_address)=%s | trace_level=%s",
             _engine_local_kid,
+            _engine_derived_kid,
             consent_key_id,
-            _audit_kid,
             self._trace_level.value,
         )
 
@@ -1696,9 +1698,10 @@ class AccordMetricsService:
             Dictionary of service metrics
         """
         try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-            signer_key_id: Optional[str] = get_unified_signing_key().key_id
+            _engine = get_persist_engine()
+            signer_key_id: Optional[str] = _engine.local_derived_key_id() if _engine is not None else None
         except Exception:
             signer_key_id = None
 

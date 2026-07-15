@@ -243,29 +243,35 @@ class CIRISNodeTests:
     # =========================================================================
 
     async def _test_local_signing_key(self) -> Tuple[bool, str]:
-        """Test that local signing key exists and is valid."""
+        """Test that the local signing seed exists and is valid.
+
+        2.9.7 (second-signer removal): the signing identity is the persist
+        Engine's local Ed25519 signer, seeded from data/local_signing.seed.
+        """
         try:
-            key_path = Path("data/agent_signing.key")
+            key_path = Path("data/local_signing.seed")
 
             if not key_path.exists():
-                return False, f"Signing key not found at {key_path}. Register via CIRISPortal to obtain key."
+                return False, f"Signing seed not found at {key_path}. Bootstrapped at engine construction."
 
-            # Check key size (Ed25519 private key should be 32 bytes)
+            # Check key size (Ed25519 private key seed should be 32 bytes)
             key_size = key_path.stat().st_size
             if key_size != 32:
-                return False, f"Invalid key size: {key_size} bytes (expected 32 for Ed25519)"
+                return False, f"Invalid seed size: {key_size} bytes (expected 32 for Ed25519)"
 
-            # Try to load the key using the signing protocol
+            # Try to resolve the key id from the wired persist engine
             try:
-                from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+                from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-                unified_key = get_unified_signing_key()
-                key_id = unified_key.key_id
+                engine = get_persist_engine()
+                if engine is None:
+                    return True, f"Signing seed exists ({key_size} bytes) - engine not wired for validation"
+                key_id = str(engine.local_derived_key_id())
                 return True, f"Signing key loaded: {key_id}"
             except ImportError:
-                return True, f"Signing key exists ({key_size} bytes) - protocol not available for validation"
+                return True, f"Signing seed exists ({key_size} bytes) - engine not available for validation"
             except Exception as e:
-                return False, f"Signing key exists but failed to load: {e}"
+                return False, f"Signing seed exists but failed to load: {e}"
 
         except Exception as e:
             return False, str(e)
@@ -421,14 +427,21 @@ class CIRISNodeTests:
     async def _test_key_registration(self) -> Tuple[bool, str]:
         """Test public key registration endpoint on live CIRISNode."""
         try:
-            # Try to get signing key
+            # Try to get signing key (2.9.7: the persist Engine's local signer)
             try:
-                from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+                from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-                unified_key = get_unified_signing_key()
-                registration_payload = unified_key.get_registration_payload()
+                engine = get_persist_engine()
+                if engine is None:
+                    return True, "Skipped (persist engine not wired)"
+                registration_payload = {
+                    "key_id": str(engine.local_derived_key_id()),
+                    "public_key_base64": str(engine.local_public_key_b64()),
+                    "algorithm": "ed25519",
+                    "description": "",
+                }
             except ImportError:
-                return True, "Skipped (signing protocol not available)"
+                return True, "Skipped (engine not available)"
             except Exception as e:
                 return False, f"Cannot get signing key: {e}"
 

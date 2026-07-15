@@ -22,17 +22,17 @@ from ciris_engine.logic.adapters.api.models import TokenData
 # ============================================================================
 # Signing Infrastructure Mocking
 # ============================================================================
-# The signing key singleton (get_unified_signing_key) requires ciris_verify
-# which is not available in unit tests. We mock the fallback hash function
-# to prevent hangs during initialization when calling API endpoints.
+# The agent_id hash derives from the persist Engine's local signer (2.9.7
+# second-signer removal); unit tests run without a wired engine, so we mock
+# the hash function to a stable value when calling API endpoints.
 
 
 @pytest.fixture
 def mock_signing_key_fallback():
-    """Mock the signing key fallback to prevent hangs in tests.
+    """Mock the signing-key-derived hash for tests without a wired engine.
 
-    _compute_agent_id_hash_from_signer() tries to initialize the
-    ciris_verify singleton which blocks in test environments.
+    _compute_agent_id_hash_from_signer() reads the persist Engine's local
+    signer, which is not bootstrapped in unit tests.
 
     This fixture is used by client fixtures that make API calls.
     """
@@ -433,17 +433,19 @@ class TestComputeAgentIdHashFromSigner:
     """Test _compute_agent_id_hash_from_signer function."""
 
     def test_successful_computation(self):
-        """Test successful hash computation from signing key."""
+        """Test successful hash computation from the engine's local signer."""
+        import base64
+
         from ciris_engine.logic.adapters.api.routes.my_data import _compute_agent_id_hash_from_signer
 
-        with patch("ciris_engine.logic.audit.signing_protocol.get_unified_signing_key") as mock_get_key:
-            mock_key = MagicMock()
-            mock_key.public_key_bytes = b"test_public_key_bytes"
-            mock_get_key.return_value = mock_key
+        with patch("ciris_engine.logic.persistence.models.graph.get_persist_engine") as mock_get_engine:
+            mock_engine = MagicMock()
+            mock_engine.local_public_key_b64.return_value = base64.b64encode(b"test_public_key_bytes").decode()
+            mock_get_engine.return_value = mock_engine
 
             result = _compute_agent_id_hash_from_signer()
 
-            # Should be first 16 chars of sha256 hash
+            # Should be first 16 chars of sha256 hash of the raw pubkey bytes
             expected = hashlib.sha256(b"test_public_key_bytes").hexdigest()[:16]
             assert result == expected
 
@@ -451,8 +453,8 @@ class TestComputeAgentIdHashFromSigner:
         """Test that exceptions return 'unknown'."""
         from ciris_engine.logic.adapters.api.routes.my_data import _compute_agent_id_hash_from_signer
 
-        with patch("ciris_engine.logic.audit.signing_protocol.get_unified_signing_key") as mock_get_key:
-            mock_get_key.side_effect = RuntimeError("No signing key")
+        with patch("ciris_engine.logic.persistence.models.graph.get_persist_engine") as mock_get_engine:
+            mock_get_engine.side_effect = RuntimeError("No signing key")
 
             result = _compute_agent_id_hash_from_signer()
             assert result == "unknown"
@@ -648,13 +650,11 @@ class TestGetAgentId:
         mock_request.app.state.runtime.essential_config = None
         mock_request.app.state.runtime.agent_id = None
 
-        # Mock the signing key fallback to prevent blocking and return no key
-        # Patch at the source module since it's imported inside the function
-        mock_key = MagicMock()
-        mock_key.has_key = False  # Simulate no signing key available
+        # Mock the engine signer fallback to simulate no wired engine.
+        # Patch at the source module since it's imported inside the function.
         with patch(
-            "ciris_engine.logic.audit.signing_protocol.get_unified_signing_key",
-            return_value=mock_key,
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=None,
         ):
             result = _get_agent_id(mock_request)
             assert result is None
@@ -1139,7 +1139,7 @@ class TestCapacityEndpoint:
         app.dependency_overrides[get_current_user] = _mock_admin_user
 
         with patch(
-            "ciris_engine.logic.audit.signing_protocol.get_unified_signing_key",
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
             side_effect=RuntimeError("no key"),
         ):
             local_client = TestClient(app)

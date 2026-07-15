@@ -22,7 +22,7 @@ import os
 import tempfile
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -280,64 +280,46 @@ class TestAuditServiceMetrics(BaseMetricsTest):
     @pytest_asyncio.fixture
     async def audit_service(self, mock_memory_bus, time_service):
         """Create audit service."""
-        import base64
-        import hashlib
-
         from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric import ed25519
 
         import ciris_engine.logic.persistence.models.graph as _graph_mod
         from ciris_engine.logic.persistence.models.graph import set_persist_engine
 
-        # Generate real Ed25519 keypair for testing
-        private_key = ed25519.Ed25519PrivateKey.generate()
-        public_key = private_key.public_key()
-        pub_bytes = public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        )
-
-        # Mock the CIRISVerify verifier singleton
-        mock_verifier = MagicMock()
-        mock_verifier.has_key_sync.return_value = True
-        mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
-        mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
-
-        # A3 cutover: the audit hash-chain write goes through the persist
-        # engine — wire a real one (pointed at a temp DB) or log_event raises
-        # "persist engine not wired". Restored in the finally for isolation.
+        # A3 cutover / 2.9.7: the audit hash-chain write goes through the
+        # persist engine and signs via engine.local_sign — wire a real one
+        # WITH a local signing identity (pointed at a temp DB) or log_event
+        # raises "persist engine not wired". Restored in the finally.
         _prior_engine = _graph_mod._engine
         _prior_dsn = _graph_mod._engine_dsn
-        fingerprint = hashlib.sha256(pub_bytes).hexdigest()[:12]
-        key_id = f"agent-{fingerprint}"
 
         with tempfile.TemporaryDirectory() as temp_dir:
             persist_db_path = os.path.join(temp_dir, "audit.db")
+            seed_path = os.path.join(temp_dir, "local.seed")
+            with open(seed_path, "wb") as _sf:
+                _sf.write(os.urandom(32))
+            pqc_seed_path = os.path.join(temp_dir, "local.pqc")
+            with open(pqc_seed_path, "wb") as _qf:
+                _qf.write(os.urandom(32))
             reset_engine()  # un-pin any engine a prior fixture wired
-            persist_engine = Engine(f"sqlite:///{persist_db_path}", key_id)
-            persist_engine.register_public_key(
-                signature_key_id=key_id,
-                public_key_b64=base64.b64encode(pub_bytes).decode(),
-                algorithm="ed25519",
-                description="test fixture audit key",
-                added_by="test",
+            persist_engine = Engine(
+                f"sqlite:///{persist_db_path}",
+                "test-key",
+                local_key_id="test-key",
+                local_key_path=seed_path,
+                local_pqc_key_id="test-key-pqc",
+                local_pqc_key_path=pqc_seed_path,
             )
             set_persist_engine(persist_engine, dsn=f"sqlite:///{persist_db_path}")
             try:
-                with patch(
-                    "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
-                    return_value=mock_verifier,
-                ):
-                    service = GraphAuditService(
-                        memory_bus=mock_memory_bus,
-                        time_service=time_service,
-                        db_path=persist_db_path,
-                        enable_hash_chain=True,
-                    )
-                    await service.start()
-                    yield service
-                    await service.stop()
+                service = GraphAuditService(
+                    memory_bus=mock_memory_bus,
+                    time_service=time_service,
+                    db_path=persist_db_path,
+                    enable_hash_chain=True,
+                )
+                await service.start()
+                yield service
+                await service.stop()
             finally:
                 _graph_mod._engine = _prior_engine
                 _graph_mod._engine_dsn = _prior_dsn

@@ -158,22 +158,31 @@ class CapacityResponse(BaseModel):
 
 
 def _compute_agent_id_hash_from_signer() -> str:
-    """Compute agent_id_hash from the unified signing key.
+    """Compute agent_id_hash from the persist Engine's local signer.
 
-    This hash is unique per agent instance (based on signing key),
+    2.9.7 (second-signer removal): derived from the engine's federation
+    signing pubkey — the ONE signer identity. This CHANGES the hash from
+    the pre-2.9.7 CIRISVerify-key derivation (accepted breakage).
+
+    This hash is unique per agent instance (based on the signing key),
     not per template name. This ensures multiple instances of the same
     template (e.g., 30 "Ally" agents) have distinct hashes.
 
-    Must stay in sync with ciris_adapters/ciris_accord_metrics/services.py.
+    Must stay in sync with ciris_adapters/ciris_accord_metrics/services.py
+    (_compute_instance_hash).
     """
     try:
-        from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+        import base64
 
-        unified_key = get_unified_signing_key()
-        pubkey_bytes = unified_key.public_key_bytes
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError("persist engine not wired")
+        pubkey_bytes = base64.b64decode(engine.local_public_key_b64())
         return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
     except Exception as e:
-        logger.warning(f"Could not compute agent_id_hash from signing key: {e}")
+        logger.warning(f"Could not compute agent_id_hash from engine signer: {e}")
         return "unknown"
 
 
@@ -291,19 +300,20 @@ def _get_agent_id(request: Request) -> Optional[str]:
         logger.debug(f"_get_agent_id: Using legacy runtime.agent_id={legacy}")
         return str(legacy)
 
-    # Signing key fallback: key_id is always available (deterministic from Ed25519 pubkey)
+    # Signing key fallback: the engine's derived key id is deterministic
+    # from the local Ed25519 signing identity (2.9.7: the ONE signer).
     try:
-        from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-        unified_key = get_unified_signing_key()
-        if unified_key.has_key:
-            key_id = unified_key.key_id
-            logger.info(f"_get_agent_id: Using signing key key_id={key_id}")
+        engine = get_persist_engine()
+        if engine is not None:
+            key_id = str(engine.local_derived_key_id())
+            logger.info(f"_get_agent_id: Using engine signer key_id={key_id}")
             return key_id
         else:
-            logger.warning("_get_agent_id: Signing key exists but has_key=False")
+            logger.warning("_get_agent_id: persist engine not wired")
     except Exception as e:
-        logger.error(f"_get_agent_id: Signing key fallback FAILED: {e}", exc_info=True)
+        logger.error(f"_get_agent_id: Engine signer fallback FAILED: {e}", exc_info=True)
 
     logger.error(
         "_get_agent_id: ALL fallbacks exhausted! Could not determine agent_id. "

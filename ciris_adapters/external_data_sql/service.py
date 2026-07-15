@@ -12,7 +12,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from ciris_engine.logic.audit.signing_protocol import CIRISVerifySigner
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import TimeServiceProtocol, ToolService
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
@@ -83,12 +82,11 @@ class SQLToolService(BaseService, ToolService):
         self._schema_loader = PrivacySchemaLoader()
         self._privacy_schema_path = privacy_schema_path
 
-        # Signer for GDPR deletion verification. Post-2.9.0: routes through
-        # CIRISVerify (Ed25519, hardware-backed when available) — the same
-        # signing primitive persist's audit_record_entry uses. The legacy
-        # AuditSignatureManager (RSA-2048, stored in ciris.db) was retired
-        # in Phase 3a.
-        self._signer: Optional[CIRISVerifySigner] = None
+        # Signer for GDPR deletion verification. 2.9.7 (second-signer
+        # removal): the persist Engine's local Ed25519 signer — the same
+        # federation-registered identity that signs audit entries. The
+        # legacy CIRISVerifySigner (agent-{sha12}) was deleted.
+        self._signer: Optional[Any] = None  # persist Engine (local_sign surface)
 
         # Result tracking and tool metadata
         self._results: Dict[str, ToolExecutionResult] = {}
@@ -129,12 +127,15 @@ class SQLToolService(BaseService, ToolService):
         self._logger.info(f"SQLToolService has {len(self._tool_schemas)} tool schemas ready")
         self._logger.info(f"SQLToolService has {len(self._tool_info)} tool info objects ready")
 
-        # Initialize CIRISVerify-backed signer for GDPR deletion verification.
+        # Initialize the engine-backed signer for GDPR deletion verification.
         try:
-            self._signer = CIRISVerifySigner()
-            self._signer.initialize()
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            self._signer = get_persist_engine()
+            if self._signer is None:
+                raise RuntimeError("persist engine not wired")
             logger.info(
-                f"Initialized deletion signer via CIRISVerify (key: {(self._signer.key_id or '')[:8]}...)"
+                f"Initialized deletion signer via persist engine (key: {str(self._signer.local_derived_key_id())[:8]}...)"
             )
         except Exception as e:
             logger.warning(f"Failed to initialize deletion signer: {e}. Signatures will not be available.")
@@ -1023,10 +1024,10 @@ class SQLToolService(BaseService, ToolService):
 
                 timestamp = datetime.utcnow().isoformat() + "Z"
 
-            # Generate RSA-PSS signature for GDPR Article 17 deletion verification
+            # Generate Ed25519 signature for GDPR Article 17 deletion verification
             cryptographic_proof = None
             if sign and zero_data_confirmed:
-                if self._signer:
+                if self._signer is not None:
                     try:
                         # Create deterministic hash of verification data
                         verification_data = (
@@ -1034,12 +1035,14 @@ class SQLToolService(BaseService, ToolService):
                         )
                         data_hash = hashlib.sha256(verification_data.encode("utf-8")).digest()
 
-                        # Sign the hash via CIRISVerify (Ed25519 or platform HSM)
-                        signature_bytes = self._signer.sign(data_hash)
+                        # Sign the hash via the persist Engine's local signer
+                        # (2.9.7: the ONE federation-registered signer identity)
+                        signature_bytes = bytes(self._signer.local_sign(data_hash))
                         import base64 as _b64
+
                         signature_b64 = _b64.b64encode(signature_bytes).decode("ascii")
-                        key_id = self._signer.key_id or "unknown"
-                        algo = self._signer.algorithm.value
+                        key_id = str(self._signer.local_derived_key_id())
+                        algo = "ed25519"
                         cryptographic_proof = f"{algo}:{key_id}:{signature_b64}"
 
                         logger.info(

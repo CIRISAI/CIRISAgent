@@ -13,7 +13,7 @@ import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
@@ -65,61 +65,58 @@ class TestAuditRetentionCleanup:
         self, mock_time_service, mock_memory_bus
     ) -> AsyncGenerator[GraphAuditService, None]:
         """Create GraphAuditService with real SQLite database."""
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-
-        # Generate real Ed25519 keypair for testing
-        private_key = ed25519.Ed25519PrivateKey.generate()
-        public_key = private_key.public_key()
-        pub_bytes = public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        )
-
-        mock_verifier = MagicMock()
-        mock_verifier.has_key_sync.return_value = True
-        mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
-        mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
+        import os as _os
 
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = f"{temp_dir}/test_audit.db"
             # Wire persist engine against the same temp file so the audit
             # service's reads + maintenance_prune_audit_chain land on the
-            # same `cirislens_audit_log` we INSERT into.
+            # same `cirislens_audit_log` we INSERT into. 2.9.7: the engine
+            # carries a local signing identity (mirroring db/core.py) so
+            # any hash-chain write signs via engine.local_sign.
             from ciris_engine.logic.persistence._substrate import Engine, reset_engine
             from ciris_engine.logic.persistence.models import graph as _gp
             prior_engine, prior_dsn = _gp._engine, _gp._engine_dsn
+            seed_path = f"{temp_dir}/local.seed"
+            with open(seed_path, "wb") as _sf:
+                _sf.write(_os.urandom(32))
+            pqc_seed_path = f"{temp_dir}/local.pqc"
+            with open(pqc_seed_path, "wb") as _qf:
+                _qf.write(_os.urandom(32))
             reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
-            engine = Engine(f"sqlite:///{db_path}", "test-key")
+            engine = Engine(
+                f"sqlite:///{db_path}",
+                "test-key",
+                local_key_id="test-key",
+                local_key_path=seed_path,
+                local_pqc_key_id="test-key-pqc",
+                local_pqc_key_path=pqc_seed_path,
+            )
             _gp.set_persist_engine(engine, dsn=f"sqlite:///{db_path}")
-            with patch(
-                "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
-                return_value=mock_verifier,
-            ):
-                service = GraphAuditService(
-                    memory_bus=mock_memory_bus,
-                    time_service=mock_time_service,
-                    retention_days=90,
-                    db_path=db_path,
-                    enable_hash_chain=True,
-                )
-                await service.start()
-                try:
-                    yield service
-                finally:
-                    _gp._engine, _gp._engine_dsn = prior_engine, prior_dsn
+            service = GraphAuditService(
+                memory_bus=mock_memory_bus,
+                time_service=mock_time_service,
+                retention_days=90,
+                db_path=db_path,
+                enable_hash_chain=True,
+            )
+            await service.start()
+            try:
+                yield service
+            finally:
+                _gp._engine, _gp._engine_dsn = prior_engine, prior_dsn
 
-                # Cleanup
-                try:
-                    if service._export_task:
-                        service._export_task.cancel()
-                        try:
-                            await service._export_task
-                        except asyncio.CancelledError:
-                            pass
-                    service._started = False
-                except Exception:
-                    pass
+            # Cleanup
+            try:
+                if service._export_task:
+                    service._export_task.cancel()
+                    try:
+                        await service._export_task
+                    except asyncio.CancelledError:
+                        pass
+                service._started = False
+            except Exception:
+                pass
 
     def _insert_test_entries(self, db_path: str, entries: list[dict], time_service) -> None:
         """Insert test entries into persist's cirislens_audit_log.
@@ -464,39 +461,19 @@ class TestAuditRetentionCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_audit_graph_nodes_no_memory_bus(self, mock_time_service):
         """Test graph cleanup returns 0 without memory bus."""
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-
-        private_key = ed25519.Ed25519PrivateKey.generate()
-        public_key = private_key.public_key()
-        from cryptography.hazmat.primitives import serialization
-
-        pub_bytes = public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        )
-
-        mock_verifier = MagicMock()
-        mock_verifier.has_key_sync.return_value = True
-        mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
-        mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
-
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch(
-                "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
-                return_value=mock_verifier,
-            ):
-                service = GraphAuditService(
-                    memory_bus=None,  # No memory bus
-                    time_service=mock_time_service,
-                    retention_days=90,
-                    db_path=f"{temp_dir}/test.db",
-                )
+            service = GraphAuditService(
+                memory_bus=None,  # No memory bus
+                time_service=mock_time_service,
+                retention_days=90,
+                db_path=f"{temp_dir}/test.db",
+            )
 
-                now = mock_time_service.now()
-                cutoff = now - timedelta(days=90)
-                deleted = await service._cleanup_audit_graph_nodes(cutoff)
+            now = mock_time_service.now()
+            cutoff = now - timedelta(days=90)
+            deleted = await service._cleanup_audit_graph_nodes(cutoff)
 
-                assert deleted == 0
+            assert deleted == 0
 
     # ========== Test 90-day boundary ==========
 

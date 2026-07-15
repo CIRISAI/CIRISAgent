@@ -125,7 +125,8 @@ class CIRISNodeService:
         self._agent_id_hash: Optional[str] = None
         self._agent_id_raw: Optional[str] = None
 
-        # Ed25519 trace signer (same unified key as audit + accord_metrics)
+        # Ed25519 trace signer (the persist Engine's local signer — the same
+        # federation-registered key that signs audit entries + lens traces)
         self._signer = Ed25519TraceSigner()
 
         # Credit generation state
@@ -272,13 +273,10 @@ class CIRISNodeService:
 
         domain_hint = request.context.get("domain_hint") if request.context else None
 
-        # Sign the deferral with the agent's Ed25519 key
+        # Sign the deferral with the engine's local Ed25519 key
         signature = None
         signature_key_id = None
         try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
-
-            unified_key = get_unified_signing_key()
             # Canonical message: same fields that CIRISNode will reconstruct
             signed_payload: Dict[str, Any] = {
                 "agent_task_id": request.thought_id,
@@ -287,8 +285,8 @@ class CIRISNodeService:
             if domain_hint:
                 signed_payload["domain_hint"] = domain_hint
             message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-            signature = unified_key.sign_base64(message)
-            signature_key_id = unified_key.key_id
+            signature = self._signer.sign_base64(message)
+            signature_key_id = self._signer.key_id
             logger.debug(f"Deferral signed with key_id={signature_key_id}")
         except Exception as e:
             logger.warning(f"Could not sign deferral: {e}")
@@ -356,10 +354,7 @@ class CIRISNodeService:
             return
 
         try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
-
-            unified_key = get_unified_signing_key()
-            payload = unified_key.get_registration_payload("CIRISNode oversight adapter")
+            payload = self._signer.get_registration_payload("CIRISNode oversight adapter")
 
             result = await self._client.register_public_key(payload)
 
@@ -536,15 +531,12 @@ class CIRISNodeService:
             # Sign the resolution response
             signature = ""
             try:
-                from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
-
-                unified_key = get_unified_signing_key()
                 sig_msg = json.dumps(
                     {"deferral_id": deferral_id, "decision": decision},
                     sort_keys=True,
                     separators=(",", ":"),
                 ).encode("utf-8")
-                signature = unified_key.sign_base64(sig_msg)
+                signature = self._signer.sign_base64(sig_msg) or ""
             except Exception:
                 pass
 
@@ -660,22 +652,23 @@ class CIRISNodeService:
                 logger.warning(f"Failed to submit credit record to CIRISNode: {e}")
 
     def _sign_credit_record(self, interaction_id: str, timestamp: datetime) -> Optional[DualSignature]:
-        """Sign a credit record with the agent's Ed25519 key."""
+        """Sign a credit record with the engine's local Ed25519 key."""
         try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
-
-            unified_key = get_unified_signing_key()
             # Sign the canonical interaction data
             canonical = json.dumps(
                 {"interaction_id": interaction_id, "timestamp": timestamp.isoformat()},
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode("utf-8")
-            signature = unified_key.sign_base64(canonical)
+            signature = self._signer.sign_base64(canonical)
+            key_id = self._signer.key_id
+            if signature is None or key_id is None:
+                logger.warning("Could not sign credit record: engine signing key unavailable")
+                return None
 
             return DualSignature(
                 ed25519_signature=signature,
-                ed25519_key_id=unified_key.key_id,
+                ed25519_key_id=key_id,
                 ml_dsa_65_signature=None,  # PQ signature when available
                 ml_dsa_65_key_id=None,
             )

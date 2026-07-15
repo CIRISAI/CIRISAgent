@@ -26,7 +26,6 @@ import base64
 import hashlib
 import json
 import logging
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -186,14 +185,6 @@ class CompleteTrace:
         return hashlib.sha256(json_str.encode()).hexdigest()
 
 
-# CIRISVerify briefly blocks signing while a tree attestation runs (typically
-# at startup); it raises a retryable AttestationInProgressError whose message
-
-
-_TRACE_SIGN_MAX_RETRIES = 10
-_TRACE_SIGN_RETRY_DELAY_S = 0.5
-
-
 # 2.9.6 is the HARD JCS cutover (CEG §0.9 / the substrate triple persist 4.10 ·
 # edge 1.5 · verify 5.0). Trace signing canonical bytes are produced by verify's
 # RFC 8785 (JCS) canonicalizer — ciris_verify_core::jcs via the verify FFI — so
@@ -244,34 +235,19 @@ def _get_jcs_canonicalize() -> Callable[[Any], bytes]:
     )
 
 
-def _attestation_in_progress_error() -> Optional[type]:
-    """Return CIRISVerify's AttestationInProgressError type, if importable.
-
-    ciris_verify is an optional adapter, so the type is resolved dynamically.
-    """
-    try:
-        import ciris_adapters.ciris_verify as ciris_verify
-
-        err = getattr(ciris_verify, "AttestationInProgressError", None)
-        return err if isinstance(err, type) else None
-    except ImportError:
-        return None
-
-
 class Ed25519TraceSigner:
-    """Sign traces using the unified Ed25519 signing key.
+    """Sign traces + node payloads with the persist Engine's local signer.
 
-    This class wraps the unified signing key from ciris_engine.logic.audit.signing_protocol,
-    ensuring the same key is used for both audit trail signing and accord metrics traces.
-
-    The unified key is stored at data/agent_signing.key and is shared with the audit service.
+    2.9.7 (second-signer removal): the engine's federation-registered local
+    Ed25519 key is the ONE signer identity — the same key that signs audit
+    entries and lens traces. The pre-2.9.7 CIRISVerify "unified key"
+    (agent-{sha12}) is gone; its ids were never federation-registered and
+    peer nodes rejected them with verify_unknown_key.
     """
 
     def __init__(self, seed_dir: Optional[Path] = None):
         """Initialize signer with optional seed directory for root public key."""
-        self._unified_key: Optional[Any] = None
         self._root_pubkey: Optional[str] = None
-        self._key_id: Optional[str] = None
 
         # Load root public key from seed directory (for verification only)
         if seed_dir is None:
@@ -284,21 +260,35 @@ class Ed25519TraceSigner:
                 self._root_pubkey = root_data.get("pubkey")
                 logger.info(f"Loaded root public key: {root_data.get('wa_id', 'wa-unknown')}")
 
-    def _ensure_unified_key(self) -> bool:
-        """Ensure the unified signing key is loaded."""
-        if self._unified_key is not None:
-            return True
-
+    def _get_engine(self) -> Optional[Any]:
+        """Return the wired persist Engine, or None if not yet bootstrapped."""
         try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-            self._unified_key = get_unified_signing_key()
-            self._key_id = self._unified_key.key_id
-            logger.info(f"Using unified signing key: {self._key_id}")
-            return True
+            return get_persist_engine()
         except Exception as e:
-            logger.warning(f"Could not load unified signing key: {e}")
-            return False
+            logger.warning(f"Could not resolve persist engine for signing: {e}")
+            return None
+
+    def sign_base64(self, message: bytes) -> Optional[str]:
+        """Sign message with the engine's local key; URL-safe base64, unpadded."""
+        engine = self._get_engine()
+        if engine is None:
+            return None
+        sig = bytes(engine.local_sign(message))
+        return base64.urlsafe_b64encode(sig).decode().rstrip("=")
+
+    def get_registration_payload(self, description: str = "") -> Dict[str, Any]:
+        """Payload for registering the engine's public key with CIRISNode/Lens."""
+        engine = self._get_engine()
+        if engine is None:
+            raise RuntimeError("persist engine not wired — no signing identity available")
+        return {
+            "key_id": str(engine.local_derived_key_id()),
+            "public_key_base64": str(engine.local_public_key_b64()),
+            "algorithm": "ed25519",
+            "description": description,
+        }
 
     def _build_canonical_message(self, trace: CompleteTrace) -> bytes:
         """Build the canonical signing/verifying bytes per FSD/TRACE_WIRE_FORMAT.md §8.
@@ -394,7 +384,7 @@ class Ed25519TraceSigner:
         return _get_jcs_canonicalize()(canonical)
 
     def sign_trace(self, trace: CompleteTrace) -> bool:
-        """Sign a trace with the unified Ed25519 signing key.
+        """Sign a trace with the engine's local Ed25519 signing key.
 
         Canonical bytes are produced by _build_canonical_message — see that
         method's docstring for the 9-field shape per FSD/TRACE_WIRE_FORMAT.md §8
@@ -402,45 +392,24 @@ class Ed25519TraceSigner:
 
         Returns True on success, False if the signing key isn't available.
         """
-        if not self._ensure_unified_key() or self._unified_key is None:
-            logger.warning("No unified signing key available for trace signing")
-            return False
-
-        attestation_in_progress = _attestation_in_progress_error()
-        for attempt in range(_TRACE_SIGN_MAX_RETRIES):
-            try:
-                message = self._build_canonical_message(trace)
-                message_hash = hashlib.sha256(message).hexdigest()
-                logger.info(
-                    f"[SIGN_TRACE] trace={trace.trace_id} level={trace.trace_level} "
-                    f"len={len(message)} hash={message_hash[:16]} canonical=9-field"
-                )
-                trace.signature = self._unified_key.sign_base64(message)
-                trace.signature_key_id = self._key_id
-                logger.debug(f"Signed trace {trace.trace_id} with unified key {self._key_id}")
-                return True
-            except Exception as e:
-                last_attempt = attempt >= _TRACE_SIGN_MAX_RETRIES - 1
-                # The signing wrapper may re-raise CIRISVerify's
-                # AttestationInProgressError as a generic exception that only
-                # carries the message — so match the type OR the message.
-                is_attestation = (
-                    attestation_in_progress is not None
-                    and isinstance(e, attestation_in_progress)
-                ) or "attestation in progress" in str(e).lower()
-                if is_attestation and not last_attempt:
-                    logger.debug(
-                        "trace signing deferred (attestation in progress); "
-                        "retry %d/%d in %.1fs",
-                        attempt + 1,
-                        _TRACE_SIGN_MAX_RETRIES,
-                        _TRACE_SIGN_RETRY_DELAY_S,
-                    )
-                    time.sleep(_TRACE_SIGN_RETRY_DELAY_S)
-                    continue
-                logger.error(f"Failed to sign trace: {e}")
+        try:
+            key_id = self.key_id
+            if key_id is None:
+                logger.warning("No engine signing key available for trace signing")
                 return False
-        return False
+            message = self._build_canonical_message(trace)
+            message_hash = hashlib.sha256(message).hexdigest()
+            logger.info(
+                f"[SIGN_TRACE] trace={trace.trace_id} level={trace.trace_level} "
+                f"len={len(message)} hash={message_hash[:16]} canonical=9-field"
+            )
+            trace.signature = self.sign_base64(message)
+            trace.signature_key_id = key_id
+            logger.debug(f"Signed trace {trace.trace_id} with engine key {key_id}")
+            return trace.signature is not None
+        except Exception as e:
+            logger.error(f"Failed to sign trace: {e}")
+            return False
 
     def verify_trace(self, trace: CompleteTrace) -> bool:
         """Verify a trace signature using the root public key.
@@ -467,15 +436,20 @@ class Ed25519TraceSigner:
 
     @property
     def key_id(self) -> Optional[str]:
-        """Get the key ID, loading unified key if needed."""
-        if self._key_id is None:
-            self._ensure_unified_key()
-        return self._key_id
+        """The engine's federation-registered (derived) key id, or None."""
+        engine = self._get_engine()
+        if engine is None:
+            return None
+        try:
+            return str(engine.local_derived_key_id())
+        except Exception as e:
+            logger.warning(f"Could not resolve engine derived key id: {e}")
+            return None
 
     @property
     def has_signing_key(self) -> bool:
         """Check if a signing key is available."""
-        return self._ensure_unified_key()
+        return self.key_id is not None
 
 
 

@@ -19,7 +19,6 @@ import ai.ciris.mobile.shared.models.safety.WatchlistRequest
 import ai.ciris.mobile.shared.models.safety.WatchlistResponse
 import ai.ciris.mobile.shared.models.federation.EdgePeerReachability
 import ai.ciris.mobile.shared.models.federation.EdgeReachabilityEntry
-import ai.ciris.mobile.shared.models.federation.FederationContentRequest
 import ai.ciris.mobile.shared.models.federation.FederationContentResponse
 import ai.ciris.mobile.shared.models.federation.FederationIdentity
 import ai.ciris.mobile.shared.models.federation.FederationIdentityResponse
@@ -27,11 +26,9 @@ import ai.ciris.mobile.shared.models.federation.FederationMetricsResponse
 import ai.ciris.mobile.shared.models.federation.MintIdentityRequest
 import ai.ciris.mobile.shared.models.federation.MintedIdentity
 import ai.ciris.mobile.shared.models.federation.OwnedNodesDto
-import ai.ciris.mobile.shared.models.federation.FederationPeerAppearanceUpdateRequest
 import ai.ciris.mobile.shared.models.federation.FederationPeerDetailResponse
 import ai.ciris.mobile.shared.models.federation.FederationPeerListResponse
 import ai.ciris.mobile.shared.models.federation.FederationPeerSASResponse
-import ai.ciris.mobile.shared.models.federation.FederationPeerTrustUpdateRequest
 import ai.ciris.mobile.shared.models.federation.LocalPeerState
 import ai.ciris.mobile.shared.models.federation.NodeCodeAddRequest
 import ai.ciris.mobile.shared.models.federation.NodeCodeAddResponse
@@ -813,12 +810,18 @@ class CIRISApiClient(
 
     // ─── Federation surface (/v1/federation/*) ───────────────────────────────
     //
-    // Hand-rolled rather than via the generated SDK because (a) the federation
-    // routes ship faster than the SDK regen cadence, and (b) the response
-    // envelope (SuccessResponse{data: ...}) is uniform across every route here
-    // — one helper unwraps them all. SSE for /v1/federation/events/{channel}
-    // lives in [FederationEventStream] so the streaming concerns don't bleed
-    // into the request/response client.
+    // Served NATIVELY by the local ciris-server node (:4243) — the Python
+    // duplicate routes on the agent (:8080) were deleted in the 2.9.7 DRY
+    // purge. The node currently exposes: announce, node-code, peering, peers,
+    // peers/{key_id}, self-key-record, conformance, adopt-scrubbed.
+    //
+    // SEVEN capabilities have NO node route yet (CIRISServer ask filed):
+    //   identity, peers/{key_id}/sas, peers/{key_id}/trust,
+    //   peers/{key_id}/appearance, metrics, content/{content_id},
+    //   events/{channel} (SSE).
+    // Their client methods below are DISABLED (throw immediately) until
+    // CIRISServer exposes them on :4243; every call-site already handles the
+    // thrown error as a degraded/"unknown" UI state.
 
     /**
      * Short-lived Ktor client for one direct-HTTP request. Mirrors the
@@ -864,26 +867,19 @@ class CIRISApiClient(
      * Federation identity card — local agent's signer_key_id, crate
      * version, peer counts, and advertised capabilities.
      *
-     * Hits ``GET /v1/federation/identity``.
+     * DISABLED: the agent-side ``GET /v1/federation/identity`` route was
+     * deleted (2.9.7 DRY purge — Edge PyO3 owns the capability) and the
+     * node (:4243) does not expose it yet. TODO(CIRISServer ask: expose
+     * GET /v1/federation/identity on the node) — repoint to
+     * [LOCAL_NODE_URL] when it lands. Callers already treat the throw as
+     * "Edge degraded" (identity card renders em-dash); the persist
+     * aggregate fallback [getFederationIdentityAggregate] still works.
      */
     suspend fun getFederationIdentity(): FederationIdentity {
-        val method = "getFederationIdentity"
-        logDebug(method, "GET $baseUrl/v1/federation/identity")
-        val client = federationHttpClient()
-        return try {
-            val response = client.get("$baseUrl/v1/federation/identity") {
-                authHeader()?.let { header("Authorization", it) }
-            }
-            if (!response.status.isSuccess()) {
-                throw RuntimeException("Federation identity fetch failed: ${response.status}")
-            }
-            decodeFederationEnvelope(response.bodyAsText(), FederationIdentity.serializer())
-        } catch (e: Exception) {
-            logException(method, e, "url=$baseUrl")
-            throw e
-        } finally {
-            client.close()
-        }
+        throw UnsupportedOperationException(
+            "GET /v1/federation/identity is not served yet: agent duplicate deleted, " +
+                "node route pending (CIRISServer ask)"
+        )
     }
 
     /**
@@ -958,97 +954,57 @@ class CIRISApiClient(
 
     /**
      * Fetch the Signal-style SAS (5 words + 6 digits) for verifying a
-     * peer's pubkey out-of-band. Both sides of the call see the same
-     * value because Edge sorts the ``(local_pub, peer_pub)`` tuple
-     * deterministically before deriving.
+     * peer's pubkey out-of-band.
      *
-     * Hits ``GET /v1/federation/peers/{keyId}/sas``.
+     * DISABLED: agent-side ``GET /v1/federation/peers/{keyId}/sas`` was
+     * deleted (2.9.7 DRY purge — Edge's ``peer_sas`` owns the capability)
+     * and the node (:4243) does not expose it yet. TODO(CIRISServer ask:
+     * expose peer SAS on the node) — repoint to [LOCAL_NODE_URL] when it
+     * lands. NetworkPeerDetailViewModel surfaces the throw as an error row.
      */
     suspend fun getFederationPeerSAS(keyId: String): FederationPeerSASResponse {
-        val method = "getFederationPeerSAS"
-        logDebug(method, "GET /v1/federation/peers/$keyId/sas")
-        val client = federationHttpClient()
-        return try {
-            val response = client.get("$baseUrl/v1/federation/peers/$keyId/sas") {
-                authHeader()?.let { header("Authorization", it) }
-            }
-            if (!response.status.isSuccess()) {
-                throw RuntimeException("Federation peer SAS fetch failed: ${response.status} for $keyId")
-            }
-            decodeFederationEnvelope(response.bodyAsText(), FederationPeerSASResponse.serializer())
-        } catch (e: Exception) {
-            logException(method, e, "keyId=$keyId")
-            throw e
-        } finally {
-            client.close()
-        }
+        throw UnsupportedOperationException(
+            "GET /v1/federation/peers/$keyId/sas is not served yet: agent duplicate deleted, " +
+                "node route pending (CIRISServer ask)"
+        )
     }
 
     /**
-     * Update the [PeerTrustState] on a known peer. SYSTEM_ADMIN only
-     * server-side; the client surfaces 403 as a regular exception.
+     * Update the [PeerTrustState] on a known peer.
      *
-     * Hits ``PUT /v1/federation/peers/{keyId}/trust``.
+     * DISABLED: agent-side ``PUT /v1/federation/peers/{keyId}/trust`` was
+     * deleted (2.9.7 DRY purge — the node's peer store owns trust state)
+     * and the node (:4243) does not expose a trust-update route yet.
+     * TODO(CIRISServer ask: expose peer trust PUT on the node) — repoint
+     * to [LOCAL_NODE_URL] when it lands.
      */
     suspend fun setFederationPeerTrust(
         keyId: String,
         trust: PeerTrustState,
     ): LocalPeerState {
-        val method = "setFederationPeerTrust"
-        logInfo(method, "PUT /v1/federation/peers/$keyId/trust → ${trust.wire}")
-        val client = federationHttpClient()
-        return try {
-            val response = client.put("$baseUrl/v1/federation/peers/$keyId/trust") {
-                authHeader()?.let { header("Authorization", it) }
-                contentType(ContentType.Application.Json)
-                setBody(jsonConfig.encodeToString(
-                    FederationPeerTrustUpdateRequest.serializer(),
-                    FederationPeerTrustUpdateRequest(trust = trust),
-                ))
-            }
-            if (!response.status.isSuccess()) {
-                throw RuntimeException("Federation peer trust update failed: ${response.status} for $keyId")
-            }
-            decodeFederationEnvelope(response.bodyAsText(), LocalPeerState.serializer())
-        } catch (e: Exception) {
-            logException(method, e, "keyId=$keyId, trust=${trust.wire}")
-            throw e
-        } finally {
-            client.close()
-        }
+        throw UnsupportedOperationException(
+            "PUT /v1/federation/peers/$keyId/trust (${trust.wire}) is not served yet: " +
+                "agent duplicate deleted, node route pending (CIRISServer ask)"
+        )
     }
 
     /**
      * Update the local-user [PeerAppearance] on a known peer.
      *
-     * Hits ``PUT /v1/federation/peers/{keyId}/appearance``.
+     * DISABLED: agent-side ``PUT /v1/federation/peers/{keyId}/appearance``
+     * was deleted (2.9.7 DRY purge — the node's peer store owns appearance)
+     * and the node (:4243) does not expose an appearance-update route yet.
+     * TODO(CIRISServer ask: expose peer appearance PUT on the node) —
+     * repoint to [LOCAL_NODE_URL] when it lands.
      */
     suspend fun setFederationPeerAppearance(
         keyId: String,
         appearance: PeerAppearance,
     ): LocalPeerState {
-        val method = "setFederationPeerAppearance"
-        logInfo(method, "PUT /v1/federation/peers/$keyId/appearance")
-        val client = federationHttpClient()
-        return try {
-            val response = client.put("$baseUrl/v1/federation/peers/$keyId/appearance") {
-                authHeader()?.let { header("Authorization", it) }
-                contentType(ContentType.Application.Json)
-                setBody(jsonConfig.encodeToString(
-                    FederationPeerAppearanceUpdateRequest.serializer(),
-                    FederationPeerAppearanceUpdateRequest(appearance = appearance),
-                ))
-            }
-            if (!response.status.isSuccess()) {
-                throw RuntimeException("Federation peer appearance update failed: ${response.status} for $keyId")
-            }
-            decodeFederationEnvelope(response.bodyAsText(), LocalPeerState.serializer())
-        } catch (e: Exception) {
-            logException(method, e, "keyId=$keyId")
-            throw e
-        } finally {
-            client.close()
-        }
+        throw UnsupportedOperationException(
+            "PUT /v1/federation/peers/$keyId/appearance is not served yet: " +
+                "agent duplicate deleted, node route pending (CIRISServer ask)"
+        )
     }
 
     /**
@@ -1056,26 +1012,18 @@ class CIRISApiClient(
      * verify failures, queue depths, transport bytes, and peer
      * reachability ratios.
      *
-     * Hits ``GET /v1/federation/metrics``.
+     * DISABLED: agent-side ``GET /v1/federation/metrics`` was deleted
+     * (2.9.7 DRY purge — Edge's ``metrics_snapshot`` owns the capability)
+     * and the node (:4243) does not expose it yet. TODO(CIRISServer ask:
+     * expose federation metrics on the node) — repoint to
+     * [LOCAL_NODE_URL] when it lands. The Interfaces/Queue pollers treat
+     * the throw as their existing degraded state.
      */
     suspend fun getFederationMetrics(): FederationMetricsResponse {
-        val method = "getFederationMetrics"
-        logDebug(method, "GET /v1/federation/metrics")
-        val client = federationHttpClient()
-        return try {
-            val response = client.get("$baseUrl/v1/federation/metrics") {
-                authHeader()?.let { header("Authorization", it) }
-            }
-            if (!response.status.isSuccess()) {
-                throw RuntimeException("Federation metrics fetch failed: ${response.status}")
-            }
-            decodeFederationEnvelope(response.bodyAsText(), FederationMetricsResponse.serializer())
-        } catch (e: Exception) {
-            logException(method, e, "url=$baseUrl")
-            throw e
-        } finally {
-            client.close()
-        }
+        throw UnsupportedOperationException(
+            "GET /v1/federation/metrics is not served yet: agent duplicate deleted, " +
+                "node route pending (CIRISServer ask)"
+        )
     }
 
     /**
@@ -1125,37 +1073,22 @@ class CIRISApiClient(
      * ``[1, 300_000]`` ms; defaults to 5_000 ms here so the typical
      * user-driven case doesn't block the UI for 30s on miss.
      *
-     * Hits ``POST /v1/federation/content/{contentId}``. SHA-256
-     * integrity (``sha256(decode(payload_base64)) == content_id``) is
-     * enforced Edge-side — the mobile client does not re-verify.
+     * DISABLED: agent-side ``POST /v1/federation/content/{contentId}``
+     * was deleted (2.9.7 DRY purge — Edge's ``fetch_content`` owns the
+     * capability, SHA-256 integrity enforced Rust-side) and the node
+     * (:4243) does not expose it yet. TODO(CIRISServer ask: expose
+     * federation content fetch on the node) — repoint to
+     * [LOCAL_NODE_URL] when it lands.
      */
     suspend fun fetchFederationContent(
         contentId: String,
         peerKeyId: String,
         timeoutMs: Int = 5_000,
     ): FederationContentResponse {
-        val method = "fetchFederationContent"
-        logInfo(method, "POST /v1/federation/content/$contentId from peer=$peerKeyId timeout=${timeoutMs}ms")
-        val client = federationHttpClient()
-        return try {
-            val response = client.post("$baseUrl/v1/federation/content/$contentId") {
-                authHeader()?.let { header("Authorization", it) }
-                contentType(ContentType.Application.Json)
-                setBody(jsonConfig.encodeToString(
-                    FederationContentRequest.serializer(),
-                    FederationContentRequest(peerKeyId = peerKeyId, timeoutMs = timeoutMs),
-                ))
-            }
-            if (!response.status.isSuccess()) {
-                throw RuntimeException("Federation content fetch failed: ${response.status} for $contentId")
-            }
-            decodeFederationEnvelope(response.bodyAsText(), FederationContentResponse.serializer())
-        } catch (e: Exception) {
-            logException(method, e, "contentId=$contentId, peer=$peerKeyId")
-            throw e
-        } finally {
-            client.close()
-        }
+        throw UnsupportedOperationException(
+            "POST /v1/federation/content/$contentId (peer=$peerKeyId, timeout=${timeoutMs}ms) " +
+                "is not served yet: agent duplicate deleted, node route pending (CIRISServer ask)"
+        )
     }
 
     /**

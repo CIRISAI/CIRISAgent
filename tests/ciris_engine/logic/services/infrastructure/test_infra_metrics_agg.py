@@ -30,7 +30,6 @@ from ciris_engine.logic.services.lifecycle.shutdown import ShutdownService
 
 # Import all the infrastructure services
 from ciris_engine.logic.services.lifecycle.time import TimeService
-from ciris_engine.schemas.secrets.core import SecretsDetectionConfig
 
 # Import required schemas and enums
 from ciris_engine.schemas.services.operations import InitializationPhase
@@ -572,16 +571,24 @@ class TestSecretsServiceMetrics(BaseMetricsTest):
 
     @pytest.fixture
     def secrets_service(self, mock_time_service):
-        """Create SecretsService for testing."""
-        with patch("ciris_engine.logic.secrets.store.SecretsStore"), patch(
-            "ciris_engine.logic.secrets.filter.SecretsFilter"
-        ):
+        """Create SecretsService for testing.
 
-            service = SecretsService(time_service=mock_time_service, detection_config=SecretsDetectionConfig())
-            # Mock the store and filter
+        2.9.7 wave 2: detection/decapsulation live on persist's substrate —
+        mock the engine accessor so `filter_enabled` (derived from the
+        substrate filter catalog) reads 1.0 without a real persist DB.
+        """
+        mock_engine = MagicMock()
+        mock_engine.secrets_test_encryption.return_value = True
+        mock_engine.secrets_get_filter_config.return_value = (
+            '{"config_id":"global","config_value":{"patterns":[{"pattern_id":"api_key",'
+            '"regex":"sk-[A-Za-z0-9]{10}","description":"API key","sensitivity":"high",'
+            '"auto_decapsulate_for_actions":["tool"]}],"version":1},"version":1}'
+        )
+        mock_engine.secrets_process_incoming_text.return_value = '{"filtered_text":"test text","refs":[]}'
+        with patch("ciris_engine.logic.secrets.service._get_engine", return_value=mock_engine):
+            service = SecretsService(time_service=mock_time_service)
+            # Isolate persist-backed listing behind a mock store alias
             service.store = MagicMock()
-            service.filter = MagicMock()
-            service.filter.enabled = True
             yield service
 
     def test_secrets_service_metrics_exist(self, secrets_service):
@@ -627,17 +634,11 @@ class TestSecretsServiceMetrics(BaseMetricsTest):
 
     @pytest.mark.asyncio
     async def test_secrets_service_process_text(self, secrets_service):
-        """Test SecretsService text processing."""
-        # Mock filter to return empty results
-        secrets_service.filter.filter_text.return_value = ("clean text", [])
-
+        """Test SecretsService text processing routes through the substrate."""
         result_text, references = await secrets_service.process_incoming_text("test text", "test_message_id")
 
-        assert result_text == "test text"  # Fixed expectation - no secrets detected means original text
+        assert result_text == "test text"  # No secrets detected means original text
         assert references == []
-
-        # Verify filter was called
-        secrets_service.filter.filter_text.assert_called_once_with("test text", "")
 
 
 class TestInfrastructureServicesIntegration(BaseMetricsTest):
@@ -689,16 +690,12 @@ class TestInfrastructureServicesIntegration(BaseMetricsTest):
             try:
                 services.append(AuthenticationService(db_path=auth_db_path, time_service=mock_time_service))
 
-                # SecretsService with mocked dependencies
-                with patch("ciris_engine.logic.secrets.store.SecretsStore"), patch(
-                    "ciris_engine.logic.secrets.filter.SecretsFilter"
-                ):
-                    secrets_service = SecretsService(
-                        time_service=mock_time_service, detection_config=SecretsDetectionConfig()
-                    )
-                    secrets_service.store = MagicMock()
-                    secrets_service.filter = MagicMock()
-                    services.append(secrets_service)
+                # SecretsService — no persist engine wired here; the
+                # facade's engine probes degrade gracefully (ctor bootstrap
+                # skips, filter_enabled reads 0.0).
+                secrets_service = SecretsService(time_service=mock_time_service)
+                secrets_service.store = MagicMock()
+                services.append(secrets_service)
 
                 # Test that each service provides base metrics
                 # Mock the ServiceRegistry for DatabaseMaintenanceService

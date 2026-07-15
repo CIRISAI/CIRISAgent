@@ -5,9 +5,17 @@ Coordinates secrets detection, storage, and retrieval with full audit trail
 and integration with the agent's action pipeline.
 
 2.9.7 (#896): the former `SecretsStore` / `SecretsEncryption` passthrough
-shims were inlined here and deleted. Persist's Engine owns crypto + storage
-+ audit (`secrets_*` substrate); the agent owns *detection* (language-aware
-patterns in `secrets.filter`) and this typed facade.
+shims were inlined here and deleted. 2.9.7 wave 2 deleted the Python
+`SecretsFilter` detection engine too — persist's Engine now owns the FULL
+secrets capability: detection (`secrets_process_incoming_text` against the
+substrate filter catalog), decapsulation (`secrets_decapsulate`), crypto,
+storage, and audit. This class is a thin typed facade plus the agent-side
+task-lifecycle auto-forget.
+
+Known upstream gaps (accepted, filed upstream): persist's default filter
+catalog is EMPTY (no detections until `update_filter_config` seeds
+patterns) and `secrets_decapsulate` is stubbed on SQLite (raises; this
+facade degrades by returning the params unchanged).
 
 `self.store` is a back-compat alias for the service itself — pre-2.9.7
 callers reached storage via `secrets_service.store.<method>` and the
@@ -19,13 +27,13 @@ import base64
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.protocols.services.runtime.secrets import SecretsServiceProtocol
 from ciris_engine.schemas.runtime.enums import SensitivityLevel, ServiceType
-from ciris_engine.schemas.secrets.core import DetectedSecret, SecretRecord, SecretReference, SecretsDetectionConfig
+from ciris_engine.schemas.secrets.core import DetectedSecret, SecretRecord, SecretReference
 from ciris_engine.schemas.secrets.service import (
     DecapsulationContext,
     FilterStats,
@@ -36,8 +44,6 @@ from ciris_engine.schemas.secrets.service import (
 from ciris_engine.schemas.services.core import ServiceStatus
 from ciris_engine.schemas.services.core.secrets import SecretsServiceStats
 from ciris_engine.schemas.types import JSONDict
-
-from .filter import SecretsFilter
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +134,6 @@ class SecretsService(BaseService, SecretsServiceProtocol):
     def __init__(
         self,
         time_service: TimeServiceProtocol,
-        filter_obj: Optional[SecretsFilter] = None,
-        detection_config: Optional[SecretsDetectionConfig] = None,
         db_path: str = "secrets.db",
     ) -> None:
         """
@@ -137,13 +141,10 @@ class SecretsService(BaseService, SecretsServiceProtocol):
 
         Args:
             time_service: Time service for consistent time operations
-            filter_obj: Secrets filter instance (created if None)
-            detection_config: Secrets detection configuration
             db_path: Legacy no-op — persist's Engine owns the database.
                 Accepted so pre-2.9.7 call sites keep constructing.
         """
         super().__init__(time_service=time_service)
-        self.filter = filter_obj or SecretsFilter(detection_config)
         # Back-compat alias: pre-2.9.7 callers reached storage via `.store`
         # (the deleted SecretsStore shim). The service IS the store now.
         self.store: "SecretsService" = self
@@ -367,61 +368,51 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         """
         Process incoming text for secrets detection and replacement.
 
+        Detection + encrypt-and-store are owned by persist's
+        `secrets_process_incoming_text`, which regex-matches the substrate
+        filter catalog and returns `{"filtered_text": ..., "refs": [...]}`.
+        An empty catalog (persist's default) means no detections — seed it
+        via `update_filter_config`.
+
         Args:
             text: Original text to process
-            context_hint: Safe context description
             source_message_id: ID of source message for tracking
 
         Returns:
             Tuple of (filtered_text, secret_references)
         """
-        filtered_text, detected_secrets = self.filter.filter_text(text, "")
-
-        if not detected_secrets:
+        try:
+            engine = _get_engine()
+            raw = engine.secrets_process_incoming_text(text, source_message_id, "system")
+            envelope = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+        except Exception as e:
+            logger.error(f"Substrate secrets detection failed: {type(e).__name__}: {e}")
             return text, []
 
-        secret_references = []
+        if not isinstance(envelope, dict):
+            logger.error(f"secrets_process_incoming_text returned non-dict envelope: {envelope!r}")
+            return text, []
 
-        for detected_secret in detected_secrets:
-            secret_record = SecretRecord(
-                secret_uuid=detected_secret.secret_uuid,
-                encrypted_value=b"",  # Persist owns the ciphertext
-                encryption_key_ref="",  # Persist owns the key handle
-                salt=b"",  # Persist owns the salt
-                nonce=b"",  # Persist owns the nonce
-                description=detected_secret.description,
-                sensitivity_level=detected_secret.sensitivity,
-                detected_pattern=detected_secret.pattern_name,
-                context_hint=detected_secret.context_hint,
-                created_at=self._now(),
-                last_accessed=None,
-                access_count=0,
-                source_message_id=source_message_id,
-                auto_decapsulate_for_actions=self._get_auto_decapsulate_actions(detected_secret.sensitivity.value),
-                manual_access_only=False,
+        refs = envelope.get("refs") or []
+        if not refs:
+            return text, []
+
+        filtered_text = str(envelope.get("filtered_text", text))
+        self._filter_detections += len(refs)
+
+        secret_references: List[SecretReference] = []
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            secret_ref = _ref_to_reference(ref)
+            # Track for task-lifecycle auto-forget (keys only matter;
+            # persist never returns plaintext here).
+            self._current_task_secrets[secret_ref.uuid] = secret_ref.description
+            secret_references.append(secret_ref)
+            logger.info(
+                f"Detected and stored {secret_ref.sensitivity} secret: "
+                f"{secret_ref.description} (UUID: {secret_ref.uuid})"
             )
-
-            stored = await self._store_detected_secret(detected_secret, source_message_id)
-
-            if stored:
-                self._current_task_secrets[detected_secret.secret_uuid] = detected_secret.original_value
-
-                secret_ref = SecretReference(
-                    uuid=detected_secret.secret_uuid,
-                    description=detected_secret.description,
-                    context_hint=detected_secret.context_hint,
-                    sensitivity=detected_secret.sensitivity,
-                    detected_pattern=detected_secret.pattern_name or "unknown",
-                    auto_decapsulate_actions=secret_record.auto_decapsulate_for_actions,
-                    created_at=secret_record.created_at,
-                    last_accessed=None,
-                )
-                secret_references.append(secret_ref)
-
-                logger.info(
-                    f"Detected and stored {detected_secret.sensitivity} secret: "
-                    f"{detected_secret.description} (UUID: {detected_secret.secret_uuid})"
-                )
 
         return filtered_text, secret_references
 
@@ -465,6 +456,14 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         """
         Automatically decapsulate secrets in action parameters.
 
+        Persist's `secrets_decapsulate` walks the params JSON, replacing
+        every `{SECRET:<uuid>:<description>}` placeholder with decrypted
+        plaintext when `action_type` is in the secret's whitelist, and
+        audits each access.
+
+        Known gap (filed upstream): stubbed on SQLite — this facade
+        degrades by returning the params unchanged (placeholders intact).
+
         Args:
             action_type: Type of action being executed
             action_params: Action parameters potentially containing secret references
@@ -476,112 +475,100 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         if not action_params:
             return action_params
 
-        result = await self._deep_decapsulate(action_params, action_type, context)
-
-        # Ensure we return a dict as expected
-        if isinstance(result, dict):
-            return result
-        else:
-            # This shouldn't happen if action_params is a dict
+        ctx_json = json.dumps(
+            {
+                "action_type": context.action_type,
+                "thought_id": context.thought_id,
+                "user_id": context.user_id,
+                "accessor": "agent",
+                "purpose": f"auto-decapsulation for {action_type} action",
+            }
+        )
+        try:
+            engine = _get_engine()
+            raw = engine.secrets_decapsulate(action_type, json.dumps(action_params), ctx_json)
+            result = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+        except Exception as e:
+            # SQLite decapsulation is stubbed upstream (`Permanent:
+            # pipeline orchestration deferred`) — degrade gracefully.
+            logger.warning(f"Substrate decapsulation unavailable, params returned unchanged: {type(e).__name__}: {e}")
             return action_params
 
-    async def _deep_decapsulate(
-        self,
-        obj: Union[JSONDict, List[Any], str, int, float, bool, None],
-        action_type: str,
-        context: DecapsulationContext,
-    ) -> Union[JSONDict, List[Any], str, int, float, bool, None]:
-        """Recursively decapsulate secrets in nested structures."""
-        if isinstance(obj, str):
-            return await self._decapsulate_string(obj, action_type, context)
-        elif isinstance(obj, dict):
-            result: JSONDict = {}
-            for key, value in obj.items():
-                result[key] = await self._deep_decapsulate(value, action_type, context)
-            return result
-        elif isinstance(obj, list):
-            list_result: List[Any] = []
-            for item in obj:
-                list_result.append(await self._deep_decapsulate(item, action_type, context))
-            return list_result
-        else:
-            return obj
+        if isinstance(result, dict):
+            # DecapsulateResult envelope carries the rewritten params.
+            for key in ("action_params", "params", "rewritten_params", "decapsulated_params"):
+                params = result.get(key)
+                if isinstance(params, dict):
+                    return params
 
-    async def _decapsulate_string(self, text: str, action_type: str, context: DecapsulationContext) -> str:
-        """Decapsulate secret references in a string."""
-        import re
+        logger.warning(f"Unrecognized secrets_decapsulate envelope shape: {type(result).__name__}")
+        return action_params
 
-        secret_pattern = r"\{SECRET:([a-f0-9-]{36}):([^}]+)\}"
+    def _read_substrate_catalog(self, engine: Any) -> Tuple[List[JSONDict], int]:
+        """Read persist's filter catalog → (patterns, version)."""
+        raw = engine.secrets_get_filter_config()
+        parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+        if not isinstance(parsed, dict):
+            return [], 0
+        config_value = parsed.get("config_value") or {}
+        patterns = config_value.get("patterns") if isinstance(config_value, dict) else []
+        version = int(parsed.get("version", 0))
+        return [p for p in (patterns or []) if isinstance(p, dict)], version
 
-        matches = list(re.finditer(secret_pattern, text))
-        if not matches:
-            return text
-
-        result = text
-
-        for match in reversed(matches):
-            secret_uuid = match.group(1)
-            description = match.group(2)
-
-            secret_record = await self._retrieve_secret_record(secret_uuid)
-
-            if not secret_record:
-                logger.warning(f"Secret {secret_uuid} not found for decapsulation")
-                continue  # Leave original reference
-
-            if action_type in secret_record.auto_decapsulate_for_actions:
-                decrypted_value = self._decrypt_secret_value(secret_record)
-                if decrypted_value:
-                    logger.info(
-                        f"Auto-decapsulated {secret_record.sensitivity_level} secret "
-                        f"for {action_type} action: {description}"
-                    )
-                    result = result[: match.start()] + decrypted_value + result[match.end() :]
-                else:
-                    logger.error(f"Failed to decrypt secret {secret_uuid}")
-            else:
-                logger.info(f"Secret {secret_uuid} not configured for auto-decapsulation " f"in {action_type} actions")
-
-        return result
-
-    async def update_filter_config(
-        self, updates: FilterUpdateRequest, accessor: str = "agent"
-    ) -> FilterUpdateResult:  # pragma: no cover - thin wrapper
+    async def update_filter_config(self, updates: FilterUpdateRequest, accessor: str = "agent") -> FilterUpdateResult:
         """
-        Update secrets filter configuration.
+        Update the substrate secrets filter catalog.
+
+        Merges the requested patterns into persist's catalog (upsert by
+        pattern name; `enabled=False` removes) and writes it back via
+        `secrets_update_filter_config`. Sensitivity-level updates have no
+        substrate representation and are acknowledged as no-ops.
 
         Args:
-            updates: Dictionary of configuration updates
+            updates: Filter configuration updates
             accessor: Who is making the update
 
         Returns:
             Result of configuration update
         """
         try:
-            results = []
+            engine = _get_engine()
+            results: List[JSONDict] = []
 
-            # Handle pattern updates
+            patterns_updated = 0
             if updates.patterns:
+                catalog, version = self._read_substrate_catalog(engine)
+                by_id = {str(p.get("pattern_id")): p for p in catalog}
                 for pattern_config in updates.patterns:
-                    # Pattern operations would be handled here based on PatternConfig
-                    results.append("Updated pattern configuration")
+                    if pattern_config.enabled:
+                        sensitivity = pattern_config.sensitivity.value.lower()
+                        by_id[pattern_config.name] = {
+                            "pattern_id": pattern_config.name,
+                            "regex": pattern_config.pattern,
+                            "description": pattern_config.name,
+                            "sensitivity": sensitivity,
+                            "auto_decapsulate_for_actions": _AUTO_DECAPSULATE_BY_SENSITIVITY.get(sensitivity, []),
+                        }
+                        results.append({"message": f"Upserted pattern: {pattern_config.name}"})
+                    else:
+                        by_id.pop(pattern_config.name, None)
+                        results.append({"message": f"Removed pattern: {pattern_config.name}"})
+                    patterns_updated += 1
 
-            # Handle sensitivity config updates
+                new_config = {"patterns": list(by_id.values()), "version": version + 1}
+                engine.secrets_update_filter_config(
+                    json.dumps({"config_id": "global", "new_config": new_config}), accessor
+                )
+
             if updates.sensitivity_config:
-                for level_name, sensitivity_config in updates.sensitivity_config.items():
-                    # Sensitivity operations would be handled here
-                    results.append(f"Updated sensitivity level: {level_name}")
+                for level_name in updates.sensitivity_config:
+                    results.append({"message": f"Sensitivity level acknowledged (no substrate mapping): {level_name}"})
 
-            # Create stats object
             stats = FilterStats(
-                patterns_updated=len(updates.patterns) if updates.patterns else 0,
+                patterns_updated=patterns_updated,
                 sensitivity_levels_updated=len(updates.sensitivity_config) if updates.sensitivity_config else 0,
             )
-
-            # Convert string results to dict format
-            dict_results = [{"message": result} for result in results]
-
-            return FilterUpdateResult(success=True, error=None, results=dict_results, accessor=accessor, stats=stats)
+            return FilterUpdateResult(success=True, error=None, results=results, accessor=accessor, stats=stats)
 
         except Exception as e:
             logger.error(f"Failed to update filter config: {e}")
@@ -653,25 +640,6 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         """Disable automatic forgetting of task secrets."""
         self._auto_forget_enabled = False
 
-    def _get_auto_decapsulate_actions(self, sensitivity: str) -> List[str]:
-        """
-        Get default auto-decapsulation actions based on sensitivity.
-
-        Args:
-            sensitivity: Secret sensitivity level
-
-        Returns:
-            List of action types that can auto-decapsulate this secret
-        """
-        if sensitivity == "CRITICAL":
-            return []  # Require manual access for critical secrets
-        elif sensitivity == "HIGH":
-            return ["tool"]  # Only tool actions for high sensitivity
-        elif sensitivity == "MEDIUM":
-            return ["tool", "speak"]  # Tool and speak actions
-        else:  # LOW
-            return ["tool", "speak", "memorize"]  # Most actions allowed
-
     # Protocol methods for SecretsServiceProtocol
     async def encrypt(self, plaintext: str) -> str:
         """Encrypt a secret via persist's `secrets_encrypt`.
@@ -720,41 +688,30 @@ class SecretsService(BaseService, SecretsServiceProtocol):
             return None
 
     async def get_filter_config(self) -> JSONDict:
-        """Get current filter configuration."""
-        # Wrap the filter's get_filter_config to prevent direct access
-        config_export = self.filter.get_filter_config()
-        # Convert ConfigExport to dict
-        return config_export.model_dump()
+        """Get the current substrate filter catalog envelope."""
+        try:
+            engine = _get_engine()
+            raw = engine.secrets_get_filter_config()
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception as e:
+            logger.error(f"Failed to get filter config: {type(e).__name__}: {e}")
+            return {}
 
     async def get_service_stats(self) -> SecretsServiceStats:
-        """Get comprehensive service statistics."""
+        """Get comprehensive service statistics from the substrate."""
         try:
-            # Get filter stats
-            filter_stats = self.filter.get_pattern_stats()
-
-            # Get storage stats
-            all_secrets = await self.store.list_secrets()
-
-            # Get enabled patterns from filter stats
-            # PatternStats doesn't have pattern_counts, but we can derive from the counts
-            enabled_patterns = []
-            if filter_stats.default_patterns > 0:
-                enabled_patterns.extend([f"default_{i}" for i in range(filter_stats.default_patterns)])
-            if filter_stats.custom_patterns > 0:
-                enabled_patterns.extend([f"custom_{i}" for i in range(filter_stats.custom_patterns)])
-
-            # Count recent detections (PatternStats doesn't track detections, so we'll use total patterns)
-            _recent_detections = filter_stats.total_patterns
-
-            # Calculate storage size (approximate)
-            _storage_size_bytes = len(all_secrets) * 512  # Rough estimate: 512 bytes per secret
-
+            engine = _get_engine()
+            raw = engine.secrets_get_service_stats()
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            if not isinstance(parsed, dict):
+                raise RuntimeError(f"secrets_get_service_stats returned non-dict: {parsed!r}")
             return SecretsServiceStats(
-                total_secrets=len(all_secrets),
-                active_filters=filter_stats.total_patterns,
-                filter_matches_today=0,  # We don't track this currently
-                last_filter_update=None,  # We don't track this currently
-                encryption_enabled=True,
+                total_secrets=int(parsed.get("total_secrets", 0)),
+                active_filters=int(parsed.get("active_filters", 0)),
+                filter_matches_today=int(parsed.get("filter_matches_today", 0)),
+                last_filter_update=_parse_iso(parsed.get("last_filter_update")),
+                encryption_enabled=bool(parsed.get("encryption_enabled", True)),
             )
 
         except Exception as e:
@@ -786,7 +743,11 @@ class SecretsService(BaseService, SecretsServiceProtocol):
 
     def _check_dependencies(self) -> bool:
         """Check if all required dependencies are available."""
-        return self.filter is not None and self.store is not None
+        try:
+            _get_engine()
+            return True
+        except RuntimeError:
+            return False
 
     def _register_dependencies(self) -> None:
         """Register service dependencies."""
@@ -843,6 +804,14 @@ class SecretsService(BaseService, SecretsServiceProtocol):
             "reencrypt_all",
         ]
 
+    def _substrate_filter_active(self) -> bool:
+        """True when the substrate filter catalog has at least one pattern."""
+        try:
+            patterns, _version = self._read_substrate_catalog(_get_engine())
+            return len(patterns) > 0
+        except Exception:
+            return False
+
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect secrets service metrics."""
         metrics = super()._collect_custom_metrics()
@@ -866,11 +835,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
                 "filter_detections": float(self._filter_detections),
                 "auto_encryptions": float(self._auto_encryptions),
                 "failed_decryptions": float(self._failed_decryptions),
-                "filter_enabled": (
-                    1.0
-                    if self.filter and hasattr(self.filter, "detection_config") and self.filter.detection_config.enabled
-                    else 0.0
-                ),
+                "filter_enabled": 1.0 if self._substrate_filter_active() else 0.0,
             }
         )
 
@@ -923,7 +888,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
             uptime_seconds=self._calculate_uptime(),
             metrics={
                 "secrets_stored": float(len(self._current_task_secrets)),
-                "filter_enabled": 1.0 if self.filter else 0.0,
+                "filter_enabled": 1.0 if self._substrate_filter_active() else 0.0,
                 "auto_forget_enabled": 1.0 if self._auto_forget_enabled else 0.0,
             },
             last_error=self._last_error,

@@ -19,6 +19,11 @@ import pytest
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.schemas.runtime.enums import SensitivityLevel
 from ciris_engine.schemas.secrets.core import DetectedSecret
+from ciris_engine.schemas.secrets.service import (
+    DecapsulationContext,
+    FilterUpdateRequest,
+    PatternConfig,
+)
 
 
 @pytest.fixture
@@ -98,7 +103,95 @@ async def test_recall_secret_metadata_and_decrypt(secrets_service):
 
 
 @pytest.mark.asyncio
-async def test_decapsulate_string_respects_action_gate(secrets_service):
+async def test_update_filter_config_seeds_substrate_catalog(persist_engine, secrets_service):
+    """update_filter_config upserts patterns into persist's filter catalog.
+
+    Persist's default catalog is EMPTY (gap filed upstream) — the seed is
+    a precondition for any detection through the substrate.
+    """
+    result = await secrets_service.update_filter_config(
+        FilterUpdateRequest(
+            patterns=[
+                PatternConfig(
+                    name="test_api_key",
+                    pattern="sk-[A-Za-z0-9]{10}",
+                    sensitivity=SensitivityLevel.HIGH,
+                    enabled=True,
+                )
+            ]
+        ),
+        accessor="test",
+    )
+    assert result.success is True
+    assert result.stats is not None and result.stats.patterns_updated == 1
+
+    config = await secrets_service.get_filter_config()
+    patterns = config["config_value"]["patterns"]
+    assert [p["pattern_id"] for p in patterns] == ["test_api_key"]
+    # HIGH sensitivity → tool-only auto-decapsulation whitelist
+    assert patterns[0]["auto_decapsulate_for_actions"] == ["tool"]
+
+    # enabled=False removes the pattern from the catalog
+    result = await secrets_service.update_filter_config(
+        FilterUpdateRequest(
+            patterns=[
+                PatternConfig(
+                    name="test_api_key",
+                    pattern="sk-[A-Za-z0-9]{10}",
+                    sensitivity=SensitivityLevel.HIGH,
+                    enabled=False,
+                )
+            ]
+        ),
+        accessor="test",
+    )
+    assert result.success is True
+    config = await secrets_service.get_filter_config()
+    assert config["config_value"]["patterns"] == []
+
+
+@pytest.mark.asyncio
+async def test_process_incoming_text_detects_via_substrate(persist_engine, secrets_service):
+    """Detection routes through persist's `secrets_process_incoming_text`."""
+    await secrets_service.update_filter_config(
+        FilterUpdateRequest(
+            patterns=[
+                PatternConfig(
+                    name="test_api_key",
+                    pattern="sk-[A-Za-z0-9]{10}",
+                    sensitivity=SensitivityLevel.HIGH,
+                    enabled=True,
+                )
+            ]
+        ),
+        accessor="test",
+    )
+
+    filtered, refs = await secrets_service.process_incoming_text("my key is sk-abcDEF1234 ok", "msg-1")
+    assert len(refs) == 1
+    ref = refs[0]
+    assert ref.sensitivity == SensitivityLevel.HIGH
+    assert f"{{SECRET:{ref.uuid}:" in filtered
+    assert "sk-abcDEF1234" not in filtered
+    # Detected secret is tracked for task-lifecycle auto-forget
+    assert ref.uuid in secrets_service._current_task_secrets
+    # And it round-trips through the substrate recall path
+    assert await secrets_service.retrieve_secret(ref.uuid) == "sk-abcDEF1234"
+
+
+@pytest.mark.asyncio
+async def test_process_incoming_text_clean_with_empty_catalog(persist_engine, secrets_service):
+    """Empty substrate catalog (persist's default) → no detections."""
+    text = "my key is sk-abcDEF1234 ok"
+    filtered, refs = await secrets_service.process_incoming_text(text, "msg-clean")
+    assert filtered == text
+    assert refs == []
+
+
+@pytest.mark.asyncio
+async def test_decapsulate_degrades_gracefully_on_sqlite_stub(persist_engine, secrets_service):
+    """`secrets_decapsulate` is stubbed on SQLite (upstream gap) — the
+    facade returns the params unchanged instead of raising."""
     key = str(uuid.uuid4())
     detected = DetectedSecret(
         secret_uuid=key,
@@ -111,13 +204,10 @@ async def test_decapsulate_string_respects_action_gate(secrets_service):
     )
     await secrets_service._store_detected_secret(detected, "msg-2")
 
-    text = f"use {{SECRET:{key}:gated}} here"
-    # HIGH → auto-decapsulates for tool actions only
-    decapsulated = await secrets_service._decapsulate_string(text, "tool", context=Mock())
-    assert decapsulated == "use tok-decap here"
-    # speak is not in the HIGH allow-list — reference stays intact
-    untouched = await secrets_service._decapsulate_string(text, "speak", context=Mock())
-    assert untouched == text
+    params = {"cmd": f"use {{SECRET:{key}:gated}} here"}
+    ctx = DecapsulationContext(action_type="tool", thought_id="t1", user_id="system")
+    result = await secrets_service.decapsulate_secrets_in_parameters("tool", params, ctx)
+    assert result == params
 
 
 @pytest.mark.asyncio

@@ -1230,6 +1230,60 @@ def test_catchup_add_fedid(adb: ADBHelper, ui: UIAutomator, config: dict) -> Tes
         )
 
 
+def _local_login_if_needed(adb: ADBHelper, config: dict) -> tuple:
+    """After the wizard, setup-complete restarts the runtime and invalidates the
+    setup-time token — BY DESIGN. On local login the user must sign back in with
+    the username/password they just created. Drive that re-login via the in-app
+    test server if the app is sitting on the Login screen.
+
+    Returns (ok: bool, detail: str). ok=True means we're authenticated and on a
+    post-login screen (or were never on Login).
+    """
+    username = config.get("setup_username", "admin")
+    password = config.get("setup_password", "qa_test_password_12345")
+    client = connect_test_server(adb, config, launch_if_needed=True, clear_data=False)
+    if client is None:
+        return False, "test server unreachable for re-login"
+
+    # Give a post-setup reload a moment to land on Login.
+    screen = None
+    for _ in range(20):
+        screen = client.screen()
+        if screen in ("Login", "Interact"):
+            break
+        time.sleep(1.5)
+
+    if screen != "Login":
+        # Already past login (or still booting into Interact) — nothing to do.
+        return True, f"no re-login needed (screen={screen!r})"
+
+    # Login screen → reveal the local form, fill creds, submit.
+    if client.is_visible("btn_local_login"):
+        _click_or_tap(client, adb, "btn_local_login")
+        client.wait_for_element("input_password", timeout=15)
+    if not client.wait_for_element("input_username", timeout=10):
+        # Some builds pre-fill username on the local form; tolerate its absence.
+        if not client.is_visible("input_password"):
+            return False, "local login form never appeared (no input_username/password)"
+    else:
+        if not client.input("input_username", username):
+            return False, "failed to input username on re-login"
+        time.sleep(0.4)
+    if not client.input("input_password", password):
+        return False, "failed to input password on re-login"
+    time.sleep(0.4)
+    if not _click_or_tap(client, adb, "btn_login_submit"):
+        return False, "failed to click btn_login_submit on re-login"
+
+    # Wait to leave Login (reach Interact / any post-login screen).
+    for _ in range(40):
+        s = client.screen()
+        if s and s != "Login":
+            return True, f"re-logged in as {username!r} → {s}"
+        time.sleep(1.5)
+    return False, "re-login submitted but never left Login screen"
+
+
 def _capture_speak_evidence(adb: ADBHelper, package: str = "ai.ciris.mobile.debug") -> dict:
     """Read the LIVE runtime log off the device and extract hard evidence of a
     real LLM reply + CEG trace ship — so the chat report carries data, not just
@@ -1318,258 +1372,146 @@ def _capture_speak_evidence(adb: ADBHelper, package: str = "ai.ciris.mobile.debu
 
 
 def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
-    """
-    Test: Send a message and receive a response.
+    """Send a message and PROVE a real agent reply — log-authoritative.
 
-    Prerequisites:
-    - Must be on Interact screen (after setup)
-
-    Steps:
-    1. Verify we're on the chat screen
-    2. Type a test message
-    3. Click send
-    4. Wait for agent response
-    5. Verify response received
+    The UI is driven via the in-app test server (reliable Compose testTags);
+    the *verdict* comes from the runtime log (SpeakHandler content + CEG trace
+    seal + ship), NOT from scraping UI text — UI scraping previously false-passed
+    on a login banner. On local login we re-authenticate first (setup-complete
+    restarts the runtime and invalidates the setup-time token by design).
     """
     start_time = time.time()
     screenshots = []
     test_message = config.get("test_message", "Hello, how are you?")
 
     try:
-        print("  [1/5] Verifying chat screen...")
-
-        # Wait for chat screen (check PRIMARY indicators)
-        chat_visible = False
-        for indicator in CIRISAppConfig.CHAT_SCREEN_INDICATORS_PRIMARY:
-            if ui.wait_for_text(indicator, timeout=5):
-                chat_visible = True
-                print(f"  Found chat indicator: '{indicator}'")
-                break
-
-        # Also accept Shutdown/STOP buttons as proof we're on chat screen
-        if not chat_visible:
-            for indicator in ["Shutdown", "STOP"]:
-                if ui.is_text_visible(indicator):
-                    chat_visible = True
-                    print(f"  Found chat-only indicator: '{indicator}'")
-                    break
-
-        if not chat_visible:
-            screen_info = ui.dump_screen_info()
-            return TestReport(
-                name="test_chat_interaction",
-                result=TestResult.SKIPPED,
-                duration=time.time() - start_time,
-                message=f"Not on chat screen. Visible: {screen_info.get('texts', [])}",
-            )
-
-        print("  [2/5] Finding message input...")
-
-        # Find the message input field. Post-setup the runtime restarts all 22
-        # services before chat composes — 60-120s under emulator arm64
-        # translation — so retry until the input appears rather than sampling once.
-        input_field = None
-        _input_deadline = time.time() + 150
-        while input_field is None and time.time() < _input_deadline:
-            # First try by test tag (resource-id contains the tag)
-            input_field = ui.find_by_resource_id(CIRISAppConfig.TAG_INPUT_MESSAGE)
-            if not input_field:
-                # Fallback: Look for EditText with hint "Type your message..."
-                input_field = ui.find_by_text(CIRISAppConfig.TEXT_TYPE_MESSAGE)
-            if not input_field:
-                # Try finding by class
-                edit_texts = ui.find_by_class("EditText")
-                input_field = edit_texts[0] if edit_texts else None
-            if not input_field:
-                time.sleep(5)
-
-        if not input_field:
-            return TestReport(
-                name="test_chat_interaction",
-                result=TestResult.FAILED,
-                duration=time.time() - start_time,
-                message="Message input field not found",
-            )
-
-        print(f"  [3/5] Typing message: '{test_message}'")
-
-        # Type the message
-        ui.click(input_field)
-        time.sleep(0.3)
-        adb.input_text(test_message)
-        time.sleep(0.5)
-
-        print("  [4/5] Sending message...")
-
-        # Find and click send button
-        # First try by test tag
-        send_clicked = ui.click_by_resource_id(CIRISAppConfig.TAG_BTN_SEND)
-        if not send_clicked:
-            # Fallback: try by content description
-            send_clicked = ui.click_by_content_desc(CIRISAppConfig.TEXT_SEND)
-        if not send_clicked:
-            # Try clicking by text
-            send_clicked = ui.click_by_text(CIRISAppConfig.TEXT_SEND)
-
-        if not send_clicked:
-            # Try finding IconButton for send
-            clickable = ui.find_clickable()
-            for elem in clickable:
-                desc = getattr(elem, "content_desc", "") or ""
-                res_id = getattr(elem, "resource_id", "") or ""
-                if "send" in desc.lower() or "send" in res_id.lower():
-                    ui.click(elem)
-                    send_clicked = True
-                    break
-
-        if not send_clicked:
-            # Final fallback: use configured coordinates
-            send_coords = ScreenCoordinates.get("send_button_center", config)
-            print(f"  Using coordinate fallback for send: {send_coords}")
-            adb.tap(*send_coords)
-            send_clicked = True
-
-        if not send_clicked:
-            return TestReport(
-                name="test_chat_interaction",
-                result=TestResult.FAILED,
-                duration=time.time() - start_time,
-                message="Could not click send button",
-            )
-
-        print("  [5/5] Waiting for response...")
-
-        # Wait for processing indicator and then response
-        time.sleep(2)  # Wait for initial processing
-
-        # Wait for response - look for CIRIS message bubble
-        # Agent messages typically appear with "CIRIS" author label
-        response_timeout = CIRISAppConfig.TIMEOUT_CHAT_RESPONSE
-        start_wait = time.time()
-        response_found = False
-        response_text = ""
-
-        # UI chrome that can be >10 chars but is NOT the agent's response.
-        _CHROME = (
-            "Type your message",
-            "Chat with CIRIS",
-            "Welcome to Ally",
-            "Emergency Stop",
-            "Processing",
-            "Thinking",
-        )
-        # Login/setup banners — if one of these is the only "response", the app
-        # bounced OUT of the chat (session/token loss) and never got an agent
-        # reply. Treat that as a hard failure, not a passing response.
-        _LOGIN_MARKERS = (
-            "hosted LLM services require",
-            "Bring your own API key",
-            "Sign in with Google",
-            "Local Login",
-            "Continue as Guest",
-        )
-        bounced_to_login = False
-
-        while time.time() - start_wait < response_timeout:
-            ui.refresh_hierarchy()
-            screen_texts = ui.get_screen_text()
-
-            if any(any(m in t for m in _LOGIN_MARKERS) for t in screen_texts):
-                bounced_to_login = True
-                break
-
-            # Agent messages appear in the chat list. Capture the actual spoken
-            # string (not just "a response exists") so the report proves a real
-            # LLM reply — the longest substantive non-chrome text that isn't our
-            # own message is the agent bubble.
-            best = ""
-            for text in screen_texts:
-                if (
-                    text != test_message
-                    and text not in ("CIRIS", "You", "Send", "Connected")
-                    and len(text) > 10
-                    and not any(c in text for c in _CHROME)
-                    and not any(m in text for m in _LOGIN_MARKERS)
-                ):
-                    if len(text) > len(best):
-                        best = text
-
-            if best:
-                response_found = True
-                response_text = best
-                break
-
-            time.sleep(1)
-
-        if bounced_to_login:
-            screenshot_path = f"/tmp/ciris_chat_bounce_{int(time.time())}.png"
-            adb.screenshot(screenshot_path)
-            screenshots.append(screenshot_path)
-            ev = _capture_speak_evidence(adb, CIRISAppConfig.PACKAGE)
-            return TestReport(
-                name="test_chat_interaction",
-                result=TestResult.FAILED,
-                duration=time.time() - start_time,
-                message=(
-                    "Chat bounced to the Login screen after send — no agent reply. "
-                    f"LLM model={ev['llm_model']}, trace_sealed={ev['trace_sealed']}. "
-                    "The visible 'response' was a login banner, not a CIRIS message."
-                ),
-                screenshots=screenshots,
-            )
-
-        # Take screenshot
-        screenshot_path = f"/tmp/ciris_chat_{int(time.time())}.png"
-        adb.screenshot(screenshot_path)
-        screenshots.append(screenshot_path)
-
-        if response_found:
-            print(f"  CIRIS spoke: {response_text!r}")
-            # Give the CEG seal + ship a moment after the visible reply, then
-            # read the LIVE runtime log for hard evidence: which model was hit,
-            # whether the LLM call errored, whether a trace sealed (+ how many
-            # events / signed), and whether the sealed envelope could ship.
-            time.sleep(8)
-            ev = _capture_speak_evidence(adb, CIRISAppConfig.PACKAGE)
-            llm_bit = (
-                f"LLM {ev['llm_model'] or '?'} "
-                + ("ERROR: " + ev["llm_error"] if ev["llm_error"] else ("called" if ev["llm_called"] else "call-unconfirmed"))
-            )
-            seal_bit = (
-                f"trace sealed ({ev['trace_events']} events{', signed' if ev['trace_signed'] else ''})"
-                if ev["trace_sealed"]
-                else "NO trace seal in log"
-            )
-            ship_bit = "shipped" if ev["trace_shipped"] else ("KEX-present (ship-ready)" if ev.get("kex_present") else "ship-unconfirmed")
-            evidence = f"{llm_bit}; {seal_bit}; {ship_bit}"
-            print(f"  Evidence: {evidence}")
-            for _l in ev.get("log_lines", [])[-12:]:
-                print(f"    | {_l}")
-            # An LLM error means the visible bubble was NOT a real reply — fail loudly.
-            if ev["llm_error"]:
+        # [0/5] Post-setup re-login (local mode) — sign back in with the creds
+        # created in the wizard so the chat runs on a live session.
+        if config.get("login_mode", "google") == "local":
+            print("  [0/5] Post-setup local re-login...")
+            ok, detail = _local_login_if_needed(adb, config)
+            print(f"    {detail}")
+            if not ok:
                 return TestReport(
                     name="test_chat_interaction",
                     result=TestResult.FAILED,
                     duration=time.time() - start_time,
-                    message=f"UI showed text but LLM call failed — {evidence}. Bubble: {response_text!r}",
-                    screenshots=screenshots,
+                    message=f"Post-setup re-login failed: {detail}",
                 )
+
+        client = connect_test_server(adb, config, launch_if_needed=True, clear_data=False)
+        if client is None:
             return TestReport(
                 name="test_chat_interaction",
-                result=TestResult.PASSED,
+                result=TestResult.SKIPPED,
                 duration=time.time() - start_time,
-                message=f'CIRIS spoke: "{response_text}"  [{evidence}]',
-                screenshots=screenshots,
+                message="in-app test server unreachable (debug build required)",
             )
-        else:
-            screen_info = ui.dump_screen_info()
+
+        # [1/5] Reach the Interact screen. After login the runtime finishes
+        # rooting/KEX before the cognitive loop accepts input.
+        print("  [1/5] Waiting for Interact screen...")
+        if not client.wait_for_screen("Interact", timeout=60.0):
             return TestReport(
                 name="test_chat_interaction",
                 result=TestResult.FAILED,
                 duration=time.time() - start_time,
-                message=f"No response received within {response_timeout}s. Screen: {screen_info.get('texts', [])}",
+                message=f"never reached Interact (screen={client.screen()!r})",
+            )
+
+        # [2/5] Message input. The composer can take a while to enable while the
+        # agent reaches WORK; poll generously.
+        print("  [2/5] Waiting for message composer (input_message)...")
+        if not client.wait_for_element("input_message", timeout=150):
+            screenshot_path = f"/tmp/ciris_chat_noinput_{int(time.time())}.png"
+            adb.screenshot(screenshot_path)
+            screenshots.append(screenshot_path)
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Message composer (input_message) never appeared on Interact",
                 screenshots=screenshots,
             )
+
+        # [3/5] Type + send via the test server (reliable testTags).
+        print(f"  [3/5] Typing + sending: {test_message!r}")
+        if not client.input("input_message", test_message):
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="failed to type into input_message",
+            )
+        time.sleep(0.5)
+        if not _click_or_tap(client, adb, "btn_send"):
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="failed to click btn_send",
+            )
+
+        # [4/5] Wait for the agent to actually reason + speak. Poll the LIVE
+        # runtime log — the authoritative source — for a SPEAK / trace seal /
+        # LLM error, instead of scraping UI text.
+        print("  [4/5] Waiting for agent SPEAK + CEG trace (log-authoritative)...")
+        deadline = time.time() + 180
+        ev = {}
+        while time.time() < deadline:
+            ev = _capture_speak_evidence(adb, CIRISAppConfig.PACKAGE)
+            if ev.get("llm_error"):
+                break
+            if ev.get("trace_sealed") or ev.get("speak_content"):
+                break
+            time.sleep(6)
+
+        screenshot_path = f"/tmp/ciris_chat_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        # [5/5] Verdict from the log.
+        llm_bit = (
+            f"LLM {ev.get('llm_model') or '?'} "
+            + ("ERROR: " + ev["llm_error"] if ev.get("llm_error") else ("called" if ev.get("llm_called") else "call-unconfirmed"))
+        )
+        seal_bit = (
+            f"trace sealed ({ev.get('trace_events')} events{', signed' if ev.get('trace_signed') else ''})"
+            if ev.get("trace_sealed")
+            else "NO trace seal"
+        )
+        ship_bit = "shipped" if ev.get("trace_shipped") else ("KEX-present (ship-ready)" if ev.get("kex_present") else "ship-unconfirmed")
+        evidence = f"{llm_bit}; {seal_bit}; {ship_bit}"
+        print(f"  [5/5] Evidence: {evidence}")
+        if ev.get("speak_content"):
+            print(f"    SPEAK: {ev['speak_content']}")
+        for _l in ev.get("log_lines", [])[-12:]:
+            print(f"    | {_l}")
+
+        if ev.get("llm_error"):
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"LLM call failed — {evidence}",
+                screenshots=screenshots,
+            )
+        if not (ev.get("trace_sealed") or ev.get("speak_content")):
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"No agent SPEAK/trace after 180s — {evidence}",
+                screenshots=screenshots,
+            )
+        return TestReport(
+            name="test_chat_interaction",
+            result=TestResult.PASSED,
+            duration=time.time() - start_time,
+            message=f"Real agent reply — {evidence}"
+            + (f'  SPEAK: {ev["speak_content"]}' if ev.get("speak_content") else ""),
+            screenshots=screenshots,
+        )
 
     except Exception as e:
         return TestReport(

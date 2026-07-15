@@ -106,16 +106,24 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     # boot. Opt out with CIRIS_FEDERATION_DELIVERY=false.
     _delivery_on = os.environ.get("CIRIS_FEDERATION_DELIVERY", "true").strip().lower() not in ("0", "false", "no", "off")
 
-    # Rust-side tracing (CIRISAgent#919/#920, new in ciris-server 0.5.114):
-    # without this a Python-embedded agent has ZERO rust logs — every
-    # delivery/rooting diagnostic is invisible (how the trace-flow saga stayed
-    # dark). One line, RUST_LOG-filtered, idempotent.
+    # Rust-side tracing (CIRISAgent#919/#920, ciris-server >=0.5.114): without
+    # this a Python-embedded agent has ZERO rust logs — every delivery/rooting
+    # diagnostic is invisible (how the trace-flow saga stayed dark). On 0.5.116+
+    # init_tracing(log_dir=, filter=) writes a rust log FILE next to the agent's
+    # logs — env-whitelist-proof, so RUST_LOG need not survive the mobile env
+    # scrub (CIRISServer#264 sub-item). Idempotent.
     try:
         import ciris_server as _cs
 
         _init_tracing = getattr(_cs, "init_tracing", None)
         if _init_tracing is not None:
-            _init_tracing()
+            _trace_dir = os.environ.get("CIRIS_HOME") or os.environ.get("CIRIS_DATA_DIR")
+            _log_dir = os.path.join(_trace_dir, "logs") if _trace_dir else None
+            _filter = os.environ.get("RUST_LOG") or "info,ciris_server=debug,ciris_edge=debug,ciris_persist=info"
+            try:
+                _init_tracing(log_dir=_log_dir, filter=_filter)
+            except TypeError:  # pre-0.5.116 bare signature
+                _init_tracing()
     except Exception as _trace_exc:  # noqa: BLE001 — observability must never block boot
         logger.debug("ciris_server.init_tracing unavailable/failed (non-fatal): %s", _trace_exc)
 

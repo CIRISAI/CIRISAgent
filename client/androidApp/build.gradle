@@ -31,7 +31,7 @@ android {
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
             // Release builds use App Bundle which splits by ABI automatically
-            abiFilters "arm64-v8a", "armeabi-v7a"  // x86_64 dropped: ciris-server publishes no android_24_x86_64 wheel yet (upstream ask); API-31+ emulator images translate arm64
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"  // x86_64 restored — ciris-server 0.5.116 ships android_24_x86_64 (emulator-native, no translation)
         }
 
         // Chaquopy Python configuration
@@ -59,7 +59,7 @@ android {
                 // installs the Android-bundled Python raises ModuleNotFound
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
-                install "ciris-server==0.5.115"  // ONE substrate wheel (persist v17.2.0 / edge v13.0.8 / verify v10.2.0 bundled) — Android wheels on PyPI (arm64-v8a, armeabi-v7a; x86_64 pending upstream)
+                install "ciris-server==0.5.116"  // ONE substrate wheel (persist v17.2.0 / edge v13.0.8 / verify v10.2.0 bundled) — Android wheels on PyPI (arm64-v8a, armeabi-v7a; x86_64 pending upstream)
                                 // ciris-lens-core is REQUIRED by the accord_metrics adapter
                 // in 2.9.6+ (CIRISAgent#866 LensCore fold) — the fourth
                 // substrate leg. Android wheels ship in the lens-core release

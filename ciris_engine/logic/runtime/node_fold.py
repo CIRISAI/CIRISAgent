@@ -64,6 +64,20 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     if _node_thread is not None and _node_thread.is_alive():
         return
 
+    # In-process runtime RESTART (mobile post-setup): the prior runtime's node
+    # may still be serving 4243 on its own tokio thread (module globals can be
+    # wiped by the re-import while the daemon thread lives on). The node is a
+    # process-singleton — if 4243 already accepts, reuse it: its brain proxy
+    # targets 127.0.0.1:<brain_port>, which the restarted brain rebinds.
+    import socket as _socket
+
+    try:
+        with _socket.create_connection(("127.0.0.1", 4243), timeout=1):
+            logger.info("Node fold: 4243 already serving (prior runtime in this process) — reusing the live node")
+            return
+    except OSError:
+        pass
+
     try:
         import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
     except Exception as exc:  # noqa: BLE001
@@ -120,7 +134,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
         _mobile = is_android() or is_ios()
     except Exception:  # noqa: BLE001
         _mobile = False
-    _attempts = 350 if _mobile else 115  # mobile ~180s (translated compose on existing data), desktop ~60s
+    _attempts = 190 if _mobile else 115  # mobile ~100s (must sit UNDER the 120s Start Adapters step timeout), desktop ~60s
     for _ in range(_attempts):
         if _node_error is not None:
             raise RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {_node_error}")
@@ -133,7 +147,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     if _node_error is not None:
         raise RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {_node_error}")
     if not node_up:
-        raise RuntimeError("node fold: read-API did not bind 127.0.0.1:4243 within 60s (node-fails ⇒ agent-fails)")
+        raise RuntimeError("node fold: read-API did not bind 127.0.0.1:4243 in the bind window (node-fails ⇒ agent-fails)")
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 ✅")
     # The node's SIGNED self identity-occurrence publish + trusted-peer boot-prime
     # are owned by the substrate (CIRISServer#227 S1, ciris-server >=0.5.101) — the

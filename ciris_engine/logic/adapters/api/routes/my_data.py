@@ -848,26 +848,36 @@ TAU_ISOLATED = 0.60
 def _newest_community_trust_row(engine: Any, key_id: str) -> Optional[Dict[str, Any]]:
     """Newest attestation row on ``consent:community_trust:v1`` by key_id.
 
-    Tries a dimension-scoped filter first (keeps the community-trust row
-    from falling off page 1 as per-user consent rows accumulate); falls
-    back to the unfiltered page if persist rejects the filter key.
+    Uses persist's ``list_scores`` (v17.4 FSD-005 Appendix C, bundled in
+    ciris-server 0.5.117): the durable newest-by-(subject, dimension) seek
+    over the V106 ``scores`` projection. ``dimension_exact`` filters at the
+    substrate and rows come back newest-first, so ``limit=1`` IS the head —
+    no Python-side fetch-100-then-fold (the old ``list_attestations``
+    dimension filter silently no-op'd, forcing the fold). Structural rows
+    (withdraws/recants/supersedes) are included in the seek, so a severed
+    edge surfaces as the newest row and ``_community_grant_edge`` reads it.
+
+    Scope note — this reads the FEDERATION-TIER projection: an interim
+    LOCAL-TIER grant (unpromoted sentinel row, canonical community key
+    unpublished) is absent here. That is exactly what
+    ``_community_grant_edge`` discounts anyway (a self-authored row with no
+    counterparty is the solipsism τ exists to discount), so the "None here"
+    path and the old "sentinel excluded" path collapse to the same verdict.
+    Contrast ``current_community_grant_id`` in consent/attestation.py, which
+    MUST keep the fetch-fold to stay local-tier-visible for revocation
+    targeting (list_scores would silently fail to find the interim grant and
+    break consent withdrawal — CIRISPersist ask: local-tier dimension seek).
     """
     import json as _json
 
     try:
-        raw = engine.list_attestations(_json.dumps({"dimension": "consent:community_trust:v1"}), None, 100, key_id)
-    except Exception:
-        raw = engine.list_attestations("{}", None, 100, key_id)
-    page = _json.loads(raw)
-    rows = [
-        r
-        for r in page.get("items", [])
-        if (r.get("attestation_envelope") or {}).get("dimension") == "consent:community_trust:v1"
-    ]
-    if not rows:
+        raw = engine.list_scores(_json.dumps({"dimension_exact": "consent:community_trust:v1"}), None, 1, key_id)
+    except Exception:  # pragma: no cover - defensive (pre-0.5.117 wheels lack list_scores)
         return None
-    rows.sort(key=lambda r: (r.get("asserted_at", ""), r.get("attestation_id", "")), reverse=True)
-    newest: Dict[str, Any] = rows[0]
+    items = _json.loads(raw).get("items", [])
+    if not items:
+        return None
+    newest: Dict[str, Any] = items[0]
     return newest
 
 

@@ -577,11 +577,15 @@ class CIRISRuntime(ServicePropertyMixin):
             timeout=core_services_timeout,
         )
 
+        # Adapter start includes the node fold (compose + bind 4243), which
+        # takes 15-40s on-device under emulator arm64 translation.
+        adapter_start_timeout = 120.0 if (is_android() or is_ios()) else 30.0
         init_manager.register_step(
             phase=InitializationPhase.SERVICES,
             name="Start Adapters",
             handler=self._start_adapters,
             critical=True,
+            timeout=adapter_start_timeout,
         )
 
         init_manager.register_step(

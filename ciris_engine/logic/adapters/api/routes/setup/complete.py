@@ -993,6 +993,21 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
 
             engine = get_persist_engine()
             if engine is None:
+                # First-run mobile boot order: the wizard completes BEFORE the
+                # runtime wires the persist engine (desktop wires it at server
+                # boot, which is why this only bites on-device). The engine is
+                # the signing identity now, so wire it here — same default DSN
+                # the post-setup restart uses; initialize_database is idempotent.
+                # MUST run off the event loop: Engine() spins a tokio runtime
+                # and block_on's — on the asyncio thread that deadlocks
+                # ("Cannot start a runtime from within a runtime").
+                import asyncio
+
+                from ciris_engine.logic.persistence import initialize_database
+
+                await asyncio.get_event_loop().run_in_executor(None, initialize_database)
+                engine = get_persist_engine()
+            if engine is None:
                 raise RuntimeError("persist engine not wired — no signing identity available")
             signing_key_id = str(engine.local_derived_key_id())
             logger.info(f"[Setup Complete] Using self-custody signing key (key_id={signing_key_id})")

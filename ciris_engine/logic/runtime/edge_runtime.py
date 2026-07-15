@@ -106,6 +106,19 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     # boot. Opt out with CIRIS_FEDERATION_DELIVERY=false.
     _delivery_on = os.environ.get("CIRIS_FEDERATION_DELIVERY", "true").strip().lower() not in ("0", "false", "no", "off")
 
+    # Rust-side tracing (CIRISAgent#919/#920, new in ciris-server 0.5.114):
+    # without this a Python-embedded agent has ZERO rust logs — every
+    # delivery/rooting diagnostic is invisible (how the trace-flow saga stayed
+    # dark). One line, RUST_LOG-filtered, idempotent.
+    try:
+        import ciris_server as _cs
+
+        _init_tracing = getattr(_cs, "init_tracing", None)
+        if _init_tracing is not None:
+            _init_tracing()
+    except Exception as _trace_exc:  # noqa: BLE001 — observability must never block boot
+        logger.debug("ciris_server.init_tracing unavailable/failed (non-fatal): %s", _trace_exc)
+
     try:
         edge = init_edge_runtime(
             engine,

@@ -162,7 +162,7 @@ class CIRISAppConfig:
     TAG_BTN_SEND = "btn_send"
 
     # Timeouts (in seconds)
-    TIMEOUT_APP_LAUNCH = 60
+    TIMEOUT_APP_LAUNCH = 180  # cold first boot: attestation (11 steps) + 22 services on emulator swiftshader takes 75-120s
     TIMEOUT_GOOGLE_SIGNIN = 30
     TIMEOUT_SETUP = 90  # Increased for multi-step wizard
     TIMEOUT_CHAT_RESPONSE = 30
@@ -983,7 +983,10 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
             return fail("age_range", "failed to click btn_next (finish) on age-range step")
 
         # ── Step 5: COMPLETE — leave the wizard or reach the terminal step ─
-        deadline = time.time() + 30
+        # 150s: setup-complete now wires the persist engine (keyring genesis:
+        # hardware-wrapped Ed25519 + PQC) which takes 60-120s under emulator
+        # arm64 translation.
+        deadline = time.time() + 150
         completed_via = None
         while time.time() < deadline:
             screen = client.screen()
@@ -1000,7 +1003,7 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
         screenshots.append(screenshot_path)
 
         if completed_via is None:
-            return fail("complete", f"still on Setup with btn_next after 30s (screen={client.screen()!r})")
+            return fail("complete", f"still on Setup with btn_next after 150s (screen={client.screen()!r})")
 
         return TestReport(
             name="test_setup_wizard",
@@ -1243,16 +1246,23 @@ def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> Test
 
         print("  [2/5] Finding message input...")
 
-        # Find the message input field
-        # First try by test tag (resource-id contains the tag)
-        input_field = ui.find_by_resource_id(CIRISAppConfig.TAG_INPUT_MESSAGE)
-        if not input_field:
-            # Fallback: Look for EditText with hint "Type your message..."
-            input_field = ui.find_by_text(CIRISAppConfig.TEXT_TYPE_MESSAGE)
-        if not input_field:
-            # Try finding by class
-            edit_texts = ui.find_by_class("EditText")
-            input_field = edit_texts[0] if edit_texts else None
+        # Find the message input field. Post-setup the runtime restarts all 22
+        # services before chat composes — 60-120s under emulator arm64
+        # translation — so retry until the input appears rather than sampling once.
+        input_field = None
+        _input_deadline = time.time() + 150
+        while input_field is None and time.time() < _input_deadline:
+            # First try by test tag (resource-id contains the tag)
+            input_field = ui.find_by_resource_id(CIRISAppConfig.TAG_INPUT_MESSAGE)
+            if not input_field:
+                # Fallback: Look for EditText with hint "Type your message..."
+                input_field = ui.find_by_text(CIRISAppConfig.TEXT_TYPE_MESSAGE)
+            if not input_field:
+                # Try finding by class
+                edit_texts = ui.find_by_class("EditText")
+                input_field = edit_texts[0] if edit_texts else None
+            if not input_field:
+                time.sleep(5)
 
         if not input_field:
             return TestReport(

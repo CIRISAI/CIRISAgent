@@ -102,8 +102,10 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     _node_thread = threading.Thread(target=_run, name="ciris-node-fold", daemon=True)
     _node_thread.start()
 
-    # node-fails ⇒ agent-fails: give the node a moment to compose + bind 4243;
-    # if it died on startup, abort the whole boot.
+    # node-fails ⇒ agent-fails: give the node time to compose + bind 4243;
+    # if it died on startup, abort the whole boot. Desktop composes in ~2-3s;
+    # on-device under arm64 translation (emulator) the same compose takes
+    # 15-40s, so the window is 60s — an early _node_error still aborts fast.
     time.sleep(2.5)
     if _node_error is not None:
         raise RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {_node_error}")
@@ -112,7 +114,16 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     import socket
 
     node_up = False
-    for _ in range(6):
+    try:
+        from ciris_engine.logic.utils.path_resolution import is_android, is_ios
+
+        _mobile = is_android() or is_ios()
+    except Exception:  # noqa: BLE001
+        _mobile = False
+    _attempts = 350 if _mobile else 115  # mobile ~180s (translated compose on existing data), desktop ~60s
+    for _ in range(_attempts):
+        if _node_error is not None:
+            raise RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {_node_error}")
         try:
             with socket.create_connection(("127.0.0.1", 4243), timeout=1):
                 node_up = True
@@ -122,7 +133,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     if _node_error is not None:
         raise RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {_node_error}")
     if not node_up:
-        raise RuntimeError("node fold: read-API did not bind 127.0.0.1:4243 (node-fails ⇒ agent-fails)")
+        raise RuntimeError("node fold: read-API did not bind 127.0.0.1:4243 within 60s (node-fails ⇒ agent-fails)")
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 ✅")
     # The node's SIGNED self identity-occurrence publish + trusted-peer boot-prime
     # are owned by the substrate (CIRISServer#227 S1, ciris-server >=0.5.101) — the

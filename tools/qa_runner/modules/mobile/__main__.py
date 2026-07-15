@@ -1078,6 +1078,7 @@ def test_command(args) -> int:
         test_password=test_password,
         llm_api_key=llm_api_key,
         llm_provider=args.llm_provider,
+        llm_model=getattr(args, "llm_model", None) or "",
         test_message=args.message,
         output_dir=args.output_dir,
         save_screenshots=not args.no_screenshots,
@@ -1479,6 +1480,7 @@ Examples:
         help="Path to file containing LLM API key",
     )
     test_parser.add_argument("--llm-provider", default="groq", help="LLM provider for setup")
+    test_parser.add_argument("--llm-model", default=None, help="LLM model id for the wizard (exact, case-sensitive)")
     test_parser.add_argument(
         "--message",
         default="Hello CIRIS! This is an automated test. Please respond briefly.",

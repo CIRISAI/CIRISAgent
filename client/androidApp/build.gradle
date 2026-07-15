@@ -31,7 +31,7 @@ android {
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
             // Release builds use App Bundle which splits by ABI automatically
-            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
+            abiFilters "arm64-v8a", "armeabi-v7a"  // x86_64 dropped: ciris-server publishes no android_24_x86_64 wheel yet (upstream ask); API-31+ emulator images translate arm64
         }
 
         // Chaquopy Python configuration
@@ -42,7 +42,7 @@ android {
             // ciris_engine MUST be included for startup hash verification to work!
             // ciris_edge added in 2.9.4 — Edge is the third leg of the
             // substrate triple and must be import-able from Python at boot.
-            extractPackages "pydantic_core", "ciris_persist", "ciris_edge", "ciris_lens_core", "ciris_engine", "ciris_adapters"
+            extractPackages "pydantic_core", "ciris_server", "ciris_engine", "ciris_adapters"
 
             pip {
                 options "--find-links", "wheels"  // Local wheels directory
@@ -59,16 +59,14 @@ android {
                 // installs the Android-bundled Python raises ModuleNotFound
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
-                install "ciris-persist==5.5.5"
-                install "ciris-edge==2.2.1"
-                // ciris-lens-core is REQUIRED by the accord_metrics adapter
+                install "ciris-server==0.5.115"  // ONE substrate wheel (persist v17.2.0 / edge v13.0.8 / verify v10.2.0 bundled) — Android wheels on PyPI (arm64-v8a, armeabi-v7a; x86_64 pending upstream)
+                                // ciris-lens-core is REQUIRED by the accord_metrics adapter
                 // in 2.9.6+ (CIRISAgent#866 LensCore fold) — the fourth
                 // substrate leg. Android wheels ship in the lens-core release
                 // artifacts as of v1.0.1 (CIRISLensCore#43.3); refreshed by
                 // the substrate updater (`tools/update_substrate_libs.py
                 // --platform android --lib lens V`).
-                install "ciris-lens-core==1.3.0"
-
+                
                 // Core dependencies (same as original android/app/build.gradle)
                 install "pydantic-core==2.23.4"
                 install "pydantic==2.9.2"

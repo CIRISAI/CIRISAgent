@@ -547,6 +547,7 @@ def main():
     # LLM settings
     parser.add_argument("--llm-key", help="LLM API key for setup wizard")
     parser.add_argument("--llm-provider", default="groq", help="LLM provider for setup")
+    parser.add_argument("--llm-model", default=None, help="LLM model id for setup (exact, case-sensitive)")
 
     # Output settings
     parser.add_argument(
@@ -572,6 +573,7 @@ def main():
         test_email=args.email,
         llm_api_key=args.llm_key or "",
         llm_provider=args.llm_provider,
+        llm_model=args.llm_model or TestConfig.llm_model,
         output_dir=args.output_dir,
         save_screenshots=not args.no_screenshots,
         save_logcat=not args.no_logcat,

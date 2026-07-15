@@ -53,7 +53,6 @@ class QAModule(Enum):
     HOMEASSISTANT_AGENTIC = "homeassistant_agentic"  # Live Home Assistant + Music Assistant integration testing
     DEFERRAL_TAXONOMY = "deferral_taxonomy"  # DSASPDMA rights/needs taxonomy coverage and routing tests
     HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
-    CIRISNODE = "cirisnode"  # CIRISNode integration testing (deferral routing, trace forwarding)
     LICENSED_AGENT = "licensed_agent"  # Licensed agent device auth (RFC 8628) flow testing
     WALLET = "wallet"  # Wallet adapter testing (x402, validation, spending limits)
     DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
@@ -294,10 +293,6 @@ class QAConfig:
     # carry the stale :4243 until the 0.5.93 re-bake; this overrides it.
     canonical_peer: str = "108.61.242.236:4242"
 
-    # Live CIRISNode configuration (--live-node flag for cirisnode tests)
-    # When True, runs additional tests against live CIRISNode server
-    live_node: bool = False
-
     # Live Portal configuration (--live-portal flag for licensed_agent tests)
     # When True, runs tests against live CIRISPortal server
     live_portal: bool = False
@@ -463,9 +458,6 @@ class QAConfig:
             from .modules.he300_benchmark_tests import HE300BenchmarkModule
 
             return HE300BenchmarkModule.get_he300_benchmark_tests()
-        elif module == QAModule.CIRISNODE:
-            # CIRISNode integration tests use SDK client
-            return []  # Will be handled separately by runner
         elif module == QAModule.DEGRADED_MODE:
             # Degraded mode tests use SDK client
             return []  # Will be handled separately by runner

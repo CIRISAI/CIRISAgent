@@ -10,9 +10,10 @@ substrate wheels alongside it recreates the dual-registry cohabitation class:
 
 This test makes the invariant a hard gate: when ciris-server is installed,
 none of the standalone substrate wheels may be co-installed. The Python
-ciris-verify wheel is EXEMPT — it is the L1-L4 attestation FFI client, a
-different artifact from the in-wheel verify crate, and remains standalone
-until the Phase-3 fold.
+ciris-verify wheel is EXEMPT — a leftover install is harmless (it is a
+C-ABI client artifact, not a second PyO3 type registry). As of the 2.9.7
+DRY purge the agent no longer pins or imports it: tree_verify rides the
+ciris-server wheel's ``ciris_verify_tree`` C symbol directly.
 """
 
 from __future__ import annotations

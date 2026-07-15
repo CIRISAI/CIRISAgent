@@ -431,14 +431,10 @@ fun InteractScreen(
                 )
             }
 
-            // Consent-objects card (change #3a) — bilateral consent:replication
-            // across the two connected nodes. Hidden in FG (inspect mode).
-            if (consentObjectsViewModel != null && visualizationMode != VisualizationMode.FOREGROUND) {
-                ConsentObjectsCard(
-                    viewModel = consentObjectsViewModel,
-                    theme = theme,
-                )
-            }
+            // Consent-objects (bilateral consent:replication) is NOT surfaced on
+            // the Interact main page — the interact surface is just interact. The
+            // consent-objects management lives under Settings → Consent
+            // (Screen.Consent / Screen.ManageConsent), reachable from the nav.
 
             // FG detail panel is rendered as a side overlay INSIDE the
             // chat-area Box (see below) rather than inline here, so it

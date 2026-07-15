@@ -418,6 +418,15 @@ fun CIRISApp(
     var contactsPickerSourceScreen by remember { mutableStateOf<Screen?>(null) }
     var pickedDelegationKeyId by remember { mutableStateOf<String?>(null) }
 
+    // Add-Federation-ID (catch-up) return target + one-shot guard. The guided
+    // AddFederationIdScreen is reached two ways: manually from Manage Nodes
+    // (return there) and auto-presented after login for a legacy owner with no
+    // fed-ID (return to Interact). [addFederationIdReturnScreen] records which,
+    // and [fedIdCatchupPrompted] makes the auto-present fire at most once per
+    // session so returning to Interact doesn't re-trigger it.
+    var addFederationIdReturnScreen by remember { mutableStateOf<Screen>(Screen.ManageNodes) }
+    var fedIdCatchupPrompted by remember { mutableStateOf(false) }
+
     // Track screen changes for test automation
     LaunchedEffect(currentScreen) {
         TestAutomation.setCurrentScreen(currentScreen::class.simpleName ?: "unknown")
@@ -432,8 +441,9 @@ fun CIRISApp(
             // GraphMemory goes back to Memory list
             is Screen.GraphMemory -> Screen.Memory
 
-            // Add Federation ID (catch-up) goes back to Manage Nodes
-            is Screen.AddFederationId -> Screen.ManageNodes
+            // Add Federation ID (catch-up) goes back to its origin: Manage Nodes
+            // for the manual entry, Interact for the post-login auto-present.
+            is Screen.AddFederationId -> addFederationIdReturnScreen
 
             // DataManagement and LLMSettings go back to Interact (main screen)
             is Screen.DataManagement -> Screen.Interact
@@ -672,6 +682,31 @@ fun CIRISApp(
     // Node switcher (change #1) + consent-objects (change #3a)
     val nodeSwitcherViewModel: NodeSwitcherViewModel = viewModel {
         NodeSwitcherViewModel(apiClient)
+    }
+    // Catch-up: an existing logged-in owner whose local node has NO fed-ID
+    // (legacy WA claim) must be auto-presented the guided Add Federation ID flow
+    // after login — the startup owned-nodes projection ran UNAUTHENTICATED (or
+    // pre-claim), so it couldn't know. We hook the FINAL landing screen
+    // (Interact) rather than the token assignment so we don't race the several
+    // login continuations that set currentScreen afterwards. Once authenticated
+    // and on Interact, refresh owned-nodes and reuse the SAME condition Manage
+    // Nodes uses to show the entry (ownerHasFedId == false: legacy owner, no
+    // fed-ID; null = unknown → fail-closed, don't prompt). One-shot via
+    // fedIdCatchupPrompted; naturally false once a fed-ID exists.
+    LaunchedEffect(currentScreen, currentAccessToken) {
+        if (currentScreen !is Screen.Interact) return@LaunchedEffect
+        if (currentAccessToken == null || fedIdCatchupPrompted) return@LaunchedEffect
+        try {
+            nodeSwitcherViewModel.reload()
+        } catch (e: Exception) {
+            PlatformLogger.w(TAG, "[fed-id-catchup] owned-nodes reload failed: ${e.message}")
+        }
+        if (nodeSwitcherViewModel.ownerHasFedId.value == false) {
+            fedIdCatchupPrompted = true
+            addFederationIdReturnScreen = Screen.Interact
+            PlatformLogger.i(TAG, "[fed-id-catchup] legacy owner has no fed-ID — auto-presenting Add Federation ID")
+            currentScreen = Screen.AddFederationId
+        }
     }
     val consentObjectsViewModel: ConsentObjectsViewModel = viewModel {
         ConsentObjectsViewModel(apiClient)
@@ -1982,6 +2017,12 @@ fun CIRISApp(
                     onNavigateToVizSettings = {
                         PlatformLogger.i("CIRISApp", "[Settings] Navigating to Viz Settings")
                         currentScreen = Screen.VizSettings
+                    },
+                    // Consent-objects belong under Settings (not the Interact
+                    // surface). Routes to the consent management surface.
+                    onNavigateToConsent = {
+                        PlatformLogger.i("CIRISApp", "[Settings] Navigating to Manage Consent")
+                        currentScreen = Screen.ManageConsent
                     }
                 )
             }
@@ -2904,7 +2945,12 @@ fun CIRISApp(
                     onBack = { currentScreen = Screen.Interact },
                     onClaimNode = { currentScreen = Screen.ClaimNode },
                     // Catch-up: legacy owner (no fed-ID) → guided Add Federation ID.
-                    onAddFederationId = { currentScreen = Screen.AddFederationId },
+                    // Manual entry returns to Manage Nodes (vs. the login auto-
+                    // present, which returns to Interact).
+                    onAddFederationId = {
+                        addFederationIdReturnScreen = Screen.ManageNodes
+                        currentScreen = Screen.AddFederationId
+                    },
                     // Graph-view data sources: delegations (you → agent),
                     // consent:replication (node ↔ node), plus the shared API
                     // client that powers the live neural background.
@@ -2920,8 +2966,10 @@ fun CIRISApp(
                 PlatformLogger.d(TAG, "[Screen.AddFederationId] Rendering add-federation-id screen")
                 AddFederationIdScreen(
                     viewModel = nodeSwitcherViewModel,
-                    onBack = { currentScreen = Screen.ManageNodes },
-                    onDone = { currentScreen = Screen.ManageNodes },
+                    // Return to wherever we came from: Manage Nodes for the manual
+                    // entry, Interact for the post-login catch-up auto-present.
+                    onBack = { currentScreen = addFederationIdReturnScreen },
+                    onDone = { currentScreen = addFederationIdReturnScreen },
                 )
             }
 

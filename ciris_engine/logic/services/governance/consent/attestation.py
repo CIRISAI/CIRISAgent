@@ -420,28 +420,26 @@ def current_community_grant_id() -> Optional[str]:
     """attestation_id of the current community-trust grant, or None.
 
     The structural primitives (withdraws/recants/supersedes) reference this as
-    their ``target``. Reads back via ``list_attestations`` and picks the latest
-    ``scores`` row on the community-trust dimension.
+    their ``target``. Reads via ``list_attestations`` (dimension_exact-scoped)
+    and picks the latest ``scores`` row on the community-trust dimension.
 
-    DELIBERATELY still on the ``list_attestations`` fetch-then-fold (NOT the
-    ``list_scores`` seek that ``_newest_community_trust_row`` adopted in 2.9.7):
-    this lookup must find the INTERIM grant (unpromoted, written while the
-    canonical community key is unpublished) so a user's withdrawal can target
-    it. ``list_scores`` HAS a working ``tier`` selector (Local/Federation/Any,
-    verified on 0.5.117) — but it seeks on ``subject_key_ids``, and the
-    interim grant is emitted UNDIRECTED (``subject_key_ids=[]`` so it can never
-    federate), so it is absent from ``list_scores`` at EVERY tier. Migrating
-    here would make consent withdrawal silently no-op (``target=None`` → no
-    revocation emitted). The fetch-fold over ``list_attestations`` is the only
-    read that sees the subjectless interim row today. (#921)
+    Stays on ``list_attestations`` — NOT the ``list_scores`` seek that
+    ``_newest_community_trust_row`` adopted in 2.9.7 — because this lookup must
+    find the INTERIM grant (unpromoted, written while the canonical community
+    key is unpublished) so a user's withdrawal can target it. ``list_scores``
+    seeks the V106 ``subject_key_ids`` projection, and the interim grant is
+    emitted UNDIRECTED (``subject_key_ids=[]`` so it can never federate) → it
+    projects zero V106 rows → invisible to ``list_scores`` at EVERY tier
+    (CIRISPersist#461: tier was a red herring, subject-presence is the axis).
+    ``list_attestations`` sees all tiers AND subjectless rows, so it stays.
 
-    TODO(CIRISPersist#461): migrate to ``list_scores(tier="Any")`` once the
-    interim grant carries a self-subject (``subject_key_ids=[self]``, relying
-    on tier=local for the no-federate property) — GATED on confirming
-    lens-core's seal-time consent read is the same V106 subject seek. If it
-    is, the current subjectless interim row may not gate at seal at all, and
-    the self-subject fix aligns the lens gate AND this lookup; then delete this
-    fold, matching ``_newest_community_trust_row``.
+    TODO(CIRISPersist#461): the full fetch-fold goes away by giving the interim
+    grant a self-subject (``subject_key_ids=[self]``, tier=local for the
+    no-federate property) and migrating to ``list_scores(tier="Any")`` — GATED
+    on confirming lens-core's seal-time consent read is the same V106 subject
+    seek (if it is, today's subjectless interim row may not gate at seal at
+    all, and the self-subject fix aligns the lens gate AND this lookup). Until
+    then the dimension_exact-scoped list_attestations read is the correct one.
     """
     engine = _resolve_engine()
     key_id = _resolve_attesting_key_id()
@@ -450,14 +448,17 @@ def current_community_grant_id() -> Optional[str]:
     try:
         import json as _json
 
-        page = _json.loads(engine.list_attestations("{}", None, 100, key_id))  # type: ignore[attr-defined]
+        # dimension_exact is honored at the substrate as of persist v17.5.2
+        # (CIRISPersist#461 — it was a silent no-op before), so the query is
+        # dimension-scoped and the community-trust row can't fall off page 1 as
+        # per-user consent rows accumulate. list_attestations (not list_scores)
+        # is still required: it sees ALL tiers AND subjectless rows, so the
+        # UNDIRECTED interim grant remains findable for revocation targeting.
+        page = _json.loads(
+            engine.list_attestations(_json.dumps({"dimension_exact": _COMMUNITY_TRUST_DIMENSION}), None, 100, key_id)  # type: ignore[attr-defined]
+        )
         rows = page.get("items", [])
-        grants = [
-            r
-            for r in rows
-            if r.get("attestation_type") == "scores"
-            and (r.get("attestation_envelope") or {}).get("dimension") == _COMMUNITY_TRUST_DIMENSION
-        ]
+        grants = [r for r in rows if r.get("attestation_type") == "scores"]
         if not grants:
             return None
         grants.sort(key=lambda r: r.get("asserted_at", ""), reverse=True)

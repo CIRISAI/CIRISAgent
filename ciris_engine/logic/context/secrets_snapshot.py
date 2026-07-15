@@ -23,15 +23,15 @@ async def build_secrets_snapshot(secrets_service: SecretsService) -> JSONDict:
     """
     try:
         # Get recent secrets (limit to last 10 for context)
-        all_secrets = await secrets_service.store.list_all_secrets()
+        all_secrets = await secrets_service.list_all_secrets()
         recent_secrets = sorted(all_secrets, key=lambda s: s.created_at, reverse=True)[:10]
 
         # Convert SecretReference objects to strings for SystemSnapshot compatibility
         detected_secrets: List[str] = [str(s.uuid) for s in recent_secrets]
 
-        # Get filter version
-        filter_config = secrets_service.filter.get_filter_config()
-        filter_version = filter_config.version
+        # Filter version comes from the substrate catalog envelope
+        filter_config = await secrets_service.get_filter_config()
+        filter_version = int(filter_config.get("version", 0))
 
         # Get total count
         total_secrets = len(all_secrets)

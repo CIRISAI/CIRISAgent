@@ -337,11 +337,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         if not secret_refs:
             return attributes_dict
 
-        should_decrypt = False
-        if self.secrets_service and hasattr(self.secrets_service, "filter"):
-            should_decrypt = action_type in getattr(
-                self.secrets_service.filter.detection_config, "auto_decrypt_for_actions", ["speak", "tool"]
-            )
+        # Auto-decrypt policy: the Python filter (and its per-config
+        # auto_decrypt_for_actions) is substrate-owned now; the agent keeps the
+        # long-standing default — decapsulate only for outward-facing actions.
+        should_decrypt = self.secrets_service is not None and action_type in ("speak", "tool")
 
         if should_decrypt:
             _attributes_str = json.dumps(attributes_dict, cls=DateTimeEncoder)

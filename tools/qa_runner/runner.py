@@ -983,54 +983,28 @@ class QARunner:
             return False
 
     def _verify_federation_delivery(self) -> bool:
-        """Verify CEG traces reached canonical-server-1 (the Reticulum delivery path).
+        """Verify CEG delivery preconditions to canonical-server-1 (log-based).
 
-        Distinct from the live-lens HTTP tee: this asserts the edge's
-        start_federation_delivery controller actually rooted the canonical peer
-        and shipped to it. Polls the federation API (rooting takes ~60-90s after
-        boot, so retry): GET /v1/federation/peers?canonical_only=true for the
-        canonical key_id + its Edge reachability, and GET /v1/federation/metrics
-        for delivery counters. Best-effort + non-fatal — reports, never crashes
-        the run.
+        TWO delivery paths (CIRISServer#260 RCA):
+          - keys + attestations ride the anti-entropy ROUNDS (Key / Attestation /
+            IdentityOccurrence) — green once the canonical roots; confirmed by
+            round completions on the peer, not by any envelope counter.
+          - CEG traces ride SEALED ENVELOPES (start_federation_delivery), which
+            are KEX-gated: resolve_peer_kex_pubkeys(canonical) must be Some.
+
+        The old HTTP probes (/v1/federation/peers, /v1/federation/metrics) are
+        gone — the Python federation routes were substrate-deleted in 2.9.7 and
+        the node does not expose delivery counters over HTTP yet (upstream ask in
+        CIRISServer#260). AUTHORITATIVE signals are log-based: the
+        [DELIVERY-PROBE] line carries rooting (edge.knows_peer) + the post-root
+        KEX poll verdict. Best-effort + non-fatal — reports, never crashes the run.
         """
         self.console.print("\n" + "=" * 60)
         self.console.print("[bold cyan]🛰️  Federation delivery verification (canonical-server-1)[/bold cyan]")
         self.console.print("=" * 60)
-        if not self.token:
-            self._authenticate()
-        headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
-        base = self.config.base_url
 
-        def _get(path: str):
-            try:
-                r = requests.get(f"{base}{path}", headers=headers, timeout=10)
-                return r.status_code, (r.json() if r.headers.get("content-type", "").startswith("application/json") else None)
-            except Exception as exc:  # noqa: BLE001
-                return None, {"error": str(exc)[:120]}
-
-        # AUTHORITATIVE rooting = the edge's Reticulum rooted-peer map
-        # (edge.knows_peer), surfaced by the server-side delivery-rooting probe
-        # into logs/<backend>/latest.log. peer_reachability_ratio from
-        # /federation/metrics is NOT that signal — it reflects an HTTP/persist
-        # reachability layer and can read 1.0 while the Reticulum fabric roots
-        # nobody (Node A rejecting every announce with rooting_unknown_key_id,
-        # CIRISServer#216). So we treat reachability_ratio as ADVISORY only and
-        # take rooting + KEX from the probe.
-        #
-        # 1. Metrics: envelopes shipped (the real delivery counter) + advisory ratio.
-        metrics = None
-        for _attempt in range(4):
-            _, mbody = _get("/v1/federation/metrics")
-            metrics = (mbody or {}).get("data") if isinstance(mbody, dict) else None
-            if metrics:
-                break
-            time.sleep(5)
-        reach_ratio = (metrics or {}).get("peer_reachability_ratio") or {} if isinstance(metrics, dict) else {}
-        envelopes_sent = (metrics or {}).get("envelopes_sent_total") or {} if isinstance(metrics, dict) else {}
-        n_sent = sum(v for v in envelopes_sent.values() if isinstance(v, (int, float))) if isinstance(envelopes_sent, dict) else 0
-
-        # 2. Authoritative transport rooting + KEX from the [DELIVERY-PROBE] line
-        #    the server logs once the canonical roots (or times out at 120s).
+        # Transport rooting + KEX from the [DELIVERY-PROBE] line the server logs
+        # once the canonical roots (or times out).
         backend = (self.database_backends[0] if getattr(self, "database_backends", None) else "sqlite")
         probe_log = Path(f"logs/{backend}/latest.log")
         transport_rooted: Optional[bool] = None  # None = probe verdict not yet available
@@ -1060,40 +1034,35 @@ class QARunner:
         self.console.print(f"  canonical peer      : {canonical_key or '<from probe>'}")
         rooted_str = "✅ YES" if transport_rooted else ("❌ NO" if transport_rooted is False else "❓ probe verdict not found")
         self.console.print(f"  transport-rooted    : {rooted_str}  (edge.knows_peer — authoritative)")
-        self.console.print(f"  peer KEX resolvable : {kex_state}  (encryption_pubkeys stored from connect)")
-        self.console.print(f"  envelopes shipped   : {n_sent}")
-        self.console.print(f"  reachability_ratio  : {reach_ratio}  (advisory — HTTP/persist layer, NOT transport rooting)")
-        self.console.print(f"  delivery metrics    : {metrics}")
+        self.console.print(f"  peer KEX resolvable : {kex_state}  (gates the sealed-envelope TRACE path)")
         logger.info(
-            "[FEDERATION-DELIVERY] canonical=%s transport_rooted=%s kex=%s envelopes_sent=%s reachability_ratio_advisory=%s",
+            "[FEDERATION-DELIVERY] canonical=%s transport_rooted=%s kex=%s",
             canonical_key,
             transport_rooted,
             kex_state,
-            n_sent,
-            reach_ratio,
         )
 
         rooted = bool(transport_rooted)
-        if transport_rooted and n_sent > 0:
+        if transport_rooted and kex_state == "PRESENT":
             verdict = (
-                f"✅ Federation delivery LIVE — canonical rooted (edge.knows_peer) and "
-                f"{n_sent} envelope(s) shipped. Trace flow to the canonical mesh confirmed."
+                "✅ Federation delivery preconditions GREEN — canonical rooted (edge.knows_peer) and "
+                "peer KEX resolvable: attestations replicate via rounds AND trace envelopes can seal. "
+                "Confirm trace arrival via Node A trace_events / the mesh-repro trace gate (CIRISServer#260)."
             )
             self.console.print(f"[bold green]{verdict}[/bold green]")
             logger.info("[FEDERATION-DELIVERY] %s", verdict)
         elif transport_rooted:
             verdict = (
-                "⚠️  Canonical is transport-rooted but 0 envelopes shipped — "
-                f"KEX resolvable={kex_state}. If KEX=None, the peer's encryption_pubkeys "
-                "were not stored from the connect handshake (can't seal envelopes)."
+                "⚠️  Canonical rooted — attestation/key delivery (anti-entropy rounds) is live, but "
+                f"peer KEX resolvable={kex_state}: the sealed-envelope TRACE path cannot seal until "
+                "resolve_peer_kex_pubkeys(canonical) returns Some (CIRISServer#260)."
             )
             self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
             logger.warning("[FEDERATION-DELIVERY] %s", verdict)
         else:
             verdict = (
-                "❌ Canonical NOT transport-rooted (edge.knows_peer=false). Node A rejects the "
-                "announce (rooting_unknown_key_id) — its AV-42 peer registry is empty (CIRISServer#216). "
-                "reachability_ratio may still read >0 but that is the HTTP/persist layer, not the fabric."
+                "❌ Canonical NOT transport-rooted (edge.knows_peer=false) — neither rounds nor "
+                "trace envelopes can flow. Check the canonical boot-prime + bootstrap dial."
             )
             self.console.print(f"[bold red]{verdict}[/bold red]")
             logger.warning("[FEDERATION-DELIVERY] %s", verdict)

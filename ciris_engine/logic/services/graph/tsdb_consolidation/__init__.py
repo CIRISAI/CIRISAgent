@@ -1,14 +1,14 @@
 """
 TSDB Consolidation Service Module.
 
-This module consolidates telemetry and graph data into 6-hour summaries
-for long-term memory retention.
+Thin cadence-caller over the persist substrate's consolidators
+(`Engine.tsdb_consolidate_*` / `telemetry_consolidate_period` /
+`tsdb_prune_summaries`). All consolidation compute is substrate-owned.
 
 Components:
-- service.py: Main service class and lifecycle management
-- edge_manager.py: Proper edge creation and management
-- query_manager.py: Querying nodes and correlations for consolidation
-- period_manager.py: Time period calculations and management
+- service.py: Cadence loop + substrate calls
+- period_manager.py: 6h period boundary math
+- date_calculation_helpers.py: weekly/monthly window + retention math
 """
 
 from .service import TSDBConsolidationService

@@ -877,21 +877,30 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
         time.sleep(0.5)
 
         # ── Step 2: ACCOUNT_AND_CONFIRMATION ──────────────────────────────
-        print(f"  [4/7] ACCOUNT: {username} / ******** (+ confirm)")
-        if not client.wait_for_element("input_username", timeout=10):
-            return fail("account", "input_username not found on account step")
-        # Small settles between inputs: the Kotlin side consumes ONE pending
-        # TextInputRequest via a StateFlow slot — back-to-back requests can
-        # overwrite each other before recomposition applies them.
-        if not client.input("input_username", username):
-            return fail("account", "failed to input username")
-        time.sleep(0.5)
-        if not client.input("input_password", password):
-            return fail("account", "failed to input password")
-        time.sleep(0.5)
-        if not client.input("input_password_confirm", password):
-            return fail("account", "failed to input password confirmation")
-        time.sleep(0.5)
+        # Two shapes of this step, gated on SetupScreen's `!state.isGoogleAuth`:
+        #  - LOCAL login → username/password/confirm inputs (input_username).
+        #  - GOOGLE sign-in (full_flow's google_signin ran first) → the account
+        #    is the Google identity; the step is a CONFIRMATION SUMMARY with NO
+        #    local-account inputs, so just confirm. Probe for input_username to
+        #    tell them apart instead of assuming the local path.
+        if client.wait_for_element("input_username", timeout=10):
+            print(f"  [4/7] ACCOUNT (local): {username} / ******** (+ confirm)")
+            # Small settles between inputs: the Kotlin side consumes ONE pending
+            # TextInputRequest via a StateFlow slot — back-to-back requests can
+            # overwrite each other before recomposition applies them.
+            if not client.input("input_username", username):
+                return fail("account", "failed to input username")
+            time.sleep(0.5)
+            if not client.input("input_password", password):
+                return fail("account", "failed to input password")
+            time.sleep(0.5)
+            if not client.input("input_password_confirm", password):
+                return fail("account", "failed to input password confirmation")
+            time.sleep(0.5)
+        else:
+            # Google-auth path: no local inputs — the step is the confirmation
+            # summary. btn_next confirms the Google-provisioned account.
+            print("  [4/7] ACCOUNT (google): confirmation summary — no local inputs, confirming")
         if not _click_or_tap(client, adb, "btn_next"):
             return fail("account", "failed to click btn_next on account step")
         time.sleep(0.5)
@@ -955,6 +964,29 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                 if not client.input("input_api_key", llm_api_key):
                     return fail("llm", "failed to input LLM API key")
                 time.sleep(0.5)
+                # Model: without this the wizard writes OPENAI_MODEL="" and the
+                # provider 404s (no model). The field is a live-models dropdown
+                # once validation has fetched them (menu_model_<sanitized-id>),
+                # else a plain text field (input_llm_model_text) before/without
+                # validation. Set it via whichever composed; tolerate absence
+                # only when no model was requested (provider default).
+                llm_model = config.get("llm_model") or ""
+                if llm_model:
+                    sanitized = llm_model.replace("/", "_").replace(":", "_")
+                    menu_model_tag = f"menu_model_{sanitized}"
+                    if client.is_visible("input_llm_model_text"):
+                        if not client.input("input_llm_model_text", llm_model):
+                            return fail("llm", f"failed to input model {llm_model!r}")
+                        time.sleep(0.5)
+                    elif client.wait_for_element("input_llm_model", timeout=3):
+                        _click_or_tap(client, adb, "input_llm_model")
+                        if not client.wait_for_element(menu_model_tag, timeout=5):
+                            return fail("llm", f"{menu_model_tag} not in model dropdown")
+                        if not _click_or_tap(client, adb, menu_model_tag):
+                            return fail("llm", f"failed to select model {llm_model!r}")
+                        time.sleep(0.5)
+                    else:
+                        return fail("llm", f"no model field (dropdown/text) to set {llm_model!r}")
             else:
                 # No key available: keyless "local" (Ollama) provider lets the
                 # wizard proceed and the backend start without a real key.

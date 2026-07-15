@@ -448,6 +448,7 @@ class MobileTestRunner:
             "clear_data": self.config.clear_data,
             "llm_provider": self.config.llm_provider,
             "llm_api_key": self.config.llm_api_key,
+            "llm_model": self.config.llm_model,
             "test_message": self.config.test_message,
             # Portal / Node settings
             "portal_url": self.config.portal_url,

@@ -11,26 +11,24 @@ What broke and why these tests exist:
    so every basic-consolidation tick after upgrade logged an error and
    `_basic_consolidations` never advanced.
 
-2. **Invalid `node_type`**: 4 other callsites (one in service.py, two in
-   query_manager.py, one in get_summary_for_period) passed
-   `"tsdb_summary"` — the cirisgraph-namespace string — as the first
-   argument. Persist's enum only accepts `task_summary` /
-   `conversation_summary` / `trace_summary` / `audit_summary` and the
-   Rust side answers `unknown summary node_type: tsdb_summary`,
-   returning zero rows. Effect: probes silently always returned
-   "not consolidated", and the agent re-consolidated every tick.
+2. **Invalid `node_type`**: other callsites passed `"tsdb_summary"` —
+   the cirisgraph-namespace string — as the first argument. Persist's
+   enum only accepts `task_summary` / `conversation_summary` /
+   `trace_summary` / `audit_summary` and the Rust side answers
+   `unknown summary node_type: tsdb_summary`, returning zero rows.
+   Effect: probes silently always returned "not consolidated", and the
+   agent re-consolidated every tick.
 
 Both classes of failure are now routed through the shared
-`query_typed_summaries` helper. These tests pin:
+`query_typed_summaries` helper (which lives in service.py since the
+2.9.7 DRY purge deleted query_manager.py). These tests pin:
   - The helper iterates ALL 4 valid persist node_types.
   - Per-type errors don't fail the others (best-effort aggregation).
   - The helper never re-raises — callers can rely on the empty-list
     contract for both "no data" and "all sub-tables errored".
-  - The callers (`check_period_consolidated`,
-    `get_last_consolidated_period`, `_is_period_consolidated`,
-    `get_summary_for_period`, `_consolidate_period`) all funnel through
-    the helper rather than calling `tsdb_query_summary_nodes` directly
-    with the invalid string.
+  - The callers (`get_summary_for_period`, `_consolidate_period`)
+    funnel through the helper rather than calling
+    `tsdb_query_summary_nodes` directly with the invalid string.
 """
 
 from __future__ import annotations
@@ -38,7 +36,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-from ciris_engine.logic.services.graph.tsdb_consolidation.query_manager import (
+from ciris_engine.logic.services.graph.tsdb_consolidation.service import (
     _SUMMARY_NODE_TYPES,
     query_typed_summaries,
 )
@@ -180,12 +178,9 @@ class TestQueryTypedSummaries:
         `tsdb_query_summary_nodes(...)` call, this test catches it."""
         import inspect
 
-        from ciris_engine.logic.services.graph.tsdb_consolidation import (
-            query_manager,
-            service,
-        )
+        from ciris_engine.logic.services.graph.tsdb_consolidation import service
 
-        for module in (service, query_manager):
+        for module in (service,):
             src = inspect.getsource(module)
             # Walk every line where the persist API name appears and
             # confirm no line within ±4 lines mentions the bogus string.

@@ -1230,6 +1230,93 @@ def test_catchup_add_fedid(adb: ADBHelper, ui: UIAutomator, config: dict) -> Tes
         )
 
 
+def _capture_speak_evidence(adb: ADBHelper, package: str = "ai.ciris.mobile.debug") -> dict:
+    """Read the LIVE runtime log off the device and extract hard evidence of a
+    real LLM reply + CEG trace ship — so the chat report carries data, not just
+    "a bubble appeared".
+
+    Returns a dict: {llm_model, llm_called, llm_error, speak_content,
+    trace_sealed, trace_events, trace_signed, trace_shipped, log_lines}.
+    Best-effort: run-as can be blocked on some OEM builds (Samsung) — then the
+    fields are None/empty and the caller notes the log was unavailable.
+    """
+    ev = {
+        "llm_model": None,
+        "llm_called": False,
+        "llm_error": None,
+        "speak_content": None,
+        "trace_sealed": False,
+        "trace_events": None,
+        "trace_signed": False,
+        "trace_shipped": False,
+        "kex_present": False,
+        "log_lines": [],
+    }
+    try:
+        # Resolve the CURRENT runtime log (a setup-complete reload rotates it).
+        link = adb._run_adb(
+            ["shell", "run-as", package, "readlink", "files/ciris/logs/latest.log"], timeout=15
+        )
+        logfile = (link.stdout or "").strip() or "latest.log"
+        cat = adb._run_adb(
+            ["shell", "run-as", package, "cat", f"files/ciris/logs/{logfile}"], timeout=30
+        )
+        text = cat.stdout or ""
+    except Exception as e:  # noqa: BLE001
+        ev["llm_error"] = f"log unavailable: {type(e).__name__}: {e}"
+        return ev
+
+    if not text:
+        return ev
+
+    import re as _re
+
+    lines = text.splitlines()
+    keep = []
+    for ln in lines:
+        low = ln.lower()
+        # Model the runtime actually initialized.
+        m = _re.search(r"LLM Service started with model:\s*(\S+)", ln)
+        if m:
+            ev["llm_model"] = m.group(1)
+        # Real provider call / structured completion.
+        if any(k in low for k in ("openrouter", "call_llm_structured", "llm request", "chat/completions")):
+            ev["llm_called"] = True
+            keep.append(ln)
+        # LLM failure signatures.
+        if any(k in ln for k in ("model_not_available", "401 ", "403 ", "404 ", "429 ", "invalid_request", "RateLimit", "APIError")):
+            if "llm" in low or "openai" in low or "openrouter" in low or "completion" in low:
+                ev["llm_error"] = ln.strip()[:300]
+                keep.append(ln)
+        # The SPEAK the agent produced.
+        if "speakhandler" in low and ("completed" in low or "content" in low):
+            ev["speak_content"] = ln.strip()[:400]
+            keep.append(ln)
+        # CEG trace seal (accord_metrics adapter).
+        if "trace sealed" in low:
+            ev["trace_sealed"] = True
+            cnt = _re.search(r"\((\d+)\s+trace_events", ln)
+            if cnt:
+                ev["trace_events"] = int(cnt.group(1))
+            if "signature" in low and "verif" in low:
+                ev["trace_signed"] = True
+            keep.append(ln)
+        # Sealed-envelope delivery to the canonical. Agent-side "can ship"
+        # precondition = KEX PRESENT (advisory only — NOT proof of a ship).
+        if "kex present" in low:
+            ev["kex_present"] = True
+            keep.append(ln)
+        # An actual ship: an envelope leaving for the canonical. Exclude the
+        # DELIVERY-PROBE / "can now seal envelopes" advisory (it says "seal
+        # envelopes" but ships nothing).
+        if "delivery-probe" not in low and "can now seal" not in low:
+            if ("envelope" in low and any(k in low for k in ("sent", "shipped", "delivered"))) or "delivered to canonical" in low:
+                ev["trace_shipped"] = True
+                keep.append(ln)
+    ev["log_lines"] = keep[-40:]
+    return ev
+
+
 def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
     """
     Test: Send a message and receive a response.
@@ -1360,29 +1447,76 @@ def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> Test
         response_timeout = CIRISAppConfig.TIMEOUT_CHAT_RESPONSE
         start_wait = time.time()
         response_found = False
+        response_text = ""
+
+        # UI chrome that can be >10 chars but is NOT the agent's response.
+        _CHROME = (
+            "Type your message",
+            "Chat with CIRIS",
+            "Welcome to Ally",
+            "Emergency Stop",
+            "Processing",
+            "Thinking",
+        )
+        # Login/setup banners — if one of these is the only "response", the app
+        # bounced OUT of the chat (session/token loss) and never got an agent
+        # reply. Treat that as a hard failure, not a passing response.
+        _LOGIN_MARKERS = (
+            "hosted LLM services require",
+            "Bring your own API key",
+            "Sign in with Google",
+            "Local Login",
+            "Continue as Guest",
+        )
+        bounced_to_login = False
 
         while time.time() - start_wait < response_timeout:
             ui.refresh_hierarchy()
             screen_texts = ui.get_screen_text()
 
-            # Check for processing indicators gone and response present
-            # Agent messages will appear in the chat list
-            # Look for any new text that wasn't our message
+            if any(any(m in t for m in _LOGIN_MARKERS) for t in screen_texts):
+                bounced_to_login = True
+                break
+
+            # Agent messages appear in the chat list. Capture the actual spoken
+            # string (not just "a response exists") so the report proves a real
+            # LLM reply — the longest substantive non-chrome text that isn't our
+            # own message is the agent bubble.
+            best = ""
             for text in screen_texts:
-                # Skip our own message and UI labels
                 if (
                     text != test_message
-                    and text not in ["CIRIS", "You", "Send", "Connected", "Chat with CIRIS"]
-                    and len(text) > 10  # Response should be substantive
-                    and "Type your message" not in text
+                    and text not in ("CIRIS", "You", "Send", "Connected")
+                    and len(text) > 10
+                    and not any(c in text for c in _CHROME)
+                    and not any(m in text for m in _LOGIN_MARKERS)
                 ):
-                    response_found = True
-                    break
+                    if len(text) > len(best):
+                        best = text
 
-            if response_found:
+            if best:
+                response_found = True
+                response_text = best
                 break
 
             time.sleep(1)
+
+        if bounced_to_login:
+            screenshot_path = f"/tmp/ciris_chat_bounce_{int(time.time())}.png"
+            adb.screenshot(screenshot_path)
+            screenshots.append(screenshot_path)
+            ev = _capture_speak_evidence(adb, CIRISAppConfig.PACKAGE)
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=(
+                    "Chat bounced to the Login screen after send — no agent reply. "
+                    f"LLM model={ev['llm_model']}, trace_sealed={ev['trace_sealed']}. "
+                    "The visible 'response' was a login banner, not a CIRIS message."
+                ),
+                screenshots=screenshots,
+            )
 
         # Take screenshot
         screenshot_path = f"/tmp/ciris_chat_{int(time.time())}.png"
@@ -1390,11 +1524,41 @@ def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> Test
         screenshots.append(screenshot_path)
 
         if response_found:
+            print(f"  CIRIS spoke: {response_text!r}")
+            # Give the CEG seal + ship a moment after the visible reply, then
+            # read the LIVE runtime log for hard evidence: which model was hit,
+            # whether the LLM call errored, whether a trace sealed (+ how many
+            # events / signed), and whether the sealed envelope could ship.
+            time.sleep(8)
+            ev = _capture_speak_evidence(adb, CIRISAppConfig.PACKAGE)
+            llm_bit = (
+                f"LLM {ev['llm_model'] or '?'} "
+                + ("ERROR: " + ev["llm_error"] if ev["llm_error"] else ("called" if ev["llm_called"] else "call-unconfirmed"))
+            )
+            seal_bit = (
+                f"trace sealed ({ev['trace_events']} events{', signed' if ev['trace_signed'] else ''})"
+                if ev["trace_sealed"]
+                else "NO trace seal in log"
+            )
+            ship_bit = "shipped" if ev["trace_shipped"] else ("KEX-present (ship-ready)" if ev.get("kex_present") else "ship-unconfirmed")
+            evidence = f"{llm_bit}; {seal_bit}; {ship_bit}"
+            print(f"  Evidence: {evidence}")
+            for _l in ev.get("log_lines", [])[-12:]:
+                print(f"    | {_l}")
+            # An LLM error means the visible bubble was NOT a real reply — fail loudly.
+            if ev["llm_error"]:
+                return TestReport(
+                    name="test_chat_interaction",
+                    result=TestResult.FAILED,
+                    duration=time.time() - start_time,
+                    message=f"UI showed text but LLM call failed — {evidence}. Bubble: {response_text!r}",
+                    screenshots=screenshots,
+                )
             return TestReport(
                 name="test_chat_interaction",
                 result=TestResult.PASSED,
                 duration=time.time() - start_time,
-                message="Message sent and response received",
+                message=f'CIRIS spoke: "{response_text}"  [{evidence}]',
                 screenshots=screenshots,
             )
         else:

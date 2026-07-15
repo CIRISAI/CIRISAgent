@@ -75,7 +75,6 @@ Available modules:
   accord_metrics - Accord metrics trace capture and signing
   homeassistant_agentic - Live Home Assistant configuration and Music Assistant verification
   deferral_taxonomy - DSASPDMA taxonomy coverage and localized deferral classification
-  cirisnode       - CIRISNode integration (deferral routing, trace forwarding)
   licensed_agent  - Licensed agent device auth (RFC 8628) flow testing
   model_eval      - Model quality evaluation with tough questions (requires --live)
   api_full        - All API modules
@@ -165,13 +164,6 @@ Available modules:
         "--canonical-peer",
         default="108.61.242.236:4242",
         help="Canonical edge bootstrap peer host:port for --federation-delivery (default 108.61.242.236:4242; overrides a stale baked :4243 hint via edge #296 union).",
-    )
-
-    # Live CIRISNode configuration (for cirisnode tests)
-    parser.add_argument(
-        "--live-node",
-        action="store_true",
-        help="Run additional tests against live CIRISNode server (node.ciris-services-1.ai) for cirisnode tests",
     )
 
     # Live Portal configuration (for licensed_agent tests)
@@ -643,8 +635,6 @@ def main():
         canonical_peer=args.canonical_peer,
         # Staged-env mode (server runs from canonical-staged-tree wheel in a venv)
         staged_env=staged_env,
-        # Live CIRISNode configuration (for cirisnode tests)
-        live_node=args.live_node,
         # Live Portal configuration (for licensed_agent tests)
         live_portal=args.live_portal,
         # Fail-fast configuration

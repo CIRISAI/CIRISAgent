@@ -336,7 +336,6 @@ class QARunner:
             QAModule.UTILITY_ADAPTERS,
             QAModule.HOMEASSISTANT_AGENTIC,
             QAModule.DEFERRAL_TAXONOMY,
-            QAModule.CIRISNODE,
             QAModule.LICENSED_AGENT,
             QAModule.SOLITUDE_LIVE,
             QAModule.PLAY_LIVE,
@@ -1319,7 +1318,6 @@ class QARunner:
         from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.adapter_manifest_tests import AdapterManifestTests
         from .modules.billing_integration_tests import BillingIntegrationTests
-        from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
         from .modules.deferral_taxonomy_tests import DeferralTaxonomyTests
@@ -1383,7 +1381,6 @@ class QARunner:
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
             QAModule.HOMEASSISTANT_AGENTIC: HomeAssistantAgenticTests,
             QAModule.DEFERRAL_TAXONOMY: DeferralTaxonomyTests,
-            QAModule.CIRISNODE: CIRISNodeTests,
             QAModule.LICENSED_AGENT: LicensedAgentTests,
             QAModule.SOLITUDE_LIVE: SolitudeLiveTests,
             QAModule.PLAY_LIVE: PlayLiveTests,
@@ -1484,9 +1481,6 @@ class QARunner:
                         live_lens=self.config.live_lens,
                         qa_reports_dir=self.server_manager.qa_reports_dir,
                     )
-                # Special handling for CIRISNodeTests - pass live_node config
-                elif module == QAModule.CIRISNODE:
-                    test_instance = test_class(client, self.console, live_node=getattr(self.config, "live_node", False))
                 # Special handling for LicensedAgentTests - pass live_portal config
                 elif module == QAModule.LICENSED_AGENT:
                     test_instance = test_class(

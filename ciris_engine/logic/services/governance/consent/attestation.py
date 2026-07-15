@@ -425,21 +425,23 @@ def current_community_grant_id() -> Optional[str]:
 
     DELIBERATELY still on the ``list_attestations`` fetch-then-fold (NOT the
     ``list_scores`` seek that ``_newest_community_trust_row`` adopted in 2.9.7):
-    this lookup must find the INTERIM LOCAL-TIER grant (unpromoted, written
-    while the canonical community key is unpublished) so a user's withdrawal
-    can target it. ``list_scores`` reads the federation-tier V106 projection
-    only — it cannot see local-tier rows, so migrating here would make consent
-    withdrawal silently no-op (``target=None`` → no revocation emitted → the
-    lens gate keeps permitting local emission). Persist has no local-tier
-    dimension-scoped newest query today (the ``list_attestations`` dimension
-    filter silently no-op's — verified on 0.5.117); until it does, the fold
-    stays. (#921)
+    this lookup must find the INTERIM grant (unpromoted, written while the
+    canonical community key is unpublished) so a user's withdrawal can target
+    it. ``list_scores`` HAS a working ``tier`` selector (Local/Federation/Any,
+    verified on 0.5.117) — but it seeks on ``subject_key_ids``, and the
+    interim grant is emitted UNDIRECTED (``subject_key_ids=[]`` so it can never
+    federate), so it is absent from ``list_scores`` at EVERY tier. Migrating
+    here would make consent withdrawal silently no-op (``target=None`` → no
+    revocation emitted). The fetch-fold over ``list_attestations`` is the only
+    read that sees the subjectless interim row today. (#921)
 
-    TODO(CIRISPersist#461): when persist ships a local-tier dimension seek
-    (either the ``list_attestations`` dimension filter starts filtering, or
-    ``list_scores`` gains a tier/lifecycle selector that includes Local),
-    replace this fetch-100-then-fold with the seek — matching the
-    ``list_scores`` migration ``_newest_community_trust_row`` already did.
+    TODO(CIRISPersist#461): migrate to ``list_scores(tier="Any")`` once the
+    interim grant carries a self-subject (``subject_key_ids=[self]``, relying
+    on tier=local for the no-federate property) — GATED on confirming
+    lens-core's seal-time consent read is the same V106 subject seek. If it
+    is, the current subjectless interim row may not gate at seal at all, and
+    the self-subject fix aligns the lens gate AND this lookup; then delete this
+    fold, matching ``_newest_community_trust_row``.
     """
     engine = _resolve_engine()
     key_id = _resolve_attesting_key_id()

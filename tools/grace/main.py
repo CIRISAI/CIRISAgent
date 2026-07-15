@@ -307,7 +307,6 @@ class Grace:
                     message.append(f"  • {error}")
 
             message.append("\n💡 RCA Mode:")
-            message.append("  docker exec " + container_name + " python debug_tools.py")
             message.append("  Check traces, thoughts, and handler metrics")
         else:
             message.append("✅ No ERROR entries found in recent logs")

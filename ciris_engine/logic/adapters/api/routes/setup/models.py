@@ -533,49 +533,7 @@ class PlayIntegrityVerifyRequest(BaseModel):
     nonce: str = Field(..., description="Nonce used when requesting the token")
 
 
-# Device Auth / Node Connection models
-class ConnectNodeRequest(BaseModel):
-    """Request to initiate device auth via CIRISPortal."""
-
-    node_url: str = Field(..., description="Portal URL (e.g., https://portal.ciris.ai)")
-
-
-class ConnectNodeResponse(BaseModel):
-    """Response from device auth initiation."""
-
-    verification_uri_complete: str = Field(..., description="URL for user to open in browser")
-    device_code: str = Field(..., description="Device code for polling")
-    user_code: str = Field(..., description="Human-readable code")
-    portal_url: str = Field(..., description="Normalized Portal URL (with https://)")
-    expires_in: int = Field(..., description="Seconds until device code expires")
-    interval: int = Field(..., description="Polling interval in seconds")
-
-
-class ConnectNodeStatusResponse(BaseModel):
-    """Response from device auth status polling.
-
-    NOTE (FSD-002 Self-Custody): Portal no longer sends private keys.
-    The agent generates its own Ed25519 keypair and registers the PUBLIC key with Portal.
-    The `signing_key_b64` field is DEPRECATED and always None.
-    """
-
-    status: str = Field(..., description="pending, complete, or error")
-    # Fields below are only set when status == 'complete'
-    template: Optional[str] = Field(None, description="Provisioned identity template ID")
-    adapters: Optional[List[str]] = Field(None, description="Approved adapter list")
-    org_id: Optional[str] = Field(None, description="Organization ID")
-    signing_key_b64: Optional[str] = Field(
-        None,
-        description="DEPRECATED: Always None. Portal never sends private keys (FSD-002 self-custody).",
-        deprecated=True,
-    )
-    key_id: Optional[str] = Field(None, description="Key ID from self-custody registration")
-    stewardship_tier: Optional[int] = Field(None, description="Stewardship tier from template")
-    # Licensed package info — agent downloads this after provisioning
-    package_download_url: Optional[str] = Field(None, description="URL to download licensed module package zip")
-    package_template_id: Optional[str] = Field(None, description="Template ID within the licensed package")
-
-
+# Device Auth models (connect-node flow itself is served by the local node substrate on :4243)
 class DownloadPackageRequest(BaseModel):
     """Request to download and install a licensed module package."""
 

@@ -1,44 +1,51 @@
 """Deletion verification API endpoints.
 
-Provides public verification of DSAR deletion proofs using RSA signatures.
+Provides public verification of DSAR deletion proofs.
+
+Proofs are signed by the substrate's local Ed25519 signing identity
+(ciris-persist ``Engine.local_sign``) over the RFC 8785 (JCS) canonical
+bytes of the deletion data, and verified via ``Engine.verify_hybrid``.
+The homegrown RSA-PSS signer was deleted in the 2.9.7 DRY purge.
 """
 
+import base64
+import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
-from ciris_engine.logic.services.governance.dsar.signature_service import (
-    DeletionProof,
-    RSASignatureService,
-    SignatureVerificationResult,
-)
-
 from ..models import StandardResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/verification", tags=["Verification"])
 
-# Global signature service instance
-_signature_service: Optional[RSASignatureService] = None
+
+class DeletionProof(BaseModel):
+    """Cryptographically signed proof of data deletion (Ed25519)."""
+
+    deletion_id: str = Field(..., description="Unique deletion request ID")
+    user_identifier: str = Field(..., description="User identifier for deleted data")
+    sources_deleted: Dict[str, Any] = Field(..., description="Sources and records deleted")
+    deleted_at: str = Field(..., description="ISO 8601 deletion timestamp")
+    signature: str = Field(..., description="Ed25519 signature (base64) over JCS canonical deletion data")
+    public_key_id: str = Field(..., description="Derived key ID of the local Ed25519 signing identity")
 
 
-def _get_signature_service(req: Request) -> RSASignatureService:
-    """Get or create signature service.
+class SignatureVerificationResult(BaseModel):
+    """Result of signature verification."""
 
-    Args:
-        req: FastAPI request
-
-    Returns:
-        RSASignatureService instance
-    """
-    global _signature_service
-
-    if _signature_service is None:
-        _signature_service = RSASignatureService(key_size=2048)
-
-    return _signature_service
+    valid: bool = Field(..., description="Whether signature is valid")
+    deletion_id: str = Field(..., description="Deletion request ID")
+    user_identifier: str = Field(..., description="User identifier")
+    deleted_at: str = Field(..., description="Deletion timestamp")
+    sources_count: int = Field(..., description="Number of sources deleted")
+    total_records: int = Field(..., description="Total records deleted")
+    message: str = Field(..., description="Verification result message")
+    verified_at: str = Field(..., description="When verification occurred")
 
 
 class VerifyDeletionRequest(BaseModel):
@@ -52,11 +59,115 @@ class ManualSignatureVerificationRequest(BaseModel):
 
     deletion_id: str = Field(..., description="Deletion request ID")
     user_identifier: str = Field(..., description="User identifier")
-    sources_deleted: Dict[str, Any] = Field(..., description="Sources and records deleted (for hash computation)")
+    sources_deleted: Dict[str, Any] = Field(..., description="Sources and records deleted")
     deleted_at: str = Field(..., description="ISO 8601 deletion timestamp")
-    verification_hash: str = Field(..., description="SHA-256 hash to verify")
-    signature: str = Field(..., description="Base64-encoded RSA signature")
+    signature: str = Field(..., description="Base64-encoded Ed25519 signature")
     public_key_id: str = Field(..., description="Public key ID used for signing")
+
+
+def _require_engine() -> Any:
+    """Return the wired persist Engine or raise 503.
+
+    The substrate owns the signing identity; without a wired engine the
+    verification surface cannot operate.
+    """
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    engine = get_persist_engine()
+    if engine is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Signing substrate not available",
+        )
+    return engine
+
+
+def _canonical_proof_bytes(
+    deletion_id: str, user_identifier: str, sources_deleted: Dict[str, Any], deleted_at: str
+) -> bytes:
+    """RFC 8785 (JCS) canonical bytes of the deletion data (signed payload)."""
+    from ciris_verify import jcs_canonicalize  # substrate-provided canonicalizer
+
+    return jcs_canonicalize(
+        {
+            "deletion_id": deletion_id,
+            "user_identifier": user_identifier,
+            "sources_deleted": sources_deleted,
+            "deleted_at": deleted_at,
+        }
+    )
+
+
+def sign_deletion_proof(
+    deletion_id: str, user_identifier: str, sources_deleted: Dict[str, Any], deleted_at: datetime
+) -> DeletionProof:
+    """Create a deletion proof signed by the substrate's local Ed25519 identity."""
+    engine = _require_engine()
+    deleted_at_iso = deleted_at.isoformat()
+    canonical = _canonical_proof_bytes(deletion_id, user_identifier, sources_deleted, deleted_at_iso)
+    try:
+        signature_bytes = engine.local_sign(canonical)
+        public_key_id = engine.local_derived_key_id()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Local signing identity not configured: {e}",
+        )
+    logger.info(f"Deletion proof signed: {deletion_id} using key {public_key_id}")
+    return DeletionProof(
+        deletion_id=deletion_id,
+        user_identifier=user_identifier,
+        sources_deleted=sources_deleted,
+        deleted_at=deleted_at_iso,
+        signature=base64.b64encode(signature_bytes).decode("ascii"),
+        public_key_id=public_key_id,
+    )
+
+
+def _verify_proof(proof: DeletionProof) -> SignatureVerificationResult:
+    """Verify a deletion proof against the substrate's local Ed25519 identity."""
+    engine = _require_engine()
+    verified_at = datetime.now(timezone.utc).isoformat()
+
+    try:
+        public_key_b64 = engine.local_public_key_b64()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Local signing identity not configured: {e}",
+        )
+
+    canonical = _canonical_proof_bytes(
+        proof.deletion_id, proof.user_identifier, proof.sources_deleted, proof.deleted_at
+    )
+
+    try:
+        engine.verify_hybrid(canonical, proof.signature, None, public_key_b64, None, "ed25519_fallback")
+        valid = True
+        message = "Deletion proof verified - signature valid"
+    except ValueError as e:
+        logger.warning(f"Signature verification failed for {proof.deletion_id}: {e}")
+        valid = False
+        message = "Invalid signature - deletion proof cannot be verified"
+
+    total_records = 0
+    if valid:
+        total_records = sum(
+            int(source.get("total_records_deleted", 0))
+            for source in proof.sources_deleted.values()
+            if isinstance(source, dict)
+        )
+
+    return SignatureVerificationResult(
+        valid=valid,
+        deletion_id=proof.deletion_id,
+        user_identifier=proof.user_identifier,
+        deleted_at=proof.deleted_at,
+        sources_count=len(proof.sources_deleted),
+        total_records=total_records,
+        message=message,
+        verified_at=verified_at,
+    )
 
 
 @router.post("/deletion")
@@ -70,39 +181,25 @@ async def verify_deletion_proof(
     NO AUTHENTICATION REQUIRED - Public verification endpoint.
 
     Users can verify that their data was actually deleted by checking
-    the RSA-PSS signature on the deletion proof.
+    the Ed25519 signature on the deletion proof.
 
     Returns verification result with signature validity.
     """
-    import logging
+    verification_result = _verify_proof(request.deletion_proof)
 
-    logger = logging.getLogger(__name__)
+    logger.info(
+        f"Deletion verification request: {request.deletion_proof.deletion_id} - Valid: {verification_result.valid}"
+    )
 
-    signature_service = _get_signature_service(req)
-
-    try:
-        verification_result = signature_service.verify_deletion(request.deletion_proof)
-
-        logger.info(
-            f"Deletion verification request: {request.deletion_proof.deletion_id} - Valid: {verification_result.valid}"
-        )
-
-        return StandardResponse(
-            success=verification_result.valid,
-            data=verification_result.model_dump(),
-            message=verification_result.message,
-            metadata={
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "public_endpoint": True,
-            },
-        )
-
-    except Exception as e:
-        logger.error(f"Deletion verification failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Verification failed: {str(e)}",
-        )
+    return StandardResponse(
+        success=verification_result.valid,
+        data=verification_result.model_dump(),
+        message=verification_result.message,
+        metadata={
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "public_endpoint": True,
+        },
+    )
 
 
 @router.get("/public/{deletion_id}", response_class=HTMLResponse)
@@ -203,13 +300,15 @@ async def public_verification_page(
             <ol>
                 <li>You should have received a signed deletion proof JSON file</li>
                 <li>POST the deletion proof to <code>/v1/verification/deletion</code></li>
-                <li>The API will verify the RSA-PSS signature</li>
+                <li>The API will verify the Ed25519 signature</li>
                 <li>A valid signature proves the deletion was performed by CIRIS</li>
             </ol>
 
             <div class="warning">
                 <p><strong>⚠️ Manual Verification</strong></p>
-                <p>For maximum transparency, you can also verify the signature manually using the public key available at:</p>
+                <p>For maximum transparency, you can also verify the signature manually: canonicalize the
+                deletion data per RFC 8785 (JCS) and verify the Ed25519 signature using the public key
+                available at:</p>
                 <p><code>GET /v1/verification/keys/{{key_id}}.pub</code></p>
             </div>
 
@@ -240,20 +339,22 @@ async def download_public_key(
     req: Request,
 ) -> PlainTextResponse:
     """
-    Download RSA public key.
+    Download the local Ed25519 public key (base64, raw 32 bytes).
 
     NO AUTHENTICATION REQUIRED - Public keys are public by design.
 
     Users can download the public key to manually verify deletion signatures.
     """
-    import logging
+    engine = _require_engine()
 
-    logger = logging.getLogger(__name__)
-
-    signature_service = _get_signature_service(req)
-
-    # Check if requested key ID matches current key
-    current_key_id = signature_service.get_public_key_id()
+    try:
+        current_key_id = engine.local_derived_key_id()
+        public_key_b64 = engine.local_public_key_b64()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Local signing identity not configured: {e}",
+        )
 
     if key_id != current_key_id:
         logger.warning(f"Public key request for unknown key ID: {key_id} (current: {current_key_id})")
@@ -262,25 +363,15 @@ async def download_public_key(
             detail=f"Public key {key_id} not found. Current key: {current_key_id}",
         )
 
-    try:
-        public_key_pem = signature_service.get_public_key_pem()
+    logger.info(f"Public key {key_id} downloaded")
 
-        logger.info(f"Public key {key_id} downloaded")
-
-        return PlainTextResponse(
-            content=public_key_pem,
-            media_type="application/x-pem-file",
-            headers={
-                "Content-Disposition": f'attachment; filename="{key_id}.pub"',
-            },
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to retrieve public key {key_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve public key",
-        )
+    return PlainTextResponse(
+        content=public_key_b64,
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": f'attachment; filename="{key_id}.pub"',
+        },
+    )
 
 
 @router.post("/verify-signature")
@@ -294,53 +385,35 @@ async def manual_signature_verification(
     NO AUTHENTICATION REQUIRED - For manual verification using external tools.
 
     Users can verify signatures manually by:
-    1. Computing hash of deletion data
-    2. Verifying RSA-PSS signature using public key
+    1. Canonicalizing deletion data per RFC 8785 (JCS)
+    2. Verifying the Ed25519 signature using the public key
     3. Comparing with this endpoint's result
-
-    This endpoint helps users who want to verify independently.
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    signature_service = _get_signature_service(req)
-
-    # Build deletion proof for verification with provided data
     deletion_proof = DeletionProof(
         deletion_id=request.deletion_id,
         user_identifier=request.user_identifier,
         sources_deleted=request.sources_deleted,
         deleted_at=request.deleted_at,
-        verification_hash=request.verification_hash,
         signature=request.signature,
         public_key_id=request.public_key_id,
     )
 
-    try:
-        verification_result = signature_service.verify_deletion(deletion_proof)
+    verification_result = _verify_proof(deletion_proof)
 
-        from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+    from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
 
-        safe_deletion_id = sanitize_for_log(request.deletion_id, max_length=100)
-        logger.info(f"Manual signature verification: {safe_deletion_id} - Valid: {verification_result.valid}")
+    safe_deletion_id = sanitize_for_log(request.deletion_id, max_length=100)
+    logger.info(f"Manual signature verification: {safe_deletion_id} - Valid: {verification_result.valid}")
 
-        return StandardResponse(
-            success=verification_result.valid,
-            data=verification_result.model_dump(),
-            message=verification_result.message,
-            metadata={
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "manual_verification": True,
-            },
-        )
-
-    except Exception as e:
-        logger.error(f"Manual verification failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Manual verification failed: {str(e)}",
-        )
+    return StandardResponse(
+        success=verification_result.valid,
+        data=verification_result.model_dump(),
+        message=verification_result.message,
+        metadata={
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "manual_verification": True,
+        },
+    )
 
 
 @router.get("/keys/current")
@@ -354,17 +427,22 @@ async def get_current_public_key_info(
 
     Returns the current public key ID and download URL.
     """
-    signature_service = _get_signature_service(req)
+    engine = _require_engine()
 
-    key_id = signature_service.get_public_key_id()
+    try:
+        key_id = engine.local_derived_key_id()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Local signing identity not configured: {e}",
+        )
 
     return StandardResponse(
         success=True,
         data={
             "public_key_id": key_id,
             "download_url": f"/v1/verification/keys/{key_id}.pub",
-            "algorithm": "RSA-PSS with SHA-256",
-            "key_size": 2048,
+            "algorithm": "Ed25519 over RFC 8785 (JCS) canonical bytes",
         },
         message="Current public key information",
         metadata={

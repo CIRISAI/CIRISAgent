@@ -19,7 +19,10 @@ import ai.ciris.mobile.shared.models.safety.WatchlistRequest
 import ai.ciris.mobile.shared.models.safety.WatchlistResponse
 import ai.ciris.mobile.shared.models.federation.EdgePeerReachability
 import ai.ciris.mobile.shared.models.federation.EdgeReachabilityEntry
+import ai.ciris.mobile.shared.models.federation.FederationContentRequest
 import ai.ciris.mobile.shared.models.federation.FederationContentResponse
+import ai.ciris.mobile.shared.models.federation.FederationPeerAppearanceUpdateRequest
+import ai.ciris.mobile.shared.models.federation.FederationPeerTrustUpdateRequest
 import ai.ciris.mobile.shared.models.federation.FederationIdentity
 import ai.ciris.mobile.shared.models.federation.FederationIdentityResponse
 import ai.ciris.mobile.shared.models.federation.FederationMetricsResponse

@@ -143,7 +143,9 @@ class ADBHelper:
             args.append("-r")
         args.append(apk_path)
 
-        result = self._run_adb(args, timeout=120)
+        # 250MB+ debug APKs regularly exceed 120s on cold emulators — a timeout
+        # here surfaced as a bare "APK installation failed" with no cause.
+        result = self._run_adb(args, timeout=600)
         return "Success" in result.stdout
 
     def uninstall_app(self, package: str) -> bool:

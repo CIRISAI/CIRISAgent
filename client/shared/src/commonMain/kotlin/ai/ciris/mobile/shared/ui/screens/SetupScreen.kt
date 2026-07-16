@@ -39,6 +39,7 @@ import ai.ciris.mobile.shared.viewmodels.LocationGranularity
 import androidx.compose.animation.AnimatedVisibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
@@ -532,43 +533,50 @@ fun SetupScreen(
                         )
                         viewModel.nextStep()
                     } else if (isFinalStep) {
-                        // AGENT BUILD: submit setup to the agent API then advance
-                        PlatformLogger.i(TAG, " Final step - launching coroutine to submit setup")
+                        // AGENT BUILD: CLAIM THEN COMPLETE. The self-claim
+                        // (POST /v1/setup/claim-remote) needs a LIVE :4243 bearer
+                        // session, and completeSetup restarts the runtime — which
+                        // INVALIDATES that session. So we must claim FIRST (while
+                        // the setup session is still valid) and only THEN write the
+                        // config + reload. Doing complete-first left the claim to
+                        // hit a dead session → 401 → node stays unclaimed → the
+                        // first-run nav loop.
+                        PlatformLogger.i(TAG, " Final step - CLAIM then COMPLETE")
                         coroutineScope.launch {
-                            PlatformLogger.i(TAG, " Coroutine started - calling viewModel.completeSetup")
                             try {
-                                // Run API call on IO dispatcher to avoid blocking main thread
-                                // Setup can take 20+ seconds as Python initializes services
+                                // 1) Self-claim ownership on the still-valid session.
+                                PlatformLogger.i(TAG, " Self-claiming local node ownership (pre-complete)")
+                                viewModel.claimLocalNodeOwnership(
+                                    claimPinProvider = claimPinProvider,
+                                    nodeCodeProvider = nodeCodeProvider,
+                                )
+                                // Await the claim settling (all exit paths clear
+                                // inProgress); bounded so a stuck claim never traps.
+                                kotlinx.coroutines.withTimeoutOrNull(90_000) {
+                                    viewModel.state.first { !it.ownershipClaim.inProgress }
+                                }
+                                val claimed = viewModel.state.value.ownershipClaim.claimed
+                                PlatformLogger.i(TAG, " Claim settled: claimed=$claimed — proceeding to completeSetup")
+
+                                // 2) Complete setup (writes .env + reloads the
+                                // runtime). The node is now owned; post-reload the
+                                // owner re-authenticates. Non-blocking on the claim
+                                // result — an unclaimed node still completes; the
+                                // user can claim later from the Network surface.
                                 val result = withContext(Dispatchers.Default) {
                                     viewModel.completeSetup { request ->
-                                        // Make API call to /v1/setup/complete
                                         PlatformLogger.i(TAG, " Calling apiClient.completeSetup with provider=${request.llm_provider}")
                                         apiClient.completeSetup(request)
                                     }
                                 }
                                 PlatformLogger.i(TAG, " completeSetup returned: success=${result.success}, error=${result.error}")
                                 if (result.success) {
-                                    // CLAIM OWNERSHIP of the LOCAL node: now that the
-                                    // account + fed-ID exist, drive the local node to
-                                    // self-claim so the just-created user becomes its
-                                    // ROOT/owner. The PIN is the console-only PIN the
-                                    // node printed on a fresh boot, captured by
-                                    // PythonRuntime. Non-blocking: a missing PIN or a
-                                    // failed claim surfaces in the completion UI but
-                                    // never traps the user.
-                                    PlatformLogger.i(TAG, " Setup successful - self-claiming local node ownership")
-                                    viewModel.claimLocalNodeOwnership(
-                                        claimPinProvider = claimPinProvider,
-                                        nodeCodeProvider = nodeCodeProvider,
-                                    )
-                                    PlatformLogger.i(TAG, " Advancing to next step")
                                     viewModel.nextStep()
                                 } else {
                                     PlatformLogger.i(TAG, " ERROR: Setup failed: ${result.error}")
-                                    // Error is now shown in UI via state.submissionError
                                 }
                             } catch (e: Exception) {
-                                PlatformLogger.i(TAG, " EXCEPTION in completeSetup: ${e.message}")
+                                PlatformLogger.i(TAG, " EXCEPTION in claim/completeSetup: ${e.message}")
                                 e.printStackTrace()
                             }
                         }

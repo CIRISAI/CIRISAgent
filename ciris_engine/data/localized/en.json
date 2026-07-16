@@ -814,6 +814,8 @@
     "status_connecting_ciris": "Connecting to CIRIS...",
     "status_loading_services": "Loading services...",
     "status_resuming_services": "Resuming services...",
+    "status_reconfiguring": "Restarting your node...",
+    "status_reconfiguring_timeout": "Your node is taking longer than expected to restart. Please restart the app.",
     "status_shutting_down": "Shutting down existing server...",
     "status_auth_shutdown": "Trying authenticated shutdown...",
     "processing_sending": "Sending message...",

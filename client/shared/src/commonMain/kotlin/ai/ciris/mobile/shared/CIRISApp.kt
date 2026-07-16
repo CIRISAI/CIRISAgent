@@ -83,6 +83,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
@@ -1722,10 +1725,25 @@ fun CIRISApp(
                     viewModel = setupViewModel,
                     apiClient = apiClient,
                     // Provide the one-time ownership CLAIM PIN / NodeCode captured
-                    // from the LOCAL node's console banner so the setup flow can
-                    // self-claim ownership of this node on COMPLETE. Console-only:
-                    // PythonRuntime scrapes it from the node stdout it launched.
-                    claimPinProvider = { pythonRuntimeProtocol.localClaimPin.value },
+                    // from the LOCAL node's boot banner so the setup flow can
+                    // self-claim ownership of this node on COMPLETE. PythonRuntime
+                    // latches these asynchronously from the node's boot output
+                    // (console stream + boot-log FILE fallback), so the banner can
+                    // arrive slightly AFTER the COMPLETE step fires. AWAIT the PIN
+                    // with a bounded timeout rather than snapshotting a value that
+                    // may still be null at the instant COMPLETE runs.
+                    claimPinProvider = {
+                        pythonRuntimeProtocol.localClaimPin.value
+                            ?: withTimeoutOrNull(20_000L) {
+                                pythonRuntimeProtocol.localClaimPin
+                                    .filterNotNull()
+                                    .first { it.isNotBlank() }
+                            }
+                    },
+                    // NodeCode may legitimately never come via the banner (the app
+                    // then fetches it over HTTP in claimLocalNodeOwnership), so we
+                    // only take a snapshot here — no wait — to avoid a needless
+                    // stall on the common banner-omits-NodeCode path.
                     nodeCodeProvider = { pythonRuntimeProtocol.localNodeCode.value },
                     onSetupComplete = {
                         platformLog(TAG, "[INFO] onSetupComplete called - exchanging tokens...")

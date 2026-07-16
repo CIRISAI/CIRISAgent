@@ -210,20 +210,34 @@ actual class PythonRuntime : PythonRuntimeProtocol {
         private val NODE_CODE_REGEX = Regex("CIRIS-V1-[0-9A-Za-z\\-]+")
 
         /**
-         * Parse one console line for the node's "OWNERSHIP UNCLAIMED" banner and,
-         * when found, latch the one-time CLAIM PIN and/or the NodeCode into the
-         * StateFlows the setup flow reads. Idempotent — first match wins.
+         * Parse one console/log line for the node's "OWNERSHIP UNCLAIMED" banner
+         * and, when found, latch the one-time CLAIM PIN and/or the NodeCode into
+         * the StateFlows the setup flow reads. Idempotent — first match wins.
+         *
+         * The gate is deliberately WIDE: the banner's exact wording lives in the
+         * ciris-server wheel (not visible here), so we trigger on any of the
+         * banner's marker words ("CLAIM PIN", "OWNERSHIP", "UNCLAIMED") and
+         * extract the value by its strict shape (CLAIM_PIN_REGEX / NODE_CODE_REGEX)
+         * rather than trusting one exact label. Both regexes are highly specific
+         * (Crockford-base32 XXXX-XXXX; `CIRIS-V1-…`), so extract-by-shape from an
+         * ownership-context line carries negligible false-positive risk.
          */
         private fun parseOwnershipBanner(line: String) {
-            if (_localClaimPin.value == null && line.contains("CLAIM PIN", ignoreCase = true)) {
-                val after = line.substringAfter(":", "").substringAfter("CLAIM PIN", "")
-                val pin = CLAIM_PIN_REGEX.find(after.ifBlank { line })?.value
+            val ownershipContext = line.contains("CLAIM PIN", ignoreCase = true) ||
+                line.contains("OWNERSHIP", ignoreCase = true) ||
+                line.contains("UNCLAIMED", ignoreCase = true)
+            if (_localClaimPin.value == null && ownershipContext) {
+                // Prefer the token AFTER a "CLAIM PIN" label when the banner uses
+                // it; otherwise scan the whole line (the banner may label the PIN
+                // differently than the literal "CLAIM PIN").
+                val labelled = line.substringAfter("CLAIM PIN", "")
+                val pin = CLAIM_PIN_REGEX.find(labelled.ifBlank { line })?.value
                 if (pin != null) {
-                    Log.i(TAG, "Captured one-time CLAIM PIN from node banner (console-only).")
+                    Log.i(TAG, "Captured one-time CLAIM PIN from node ownership banner.")
                     _localClaimPin.value = pin
                 }
             }
-            if (_localNodeCode.value == null && line.contains("NodeCode", ignoreCase = true)) {
+            if (_localNodeCode.value == null && (ownershipContext || line.contains("NodeCode", ignoreCase = true))) {
                 val code = NODE_CODE_REGEX.find(line)?.value
                 if (code != null) {
                     Log.i(TAG, "Captured NodeCode from node banner: ${code.take(24)}…")
@@ -231,6 +245,26 @@ actual class PythonRuntime : PythonRuntimeProtocol {
                 }
             }
         }
+
+        /**
+         * FILE-based fallback for the ownership banner. The node writes its boot
+         * banner to log FILES under `$CIRIS_HOME/logs`, and MainActivity's logcat
+         * reader filters to `python.stdout/stderr` + `CIRISVerify` only — so the
+         * banner (and the one-time CLAIM PIN) can be latched from neither the
+         * console callback nor logcat. The MainActivity file-tail feeds boot-log
+         * lines through here so capture no longer depends on logcat at all.
+         * Reuses [parseOwnershipBanner] so the regexes/format stay in ONE place.
+         */
+        fun scanFileLineForOwnership(line: String) {
+            parseOwnershipBanner(line)
+        }
+
+        /**
+         * True once the one-time ownership CLAIM PIN has been latched (from either
+         * the logcat stream or the file-tail fallback). Lets the file-tail loop in
+         * MainActivity stop early once capture succeeds.
+         */
+        fun isClaimPinCaptured(): Boolean = _localClaimPin.value != null
 
         /**
          * Forward a line from logcat to the output callback.

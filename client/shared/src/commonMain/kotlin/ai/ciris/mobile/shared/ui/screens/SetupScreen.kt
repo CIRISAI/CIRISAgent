@@ -164,12 +164,14 @@ fun SetupScreen(
     onSetupComplete: () -> Unit,
     onBackToLogin: (() -> Unit)? = null,  // Optional callback to return to login screen
     // The one-time ownership CLAIM PIN / NodeCode captured from the LOCAL node's
-    // console banner (PythonRuntime.localClaimPin / .localNodeCode). Used on setup
+    // boot banner (PythonRuntime.localClaimPin / .localNodeCode). Used on setup
     // COMPLETE to self-claim ownership of the local node for the just-created user.
-    // Default null providers → claim is skipped with an honest error (the PIN is
-    // console-only and not capturable on platforms that don't launch a local node).
-    claimPinProvider: () -> String? = { null },
-    nodeCodeProvider: () -> String? = { null },
+    // SUSPEND providers so the consumer can AWAIT the PIN (the banner can land
+    // just after COMPLETE fires) instead of snapshotting a possibly-null value.
+    // Default null providers → claim is skipped with an honest error (no local
+    // node launched on this platform, so nothing to capture).
+    claimPinProvider: suspend () -> String? = { null },
+    nodeCodeProvider: suspend () -> String? = { null },
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
@@ -525,8 +527,8 @@ fun SetupScreen(
                         // missing PIN or failed claim surfaces in the UI, never traps.
                         PlatformLogger.i(TAG, " Final step (node client) - self-claiming local node ownership")
                         viewModel.claimLocalNodeOwnership(
-                            claimPin = claimPinProvider(),
-                            capturedNodeCode = nodeCodeProvider(),
+                            claimPinProvider = claimPinProvider,
+                            nodeCodeProvider = nodeCodeProvider,
                         )
                         viewModel.nextStep()
                     } else if (isFinalStep) {
@@ -556,8 +558,8 @@ fun SetupScreen(
                                     // never traps the user.
                                     PlatformLogger.i(TAG, " Setup successful - self-claiming local node ownership")
                                     viewModel.claimLocalNodeOwnership(
-                                        claimPin = claimPinProvider(),
-                                        capturedNodeCode = nodeCodeProvider(),
+                                        claimPinProvider = claimPinProvider,
+                                        nodeCodeProvider = nodeCodeProvider,
                                     )
                                     PlatformLogger.i(TAG, " Advancing to next step")
                                     viewModel.nextStep()

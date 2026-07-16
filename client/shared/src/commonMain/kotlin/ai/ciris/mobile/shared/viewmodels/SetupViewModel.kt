@@ -1169,6 +1169,15 @@ class SetupViewModel(
                     claimPin = claimPin.trim(),
                     cohortScope = cohortScope,
                     localNodeUrl = CIRISApiClient.LOCAL_NODE_URL,
+                    // FIRST-RUN self-claim is authenticated by the claim PIN +
+                    // owner password (baked into the ROOT cert), NOT a prior
+                    // session — there is none yet. Force token=null: the app's
+                    // default accessToken is the SETUP-time token, invalidated by
+                    // the setup-complete runtime reload, so sending it makes the
+                    // node reject on the stale session ("invalid or expired
+                    // session", 401) instead of falling through to the first-run
+                    // -open setup path. The PIN is the credential here.
+                    token = null,
                     // SELF-claim: set the owner's login password + friendly username
                     // on the ROOT cert so the owner can obtain a SYSTEM_ADMIN session
                     // (POST /v1/auth/login with EITHER `eric` or the wa_id) — the

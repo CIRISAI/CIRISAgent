@@ -50,6 +50,38 @@ def _resolve_key_id() -> Optional[str]:
         return None
 
 
+def _surface_first_run_claim_pin() -> None:
+    """Echo the node's one-time first-run CLAIM PIN to the app's console.
+
+    ciris-server ≥0.5.119 (CIRISServer#277) exposes
+    ``ciris_server.first_run_claim_pin()`` — an in-process, NON-consuming,
+    never-over-HTTP accessor stashed the instant compose mints the PIN. On the
+    embedded topology the embedding app IS the node's console, but the rust
+    tracing banner is unobservable on Android (0-byte file sink at compose,
+    nothing in logcat). Bridge it here: print + log the PIN in the exact
+    banner vocabulary the client's capture already latches
+    (``parseOwnershipBanner`` — the "CLAIM PIN" marker + the Crockford
+    XXXX-XXXX shape — via BOTH the logcat python.stdout stream and the
+    <home>/logs/latest.log file-tail). No PIN (already-claimed node, or a
+    pre-0.5.119 wheel) ⇒ silent no-op. Security note: this reaches the app's
+    own stdout/log file only — the same trust domain as the desktop console
+    the PIN is designed for; it is never served over HTTP.
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        accessor = getattr(ciris_server, "first_run_claim_pin", None)
+        if accessor is None:
+            return  # pre-0.5.119 wheel — banner-only capture still applies
+        pin = accessor()
+        if pin:
+            line = f"Node fold: OWNERSHIP UNCLAIMED — one-time CLAIM PIN: {pin} (console-only; used by setup self-claim)"
+            print(line, flush=True)  # → logcat python.stdout on Android; console on desktop
+            logger.info(line)  # → <home>/logs/latest.log for the file-tail capture
+    except Exception as exc:  # noqa: BLE001 — never let PIN surfacing break the boot
+        logger.debug("Node fold: first_run_claim_pin probe failed (non-fatal): %s", exc)
+
+
 def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Optional[str] = None) -> None:
     """Boot the node (4243) on the agent's engine/edge, brain proxied to :8080.
 
@@ -74,6 +106,9 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     try:
         with _socket.create_connection(("127.0.0.1", 4243), timeout=1):
             logger.info("Node fold: 4243 already serving (prior runtime in this process) — reusing the live node")
+            # Non-consuming: re-surface the PIN for the restarted runtime's
+            # capture (the wizard's self-claim may run after this reload).
+            _surface_first_run_claim_pin()
             return
     except OSError:
         pass
@@ -149,6 +184,9 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     if not node_up:
         raise RuntimeError("node fold: read-API did not bind 127.0.0.1:4243 in the bind window (node-fails ⇒ agent-fails)")
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 ✅")
+    # Surface the one-time first-run CLAIM PIN (minted during compose, stashed
+    # in-process by ciris-server ≥0.5.119) so the client's capture latches it.
+    _surface_first_run_claim_pin()
     # The node's SIGNED self identity-occurrence publish + trusted-peer boot-prime
     # are owned by the substrate (CIRISServer#227 S1, ciris-server >=0.5.101) — the
     # agent does NOT derive/publish encryption_pubkeys itself.

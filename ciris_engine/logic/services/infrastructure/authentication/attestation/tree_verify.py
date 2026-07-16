@@ -64,7 +64,7 @@ def _load_verify_ffi_lib() -> Optional[ctypes.CDLL]:
         return _VERIFY_FFI_LIB
 
     try:
-        import ciris_server
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
         lib = ctypes.CDLL(str(ciris_server.verify_ffi_path()))
     except Exception as e:

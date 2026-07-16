@@ -31,7 +31,8 @@ async def build_secrets_snapshot(secrets_service: SecretsService) -> JSONDict:
 
         # Filter version comes from the substrate catalog envelope
         filter_config = await secrets_service.get_filter_config()
-        filter_version = int(filter_config.get("version", 0))
+        _raw_version = filter_config.get("version", 0)
+        filter_version = int(_raw_version) if isinstance(_raw_version, (int, float, str)) else 0
 
         # Get total count
         total_secrets = len(all_secrets)

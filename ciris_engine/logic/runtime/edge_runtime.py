@@ -113,7 +113,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     # logs — env-whitelist-proof, so RUST_LOG need not survive the mobile env
     # scrub (CIRISServer#264 sub-item). Idempotent.
     try:
-        import ciris_server as _cs
+        import ciris_server as _cs  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
         _init_tracing = getattr(_cs, "init_tracing", None)
         if _init_tracing is not None:

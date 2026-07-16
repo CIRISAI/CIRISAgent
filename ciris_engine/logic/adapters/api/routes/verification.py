@@ -88,7 +88,9 @@ def _canonical_proof_bytes(
     """RFC 8785 (JCS) canonical bytes of the deletion data (signed payload)."""
     from ciris_verify import jcs_canonicalize  # substrate-provided canonicalizer
 
-    return jcs_canonicalize(
+    # jcs_canonicalize is from the untyped substrate wheel (returns Any); annotate
+    # the local as bytes so the declared return type is satisfied without a cast.
+    canonical_bytes: bytes = jcs_canonicalize(
         {
             "deletion_id": deletion_id,
             "user_identifier": user_identifier,
@@ -96,6 +98,7 @@ def _canonical_proof_bytes(
             "deleted_at": deleted_at,
         }
     )
+    return canonical_bytes
 
 
 def sign_deletion_proof(

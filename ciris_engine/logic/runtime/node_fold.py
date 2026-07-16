@@ -169,8 +169,33 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
         _mobile = is_android() or is_ios()
     except Exception:  # noqa: BLE001
         _mobile = False
+    # compose_status() (ciris-server ≥0.5.120, CIRISServer#279): in-process
+    # compose-progress snapshot — {"completed", "current": {phase, elapsed_s,
+    # stuck, ...} | null, "history": [{phase, ms}]}. Poll it during the bind
+    # wait so a wedged compose NAMES its seam in the log (and in the failure),
+    # instead of a dark N-minute timeout. The [COMPOSE] lines are what the QA
+    # fold-RCA reads to attribute a compose-hang to its phase.
+    def _compose_phase() -> Optional[str]:
+        try:
+            import json as _json
+
+            _status_fn = getattr(ciris_server, "compose_status", None)
+            if _status_fn is None:
+                return None
+            st = _json.loads(_status_fn() or "{}")
+            cur = st.get("current") or {}
+            if st.get("completed"):
+                return "completed"
+            if cur:
+                stuck = " STUCK" if cur.get("stuck") else ""
+                return f"{cur.get('phase')} ({cur.get('elapsed_s')}s{stuck})"
+            return None
+        except Exception:  # noqa: BLE001
+            return None
+
     _attempts = 190 if _mobile else 115  # mobile ~100s (must sit UNDER the 120s Start Adapters step timeout), desktop ~60s
-    for _ in range(_attempts):
+    _last_phase: Optional[str] = None
+    for _i in range(_attempts):
         if _node_error is not None:
             raise RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {_node_error}")
         try:
@@ -179,10 +204,19 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
                 break
         except OSError:
             time.sleep(0.5)
+        if _i % 20 == 19:  # every ~10s: log compose-phase transitions
+            _phase = _compose_phase()
+            if _phase and _phase != _last_phase:
+                logger.info("[COMPOSE] phase: %s", _phase)
+                _last_phase = _phase
     if _node_error is not None:
         raise RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {_node_error}")
     if not node_up:
-        raise RuntimeError("node fold: read-API did not bind 127.0.0.1:4243 in the bind window (node-fails ⇒ agent-fails)")
+        _wedged = _compose_phase()
+        raise RuntimeError(
+            "node fold: read-API did not bind 127.0.0.1:4243 in the bind window "
+            f"(node-fails ⇒ agent-fails); compose phase at expiry: {_wedged or 'unknown (no compose_status — wheel <0.5.120?)'}"
+        )
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 ✅")
     # Surface the one-time first-run CLAIM PIN (minted during compose, stashed
     # in-process by ciris-server ≥0.5.119) so the client's capture latches it.

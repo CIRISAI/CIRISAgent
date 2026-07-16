@@ -411,6 +411,19 @@ def _classify(ev: Dict) -> Dict:
     # 2/3. bind-window failure family
     elif bind_fail_lines:
         add("py", bind_fail_lines, limit=1)
+        # 0.5.120 (CIRISServer#279): node_fold polls compose_status() during
+        # the bind wait and logs "[COMPOSE] phase: <name> (<Ns> [STUCK])"
+        # transitions, and the bind-window error carries "compose phase at
+        # expiry: <name>". Extract the NAMED wedged phase so the verdict says
+        # WHERE compose stopped, not just that it did.
+        compose_lines = _grep(py, re.compile(r"\[COMPOSE\] phase:|compose phase at expiry:", re.IGNORECASE))
+        wedged_phase = None
+        if compose_lines:
+            m = re.search(r"compose phase at expiry:\s*([^\n]+)", compose_lines[-1]) or re.search(
+                r"\[COMPOSE\] phase:\s*([^\n]+)", compose_lines[-1]
+            )
+            wedged_phase = m.group(1).strip() if m else None
+            add("py", compose_lines, limit=3)
         if ev["port_4243_open"]:
             verdict = "bind-window"
             layer = "4243 IS answering now — compose completed after the bind window"
@@ -421,9 +434,13 @@ def _classify(ev: Dict) -> Dict:
         elif alive and ev["port_4243_open"] is False:
             verdict = "compose-hang"
             layer = f"node compose never completed — serve alive {etime_h}, 4243 refused"
+            if wedged_phase:
+                layer += f"; WEDGED IN PHASE: {wedged_phase}"
             upstream_ref = "CIRISServer#279"
             next_action = (
-                "attach this RCA + rust substrate logs (if any) to CIRISServer#279; "
+                f"file the wedged phase ({wedged_phase}) on CIRISServer#279"
+                if wedged_phase
+                else "attach this RCA + rust substrate logs (if any) to CIRISServer#279; "
                 "the compose future never resolved inside the fold"
             )
             add("live", f"pid {ev['pid']} alive, ETIME {ev['etime'] or 'unknown'} ({etime_h})")

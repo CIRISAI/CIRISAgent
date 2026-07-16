@@ -141,15 +141,25 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             else:
                 _filter = os.environ.get("RUST_LOG") or "info,ciris_server=debug,ciris_edge=debug,ciris_persist=info"
             try:
-                _init_tracing(log_dir=_log_dir, filter=_filter)
+                _sink_verdict = _init_tracing(log_dir=_log_dir, filter=_filter)
             except TypeError:  # pre-0.5.116 bare signature
-                _init_tracing()
+                _sink_verdict = _init_tracing()
             logger.info(
                 "Rust tracing initialized: log_dir=%s filter=%s test_mode=%s (rust logs → ciris-server.log*)",
                 _log_dir,
                 _filter,
                 _test_mode,
             )
+            # 0.5.120 (CIRISServer#279 ask 1): init_tracing returns the sink
+            # verdict {fresh_subscriber, file_layer_attached, first_write_ok,
+            # log_path} — first-write-verified at t=0. Log it loudly either way
+            # so every pull carries it (the t+60s [RUST-SINK] sentinel stays as
+            # the belt for older wheels / late failures).
+            if isinstance(_sink_verdict, dict):
+                if _sink_verdict.get("first_write_ok"):
+                    logger.info("[RUST-SINK] t=0 verdict: %s", _sink_verdict)
+                else:
+                    logger.warning("[RUST-SINK] t=0 DARK — file layer not writing: %s", _sink_verdict)
     except Exception as _trace_exc:  # noqa: BLE001 — observability must never block boot
         logger.debug("ciris_server.init_tracing unavailable/failed (non-fatal): %s", _trace_exc)
 

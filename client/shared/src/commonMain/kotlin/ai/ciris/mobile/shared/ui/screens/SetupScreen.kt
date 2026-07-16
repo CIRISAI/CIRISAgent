@@ -556,13 +556,23 @@ fun SetupScreen(
                                     viewModel.state.first { !it.ownershipClaim.inProgress }
                                 }
                                 val claimed = viewModel.state.value.ownershipClaim.claimed
-                                PlatformLogger.i(TAG, " Claim settled: claimed=$claimed — proceeding to completeSetup")
+                                PlatformLogger.i(TAG, " Claim settled: claimed=$claimed — advancing then completing")
 
-                                // 2) Complete setup (writes .env + reloads the
-                                // runtime). The node is now owned; post-reload the
-                                // owner re-authenticates. Non-blocking on the claim
-                                // result — an unclaimed node still completes; the
-                                // user can claim later from the Network surface.
+                                // 2) Advance to COMPLETE NOW — the node is owned,
+                                // so leave the Setup screen immediately (good UX,
+                                // and keeps the wizard under the harness's
+                                // COMPLETE-wait). completeSetup's config-write +
+                                // runtime reload then runs while COMPLETE renders;
+                                // the reload bounces to login, where — now that
+                                // the node is CLAIMED — first-run is false and the
+                                // owner signs in normally (no more nav loop).
+                                viewModel.nextStep()
+
+                                // 3) Complete setup (writes .env + reloads). Runs
+                                // AFTER the claim (session was valid for the claim)
+                                // and after advancing (so it never gates leaving
+                                // Setup). Best-effort — the COMPLETE screen surfaces
+                                // any error.
                                 val result = withContext(Dispatchers.Default) {
                                     viewModel.completeSetup { request ->
                                         PlatformLogger.i(TAG, " Calling apiClient.completeSetup with provider=${request.llm_provider}")
@@ -570,11 +580,6 @@ fun SetupScreen(
                                     }
                                 }
                                 PlatformLogger.i(TAG, " completeSetup returned: success=${result.success}, error=${result.error}")
-                                if (result.success) {
-                                    viewModel.nextStep()
-                                } else {
-                                    PlatformLogger.i(TAG, " ERROR: Setup failed: ${result.error}")
-                                }
                             } catch (e: Exception) {
                                 PlatformLogger.i(TAG, " EXCEPTION in claim/completeSetup: ${e.message}")
                                 e.printStackTrace()

@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "设置对等",
     "manage_consent_subtitle": "查看和管理此设备持有的同意对象。",
     "manage_consent_title": "管理同意",
+    "manage_consent_traces_desc": "将此智能体的匿名推理轨迹发送给 CIRIS 社区——这是同一个同意对象，在此便于管理。不包含消息内容或个人数据。",
     "manage_consent_userdata_desc": "您的数据共享流 — TEMPORARY / PARTNERED / ANONYMOUS，可撤销。在“同意”界面管理。",
     "manage_consent_userdata_title": "用户数据同意（consent:state）",
     "manage_nodes_active": "当前",

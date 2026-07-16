@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "Configura il peering",
     "manage_consent_subtitle": "Visualizza e gestisci gli oggetti di consenso detenuti da questo dispositivo.",
     "manage_consent_title": "Gestisci Consenso",
+    "manage_consent_traces_desc": "Invia le tracce di ragionamento anonime di questo agente alla comunità CIRIS: lo stesso oggetto di consenso, qui per una gestione semplice. Nessun contenuto dei messaggi né dati personali.",
     "manage_consent_userdata_desc": "Il tuo flusso di condivisione dei dati — TEMPORARY / PARTNERED / ANONYMOUS, con revoca. Gestito nella superficie Consenso.",
     "manage_consent_userdata_title": "Consenso sui dati utente (consent:state)",
     "manage_nodes_active": "attivo",

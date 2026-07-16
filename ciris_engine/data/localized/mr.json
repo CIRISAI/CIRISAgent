@@ -2251,6 +2251,7 @@
     "manage_consent_setup": "पीयरिंग सेट करा",
     "manage_consent_subtitle": "हे डिव्हाइस धारण करत असलेले संमती ऑब्जेक्ट्स पहा आणि व्यवस्थापित करा.",
     "manage_consent_title": "संमती व्यवस्थापन",
+    "manage_consent_traces_desc": "या एजंटचे निनावी तर्क ट्रेस CIRIS समुदायाला पाठवा — तोच संमती ऑब्जेक्ट, येथे सुलभ व्यवस्थापनासाठी. संदेश सामग्री किंवा वैयक्तिक डेटा नाही.",
     "manage_consent_userdata_desc": "तुमचा डेटा-सामायिकरण प्रवाह — TEMPORARY / PARTNERED / ANONYMOUS, रद्द करण्याच्या पर्यायासह. संमती पृष्ठभागावर व्यवस्थापित.",
     "manage_consent_userdata_title": "वापरकर्ता-डेटा संमती (consent:state)",
     "manage_nodes_active": "सक्रिय",

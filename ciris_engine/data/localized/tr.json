@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "Eşlemeyi kur",
     "manage_consent_subtitle": "Bu cihazın tuttuğu rıza nesnelerini görüntüleyin ve yönetin.",
     "manage_consent_title": "Rıza Yönetimi",
+    "manage_consent_traces_desc": "Bu aracının anonim akıl yürütme izlerini CIRIS topluluğuna gönderin — aynı onay nesnesi, kolay yönetim için burada. Mesaj içeriği veya kişisel veri gönderilmez.",
     "manage_consent_userdata_desc": "Veri paylaşım akışınız — GEÇİCİ / ORTAKLANAN / ANONİM, iptal seçeneğiyle. Rıza yüzeyinden yönetilir.",
     "manage_consent_userdata_title": "Kullanıcı verisi rızası (consent:state)",
     "manage_nodes_active": "etkin",

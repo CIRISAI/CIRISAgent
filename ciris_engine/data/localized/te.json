@@ -2251,6 +2251,7 @@
     "manage_consent_setup": "పీరింగ్‌ను సెటప్ చేయండి",
     "manage_consent_subtitle": "ఈ పరికరం కలిగి ఉన్న సమ్మతి ఆబ్జెక్ట్‌లను చూసి నిర్వహించండి.",
     "manage_consent_title": "సమ్మతిని నిర్వహించండి",
+    "manage_consent_traces_desc": "ఈ ఏజెంట్ యొక్క అనామక తార్కిక ట్రేస్‌లను CIRIS సంఘానికి పంపండి — అదే సమ్మతి ఆబ్జెక్ట్, ఇక్కడ సులభ నిర్వహణ కోసం. సందేశ కంటెంట్ లేదా వ్యక్తిగత డేటా లేదు.",
     "manage_consent_userdata_desc": "మీ డేటా-భాగస్వామ్య స్ట్రీమ్ — TEMPORARY / PARTNERED / ANONYMOUS, రద్దుతో. సమ్మతి సర్ఫేస్‌లో నిర్వహించబడుతుంది.",
     "manage_consent_userdata_title": "వినియోగదారు-డేటా సమ్మతి (consent:state)",
     "manage_nodes_active": "సక్రియ",

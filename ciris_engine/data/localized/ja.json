@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "ピアリングを設定",
     "manage_consent_subtitle": "このデバイスが保持する同意オブジェクトを表示・管理します。",
     "manage_consent_title": "同意の管理",
+    "manage_consent_traces_desc": "このエージェントの匿名の推論トレースを CIRIS コミュニティに送信します。ウィザードと同じ同意オブジェクトを、ここで簡単に管理できます。メッセージ内容や個人データは送信されません。",
     "manage_consent_userdata_desc": "あなたのデータ共有ストリーム — TEMPORARY / PARTNERED / ANONYMOUS、取り消し可能。「同意」画面で管理します。",
     "manage_consent_userdata_title": "ユーザーデータ同意（consent:state）",
     "manage_nodes_active": "アクティブ",

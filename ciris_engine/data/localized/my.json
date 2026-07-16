@@ -2251,6 +2251,7 @@
     "manage_consent_setup": "peering တည်ဆောက်ပါ",
     "manage_consent_subtitle": "ဤစက် ကိုင်ဆောင်ထားသော consent object များကို ကြည့်၍ စီမံပါ။",
     "manage_consent_title": "Consent စီမံပါ",
+    "manage_consent_traces_desc": "ဤ agent ၏ အမည်မဖော် ကျိုးကြောင်းဆင်ခြင်မှု ခြေရာများကို CIRIS အသိုက်အဝန်းသို့ ပို့ပါ — အလားတူ သဘောတူညီချက် object ကို ဤနေရာတွင် လွယ်ကူစွာ စီမံရန်။ မက်ဆေ့ဂျ် အကြောင်းအရာ သို့မဟုတ် ကိုယ်ရေးအချက်အလက် မပါဝင်ပါ။",
     "manage_consent_userdata_desc": "သင်၏ ဒေတာမျှဝေမှု stream — TEMPORARY / PARTNERED / ANONYMOUS၊ ရုပ်သိမ်းနိုင်။ Consent မျက်နှာပြင်တွင် စီမံသည်။",
     "manage_consent_userdata_title": "User-data consent (consent:state)",
     "manage_nodes_active": "လုပ်ဆောင်နေသည်",

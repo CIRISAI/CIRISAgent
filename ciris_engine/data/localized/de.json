@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "Peering einrichten",
     "manage_consent_subtitle": "Sehen und verwalten Sie die Einwilligungsobjekte, die dieses Gerät hält.",
     "manage_consent_title": "Einwilligungen verwalten",
+    "manage_consent_traces_desc": "Sende die anonymen Denk-Traces dieses Agenten an die CIRIS-Community – dasselbe Einwilligungsobjekt, hier zur einfachen Verwaltung. Keine Nachrichteninhalte oder personenbezogenen Daten.",
     "manage_consent_userdata_desc": "Ihr Datenfreigabe-Stream — TEMPORARY / PARTNERED / ANONYMOUS, mit Widerruf. Verwaltet im Bereich „Einwilligung“.",
     "manage_consent_userdata_title": "Nutzerdaten-Einwilligung (consent:state)",
     "manage_nodes_active": "aktiv",

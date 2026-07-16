@@ -308,6 +308,11 @@ class DataManagementViewModel(
     fun updateAccordConsent(consent: Boolean) {
         val method = "updateAccordConsent"
         logInfo(method, "Updating accord consent to: $consent")
+        // [ORDER] trace_consent written from the post-config settings surface.
+        // Drives the SAME my-data PUT the backend uses to (re)emit / withdraw the
+        // consent:community_trust:v1 grant AND re-arm the running adapter's seal —
+        // the alternative view of the exact same CEG object the wizard writes.
+        logInfo(method, "[ORDER] trace_consent ${if (consent) "OPT_IN" else "OPT_OUT"} via Data & Privacy → Send traces (settings path)")
 
         viewModelScope.launch {
             try {

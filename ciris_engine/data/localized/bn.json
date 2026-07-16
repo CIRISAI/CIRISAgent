@@ -2252,6 +2252,7 @@
     "manage_consent_setup": "পিয়ারিং সেট আপ করুন",
     "manage_consent_subtitle": "এই ডিভাইসে থাকা সম্মতি অবজেক্টগুলি দেখুন ও পরিচালনা করুন।",
     "manage_consent_title": "সম্মতি পরিচালনা",
+    "manage_consent_traces_desc": "এই এজেন্টের বেনামী যুক্তি ট্রেস CIRIS সম্প্রদায়ে পাঠান — একই সম্মতি অবজেক্ট, এখানে সহজ ব্যবস্থাপনার জন্য। কোনো বার্তার বিষয়বস্তু বা ব্যক্তিগত তথ্য নয়।",
     "manage_consent_userdata_desc": "আপনার ডেটা-শেয়ারিং স্ট্রিম — TEMPORARY / PARTNERED / ANONYMOUS, প্রত্যাহারসহ। সম্মতি স্ক্রিনে পরিচালিত হয়।",
     "manage_consent_userdata_title": "ব্যবহারকারী-ডেটা সম্মতি (consent:state)",
     "manage_nodes_active": "সক্রিয়",

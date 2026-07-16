@@ -2251,6 +2251,7 @@
     "manage_consent_setup": "Set up peering",
     "manage_consent_subtitle": "View and manage the consent objects this device holds.",
     "manage_consent_title": "Manage Consent",
+    "manage_consent_traces_desc": "Send this agent's anonymous reasoning traces to the CIRIS community — the same consent object, here for easy management. No message content or personal data.",
     "manage_consent_userdata_desc": "Your data-sharing stream — TEMPORARY / PARTNERED / ANONYMOUS, with revoke. Managed on the Consent surface.",
     "manage_consent_userdata_title": "User-data consent (consent:state)",
     "manage_nodes_active": "active",

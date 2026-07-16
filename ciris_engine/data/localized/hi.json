@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "पीयरिंग सेट करें",
     "manage_consent_subtitle": "इस डिवाइस के पास मौजूद सहमति ऑब्जेक्ट देखें और प्रबंधित करें।",
     "manage_consent_title": "सहमति प्रबंधन",
+    "manage_consent_traces_desc": "इस एजेंट के गुमनाम तर्क ट्रेस CIRIS समुदाय को भेजें — वही सहमति ऑब्जेक्ट, यहाँ आसान प्रबंधन के लिए। कोई संदेश सामग्री या व्यक्तिगत डेटा नहीं।",
     "manage_consent_userdata_desc": "आपकी डेटा-साझाकरण स्ट्रीम — TEMPORARY / PARTNERED / ANONYMOUS, निरसन सहित। सहमति सतह पर प्रबंधित होती है।",
     "manage_consent_userdata_title": "उपयोगकर्ता-डेटा सहमति (consent:state)",
     "manage_nodes_active": "सक्रिय",

@@ -504,6 +504,40 @@ def current_community_grant_id() -> Optional[str]:
         return None
 
 
+def current_community_grant_asserted_at() -> Optional[str]:
+    """``asserted_at`` of the current community-trust grant, or None.
+
+    Companion to :func:`current_community_grant_id`. The accord service derives
+    its config-fallback consent from the CEG grant (the source of truth in the
+    cohabitation seal path — see that adapter's boot/self-heal derivation), and
+    needs the grant's timestamp so the fallback ``consent_timestamp`` is STABLE
+    across restarts rather than stamping a fresh ``now()`` each boot (the
+    warning at services.py where consent is set without a timestamp). Uses the
+    SAME ``list_attestations`` read + newest-``scores`` selection as the id
+    lookup so the two stay consistent (they resolve the same row).
+    """
+    engine = _resolve_engine()
+    key_id = _resolve_attesting_key_id()
+    if engine is None or not key_id:
+        return None
+    try:
+        import json as _json
+
+        page = _json.loads(
+            engine.list_attestations(_json.dumps({"dimension_exact": _COMMUNITY_TRUST_DIMENSION}), None, 100, key_id)  # type: ignore[attr-defined]
+        )
+        rows = page.get("items", [])
+        grants = [r for r in rows if r.get("attestation_type") == "scores"]
+        if not grants:
+            return None
+        grants.sort(key=lambda r: r.get("asserted_at", ""), reverse=True)
+        asserted_at = grants[0].get("asserted_at")
+        return str(asserted_at) if asserted_at else None
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("consent-CEG: grant timestamp lookup failed: %s", exc)
+        return None
+
+
 # Sentinel counterparty for the interim LOCAL-TIER grant emitted while the
 # canonical community key is unpublished. A local-tier row (no promotion,
 # subject_key_ids=[]) can never federate, so the "consent objects are

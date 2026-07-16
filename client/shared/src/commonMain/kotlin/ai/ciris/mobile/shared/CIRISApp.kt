@@ -2991,6 +2991,9 @@ fun CIRISApp(
                     viewModel = consentObjectsViewModel,
                     onBack = { currentScreen = Screen.Interact },
                     onOpenUserConsent = { currentScreen = Screen.Consent },
+                    // Trace-consent: the alternative view of the SAME CEG object
+                    // the wizard writes. One-tap opt-in/out via the my-data PUT.
+                    dataViewModel = dataManagementViewModel,
                     // No node-side peering-revoke (withdraws) endpoint yet — flag
                     // for upstream. Flip when CIRISServer ships it.
                     revokeEndpointAvailable = false,

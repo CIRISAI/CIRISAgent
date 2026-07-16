@@ -2251,6 +2251,18 @@ class SetupViewModel(
             }
         }
 
+        // [ORDER] trace_consent written into the completeSetup request. Including
+        // ciris_accord_metrics in enabled_adapters is what makes the backend
+        // emit the happy CEG grant (consent:community_trust:v1) at completeSetup
+        // (_emit_accord_metrics_consent). This marker is check (a) of the
+        // client-side trace-consent trail — grep [ORDER] in logcat_app.txt.
+        PlatformLogger.i(
+            TAG,
+            "[ORDER] trace_consent ${if (currentState.accordMetricsConsent) "REQUESTED" else "declined"} " +
+                "(accord_adapter=${enabledAdapters.contains("ciris_accord_metrics")}) — " +
+                "backend emits the consent:community_trust:v1 grant at completeSetup when requested",
+        )
+
         // Build adapter config with consent settings and adapter-specific config
         val adapterConfig = buildMap {
             // Accord metrics settings

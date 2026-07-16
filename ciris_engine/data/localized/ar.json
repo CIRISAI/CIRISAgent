@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "إعداد الاقتران",
     "manage_consent_subtitle": "اعرض وأدر كائنات الموافقة التي يحملها هذا الجهاز.",
     "manage_consent_title": "إدارة الموافقة",
+    "manage_consent_traces_desc": "أرسل مسارات الاستدلال المجهولة لهذا الوكيل إلى مجتمع CIRIS — نفس كائن الموافقة، معروض هنا لإدارته بسهولة. لا يُرسَل محتوى الرسائل أو البيانات الشخصية.",
     "manage_consent_userdata_desc": "تدفق مشاركة بياناتك — مؤقت / شراكة / مجهول، مع إمكانية الإلغاء. يُدار من واجهة الموافقة.",
     "manage_consent_userdata_title": "موافقة بيانات المستخدم (consent:state)",
     "manage_nodes_active": "نشطة",

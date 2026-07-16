@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "አጋርነት አዘጋጅ",
     "manage_consent_subtitle": "ይህ መሣሪያ የያዛቸውን የፈቃድ ነገሮች ተመልከትና አስተዳድር።",
     "manage_consent_title": "ፈቃድ አስተዳድር",
+    "manage_consent_traces_desc": "የዚህን ወኪል ማንነት-አልባ የማመዛዘኛ ዱካዎች ወደ CIRIS ማህበረሰብ ይላኩ — ተመሳሳዩ የፈቃድ ነገር፣ እዚህ ለቀላል አስተዳደር። ምንም የመልእክት ይዘት ወይም የግል መረጃ አይላክም።",
     "manage_consent_userdata_desc": "የውሂብ-ማጋሪያ ዥረትህ — ጊዜያዊ / አጋር / ስም-አልባ፣ ከመሻር ጋር። በፈቃድ ገጽ ላይ ይተዳደራል።",
     "manage_consent_userdata_title": "የተጠቃሚ-ውሂብ ፈቃድ (consent:state)",
     "manage_nodes_active": "ንቁ",

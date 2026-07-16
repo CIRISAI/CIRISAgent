@@ -2251,6 +2251,7 @@
     "manage_consent_setup": "ਪੀਅਰਿੰਗ ਸੈੱਟ ਅੱਪ ਕਰੋ",
     "manage_consent_subtitle": "ਇਸ ਡਿਵਾਈਸ ਵੱਲੋਂ ਰੱਖੇ ਸਹਿਮਤੀ ਆਬਜੈਕਟ ਵੇਖੋ ਅਤੇ ਪ੍ਰਬੰਧਿਤ ਕਰੋ।",
     "manage_consent_title": "ਸਹਿਮਤੀ ਪ੍ਰਬੰਧਿਤ ਕਰੋ",
+    "manage_consent_traces_desc": "ਇਸ ਏਜੰਟ ਦੇ ਗੁਮਨਾਮ ਤਰਕ ਟ੍ਰੇਸ CIRIS ਭਾਈਚਾਰੇ ਨੂੰ ਭੇਜੋ — ਉਹੀ ਸਹਿਮਤੀ ਆਬਜੈਕਟ, ਇੱਥੇ ਆਸਾਨ ਪ੍ਰਬੰਧਨ ਲਈ। ਕੋਈ ਸੁਨੇਹਾ ਸਮੱਗਰੀ ਜਾਂ ਨਿੱਜੀ ਡਾਟਾ ਨਹੀਂ।",
     "manage_consent_userdata_desc": "ਤੁਹਾਡੀ ਡਾਟਾ-ਸਾਂਝਾ ਧਾਰਾ — TEMPORARY / PARTNERED / ANONYMOUS, ਰੱਦ ਕਰਨ ਸਮੇਤ। ਸਹਿਮਤੀ ਸਰਫੇਸ 'ਤੇ ਪ੍ਰਬੰਧਿਤ।",
     "manage_consent_userdata_title": "ਯੂਜ਼ਰ-ਡਾਟਾ ਸਹਿਮਤੀ (consent:state)",
     "manage_nodes_active": "ਸਰਗਰਮ",

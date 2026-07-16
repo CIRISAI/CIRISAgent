@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "Налаштувати пірінг",
     "manage_consent_subtitle": "Переглядайте й керуйте об'єктами згоди, які тримає цей пристрій.",
     "manage_consent_title": "Керування згодою",
+    "manage_consent_traces_desc": "Надсилайте анонімні трасування міркувань цього агента спільноті CIRIS — той самий об'єкт згоди, тут для зручного керування. Без вмісту повідомлень і персональних даних.",
     "manage_consent_userdata_desc": "Ваш потік обміну даними — TEMPORARY / PARTNERED / ANONYMOUS, з відкликанням. Керується на поверхні Згоди.",
     "manage_consent_userdata_title": "Згода на дані користувача (consent:state)",
     "manage_nodes_active": "активний",

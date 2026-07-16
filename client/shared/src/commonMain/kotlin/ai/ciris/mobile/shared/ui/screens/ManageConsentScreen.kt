@@ -5,6 +5,7 @@ import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.nav.LocalIsCompactWindow
 import ai.ciris.mobile.shared.viewmodels.ConsentObjectsViewModel
+import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
 import ai.ciris.mobile.shared.viewmodels.GrantDirectionState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,10 +29,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -67,6 +70,14 @@ fun ManageConsentScreen(
     viewModel: ConsentObjectsViewModel,
     onBack: () -> Unit,
     onOpenUserConsent: () -> Unit = {},
+    /**
+     * Trace-consent surface. The **same** `consent:community_trust:v1` CEG
+     * object the setup wizard writes, viewed post-config — one-tap opt-in/out
+     * drives [DataManagementViewModel.updateAccordConsent] (the my-data PUT that
+     * re-emits/withdraws the grant AND re-arms the running adapter's seal). Null
+     * = caller didn't wire it (card hidden); we never invent a second write path.
+     */
+    dataViewModel: DataManagementViewModel? = null,
     /**
      * Whether a node-side peering-revoke endpoint exists. False today; when the
      * server ships `withdraws` for consent:replication, flip this and wire the
@@ -116,6 +127,10 @@ fun ManageConsentScreen(
             state.message?.let { msg ->
                 MessageBar(msg, isError = false) { viewModel.clearMessages() }
             }
+
+            // ── Send reasoning traces (consent:community_trust) ──────────────
+            // An alternative view of the SAME CEG object the wizard writes.
+            dataViewModel?.let { SendTracesCard(it) }
 
             // ── consent:replication peering ──────────────────────────────────
             Surface(
@@ -236,6 +251,92 @@ fun ManageConsentScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * "Send reasoning traces" opt-in — the post-config, tappable view of the same
+ * `consent:community_trust:v1` grant the setup wizard writes. Reads live state
+ * from [DataManagementViewModel.accordSettings] (the my-data GET) and toggles
+ * via [DataManagementViewModel.updateAccordConsent] (the my-data PUT — the ONE
+ * write path; it re-emits/withdraws the CEG grant and re-arms the seal).
+ */
+@Composable
+private fun SendTracesCard(dataViewModel: DataManagementViewModel) {
+    val accord by dataViewModel.accordSettings.collectAsState()
+    val communityPeer by dataViewModel.communityPeer.collectAsState()
+
+    // Populate accordSettings + community peer on entry (best-effort; the VM
+    // guards its own concurrency and degrades to a "federation pending" view).
+    LaunchedEffect(Unit) { dataViewModel.refresh() }
+
+    val armed = accord?.consentGiven == true
+    Surface(
+        color = if (armed) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        localizedString("mobile.announce_decision_trace_title"),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                    )
+                    Text(
+                        localizedString("mobile.manage_consent_traces_desc"),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = armed,
+                    onCheckedChange = { dataViewModel.updateAccordConsent(it) },
+                    modifier = Modifier.testable("toggle_send_traces"),
+                )
+            }
+
+            // Status chip — armed vs. paused (reuses the Data & Privacy vocab).
+            Surface(
+                color = if (armed) MaterialTheme.colorScheme.tertiaryContainer
+                else MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(4.dp),
+            ) {
+                Text(
+                    text = if (armed) localizedString("mobile.data_community_consent_active")
+                    else localizedString("mobile.data_community_consent_paused"),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+
+            // Target (directed counterparty) — the canonical CIRIS community.
+            Text(
+                text = "${localizedString("mobile.data_community_label")}: " +
+                    (communityPeer?.aliasOverride
+                        ?: localizedString("mobile.data_community_canonical")),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            // Detail level + events sent (only once accord settings resolve).
+            accord?.let { a ->
+                Text(
+                    text = "${localizedString("mobile.data_detail_level")}: ${a.traceLevel ?: "-"}  ·  " +
+                        "${localizedString("mobile.data_events_sent")}: ${a.eventsSent}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } ?: Text(
+                localizedString("mobile.data_community_pending"),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

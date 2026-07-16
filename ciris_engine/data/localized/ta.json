@@ -2251,6 +2251,7 @@
     "manage_consent_setup": "இணைவை அமை",
     "manage_consent_subtitle": "இந்த சாதனம் வைத்திருக்கும் ஒப்புதல் பொருள்களைக் காணவும் நிர்வகிக்கவும்.",
     "manage_consent_title": "ஒப்புதலை நிர்வகி",
+    "manage_consent_traces_desc": "இந்த முகவரின் அநாமதேய பகுத்தறிவு தடயங்களை CIRIS சமூகத்திற்கு அனுப்பவும் — அதே சம்மத பொருள், இங்கே எளிதாக நிர்வகிக்க. செய்தி உள்ளடக்கம் அல்லது தனிப்பட்ட தரவு இல்லை.",
     "manage_consent_userdata_desc": "உங்கள் தரவு-பகிர்வு ஸ்ட்ரீம் — TEMPORARY / PARTNERED / ANONYMOUS, திரும்பப்பெறலுடன். ஒப்புதல் பரப்பில் நிர்வகிக்கப்படுகிறது.",
     "manage_consent_userdata_title": "பயனர்-தரவு ஒப்புதல் (consent:state)",
     "manage_nodes_active": "செயலில்",

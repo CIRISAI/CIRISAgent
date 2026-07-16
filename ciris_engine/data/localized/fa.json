@@ -2141,6 +2141,7 @@
     "manage_consent_setup": "راه‌اندازی جفت‌سازی",
     "manage_consent_subtitle": "اشیای رضایتی را که این دستگاه نگه می‌دارد ببینید و مدیریت کنید.",
     "manage_consent_title": "مدیریت رضایت",
+    "manage_consent_traces_desc": "ردیابی‌های استدلال ناشناس این عامل را به جامعهٔ CIRIS بفرستید — همان شیء رضایت، اینجا برای مدیریت آسان. بدون محتوای پیام یا داده‌های شخصی.",
     "manage_consent_userdata_desc": "جریان اشتراک‌گذاری داده شما — TEMPORARY / PARTNERED / ANONYMOUS، با امکان لغو. در سطح «رضایت» مدیریت می‌شود.",
     "manage_consent_userdata_title": "رضایت داده‌های کاربر (consent:state)",
     "manage_nodes_active": "فعال",

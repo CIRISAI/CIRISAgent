@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "피어링 설정",
     "manage_consent_subtitle": "이 기기가 보유한 동의 객체를 보고 관리합니다.",
     "manage_consent_title": "동의 관리",
+    "manage_consent_traces_desc": "이 에이전트의 익명 추론 트레이스를 CIRIS 커뮤니티에 전송합니다. 마법사와 동일한 동의 객체를 여기서 간편하게 관리합니다. 메시지 내용이나 개인정보는 전송되지 않습니다.",
     "manage_consent_userdata_desc": "내 데이터 공유 스트림 — TEMPORARY / PARTNERED / ANONYMOUS, 철회 가능. 동의 화면에서 관리합니다.",
     "manage_consent_userdata_title": "사용자 데이터 동의 (consent:state)",
     "manage_nodes_active": "활성",

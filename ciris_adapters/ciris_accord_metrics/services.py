@@ -375,6 +375,15 @@ class AccordMetricsService:
         self._traces_consent_blocked = 0
         self._last_send_time: Optional[datetime] = None
 
+        # Runtime self-heal: while consent is OFF, the event path re-checks the
+        # CEG grant (throttled) so a grant written AFTER the service started
+        # (the mobile first-run wizard case — Chaquopy keeps ONE Python process
+        # across the Android UI "restart", so the boot-time derivation never
+        # re-runs) arms the seal without a process restart. Monotonic seconds of
+        # the last re-check; 0.0 = never checked.
+        self._last_consent_recheck: float = 0.0
+        self._consent_recheck_interval: float = 10.0
+
         # In-flight thought_ids → monotonic open time (from capture_event
         # outcomes; the authoritative partial-trace store lives in lens-core).
         # Timestamps let _periodic_sweep age out entries whose traces the
@@ -698,9 +707,28 @@ class AccordMetricsService:
             self.set_agent_id(self._initial_agent_id)
             logger.info(f"   Agent ID set from constructor: {self._initial_agent_id}")
 
+        # Consent is a CEG artifact (2.9.6 fold): the config-fallback consent
+        # the cohabitation seal gate reads must be DERIVED FROM THE GRANT, which
+        # is the source of truth. If config/env didn't already arm consent,
+        # resolve it from the standing community-trust grant BEFORE building the
+        # LensClient, so a clean restart (or any boot where the grant already
+        # exists) seals from the very first thought. Without this the service
+        # only ever saw config/env — which the wizard stopped writing at boot —
+        # so every seal resolved NoConsent even with a happy grant on disk.
+        consent_source = "config/env" if self._consent_given else None
+        if not self._consent_given:
+            grant_id = self._derive_consent_from_ceg()
+            if grant_id:
+                consent_source = f"ceg:grant {grant_id}"
+
         # REQUIRED substrate leg — raises if unavailable (see docstring)
         self._lens = self._build_lens_client()
         logger.info("   ✅ LensClient constructed (capture→seal→sign→persist owned by substrate)")
+
+        # ONE authoritative, greppable consent one-liner (rides logcat →
+        # mobile pull-logs). This is check (a) of the trace-consent validation
+        # recipe (FSD/TRACE_CONSENT.md).
+        self._log_consent_resolution(consent_source)
         logger.info("=" * 70)
 
         # Subscribe to reasoning_event_stream for trace capture.
@@ -719,12 +747,6 @@ class AccordMetricsService:
             logger.error("   Traces will NOT be captured!")
 
         self._sweep_task = asyncio.create_task(self._periodic_sweep())
-
-        if not self._consent_given:
-            logger.warning(
-                "⚠️  CONSENT NOT GIVEN — events are captured but every seal "
-                "resolves consent_blocked at the substrate (nothing persists)"
-            )
 
     async def stop(self) -> None:
         """Stop the service: final sweep + stats."""
@@ -885,6 +907,11 @@ class AccordMetricsService:
 
         self._events_received += 1
 
+        # Runtime self-heal (throttled, no-op once armed): if a CEG grant landed
+        # after boot (mobile first-run wizard — single Chaquopy process), arm the
+        # seal here so this event captures into the rebuilt, consent-on client.
+        self._maybe_self_heal_consent()
+
         if self._lens is None:
             # start() raises when the substrate is unavailable, so this only
             # happens if events arrive before start() — drop with a debug.
@@ -920,13 +947,22 @@ class AccordMetricsService:
             self._events_sent += inserted
             self._last_send_time = datetime.now(timezone.utc)
             logger.info(
-                f"✅ TRACE SEALED #{self._traces_completed}: {outcome.get('trace_id')} "
+                f"[SEAL] sealed thought={thought_id} trace_id={outcome.get('trace_id')} "
+                f"✅ TRACE SEALED #{self._traces_completed} "
                 f"({inserted} trace_events, {outcome.get('signatures_verified', 0)} signature(s) verified)"
             )
         elif kind == "consent_blocked":
             self._open_thoughts.pop(thought_id, None)
             self._traces_consent_blocked += 1
-            logger.debug(f"⏭️  Trace for {thought_id} consent_blocked at seal (reason={outcome.get('reason')})")
+            # WARNING (not debug): a skipped seal is the exact silent failure the
+            # RCA chased — no trace_events row, no error. Greppable in pull-logs
+            # as `[SEAL] SKIPPED`. Self-heal (above) normally arms before this;
+            # if it still fires, the CEG grant is genuinely absent.
+            logger.warning(
+                f"[SEAL] SKIPPED thought={thought_id} reason=no-consent "
+                f"(substrate reason={outcome.get('reason')}) — opt in via wizard or "
+                f"Data & Privacy → Send traces"
+            )
         elif kind == "rejected":
             self._events_rejected += 1
             logger.warning(f"🚫 Substrate rejected unknown event_type {outcome.get('raw')!r} (thought {thought_id})")
@@ -1639,6 +1675,97 @@ class AccordMetricsService:
     # =========================================================================
     # Consent Management
     # =========================================================================
+
+    def _derive_consent_from_ceg(self) -> Optional[str]:
+        """Resolve consent from the CEG community-trust grant (source of truth).
+
+        The 2.9.6 fold made the ``consent:community_trust:v1`` grant THE consent
+        artifact. In the cohabitation seal path lens-core gates on the
+        config-fallback consent, so the service must TRANSLATE the grant into
+        that fallback. Reads ``current_community_grant_id`` (+ its ``asserted_at``
+        for a restart-stable timestamp). On a hit, sets ``_consent_given`` /
+        ``_consent_timestamp`` (never clobbering an already-set timestamp) and
+        returns the grant id; else returns None. Never raises — a broken read
+        leaves consent untouched (capture keeps running; seals stay blocked).
+        """
+        try:
+            from ciris_engine.logic.services.governance.consent.attestation import (
+                current_community_grant_asserted_at,
+                current_community_grant_id,
+            )
+
+            grant_id = current_community_grant_id()
+            if not grant_id:
+                return None
+            self._consent_given = True
+            if not self._consent_timestamp:
+                self._consent_timestamp = (
+                    current_community_grant_asserted_at() or datetime.now(timezone.utc).isoformat()
+                )
+            return grant_id
+        except Exception as exc:  # noqa: BLE001 — best-effort, never break capture
+            logger.debug("consent-CEG: service consent derivation skipped (%s): %s", type(exc).__name__, exc)
+            return None
+
+    def _log_consent_resolution(self, source: Optional[str]) -> None:
+        """Emit the single authoritative ``[CONSENT]`` boot one-liner.
+
+        ARMED when consent resolved (source = ``config/env`` or ``ceg:grant <id>``),
+        ABSENT otherwise — with the exact signals checked, so troubleshooting is
+        a one-line grep (``grep '\\[CONSENT\\]'`` in mobile pull-logs).
+        """
+        if self._consent_given:
+            logger.info(
+                "[CONSENT] trace consent ARMED — source=%s role=community_trust "
+                "target=canonical-community ts=%s → traces WILL seal",
+                source or "unknown",
+                self._consent_timestamp or "now",
+            )
+        else:
+            config_consent = bool(self._config.get("consent_given", False))
+            env_consent = _get_metrics_env("CONSENT", "").lower() == "true"
+            logger.warning(
+                "[CONSENT] trace consent ABSENT — traces will NOT seal "
+                "(checked: ceg=none config=%s env=%s). Opt in via the setup wizard "
+                "or Data & Privacy → Send traces; the service SELF-ARMS at the next "
+                "reasoning event once the grant lands (no restart needed).",
+                config_consent,
+                env_consent,
+            )
+
+    def _maybe_self_heal_consent(self) -> None:
+        """Throttled runtime re-arm from the CEG grant while consent is OFF.
+
+        Called at the TOP of the event path (before capture), so when a grant
+        lands after boot the LensClient is rebuilt BEFORE the first event of the
+        next thought opens — that whole thought then captures in the armed
+        client and its ACTION_RESULT seals cleanly. No-ops once consent is on.
+        """
+        if self._consent_given:
+            return
+        now = time.monotonic()
+        # First re-check (sentinel 0.0) is always allowed — don't let a small
+        # monotonic epoch right after boot throttle the very first opportunity
+        # to arm. Subsequent re-checks are interval-throttled.
+        if self._last_consent_recheck != 0.0 and now - self._last_consent_recheck < self._consent_recheck_interval:
+            return
+        self._last_consent_recheck = now
+        grant_id = self._derive_consent_from_ceg()
+        if grant_id:
+            logger.info(
+                "[CONSENT] trace consent SELF-ARMED at runtime — source=ceg:grant %s "
+                "ts=%s (grant landed after boot; rebuilding LensClient)",
+                grant_id,
+                self._consent_timestamp or "now",
+            )
+            # Rebuild the substrate client so its config-fallback consent picks
+            # up the now-armed state (set_consent freezes it at construction).
+            if self._lens is not None:
+                try:
+                    self._lens = self._build_lens_client()
+                    logger.info("   [CONSENT] LensClient rebuilt — seals now persist")
+                except RuntimeError:
+                    logger.exception("   [CONSENT] LensClient rebuild failed after self-arm")
 
     def set_consent(self, consent_given: bool, timestamp: Optional[str] = None) -> None:
         """Update consent state and rebuild the substrate client.

@@ -2485,6 +2485,7 @@
     "manage_consent_setup": "Thiết lập ghép nối",
     "manage_consent_subtitle": "Xem và quản lý các đối tượng đồng ý mà thiết bị này giữ.",
     "manage_consent_title": "Quản lý Đồng ý",
+    "manage_consent_traces_desc": "Gửi các dấu vết suy luận ẩn danh của tác nhân này đến cộng đồng CIRIS — cùng một đối tượng đồng ý, hiển thị ở đây để quản lý dễ dàng. Không có nội dung tin nhắn hay dữ liệu cá nhân.",
     "manage_consent_userdata_desc": "Luồng chia sẻ dữ liệu của bạn — TẠM THỜI / ĐỐI TÁC / ẨN DANH, có thể thu hồi. Được quản lý trên mục Đồng ý.",
     "manage_consent_userdata_title": "Đồng ý dữ liệu người dùng (consent:state)",
     "manage_nodes_active": "đang hoạt động",

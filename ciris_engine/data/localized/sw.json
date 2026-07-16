@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "Sanidi ushirikiano",
     "manage_consent_subtitle": "Tazama na udhibiti vitu vya idhini ambavyo kifaa hiki kinashikilia.",
     "manage_consent_title": "Dhibiti Idhini",
+    "manage_consent_traces_desc": "Tuma alama za hoja zisizojulikana za wakala huyu kwa jumuiya ya CIRIS — kitu kile kile cha idhini, hapa kwa usimamizi rahisi. Hakuna maudhui ya ujumbe wala data binafsi.",
     "manage_consent_userdata_desc": "Mkondo wako wa kushiriki data — WA MUDA / WA USHIRIKA / BILA JINA, wenye kubatilisha. Hudhibitiwa kwenye sehemu ya Idhini.",
     "manage_consent_userdata_title": "Idhini ya data ya mtumiaji (consent:state)",
     "manage_nodes_active": "hai",

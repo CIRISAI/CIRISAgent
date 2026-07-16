@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "Configurer l'appairage",
     "manage_consent_subtitle": "Consultez et gérez les objets de consentement détenus par cet appareil.",
     "manage_consent_title": "Gérer le consentement",
+    "manage_consent_traces_desc": "Envoyez les traces de raisonnement anonymes de cet agent à la communauté CIRIS — le même objet de consentement, présenté ici pour une gestion facile. Aucun contenu de message ni donnée personnelle.",
     "manage_consent_userdata_desc": "Votre flux de partage de données — TEMPORARY / PARTNERED / ANONYMOUS, avec révocation. Géré sur la surface Consentement.",
     "manage_consent_userdata_title": "Consentement des données utilisateur (consent:state)",
     "manage_nodes_active": "actif",

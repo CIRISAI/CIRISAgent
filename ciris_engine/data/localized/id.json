@@ -2251,6 +2251,7 @@
     "manage_consent_setup": "Siapkan peering",
     "manage_consent_subtitle": "Lihat dan kelola objek persetujuan yang dipegang perangkat ini.",
     "manage_consent_title": "Kelola Persetujuan",
+    "manage_consent_traces_desc": "Kirim jejak penalaran anonim agen ini ke komunitas CIRIS — objek persetujuan yang sama, ditampilkan di sini agar mudah dikelola. Tanpa konten pesan atau data pribadi.",
     "manage_consent_userdata_desc": "Aliran berbagi data Anda — SEMENTARA / BERMITRA / ANONIM, dengan opsi cabut. Dikelola di layar Persetujuan.",
     "manage_consent_userdata_title": "Persetujuan data pengguna (consent:state)",
     "manage_nodes_active": "aktif",

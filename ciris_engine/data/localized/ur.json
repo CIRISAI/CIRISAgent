@@ -2135,6 +2135,7 @@
     "manage_consent_setup": "پیئرنگ ترتیب دیں",
     "manage_consent_subtitle": "یہ آلہ جو رضامندی آبجیکٹس رکھتا ہے انہیں دیکھیں اور ان کا انتظام کریں۔",
     "manage_consent_title": "رضامندی کا انتظام کریں",
+    "manage_consent_traces_desc": "اس ایجنٹ کے گمنام استدلالی ٹریسز CIRIS کمیونٹی کو بھیجیں — وہی رضامندی آبجیکٹ، یہاں آسان انتظام کے لیے۔ کوئی پیغام مواد یا ذاتی ڈیٹا نہیں۔",
     "manage_consent_userdata_desc": "آپ کا ڈیٹا شیئرنگ سلسلہ — عارضی / شریک / گمنام، منسوخی کے ساتھ۔ رضامندی کی سطح پر منظم۔",
     "manage_consent_userdata_title": "صارف-ڈیٹا رضامندی (consent:state)",
     "manage_nodes_active": "فعال",

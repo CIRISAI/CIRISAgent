@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, cast
 
@@ -112,6 +113,42 @@ def _coerce_optional_json_string(value: Any) -> Optional[str]:
     if isinstance(value, str):
         return value
     return json.dumps(value)
+
+
+# Classic Wise-Authority id shape (wa-YYYY-MM-DD-XXXXXX) — the ONLY shape
+# WACertificate.wa_id accepts (authority_core.py). The shared persist wa_cert
+# store can ALSO hold the local node's *owner* WA, minted by the substrate's
+# node self-claim (ciris-server /v1/setup/claim-remote) in a fed-ID-rooted
+# shape (e.g. "wa-root-<label>-<suffix>"). That row is a federation ownership
+# identity — a different identity kind, not a brain WACertificate — and does
+# not satisfy this pattern (nor necessarily the other WACertificate field
+# constraints). Materializing it as a WACertificate raises a pydantic
+# validation error that would take down EVERY brain WA enumeration (list_was,
+# OAuth fallback scan, counts) with a 500. We recognize and skip those rows so
+# the brain's WA world stays exactly what it was before node self-claim began
+# writing owner rows to the shared store (CIRISAgent#922). The classic path is
+# unaffected: a fresh unclaimed node has no such rows, so nothing is skipped.
+_CLASSIC_WA_ID_RE = re.compile(r"^wa-\d{4}-\d{2}-\d{2}-[A-Z0-9]{6}$")
+
+
+def _is_brain_wa_row(row: Dict[str, Any]) -> bool:
+    """True if a persist row is a classic brain WACertificate (not a node-owner row).
+
+    Non-classic rows are substrate-owned federation identities; skip them so
+    the brain does not choke trying to build a WACertificate it cannot
+    represent. `%r` (repr) escapes newlines/CR/tabs in the federation-
+    controlled wa_id so a crafted id can't inject log lines (CWE-117 /
+    Sonar S5145), matching the existing pattern in update_wa_certificate().
+    """
+    wa_id = row.get("wa_id")
+    if isinstance(wa_id, str) and _CLASSIC_WA_ID_RE.match(wa_id):
+        return True
+    logger.debug(
+        "authentication_store: skipping non-classic WA row wa_id=%r — "
+        "substrate/node-owner federation identity, not a brain WACertificate",
+        wa_id,
+    )
+    return False
 
 
 def _row_to_wa(row: Dict[str, Any]) -> WACertificate:
@@ -331,6 +368,8 @@ def get_wa_by_oauth(provider: str, external_id: str) -> Optional[WACertificate]:
     # Fallback: search linked OAuth identities across all active certs.
     for role in ("root", "authority", "observer"):
         for cand in _list_active_by_role(role):
+            if not _is_brain_wa_row(cand):
+                continue
             wa = _row_to_wa(cand)
             for link in wa.oauth_links:
                 if link.provider == provider and link.external_id == external_id:
@@ -488,7 +527,7 @@ def list_wa_certificates(active_only: bool) -> List[WACertificate]:
         return v if isinstance(v, str) else str(v)
 
     rows.sort(key=_created_key, reverse=True)
-    return [_row_to_wa(r) for r in rows]
+    return [_row_to_wa(r) for r in rows if _is_brain_wa_row(r)]
 
 
 def get_certificate_counts() -> Dict[str, int]:
@@ -503,7 +542,10 @@ def get_certificate_counts() -> Dict[str, int]:
     try:
         active_rows: List[Dict[str, Any]] = []
         for role in ("root", "authority", "observer"):
-            role_rows = _list_active_by_role(role)
+            # Count brain WAs only; substrate/node-owner rows are a different
+            # identity kind and are excluded from list_was, so keep the counts
+            # consistent with what the brain actually enumerates.
+            role_rows = [r for r in _list_active_by_role(role) if _is_brain_wa_row(r)]
             counts["by_role"][role] = len(role_rows)
             active_rows.extend(role_rows)
 

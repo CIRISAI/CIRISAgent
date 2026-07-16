@@ -1330,6 +1330,8 @@
     "status_connecting_ciris": "Inaunganisha kwenye CIRIS...",
     "status_loading_services": "Inapakia huduma...",
     "status_resuming_services": "Inaendesha upya huduma...",
+    "status_reconfiguring": "Inaanzisha upya nodi yako...",
+    "status_reconfiguring_timeout": "Nodi yako inachukua muda mrefu kuliko inavyotarajiwa kuanzisha upya. Tafadhali anzisha upya programu.",
     "status_shutting_down": "Inazima seva iliyopo...",
     "status_auth_shutdown": "Inajaribu kuzima kwa uthibitishaji...",
     "processing_sending": "Inatuma ujumbe...",

@@ -543,6 +543,8 @@
     "status_connecting_ciris": "CIRIS سے جڑ رہے ہیں...",
     "status_loading_services": "سروسز لوڈ ہو رہی ہیں...",
     "status_resuming_services": "سروسز دوبارہ شروع ہو رہی ہیں...",
+    "status_reconfiguring": "آپ کا نوڈ دوبارہ شروع ہو رہا ہے...",
+    "status_reconfiguring_timeout": "آپ کے نوڈ کو دوبارہ شروع ہونے میں توقع سے زیادہ وقت لگ رہا ہے۔ براہ کرم ایپ کو دوبارہ شروع کریں۔",
     "status_shutting_down": "موجودہ سرور بند ہو رہا ہے...",
     "status_auth_shutdown": "تصدیق شدہ بند کرنے کی کوشش ہو رہی ہے...",
     "processing_sending": "پیغام بھیجا جا رہا ہے...",

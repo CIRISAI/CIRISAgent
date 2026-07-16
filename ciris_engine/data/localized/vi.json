@@ -1751,6 +1751,8 @@
     "status_shutdown_forbidden": "Tắt máy bị cấm",
     "status_shutdown_initiated": "Tắt máy Bắt đầu",
     "status_shutdown_successful": "Tắt máy Thành công",
+    "status_reconfiguring": "Đang khởi động lại nút của bạn...",
+    "status_reconfiguring_timeout": "Nút của bạn đang mất nhiều thời gian khởi động lại hơn dự kiến. Vui lòng khởi động lại ứng dụng.",
     "status_shutting_down": "Đang tắt máy",
     "status_signing_in": "Đang đăng nhập với {provider}...",
     "status_starting_python": "Khởi động Trình thông dịch Python...",

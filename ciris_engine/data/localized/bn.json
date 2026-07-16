@@ -765,6 +765,8 @@
     "status_connecting_ciris": "CIRIS-এ সংযোগ করা হচ্ছে...",
     "status_loading_services": "সেবাসমূহ লোড করা হচ্ছে...",
     "status_resuming_services": "সেবাসমূহ পুনরায় শুরু করা হচ্ছে...",
+    "status_reconfiguring": "আপনার নোড পুনরায় চালু করা হচ্ছে...",
+    "status_reconfiguring_timeout": "আপনার নোড পুনরায় চালু হতে প্রত্যাশার চেয়ে বেশি সময় নিচ্ছে। অনুগ্রহ করে অ্যাপটি পুনরায় চালু করুন।",
     "status_shutting_down": "বিদ্যমান সার্ভার বন্ধ করা হচ্ছে...",
     "status_auth_shutdown": "প্রমাণীকৃত শাটডাউন চেষ্টা করা হচ্ছে...",
     "processing_sending": "বার্তা পাঠানো হচ্ছে...",

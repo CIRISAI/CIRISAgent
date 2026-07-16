@@ -636,6 +636,8 @@
     "status_connecting_ciris": "Connessione a CIRIS...",
     "status_loading_services": "Caricamento servizi...",
     "status_resuming_services": "Ripristino servizi...",
+    "status_reconfiguring": "Riavvio del tuo nodo in corso...",
+    "status_reconfiguring_timeout": "Il riavvio del tuo nodo sta richiedendo più tempo del previsto. Riavvia l'app.",
     "status_shutting_down": "Spegnimento server esistente...",
     "status_auth_shutdown": "Tentativo spegnimento autenticato...",
     "processing_sending": "Invio messaggio...",

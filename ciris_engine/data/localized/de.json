@@ -527,6 +527,8 @@
     "status_connecting_ciris": "Verbindung zu CIRIS wird hergestellt...",
     "status_loading_services": "Dienste werden geladen...",
     "status_resuming_services": "Dienste werden fortgesetzt...",
+    "status_reconfiguring": "Ihr Node wird neu gestartet...",
+    "status_reconfiguring_timeout": "Ihr Node braucht länger als erwartet zum Neustart. Bitte starten Sie die App neu.",
     "status_shutting_down": "Bestehendes Server wird heruntergefahren...",
     "status_auth_shutdown": "Authentifiziertes Herunterfahren wird versucht...",
     "startup_waiting_backend": "Warte auf Backend... (Versuch {attempt})",

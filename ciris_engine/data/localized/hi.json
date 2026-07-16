@@ -714,6 +714,8 @@
     "status_connecting_ciris": "CIRIS से कनेक्ट हो रहा है...",
     "status_loading_services": "सेवाएं लोड हो रही हैं...",
     "status_resuming_services": "सेवाएं फिर से शुरू हो रही हैं...",
+    "status_reconfiguring": "आपका नोड पुनः शुरू हो रहा है...",
+    "status_reconfiguring_timeout": "आपके नोड को पुनः शुरू होने में अपेक्षा से अधिक समय लग रहा है। कृपया ऐप को पुनः प्रारंभ करें।",
     "status_shutting_down": "मौजूदा सर्वर बंद हो रहा है...",
     "status_auth_shutdown": "प्रमाणित शटडाउन का प्रयास हो रहा है...",
     "processing_sending": "संदेश भेजा जा रहा है...",

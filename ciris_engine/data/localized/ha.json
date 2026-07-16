@@ -1223,6 +1223,8 @@
     "status_connecting_ciris": "Ana haɗawa zuwa CIRIS...",
     "status_loading_services": "Ana ɗaukar sabis...",
     "status_resuming_services": "Ana ci gaba da sabis...",
+    "status_reconfiguring": "Ana sake fara node ɗinka...",
+    "status_reconfiguring_timeout": "Node ɗinka yana ɗaukar lokaci fiye da yadda ake tsammani don sake farawa. Da fatan za a sake fara app.",
     "status_shutting_down": "Ana kashe sabar da ke aiki...",
     "status_auth_shutdown": "Ana gwada kashewa ta tabbatarwa...",
     "status_shutdown_initiated": "An fara kashewa",

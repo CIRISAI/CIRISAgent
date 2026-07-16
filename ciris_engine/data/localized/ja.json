@@ -641,6 +641,8 @@
     "status_connecting_ciris": "CIRISに接続中...",
     "status_loading_services": "サービスを読み込み中...",
     "status_resuming_services": "サービスを再開中...",
+    "status_reconfiguring": "ノードを再起動しています...",
+    "status_reconfiguring_timeout": "ノードの再起動に予想以上の時間がかかっています。アプリを再起動してください。",
     "status_shutting_down": "既存のサーバーをシャットダウン中...",
     "status_auth_shutdown": "認証済みシャットダウンを試行中...",
     "processing_sending": "メッセージを送信中...",

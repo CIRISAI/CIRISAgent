@@ -626,6 +626,8 @@
     "status_connecting_ciris": "الاتصال بـ CIRIS...",
     "status_loading_services": "تحميل الخدمات...",
     "status_resuming_services": "استئناف الخدمات...",
+    "status_reconfiguring": "جارٍ إعادة تشغيل العقدة الخاصة بك...",
+    "status_reconfiguring_timeout": "تستغرق العقدة الخاصة بك وقتًا أطول من المتوقع لإعادة التشغيل. يرجى إعادة تشغيل التطبيق.",
     "status_shutting_down": "إيقاف التشغيل للخادم الحالي...",
     "status_auth_shutdown": "محاولة إيقاف التشغيل المصادق عليه...",
     "startup_waiting_backend": "في انتظار الخادم الخلفي... (محاولة {attempt})",

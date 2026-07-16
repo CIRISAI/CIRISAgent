@@ -766,6 +766,8 @@
     "status_connecting_ciris": "இணைக்கிறது to CIRIS...",
     "status_loading_services": "ஏற்றுகிறது services...",
     "status_resuming_services": "சேவைகளை மீண்டும் தொடங்குகிறது...",
+    "status_reconfiguring": "உங்கள் கணுவை மீண்டும் தொடங்குகிறது...",
+    "status_reconfiguring_timeout": "உங்கள் கணு மீண்டும் தொடங்க எதிர்பார்த்ததை விட அதிக நேரம் எடுக்கிறது. தயவுசெய்து ஆப்பை மீண்டும் தொடங்கவும்.",
     "status_shutting_down": "தற்போதுள்ள சர்வரை நிறுத்துகிறது...",
     "status_auth_shutdown": "சான்றளிப்புடன் நிறுத்தலை முயற்சிக்கிறது...",
     "processing_sending": "அனுப்புing செய்தி...",

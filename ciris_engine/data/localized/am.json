@@ -1321,6 +1321,8 @@
     "status_connecting_ciris": "ወደ CIRIS ከሚያገናኘው...",
     "status_loading_services": "አገልግሎቶች ጫኖ...",
     "status_resuming_services": "አገልግሎቶች ይቀጥሉ...",
+    "status_reconfiguring": "የእርስዎን node ዳግም በማስጀመር ላይ...",
+    "status_reconfiguring_timeout": "የእርስዎ node ከተጠበቀው በላይ ዳግም ለመጀመር እየወሰደ ነው። እባክዎ መተግበሪያውን ዳግም ያስጀምሩ።",
     "status_shutting_down": "ሰርቨር ዝግ...",
     "tools_search_placeholder": "መሳሪያ ፍለጋ...",
     "tools_all_categories": "ሁሉም ምድብ",

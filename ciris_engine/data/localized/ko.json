@@ -435,6 +435,8 @@
     "status_connecting_ciris": "CIRIS에 연결 중...",
     "status_loading_services": "서비스 로드 중...",
     "status_resuming_services": "서비스 재개 중...",
+    "status_reconfiguring": "노드를 다시 시작하는 중...",
+    "status_reconfiguring_timeout": "노드를 다시 시작하는 데 예상보다 오래 걸리고 있습니다. 앱을 다시 시작해 주세요.",
     "status_shutting_down": "기존 서버 종료 중...",
     "status_auth_shutdown": "인증된 종료 시도 중...",
     "status_shutdown_initiated": "종료 시작됨",

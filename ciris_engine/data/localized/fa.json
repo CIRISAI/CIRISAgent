@@ -632,6 +632,8 @@
     "status_connecting_ciris": "الاتصال بـ CIRIS...",
     "status_loading_services": "تحميل الخدمات...",
     "status_resuming_services": "استئناف الخدمات...",
+    "status_reconfiguring": "در حال راه‌اندازی مجدد گره شما...",
+    "status_reconfiguring_timeout": "راه‌اندازی مجدد گره شما بیشتر از حد انتظار طول می‌کشد. لطفاً برنامه را دوباره راه‌اندازی کنید.",
     "status_shutting_down": "إيقاف التشغيل للخادم الحالي...",
     "status_auth_shutdown": "محاولة إيقاف التشغيل المصادق عليه...",
     "startup_waiting_backend": "في انتظار الخادم الخلفي... (محاولة {attempt})",

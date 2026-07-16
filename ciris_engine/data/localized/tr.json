@@ -918,6 +918,8 @@
     "status_connecting_ciris": "CIRIS'e bağlanılıyor...",
     "status_loading_services": "Hizmetler yükleniyor...",
     "status_resuming_services": "Hizmetler sürdürülüyor...",
+    "status_reconfiguring": "Düğümünüz yeniden başlatılıyor...",
+    "status_reconfiguring_timeout": "Düğümünüzün yeniden başlatılması beklenenden uzun sürüyor. Lütfen uygulamayı yeniden başlatın.",
     "status_shutting_down": "Mevcut sunucu kapatılıyor...",
     "status_auth_shutdown": "Kimlik doğrulamalı kapatma deneniyor...",
     "processing_sending": "Mesaj gönderiliyor...",

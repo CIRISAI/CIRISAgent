@@ -1238,6 +1238,8 @@
     "status_connecting_ciris": "Conectando ao CIRIS...",
     "status_loading_services": "Carregando serviços...",
     "status_resuming_services": "Retomando serviços...",
+    "status_reconfiguring": "Reiniciando seu nó...",
+    "status_reconfiguring_timeout": "Seu nó está demorando mais do que o esperado para reiniciar. Por favor, reinicie o aplicativo.",
     "status_shutting_down": "Desligando servidor existente...",
     "status_auth_shutdown": "Tentando desligamento autenticado...",
     "processing_sending": "Enviando mensagem...",

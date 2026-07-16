@@ -766,6 +766,8 @@
     "status_connecting_ciris": "Ń sopọ̀ mọ́ CIRIS...",
     "status_loading_services": "Ń gbékalẹ̀ àwọn iṣẹ́ ìrànwọ́...",
     "status_resuming_services": "Ń tún àwọn iṣẹ́ ìrànwọ́ bẹ̀rẹ̀...",
+    "status_reconfiguring": "Ń tún node rẹ bẹ̀rẹ̀...",
+    "status_reconfiguring_timeout": "Node rẹ ń gba àkókò gùn ju bí a ṣe retí lọ láti tún bẹ̀rẹ̀. Jọ̀wọ́ tún áàpù náà bẹ̀rẹ̀.",
     "status_shutting_down": "Ń dínà olùpèsè tẹ́lẹ̀ tí ó wà...",
     "status_auth_shutdown": "Ń gbìyànjú ìdínà pẹ̀lú ìfọwọ́sí...",
     "processing_sending": "Ń fi ìránṣẹ́ ránṣẹ́...",

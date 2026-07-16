@@ -766,6 +766,8 @@
     "status_connecting_ciris": "กำลังเชื่อมต่อกับ CIRIS...",
     "status_loading_services": "กำลังโหลด บริการs...",
     "status_resuming_services": "Resuming บริการs...",
+    "status_reconfiguring": "กำลังรีสตาร์ทโหนดของคุณ...",
+    "status_reconfiguring_timeout": "โหนดของคุณใช้เวลารีสตาร์ทนานกว่าที่คาดไว้ กรุณารีสตาร์ทแอป",
     "status_shutting_down": "กำลังปิดเซิร์ฟเวอร์ที่มีอยู่...",
     "status_auth_shutdown": "Trying authenticated ปิดระบบ...",
     "processing_sending": "ส่งing message...",

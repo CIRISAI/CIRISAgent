@@ -635,6 +635,8 @@
     "status_connecting_ciris": "Подключение до CIRIS...",
     "status_loading_services": "Загрузка сервисов...",
     "status_resuming_services": "Возобновление сервисов...",
+    "status_reconfiguring": "Перезапуск вашого вузла...",
+    "status_reconfiguring_timeout": "Перезапуск вашого вузла триває довше, ніж очікувалося. Будь ласка, перезапустіть застосунок.",
     "status_shutting_down": "Выключение существующего сервера...",
     "status_auth_shutdown": "Попытка аутентифицированного выключения...",
     "processing_sending": "Отправка сообщения...",

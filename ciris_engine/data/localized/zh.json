@@ -636,6 +636,8 @@
     "status_connecting_ciris": "连接 CIRIS...",
     "status_loading_services": "加载服务...",
     "status_resuming_services": "恢复服务...",
+    "status_reconfiguring": "正在重启您的节点...",
+    "status_reconfiguring_timeout": "您的节点重启时间超出预期。请重启应用。",
     "status_shutting_down": "关闭现有服务器...",
     "status_auth_shutdown": "尝试经过身份验证的关闭...",
     "processing_sending": "发送消息中...",

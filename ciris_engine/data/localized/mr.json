@@ -766,6 +766,8 @@
     "status_connecting_ciris": "CIRIS शी जोडत आहे...",
     "status_loading_services": "लोड होत आहे सेवाs...",
     "status_resuming_services": "Resuming सेवाs...",
+    "status_reconfiguring": "तुमचा नोड पुन्हा सुरू होत आहे...",
+    "status_reconfiguring_timeout": "तुमच्या नोडला पुन्हा सुरू होण्यास अपेक्षेपेक्षा जास्त वेळ लागत आहे. कृपया अ‍ॅप पुन्हा सुरू करा.",
     "status_shutting_down": "विद्यमान सर्व्हर बंद करत आहे...",
     "status_auth_shutdown": "Trying authenticated बंद...",
     "processing_sending": "पाठवाing message...",

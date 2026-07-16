@@ -766,6 +766,8 @@
     "status_connecting_ciris": "కనెక్ట్ అవుతోంది to CIRIS...",
     "status_loading_services": "సేవలు లోడ్ చేస్తోంది...",
     "status_resuming_services": "సేవలు పునఃప్రారంభిస్తోంది...",
+    "status_reconfiguring": "మీ నోడ్‌ను పునఃప్రారంభిస్తోంది...",
+    "status_reconfiguring_timeout": "మీ నోడ్ పునఃప్రారంభం కావడానికి ఊహించిన దానికంటే ఎక్కువ సమయం తీసుకుంటోంది. దయచేసి యాప్‌ను పునఃప్రారంభించండి.",
     "status_shutting_down": "ఇప్పటికే ఉన్న సర్వర్ షట్‌డౌన్ చేస్తోంది...",
     "status_auth_shutdown": "ప్రమాణీకృత షట్‌డౌన్ ప్రయత్నిస్తోంది...",
     "processing_sending": "సందేశం పంపుతోంది...",

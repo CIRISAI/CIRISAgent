@@ -764,6 +764,8 @@
     "status_connecting_ciris": "CIRIS ਨਾਲ ਜੁੜ ਰਿਹਾ ਹੈ...",
     "status_loading_services": "ਸੇਵਾਵਾਂ ਲੋਡ ਕੀਤੀਆਂ ਜਾ ਰਹੀਆਂ ਹਨ...",
     "status_resuming_services": "ਸੇਵਾਵਾਂ ਮੁੜ ਸ਼ੁਰੂ ਕੀਤੀਆਂ ਜਾ ਰਹੀਆਂ ਹਨ...",
+    "status_reconfiguring": "ਤੁਹਾਡਾ ਨੋਡ ਮੁੜ ਸ਼ੁਰੂ ਹੋ ਰਿਹਾ ਹੈ...",
+    "status_reconfiguring_timeout": "ਤੁਹਾਡੇ ਨੋਡ ਨੂੰ ਮੁੜ ਸ਼ੁਰੂ ਹੋਣ ਵਿੱਚ ਉਮੀਦ ਤੋਂ ਵੱਧ ਸਮਾਂ ਲੱਗ ਰਿਹਾ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਐਪ ਮੁੜ ਸ਼ੁਰੂ ਕਰੋ।",
     "status_shutting_down": "ਮੌਜੂਦਾ ਸਰਵਰ ਬੰਦ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ...",
     "status_auth_shutdown": "ਪ੍ਰਮਾਣਿਤ ਸ਼ਟਡਾਊਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ...",
     "processing_sending": "ਸੁਨੇਹਾ ਭੇਜਿਆ ਜਾ ਰਿਹਾ ਹੈ...",

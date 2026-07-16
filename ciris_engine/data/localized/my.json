@@ -766,6 +766,8 @@
     "status_connecting_ciris": "CIRIS နှင့် ချိတ်ဆက်နေသည်...",
     "status_loading_services": "ဖွင့်နေသည် ဝန်ဆောင်မှုs...",
     "status_resuming_services": "Resuming ဝန်ဆောင်မှုs...",
+    "status_reconfiguring": "သင်၏ node ကို ပြန်လည်စတင်နေသည်...",
+    "status_reconfiguring_timeout": "သင်၏ node သည် ပြန်လည်စတင်ရန် မျှော်လင့်ထားသည်ထက် အချိန်ပိုကြာနေသည်။ ကျေးဇူးပြု၍ အပ်ပ်ကို ပြန်လည်စတင်ပါ။",
     "status_shutting_down": "ရှိပြီးသား server ကို ရပ်တန့်နေသည်...",
     "status_auth_shutdown": "Trying authenticated ပိတ်...",
     "processing_sending": "ပို့ing message...",

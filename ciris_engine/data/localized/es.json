@@ -670,6 +670,8 @@
     "status_connecting_ciris": "Conectando a CIRIS...",
     "status_loading_services": "Cargando servicios...",
     "status_resuming_services": "Reanudando servicios...",
+    "status_reconfiguring": "Reiniciando tu nodo...",
+    "status_reconfiguring_timeout": "Tu nodo está tardando más de lo esperado en reiniciarse. Por favor, reinicia la aplicación.",
     "status_shutting_down": "Apagando servidor existente...",
     "status_auth_shutdown": "Intentando apagado autenticado...",
     "adapter_reloading": "Recargando adaptador...",

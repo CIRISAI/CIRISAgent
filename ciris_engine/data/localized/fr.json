@@ -635,6 +635,8 @@
     "status_connecting_ciris": "Connexion à CIRIS...",
     "status_loading_services": "Chargement des services...",
     "status_resuming_services": "Reprise des services...",
+    "status_reconfiguring": "Redémarrage de votre nœud...",
+    "status_reconfiguring_timeout": "Le redémarrage de votre nœud prend plus de temps que prévu. Veuillez redémarrer l'application.",
     "status_shutting_down": "Arrêt du serveur existant...",
     "status_auth_shutdown": "Tentative d'arrêt authentifié...",
     "processing_sending": "Envoi du message...",

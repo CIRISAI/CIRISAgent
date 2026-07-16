@@ -764,6 +764,8 @@
     "status_connecting_ciris": "Menghubungkan ke CIRIS...",
     "status_loading_services": "Memuat layanan...",
     "status_resuming_services": "Melanjutkan layanan...",
+    "status_reconfiguring": "Memulai ulang node Anda...",
+    "status_reconfiguring_timeout": "Node Anda membutuhkan waktu lebih lama dari yang diharapkan untuk dimulai ulang. Silakan mulai ulang aplikasi.",
     "status_shutting_down": "Menutup server yang ada...",
     "status_auth_shutdown": "Mencoba penutupan terautentikasi...",
     "processing_sending": "Mengirim pesan...",

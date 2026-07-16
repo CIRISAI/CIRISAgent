@@ -96,6 +96,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.doubleOrNull
@@ -1732,6 +1733,63 @@ class CIRISApiClient(
      * substrate. Run AFTER the claim (the owner must exist) with the owner session.
      * [band] is `"minor"` | `"adult"`. Returns the raw JSON.
      */
+    /**
+     * Owner login against the LOCAL NODE — `POST {localNodeUrl}/v1/auth/login`.
+     *
+     * The post-claim owner session MUST come from the node: the self-claim writes
+     * the owner ROOT cert into the node's substrate and ROTATES the setup session
+     * (FSD/FIRST_RUN_STATECHART.md, axis S), while the brain (:8080) is still in
+     * setup mode with no auth routes mounted — `login()` (SDK, brain-bound) can
+     * never succeed at that point (its 404 body fails LoginResponse parsing,
+     * which is exactly the E6x failure the first conformance runs captured).
+     * Accepts the friendly username OR the wa_id. Response shape verified live
+     * on ciris-server 0.5.122:
+     * {"access_token","token_type","expires_in","role","user_id"}.
+     *
+     * Returns the bearer token; does NOT mutate [accessToken] — callers decide.
+     */
+    suspend fun loginToNode(
+        username: String,
+        password: String,
+        localNodeUrl: String = LOCAL_NODE_URL,
+    ): String {
+        val method = "loginToNode"
+        logInfo(method, "POST $localNodeUrl/v1/auth/login user=$username")
+        val client = federationHttpClient()
+        return try {
+            val response = client.post("$localNodeUrl/v1/auth/login") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    buildJsonObject {
+                        put("username", username)
+                        put("password", password)
+                    }.toString()
+                )
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "localNodeUrl=$localNodeUrl")
+                throw RuntimeException("node login failed: ${response.status}: ${raw.take(200)}")
+            }
+            val obj = Json.parseToJsonElement(raw).jsonObject
+            val tokenValue = obj["access_token"]?.jsonPrimitive?.content
+            if (tokenValue.isNullOrBlank()) {
+                throw RuntimeException("node login: no access_token in response: ${raw.take(200)}")
+            }
+            logInfo(
+                method,
+                "node owner session established (role=${obj["role"]?.jsonPrimitive?.content} " +
+                    "user_id=${obj["user_id"]?.jsonPrimitive?.content})",
+            )
+            tokenValue
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl user=$username")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
     suspend fun setAgeSelf(
         band: String,
         localNodeUrl: String = LOCAL_NODE_URL,

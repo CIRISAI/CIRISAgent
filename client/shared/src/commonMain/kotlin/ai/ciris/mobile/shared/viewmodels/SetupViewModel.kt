@@ -1229,9 +1229,14 @@ class SetupViewModel(
                     val password = _state.value.userPassword
                     if (!waId.isNullOrBlank() && password.isNotBlank()) {
                         try {
-                            PlatformLogger.i(TAG, "[ORDER] owner_login begin (session=$sessionKind → owner)")
-                            val auth = client.login(waId, password)
-                            client.setAccessToken(auth.access_token)
+                            PlatformLogger.i(TAG, "[ORDER] owner_login begin (session=$sessionKind → owner, target=node)")
+                            // MUST target the NODE (:4243): the claim wrote the owner
+                            // ROOT cert into the node's substrate and rotated the
+                            // setup session; the brain (:8080) is still in setup mode
+                            // with no auth routes (client.login() there parse-fails
+                            // on the 404 body — the E6x signature).
+                            val nodeToken = client.loginToNode(waId, password, CIRISApiClient.LOCAL_NODE_URL)
+                            client.setAccessToken(nodeToken)
                             sessionKind = "owner"
                             ownerLoginOk = true
                             PlatformLogger.i(TAG, "[ORDER] owner_login ok (session now=owner)")

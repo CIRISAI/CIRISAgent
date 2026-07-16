@@ -493,6 +493,25 @@ class MobileTestRunner:
         with open(results_path, "w") as f:
             json.dump(suite.to_dict(), f, indent=2)
 
+        # Fold-failure RCA: on any FAILED/ERROR, classify which layer broke
+        # (fold-panic / compose-hang / bind-window / PIN / session / delivery)
+        # instead of leaving a bare FAIL. Fully best-effort — an RCA crash
+        # must never mask the original suite failure.
+        rca_path = None
+        if not suite.success:
+            try:
+                from .fold_rca import format_rca, format_rca_markdown, run_fold_rca
+
+                print("\nSuite had failures — running fold-failure RCA...")
+                rca_result = run_fold_rca(self.adb, package=self.config.package_name)
+                print(format_rca(rca_result))
+                rca_path = output_dir / f"rca_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                with open(rca_path, "w") as f:
+                    f.write(format_rca_markdown(rca_result))
+            except Exception as e:
+                print(f"  [WARN] fold RCA failed ({e}) — original failure report above stands")
+                rca_path = None
+
         # Print summary
         print("\n" + "=" * 60)
         print("Test Summary")
@@ -505,6 +524,8 @@ class MobileTestRunner:
         print(f"  Results: {results_path}")
         if suite.logcat_path:
             print(f"  Logcat:  {suite.logcat_path}")
+        if rca_path:
+            print(f"  RCA:     {rca_path}")
         print("=" * 60 + "\n")
 
         return suite

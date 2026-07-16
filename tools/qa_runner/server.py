@@ -1036,6 +1036,21 @@ class APIServerManager:
             # bundles only ever held hashed traces (no full text).
             trace_level = "generic" if (model_eval_requested or safety_battery_requested) else "detailed"
             env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = trace_level
+            # Point the substrate's local-tee stream at qa_reports/<backend>/ for
+            # ANY accord_metrics-enabled run — not only federation-delivery ones.
+            # accord_metrics_tests.py reads <instance>/lens-batch-<seq>.json from
+            # exactly this dir (see AccordMetricsTests.qa_reports_dir, wired from
+            # server_manager.qa_reports_dir). Before this, the tee dir was set
+            # only inside the federation_delivery block below, so a plain
+            # `accord_metrics` run received reasoning events but never flushed
+            # them to disk — Export Real Trace / Verb Second Pass / Generic Trace
+            # Field all failed with "No traces found in qa_reports/". The
+            # live-lens path in the federation block intentionally redirects the
+            # tee to a per-run /tmp dir, so leave the key unset when live_lens is
+            # on and let that block own it.
+            if not self.config.live_lens and "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" not in env:
+                self.qa_reports_dir.mkdir(parents=True, exist_ok=True)
+                env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] = str(self.qa_reports_dir)
 
         # Federation delivery (Reticulum trace-flow to canonical-server-1).
         # Distinct from the HTTP lens shipping above: this drives the embedded

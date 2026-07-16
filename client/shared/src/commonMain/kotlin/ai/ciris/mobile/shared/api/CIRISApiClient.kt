@@ -4985,6 +4985,16 @@ class CIRISApiClient(
                     json(Json {
                         ignoreUnknownKeys = true
                         isLenient = true
+                        // DEFAULT-COLLISION FIX: the generated SdkSetupCompleteRequest
+                        // declares adminUsername default "admin". With kotlinx's
+                        // default encodeDefaults=false, a user who picks EXACTLY
+                        // "admin" serializes as an ABSENT field → the server's
+                        // pydantic default ("owner") wins → the account is created
+                        // as "owner" and the user's admin/password login bounces
+                        // forever. Encode set values always; keep omitting nulls so
+                        // server-side defaults still apply to genuinely-unset fields.
+                        encodeDefaults = true
+                        explicitNulls = false
                     })
                 }
                 install(HttpTimeout) {

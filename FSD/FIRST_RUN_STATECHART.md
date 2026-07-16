@@ -43,13 +43,22 @@ renders an axis it never actually checked.
 | O2a | OWNED + age recorded | `age band … recorded` |
 | O2b | OWNED + announced | `announced to federation` |
 
-### S — `:4243` session (volatile; dies with every runtime restart)
+### S — `:4243` session (volatile; dies at BOTH boundaries below)
 | id | state | how it arises |
 |---|---|---|
 | S0 | none | before first auth |
 | S1 | SETUP session | first-boot bearer (wizard's working credential) |
 | S2 | OWNER session | post-claim `login(waId, password)` → `setAccessToken` |
-| S3 | INVALIDATED | runtime restart — **every** bearer 401s until re-login |
+| S3 | INVALIDATED | see the two invalidation boundaries |
+
+**Two invalidation boundaries** (each proven by a live 401):
+1. **E5 rotates S1** — a successful claim crosses a privilege boundary and the node
+   rotates the setup session (observed: claim OK at t, `setAgeSelf` 401 on the same
+   bearer at t+32ms, no restart in between). Hence **E7/E8 REQUIRE S2 (E6 ok)** —
+   firing them without an owner login is a guaranteed 401; the saga skips them
+   honestly (`[ORDER] set_age SKIPPED (no owner session)`).
+2. **E12 kills everything** — the runtime restart invalidates S1 AND S2; nothing
+   authenticated may fire until re-login (E15).
 
 ### B — Brain/config (`:8080`)
 | id | state | observable predicate |

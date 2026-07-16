@@ -1238,9 +1238,37 @@ class SetupViewModel(
                         } catch (e: Exception) {
                             PlatformLogger.w(TAG, "[ORDER] owner_login FAILED (continuing on session=$sessionKind): ${e.message}")
                         }
+                    } else {
+                        // The guard states are THE diagnostic for post-claim 401s:
+                        // a successful claim ROTATES the setup session (privilege
+                        // boundary crossed), so without an owner login every
+                        // subsequent :4243 call is a guaranteed 401.
+                        PlatformLogger.w(
+                            TAG,
+                            "[ORDER] owner_login SKIPPED (waId_present=${!waId.isNullOrBlank()} " +
+                                "password_present=${password.isNotBlank()}) — no owner session",
+                        )
                     }
                     val band = _state.value.ageRange.selectedBandToken
-                    if (!band.isNullOrBlank()) {
+                    if (!ownerLoginOk) {
+                        // Statechart law (FSD/FIRST_RUN_STATECHART.md): setAgeSelf and
+                        // announce REQUIRE the owner session — the claim rotated the
+                        // setup bearer, so firing them now is a guaranteed 401.
+                        // Skip honestly with markers; surface the age gap for retry.
+                        PlatformLogger.w(TAG, "[ORDER] set_age SKIPPED (no owner session; band=$band)")
+                        if (_state.value.announceOwnership) {
+                            PlatformLogger.w(TAG, "[ORDER] announce SKIPPED (no owner session)")
+                        }
+                        if (!band.isNullOrBlank()) {
+                            _state.value = _state.value.copy(
+                                ageRange = _state.value.ageRange.copy(
+                                    recorded = false,
+                                    error = "Your age range couldn't be recorded during setup — " +
+                                        "you can set it after signing in.",
+                                )
+                            )
+                        }
+                    } else if (!band.isNullOrBlank()) {
                         try {
                             PlatformLogger.i(
                                 TAG,
@@ -1268,7 +1296,7 @@ class SetupViewModel(
                     // claim already succeeded, so this is NON-FATAL — on failure we
                     // surface a soft notice and let the user retry later; it never
                     // blocks COMPLETE. Takes effect on the node's next boot.
-                    if (_state.value.announceOwnership) {
+                    if (ownerLoginOk && _state.value.announceOwnership) {
                         try {
                             PlatformLogger.i(TAG, "[ORDER] announce begin (session=$sessionKind)")
                             val ann = client.announceOwnership(localNodeUrl = CIRISApiClient.LOCAL_NODE_URL)

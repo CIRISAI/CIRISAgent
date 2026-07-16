@@ -27,10 +27,14 @@ _EVENT_PATTERNS: List[Tuple[str, str, re.Pattern]] = [
     ("E5", "claim_accepted", re.compile(r"\[ORDER\] claim_accepted")),
     ("E5x", "claim_rejected", re.compile(r"\[ORDER\] claim_rejected")),
     ("E6", "owner_login", re.compile(r"\[ORDER\] owner_login ok")),
+    ("E6x", "owner_login_failed", re.compile(r"\[ORDER\] owner_login FAILED")),
+    ("E6s", "owner_login_skipped", re.compile(r"\[ORDER\] owner_login SKIPPED")),
     ("E7", "age_recorded", re.compile(r"\[ORDER\] age_recorded")),
     ("E7x", "age_record_failed", re.compile(r"\[ORDER\] age_record FAILED")),
+    ("E7s", "age_skipped", re.compile(r"\[ORDER\] set_age SKIPPED")),
     ("E8", "announced", re.compile(r"\[ORDER\] announced to federation")),
     ("E8x", "announce_failed", re.compile(r"\[ORDER\] announce FAILED")),
+    ("E8s", "announce_skipped", re.compile(r"\[ORDER\] announce SKIPPED")),
     ("E9", "claim_settled", re.compile(r"\[ORDER\] claim_settled")),
     ("E9t", "settle_await_timeout", re.compile(r"\[ORDER\] settle_await TIMEOUT")),
     ("E10", "complete_begin", re.compile(r"\[ORDER\] complete_setup begin")),
@@ -67,6 +71,14 @@ _REQUIRES: List[Tuple[str, str, str]] = [
     ("E5", "E9", "claim accepted but never settled — settle gate broken"),
     ("E10", "E9", "completeSetup began without a prior settle — E9≺E10 gate bypassed"),
 ]
+
+# Session-rotation law (FSD § 1, axis S): a successful claim (E5) ROTATES the
+# setup session, so E7/E8 fired without an owner session (E6) are guaranteed
+# 401s. E7x/E8x present while E6 is absent = this exact known cause.
+_ROTATION_DIAGNOSTIC = (
+    "E7x/E8x without E6: post-claim call rode the ROTATED setup session — "
+    "owner login was skipped/failed (see the owner_login SKIPPED marker for the guard states)"
+)
 
 
 def _adb_out(adb, args: List[str], timeout: int = 30) -> str:
@@ -126,6 +138,10 @@ def validate_trace(trace: List[dict]) -> dict:
     # Settle-await timeout is always noteworthy (bounded gate expired).
     if "E9t" in first:
         violations.append("SETTLE TIMEOUT: the E9 await expired (90s) — completeSetup ran ungated")
+
+    # Session-rotation diagnostic: post-claim 401s without an owner session.
+    if ("E7x" in first or "E8x" in first) and "E6" not in first:
+        violations.append(_ROTATION_DIAGNOSTIC)
 
     return {
         "conformant": not violations,

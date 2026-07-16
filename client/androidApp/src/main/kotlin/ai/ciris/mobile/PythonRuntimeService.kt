@@ -5,7 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -54,6 +56,19 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
     private var backgroundTimeoutRunnable: Runnable? = null
     private var isAppInForeground = true
 
+    /**
+     * Wi-Fi multicast lock held for the lifetime of the embedded backend.
+     *
+     * Chaquopy runs the Python runtime IN THIS PROCESS, so the backend's
+     * mDNS/zeroconf sockets (LAN LLM + node discovery) and Reticulum
+     * AutoInterface share this process's multicast filter. Android drops
+     * inbound multicast (mDNS responses on 224.0.0.251:5353, RNS link-local
+     * announces) unless a MulticastLock is held — which is why LAN discovery
+     * returned nothing on physical devices. Held while the service runs so any
+     * discovery/announce during that window can receive replies.
+     */
+    private var multicastLock: WifiManager.MulticastLock? = null
+
     override fun onCreate() {
         super<Service>.onCreate()
         Log.i(TAG, "Service created")
@@ -70,6 +85,7 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
 
         startForeground(NOTIFICATION_ID, createNotification("Starting CIRIS..."))
         isRunning = true
+        acquireMulticastLock()
 
         serviceScope.launch {
             try {
@@ -92,6 +108,8 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
         Log.i(TAG, "Service destroyed")
         isRunning = false
         serverStarted = false
+
+        releaseMulticastLock()
 
         // Cancel timeout and remove lifecycle observer
         cancelBackgroundTimeout()
@@ -231,6 +249,51 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
             Log.i(TAG, "[SmartStartup] local-shutdown response: $responseCode")
         } catch (e: Exception) {
             Log.w(TAG, "[SmartStartup] Failed to send shutdown: ${e.message}")
+        }
+    }
+
+    // ========================================================================
+    // Wi-Fi Multicast Lock (LAN discovery: mDNS + Reticulum AutoInterface)
+    // ========================================================================
+
+    /**
+     * Acquire the multicast lock so the in-process Python backend can RECEIVE
+     * multicast on Wi-Fi. Idempotent: a no-op if already held. Failures are
+     * logged and swallowed — discovery degrades gracefully rather than crashing
+     * the runtime service.
+     */
+    private fun acquireMulticastLock() {
+        if (multicastLock?.isHeld == true) return
+        try {
+            val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            if (wifi == null) {
+                Log.w(TAG, "WifiManager unavailable - LAN discovery multicast will be filtered")
+                return
+            }
+            val lock = wifi.createMulticastLock("ciris-lan-discovery").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            multicastLock = lock
+            Log.i(TAG, "Multicast lock acquired (held=${lock.isHeld}) - mDNS/RNS LAN discovery enabled")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to acquire multicast lock: ${e.message}")
+        }
+    }
+
+    /** Release the multicast lock if held. Safe to call multiple times. */
+    private fun releaseMulticastLock() {
+        try {
+            multicastLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                    Log.i(TAG, "Multicast lock released")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to release multicast lock: ${e.message}")
+        } finally {
+            multicastLock = null
         }
     }
 

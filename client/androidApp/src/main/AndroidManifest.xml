@@ -8,6 +8,17 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      Local-network discovery: the embedded Python backend uses mDNS/zeroconf
+      (jetson.local, ollama.local, ...) and Reticulum AutoInterface to find LAN
+      peers/servers. Android's Wi-Fi driver filters inbound multicast (mDNS
+      responses on 224.0.0.251:5353, RNS link-local announces) unless a
+      WifiManager.MulticastLock is held. PythonRuntimeService holds one while the
+      backend runs. Without this permission the lock cannot be acquired and LAN
+      discovery finds nothing on physical devices (e.g. Samsung).
+    -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <!-- Support 16KB page size for Android 15+ -->
     <uses-feature

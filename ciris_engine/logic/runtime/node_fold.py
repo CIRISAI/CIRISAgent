@@ -126,6 +126,25 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
             "/v1/federation/announce would 404 and the agent could not announce."
         )
 
+    # CIRISServer#276 clean-restart: on an in-process runtime RESTART (mobile
+    # setup-complete), the prior node's tokio thread can keep :4243 bound for
+    # minutes during teardown/rebind (EADDRINUSE) even though the reuse-probe
+    # above no longer connects — the old ~4-minute wedge between an owned
+    # first-run and the automated filmstrip. shutdown_node() (ciris-server
+    # >=0.5.122) signals the prior node to stop and BLOCKS until :4243 is
+    # bindable again; it no-ops immediately when nothing is serving, so it is
+    # safe on the first-boot path too. Guarded via getattr so a wheel <0.5.122
+    # degrades to the prior (EADDRINUSE-prone) behavior rather than crashing.
+    _shutdown_node = getattr(ciris_server, "shutdown_node", None)
+    if _shutdown_node is not None:
+        try:
+            _bindable = _shutdown_node(timeout_secs=30)
+            logger.info("Node fold: shutdown_node() → :4243 bindable=%s (CIRISServer#276 clean-restart)", _bindable)
+        except Exception as exc:  # noqa: BLE001
+            # Non-fatal: if the primitive itself errors, fall through to serve()
+            # — a genuine EADDRINUSE there still trips node-fails ⇒ agent-fails.
+            logger.warning("Node fold: shutdown_node() raised (continuing to serve): %s", exc)
+
     from ciris_engine.logic.runtime.brain_adapter import BrainAdapter
 
     resolved_home = home or _resolve_home()

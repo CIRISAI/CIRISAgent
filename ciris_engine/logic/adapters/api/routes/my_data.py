@@ -830,8 +830,10 @@ def _capacity_base_url() -> str:
 #
 #   * TAU_ATTESTED (0.95) — a live trust edge exists: either the CEG
 #     community-trust grant is in force (consent:community_trust:v1,
-#     newest-wins — the same artifact lens-core's consent gate reads) or
-#     at least one federation peer is reachable. The occurrence's claim
+#     newest-wins — the same artifact that drives lens-core's consent gate:
+#     directly in the sovereign path, via the adapter's config-fallback
+#     derivation in the cohabitation path — see _newest_community_trust_row)
+#     or at least one federation peer is reachable. The occurrence's claim
 #     is anchored to something outside itself, but still self-reported:
 #     capped below 1.0 forever.
 #   * TAU_ISOLATED (0.60) — no trust edge. An isolated occurrence's

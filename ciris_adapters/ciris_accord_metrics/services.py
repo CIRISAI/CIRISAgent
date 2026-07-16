@@ -593,12 +593,21 @@ class AccordMetricsService:
                 "ciris-lens-core for partial dev envs. Import failed: " + str(e)
             ) from e
 
-        # The consent wire artifact: lens-core's gate resolves the newest
-        # consent:community_trust:v1 row BY this key at every seal — the
-        # grant our consent attestation module writes on opt-in, the
-        # withdraws/recants it writes on revocation (a recant is a hard
-        # stop). The config-fallback timestamp below only matters while no
-        # CEG row exists (e.g. QA-runner env override).
+        # The consent wire artifact: consent:community_trust:v1, written by our
+        # consent attestation module on opt-in (grant) and revocation
+        # (withdraws/recants — a recant is a hard stop).
+        #
+        # CIRISPersist#461 confirmation (0.5.118 wheel): this key_id is passed
+        # as `consent_attesting_key_id`, but in the COHABITATION path (the one
+        # we take — `engine=` is passed below) the wheel's LensClient IGNORES
+        # it and gates on the CONFIG-FALLBACK consent (`consent_timestamp` +
+        # `_consent_given`) only. The direct per-seal CEG read is the sovereign
+        # (`engine=None`) path; wiring it in cohabitation is upstream
+        # CIRISEdge#85. So the CEG grant reaches the seal INDIRECTLY: the
+        # adapter reads it at boot (current_community_grant_id → _consent_given)
+        # and that populates the config-fallback timestamp handed to LensClient.
+        # We still resolve + pass the key_id so the sovereign path works
+        # unchanged once/if the agent uses it.
         try:
             from ciris_engine.logic.runtime.edge_runtime import get_federation_address
 

@@ -22,9 +22,17 @@ persist except ``dimension`` (the upsert key). See the round-trip test in
 ``tests/.../consent/test_consent_attestation.py``.
 
 Default ON as of 2.9.6 (the LensCore fold, CIRISAgent#866): the CEG
-attestation IS the consent wire artifact — lens-core's per-seal consent gate
-reads `consent:community_trust:v1` by the agent's federation key, so opt-in
-(grant) and revocation (withdraws/recants) only function if these emits run.
+attestation IS the consent wire artifact. In the SOVEREIGN LensClient path
+(``engine=None``) lens-core's per-seal consent gate reads
+`consent:community_trust:v1` by the agent's federation key directly. In the
+agent's actual runtime — the COHABITATION path (``engine=`` passed
+explicitly, see ciris_accord_metrics/services.py) — lens-core does NOT read
+the CEG row (``consent_attesting_key_id`` has no effect there; the cross-wheel
+directory accessor is the unwired CIRISEdge#85 follow-up). There the grant
+gates INDIRECTLY: the accord adapter reads it at boot via
+``current_community_grant_id()`` and derives ``_consent_given``, which feeds
+the config-fallback consent the seal gate consults. Either way opt-in (grant)
+and revocation (withdraws/recants) only function if these emits run.
 ``CIRIS_CONSENT_CEG_ATTESTATIONS=false`` remains as an emergency kill-switch.
 """
 
@@ -71,11 +79,14 @@ def consent_ceg_attestations_enabled() -> bool:
     """True unless explicitly disabled (default ON as of 2.9.6).
 
     The consent→CEG write is no longer a dual-write experiment: the CEG
-    attestation IS the consent artifact — lens-core's per-seal gate reads
-    the `consent:community_trust:v1` dimension to decide emission
-    (CIRISAgent#866 fold; opt-in = grant, revoke = withdraws/recants).
-    The flag remains only as an emergency kill-switch
-    (CIRIS_CONSENT_CEG_ATTESTATIONS=false).
+    attestation IS the consent artifact. It drives emission either directly
+    (sovereign LensClient path, ``engine=None`` — lens-core reads the
+    `consent:community_trust:v1` dimension at seal) or indirectly (the agent's
+    cohabitation path, ``engine=`` passed — the adapter reads the grant at boot
+    and derives the config-fallback consent the seal gate consults; the direct
+    CEG-read gate in cohabitation is the unwired CIRISEdge#85 follow-up).
+    CIRISAgent#866 fold; opt-in = grant, revoke = withdraws/recants. The flag
+    remains only as an emergency kill-switch (CIRIS_CONSENT_CEG_ATTESTATIONS=false).
     """
     return os.environ.get(_FEATURE_FLAG_ENV, "").strip().lower() not in ("0", "false", "no", "off")
 
@@ -433,13 +444,38 @@ def current_community_grant_id() -> Optional[str]:
     (CIRISPersist#461: tier was a red herring, subject-presence is the axis).
     ``list_attestations`` sees all tiers AND subjectless rows, so it stays.
 
-    TODO(CIRISPersist#461): the full fetch-fold goes away by giving the interim
-    grant a self-subject (``subject_key_ids=[self]``, tier=local for the
-    no-federate property) and migrating to ``list_scores(tier="Any")`` — GATED
-    on confirming lens-core's seal-time consent read is the same V106 subject
-    seek (if it is, today's subjectless interim row may not gate at seal at
-    all, and the self-subject fix aligns the lens gate AND this lookup). Until
-    then the dimension_exact-scoped list_attestations read is the correct one.
+    CIRISPersist#461 seal-gate confirmation (empirically resolved 2026-07,
+    ciris-server 0.5.118 / persist v17.5.2 wheel):
+
+      * The subjectless interim grant is INVISIBLE to ``list_scores`` at every
+        tier (Local/Any/Federation → 0 rows); ``list_attestations`` sees it
+        (1 row, tier=local). Confirmed by a live throwaway-engine probe.
+      * lens-core's per-seal consent gate does NOT read this CEG row in the
+        agent's runtime path. The agent constructs ``LensClient`` with an
+        explicit ``engine=`` (the COHABITATION path, services.py); the wheel's
+        own ``LensClient`` docstring states ``consent_attesting_key_id`` "has
+        no effect when ``engine=`` is provided" — cohabitation uses the
+        CONFIG-FALLBACK consent path only. The CEG engine-read gate needs a
+        cross-wheel ``federation_directory`` accessor that is NOT yet wired:
+        upstream follow-up CIRISEdge#85.
+      * So the interim grant DOES gate local emission today, but INDIRECTLY:
+        the accord adapter reads it at boot via THIS function (list_attestations
+        → ``_consent_given=True``), which then feeds the config-fallback
+        ``consent_timestamp`` the seal gate actually consults. Migrating this
+        lookup to ``list_scores`` would return None for the subjectless interim
+        grant → ``_consent_given`` stays False → every seal resolves NoConsent
+        → all traces blocked. list_attestations is therefore load-bearing here
+        for BOTH revocation targeting AND boot consent-derivation.
+
+    Deferred self-subject migration (only when CIRISEdge#85 lands the
+    cohabitation CEG-read gate, OR the agent adopts the sovereign engine=None
+    LensClient path): give the interim grant ``subject_key_ids=[self]`` (still
+    ``attestation_upsert_local`` → tier=local, so no-federate is preserved by
+    TIER per persist#461) and migrate this lookup to ``list_scores(tier="Any")``
+    — the live probe confirms a self-subject local row IS visible there while
+    staying invisible to Federation tier and to default-tier list_scores. Until
+    then the emit stays subjectless and this dimension_exact-scoped
+    list_attestations read is the correct one.
     """
     engine = _resolve_engine()
     key_id = _resolve_attesting_key_id()
@@ -481,15 +517,23 @@ _PENDING_COMMUNITY_SENTINEL = "ciris:canonical-community:pending"
 def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[str]:
     """Best-effort emit the traces-consent grant. Returns attestation_id.
 
-    This is THE consent wire artifact (2.9.6 #866): lens-core's consent gate
-    resolves the newest row on ``consent:community_trust:v1`` by the agent's
-    federation key at every trace seal. Two shapes:
+    This is THE consent wire artifact (2.9.6 #866). In the sovereign LensClient
+    path lens-core's consent gate resolves the newest row on
+    ``consent:community_trust:v1`` by the agent's federation key at every trace
+    seal; in the agent's cohabitation path the grant instead drives the
+    config-fallback consent the seal gate reads, via the adapter's boot-time
+    ``current_community_grant_id()`` derivation (see that function's docstring
+    for the confirmed CIRISPersist#461 seal-gate finding). Two shapes:
 
     - Canonical community key published → the DIRECTED grant
       (subject_key_ids=[community]) — the CEG promotion event self→community.
     - Key unpublished (interim) → an UNDIRECTED LOCAL-TIER grant that gates
       local emission but cannot federate (never promoted, no subjects), so
-      nothing undirected ever leaves the occurrence.
+      nothing undirected ever leaves the occurrence. NOTE: the interim grant is
+      emitted subjectless deliberately — it is found by ``list_attestations``
+      (which sees subjectless local rows), NOT ``list_scores`` (V106 subject
+      seek, blind to it). See current_community_grant_id for why that read
+      split must be preserved.
 
     No-op (None) when the kill-switch is set or engine/key are unavailable.
     """

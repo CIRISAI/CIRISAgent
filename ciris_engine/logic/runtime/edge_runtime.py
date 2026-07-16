@@ -118,12 +118,38 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         _init_tracing = getattr(_cs, "init_tracing", None)
         if _init_tracing is not None:
             _trace_dir = os.environ.get("CIRIS_HOME") or os.environ.get("CIRIS_DATA_DIR")
+            if not _trace_dir:
+                # Belt: env can be scrubbed/late on mobile — resolve the real home.
+                try:
+                    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+                    _trace_dir = str(get_ciris_home())
+                except Exception:  # noqa: BLE001
+                    _trace_dir = None
             _log_dir = os.path.join(_trace_dir, "logs") if _trace_dir else None
-            _filter = os.environ.get("RUST_LOG") or "info,ciris_server=debug,ciris_edge=debug,ciris_persist=info"
+            # TEST MODE gets the full-fat filter: compose hangs / keyring stalls /
+            # verify paths have all gone dark behind the default filter before
+            # (the 2.9.7 compose-hang debug needed exactly these targets). Also
+            # force RUST_BACKTRACE so any surfaced panic carries frames.
+            _test_mode = os.environ.get("CIRIS_TEST_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+            if _test_mode:
+                _filter = os.environ.get("RUST_LOG") or (
+                    "debug,ciris_server=debug,ciris_edge=debug,ciris_persist=debug,"
+                    "ciris_keyring=debug,ciris_verify=debug,ciris_lens_core=debug"
+                )
+                os.environ.setdefault("RUST_BACKTRACE", "full")
+            else:
+                _filter = os.environ.get("RUST_LOG") or "info,ciris_server=debug,ciris_edge=debug,ciris_persist=info"
             try:
                 _init_tracing(log_dir=_log_dir, filter=_filter)
             except TypeError:  # pre-0.5.116 bare signature
                 _init_tracing()
+            logger.info(
+                "Rust tracing initialized: log_dir=%s filter=%s test_mode=%s (rust logs → ciris-server.log*)",
+                _log_dir,
+                _filter,
+                _test_mode,
+            )
     except Exception as _trace_exc:  # noqa: BLE001 — observability must never block boot
         logger.debug("ciris_server.init_tracing unavailable/failed (non-fatal): %s", _trace_exc)
 
@@ -335,7 +361,40 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
         except Exception as exc:  # noqa: BLE001 — pure diagnostics, never disturb boot
             logger.debug("[DELIVERY-PROBE] probe error (non-fatal): %s", exc)
 
+    def _sink_health() -> None:
+        """RUST-SINK HEALTH SENTINEL (own thread; never delays the probe).
+
+        Judge the rust tracing file ~60s into the boot. A 0-byte
+        ciris-server.log at that point means every compose/keyring/edge
+        diagnostic is going nowhere — the exact condition that kept the 2.9.7
+        Android compose-hang dark — so say it LOUDLY in the python log, where
+        every future pull-logs will carry the verdict.
+        """
+        try:
+            import glob as _glob
+            import time as _t2
+
+            _t2.sleep(60)
+            _home = os.environ.get("CIRIS_HOME") or os.environ.get("CIRIS_DATA_DIR")
+            if not _home:
+                return
+            _rust_logs = sorted(_glob.glob(os.path.join(_home, "logs", "ciris-server.log*")))
+            _sizes = {os.path.basename(p): os.path.getsize(p) for p in _rust_logs}
+            _dated = {n: s for n, s in _sizes.items() if not n.endswith(".boot")}
+            if _dated and all(s == 0 for s in _dated.values()):
+                logger.warning(
+                    "[RUST-SINK] DARK — rust tracing files exist but carry 0 bytes at t+60s (%s). "
+                    "Compose/keyring/edge diagnostics are being LOST (init_tracing sink not receiving "
+                    "writes on this platform). Debug via the python-side probes only.",
+                    _sizes,
+                )
+            elif _rust_logs:
+                logger.info("[RUST-SINK] healthy at t+60s: %s", _sizes)
+        except Exception as _sink_exc:  # noqa: BLE001
+            logger.debug("[RUST-SINK] health check failed (non-fatal): %s", _sink_exc)
+
     threading.Thread(target=_probe, name="delivery-rooting-probe", daemon=True).start()
+    threading.Thread(target=_sink_health, name="rust-sink-health", daemon=True).start()
 
 
 def _seed_bootstrap_peers_into_edge(seeder: Optional[Any], edge: Any) -> None:

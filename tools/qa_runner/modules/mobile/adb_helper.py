@@ -598,7 +598,16 @@ class ADBHelper:
             logs_path = output_path / "logs"
             logs_path.mkdir(exist_ok=True)
 
-            for log_file in ["latest.log", "incidents_latest.log", "ciris.log"]:
+            # Include the RUST tracing logs (ciris-server.log*) — the compose /
+            # keyring / edge diagnostics live there, and their absence from
+            # pulls is how the 2.9.7 compose-hang stayed dark. Glob on-device
+            # since the dated filename changes daily.
+            rust_ls = self._run_adb(
+                ["shell", "run-as", package, "sh", "-c", f"ls {logs_dir}/ciris-server.log* 2>/dev/null"]
+            )
+            rust_logs = [line.strip().split("/")[-1] for line in (rust_ls.stdout or "").splitlines() if line.strip()]
+
+            for log_file in ["latest.log", "incidents_latest.log", "ciris.log", *rust_logs]:
                 result = self._run_adb(["shell", "run-as", package, "cat", f"{logs_dir}/{log_file}"])
                 if result.returncode == 0 and result.stdout.strip():
                     file_path = logs_path / log_file

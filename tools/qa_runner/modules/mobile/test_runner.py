@@ -493,6 +493,18 @@ class MobileTestRunner:
         with open(results_path, "w") as f:
             json.dump(suite.to_dict(), f, indent=2)
 
+        # Provisioning-saga trace conformance (FSD/FIRST_RUN_STATECHART.md):
+        # validate the observed [ORDER] event trace against the precedence DAG
+        # on EVERY run — a green suite with a red conformance report is an
+        # ordering bug that happened not to bite this run. Best-effort.
+        try:
+            from .order_conformance import format_conformance, run_order_conformance
+
+            conf = run_order_conformance(self.adb)
+            print("\n" + format_conformance(conf))
+        except Exception as e:
+            print(f"  [WARN] order conformance failed ({e}) — suite result above stands")
+
         # Fold-failure RCA: on any FAILED/ERROR, classify which layer broke
         # (fold-panic / compose-hang / bind-window / PIN / session / delivery)
         # instead of leaving a bare FAIL. Fully best-effort — an RCA crash

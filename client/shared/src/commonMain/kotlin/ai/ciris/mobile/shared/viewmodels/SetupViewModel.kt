@@ -1075,6 +1075,7 @@ class SetupViewModel(
         // NOT touch the local node's owner-binding here; surface the pending state.
         if (_state.value.isMinorBand()) {
             PlatformLogger.i(TAG, "claimLocalNodeOwnership: minor band — skipping self-claim (fail-secure, awaiting adult steward)")
+            PlatformLogger.i(TAG, "[ORDER] claim_settled claimed=false (skipped: minor band, fail-secure)")
             _state.value = _state.value.copy(
                 ownershipClaim = _state.value.ownershipClaim.copy(
                     inProgress = false,
@@ -1108,6 +1109,7 @@ class SetupViewModel(
             val claimPin = claimPinProvider()
             if (claimPin.isNullOrBlank()) {
                 PlatformLogger.w(TAG, "claimLocalNodeOwnership: claim PIN not captured after wait — leaving node unclaimed")
+                PlatformLogger.w(TAG, "[ORDER] claim_settled claimed=false (PIN not captured)")
                 _state.value = _state.value.copy(
                     ownershipClaim = _state.value.ownershipClaim.copy(
                         inProgress = false,
@@ -1121,6 +1123,14 @@ class SetupViewModel(
             }
             // Resolve the captured NodeCode (may be null — fetched via HTTP below).
             val capturedNodeCode = nodeCodeProvider()
+            // [ORDER] session-state tracking for the provisioning saga
+            // (FSD/FIRST_RUN_STATECHART.md): every :4243 call below logs which
+            // bearer it rides so a 401 is diagnosable from the preceding line.
+            // The wizard starts on the SETUP session; a successful post-claim
+            // owner login swaps it for the OWNER session. BOTH die at the
+            // completeSetup runtime restart — hence the settle gate (E9 ≺ E10).
+            var sessionKind = "setup"
+            var ownerLoginOk = false
             try {
                 // MINT-IF-ABSENT: the self-claim REQUIRES a responsible-user fed-ID
                 // (the node 503s "no responsible-user identity yet" otherwise). The
@@ -1135,6 +1145,7 @@ class SetupViewModel(
                 if (!fed0.minted && !fed0.admitted) {
                     val mintBackend = fed0.backend
                         ?: if (_state.value.secureWith2FA) "pkcs11" else null
+                    PlatformLogger.i(TAG, "[ORDER] fedid_mint begin (session=$sessionKind url=${CIRISApiClient.LOCAL_NODE_URL})")
                     val minted = client.mintUserIdentity(
                         label = fed0.label.trim().ifBlank { null },
                         backend = mintBackend,
@@ -1152,7 +1163,7 @@ class SetupViewModel(
                             error = null,
                         )
                     )
-                    PlatformLogger.i(TAG, "claimLocalNodeOwnership: minted fed-ID before claim (was absent) key_id=${minted.keyId}")
+                    PlatformLogger.i(TAG, "[ORDER] fedid_minted key_id=${minted.keyId} (was absent — minted before claim)")
                 }
 
                 // Resolve THIS node's own NodeCode (PUBLIC handle). Prefer the one
@@ -1182,9 +1193,17 @@ class SetupViewModel(
                     ownerPassword = _state.value.userPassword.ifBlank { null },
                     ownerUsername = _state.value.username.ifBlank { null },
                 )
+                // [ORDER] E5→E9 GATE (FSD/FIRST_RUN_STATECHART.md): on a successful
+                // claim, inProgress stays TRUE through the whole post-claim block
+                // below (owner login → setAgeSelf → announce → device name).
+                // SetupScreen's settle-await (`first { !inProgress }`) gates
+                // completeSetup — releasing it here (the old behavior) let the
+                // runtime restart race those :4243 calls → 401 "invalid or
+                // expired session" on setAgeSelf. A REJECTED claim settles now
+                // (no post-claim work follows).
                 _state.value = _state.value.copy(
                     ownershipClaim = _state.value.ownershipClaim.copy(
-                        inProgress = false,
+                        inProgress = resp.role != null,
                         claimed = resp.role != null,
                         role = resp.role,
                         waId = resp.waId,
@@ -1193,6 +1212,12 @@ class SetupViewModel(
                         } else null,
                     )
                 )
+                if (resp.role != null) {
+                    PlatformLogger.i(TAG, "[ORDER] claim_accepted role=${resp.role} waId=${resp.waId} (session=$sessionKind)")
+                } else {
+                    PlatformLogger.w(TAG, "[ORDER] claim_rejected: ${resp.error}")
+                    PlatformLogger.w(TAG, "[ORDER] claim_settled claimed=false (rejected — no post-claim work)")
+                }
 
                 // POST-CLAIM owner sequence (now that the node is owned + the owner
                 // fed-ID exists): (1) log in with the account credential to get the
@@ -1204,23 +1229,30 @@ class SetupViewModel(
                     val password = _state.value.userPassword
                     if (!waId.isNullOrBlank() && password.isNotBlank()) {
                         try {
+                            PlatformLogger.i(TAG, "[ORDER] owner_login begin (session=$sessionKind → owner)")
                             val auth = client.login(waId, password)
                             client.setAccessToken(auth.access_token)
-                            PlatformLogger.i(TAG, "claimLocalNodeOwnership: owner session established post-claim")
+                            sessionKind = "owner"
+                            ownerLoginOk = true
+                            PlatformLogger.i(TAG, "[ORDER] owner_login ok (session now=owner)")
                         } catch (e: Exception) {
-                            PlatformLogger.w(TAG, "claimLocalNodeOwnership: post-claim owner login failed: ${e.message}")
+                            PlatformLogger.w(TAG, "[ORDER] owner_login FAILED (continuing on session=$sessionKind): ${e.message}")
                         }
                     }
                     val band = _state.value.ageRange.selectedBandToken
                     if (!band.isNullOrBlank()) {
                         try {
+                            PlatformLogger.i(
+                                TAG,
+                                "[ORDER] set_age begin (session=$sessionKind band=$band url=${CIRISApiClient.LOCAL_NODE_URL})",
+                            )
                             val r = client.setAgeSelf(band = band, localNodeUrl = CIRISApiClient.LOCAL_NODE_URL)
                             _state.value = _state.value.copy(
                                 ageRange = _state.value.ageRange.copy(recorded = true, error = null)
                             )
-                            PlatformLogger.i(TAG, "claimLocalNodeOwnership: age band '$band' recorded post-claim ($r)")
+                            PlatformLogger.i(TAG, "[ORDER] age_recorded band=$band (session=$sessionKind): $r")
                         } catch (e: Exception) {
-                            PlatformLogger.w(TAG, "claimLocalNodeOwnership: post-claim age record failed: ${e.message}")
+                            PlatformLogger.w(TAG, "[ORDER] age_record FAILED (session=$sessionKind): ${e.message}")
                             _state.value = _state.value.copy(
                                 ageRange = _state.value.ageRange.copy(
                                     recorded = false,
@@ -1238,18 +1270,19 @@ class SetupViewModel(
                     // blocks COMPLETE. Takes effect on the node's next boot.
                     if (_state.value.announceOwnership) {
                         try {
+                            PlatformLogger.i(TAG, "[ORDER] announce begin (session=$sessionKind)")
                             val ann = client.announceOwnership(localNodeUrl = CIRISApiClient.LOCAL_NODE_URL)
                             PlatformLogger.i(
                                 TAG,
-                                "claimLocalNodeOwnership: announced to federation " +
-                                    "(owner=${ann.owner} cohort=${ann.cohortScope}); " +
+                                "[ORDER] announced to federation " +
+                                    "(owner=${ann.owner} cohort=${ann.cohortScope} session=$sessionKind); " +
                                     "takes effect ${ann.announceTakesEffect ?: "next boot"}",
                             )
                             _state.value = _state.value.copy(
                                 ownershipClaim = _state.value.ownershipClaim.copy(announceNotice = null)
                             )
                         } catch (e: Exception) {
-                            PlatformLogger.w(TAG, "claimLocalNodeOwnership: federation announce failed (non-fatal): ${e.message}")
+                            PlatformLogger.w(TAG, "[ORDER] announce FAILED (non-fatal, session=$sessionKind): ${e.message}")
                             _state.value = _state.value.copy(
                                 ownershipClaim = _state.value.ownershipClaim.copy(
                                     announceNotice = "You're set up, but announcing to the " +
@@ -1274,9 +1307,25 @@ class SetupViewModel(
                             PlatformLogger.w(TAG, "claimLocalNodeOwnership: failed to persist device name: ${e.message}")
                         }
                     }
+
+                    // [ORDER] E9 claim_settled: every :4243 session-consuming saga
+                    // step above is now terminal. ONLY here may SetupScreen's
+                    // settle-await release and completeSetup restart the runtime
+                    // (E9 ≺ E10, FSD/FIRST_RUN_STATECHART.md § 3).
+                    _state.value = _state.value.copy(
+                        ownershipClaim = _state.value.ownershipClaim.copy(inProgress = false)
+                    )
+                    PlatformLogger.i(
+                        TAG,
+                        "[ORDER] claim_settled claimed=true login=$ownerLoginOk " +
+                            "age_recorded=${_state.value.ageRange.recorded} " +
+                            "announce_on=${_state.value.announceOwnership} " +
+                            "session=$sessionKind — safe to complete",
+                    )
                 }
             } catch (e: Exception) {
                 PlatformLogger.w(TAG, "claimLocalNodeOwnership: self-claim via local node failed: ${e.message}")
+                PlatformLogger.w(TAG, "[ORDER] claim_settled claimed=false (exception, session=$sessionKind): ${e.message}")
                 val msg = e.message.orEmpty()
                 val isPinRejection = msg.contains("claim_pin", ignoreCase = true) ||
                     msg.contains("claim pin", ignoreCase = true) ||

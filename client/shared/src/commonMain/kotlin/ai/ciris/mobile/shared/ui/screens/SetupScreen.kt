@@ -550,13 +550,20 @@ fun SetupScreen(
                                     claimPinProvider = claimPinProvider,
                                     nodeCodeProvider = nodeCodeProvider,
                                 )
-                                // Await the claim settling (all exit paths clear
-                                // inProgress); bounded so a stuck claim never traps.
-                                kotlinx.coroutines.withTimeoutOrNull(90_000) {
+                                // Await the claim SETTLING (E9). Since the settle fix,
+                                // inProgress stays true through the ENTIRE post-claim
+                                // block (owner login → setAgeSelf → announce), so this
+                                // await is the real E9 ≺ E10 gate: completeSetup's
+                                // runtime restart cannot race those :4243 calls.
+                                // Bounded so a stuck claim never traps the wizard.
+                                val settled = kotlinx.coroutines.withTimeoutOrNull(90_000) {
                                     viewModel.state.first { !it.ownershipClaim.inProgress }
                                 }
+                                if (settled == null) {
+                                    PlatformLogger.w(TAG, "[ORDER] settle_await TIMEOUT (90s) — proceeding; conformance will flag")
+                                }
                                 val claimed = viewModel.state.value.ownershipClaim.claimed
-                                PlatformLogger.i(TAG, " Claim settled: claimed=$claimed — advancing then completing")
+                                PlatformLogger.i(TAG, "[ORDER] settle_await released claimed=$claimed — advancing then completing")
 
                                 // 2) Advance to COMPLETE NOW — the node is owned,
                                 // so leave the Setup screen immediately (good UX,
@@ -573,6 +580,7 @@ fun SetupScreen(
                                 // and after advancing (so it never gates leaving
                                 // Setup). Best-effort — the COMPLETE screen surfaces
                                 // any error.
+                                PlatformLogger.i(TAG, "[ORDER] complete_setup begin (post-settle)")
                                 val result = withContext(Dispatchers.Default) {
                                     viewModel.completeSetup { request ->
                                         PlatformLogger.i(TAG, " Calling apiClient.completeSetup with provider=${request.llm_provider}")

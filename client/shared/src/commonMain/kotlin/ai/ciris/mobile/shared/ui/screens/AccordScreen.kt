@@ -92,6 +92,10 @@ import kotlinx.coroutines.launch
 /** Which shared sub-flow is open, if any. */
 private sealed interface AccordSheet {
     data object AdmitNode : AccordSheet
+    /** Approve a CI runner — co-scrub the pipeline key with `infra:attest` (CIRISVerify#185). */
+    data object ApproveCiRunner : AccordSheet
+    /** Cosign a CI-runner co-scrub — paste the partial, append this holder's scrub. */
+    data object CiKeyCosign : AccordSheet
     data class AddCanonical(val replace: CanonicalServerDto?) : AccordSheet
     data object Drill : AccordSheet
     data object Halt : AccordSheet
@@ -183,6 +187,20 @@ fun AccordScreen(
                                 add(
                                     NewAttestationAction("cosign_paste", "mobile.accord_new_cosign_paste") {
                                         sheet = AccordSheet.CoscrubCosign(entry = null)
+                                    },
+                                )
+                                // Approve a CI runner: co-scrub its build-signing key with
+                                // infra:attest so the mesh trusts its build manifests
+                                // (CIRISVerify#185). Same holder-gated YubiKey consent as
+                                // admit-node — propose (scrub #1) then cosign to m-of-n.
+                                add(
+                                    NewAttestationAction("approve_ci_runner", "mobile.accord_new_approve_ci_runner") {
+                                        sheet = AccordSheet.ApproveCiRunner
+                                    },
+                                )
+                                add(
+                                    NewAttestationAction("cosign_ci_key", "mobile.accord_new_cosign_ci_key") {
+                                        sheet = AccordSheet.CiKeyCosign
                                     },
                                 )
                                 add(
@@ -447,6 +465,8 @@ fun AccordScreen(
     when (val s = sheet) {
         null -> Unit
         is AccordSheet.AdmitNode -> AdmitNodeSheet(viewModel, holders, busy) { sheet = null }
+        is AccordSheet.ApproveCiRunner -> ApproveCiRunnerSheet(viewModel, holders, busy) { sheet = null }
+        is AccordSheet.CiKeyCosign -> CiKeyCosignSheet(viewModel, holders, busy) { sheet = null }
         is AccordSheet.AddCanonical ->
             AddCanonicalSheet(viewModel, holders, busy, s.replace) { sheet = null }
         is AccordSheet.Drill -> DrillSheet(viewModel, holders, busy) { sheet = null }
@@ -655,6 +675,132 @@ private fun AdmitNodeSheet(
                 viewModel.admitNode(holderKeyId, usbPath, t.keyId, t.ed25519, t.mldsa, pin, modulePath)
             }
             onDismiss()
+        },
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * **Approve a CI runner** (co-scrub scrub #1, CIRISVerify#185). Holder-gated — the
+ * same hardware-scrub + YubiKey-consent register as admit-node/make-canonical. The
+ * holder scrub-signs the CI build-signing pipeline key with the fixed `infra:attest`
+ * role; the 1-scrub partial gossips to the next holder to [CiKeyCosignSheet] toward
+ * the family m-of-n. The operator supplies the CI key's identity (the three fields
+ * of a `ScrubTarget`). The app holds no keys — the YubiKey touch is consent.
+ */
+@Composable
+private fun ApproveCiRunnerSheet(
+    viewModel: AccordViewModel,
+    holders: List<AccordHolderDto>,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+) {
+    var ciKeyId by remember { mutableStateOf("") }
+    var ed25519 by remember { mutableStateOf("") }
+    var mldsa by remember { mutableStateOf("") }
+    HardwareScrubSheet(
+        title = localizedString("mobile.accord_new_approve_ci_runner"),
+        subtitle = localizedString("mobile.accord_ci_approve_desc"),
+        holders = holders,
+        busy = busy,
+        submitLabel = localizedString("mobile.accord_ci_approve_submit"),
+        submitBusyLabel = localizedString("mobile.accord_ci_approve_submit_busy"),
+        tagPrefix = "ci_approve",
+        extraReady = ciKeyId.isNotBlank() && ed25519.isNotBlank() && mldsa.isNotBlank(),
+        extras = {
+            OutlinedTextField(
+                value = ciKeyId,
+                onValueChange = { ciKeyId = it },
+                singleLine = true,
+                label = { Text(localizedString("mobile.accord_ci_key_id_label")) },
+                modifier = Modifier.fillMaxWidth().testable("input_ci_key_id"),
+            )
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = ed25519,
+                onValueChange = { ed25519 = it },
+                singleLine = true,
+                label = { Text(localizedString("mobile.accord_ci_ed25519_label")) },
+                modifier = Modifier.fillMaxWidth().testable("input_ci_ed25519"),
+            )
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = mldsa,
+                onValueChange = { mldsa = it },
+                singleLine = true,
+                label = { Text(localizedString("mobile.accord_ci_mldsa_label")) },
+                modifier = Modifier.fillMaxWidth().testable("input_ci_mldsa"),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                localizedString("mobile.accord_ci_role_note"),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testable("accord_ci_role_note"),
+            )
+        },
+        onSubmit = { holderKeyId, usbPath, pin, modulePath ->
+            viewModel.proposeCiKey(holderKeyId, usbPath, ciKeyId, ed25519, mldsa, pin, modulePath)
+            onDismiss()
+        },
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * **Cosign a CI-runner co-scrub** (CIRISVerify#185). Paste the partial from a prior
+ * [ApproveCiRunnerSheet] propose / cosign and append THIS holder's scrub over the
+ * byte-identical envelope (roles preserved). Malformed JSON keeps the sheet open with
+ * a clear error. Built on [HardwareScrubSheet] so the holder + USB + PIN inputs match.
+ */
+@Composable
+private fun CiKeyCosignSheet(
+    viewModel: AccordViewModel,
+    holders: List<AccordHolderDto>,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+) {
+    var pasted by remember { mutableStateOf("") }
+    // Resolve the error string in composable context — the submit lambda isn't @Composable.
+    val invalidJsonMsg = localizedString("mobile.accord_coscrub_paste_invalid")
+    HardwareScrubSheet(
+        title = localizedString("mobile.accord_ci_cosign_title"),
+        subtitle = localizedString("mobile.accord_ci_cosign_desc"),
+        holders = holders,
+        busy = busy,
+        submitLabel = localizedString("mobile.accord_ci_cosign_submit"),
+        submitBusyLabel = localizedString("mobile.accord_ci_cosign_submit_busy"),
+        tagPrefix = "ci_cosign",
+        extraReady = pasted.isNotBlank(),
+        extras = {
+            Text(
+                localizedString("mobile.accord_ci_cosign_paste_hint"),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = pasted,
+                onValueChange = { pasted = it },
+                singleLine = false,
+                label = { Text(localizedString("mobile.accord_cosign_paste_label")) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .testable("input_ci_cosign_paste"),
+            )
+        },
+        onSubmit = { holderKeyId, usbPath, pin, modulePath ->
+            val partial = try {
+                kotlinx.serialization.json.Json.parseToJsonElement(pasted.trim())
+            } catch (e: Exception) {
+                viewModel.showError(invalidJsonMsg)
+                null
+            }
+            if (partial != null) {
+                viewModel.cosignCiKey(holderKeyId, usbPath, pin, partial, modulePath)
+                onDismiss()
+            }
         },
         onDismiss = onDismiss,
     )

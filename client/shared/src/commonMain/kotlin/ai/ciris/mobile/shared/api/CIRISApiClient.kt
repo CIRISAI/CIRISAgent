@@ -3142,6 +3142,153 @@ class CIRISApiClient(
     }
 
     /**
+     * **Approve a CI runner (co-scrub scrub #1)** —
+     * `POST {nodeUrl}/v1/accord/ci-key/propose` (CIRISVerify#185). The local accord
+     * holder RE-OPENS their YubiKey + USB-wrapped ML-DSA and scrub-signs the CI
+     * build-signing pipeline key with `roles: ["infra:attest"]`, producing a 1-scrub
+     * **partial** that does NOT yet bless the runner (m-of-n). Once the distinct-scrub
+     * set meets the family quorum the pipeline key becomes an accord-co-scrubbed
+     * `KeyRecord` carrying `infra:attest` — a blessed build-manifest signer (verify's
+     * `verify_build_manifest_via_coscrub`, retiring the old `delegates_to` grant path).
+     * SAME co-scrub lane as [proposeCanonicalServer]; only the endpoint + the target's
+     * `roles` differ. The app holds NO keys — the YubiKey touch is consent.
+     *
+     * Substrate floor: needs a ciris-server that serves `/v1/accord/ci-key/…` (the
+     * co-scrub serve leg, CIRISServer#192/#193). Older nodes 404 → surfaced as a
+     * graceful "requires a newer substrate" degrade by the caller.
+     */
+    suspend fun proposeCiKey(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        ciKeyId: String,
+        ciEd25519Base64: String,
+        ciMlDsa65Base64: String,
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.ProposeCanonicalResponse {
+        val method = "proposeCiKey"
+        logInfo(method, "POST $nodeUrl/v1/accord/ci-key/propose holder=$holderKeyId ci=$ciKeyId usb=$mldsaUsbPath")
+        logInfo(method, "needs a YubiKey touch (slot 9c is touch-ALWAYS) for the scrub signature; waiting up to ${ceremonyTimeoutMillis / 1000}s")
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            val target = buildJsonObject {
+                put("key_id", JsonPrimitive(ciKeyId.trim()))
+                put("pubkey_ed25519_base64", JsonPrimitive(ciEd25519Base64.trim()))
+                put("pubkey_ml_dsa_65_base64", JsonPrimitive(ciMlDsa65Base64.trim()))
+                put("identity_type", JsonPrimitive("node"))
+                // The scrub binds the infra:attest role into the signed envelope —
+                // this is what makes the co-scrubbed KeyRecord a blessed manifest
+                // signer rather than a plain admit-node record (CIRISVerify#185).
+                put("roles", JsonArray(listOf(JsonPrimitive("infra:attest"))))
+            }
+            val bodyJson = buildJsonObject {
+                put("key_id", JsonPrimitive(holderKeyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+                put("target", target)
+            }
+            val response = client.post("$nodeUrl/v1/accord/ci-key/propose") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("propose ci-key failed: ${response.status}: ${raw.take(220)}")
+            }
+            val parsed = jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.ProposeCanonicalResponse.serializer(),
+                raw,
+            )
+            logInfo(method, "proposed ci-key ${parsed.targetKeyId} scrubs=${parsed.distinctScrubCount} gossiped_to=${parsed.gossipedTo}")
+            parsed
+        } catch (e: Exception) {
+            val hint = if (e is io.ktor.client.plugins.HttpRequestTimeoutException) {
+                " — timed out waiting for the YubiKey touch; touch the key when it blinks and retry"
+            } else {
+                ""
+            }
+            logException(method, e, "nodeUrl=$nodeUrl$hint")
+            throw RuntimeException("${e.message ?: "propose ci-key failed"}$hint", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Cosign a CI-runner co-scrub** — `POST {nodeUrl}/v1/accord/ci-key/cosign`
+     * (CIRISVerify#185). THIS holder RE-OPENS their YubiKey + USB ML-DSA and appends
+     * their scrub to the [partial] over the BYTE-IDENTICAL envelope (verify's
+     * `append_scrub`, roles preserved). [partial] MUST be the verbatim `SignedKeyRecord`
+     * from a [proposeCiKey] / prior cosign (a pasted partial) — submitted UNCHANGED so
+     * the co-scrub bytes match. At the family m-of-n the pipeline key is blessed
+     * (`conferred`); else the advanced partial is returned for the next holder. SAME
+     * co-scrub lane as [cosignCanonicalServer]; only the endpoint differs.
+     */
+    suspend fun cosignCiKey(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        partial: JsonElement,
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.CosignCanonicalResponse {
+        val method = "cosignCiKey"
+        logInfo(method, "POST $nodeUrl/v1/accord/ci-key/cosign holder=$holderKeyId usb=$mldsaUsbPath")
+        logInfo(method, "needs a YubiKey touch (slot 9c is touch-ALWAYS) for the scrub signature; waiting up to ${ceremonyTimeoutMillis / 1000}s")
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val pkcs11 = buildJsonObject {
+                userPin?.takeIf { it.isNotBlank() }?.let { put("user_pin", JsonPrimitive(it)) }
+                pivSlot?.takeIf { it.isNotBlank() }?.let { put("piv_slot", JsonPrimitive(it)) }
+                modulePath?.takeIf { it.isNotBlank() }?.let { put("module_path", JsonPrimitive(it)) }
+            }
+            val bodyJson = buildJsonObject {
+                put("key_id", JsonPrimitive(holderKeyId.trim()))
+                put("mldsa_usb_path", JsonPrimitive(mldsaUsbPath.trim()))
+                put("pkcs11", pkcs11)
+                // Submit the partial VERBATIM — never re-encode the signed envelope.
+                put("partial", partial)
+            }
+            val response = client.post("$nodeUrl/v1/accord/ci-key/cosign") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson.toString())
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("cosign ci-key failed: ${response.status}: ${raw.take(220)}")
+            }
+            val parsed = jsonConfig.decodeFromString(
+                ai.ciris.mobile.shared.models.federation.CosignCanonicalResponse.serializer(),
+                raw,
+            )
+            logInfo(method, "cosigned ci-key ${parsed.targetKeyId} scrubs=${parsed.distinctScrubCount} conferred=${parsed.conferred} gossiped_to=${parsed.gossipedTo}")
+            parsed
+        } catch (e: Exception) {
+            val hint = if (e is io.ktor.client.plugins.HttpRequestTimeoutException) {
+                " — timed out waiting for the YubiKey touch; touch the key when it blinks and retry"
+            } else {
+                ""
+            }
+            logException(method, e, "nodeUrl=$nodeUrl$hint")
+            throw RuntimeException("${e.message ?: "cosign ci-key failed"}$hint", e)
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
      * **List pending canonical co-scrubs** —
      * `GET {nodeUrl}/v1/accord/canonical/pending` (CIRISServer#174). The co-scrub
      * partials this node holds that are still short of the family m-of-n (arrived via

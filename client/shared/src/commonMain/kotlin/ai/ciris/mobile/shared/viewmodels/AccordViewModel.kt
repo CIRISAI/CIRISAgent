@@ -785,6 +785,131 @@ class AccordViewModel(
     }
 
     /**
+     * **Approve a CI runner (co-scrub scrub #1)** (CIRISVerify#185). The local accord
+     * holder RE-OPENS their YubiKey + USB-wrapped ML-DSA and scrub-signs the CI
+     * build-signing pipeline key with `roles: ["infra:attest"]`; the 1-scrub partial
+     * does NOT yet bless the runner (m-of-n). The node saves + gossips it — hand /
+     * gossip it to the next holder to [cosignCiKey]. At the family quorum the pipeline
+     * key becomes an accord-co-scrubbed `KeyRecord` carrying `infra:attest`, a blessed
+     * build-manifest signer. Same co-scrub lane as [proposeCanonical]. If the node's
+     * substrate is too old to serve `/v1/accord/ci-key/…` it 404s — surfaced as a
+     * graceful "needs a newer substrate" notice.
+     */
+    fun proposeCiKey(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        ciKeyId: String,
+        ciEd25519Base64: String,
+        ciMlDsa65Base64: String,
+        userPin: String?,
+        modulePath: String? = null,
+    ) {
+        if (_busy.value) return
+        _busy.value = true
+        _error.value = null
+        _notice.value = null
+        _canonicalSavedTo.value = null
+        viewModelScope.launch {
+            try {
+                val res = apiClient.proposeCiKey(
+                    holderKeyId = holderKeyId,
+                    mldsaUsbPath = mldsaUsbPath,
+                    ciKeyId = ciKeyId,
+                    ciEd25519Base64 = ciEd25519Base64,
+                    ciMlDsa65Base64 = ciMlDsa65Base64,
+                    userPin = userPin,
+                    modulePath = modulePath,
+                )
+                _canonicalSavedTo.value = res.savedTo
+                _lastCoscrubJson.value = prettyCoscrub(res.partial)
+                _notice.value =
+                    "Approved CI runner ${res.targetKeyId} (${res.distinctScrubCount} scrub, infra:attest) — " +
+                        "gossiped to ${res.gossipedTo} peer(s). Hand / gossip the partial to the next holder to cosign."
+                loadCanonicalServers()
+                loadPendingCoscrubs()
+            } catch (e: Exception) {
+                PlatformLogger.w(TAG, "[proposeCiKey] ${e.message}")
+                _error.value = ciKeyErrorFor(e, "approve the CI runner")
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    /**
+     * **Cosign a CI-runner co-scrub** (CIRISVerify#185). THIS holder RE-OPENS their
+     * YubiKey + USB ML-DSA and appends their scrub to [partial] over the BYTE-IDENTICAL
+     * envelope (roles preserved). [partial] MUST be the verbatim `SignedKeyRecord` from
+     * a [proposeCiKey] / prior cosign (a pasted partial) — submitted UNCHANGED so the
+     * co-scrub bytes match. At the family m-of-n the pipeline key is blessed
+     * (`conferred`); else the advanced partial is surfaced for the next holder.
+     */
+    fun cosignCiKey(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        userPin: String?,
+        partial: kotlinx.serialization.json.JsonElement,
+        modulePath: String? = null,
+    ) {
+        if (_busy.value) return
+        _busy.value = true
+        _error.value = null
+        _notice.value = null
+        _canonicalSavedTo.value = null
+        viewModelScope.launch {
+            try {
+                val res = apiClient.cosignCiKey(
+                    holderKeyId = holderKeyId,
+                    mldsaUsbPath = mldsaUsbPath,
+                    partial = partial,
+                    userPin = userPin,
+                    modulePath = modulePath,
+                )
+                _canonicalSavedTo.value = res.savedTo
+                _lastCoscrubJson.value = if (res.conferred) null else prettyCoscrub(res.advanced)
+                _notice.value = if (res.conferred) {
+                    "Cosigned — CI runner ${res.targetKeyId} BLESSED (infra:attest) at the family quorum (${res.distinctScrubCount} scrubs)."
+                } else {
+                    "Cosigned CI runner ${res.targetKeyId} (${res.distinctScrubCount} scrubs) — still short of the family quorum. " +
+                        "Gossiped to ${res.gossipedTo} peer(s); hand / gossip it to the next holder."
+                }
+                loadCanonicalServers()
+                loadPendingCoscrubs()
+                refresh()
+            } catch (e: Exception) {
+                PlatformLogger.w(TAG, "[cosignCiKey] ${e.message}")
+                _error.value = when {
+                    e.message.orEmpty().contains("already signed", ignoreCase = true) ->
+                        "This holder has already scrubbed this record — a distinct holder must cosign."
+                    else -> ciKeyErrorFor(e, "cosign the CI-runner co-scrub")
+                }
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    /**
+     * Map a ci-key co-scrub failure to a user-facing message. A 404 (or 501 /
+     * NotSupported) means this node's substrate predates the `/v1/accord/ci-key/…`
+     * serve leg (CIRISServer#192/#193) — surface a graceful "needs a newer substrate"
+     * degrade rather than a raw error.
+     */
+    private fun ciKeyErrorFor(e: Exception, verb: String): String {
+        val msg = e.message.orEmpty()
+        return when {
+            msg.contains("401") || msg.contains("403") ->
+                "Sign in as the owner on this node first."
+            msg.contains("404") ->
+                "This node's ciris-server doesn't serve the CI-runner co-scrub endpoints yet — " +
+                    "approving a CI runner needs a newer substrate (the /v1/accord/ci-key serve leg)."
+            msg.contains("501") || msg.contains("NotSupported", ignoreCase = true) ->
+                "This build lacks pkcs11 — the CI-runner co-scrub needs the YubiKey signer."
+            else -> "Couldn't $verb: ${e.message}"
+        }
+    }
+
+    /**
      * **Supersede a canonical server** (CIRISServer#174). DESTRUCTIVE / 2-of-3: admits
      * the successor [newRecord] (a full A1-scrubbed `SignedKeyRecord`) BEFORE tombstoning
      * [oldKeyId], so the canonical set is never momentarily empty. [proposalDigest] names

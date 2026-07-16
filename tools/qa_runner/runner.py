@@ -1006,15 +1006,31 @@ class QARunner:
         # Transport rooting + KEX from the [DELIVERY-PROBE] line the server logs
         # once the canonical roots (or times out).
         backend = (self.database_backends[0] if getattr(self, "database_backends", None) else "sqlite")
-        probe_log = Path(f"logs/{backend}/latest.log")
+
+        def _read_probe_log() -> str:
+            """Read the runtime log, tolerating a missing latest.log symlink.
+
+            In containerized/sandboxed runs the latest.log symlink may not be
+            created — fall back to the newest ciris_agent_*.log. A missing
+            symlink previously produced a FALSE-NEGATIVE verdict ("probe
+            verdict not found" / knows_peer=false) on a run whose real log
+            showed ROOTED + KEX PRESENT.
+            """
+            p = Path(f"logs/{backend}/latest.log")
+            if not p.exists():
+                candidates = sorted(Path(f"logs/{backend}").glob("ciris_agent_*.log"))
+                if candidates:
+                    p = candidates[-1]
+            try:
+                return p.read_text(errors="ignore") if p.exists() else ""
+            except Exception:  # noqa: BLE001
+                return ""
+
         transport_rooted: Optional[bool] = None  # None = probe verdict not yet available
         kex_state = "unknown"
         canonical_key = None
         for _attempt in range(12):  # ~12 * 8s — give the 120s probe time to land its verdict
-            try:
-                text = probe_log.read_text(errors="ignore") if probe_log.exists() else ""
-            except Exception:  # noqa: BLE001
-                text = ""
+            text = _read_probe_log()
             probe_lines = [ln for ln in text.splitlines() if "[DELIVERY-PROBE]" in ln]
             if probe_lines:
                 last = probe_lines[-1]

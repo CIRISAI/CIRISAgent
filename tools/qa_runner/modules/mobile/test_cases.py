@@ -1233,55 +1233,107 @@ def test_catchup_add_fedid(adb: ADBHelper, ui: UIAutomator, config: dict) -> Tes
 def _local_login_if_needed(adb: ADBHelper, config: dict) -> tuple:
     """After the wizard, setup-complete restarts the runtime and invalidates the
     setup-time token — BY DESIGN. On local login the user must sign back in with
-    the username/password they just created. Drive that re-login via the in-app
-    test server if the app is sitting on the Login screen.
+    the username/password they just created (the app 401s and navigates to Login).
 
-    Returns (ok: bool, detail: str). ok=True means we're authenticated and on a
-    post-login screen (or were never on Login).
+    Resilient state-machine: instead of assuming the exact screen sequence, it
+    reacts to whatever is on screen each tick — reveal the local form, fill creds,
+    submit, and confirm we left Login. Returns (ok, detail).
     """
     username = config.get("setup_username", "admin")
     password = config.get("setup_password", "qa_test_password_12345")
-    client = connect_test_server(adb, config, launch_if_needed=True, clear_data=False)
-    if client is None:
-        return False, "test server unreachable for re-login"
-
-    # Give a post-setup reload a moment to land on Login.
-    screen = None
-    for _ in range(20):
-        screen = client.screen()
-        if screen in ("Login", "Interact"):
+    # Do NOT relaunch — the app is already running post-setup; a force-stop
+    # relaunch would restart the 60-120s boot. Reuse the live server, retrying
+    # briefly if it's momentarily unreachable during the bounce navigation.
+    client = None
+    for _ in range(15):
+        client = connect_test_server(adb, config, launch_if_needed=False, clear_data=False)
+        if client is not None:
             break
+        time.sleep(2)
+    if client is None:
+        return False, "test server unreachable for re-login (app not running?)"
+
+    submitted = False
+    interact_stable = 0
+    last = ""
+    deadline = time.time() + 150
+    while time.time() < deadline:
+        screen = client.screen() or "?"
+        tags = set(client.tags())
+        snap = f"screen={screen} form={'input_username' in tags or 'input_password' in tags} " \
+               f"btn_local={'btn_local_login' in tags} submit={'btn_login_submit' in tags}"
+        if snap != last:
+            print(f"    · {snap}")
+            last = snap
+
+        # Settled on Interact. If we already re-logged in, we're done. If NOT,
+        # the post-setup token is stale by design and the app lands on Interact
+        # optimistically before fetchHistory 401s x3 (~10-15s) bounce it to Login
+        # — so do NOT trust a short Interact window: require ~30s of stable
+        # Interact before concluding the session genuinely held.
+        if screen == "Interact" and not ({"input_username", "input_password", "btn_local_login"} & tags):
+            interact_stable += 1
+            if submitted and interact_stable >= 4:
+                return True, f"re-logged in as {username!r} → Interact"
+            if interact_stable >= 20:  # ~30s stable, past the 401-bounce window
+                return True, "session held (stable on Interact >30s, no login needed)"
+            time.sleep(1.5)
+            continue
+        interact_stable = 0
+
+        # The local form is up → fill creds + submit.
+        #
+        # LoginScreen consumes ONE pending TextInputRequest per recompose via a
+        # single StateFlow slot, and btn_login_submit is disabled (no-op) until
+        # BOTH username+password are non-blank in the ViewModel. So (a) back-to-
+        # back inputs can overwrite the slot before recompose applies the first,
+        # and (b) clicking submit before the state settles fires against a
+        # disabled button. The tree does NOT expose field text (testable() is
+        # called without a text arg), so we can't read the values back — instead
+        # settle generously BETWEEN inputs so each is consumed, then retry the
+        # fill+submit until we actually leave Login.
+        if ("input_username" in tags) or ("input_password" in tags):
+            for attempt in range(1, 6):
+                # (Re)fill both fields, settling between each so the single
+                # TextInputRequest slot is consumed + cleared before the next.
+                if client.is_visible("input_username"):
+                    client.input("input_username", username)
+                    time.sleep(1.0)
+                if client.is_visible("input_password"):
+                    client.input("input_password", password)
+                    time.sleep(1.0)
+                # Submit is enabled only once the ViewModel reflects both fields.
+                client.wait_for_element("btn_login_submit", timeout=3)
+                time.sleep(0.5)
+                clicked = _click_or_tap(client, adb, "btn_login_submit")
+                if clicked:
+                    submitted = True
+                # Give the login round-trip a few seconds to leave Login before
+                # re-filling — a successful login navigates Login → (Startup) →
+                # Interact, so screen != "Login" is our success signal here.
+                left_login = False
+                for _ in range(6):
+                    time.sleep(1.0)
+                    if (client.screen() or "?") != "Login":
+                        left_login = True
+                        break
+                print(f"    · login attempt {attempt}/5: clicked={clicked} left_login={left_login}")
+                if left_login:
+                    break
+            continue
+
+        # On Login but the form isn't revealed yet → reveal it.
+        if "btn_local_login" in tags:
+            _click_or_tap(client, adb, "btn_local_login")
+            time.sleep(1.5)
+            continue
+
+        # Startup / transitioning → wait.
         time.sleep(1.5)
 
-    if screen != "Login":
-        # Already past login (or still booting into Interact) — nothing to do.
-        return True, f"no re-login needed (screen={screen!r})"
-
-    # Login screen → reveal the local form, fill creds, submit.
-    if client.is_visible("btn_local_login"):
-        _click_or_tap(client, adb, "btn_local_login")
-        client.wait_for_element("input_password", timeout=15)
-    if not client.wait_for_element("input_username", timeout=10):
-        # Some builds pre-fill username on the local form; tolerate its absence.
-        if not client.is_visible("input_password"):
-            return False, "local login form never appeared (no input_username/password)"
-    else:
-        if not client.input("input_username", username):
-            return False, "failed to input username on re-login"
-        time.sleep(0.4)
-    if not client.input("input_password", password):
-        return False, "failed to input password on re-login"
-    time.sleep(0.4)
-    if not _click_or_tap(client, adb, "btn_login_submit"):
-        return False, "failed to click btn_login_submit on re-login"
-
-    # Wait to leave Login (reach Interact / any post-login screen).
-    for _ in range(40):
-        s = client.screen()
-        if s and s != "Login":
-            return True, f"re-logged in as {username!r} → {s}"
-        time.sleep(1.5)
-    return False, "re-login submitted but never left Login screen"
+    if submitted:
+        return True, f"re-login submitted as {username!r} (final screen={client.screen()!r})"
+    return False, f"could not complete re-login within 150s (last {last})"
 
 
 def _capture_speak_evidence(adb: ADBHelper, package: str = "ai.ciris.mobile.debug") -> dict:

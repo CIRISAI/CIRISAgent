@@ -485,8 +485,14 @@ fun CIRISApp(
     var isFirstRun by remember { mutableStateOf<Boolean?>(null) }
     var checkingFirstRun by remember { mutableStateOf(false) }
 
-    // Flag to skip token re-validation after setup (we just authenticated)
-    var justCompletedSetup by remember { mutableStateOf(false) }
+    // Post-setup RECONFIGURING hold. After /v1/setup/complete the runtime
+    // reloads and the node-fold takes a while to rebind :4243, so the local
+    // node is transiently DOWN. While this is set the startup / first-run /
+    // Interact-poll logic must hold ONE stable "reconfiguring" state (re-poll
+    // node reachability + ownership) instead of bouncing
+    // Setup↔Startup↔Interact↔Login for minutes. Cleared once we land on
+    // Login/Setup, or the rebind times out.
+    var reconfiguring by remember { mutableStateOf(false) }
 
     // Login state
     var isLoginLoading by remember { mutableStateOf(false) }
@@ -843,94 +849,69 @@ fun CIRISApp(
                 platformLog(TAG, "[WARN][gate] clientMode probe failed: ${e.message?.take(80)}")
             }
 
-            // If we just completed setup, wait for agent WORK state before navigating to Interact
-            // The token was literally just created during setup, so it's definitely valid
-            if (justCompletedSetup) {
-                platformLog(TAG, "[INFO] Just completed setup, waiting for agent WORK state...")
-                justCompletedSetup = false
+            // ─── Post-setup RECONFIGURING hold ──────────────────────────────
+            // After /v1/setup/complete the runtime reloads and the node-fold
+            // takes a while to rebind :4243, so the LOCAL node is transiently
+            // DOWN. The stateless client (#125) keeps no token across a reload,
+            // so the old "go straight to Interact" path 401-bounced to Login →
+            // first-run → Setup and CYCLED for minutes. Instead HOLD a single
+            // stable "reconfiguring" state and poll the local node until it is
+            // back AND owned, then route to Login exactly once (the owner signs
+            // in). Reachable-but-unowned ⇒ a genuinely fresh node ⇒ Setup.
+            // Bounded (~4 min) so a dead rebind surfaces a clear timeout rather
+            // than a spinner forever. (CIRISServer#276 shutdown_node() will
+            // shorten the rebind; the bound is the safety net.)
+            if (reconfiguring) {
+                platformLog(TAG, "[INFO] Setup complete — holding reconfiguring state while the node restarts")
 
-                // Keep timer running during backend polling
+                // Keep the startup timer/spinner alive during the hold.
                 startupViewModel.setKeepTimerAlive(true)
+                startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_reconfiguring"))
 
-                // Check for degraded mode first - skip WORK state wait if no LLM
-                // NOTE: Don't call setPhase() here - it would cancel this LaunchedEffect!
-                startupViewModel.setStatus(
-                    if (isAgentMode) LocalizationHelper.getString("mobile.status_waiting_agent")
-                    else "Connecting to node..."
-                )
-
-                var agentReady = false
-                var inDegradedMode = false
-                var pollAttempts = 0
-                val maxPollAttempts = 150 // 30 seconds
-                var lastState = "UNKNOWN"
-
-                if (!isAgentMode) {
-                    // NODE mode: a bare node has no cognitive brain / WORK state.
-                    // The server is already healthy (we just probed /v1/health),
-                    // so there is nothing to wait for — proceed straight through.
-                    PlatformLogger.i(TAG, " NODE mode — skipping agent WORK-state wait")
-                    startupViewModel.setStatus("Node ready")
-                    agentReady = true
-                }
-
-                // Quick check for degraded mode via health endpoint (agent only)
-                if (isAgentMode) {
-                    try {
-                        val health = apiClient.getSystemHealth()
-                        if (health.degradedMode) {
-                            PlatformLogger.i(TAG, " Degraded mode detected - no working LLM provider")
-                            startupViewModel.setStatus("Running in limited mode (no LLM)")
-                            inDegradedMode = true
-                            agentReady = true  // Skip waiting for WORK state
-                        }
-                    } catch (e: Exception) {
-                        PlatformLogger.d(TAG, " Could not check degraded mode: ${e.message?.take(30)}")
-                    }
-                }
-
-                // Only wait for WORK state if not in degraded mode
-                while (pollAttempts < maxPollAttempts && !agentReady) {
-                    try {
-                        val status = apiClient.getSystemStatus()
-                        val cogState = (status.cognitive_state ?: "UNKNOWN").uppercase()
-
-                        if (cogState != lastState) {
-                            PlatformLogger.i(TAG, " Agent state: $cogState")
-                            startupViewModel.setStatus("Agent state: $cogState")
-                            lastState = cogState
-                        }
-
-                        if (cogState == "WORK") {
-                            PlatformLogger.i(TAG, " Agent reached WORK state!")
-                            agentReady = true
+                val maxReconfigPolls = 240 // ~4 minutes at 1s cadence
+                var reconfigPolls = 0
+                var routed = false
+                while (reconfigPolls < maxReconfigPolls) {
+                    if (isNodeReachable(baseUrl)) {
+                        if (nodeHasOwner(baseUrl)) {
+                            // Back + owned → configured. The reload invalidated
+                            // the setup token, so the owner must sign back in.
+                            platformLog(TAG, "[INFO] Node back + owned after reconfigure → Login")
+                            isFirstRun = false
+                            reconfiguring = false
+                            startupViewModel.setKeepTimerAlive(false)
+                            currentScreen = Screen.Login
+                            routed = true
                             break
                         }
-                    } catch (e: Exception) {
-                        if (pollAttempts % 10 == 0) {
-                            PlatformLogger.d(TAG, " Waiting for server... (${e.message?.take(30)})")
-                            startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_connecting_backend"))
-                        }
+                        // Reachable but UNOWNED → genuinely fresh node → first-run.
+                        platformLog(TAG, "[INFO] Node back but UNOWNED after reconfigure → Setup (first-run)")
+                        isFirstRun = true
+                        reconfiguring = false
+                        startupViewModel.setKeepTimerAlive(false)
+                        currentScreen = Screen.Setup
+                        routed = true
+                        break
                     }
-                    kotlinx.coroutines.delay(200)
-                    pollAttempts++
+                    if (reconfigPolls % 10 == 0) {
+                        // Re-assert the stable status (a stray poller may have
+                        // overwritten it) — do NOT setPhase() here, that would
+                        // cancel this LaunchedEffect.
+                        startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_reconfiguring"))
+                    }
+                    kotlinx.coroutines.delay(1000)
+                    reconfigPolls++
                 }
 
-                if (inDegradedMode) {
-                    startupViewModel.setStatus("Limited mode - configure LLM in Settings")
-                } else if (!agentReady) {
-                    PlatformLogger.w(TAG, " Agent did not reach WORK state within timeout, proceeding anyway")
-                    startupViewModel.setStatus("Agent ready (timeout)")
-                } else {
-                    startupViewModel.setStatus(if (isAgentMode) "Agent ready!" else "Node ready!")
+                if (!routed) {
+                    // Rebind never completed — surface a clear timeout, not a bounce.
+                    platformLog(TAG, "[ERROR] Node did not come back after reconfigure within timeout")
+                    reconfiguring = false
+                    startupViewModel.setKeepTimerAlive(false)
+                    startupViewModel.onErrorDetected(
+                        LocalizationHelper.getString("mobile.status_reconfiguring_timeout")
+                    )
                 }
-                kotlinx.coroutines.delay(500)
-
-                // Stop timer before navigating away
-                startupViewModel.setKeepTimerAlive(false)
-
-                interactViewModel.startPolling() // Start polling now that token is set
-                currentScreen = HOME_SCREEN
                 return@LaunchedEffect
             }
 
@@ -1852,7 +1833,9 @@ fun CIRISApp(
                             // Reset the startup phase so it re-polls for services
                             startupViewModel.resetForResume()
                             checkingFirstRun = false  // Allow re-check after startup completes
-                            justCompletedSetup = true  // Skip token re-validation since we just authenticated
+                            // Hold a STABLE reconfiguring state while the runtime
+                            // reloads and :4243 rebinds — no Setup↔Startup↔Interact↔Login cycle.
+                            reconfiguring = true
                             currentScreen = Screen.Startup
                         }
                     },
@@ -1937,17 +1920,25 @@ fun CIRISApp(
                         moderationViewModel = moderationViewModel,
                         onNavigateBack = { /* Already at root */ },
                         onSessionExpired = {
-                            // Navigate to login screen when session expires
-                            platformLog(TAG, "[INFO] Session expired - navigating to login")
-                            // Cancel polling before clearing token so a stale 401 doesn't
-                            // re-enter via TokenManager and race the next sign-in attempt.
-                            interactViewModel.resetState()
-                            currentAccessToken = null
-                            // Clear stored tokens asynchronously
-                            coroutineScope.launch {
-                                secureStorage.deleteAccessToken()
+                            if (reconfiguring) {
+                                // During the post-setup node reload the token is
+                                // EXPECTED to be invalid; the reconfiguring hold
+                                // owns navigation. Don't flash Interact then
+                                // bounce to Login here — that's the cycle.
+                                platformLog(TAG, "[INFO] Session-expired suppressed — reconfiguring hold owns navigation")
+                            } else {
+                                // Navigate to login screen when session expires
+                                platformLog(TAG, "[INFO] Session expired - navigating to login")
+                                // Cancel polling before clearing token so a stale 401 doesn't
+                                // re-enter via TokenManager and race the next sign-in attempt.
+                                interactViewModel.resetState()
+                                currentAccessToken = null
+                                // Clear stored tokens asynchronously
+                                coroutineScope.launch {
+                                    secureStorage.deleteAccessToken()
+                                }
+                                currentScreen = Screen.Login
                             }
-                            currentScreen = Screen.Login
                         },
                         onOpenTrustPage = {
                             platformLog(TAG, "[INFO] Opening Trust page")

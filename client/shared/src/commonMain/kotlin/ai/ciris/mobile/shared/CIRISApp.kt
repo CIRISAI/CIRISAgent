@@ -3948,7 +3948,17 @@ private suspend fun checkFirstRunStatus(
                 e.message?.contains("404") == true ||
                 e.message?.contains("/v1/setup/status") == true
             if (absent && isNodeReachable(baseUrl)) {
-                platformLog("checkFirstRunStatus", "[INFO] /v1/setup/status absent (node is ciris-server) + node reachable → first-run (fast degrade)")
+                // OWNER-AWARE degrade: setup-status is unavailable, but a node
+                // that already has an OWNER is CONFIGURED, not first-run. Only a
+                // genuinely fresh (unowned) node is first-run. Without this, the
+                // post-setup runtime reload (during which setup-status is briefly
+                // unreachable / the node-fold rebinds 4243) degrades to first-run
+                // and the app loops the wizard/login forever on an owned node.
+                if (nodeHasOwner(baseUrl)) {
+                    platformLog("checkFirstRunStatus", "[INFO] setup-status absent but node has an OWNER → configured, NOT first-run")
+                    return false
+                }
+                platformLog("checkFirstRunStatus", "[INFO] /v1/setup/status absent + node reachable + no owner → first-run (fast degrade)")
                 return true
             }
             attempts++
@@ -3964,7 +3974,14 @@ private suspend fun checkFirstRunStatus(
                 // as a fresh first-run so the app reaches the federation-ID wizard
                 // instead of dead-ending on "Backend unreachable".
                 if (isNodeReachable(baseUrl)) {
-                    platformLog("checkFirstRunStatus", "[INFO] Node reachable via /v1/identity but setup status unavailable - treating as first-run")
+                    // OWNER-AWARE (see the fast-degrade branch above): an owned
+                    // node is configured, not first-run — don't loop the wizard
+                    // just because setup-status is transiently unreachable.
+                    if (nodeHasOwner(baseUrl)) {
+                        platformLog("checkFirstRunStatus", "[INFO] setup status unavailable but node has an OWNER → configured, NOT first-run")
+                        return false
+                    }
+                    platformLog("checkFirstRunStatus", "[INFO] Node reachable but setup status unavailable + no owner - treating as first-run")
                     return true
                 }
                 return null
@@ -3981,6 +3998,21 @@ private suspend fun checkFirstRunStatus(
 private suspend fun isNodeReachable(baseUrl: String): Boolean {
     return try {
         CIRISApiClient(baseUrl).isLocalNodeUp(baseUrl.trimEnd('/'))
+    } catch (_: Exception) {
+        false
+    }
+}
+
+/**
+ * Does the local node already have an OWNER? A claimed/owned node is CONFIGURED
+ * (not first-run) even when /v1/setup/status is transiently unavailable — e.g.
+ * during the post-setup runtime reload while the node-fold rebinds 4243. Uses
+ * GET /v1/auth/owner-hint (null hint = no owner). Best-effort: any failure ⇒
+ * false (fall back to the first-run assumption).
+ */
+private suspend fun nodeHasOwner(baseUrl: String): Boolean {
+    return try {
+        CIRISApiClient(baseUrl).getOwnerHint() != null
     } catch (_: Exception) {
         false
     }

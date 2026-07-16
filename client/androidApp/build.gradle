@@ -59,7 +59,7 @@ android {
                 // installs the Android-bundled Python raises ModuleNotFound
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
-                install "ciris-server==0.5.120"  // ONE substrate wheel (same triple: verify v10.3.0 / persist v17.5.2 / edge v13.1.1) — CIRISAgent#922: THE NAMED-PHASE CUT. compose_status() names a wedged compose phase (CIRISServer#279) + rust file sink fixed (first-write-verified) + first_run_claim_pin() (#277). Android wheels on PyPI (arm64-v8a, armeabi-v7a, x86_64 emulator-native)
+                install "ciris-server==0.5.121"  // ONE substrate wheel (same triple: verify v10.3.0 / persist v17.5.2 / edge v13.1.1) — CIRISAgent#922: THE NAMED-PHASE CUT. compose_status() names a wedged compose phase (CIRISServer#279) + rust file sink fixed (first-write-verified) + first_run_claim_pin() (#277). Android wheels on PyPI (arm64-v8a, armeabi-v7a, x86_64 emulator-native)
                                 // ciris-lens-core is REQUIRED by the accord_metrics adapter
                 // in 2.9.6+ (CIRISAgent#866 LensCore fold) — the fourth
                 // substrate leg. Android wheels ship in the lens-core release

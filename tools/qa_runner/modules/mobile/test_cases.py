@@ -815,7 +815,7 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
     start_time = time.time()
     screenshots = []
 
-    username = config.get("setup_username", "admin")
+    username = config.get("setup_username", "qauser")
     password = config.get("setup_password", "qa_test_password_12345")
     fed_label = config.get("fed_label") or f"qa-node-{int(time.time())}"
     announce = config.get("announce", True)
@@ -1087,7 +1087,7 @@ def test_catchup_add_fedid(adb: ADBHelper, ui: UIAutomator, config: dict) -> Tes
     fed_label = config.get("fed_label") or f"qa-catchup-{int(time.time())}"
     announce = config.get("announce", True)
     trace_opt_in = config.get("trace_opt_in", True)
-    username = config.get("setup_username", "admin")
+    username = config.get("setup_username", "qauser")
     password = config.get("setup_password", "qa_test_password_12345")
 
     def fail(step: str, detail: str) -> TestReport:
@@ -1239,7 +1239,7 @@ def _local_login_if_needed(adb: ADBHelper, config: dict) -> tuple:
     reacts to whatever is on screen each tick — reveal the local form, fill creds,
     submit, and confirm we left Login. Returns (ok, detail).
     """
-    username = config.get("setup_username", "admin")
+    username = config.get("setup_username", "qauser")
     password = config.get("setup_password", "qa_test_password_12345")
     # Do NOT relaunch — the app is already running post-setup; a force-stop
     # relaunch would restart the 60-120s boot. Reuse the live server, retrying

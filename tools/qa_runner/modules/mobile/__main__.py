@@ -1469,7 +1469,12 @@ Examples:
         help="First-run login: 'local' creates a local account via the setup wizard "
         "(fully driveable by the test server); 'google' uses the native overlay (default).",
     )
-    test_parser.add_argument("--setup-username", default="admin", help="Local account username (login_mode=local)")
+    # NOT "admin": the server's CompleteSetupRequest validator rejects it as
+    # reserved-for-testing unless CIRIS_TESTING_MODE is set (models.py:465) —
+    # and the mobile filmstrip deliberately exercises the PRODUCTION path.
+    # (Before the encodeDefaults fix this failure was masked: "admin" == the
+    # SDK default → field omitted → server silently created user "owner".)
+    test_parser.add_argument("--setup-username", default="qauser", help="Local account username (login_mode=local)")
     test_parser.add_argument(
         "--setup-password", default="qa_test_password_12345", help="Local account password (login_mode=local)"
     )

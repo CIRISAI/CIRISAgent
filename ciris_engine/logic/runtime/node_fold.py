@@ -82,6 +82,35 @@ def _surface_first_run_claim_pin() -> None:
         logger.debug("Node fold: first_run_claim_pin probe failed (non-fatal): %s", exc)
 
 
+def _reprime_federation_delivery(path: str) -> None:
+    """Re-drive the canonical delivery prime (CIRISServer#288 / CIRISAgent#926).
+
+    The setup-complete restart is an in-process reload: the edge runtime is a
+    reused process-singleton, so ``start_federation_delivery`` (is_started()-
+    guarded) never re-fires and canonical is never re-rooted as a KEX'd
+    delivery target — the exact ``peer_count_canonical: 0`` /
+    rooted-once-never-dialed shape that stranded the first sealed mobile
+    trace. ``reprime_federation_delivery`` (ciris-server >=0.5.124) is
+    idempotent and re-drives ONLY the canonical prime against the current
+    embedded handles, so it is safe on every re-serve (both the reuse branch
+    and a fresh post-bind). getattr-guarded: wheels <0.5.124 degrade to the
+    prior (never-re-primed) behavior rather than crashing.
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        reprime = getattr(ciris_server, "reprime_federation_delivery", None)
+        if reprime is None:
+            logger.info("Node fold: reprime_federation_delivery unavailable (wheel <0.5.124) — canonical prime not re-driven (%s)", path)
+            return
+        count = reprime()
+        logger.info("Node fold: reprime_federation_delivery(%s) → %s canonical delivery target(s) re-seeded", path, count)
+    except Exception as exc:  # noqa: BLE001
+        # Non-fatal: delivery re-prime failure must never take down the fold —
+        # the seal path still works; only the ship waits for the next prime.
+        logger.warning("Node fold: reprime_federation_delivery(%s) failed (non-fatal): %s", path, exc)
+
+
 def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Optional[str] = None) -> None:
     """Boot the node (4243) on the agent's engine/edge, brain proxied to :8080.
 
@@ -109,6 +138,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
             # Non-consuming: re-surface the PIN for the restarted runtime's
             # capture (the wizard's self-claim may run after this reload).
             _surface_first_run_claim_pin()
+            _reprime_federation_delivery("reuse")
             return
     except OSError:
         pass
@@ -237,6 +267,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
             f"(node-fails ⇒ agent-fails); compose phase at expiry: {_wedged or 'unknown (no compose_status — wheel <0.5.120?)'}"
         )
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 ✅")
+    _reprime_federation_delivery("post-bind")
     # Surface the one-time first-run CLAIM PIN (minted during compose, stashed
     # in-process by ciris-server ≥0.5.119) so the client's capture latches it.
     _surface_first_run_claim_pin()

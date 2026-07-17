@@ -59,7 +59,7 @@ android {
                 // installs the Android-bundled Python raises ModuleNotFound
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
-                install "ciris-server==0.5.122"  // ONE substrate wheel (triple: verify v10.3.0 / persist v17.5.2 / edge v13.1.2) — CIRISAgent#922: THE RESTART CUT. shutdown_node(timeout_secs=30) kills the ~4-min :4243 EADDRINUSE window on setup-complete restart (CIRISServer#276) — the last substrate wedge before a green filmstrip; node_fold calls it before re-serving. edge v13.1.2 = #353 busy-link reply-over-inbound-link fix. Android wheels on PyPI (arm64-v8a, armeabi-v7a, x86_64 emulator-native), sha256-verified in client/androidApp/wheels/
+                install "ciris-server==0.5.124"  // ONE substrate wheel (triple: verify v10.3.0 / persist v17.5.2 / edge v13.1.2) — CIRISAgent#922: THE RESTART CUT. shutdown_node(timeout_secs=30) kills the ~4-min :4243 EADDRINUSE window on setup-complete restart (CIRISServer#276) — the last substrate wedge before a green filmstrip; node_fold calls it before re-serving. edge v13.1.2 = #353 busy-link reply-over-inbound-link fix. Android wheels on PyPI (arm64-v8a, armeabi-v7a, x86_64 emulator-native), sha256-verified in client/androidApp/wheels/
                                 // ciris-lens-core is REQUIRED by the accord_metrics adapter
                 // in 2.9.6+ (CIRISAgent#866 LensCore fold) — the fourth
                 // substrate leg. Android wheels ship in the lens-core release

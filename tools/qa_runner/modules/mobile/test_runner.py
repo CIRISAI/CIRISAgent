@@ -77,7 +77,12 @@ class MobileTestConfig:
     # Test settings
     test_message: str = "Hello CIRIS! This is an automated test. Please respond briefly."
     timeout: int = 300  # Total test timeout in seconds
-    keep_app_open: bool = False  # Don't force-stop app after tests
+    # Default TRUE: teardown must NOT kill the node. A full_flow run seals its
+    # trace seconds before teardown, and federation delivery ships in the
+    # background AFTER the suite — force-stopping here stranded every sealed
+    # trace on-device (the ship-unconfirmed chronic). Opt into the old
+    # behavior with --force-stop.
+    keep_app_open: bool = True
 
     # Portal / Node settings (for connect_node tests)
     portal_url: str = "https://portal.ciris.ai"
@@ -351,11 +356,14 @@ class MobileTestRunner:
             self.logcat_process.terminate()
             self.logcat_process = None
 
-        # Force stop app (unless keep_app_open is set)
+        # Leave the app (and its node) RUNNING by default: sealed traces ship
+        # via federation delivery AFTER the suite; killing the process here
+        # strands them. --force-stop opts into the old kill.
         if self.adb and not self.config.keep_app_open:
+            print("      Force-stopping app (--force-stop)")
             self.adb.force_stop_app(self.config.package_name)
-        elif self.config.keep_app_open:
-            print("      Keeping app open (--keep-open flag set)")
+        else:
+            print("      Leaving app running (default — sealed traces ship post-suite; use --force-stop to kill)")
 
     def run_tests(self, tests: Optional[List[str]] = None) -> MobileTestSuite:
         """
@@ -569,7 +577,8 @@ def main():
     )
     parser.add_argument("--no-reinstall", action="store_true", help="Don't reinstall the app")
     parser.add_argument("--no-clear", action="store_true", help="Don't clear app data before tests")
-    parser.add_argument("--keep-open", action="store_true", help="Keep app running after tests (don't force-stop)")
+    parser.add_argument("--keep-open", action="store_true", help="(default) Keep app running after tests")
+    parser.add_argument("--force-stop", action="store_true", help="Force-stop the app at teardown (strands unshipped sealed traces)")
 
     # Test account
     parser.add_argument(
@@ -612,7 +621,7 @@ def main():
         save_screenshots=not args.no_screenshots,
         save_logcat=not args.no_logcat,
         verbose=args.verbose,
-        keep_app_open=args.keep_open,
+        keep_app_open=not args.force_stop,
     )
 
     # Run tests

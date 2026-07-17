@@ -13,7 +13,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
 from rich.console import Console
@@ -1082,7 +1082,52 @@ class QARunner:
             )
             self.console.print(f"[bold red]{verdict}[/bold red]")
             logger.warning("[FEDERATION-DELIVERY] %s", verdict)
+
+        # Not fully green → surface delivery_status() (CIRISServer#294, >=0.5.125)
+        # and its decision tree, so a stalled gate is one query, not archaeology.
+        if not (transport_rooted and kex_state == "PRESENT"):
+            self._diagnose_delivery_status(_read_probe_log)
         return rooted
+
+    def _diagnose_delivery_status(self, read_probe_log: Callable[[], str]) -> None:
+        """Print the ciris_server.delivery_status() snapshot + the #926 decision
+        tree from the [DELIVERY-STATUS] line the edge probe logs. Collapses a
+        stalled delivery gate into one structured read (leviculum#25 frame-loss
+        vs never-primed vs no-KEX). Best-effort; never raises."""
+        import json as _json
+
+        try:
+            lines = [ln for ln in read_probe_log().splitlines() if "[DELIVERY-STATUS]" in ln]
+            if not lines:
+                self.console.print("  delivery_status     : (no [DELIVERY-STATUS] line — ciris_server <0.5.125 or probe not run)")
+                return
+            m = re.search(r"\[DELIVERY-STATUS\]\s+phase=(\S+)\s+(\{.*\})", lines[-1])
+            if not m:
+                self.console.print(f"  delivery_status     : {lines[-1][-160:]}")
+                return
+            phase, blob = m.group(1), m.group(2)
+            st = _json.loads(blob)
+            self.console.print(f"  delivery_status     : phase={phase} started={st.get('delivery_started')} edge_up={st.get('edge_up')} targets={st.get('canonical_targets')}")
+            hint = "  → "
+            if not st.get("delivery_started"):
+                hint += "delivery_started=false — prime never ran/re-fired (call reprime_federation_delivery(); #288)"
+            else:
+                peers = st.get("peers") or []
+                canon = next((p for p in peers if p.get("key_id") in (st.get("canonical_targets") or [])), peers[0] if peers else None)
+                if canon is None:
+                    hint += "no peers in status — canonical not admitted yet"
+                elif not canon.get("knows_peer"):
+                    hint += "knows_peer=false — not promoted to a KEX'd delivery target (advisory-link exchange incomplete; #363/prime)"
+                elif not canon.get("kex_present"):
+                    hint += "kex_present=false — IdentityOccurrence enc-keys not replicated yet; give it a round"
+                elif canon.get("deliverable"):
+                    hint += "deliverable=true but trace not landing → driver-layer frame loss: grep node log for edge FramesDropped WARN (leviculum#25)"
+                else:
+                    hint += "deliverable=false with kex present — inspect the peer entry"
+            self.console.print(f"[dim]{hint}[/dim]")
+            logger.info("[FEDERATION-DELIVERY] delivery_status phase=%s %s", phase, st)
+        except Exception as exc:  # noqa: BLE001
+            self.console.print(f"  delivery_status     : (diagnosis error, non-fatal: {exc})")
 
     def _setup_oauth_test_user(self) -> bool:
         """Create/verify OAuth test user in database for billing integration tests."""

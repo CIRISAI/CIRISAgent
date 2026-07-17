@@ -303,6 +303,25 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
     """
     import threading
 
+    def _log_delivery_status(phase: str) -> None:
+        """Surface ciris_server.delivery_status() (>=0.5.125, CIRISServer#294) as a
+        loggable [DELIVERY-STATUS] line so the QA runner / on-device log tail can
+        read the structured delivery state without test mode — the accessor is
+        in-process to the server, so it MUST be logged here, not called from the
+        runner's own process. Getattr-guarded: older wheels log 'unavailable'.
+        Same in-process-accessor → logged-surface pattern as first_run_claim_pin
+        and compose_status. Purely diagnostic; never disturbs the probe."""
+        try:
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            ds = getattr(ciris_server, "delivery_status", None)
+            if ds is None:
+                logger.info("[DELIVERY-STATUS] phase=%s unavailable (ciris_server <0.5.125 — no delivery_status accessor)", phase)
+                return
+            logger.info("[DELIVERY-STATUS] phase=%s %s", phase, ds())
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[DELIVERY-STATUS] phase=%s accessor error (non-fatal): %s", phase, exc)
+
     def _probe() -> None:
         import time as _t
 
@@ -334,6 +353,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                     break
             if not rooted:
                 logger.info("[DELIVERY-PROBE] canonical %s did not root within %ss", ckey, root_deadline)
+                _log_delivery_status("did-not-root")
                 return
 
             # KEX does NOT appear at rooting — it lands only once an inbound
@@ -356,6 +376,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                         ckey,
                         kex_waited,
                     )
+                    _log_delivery_status("kex-present")
                     return
                 _t.sleep(15)
                 kex_waited += 15
@@ -368,6 +389,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                 ckey,
                 kex_deadline,
             )
+            _log_delivery_status("kex-none")
         except Exception as exc:  # noqa: BLE001 — pure diagnostics, never disturb boot
             logger.debug("[DELIVERY-PROBE] probe error (non-fatal): %s", exc)
 

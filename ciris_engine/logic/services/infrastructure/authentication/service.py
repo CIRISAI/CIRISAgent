@@ -77,7 +77,24 @@ SYSTEM_WA_KEY_FILENAME = "system_wa.key"
 # Do not raise above 20.0 without filing a NEW issue against ciris_verify.
 # The per-worker safety net is ATTESTATION_TIMEOUT=90 in verifier_runner.py;
 # that exists to prevent infinite hangs, not to license a slow happy path.
-STARTUP_ATTESTATION_BUDGET_SECONDS = 20.0
+#
+# Env-overridable (CIRISVerify#212 workaround): the 20s contract holds in
+# production, but a dev/QA/unregistered build cannot meet it while verify v10.5.0
+# blocks ~27s on the missing-registry-record fetch. CIRIS_STARTUP_ATTESTATION_
+# BUDGET_SECONDS lets those builds tolerate the slow degrade (paired with
+# CIRIS_ATTESTATION_SKIP_REGISTRY, which removes the block entirely on verify
+# that accepts it). Default unchanged → production still enforces 20s.
+def _startup_attestation_budget() -> float:
+    raw = os.environ.get("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "").strip()
+    if raw:
+        try:
+            return max(1.0, float(raw))
+        except ValueError:
+            pass
+    return 20.0
+
+
+STARTUP_ATTESTATION_BUDGET_SECONDS = _startup_attestation_budget()
 
 
 class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProtocol):

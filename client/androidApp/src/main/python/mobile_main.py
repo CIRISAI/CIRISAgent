@@ -915,6 +915,15 @@ def setup_android_environment():
     os.environ["CIRIS_OFFLINE_MODE"] = "true"
     os.environ["CIRIS_CLOUD_SYNC"] = "false"
 
+    # An offline mobile node has no registry entry — verify v10.5.0's startup
+    # attestation would block ~27s on the missing Agent-build-record fetch and
+    # trip the 20s budget gate, bricking the processor (CIRISVerify#212).
+    # Offline ⇒ skip the registry step (degrades to L4-skipped FAST, the same
+    # end-state the fetch reaches anyway) and give the budget headroom as a
+    # belt-and-suspenders for a bundled verify that predates skip_registry.
+    os.environ.setdefault("CIRIS_ATTESTATION_SKIP_REGISTRY", "true")
+    os.environ.setdefault("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "45")
+
     # Enable CIRISVerify debug logging (logs to stderr)
     os.environ.setdefault("RUST_LOG", "ciris_verify_core=info")
 

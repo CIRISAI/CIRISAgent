@@ -304,8 +304,6 @@ class TestSecretsSnapshotFix:
 
         # Mock secrets service
         mock_secrets_service = MagicMock()
-        mock_store = AsyncMock()
-        mock_filter = MagicMock()
 
         # Create mock SecretReference objects
         mock_secrets = [
@@ -329,11 +327,11 @@ class TestSecretsSnapshotFix:
             ),
         ]
 
-        mock_store.list_all_secrets.return_value = mock_secrets
-        mock_filter.get_filter_config.return_value = MagicMock(version=1)
-
-        mock_secrets_service.store = mock_store
-        mock_secrets_service.filter = mock_filter
+        # build_secrets_snapshot awaits list_all_secrets() and get_filter_config()
+        # DIRECTLY on the secrets service (#896 substrate refactor), not via
+        # .store/.filter — wire them as async on the service itself.
+        mock_secrets_service.list_all_secrets = AsyncMock(return_value=mock_secrets)
+        mock_secrets_service.get_filter_config = AsyncMock(return_value={"version": 1})
 
         # Build snapshot
         snapshot = await build_secrets_snapshot(mock_secrets_service)

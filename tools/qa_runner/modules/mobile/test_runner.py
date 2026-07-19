@@ -363,7 +363,19 @@ class MobileTestRunner:
             print("      Force-stopping app (--force-stop)")
             self.adb.force_stop_app(self.config.package_name)
         else:
-            print("      Leaving app running (default — sealed traces ship post-suite; use --force-stop to kill)")
+            # Not force-stopping is NOT enough: once the app falls to the
+            # BACKGROUND, PythonRuntimeService's ~3-minute background timeout
+            # stops the runtime — killing the node mid-delivery even though the
+            # process survives. Re-foreground the activity at teardown so it
+            # stays RESUMED (isAppInForeground=true → the background timeout
+            # never arms) and the federation-delivery loop keeps running long
+            # enough to dispatch the sealed trace. On the (user-less) emulator
+            # nothing backgrounds it afterward, so a single launch holds it.
+            print("      Keeping app FOREGROUNDED (re-launching activity so the runtime survives the delivery window)")
+            try:
+                self.adb.launch_app(self.config.package_name, "ai.ciris.mobile.MainActivity")
+            except Exception as e:
+                print(f"      [WARN] could not re-foreground app ({e}) — runtime may hit its background timeout")
 
     def run_tests(self, tests: Optional[List[str]] = None) -> MobileTestSuite:
         """

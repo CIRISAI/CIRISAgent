@@ -358,12 +358,27 @@ jobs:
           # step above; staged_env.prepare is idempotent and reuses it).
           # --no-mock-llm not set → uses mock LLM (no API keys needed in CI).
           #
-          # --database-backends sqlite postgres --parallel-backends: exercises
-          # the full QA suite against BOTH persistence backends simultaneously.
-          # qa_runner self-provisions the postgres backend via a docker
-          # container (ubuntu-latest ships Docker); no GH service block needed.
+          # --database-backends sqlite postgres: exercises the full QA suite
+          # against BOTH persistence backends SEQUENTIALLY. qa_runner
+          # self-provisions the postgres backend via a docker container
+          # (ubuntu-latest ships Docker); no GH service block needed.
+          #
+          # NOT --parallel-backends (2026-07-20 all_1 RCA, 5 consecutive
+          # failures): the node-folded substrate binds fixed host-wide ports
+          # (:4242 reticulum transport, :4243 node read-API) and both legs
+          # share CIRIS_HOME (one data/edge/edge_identity.rid). Two
+          # simultaneous legs therefore cross-contaminate: the loser of the
+          # :4242 bind race gets "Address already in use", its node_fold then
+          # finds the WINNER's :4243 node and reuses it — a foreign node with
+          # a diverged signing key (each leg's startup wipe re-mints the
+          # shared identity) — and every accord-metrics capture fails
+          # `receive_and_persist: ValueError: verify_unknown_key` (×244 →
+          # incidents gate → exit 1). Sequential legs each get the host to
+          # themselves. Restore --parallel-backends only after the substrate
+          # exposes per-instance node/edge listen addrs (CIRISServer ask
+          # filed; agent guard: node_fold identity-verified reuse).
           python3 -m tools.qa_runner ${{ matrix.subset }} --from-staged \
-            --database-backends sqlite postgres --parallel-backends
+            --database-backends sqlite postgres
 
       - name: Capture upgrade-compat fixture (qa-full)
         # Snapshot the post-QA-sweep agent state as a "full-coverage"

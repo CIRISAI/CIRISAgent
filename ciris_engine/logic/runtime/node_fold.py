@@ -130,18 +130,65 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     # wiped by the re-import while the daemon thread lives on). The node is a
     # process-singleton — if 4243 already accepts, reuse it: its brain proxy
     # targets 127.0.0.1:<brain_port>, which the restarted brain rebinds.
+    #
+    # HARDENED (2026-07-20, QA all_1 RCA): "accepts on :4243" is NOT proof the
+    # node is OURS. Under CI --parallel-backends, the postgres leg's probe found
+    # the SQLITE leg's node (a different process, different signing key)
+    # answering :4243 and silently "reused" it — every subsequent accord-metrics
+    # capture then failed `receive_and_persist: ValueError: verify_unknown_key`
+    # (×244, incidents gate, exit 1). So: before reusing, ask the live node who
+    # it is (/v1/self/identity, /v1/health) and require OUR key_id in the
+    # answer. Confirmed-foreign ⇒ hard error (node-fails ⇒ agent-fails — never
+    # ship traces to someone else's node). Cannot-determine (endpoint shape
+    # drift on older wheels) ⇒ loud warning + reuse, preserving the legit
+    # mobile-restart path this branch exists for.
     import socket as _socket
 
     try:
         with _socket.create_connection(("127.0.0.1", 4243), timeout=1):
-            logger.info("Node fold: 4243 already serving (prior runtime in this process) — reusing the live node")
-            # Non-consuming: re-surface the PIN for the restarted runtime's
-            # capture (the wizard's self-claim may run after this reload).
-            _surface_first_run_claim_pin()
-            _reprime_federation_delivery("reuse")
-            return
+            live_node = True
     except OSError:
-        pass
+        live_node = False
+
+    if live_node:
+        expected_key = key_id or _resolve_key_id()
+        identity_text = ""
+        try:
+            import urllib.request as _urlreq
+
+            for probe_path in ("/v1/self/identity", "/v1/health"):
+                try:
+                    with _urlreq.urlopen(f"http://127.0.0.1:4243{probe_path}", timeout=2) as resp:
+                        identity_text += resp.read(65536).decode("utf-8", errors="replace")
+                except Exception:  # noqa: BLE001 — endpoint may not exist on this wheel
+                    continue
+        except Exception:  # noqa: BLE001
+            pass
+
+        if expected_key and identity_text and expected_key not in identity_text:
+            raise RuntimeError(
+                f"node fold: :4243 is already serving but it is NOT our node "
+                f"(expected key_id={expected_key} absent from /v1/self/identity + /v1/health). "
+                f"Another CIRIS process on this host owns :4243 — reusing it would ship our "
+                f"traces to a foreign node (verify_unknown_key, QA all_1 RCA). "
+                f"Run one node-folded stack per host, or stop the other process first."
+            )
+        if not identity_text:
+            logger.warning(
+                "Node fold: 4243 already serving but identity could not be confirmed "
+                "(no readable /v1/self/identity or /v1/health) — reusing on the in-process-restart "
+                "assumption. If captures fail verify_unknown_key, another process owns :4243."
+            )
+        else:
+            logger.info(
+                "Node fold: 4243 already serving and identity CONFIRMED ours (key_id=%s) — reusing the live node",
+                expected_key,
+            )
+        # Non-consuming: re-surface the PIN for the restarted runtime's
+        # capture (the wizard's self-claim may run after this reload).
+        _surface_first_run_claim_pin()
+        _reprime_federation_delivery("reuse")
+        return
 
     try:
         import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]

@@ -152,11 +152,20 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
         cancelBackgroundTimeout()
 
         backgroundTimeoutRunnable = Runnable {
-            if (!isAppInForeground) {
+            if (isAppInForeground) {
+                Log.i(TAG, "Background timeout expired but app is now in foreground - continuing")
+            } else if (BuildConfig.TEST_MODE_ENABLED) {
+                // QA/dev build: DON'T stop on the background timeout. The mobile
+                // node must stay alive so the federation-delivery loop can
+                // dispatch a sealed trace even while the app is backgrounded —
+                // the emulator churns foreground/background under adb, and a
+                // stop here strands the trace mid-delivery (the recurring
+                // ship-unconfirmed / node-unreachable-after-run). Production
+                // (release, TEST_MODE_ENABLED=false) still stops to save battery.
+                Log.i(TAG, "Background timeout expired but TEST_MODE — keeping runtime alive for federation delivery")
+            } else {
                 Log.i(TAG, "Background timeout expired (${BACKGROUND_TIMEOUT_MS / 1000}s) - stopping service to save battery")
                 stopSelf()
-            } else {
-                Log.i(TAG, "Background timeout expired but app is now in foreground - continuing")
             }
         }
 

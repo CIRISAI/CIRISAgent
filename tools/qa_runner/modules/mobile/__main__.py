@@ -1084,7 +1084,7 @@ def test_command(args) -> int:
         save_screenshots=not args.no_screenshots,
         save_logcat=not args.no_logcat,
         verbose=args.verbose,
-        keep_app_open=args.keep_open,
+        keep_app_open=not getattr(args, "force_stop", False),
     )
 
     # Print config summary
@@ -1500,7 +1500,13 @@ Examples:
     test_parser.add_argument("--no-logcat", action="store_true", help="Don't capture logcat")
     test_parser.add_argument("--build", "-b", action="store_true", help="Build APK before running tests")
     test_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
-    test_parser.add_argument("--keep-open", action="store_true", help="Keep app running after tests (don't force-stop)")
+    # Keeping the app running after tests is the DEFAULT — a full_flow seals its
+    # trace seconds before teardown and federation delivery ships in the
+    # background AFTER the suite; force-stopping here strands the sealed trace.
+    # --keep-open is kept as a harmless no-op for back-compat; --force-stop opts
+    # into the old kill.
+    test_parser.add_argument("--keep-open", action="store_true", help="(default) Keep app running after tests")
+    test_parser.add_argument("--force-stop", action="store_true", help="Force-stop the app at teardown (strands unshipped sealed traces)")
 
     # iOS physical/simulator selection
     test_parser.add_argument(

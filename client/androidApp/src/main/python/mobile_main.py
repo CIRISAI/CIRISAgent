@@ -924,8 +924,17 @@ def setup_android_environment():
     os.environ.setdefault("CIRIS_ATTESTATION_SKIP_REGISTRY", "true")
     os.environ.setdefault("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "45")
 
-    # Enable CIRISVerify debug logging (logs to stderr)
-    os.environ.setdefault("RUST_LOG", "ciris_verify_core=info")
+    # Rust log filter. init_tracing (edge_runtime) does `RUST_LOG or <default>`,
+    # so whatever we set here WINS over its ciris_edge=debug default — the old
+    # `ciris_verify_core=info` silenced the entire edge/transport/replication
+    # stack, leaving the federation-delivery path (the proactive Deliver, the
+    # outbound Reticulum send, link dials) DARK on-device (CIRISAgent#927 field
+    # confirm needed exactly this: did the Deliver fire, and over what path).
+    # Widen to capture delivery/transport at debug while keeping verify at info.
+    os.environ.setdefault(
+        "RUST_LOG",
+        "info,ciris_verify_core=info,ciris_edge=debug,leviculum=debug,reticulum_core=debug,ciris_server=info",
+    )
 
     # Optimize for low-resource devices
     os.environ.setdefault("CIRIS_MAX_WORKERS", "1")

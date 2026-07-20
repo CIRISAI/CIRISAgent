@@ -322,6 +322,27 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.debug("[DELIVERY-STATUS] phase=%s accessor error (non-fatal): %s", phase, exc)
 
+    def _envelopes_sent_total() -> Optional[int]:
+        """Read round_diagnostics.envelopes_sent_total from delivery_status()
+        (>=0.5.125). The tighter-pants terminal signal: delivery is CONFIRMED
+        only when envelopes actually left, never on TX-side optimism. Returns
+        None when the accessor is unavailable (older wheel) or unparsable —
+        callers treat None as 'cannot confirm', not as zero."""
+        try:
+            import json as _json
+
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            ds = getattr(ciris_server, "delivery_status", None)
+            if ds is None:
+                return None
+            raw = ds()
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+            sent = (data or {}).get("round_diagnostics", {}).get("envelopes_sent_total")
+            return int(sent) if sent is not None else None
+        except Exception:  # noqa: BLE001 — diagnostics only
+            return None
+
     def _probe() -> None:
         import time as _t
 
@@ -358,38 +379,91 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
 
             # KEX does NOT appear at rooting — it lands only once an inbound
             # IdentityOccurrence anti-entropy round from the peer completes (which
-            # needs the peer to REPLY over a rooted return path). So poll KEX for a
-            # window AFTER rooting rather than sampling once. If it never flips to
-            # PRESENT, the peer is not answering our replication rounds — the
-            # "rooted but 0 envelopes" blocker is on the peer's reply path, not here.
-            kex_deadline = 180
-            kex_waited = 0
-            while kex_waited < kex_deadline:
-                try:
-                    kex = edge.resolve_peer_kex_pubkeys(ckey)
-                except Exception as kex_exc:  # noqa: BLE001
-                    kex = f"<error: {kex_exc}>"
-                if isinstance(kex, dict):
-                    logger.info(
-                        "[DELIVERY-PROBE] canonical %s KEX PRESENT after ~%ss post-root — "
-                        "IdentityOccurrence round synced; replication can now seal envelopes",
-                        ckey,
-                        kex_waited,
-                    )
-                    _log_delivery_status("kex-present")
-                    return
+            # needs the peer to REPLY over a rooted return path). The 0.5.131 run
+            # proved a one-shot 180s window is too eager: it declared "peer not
+            # replying / responder unwired, NOT the agent" 80s BEFORE the dial-cache
+            # warm-up self-healed (CIRISEdge#336 residual — both sides may dial a
+            # stale cached dest for minutes before flipping to the routable one).
+            # So: belt, suspenders, AND tighter pants —
+            #   belt      — reprime on KEX stall (idempotent, CIRISServer#288) so the
+            #               peer keeps getting fresh prime/KEX chances to heal its
+            #               own dial cache the way we healed ours;
+            #   suspenders — keep [DELIVERY-STATUS] LIVE through the whole delivery
+            #               window instead of freezing at a give-up snapshot;
+            #   tighter pants — the terminal verdict is envelopes_sent-based
+            #               (ship-confirmed vs ship-unconfirmed), never TX-side
+            #               optimism and never premature peer-blame.
+            window_deadline = 900  # full delivery window (s) — mobile test-mode keeps the app alive this long
+            status_cadence = 60  # live [DELIVERY-STATUS] emit cadence (s)
+            reprime_cadence = 180  # KEX-stall reprime cadence (s)
+            waited = 0
+            kex_seen_at: Optional[int] = None
+            last_status = 0
+            last_reprime = 0
+            while waited < window_deadline:
                 _t.sleep(15)
-                kex_waited += 15
+                waited += 15
+                if kex_seen_at is None:
+                    try:
+                        kex = edge.resolve_peer_kex_pubkeys(ckey)
+                    except Exception as kex_exc:  # noqa: BLE001
+                        kex = f"<error: {kex_exc}>"
+                    if isinstance(kex, dict):
+                        kex_seen_at = waited
+                        logger.info(
+                            "[DELIVERY-PROBE] canonical %s KEX PRESENT after ~%ss post-root — "
+                            "IdentityOccurrence round synced; replication can now seal envelopes",
+                            ckey,
+                            waited,
+                        )
+                        _log_delivery_status("kex-present")
+                    elif waited - last_reprime >= reprime_cadence:
+                        # KEX stall — reprime rather than give up. Warm-up dial-cache
+                        # lag (CIRISEdge#336) means the peer may be dialing our stale
+                        # dest for minutes; every reprime re-roots the canonical
+                        # against current handles and gives its next round a fresh
+                        # chance to route (mirror of the flip that healed OUR dials).
+                        last_reprime = waited
+                        try:
+                            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+                            rp = getattr(ciris_server, "reprime_federation_delivery", None)
+                            if rp is not None:
+                                n = rp()
+                                logger.info(
+                                    "[DELIVERY-PROBE] canonical %s KEX still None at %ss post-root — repriming "
+                                    "(likely dial-cache warm-up on one side, CIRISEdge#336; %s target(s) re-seeded)",
+                                    ckey,
+                                    waited,
+                                    n,
+                                )
+                        except Exception as rp_exc:  # noqa: BLE001
+                            logger.debug("[DELIVERY-PROBE] reprime attempt failed (non-fatal): %s", rp_exc)
+                # tighter pants: terminal condition is envelopes actually SENT
+                sent = _envelopes_sent_total()
+                if sent and sent > 0:
+                    logger.info(
+                        "[DELIVERY-PROBE] canonical %s SHIP CONFIRMED — envelopes_sent_total=%s at ~%ss post-root",
+                        ckey,
+                        sent,
+                        waited,
+                    )
+                    _log_delivery_status("ship-confirmed")
+                    return
+                if waited - last_status >= status_cadence:
+                    last_status = waited
+                    _log_delivery_status("kex-present-await-ship" if kex_seen_at is not None else "kex-none-repriming")
             logger.info(
-                "[DELIVERY-PROBE] canonical %s ROOTED but KEX still None after %ss post-root — "
-                "the peer is not replying to our anti-entropy rounds (IdentityOccurrence never syncs → "
-                "resolve_peer_kex_pubkeys None → replication cannot seal). Blocker is the peer's "
-                "replication reply path (peer roots us only as advisory, or its responder is unwired), "
-                "NOT the agent.",
+                "[DELIVERY-PROBE] canonical %s window closed after %ss post-root with SHIP UNCONFIRMED "
+                "(kex=%s, envelopes_sent=0). Do not assume a peer fault: the CIRISEdge#336 dial-cache "
+                "residual is symmetric — the peer may have been dialing our stale dest all window "
+                "(explicit-hash dests cannot announce by design, so its cache heals only via our "
+                "prime/replication contact). See CIRISAgent#927 for the reverse-path ledger.",
                 ckey,
-                kex_deadline,
+                window_deadline,
+                "present" if kex_seen_at is not None else "none",
             )
-            _log_delivery_status("kex-none")
+            _log_delivery_status("window-closed-unconfirmed")
         except Exception as exc:  # noqa: BLE001 — pure diagnostics, never disturb boot
             logger.debug("[DELIVERY-PROBE] probe error (non-fatal): %s", exc)
 

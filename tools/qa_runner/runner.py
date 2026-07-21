@@ -200,8 +200,11 @@ class QARunner:
         # by _run_parallel_backends).
         modules = _expand_module_aggregates(modules)
 
-        # If testing multiple backends, always use parallel mode for proper state isolation
-        # (Sequential mode doesn't properly isolate database/server state between backends)
+        # Multi-backend always routes through subprocess isolation (in-process
+        # sequential mode cross-contaminates auth/server state). Whether the
+        # isolated children run one-at-a-time (default; the node-folded
+        # substrate binds host-wide :4242/:4243 — all_1 RCA 2026-07-20) or
+        # concurrently (--parallel-backends) is decided inside.
         if len(self.database_backends) > 1:
             return self._run_parallel_backends(modules)
 
@@ -2477,20 +2480,35 @@ class QARunner:
         [AUTH SERVICE DEBUG] traces, to send the postgres leg's API key →
         "Invalid API key" 401s on whichever leg lost the race. A separate
         subprocess per backend has zero shared mutable state — the cross is
-        structurally impossible — while the backends still run fully in
-        parallel. Each child is a plain single-backend qa_runner invocation.
+        structurally impossible. Each child is a plain single-backend
+        qa_runner invocation.
+
+        CONCURRENCY (2026-07-20 all_1 RCA): subprocess isolation covers
+        in-process state, but the node-folded substrate binds HOST-wide
+        singletons — :4242 (reticulum transport), :4243 (node read-API,
+        not configurable, CIRISServer#303) — and both legs share
+        CIRIS_HOME's data/edge identity. Two legs running at the same time
+        therefore cross-contaminate at the host level: the :4242 bind loser's
+        node_fold reuses the winner's :4243 node → foreign signing key →
+        every capture fails verify_unknown_key. So concurrency is OPT-IN:
+        children run one-at-a-time unless config.parallel_backends is set
+        (--parallel-backends), which is only sound once the substrate
+        supports per-instance listen addrs.
         """
         import subprocess
         import sys
 
         start_time = time.time()
 
+        sequential = not getattr(self.config, "parallel_backends", False)
+        mode_label = "sequential, isolated subprocesses" if sequential else "parallel, isolated subprocesses"
+
         self.console.print(
             Panel.fit(
-                "[bold cyan]CIRIS QA Test Runner - Parallel Backend Mode (isolated subprocesses)[/bold cyan]\n"
+                f"[bold cyan]CIRIS QA Test Runner - Multi-Backend Mode ({mode_label})[/bold cyan]\n"
                 f"Backends: {', '.join(self.database_backends)}\n"
                 f"Modules: {', '.join(m.value for m in modules)}",
-                title="🧪 Starting Parallel Backend QA Tests",
+                title="🧪 Starting Multi-Backend QA Tests",
             )
         )
 
@@ -2544,23 +2562,16 @@ class QARunner:
         # scale up under this contention. Sequential / single-backend runs
         # don't pay the penalty because the env var is unset there.
         child_env = os.environ.copy()
-        child_env["CIRIS_QA_PARALLEL_BACKENDS"] = "1"
-
-        procs = {}
-        for backend in self.database_backends:
-            child = [sys.executable, "-m", "tools.qa_runner", *_child_argv(backend)]
-            self.console.print(f"[cyan]🔄 Starting {backend.upper()} backend tests (isolated subprocess)...[/cyan]")
-            self.console.print(f"[dim]   $ {' '.join(child)}[/dim]")
-            procs[backend] = subprocess.Popen(child, env=child_env)
-
-        self.console.print("\n[cyan]⏳ Waiting for all backend subprocesses to complete...[/cyan]\n")
+        if not sequential:
+            child_env["CIRIS_QA_PARALLEL_BACKENDS"] = "1"
 
         # config.timeout is a PER-TEST budget; a whole backend leg runs many
         # modules (15-25 min). Give real headroom — the GH job's own
         # timeout-minutes is the actual outer bound.
         leg_timeout = max(self.config.timeout * 8, 2400)
         backend_results = {}
-        for backend, proc in procs.items():
+
+        def _wait_leg(backend: str, proc: "subprocess.Popen[bytes]") -> None:
             try:
                 rc = proc.wait(timeout=leg_timeout)
                 backend_results[backend] = {"success": rc == 0, "detail": f"exit {rc}"}
@@ -2571,11 +2582,29 @@ class QARunner:
                 backend_results[backend] = {"success": False, "detail": f"timeout >{leg_timeout}s"}
                 self.console.print(f"[red]❌ {backend.upper()} backend subprocess timed out after {leg_timeout}s[/red]")
 
+        procs = {}
+        for backend in self.database_backends:
+            child = [sys.executable, "-m", "tools.qa_runner", *_child_argv(backend)]
+            self.console.print(f"[cyan]🔄 Starting {backend.upper()} backend tests (isolated subprocess)...[/cyan]")
+            self.console.print(f"[dim]   $ {' '.join(child)}[/dim]")
+            proc = subprocess.Popen(child, env=child_env)
+            if sequential:
+                # One leg at a time: the child must EXIT (releasing :4242/:4243
+                # and the shared data/edge identity) before the next leg boots.
+                _wait_leg(backend, proc)
+            else:
+                procs[backend] = proc
+
+        if not sequential:
+            self.console.print("\n[cyan]⏳ Waiting for all backend subprocesses to complete...[/cyan]\n")
+            for backend, proc in procs.items():
+                _wait_leg(backend, proc)
+
         all_success = all(data["success"] for data in backend_results.values())
 
         elapsed = time.time() - start_time
         self.console.print(f"\n\n{'=' * 80}")
-        self.console.print("[bold cyan]📊 PARALLEL BACKEND TEST SUMMARY[/bold cyan]")
+        self.console.print("[bold cyan]📊 MULTI-BACKEND TEST SUMMARY[/bold cyan]")
         self.console.print(f"{'=' * 80}\n")
 
         table = Table(title="Backend Comparison (isolated subprocesses)")
@@ -2587,7 +2616,7 @@ class QARunner:
             table.add_row(backend.upper(), status, data["detail"])
         self.console.print(table)
 
-        self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s (parallel, isolated)[/dim]")
+        self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s ({mode_label})[/dim]")
         self.console.print(
             "[dim]Per-backend test counts + incidents are in each subprocess's own summary above.[/dim]"
         )
@@ -2598,7 +2627,7 @@ class QARunner:
             self.console.print(f"[dim]   • {backend} incidents: logs/{backend}/incidents_latest.log[/dim]")
 
         if all_success:
-            self.console.print("\n[bold green]✅ All backends passed all tests in parallel![/bold green]")
+            self.console.print("\n[bold green]✅ All backends passed all tests![/bold green]")
         else:
             failed_backends = [b for b, d in backend_results.items() if not d["success"]]
             self.console.print(f"\n[bold red]❌ Some backends failed: {', '.join(failed_backends)}[/bold red]")

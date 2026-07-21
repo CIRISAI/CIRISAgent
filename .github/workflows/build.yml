@@ -377,8 +377,15 @@ jobs:
           # themselves. Restore --parallel-backends only after the substrate
           # exposes per-instance node/edge listen addrs (CIRISServer ask
           # filed; agent guard: node_fold identity-verified reuse).
+          # ORDER MATTERS: postgres FIRST, sqlite LAST. Sequential legs each
+          # wipe $GITHUB_WORKSPACE/data at start, and the postgres leg's
+          # engine state lives in the docker postgres (no ciris_engine.db on
+          # disk) — so if postgres ran last, the fixture-capture step below
+          # would find the data dir wiped of the sqlite leg's DB (run
+          # 29850066267). With sqlite last, its ciris_engine.db is the final
+          # on-disk state, exactly what capture-upgrade-fixture snapshots.
           python3 -m tools.qa_runner ${{ matrix.subset }} --from-staged \
-            --database-backends sqlite postgres
+            --database-backends postgres sqlite
 
       - name: Capture upgrade-compat fixture (qa-full)
         # Snapshot the post-QA-sweep agent state as a "full-coverage"

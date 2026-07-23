@@ -59,7 +59,7 @@ android {
                 // installs the Android-bundled Python raises ModuleNotFound
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
-                install "ciris-server==0.5.136"  // ONE substrate wheel (edge v13.7.0) — CIRISAgent#927 THE INITIATOR-FIRST RECEIVE CUT: NAT-carrier mobile is reachable only over links IT initiates, so the Initiator round now proactively Delivers the self-publish key/attestation set alongside the Summary (no wait for the return-path Diff). Agent-side unchanged. Android wheels sha256-verified in client/androidApp/wheels/.
+                install "ciris-server==0.5.137"  // ONE substrate wheel (edge v13.7.0) — CIRISAgent#927 THE INITIATOR-FIRST RECEIVE CUT: NAT-carrier mobile is reachable only over links IT initiates, so the Initiator round now proactively Delivers the self-publish key/attestation set alongside the Summary (no wait for the return-path Diff). Agent-side unchanged. Android wheels sha256-verified in client/androidApp/wheels/.
                                 // ciris-lens-core is REQUIRED by the accord_metrics adapter
                 // in 2.9.6+ (CIRISAgent#866 LensCore fold) — the fourth
                 // substrate leg. Android wheels ship in the lens-core release

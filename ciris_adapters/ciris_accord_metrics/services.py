@@ -1013,10 +1013,16 @@ class AccordMetricsService:
                 "task_priority": event.get("task_priority"),
                 "updated_info_available": event.get("updated_info_available"),
                 "requires_human_input": event.get("requires_human_input"),
+                # FLAT summary alias (CIRISServer#315 seam sweep): persist's
+                # trace-summary projection reads '$.thought_type' off
+                # THOUGHT_START at every level — an ENUM (seed/followup/…),
+                # zero content, safe at GENERIC. (persist also reads
+                # '$.task_description' — that one is TEXT and stays FULL-tier
+                # by design; flagged upstream as a wrong-tier read.)
+                "thought_type": event.get("thought_type"),
             }
             # DETAILED: Add type identifiers
             if is_detailed:
-                data["thought_type"] = event.get("thought_type")
                 data["thought_status"] = event.get("thought_status")
                 data["parent_thought_id"] = event.get("parent_thought_id")
                 data["channel_id"] = event.get("channel_id")
@@ -1516,10 +1522,18 @@ class AccordMetricsService:
                 "has_positive_moment": positive_moment_text is not None and len(positive_moment_text) > 0,
                 # Execution error indicator (privacy-preserving boolean)
                 "has_execution_error": event.get("error") is not None,
+                # FLAT summary aliases (CIRISServer#315 seam sweep): persist's
+                # trace-summary projection reads '$.success' (→ action_success)
+                # and '$.action_executed' (→ selected_action) off ACTION_RESULT
+                # at EVERY trace level. `success` is a bool alias of
+                # execution_success; `action_executed` is the handler-action
+                # ENUM (speak/ponder/defer/…) — zero content, safe at GENERIC,
+                # and without it the summary's selected_action column is dead.
+                "success": event.get("execution_success"),
+                "action_executed": event.get("action_executed"),
             }
-            # DETAILED: Add action type, follow-up, error details, and audit signature
+            # DETAILED: Add follow-up, error details, and audit signature
             if is_detailed:
-                data["action_executed"] = event.get("action_executed")
                 data["follow_up_thought_id"] = event.get("follow_up_thought_id")
                 data["audit_entry_id"] = event.get("audit_entry_id")
                 data["models_used"] = event.get("models_used", [])

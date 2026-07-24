@@ -1278,6 +1278,16 @@ class AccordMetricsService:
                 "dsdma": dsdma_data,
                 "pdma": pdma_data if pdma_data else None,
                 "idma": idma_data,
+                # FLAT summary aliases (CIRISServer#315 root cause): persist's
+                # trace-summary projection extracts these exact top-level paths
+                # (json_extract '$.csdma_plausibility_score' etc., see
+                # SQLITE_TRACE_SUMMARY_SELECT). Without them every summary row
+                # carries NULL essentials → the capacity scorer's feature
+                # matrix drops all rows → emitted=0 → NO trace ever ships.
+                # Additive alongside the nested shape the lens reads.
+                "csdma_plausibility_score": csdma_data.get("plausibility_score"),
+                "dsdma_domain_alignment": dsdma_data.get("domain_alignment"),
+                "dsdma_domain": dsdma.get("domain") if isinstance(dsdma, dict) else None,
             }
             if is_full:
                 data["combined_analysis"] = event.get("combined_analysis")
@@ -1295,6 +1305,15 @@ class AccordMetricsService:
                 "reasoning_state": event.get("reasoning_state"),
                 "fragility_flag": event.get("fragility_flag"),
                 "reasoning_is_fragile": event.get("reasoning_is_fragile"),
+                # FLAT summary aliases (CIRISServer#315 root cause): persist's
+                # trace-summary projection reads '$.idma_k_eff' etc. off the
+                # IDMA_RESULT payload — idma_k_eff is one of the TWO essential
+                # feature dims (with csdma_plausibility_score) whose absence
+                # empties the capacity scorer's feature matrix. Additive.
+                "idma_k_eff": event.get("k_eff"),
+                "idma_correlation_risk": event.get("correlation_risk"),
+                "idma_fragility_flag": event.get("fragility_flag"),
+                "idma_phase": event.get("phase"),
             }
             # DETAILED: Add identified sources and correlation factors
             if is_detailed:

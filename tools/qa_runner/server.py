@@ -1015,7 +1015,17 @@ class APIServerManager:
         accord_metrics_requested = any(m == QAModule.ACCORD_METRICS for m in self.modules)
         model_eval_requested = any(m == QAModule.MODEL_EVAL for m in self.modules)
         safety_battery_requested = any(m == QAModule.SAFETY_BATTERY for m in self.modules)
-        accord_metrics_enabled = accord_metrics_requested or model_eval_requested or self.config.live_lens
+        # --federation-delivery implies the accord adapter: the federation block
+        # below explicitly depends on it ("Needs consent-sealed traces (the
+        # accord block above sets CONSENT=true)") and prints trace_level/env
+        # keys this block binds. Without this, `qa_runner <module>
+        # --federation-delivery` crashed UnboundLocalError at server start.
+        accord_metrics_enabled = (
+            accord_metrics_requested
+            or model_eval_requested
+            or self.config.live_lens
+            or self.config.federation_delivery
+        )
         if accord_metrics_enabled:
             # Load base accord_metrics adapter alongside the main adapter
             if "ciris_accord_metrics" not in env.get("CIRIS_ADAPTER", ""):

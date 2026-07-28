@@ -262,7 +262,7 @@ def emit_consent_revocation(user_id: str, reason: Optional[str] = None, promote:
         return None
     if promote:
         try:
-            engine.attestation_promote(attestation_id)  # type: ignore[attr-defined]
+            engine.attestation_promote(attestation_id, "federation")  # type: ignore[attr-defined]
             logger.info("consent-CEG: promoted revocation %s to federation tier", attestation_id)
         except Exception as exc:
             # Expected in CLIENT mode (no PQC signer); the local row is enough.
@@ -592,7 +592,7 @@ def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[s
             # Best-effort, mirroring the revocation path: deferred in CLIENT
             # mode (no PQC signer); the local row still gates the seal.
             try:
-                engine.attestation_promote(attestation_id)  # type: ignore[attr-defined]
+                engine.attestation_promote(attestation_id, "federation")  # type: ignore[attr-defined]
                 logger.info("consent-CEG: promoted directed grant %s to federation tier", attestation_id)
             except Exception as exc:  # noqa: BLE001
                 logger.info("consent-CEG: directed grant promote deferred (non-fatal): %s", exc)
@@ -647,7 +647,7 @@ def emit_community_consent_revocation(
         return None
     if community:
         try:
-            engine.attestation_promote(attestation_id)  # type: ignore[attr-defined]
+            engine.attestation_promote(attestation_id, "federation")  # type: ignore[attr-defined]
         except Exception as exc:
             logger.debug("consent-CEG: structural promote deferred (non-fatal): %s", exc)
     return str(attestation_id)

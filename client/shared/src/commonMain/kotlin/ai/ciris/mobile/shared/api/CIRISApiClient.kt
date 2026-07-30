@@ -1853,6 +1853,69 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * **Author the explicit trace-sharing consent** —
+     * `POST {localNodeUrl}/v1/federation/consent` (owner-gated; ciris-server
+     * >= the explicit-consent cut). Consent is NO LONGER auto-authored at node
+     * boot: when the user opts into "Send traces to CIRIS L3C", the wizard (or
+     * the Manage Consent card) must author `consent:replication` explicitly,
+     * once, AFTER the owner claim (pre-claim the route 403s). Idempotent —
+     * re-POST is a no-op.
+     *
+     * When [peerKeyId] is null, the method resolves the canonical the node is
+     * rooted to via `GET {localNodeUrl}/v1/accord/canonical-servers` (first
+     * entry). [attestationPrefixes] is the explicit scope the user consented
+     * to (empty ⇒ the node 400s — pass what was actually consented).
+     *
+     * @return the raw response body (carries `grant_attestation_id`).
+     */
+    suspend fun authorFederationConsent(
+        peerKeyId: String? = null,
+        attestationPrefixes: List<String> = listOf("trace:", "capacity:"),
+        analyze: Boolean = true,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): String {
+        val method = "authorFederationConsent"
+        val client = federationHttpClient()
+        return try {
+            val peer = peerKeyId ?: run {
+                val resp = client.get("$localNodeUrl/v1/accord/canonical-servers") {
+                    token?.let { header("Authorization", "Bearer $it") }
+                }
+                val raw = resp.bodyAsText()
+                if (!resp.status.isSuccess()) {
+                    throw RuntimeException("canonical-servers failed: ${resp.status}: ${raw.take(200)}")
+                }
+                // Envelope-tolerant first-key extraction: [{"key_id": ...}] or {"data":[...]}
+                Regex("\"key_id\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.get(1)
+                    ?: throw RuntimeException("no canonical server in: ${raw.take(200)}")
+            }
+            val prefixesJson = attestationPrefixes.joinToString(",") { "\"$it\"" }
+            logInfo(method, "POST $localNodeUrl/v1/federation/consent peer=$peer scope=$attestationPrefixes")
+            val response = client.post("$localNodeUrl/v1/federation/consent") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                // `analyze`: CC#46 (persist v22) — the subject's consent to BE SCORED
+                // (consent:state:granted:v1, scope analyze, naming the recipient's
+                // DERIVED key). Forward-compat: servers without the field ignore it;
+                // the CIRISServer ask extends the route to author it atomically.
+                setBody("""{"peer_key_id":"$peer","attestation_prefixes":[$prefixesJson],"analyze":$analyze}""")
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                logException(method, RuntimeException("status=${response.status} body=${raw.take(300)}"), "localNodeUrl=$localNodeUrl")
+                throw RuntimeException("federation consent failed: ${response.status}: ${raw.take(200)}")
+            }
+            raw
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
     // ─── Delegations (device-authorization grants) — owner authorizes an agent ──
     //
     // The owner approves a device code an agent generated out-of-band, minting a

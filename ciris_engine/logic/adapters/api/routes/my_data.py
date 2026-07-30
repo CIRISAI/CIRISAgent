@@ -47,6 +47,14 @@ class LensIdentifierResponse(BaseModel):
     agent_id: str = Field(..., description="Raw agent ID (so user can verify the hash)")
     consent_given: bool = Field(..., description="Whether accord metrics consent is currently active")
     consent_timestamp: Optional[str] = Field(None, description="When consent was last granted/revoked")
+    # CONSENT DRY (v22): the resolved federation consent set — capture alone
+    # does not ship or score traces. None = resolver unavailable on this wheel.
+    federation_consents: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Resolved v22 consent set {capture, replication, analyze, canonical, aligned} "
+        "via the engine's own readers; 'aligned' False => the Manage Consent card should "
+        "offer a one-tap confirm (authorFederationConsent).",
+    )
     trace_level: Optional[str] = Field(None, description="Current trace detail level (generic/detailed/full_traces)")
     traces_sent: int = Field(0, description="Approximate number of trace events sent this session")
     endpoint_url: Optional[str] = Field(None, description="CIRISLens endpoint traces are sent to")
@@ -444,11 +452,24 @@ async def get_lens_identifier(
     if not agent_id_hash:
         agent_id_hash = _compute_agent_id_hash_from_signer()
 
+    # CONSENT DRY: resolve the full v22 consent set through the engine's own
+    # readers so the card can offer the one-tap confirm when misaligned.
+    _fed_consents = None
+    try:
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            federation_consent_status,
+        )
+
+        _fed_consents = federation_consent_status()
+    except Exception:  # noqa: BLE001 — advisory only
+        pass
+
     data = LensIdentifierResponse(
         agent_id_hash=agent_id_hash,
         agent_id=agent_id,
         consent_given=consent_given,
         consent_timestamp=consent_timestamp,
+        federation_consents=_fed_consents,
         trace_level=trace_level,
         traces_sent=traces_sent,
         endpoint_url=endpoint_url,

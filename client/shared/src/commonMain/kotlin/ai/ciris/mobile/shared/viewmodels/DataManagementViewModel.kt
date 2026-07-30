@@ -361,6 +361,17 @@ class DataManagementViewModel(
 
                 if (result.success) {
                     logInfo(method, "Accord metrics adapter loaded: ${result.adapterId}")
+                    // CONSENT DRY: capture consent (adapter) alone leaves the
+                    // federation grants missing — traces would seal but never
+                    // ship (consent:replication) or be scorable (CC#46 analyze).
+                    // Author them through the same owner-gated route the wizard
+                    // uses; non-fatal (the status card surfaces any gap).
+                    try {
+                        val consentRaw = apiClient.authorFederationConsent()
+                        logInfo(method, "[ORDER] federation_consent authored via data card (scope=trace:,capacity: analyze=true): ${consentRaw.take(160)}")
+                    } catch (e: Exception) {
+                        logError(method, "[ORDER] federation_consent FAILED via data card (non-fatal): ${e.message} — traces will not replicate until consent is authored")
+                    }
                     // Refresh to show the new adapter state
                     refresh()
                 } else {

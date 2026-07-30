@@ -1747,6 +1747,20 @@ class AccordMetricsService:
         ABSENT otherwise — with the exact signals checked, so troubleshooting is
         a one-line grep (``grep '\\[CONSENT\\]'`` in mobile pull-logs).
         """
+        # CONSENT DRY (opt-in paths 3+4: env var / legacy-convert): capture
+        # consent resolving TRUE here does NOT imply the v22 federation grants
+        # (consent:replication + CC#46 analyze) exist — those are owner acts.
+        # Detect drift via the engine's own resolvers and surface the remedy;
+        # never silently author owner-tier grants from a session-less path.
+        if self._consent_given:
+            try:
+                from ciris_engine.logic.services.governance.consent.attestation import (
+                    log_federation_consent_drift,
+                )
+
+                log_federation_consent_drift(source or "boot")
+            except Exception:  # noqa: BLE001 — advisory only
+                pass
         if self._consent_given:
             logger.info(
                 "[CONSENT] trace consent ARMED — source=%s role=community_trust "

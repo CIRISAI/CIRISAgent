@@ -651,3 +651,103 @@ def emit_community_consent_revocation(
         except Exception as exc:
             logger.debug("consent-CEG: structural promote deferred (non-fatal): %s", exc)
     return str(attestation_id)
+
+
+def federation_consent_status() -> "dict[str, object]":
+    """CONSENT DRY (all four opt-in paths): resolve the FULL trace-sharing
+    consent set through the engine's OWN readers — never row-existence.
+
+    v22 (ciris-server 0.5.139+) needs THREE aligned artifacts for a sealed
+    trace to be captured, shipped, and scorable:
+
+    1. ``consent:community_trust:v1`` — capture/seal gate (this module owns it)
+    2. ``consent:replication:v1`` naming the canonical — ship gate; resolved
+       via ``list_consent_peers`` (the projection edge actually reads — a row
+       can exist while being invisible to edge, per the 0.5.139 consent DX)
+    3. ``consent:state:granted:v1`` scope=analyze naming the canonical's
+       DERIVED key — CC#46 score gate (resolver not yet py-exposed; reported
+       "unknown" until it is — never guessed from rows)
+
+    The four opt-in paths (wizard, data card, legacy-convert, env var) all
+    reduce to: paths WITH an owner session author via the owner-gated
+    ``POST /v1/federation/consent`` (the Kotlin client's
+    ``authorFederationConsent``); paths WITHOUT one (boot/env) must never
+    silently author an owner-tier grant — they call THIS to detect drift and
+    surface "confirmation needed" on the Manage Consent card instead. That is
+    the same explicit-consent principle that removed server auto-consent.
+
+    Returns a dict: ``capture`` / ``replication`` / ``analyze`` each
+    ``True``/``False``/``None`` (None = resolver unavailable), ``canonical``
+    (the peer checked), and ``aligned`` (True only when every resolvable gate
+    is green). Never raises.
+    """
+    status: "dict[str, object]" = {
+        "capture": None,
+        "replication": None,
+        "analyze": None,
+        "canonical": None,
+        "aligned": False,
+    }
+    try:
+        status["capture"] = current_community_grant_id() is not None
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("consent-DRY: capture resolution failed: %s", exc)
+    engine = _resolve_engine()
+    key_id = _resolve_attesting_key_id()
+    if engine is None or not key_id:
+        return status
+    try:
+        import json as _json
+
+        canon = _json.loads(engine.list_canonical_servers() or "[]")  # type: ignore[attr-defined]
+        canonical = canon[0].get("key_id") if canon else None
+        status["canonical"] = canonical
+        if canonical:
+            peers = engine.list_consent_peers(key_id)  # type: ignore[attr-defined]
+            peer_ids = peers if isinstance(peers, list) else _json.loads(peers or "[]")
+            status["replication"] = any(canonical in str(p) for p in peer_ids)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("consent-DRY: replication resolution failed: %s", exc)
+    # CC#46 analyze: resolve through the engine's scoped-consent resolver the
+    # moment it is py-exposed (assert-the-resolved-stance; a row that folds to
+    # Unspecified is the silent false the DX doc warns about).
+    resolver = getattr(engine, "resolve_scoped_consent", None)
+    if resolver is not None and status["canonical"]:
+        try:
+            stance = resolver(str(status["canonical"]), "analyze")
+            status["analyze"] = "granted" in str(stance).lower()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("consent-DRY: analyze resolution failed: %s", exc)
+    resolvable = [v for v in (status["capture"], status["replication"], status["analyze"]) if v is not None]
+    status["aligned"] = bool(resolvable) and all(resolvable)
+    return status
+
+
+def log_federation_consent_drift(reason: str) -> None:
+    """Boot/env-path detector (opt-in paths 3+4): when capture consent says
+    YES but the federation grants are missing, say so LOUDLY with the exact
+    remedy — never silently author an owner-tier grant from a session-less
+    path. The Manage Consent card completes it with one owner-session call
+    (``authorFederationConsent``)."""
+    try:
+        st = federation_consent_status()
+        if st["capture"] and st["replication"] is False:
+            logger.warning(
+                "[CONSENT-DRY] capture consent is ON (%s) but consent:replication for "
+                "canonical %s is NOT resolved via list_consent_peers — sealed traces "
+                "will NOT replicate. Remedy: confirm sharing on the Manage Consent "
+                "card (owner session -> POST /v1/federation/consent).",
+                reason,
+                st["canonical"],
+            )
+        elif st["capture"] and st["analyze"] is False:
+            logger.warning(
+                "[CONSENT-DRY] capture+replication consents resolved but the CC#46 "
+                "analyze grant for %s is NOT — traces will ship but never be scored. "
+                "Remedy: re-confirm sharing on the Manage Consent card.",
+                st["canonical"],
+            )
+        else:
+            logger.info("[CONSENT-DRY] consent status (%s): %s", reason, st)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[CONSENT-DRY] drift check failed (non-fatal): %s", exc)

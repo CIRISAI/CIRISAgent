@@ -1454,8 +1454,27 @@ def _capture_speak_evidence(adb: ADBHelper, package: str = "ai.ciris.mobile.debu
         # An actual ship: an envelope leaving for the canonical. Exclude the
         # DELIVERY-PROBE / "can now seal envelopes" advisory (it says "seal
         # envelopes" but ships nothing).
-        if "delivery-probe" not in low and "can now seal" not in low:
-            if ("envelope" in low and any(k in low for k in ("sent", "shipped", "delivered"))) or "delivered to canonical" in low:
+        # A ship is a COUNT, not a word.
+        #
+        # This used to substring-match "envelope" + sent/shipped/delivered, which
+        # matched the METRIC NAME `envelopes_sent_total` regardless of its VALUE.
+        # A run whose diagnostics read {"envelopes_sent_total": 0} on a line whose
+        # own phase was `kex-present-await-ship` was reported as "shipped" — while
+        # both trace rows sat at (cohort_scope=self, tier=local), unpromoted, and
+        # the canonical had received nothing. The gate that exists to catch
+        # undelivered traces passed the undelivered case.
+        #
+        # Read the number instead.
+        m = re.search(r'"envelopes_sent_total"\s*:\s*(\d+)', ln)
+        if m:
+            if int(m.group(1)) > 0:
+                ev["trace_shipped"] = True
+            ev["envelopes_sent_total"] = int(m.group(1))
+            keep.append(ln)
+        elif "delivery-probe" not in low and "can now seal" not in low and "await-ship" not in low:
+            # Explicit per-envelope ship events still count, but only when the
+            # line is about a specific envelope leaving — never a counter name.
+            if "delivered to canonical" in low or ("envelope" in low and "shipped to" in low):
                 ev["trace_shipped"] = True
                 keep.append(ln)
     ev["log_lines"] = keep[-40:]

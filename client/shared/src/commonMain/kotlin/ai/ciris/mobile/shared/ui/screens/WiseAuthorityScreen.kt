@@ -88,7 +88,8 @@ fun WiseAuthorityScreen(
         expiryHours: Int,
         reason: String,
         promote: Boolean,
-    ) -> Unit = { _, _, _, _, _, _ -> },
+        overGrantConfirmed: Boolean,
+    ) -> Unit = { _, _, _, _, _, _, _ -> },
     onPromoteProposal: (approvalId: String, note: String) -> Unit = { _, _ -> },
     onRejectProposal: (approvalId: String, reason: String) -> Unit = { _, _ -> },
     /** "Not now" — record why, issue nothing, leave the agent fail-closed. */
@@ -267,7 +268,7 @@ fun WiseAuthorityScreen(
             isSubmitting = isResolving,
             budgetState = selectedBudgetState?.takeIf { it.ticketId == proposal.id },
             onDismiss = close,
-            onApprove = { amount, expiryHours, reason, promote ->
+            onApprove = { amount, expiryHours, reason, promote, overGrantConfirmed ->
                 if (amount != null && proposal.requestedBudget != null) {
                     onGrantBudget(
                         proposal.id,
@@ -276,6 +277,7 @@ fun WiseAuthorityScreen(
                         expiryHours,
                         reason,
                         promote,
+                        overGrantConfirmed,
                     )
                 } else {
                     onPromoteProposal(proposal.id, reason)

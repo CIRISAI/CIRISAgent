@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlin.math.roundToInt
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -102,6 +103,36 @@ object BudgetApprovalSeam {
     private const val F_PURPOSE = "purpose"
     private const val F_EXPIRES_IN_HOURS = "expires_in_hours"
     private const val F_WA_ID = "wa_id"
+
+    // ─── Audit marking of an over-grant — READ ONLY ─────────────────────────
+    //
+    // The client does NOT send these. The server derives both in `issue_grant`
+    // by comparing the granted amount against the ticket's `__requested_budget__`
+    // at issuance, and they sit inside the canonical signed payload so the
+    // marking cannot be stripped or forged without invalidating the signature.
+    //
+    // That is strictly better than the client-asserted flag originally proposed
+    // here, and for the same reason the over-grant ruling itself turned on: a
+    // client-asserted audit flag is worthless precisely against the person it
+    // needs to work against. An operator motivated to make an over-grant look
+    // ordinary is the one calling the endpoint directly, and they would simply
+    // omit the flag — it would be present exactly when it was not needed.
+    //
+    // Note `GrantBudgetRequest` now declares `extra="forbid"`: an unknown field
+    // is a loud 422 rather than a silent default. [buildGrantBody] must send
+    // only fields the server declares.
+
+    /** True when the granted amount exceeded what the agent asked for. */
+    private const val F_EXCEEDS_REQUEST = "exceeds_request"
+
+    /**
+     * The requested amount as it stood **at grant time** — the snapshot, so the
+     * ratio stays reconstructable from the record alone even if the ticket's
+     * requested budget later differs. Null when the ticket requested nothing at
+     * all (a human-opened ticket, or a proposal asking for work but not money),
+     * in which case there is no ratio to name and it is not an over-grant.
+     */
+    private const val F_REQUESTED_AT_GRANT = "requested_amount_at_grant"
 
     // ─── Bounds the server also enforces; duplicated here so the UI can
     //     refuse locally instead of round-tripping a guaranteed 422. ─────────
@@ -226,7 +257,14 @@ object BudgetApprovalSeam {
     // Issuance — building the request, reading the response
     // ═══════════════════════════════════════════════════════════════════════
 
-    /** Body for `POST /v1/tickets/{id}/budget/grant`. */
+    /**
+     * Body for `POST /v1/tickets/{id}/budget/grant`.
+     *
+     * Sends **only** fields the server declares — `GrantBudgetRequest` uses
+     * `extra="forbid"`, so an unknown field is a 422 rather than a silent
+     * default. In particular the over-grant audit marking is *not* sent: the
+     * server derives it (see [F_EXCEEDS_REQUEST]).
+     */
     fun buildGrantBody(
         amount: String,
         currency: String,
@@ -263,6 +301,13 @@ object BudgetApprovalSeam {
             grantedByUserId = obj.str("granted_by_user_id"),
             grantedAt = obj.str("granted_at"),
             signed = runCatching { obj["signed"]?.jsonPrimitive?.booleanOrNull }.getOrNull() ?: false,
+            // Server-derived, inside the signed payload. Absent on servers
+            // predating the marking, which reads as "not an over-grant" — the
+            // same as an ordinary grant, which is the correct default.
+            exceedsRequest = runCatching {
+                obj[F_EXCEEDS_REQUEST]?.jsonPrimitive?.booleanOrNull
+            }.getOrNull() ?: false,
+            requestedAmountAtGrant = obj.str(F_REQUESTED_AT_GRANT),
         )
     }
 
@@ -322,26 +367,34 @@ object BudgetApprovalSeam {
     /**
      * Validate a proposed grant **before** it leaves the device.
      *
-     * Two different rules are checked here, and they have different standing:
-     *
-     * **`granted ≤ requested` is a product policy, and this client is stricter
-     * than the server.** The server does *not* enforce it — an AUTHORITY user is
-     * permitted to grant more than the agent asked for, e.g. when the agent
-     * lowballed. We refuse it anyway, because "approve at or below what was
-     * asked" is the promise the approval UI makes to the person using it, and a
-     * dialog that silently allows more than the request on screen is a dialog
-     * that can surprise its operator. This is a UI guarantee, not a security
-     * boundary.
+     * Two rules are checked, and they have very different standing:
      *
      * **`granted ≤ trust ceiling` is the real bound, and the server owns it.**
-     * We check it here only so the operator learns at the point of decision
-     * rather than through a rejected round-trip. A modified client changes
-     * nothing: the ceiling is enforced at issuance and again at every spend.
+     * Checked here only so the operator learns at the point of decision rather
+     * than through a rejected round-trip. A modified client changes nothing: the
+     * ceiling is enforced at issuance and again at every spend. **It is not
+     * overridable by [overGrantConfirmed]** — confirming that you meant to
+     * exceed the agent's request says nothing about the deployment's envelope,
+     * and this check deliberately runs first so it wins.
+     *
+     * **`granted > requested` is permitted, with friction.** The agent's request
+     * is *information for the human, not a constraint on them* — the agent may
+     * simply have asked for too little, and an AUTHORITY user is the one with
+     * standing to correct that. The server has always allowed it; a UI-only
+     * refusal would just teach operators to reach for `curl`, moving the grant
+     * outside every rendering and confirmation this dialog provides. So it is
+     * allowed, but never *silently*: until [overGrantConfirmed] is true this
+     * returns [BudgetGrantError.OVER_GRANT_UNCONFIRMED] with [BudgetGrantOutcome.overGrant]
+     * populated so the caller can render the ratio. Fail-closed by construction —
+     * a caller that never passes `overGrantConfirmed = true` cannot submit an
+     * over-grant.
      *
      * @param headroom remaining trust envelope, when the server reports it.
      *   Ignored when its currency differs from the requested currency — a USD
      *   ceiling says nothing about a USDC request, and comparing them would
      *   block a legitimate grant on a meaningless mismatch.
+     * @param overGrantConfirmed the human has explicitly acknowledged a grant
+     *   above the request, having been shown by how much.
      */
     fun validateGrant(
         requested: RequestedBudget,
@@ -349,6 +402,7 @@ object BudgetApprovalSeam {
         expiresInHours: Int,
         purpose: String,
         headroom: TrustHeadroom? = null,
+        overGrantConfirmed: Boolean = false,
     ): BudgetGrantOutcome {
         val requestedScaled = parseAmount(requested.requestedAmount)
             ?: return BudgetGrantOutcome(false, BudgetGrantError.INVALID_AMOUNT, "Requested amount is not a valid number")
@@ -358,13 +412,8 @@ object BudgetApprovalSeam {
         if (amountScaled <= 0L) {
             return BudgetGrantOutcome(false, BudgetGrantError.INVALID_AMOUNT, "Amount must be greater than zero")
         }
-        if (amountScaled > requestedScaled) {
-            return BudgetGrantOutcome(
-                false,
-                BudgetGrantError.EXCEEDS_REQUESTED,
-                "You can approve at most ${requested.requestedAmount} ${requested.requestedCurrency}",
-            )
-        }
+
+        // The real bound, first, so no confirmation can talk past it.
         // Only compare against headroom denominated in the same currency.
         val comparableHeadroom = headroom?.takeIf {
             it.currency.isBlank() || it.currency.equals(requested.requestedCurrency, ignoreCase = true)
@@ -378,6 +427,7 @@ object BudgetApprovalSeam {
                     "this deployment's envelope",
             )
         }
+
         if (expiresInHours < MIN_EXPIRY_HOURS || expiresInHours > MAX_EXPIRY_HOURS) {
             return BudgetGrantOutcome(
                 false,
@@ -388,7 +438,76 @@ object BudgetApprovalSeam {
         if (purpose.isBlank()) {
             return BudgetGrantOutcome(false, BudgetGrantError.MISSING_PURPOSE, "Say what the money is for")
         }
-        return BudgetGrantOutcome(true)
+
+        // Permitted, but only deliberately.
+        val overGrant = describeOverGrant(requested, amount, requestedScaled, amountScaled)
+        if (overGrant != null && !overGrantConfirmed) {
+            return BudgetGrantOutcome(
+                ok = false,
+                error = BudgetGrantError.OVER_GRANT_UNCONFIRMED,
+                message = null, // the caller renders the ratio, not a generic string
+                overGrant = overGrant,
+            )
+        }
+        return BudgetGrantOutcome(ok = true, overGrant = overGrant)
+    }
+
+    /**
+     * Describe by how much a grant exceeds the request, or null when it does
+     * not exceed it.
+     *
+     * Banding rationale: the hazard is a **mis-typed extra zero**, which is
+     * always ≥10× and therefore always lands in [OverGrantMagnitude.MULTIPLE].
+     * Below 2× a multiple reads oddly ("1.2× the requested"), so a percentage is
+     * clearer; at or under 5% no figure is shown at all, because dressing a
+     * rounding-scale overage in alarm styling trains people to click past the
+     * warning that matters.
+     */
+    fun describeOverGrant(requested: RequestedBudget, amount: String): OverGrant? {
+        val requestedScaled = parseAmount(requested.requestedAmount) ?: return null
+        val amountScaled = parseAmount(amount) ?: return null
+        return describeOverGrant(requested, amount, requestedScaled, amountScaled)
+    }
+
+    private fun describeOverGrant(
+        requested: RequestedBudget,
+        amount: String,
+        requestedScaled: Long,
+        amountScaled: Long,
+    ): OverGrant? {
+        if (requestedScaled <= 0L || amountScaled <= requestedScaled) return null
+        val multiple = amountScaled.toDouble() / requestedScaled.toDouble()
+        val magnitude = when {
+            multiple <= SLIGHT_OVER_GRANT_RATIO -> OverGrantMagnitude.SLIGHT
+            multiple < MULTIPLE_OVER_GRANT_RATIO -> OverGrantMagnitude.PERCENT
+            else -> OverGrantMagnitude.MULTIPLE
+        }
+        return OverGrant(
+            requestedAmount = requested.requestedAmount,
+            currency = requested.requestedCurrency,
+            amount = amount,
+            multiple = multiple,
+            magnitude = magnitude,
+            display = when (magnitude) {
+                OverGrantMagnitude.SLIGHT -> ""
+                OverGrantMagnitude.PERCENT -> "${((multiple - 1.0) * 100).roundToInt()}%"
+                OverGrantMagnitude.MULTIPLE -> "${formatMultiple(multiple)}×"
+            },
+        )
+    }
+
+    /** At or below this ratio an over-grant is rendered without a figure. */
+    private const val SLIGHT_OVER_GRANT_RATIO = 1.05
+
+    /** At or above this ratio an over-grant is rendered as "N×" rather than a percentage. */
+    private const val MULTIPLE_OVER_GRANT_RATIO = 2.0
+
+    /** One decimal place, with a bare integer when the fraction is zero: 10, 2.5. */
+    private fun formatMultiple(multiple: Double): String {
+        val rounded = (multiple * 10).roundToInt()
+        val whole = rounded / 10
+        val frac = rounded % 10
+        return if (frac == 0) whole.toString() else "$whole.$frac"
     }
 
     /**

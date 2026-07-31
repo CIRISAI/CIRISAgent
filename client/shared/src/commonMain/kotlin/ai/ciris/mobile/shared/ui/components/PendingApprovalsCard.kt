@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.ui.components
 import ai.ciris.mobile.shared.approvals.ApprovalKind
 import ai.ciris.mobile.shared.approvals.BudgetApprovalSeam
 import ai.ciris.mobile.shared.approvals.BudgetCapability
+import ai.ciris.mobile.shared.approvals.OverGrantMagnitude
 import ai.ciris.mobile.shared.approvals.PendingApproval
 import ai.ciris.mobile.shared.approvals.TicketBudgetState
 import ai.ciris.mobile.shared.localization.localizedString
@@ -28,6 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -288,7 +290,13 @@ fun ProposalApprovalDialog(
      */
     budgetState: TicketBudgetState?,
     onDismiss: () -> Unit,
-    onApprove: (amount: String?, expiryHours: Int, reason: String, promote: Boolean) -> Unit,
+    onApprove: (
+        amount: String?,
+        expiryHours: Int,
+        reason: String,
+        promote: Boolean,
+        overGrantConfirmed: Boolean,
+    ) -> Unit,
     onReject: (reason: String) -> Unit,
     onDefer: (reason: String) -> Unit,
 ) {
@@ -303,6 +311,9 @@ fun ProposalApprovalDialog(
         mutableStateOf(BudgetApprovalSeam.DEFAULT_EXPIRY_HOURS.toString())
     }
     var reason by remember(approval.id) { mutableStateOf("") }
+    // Reset whenever the amount changes: a confirmation given for one figure
+    // must never carry over to a different one.
+    var overGrantConfirmed by remember(approval.id, amount) { mutableStateOf(false) }
 
     val expiryHours = expiryText.toIntOrNull() ?: -1
     val validation = requested?.let {
@@ -312,9 +323,14 @@ fun ProposalApprovalDialog(
             expiresInHours = expiryHours,
             purpose = it.purpose.ifBlank { approval.title },
             headroom = headroom,
+            overGrantConfirmed = overGrantConfirmed,
         )
     }
     val unavailable = requested != null && capability == BudgetCapability.UNAVAILABLE
+    // The over-grant prompt is shown whenever the amount exceeds the request,
+    // whether or not it has been confirmed — so the ratio stays on screen after
+    // the box is ticked rather than vanishing at the moment of decision.
+    val overGrant = requested?.let { BudgetApprovalSeam.describeOverGrant(it, amount) }
     val canApprove = (validation?.ok ?: true) && !isSubmitting && !unavailable
 
     AlertDialog(
@@ -445,6 +461,24 @@ fun ProposalApprovalDialog(
                                 Spacer(Modifier.height(4.dp))
                                 LabelledLine(localizedString("approval_budget_expires_at"), it)
                             }
+                            // The server's own derived marking, carried inside
+                            // the signed payload. Shown from the grant's
+                            // snapshot rather than the ticket's current request,
+                            // because the grant is the record.
+                            if (g.exceedsRequest) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = g.requestedAmountAtGrant?.let {
+                                        localizedString(
+                                            "approval_budget_exceeded_request",
+                                            mapOf("requested" to "$it ${g.grantedCurrency}"),
+                                        )
+                                    } ?: localizedString("approval_budget_exceeded_request_unknown"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = SemanticColors.Default.warning,
+                                    modifier = Modifier.testable("txt_budget_exceeded_request"),
+                                )
+                            }
                             if (!g.signed) {
                                 Spacer(Modifier.height(4.dp))
                                 Text(
@@ -514,6 +548,62 @@ fun ProposalApprovalDialog(
                             modifier = Modifier.testable("txt_budget_validation_error"),
                         )
                     }
+
+                    // ─── Over-grant confirmation ───────────────────────────
+                    //
+                    // Granting above the request is allowed — the agent may have
+                    // asked for too little. It is never allowed *silently*. The
+                    // prompt names the ratio rather than asking "are you sure?",
+                    // because the hazard is a mis-typed extra zero and only a
+                    // ratio makes that legible: 250 next to 25 is easy to scroll
+                    // past, "10×" is not.
+                    overGrant?.let { over ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = SemanticColors.Default.warning.copy(alpha = 0.12f),
+                            modifier = Modifier.fillMaxWidth().testable("row_over_grant"),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testableClickable("chk_over_grant_confirm") {
+                                        overGrantConfirmed = !overGrantConfirmed
+                                    }
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = overGrantConfirmed,
+                                    onCheckedChange = { overGrantConfirmed = it },
+                                    enabled = !isSubmitting && !unavailable,
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = when (over.magnitude) {
+                                        OverGrantMagnitude.SLIGHT -> localizedString(
+                                            "approval_over_grant_slight",
+                                            mapOf(
+                                                "amount" to "${over.amount} ${over.currency}",
+                                                "requested" to over.requestedAmount,
+                                            ),
+                                        )
+                                        else -> localizedString(
+                                            "approval_over_grant_ratio",
+                                            mapOf(
+                                                "amount" to "${over.amount} ${over.currency}",
+                                                "ratio" to over.display,
+                                                "requested" to over.requestedAmount,
+                                            ),
+                                        )
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f).testable("txt_over_grant_ratio"),
+                                )
+                            }
+                        }
+                    }
                 }
 
                 OutlinedTextField(
@@ -532,7 +622,7 @@ fun ProposalApprovalDialog(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (requested != null) {
                         Button(
-                            onClick = { if (canApprove) onApprove(amount, expiryHours, reason, false) },
+                            onClick = { if (canApprove) onApprove(amount, expiryHours, reason, false, overGrantConfirmed) },
                             enabled = canApprove,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SemanticColors.Default.success,
@@ -540,7 +630,7 @@ fun ProposalApprovalDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testableClickable("btn_budget_approve") {
-                                    if (canApprove) onApprove(amount, expiryHours, reason, false)
+                                    if (canApprove) onApprove(amount, expiryHours, reason, false, overGrantConfirmed)
                                 },
                         ) {
                             Text(localizedString("approval_budget_approve"))
@@ -553,13 +643,13 @@ fun ProposalApprovalDialog(
                         localizedString("approval_start_work")
                     }
                     OutlinedButton(
-                        onClick = { if (canApprove) onApprove(amount.takeIf { requested != null }, expiryHours, reason, true) },
+                        onClick = { if (canApprove) onApprove(amount.takeIf { requested != null }, expiryHours, reason, true, overGrantConfirmed) },
                         enabled = canApprove,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testableClickable("btn_budget_approve_start") {
                                 if (canApprove) {
-                                    onApprove(amount.takeIf { requested != null }, expiryHours, reason, true)
+                                    onApprove(amount.takeIf { requested != null }, expiryHours, reason, true, overGrantConfirmed)
                                 }
                             },
                     ) {

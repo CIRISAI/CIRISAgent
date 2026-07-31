@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.approvals
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -83,18 +84,217 @@ class BudgetApprovalSeamTest {
         assertTrue(outcome.ok)
     }
 
+    // ─── Over-granting: permitted, but never silently ──────────────────────
+    //
+    // The agent's request is information for the human, not a constraint on
+    // them — it may simply have asked for too little. So more-than-requested is
+    // allowed, gated on an explicit confirmation that names the ratio.
+
     @Test
-    fun validateGrant_refusesMoreThanRequested() {
-        val outcome = BudgetApprovalSeam.validateGrant(requested, "25.01", 24, "fee")
+    fun validateGrant_holdsAnUnconfirmedOverGrantRatherThanRefusingIt() {
+        val outcome = BudgetApprovalSeam.validateGrant(requested, "250.00", 24, "fee")
         assertFalse(outcome.ok)
-        assertEquals(BudgetGrantError.EXCEEDS_REQUESTED, outcome.error)
+        assertEquals(BudgetGrantError.OVER_GRANT_UNCONFIRMED, outcome.error)
+        // The caller is handed the ratio so it can render the prompt.
+        assertNotNull(outcome.overGrant)
+        assertEquals("10×", outcome.overGrant.display)
     }
 
     @Test
-    fun validateGrant_refusesMoreThanRequested_evenByTheSmallestUnit() {
+    fun validateGrant_permitsAnOverGrantOnceConfirmed() {
+        val outcome = BudgetApprovalSeam.validateGrant(
+            requested, "250.00", 24, "fee", overGrantConfirmed = true,
+        )
+        assertTrue(outcome.ok)
+        // Still flagged, so the submit path can mark it for audit.
+        assertNotNull(outcome.overGrant)
+    }
+
+    @Test
+    fun validateGrant_confirmationIsNotBypassable_evenByTheSmallestOverage() {
         val outcome = BudgetApprovalSeam.validateGrant(requested, "25.00000001", 24, "fee")
         assertFalse(outcome.ok)
-        assertEquals(BudgetGrantError.EXCEEDS_REQUESTED, outcome.error)
+        assertEquals(BudgetGrantError.OVER_GRANT_UNCONFIRMED, outcome.error)
+        assertNotNull(outcome.overGrant)
+    }
+
+    @Test
+    fun validateGrant_exactlyTheRequestNeedsNoConfirmation() {
+        val outcome = BudgetApprovalSeam.validateGrant(requested, "25.00", 24, "fee")
+        assertTrue(outcome.ok)
+        assertNull(outcome.overGrant, "at the request is not over the request")
+    }
+
+    @Test
+    fun validateGrant_confirmingDoesNotSuppressOtherFailures() {
+        // A confirmation is about exceeding the request and nothing else.
+        assertEquals(
+            BudgetGrantError.INVALID_AMOUNT,
+            BudgetApprovalSeam.validateGrant(requested, "0", 24, "fee", overGrantConfirmed = true).error,
+        )
+        assertEquals(
+            BudgetGrantError.INVALID_EXPIRY,
+            BudgetApprovalSeam.validateGrant(requested, "250", 0, "fee", overGrantConfirmed = true).error,
+        )
+        assertEquals(
+            BudgetGrantError.MISSING_PURPOSE,
+            BudgetApprovalSeam.validateGrant(requested, "250", 24, " ", overGrantConfirmed = true).error,
+        )
+    }
+
+    // ─── Ratio presentation ────────────────────────────────────────────────
+
+    @Test
+    fun overGrantRatio_rendersAsAMultipleAtOrAboveTwoTimes() {
+        assertEquals("10×", BudgetApprovalSeam.describeOverGrant(requested, "250")?.display)
+        assertEquals("2×", BudgetApprovalSeam.describeOverGrant(requested, "50")?.display)
+        assertEquals("2.5×", BudgetApprovalSeam.describeOverGrant(requested, "62.50")?.display)
+        assertEquals(
+            OverGrantMagnitude.MULTIPLE,
+            BudgetApprovalSeam.describeOverGrant(requested, "250")?.magnitude,
+        )
+    }
+
+    @Test
+    fun overGrantRatio_rendersAsAPercentageBetweenFivePercentAndTwoTimes() {
+        // "1.2× the requested" reads oddly; "20% above" does not.
+        val outcome = BudgetApprovalSeam.describeOverGrant(requested, "30.00")
+        assertEquals(OverGrantMagnitude.PERCENT, outcome?.magnitude)
+        assertEquals("20%", outcome?.display)
+    }
+
+    @Test
+    fun overGrantRatio_isQuietAtOrBelowFivePercent() {
+        // Dressing a rounding-scale overage in alarm styling trains people to
+        // click past the warning that matters.
+        val outcome = BudgetApprovalSeam.describeOverGrant(requested, "26.25") // exactly 1.05×
+        assertEquals(OverGrantMagnitude.SLIGHT, outcome?.magnitude)
+        assertEquals("", outcome?.display, "no figure for a slight overage")
+        // …but it is still an over-grant and still needs confirming.
+        assertEquals(
+            BudgetGrantError.OVER_GRANT_UNCONFIRMED,
+            BudgetApprovalSeam.validateGrant(requested, "26.25", 24, "fee").error,
+        )
+    }
+
+    @Test
+    fun overGrantRatio_boundaryBetweenPercentAndMultiple() {
+        // Just under 2× is a percentage; exactly 2× is a multiple.
+        assertEquals(
+            OverGrantMagnitude.PERCENT,
+            BudgetApprovalSeam.describeOverGrant(requested, "49.99")?.magnitude,
+        )
+        assertEquals(
+            OverGrantMagnitude.MULTIPLE,
+            BudgetApprovalSeam.describeOverGrant(requested, "50.00")?.magnitude,
+        )
+    }
+
+    @Test
+    fun describeOverGrant_isNullAtOrBelowTheRequest() {
+        assertNull(BudgetApprovalSeam.describeOverGrant(requested, "25.00"))
+        assertNull(BudgetApprovalSeam.describeOverGrant(requested, "10.00"))
+        assertNull(BudgetApprovalSeam.describeOverGrant(requested, "nonsense"))
+    }
+
+    // ─── The real bound is not overridable by the confirmation ─────────────
+
+    @Test
+    fun confirmedOverGrantStillCannotExceedTheTrustEnvelope() {
+        // Confirming that you meant to exceed the agent's request says nothing
+        // about the deployment's envelope. The ceiling wins.
+        val outcome = BudgetApprovalSeam.validateGrant(
+            requested, "250.00", 24, "fee",
+            headroom = headroom("40"),
+            overGrantConfirmed = true,
+        )
+        assertFalse(outcome.ok)
+        assertEquals(BudgetGrantError.NESTING_VIOLATION, outcome.error)
+    }
+
+    @Test
+    fun anOverGrantWithinTheEnvelopeIsAllowedOnceConfirmed() {
+        val outcome = BudgetApprovalSeam.validateGrant(
+            requested, "40.00", 24, "fee",
+            headroom = headroom("100"),
+            overGrantConfirmed = true,
+        )
+        assertTrue(outcome.ok)
+        assertNotNull(outcome.overGrant)
+    }
+
+    // ─── Audit marking — server-derived, client read-only ──────────────────
+
+    @Test
+    fun buildGrantBody_neverAssertsTheOverGrantMarkingItself() {
+        // The server derives `exceeds_request` from the ticket's requested
+        // budget and carries it inside the signed payload. A client-asserted
+        // flag would be absent exactly when it mattered — the operator most
+        // motivated to make an over-grant look ordinary is the one calling the
+        // endpoint directly. Also: GrantBudgetRequest now uses extra="forbid",
+        // so an unknown field is a 422, not a silent default.
+        val body = BudgetApprovalSeam.buildGrantBody("250.00", "USDC", "fee", 24)
+        assertEquals(setOf("amount", "currency", "purpose", "expires_in_hours"), body.keys)
+    }
+
+    @Test
+    fun parseGrantResponse_readsTheServerDerivedOverGrantMarking() {
+        val data = Json.parseToJsonElement(
+            """
+            {"granted_amount": "250.00", "granted_currency": "USDC", "purpose": "fee",
+             "signed": true, "exceeds_request": true, "requested_amount_at_grant": "25.00"}
+            """.trimIndent()
+        ) as JsonObject
+
+        val granted = BudgetApprovalSeam.parseGrantResponse(data)
+        assertNotNull(granted)
+        assertTrue(granted.exceedsRequest)
+        assertEquals("25.00", granted.requestedAmountAtGrant)
+    }
+
+    @Test
+    fun parseGrantResponse_handlesATicketThatRequestedNothing() {
+        // A human-opened ticket, or a proposal asking for work but not money:
+        // requested_amount_at_grant is null and it is not an over-grant. A naive
+        // comparison here would have made those tickets ungrantable.
+        val data = Json.parseToJsonElement(
+            """
+            {"granted_amount": "250.00", "granted_currency": "USDC", "purpose": "fee",
+             "signed": true, "exceeds_request": false, "requested_amount_at_grant": null}
+            """.trimIndent()
+        ) as JsonObject
+
+        val granted = BudgetApprovalSeam.parseGrantResponse(data)
+        assertNotNull(granted)
+        assertFalse(granted.exceedsRequest)
+        assertNull(granted.requestedAmountAtGrant)
+    }
+
+    @Test
+    fun parseGrantResponse_defaultsToNotAnOverGrantOnServersPredatingTheMarking() {
+        val data = Json.parseToJsonElement(
+            """{"granted_amount": "25.00", "granted_currency": "USDC", "signed": false}"""
+        ) as JsonObject
+
+        val granted = BudgetApprovalSeam.parseGrantResponse(data)
+        assertNotNull(granted)
+        assertFalse(granted.exceedsRequest, "absent marking must read as ordinary, not as over-grant")
+        assertNull(granted.requestedAmountAtGrant)
+    }
+
+    @Test
+    fun parseGrantedBudget_carriesTheMarkingThroughTicketMetadataToo() {
+        // GET /{id}/budget returns the raw grant, so the fields arrive here as well.
+        val meta = metadata(
+            """
+            {"__granted_budget__": {"granted_amount": "250.00", "granted_currency": "USDC",
+             "signed": true, "exceeds_request": true, "requested_amount_at_grant": "25.00"}}
+            """.trimIndent()
+        )
+        val granted = BudgetApprovalSeam.parseGrantedBudget(meta)
+        assertNotNull(granted)
+        assertTrue(granted.exceedsRequest)
+        assertEquals("25.00", granted.requestedAmountAtGrant)
     }
 
     @Test
@@ -410,7 +610,8 @@ class BudgetApprovalSeamTest {
     }
 
     @Test
-    fun buildGrantBody_emitsTheFieldNamesTheServerExpects() {
+    fun buildGrantBody_emitsOnlyTheFieldNamesTheServerDeclares() {
+        // GrantBudgetRequest uses extra="forbid" — an unknown field is a 422.
         val body = BudgetApprovalSeam.buildGrantBody("25.00", "USDC", "fee", 24)
         assertEquals(setOf("amount", "currency", "purpose", "expires_in_hours"), body.keys)
         // wa_id is optional and omitted rather than sent as null.

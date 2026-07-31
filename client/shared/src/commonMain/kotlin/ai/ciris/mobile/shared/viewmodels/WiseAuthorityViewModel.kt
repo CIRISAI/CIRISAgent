@@ -432,14 +432,17 @@ class WiseAuthorityViewModel(
      * Issue a budget envelope against an agent proposal — the human approval
      * that unblocks spend.
      *
-     * The ≤-requested constraint is checked here as well as server-side, so an
-     * over-approval is refused at the point of decision instead of arriving as
-     * a rejected round-trip. Client-side enforcement is a usability property,
-     * not a security one: the server remains the authority.
+     * A grant **above** the agent's request is permitted — the agent may have
+     * asked for too little, and an AUTHORITY user is the one with standing to
+     * correct that — but never silently: [overGrantConfirmed] must be true, and
+     * the caller is expected to have shown the human by how much. The trust
+     * ceiling is a separate, harder bound that no confirmation overrides.
      *
      * @param promote when true, also PATCH the ticket to `pending` so the work
      *   actually starts. Granting money and starting work are separate
      *   decisions, and the UI makes both visible.
+     * @param overGrantConfirmed the human explicitly acknowledged exceeding the
+     *   request, having been shown the ratio.
      */
     fun grantBudget(
         approvalId: String,
@@ -448,6 +451,7 @@ class WiseAuthorityViewModel(
         purpose: String,
         expiresInHours: Int,
         promote: Boolean,
+        overGrantConfirmed: Boolean = false,
         onResult: (BudgetGrantOutcome) -> Unit = {},
     ) {
         val method = "grantBudget"
@@ -476,15 +480,22 @@ class WiseAuthorityViewModel(
             headroom = _selectedBudgetState.value
                 ?.takeIf { it.ticketId == approvalId }
                 ?.headroom,
+            overGrantConfirmed = overGrantConfirmed,
         )
         if (!validation.ok) {
             logWarn(method, "Local validation refused grant: ${validation.error} (${validation.message})")
-            _error.value = validation.message
+            _error.value = validation.message ?: describe(validation.error)
             onResult(validation)
             return
         }
 
-        logInfo(method, "Granting $amount $currency on $approvalId (expiry=${expiresInHours}h, promote=$promote)")
+        val overGrant = validation.overGrant
+        logInfo(
+            method,
+            "Granting $amount $currency on $approvalId (expiry=${expiresInHours}h, promote=$promote" +
+                (overGrant?.let { ", EXCEEDS REQUEST ${it.requestedAmount} by ${it.display.ifBlank { "<5%" }}" } ?: "") +
+                ")"
+        )
 
         viewModelScope.launch {
             _isResolving.value = true
@@ -496,7 +507,18 @@ class WiseAuthorityViewModel(
                 if (outcome.ok) {
                     _budgetCapability.value = BudgetCapability.AVAILABLE
                     val signedNote = if (outcome.granted?.signed == false) " (unsigned — no WA signing key)" else ""
-                    _successMessage.value = "Approved $amount $currency$signedNote"
+                    // Echo what the SERVER recorded, not what we asked for — the
+                    // marking is derived there and is the version that counts.
+                    val overNote = outcome.granted
+                        ?.takeIf { it.exceedsRequest }
+                        ?.let { g ->
+                            g.requestedAmountAtGrant
+                                ?.let { req -> " — above the $req requested" }
+                                ?: " — above the agent's request"
+                        }
+                        ?: overGrant?.let { " — above the ${it.requestedAmount} requested" }
+                        ?: ""
+                    _successMessage.value = "Approved $amount $currency$overNote$signedNote"
                     notifier?.forget(approvalId)
 
                     if (promote) {
@@ -595,7 +617,8 @@ class WiseAuthorityViewModel(
             "That exceeds this deployment's trust envelope — approve a smaller amount"
         BudgetGrantError.ENDPOINT_UNAVAILABLE ->
             "This server does not support budget approval yet"
-        BudgetGrantError.EXCEEDS_REQUESTED -> "You cannot approve more than the agent asked for"
+        BudgetGrantError.OVER_GRANT_UNCONFIRMED ->
+            "That is more than the agent asked for — confirm the amount to approve it"
         BudgetGrantError.INVALID_AMOUNT -> "Enter a valid amount"
         BudgetGrantError.INVALID_EXPIRY -> "Enter a valid expiry"
         BudgetGrantError.MISSING_PURPOSE -> "Say what the money is for"

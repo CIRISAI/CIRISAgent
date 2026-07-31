@@ -3091,5 +3091,9 @@
   "approval_budget_granted": "Budget approved",
   "approval_budget_expires_at": "Expires",
   "approval_budget_unsigned": "Unsigned — no WA signing key on this deployment",
-  "approval_budget_regrant_note": "A further approval raises the ceiling. It does not refund what has already been spent."
+  "approval_budget_regrant_note": "A further approval raises the ceiling. It does not refund what has already been spent.",
+  "approval_over_grant_ratio": "Approving {amount} — {ratio} the {requested} the agent asked for. Confirm this is what you mean.",
+  "approval_over_grant_slight": "Approving {amount}, slightly above the {requested} the agent asked for. Confirm this is what you mean.",
+  "approval_budget_exceeded_request": "Approved above the {requested} the agent asked for",
+  "approval_budget_exceeded_request_unknown": "Approved above the agent's request"
 }

@@ -2514,10 +2514,11 @@ fun CIRISApp(
                         wiseAuthorityViewModel.loadBudgetState(approvalId)
                     },
                     onApprovalClosed = { wiseAuthorityViewModel.clearBudgetState() },
-                    onGrantBudget = { approvalId, amount, currency, expiryHours, reason, promote ->
+                    onGrantBudget = { approvalId, amount, currency, expiryHours, reason, promote, overGrantConfirmed ->
                         PlatformLogger.i(
                             "CIRISApp",
-                            "[Screen.WiseAuthority] Granting budget $amount $currency on $approvalId (promote=$promote)"
+                            "[Screen.WiseAuthority] Granting budget $amount $currency on $approvalId " +
+                                "(promote=$promote, overGrantConfirmed=$overGrantConfirmed)"
                         )
                         wiseAuthorityViewModel.grantBudget(
                             approvalId = approvalId,
@@ -2529,6 +2530,7 @@ fun CIRISApp(
                             },
                             expiresInHours = expiryHours,
                             promote = promote,
+                            overGrantConfirmed = overGrantConfirmed,
                         )
                     },
                     onPromoteProposal = { approvalId, note ->

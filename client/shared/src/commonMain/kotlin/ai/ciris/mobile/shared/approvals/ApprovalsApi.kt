@@ -47,7 +47,15 @@ interface ApprovalsApi {
      */
     suspend fun fetchTicketBudget(ticketId: String): TicketBudgetState?
 
-    /** Issue a budget envelope against a proposal ticket. */
+    /**
+     * Issue a budget envelope against a proposal ticket.
+     *
+     * A grant above the agent's request is permitted but must have been
+     * confirmed by a human first — see [BudgetApprovalSeam.validateGrant]. The
+     * over-grant *marking* is not passed here: the server derives it and carries
+     * it inside the signed payload, which is the only version of that fact worth
+     * having.
+     */
     suspend fun grantBudget(
         ticketId: String,
         amount: String,
@@ -104,7 +112,8 @@ class CIRISApprovalsApi(private val client: CIRISApiClient) : ApprovalsApi {
         currency: String,
         purpose: String,
         expiresInHours: Int,
-    ): BudgetGrantOutcome = client.grantTicketBudget(ticketId, amount, currency, purpose, expiresInHours)
+    ): BudgetGrantOutcome =
+        client.grantTicketBudget(ticketId, amount, currency, purpose, expiresInHours)
 
     override suspend fun updateTicketStatus(ticketId: String, status: String, notes: String?): Boolean =
         client.updateTicketStatus(ticketId, status, notes)

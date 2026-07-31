@@ -37,9 +37,9 @@ approvals like budget."*
    desktop.
 4. **A budget request is rendered as a budget request**, with the amount, currency, purpose
    and the agent's stated intent — not as an opaque "approve/reject" prompt.
-5. **A human can approve at or below the requested amount, never above.** This is a UI
-   guarantee — see the asymmetry note below; the server permits over-granting and this
-   client does not.
+5. **A human can approve above the agent's request** — the agent may have asked for too
+   little — but never silently: an over-grant requires an explicit confirmation naming the
+   ratio, and is marked as an over-grant in the record.
 6. **Approving money and starting work are separate decisions**, and both are visible.
 7. **Nothing in this surface can crash or block on a platform capability that is missing.**
    Notifications, budget issuance and the tickets API each degrade to a clear, non-fatal
@@ -176,29 +176,83 @@ number. `trust_headroom` is null when no wallet adapter is loaded; the row is th
 
 `BudgetApprovalSeam.validateGrant` checks two things that are easy to conflate:
 
-**`granted ≤ requested` — a UI policy, and this client is stricter than the server.** The
-server does **not** enforce it: an AUTHORITY user is permitted to grant more than the agent
-asked for, e.g. when the agent lowballed. This client refuses it anyway, because "approve at
-or below what was asked" is the promise the approval dialog makes to the person using it, and
-a dialog that quietly allows more than the request on screen can surprise its operator. It is
-a product decision, not a security boundary, and a modified client bypassing it is not a
-vulnerability.
+**`granted > requested` is permitted — with friction.** This was an explicit user ruling:
 
-> **Open decision — flat refusal vs. confirmed over-grant.** The backend author argues the
-> flat refusal should become a confirmation path: a UI-only restriction the server does not
-> share teaches an operator who genuinely needs to over-grant to reach for `curl`, and the
-> grant then happens outside every rendering, log line and confirmation this dialog provides.
-> The alternative — make the agent re-propose — also burns its 3-proposals-per-task runaway
-> budget. If it is built, the friction should name the *real* hazard, a mis-typed extra zero:
-> show the multiple ("granting 250 USDC, **10×** the 25 requested"), because a generic "are
-> you sure?" catches nothing. **Not implemented. This is a user decision, and two agents
-> agreeing is not user approval.** The flat refusal stands until the user rules.
+> *"yes an AUTHORITY can approve above what the agent requested, of course, the agent may
+> have requested too little."*
+
+**`granted ≤ requested` is therefore not a bound of any kind** — not in the server, not in
+this client. The agent's request is **information for the human, not a constraint on them**.
+An earlier revision of this surface refused over-granting in the UI; that was wrong twice
+over. It was stricter than the system without saying so, and a UI-only restriction the server
+does not share simply teaches an operator who genuinely needs to over-grant to reach for
+`curl` — at which point the grant happens outside every rendering, log line and confirmation
+this dialog provides. The alternative, making the agent re-propose, also burns its
+3-proposals-per-task runaway budget for no safety gain.
+
+What remains is friction, aimed at the hazard that is actually real: **a mis-typed extra
+zero, not a policy disagreement.** So the confirmation names the ratio rather than asking
+"are you sure?" — 250 next to 25 is easy to scroll past; "10×" is not.
+
+| Ratio | Rendering | Why |
+|---|---|---|
+| ≤ 1.05× | "slightly above the 25.00 requested" — **no figure** | A rounding-scale overage dressed in alarm styling trains people to click past the warning that matters. |
+| 1.05× – 2× | "**20%** above the 25.00 requested" | "1.2× the requested" reads oddly; a percentage is the natural register at this scale. |
+| ≥ 2× | "**10×** the 25.00 requested" | The band a mis-typed zero always lands in, and the one that must be unmissable. |
+
+All three still require the confirmation — only the wording softens. The affordance is a
+checkbox (`chk_over_grant_confirm`) that gates the approve buttons; it **resets whenever the
+amount changes**, so a confirmation given for one figure can never carry to another. The
+prompt stays on screen after ticking rather than vanishing at the moment of decision.
+
+Fail-closed by construction: `validateGrant` returns `OVER_GRANT_UNCONFIRMED` until
+`overGrantConfirmed = true` is passed, so a caller that never passes it cannot submit an
+over-grant at all.
+
+#### The audit marking is server-derived, and that is the point
+
+An over-grant is distinguishable in the record via two fields on `GrantedBudget`:
+
+```
+exceeds_request: bool                      // granted > requested at issuance
+requested_amount_at_grant: string | null    // the snapshot; null = ticket requested nothing
+```
+
+**The client does not send these.** An earlier draft did, and that was wrong for the same
+reason the flat refusal was: a client-asserted audit flag is worthless precisely against the
+person it needs to work against. The operator most motivated to make an over-grant look
+ordinary is the one calling the endpoint directly — and they would simply omit the flag. It
+would be present exactly when it was not needed.
+
+The server derives both in `issue_grant` by comparing against the ticket's
+`__requested_budget__` at issuance, and they sit **inside the canonical signed payload**, so
+the marking cannot be stripped or forged without invalidating the signature. That is a
+property no client-side flag could have. `GrantBudgetRequest` also now declares
+`extra="forbid"`, so `buildGrantBody` must send only declared fields — an unknown field is a
+loud 422 rather than a silent default.
+
+The client reads them from the grant response and from `GET /{id}/budget`, and renders
+"Approved above the 25.00 the agent asked for" on an issued over-grant. Two consequences the
+rendering respects:
+
+- **`requested_amount_at_grant` is null when the ticket requested nothing at all** — a
+  human-opened ticket, or a proposal asking for work but not money. `exceeds_request` is false
+  there; there is no ratio to name and it is not an over-grant. A naive comparison would have
+  made those tickets ungrantable.
+- **Historical display uses the grant's snapshot, never the ticket's current request.** The
+  grant is the record; the ticket's requested budget could in principle differ later.
 
 **`granted ≤ trust ceiling` — the real bound, owned by the server.** Checked client-side only
 so the operator learns at the point of decision rather than through a rejected round-trip. It
 is enforced at issuance (422 `NestingViolation`) and again at every spend. Headroom is ignored
 when its currency differs from the requested currency — a USD ceiling says nothing about a
 USDC request, and comparing them would block a legitimate grant on a meaningless mismatch.
+
+**The over-grant confirmation does not override it.** Acknowledging that you meant to exceed
+the *agent's request* says nothing about the *deployment's envelope*; they are unrelated
+questions. The ceiling check therefore runs **before** the confirmation gate in
+`validateGrant`, so it wins, and this is locked by test
+(`confirmedOverGrantStillCannotExceedTheTrustEnvelope`).
 
 > **The headroom currency is an assumption, not a declared fact.** `SpendingLimits.max_transaction`
 > and `daily_limit` are bare `Decimal`s with **no declared currency**, while `SpendingTracker`
@@ -331,7 +385,8 @@ so deferrals still render.
 - **It does not offer a revoke affordance.** There is no revoke endpoint; granting below the
   spent amount clamps remaining to zero as a side effect, and this client neither surfaces
   nor names that as revocation.
-- **It cannot grant above the requested amount.** See the open decision above.
+- **It does not assert the over-grant marking itself.** That is deliberate — see below; the
+  server derives it. The client only reads and displays it.
 - **It does not localize into all 29 languages.** English strings are added to the six
   `en.json` copies; other locales fall back to English via the existing localizer, which
   returns the key when a translation is absent.
@@ -363,16 +418,18 @@ so deferrals still render.
 `nav_badge_wise_authority`, `nav_badge_group_{groupId}`, `dialog_budget_approval`,
 `txt_budget_requested_amount`, `txt_budget_validation_error`, `txt_budget_unsupported`,
 `row_budget_headroom`, `row_budget_issued`, `txt_budget_remaining`, `txt_budget_unsigned`,
-`input_budget_amount`, `input_budget_expiry`, `input_budget_reason`, `btn_budget_approve`,
-`btn_budget_approve_start`, `btn_budget_reject`, `btn_budget_defer`, `btn_budget_cancel`.
+`row_over_grant`, `chk_over_grant_confirm`, `txt_over_grant_ratio`,
+`txt_budget_exceeded_request`, `input_budget_amount`, `input_budget_expiry`,
+`input_budget_reason`, `btn_budget_approve`, `btn_budget_approve_start`, `btn_budget_reject`,
+`btn_budget_defer`, `btn_budget_cancel`.
 
 ## Tests
 
-`client/shared/src/commonTest/.../approvals/BudgetApprovalSeamTest.kt` (38),
+`client/shared/src/commonTest/.../approvals/BudgetApprovalSeamTest.kt` (53),
 `.../approvals/ApprovalNotifierTest.kt` (15),
-`.../viewmodels/WiseAuthorityViewModelTest.kt` (26).
+`.../viewmodels/WiseAuthorityViewModelTest.kt` (31).
 
 ```
 cd client && ./gradlew :shared:compileCommonMainKotlinMetadata   # commonMain type-checks for all targets
-cd client && ./gradlew :shared:desktopTest                       # 301 tests, 0 failures
+cd client && ./gradlew :shared:desktopTest                       # 321 tests, 0 failures
 ```

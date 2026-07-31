@@ -82,6 +82,28 @@ data class GrantedBudget(
      * person issuing it should know that.
      */
     val signed: Boolean,
+
+    /**
+     * True when this grant exceeded what the agent asked for.
+     *
+     * **Server-derived and read-only.** Computed in `issue_grant` by comparing
+     * the granted amount against the ticket's requested budget at issuance, and
+     * carried inside the canonical signed payload so it cannot be stripped or
+     * forged without invalidating the signature. The client never asserts it —
+     * a client-asserted audit flag would be absent exactly when it mattered.
+     */
+    val exceedsRequest: Boolean = false,
+
+    /**
+     * What the agent had asked for **at the moment this grant was issued**.
+     *
+     * The snapshot, not a live read: use this rather than the ticket's current
+     * requested budget for anything historical, because the grant is the record
+     * and the ticket may since differ. Null when the ticket requested nothing at
+     * all — a human-opened ticket, or a proposal asking for work but not money —
+     * in which case there is no ratio to name and [exceedsRequest] is false.
+     */
+    val requestedAmountAtGrant: String? = null,
 )
 
 /** Burn-down against an issued grant. */
@@ -215,13 +237,54 @@ enum class BudgetCapability {
     UNAVAILABLE,
 }
 
+/**
+ * How far a proposed grant exceeds what the agent asked for.
+ *
+ * Presentation is banded because the hazard being guarded against is a
+ * **mis-typed extra zero, not a policy disagreement** — and a mis-typed zero is
+ * always ≥10×, so it always lands in the loudest band. A flat "are you sure?"
+ * catches nothing; a ratio does.
+ */
+enum class OverGrantMagnitude {
+    /** ≤5% above. Rendered without a figure — a rounding-ish overage is not an alarm. */
+    SLIGHT,
+
+    /** Between 5% and 2×. Rendered as a percentage; "1.2×" reads oddly. */
+    PERCENT,
+
+    /** ≥2×. Rendered as a multiple — this is the band a typo lands in. */
+    MULTIPLE,
+}
+
+/**
+ * A grant that exceeds the agent's request.
+ *
+ * Permitted — **the agent's request is information for the human, not a
+ * constraint on them**; the agent may simply have asked for too little. But it
+ * requires an explicit confirmation naming the ratio, so an operator cannot
+ * approve 10× the request by not noticing.
+ */
+data class OverGrant(
+    val requestedAmount: String,
+    val currency: String,
+    val amount: String,
+    /** Ratio of proposed to requested, e.g. 10.0. */
+    val multiple: Double,
+    val magnitude: OverGrantMagnitude,
+    /** Pre-formatted ratio for display: "10×", "20%", or empty for [OverGrantMagnitude.SLIGHT]. */
+    val display: String,
+)
+
 /** Why a budget grant was refused — before or after the request left the device. */
 enum class BudgetGrantError {
     /** Amount is not a well-formed positive decimal. */
     INVALID_AMOUNT,
 
-    /** Amount exceeds what the agent asked for. Enforced client-side AND server-side. */
-    EXCEEDS_REQUESTED,
+    /**
+     * Amount exceeds the request and the human has not confirmed that they mean
+     * to. Not a refusal of the grant — a refusal to submit it *silently*.
+     */
+    OVER_GRANT_UNCONFIRMED,
 
     /** Expiry outside 1..8760 hours. */
     INVALID_EXPIRY,
@@ -255,4 +318,11 @@ data class BudgetGrantOutcome(
     /** Server-supplied explanation, when there is one worth showing. */
     val message: String? = null,
     val granted: GrantedBudget? = null,
+    /**
+     * Populated whenever the proposed amount exceeds the request — both when
+     * that is still awaiting confirmation ([BudgetGrantError.OVER_GRANT_UNCONFIRMED])
+     * and once it has been confirmed and the outcome is `ok`. The UI uses it to
+     * render the ratio; the submit path uses it to mark the grant for audit.
+     */
+    val overGrant: OverGrant? = null,
 )

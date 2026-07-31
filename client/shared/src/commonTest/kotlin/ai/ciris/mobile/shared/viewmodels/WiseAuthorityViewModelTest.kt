@@ -180,6 +180,7 @@ class WiseAuthorityViewModelTest {
             status: String = "blocked",
             grantedAmount: String? = null,
             spentTotal: String? = null,
+            exceedsRequest: Boolean = false,
         ): TicketData {
             val budget = requestedAmount?.let {
                 """, "__requested_budget__": {"requested_amount": "$it",
@@ -187,9 +188,12 @@ class WiseAuthorityViewModelTest {
                      "justification": "registry charges"}"""
             }.orEmpty()
             val grant = grantedAmount?.let {
+                val marking = if (exceedsRequest) {
+                    """, "exceeds_request": true, "requested_amount_at_grant": "$requestedAmount""""
+                } else ""
                 """, "__granted_budget__": {"granted_amount": "$it",
                      "granted_currency": "USDC", "purpose": "Opt-out fee",
-                     "expires_at": "2026-08-01T00:00:00Z", "signed": true}"""
+                     "expires_at": "2026-08-01T00:00:00Z", "signed": true$marking}"""
             }.orEmpty()
             val spend = spentTotal?.let {
                 """, "__budget_spent__": {"total_spent": "$it",
@@ -358,19 +362,114 @@ class WiseAuthorityViewModelTest {
     // ─── Budget issuance ───────────────────────────────────────────────────
 
     @Test
-    fun grantBudget_refusesMoreThanRequestedWithoutCallingTheServer() = runTest {
+    fun grantBudget_holdsAnUnconfirmedOverGrantWithoutCallingTheServer() = runTest {
         val api = FakeApprovalsApi(proposals = listOf(proposalTicket("t1", "25.00")))
         val (vm, _) = viewModel(api)
         vm.refresh()
         advanceUntilIdle()
 
         var outcome: BudgetGrantOutcome? = null
-        vm.grantBudget("t1", "100.00", "USDC", "fee", 24, promote = false) { outcome = it }
+        vm.grantBudget("t1", "250.00", "USDC", "fee", 24, promote = false) { outcome = it }
         advanceUntilIdle()
 
-        assertEquals(BudgetGrantError.EXCEEDS_REQUESTED, outcome?.error)
-        assertTrue(api.grantCalls.isEmpty(), "an over-request grant must never reach the wire")
+        assertEquals(BudgetGrantError.OVER_GRANT_UNCONFIRMED, outcome?.error)
+        assertEquals("10×", outcome?.overGrant?.display)
+        assertTrue(api.grantCalls.isEmpty(), "an unconfirmed over-grant must never reach the wire")
         assertNotNull(vm.error.value)
+    }
+
+    @Test
+    fun grantBudget_permitsAnOverGrantOnceConfirmed() = runTest {
+        // The user's ruling: an AUTHORITY may approve above the request,
+        // because the agent may have asked for too little.
+        val api = FakeApprovalsApi(proposals = listOf(proposalTicket("t1", "25.00")))
+        val (vm, _) = viewModel(api)
+        vm.refresh()
+        advanceUntilIdle()
+
+        vm.grantBudget("t1", "250.00", "USDC", "fee", 24, promote = false, overGrantConfirmed = true)
+        advanceUntilIdle()
+
+        assertEquals(1, api.grantCalls.size)
+        assertEquals("250.00", api.grantCalls.single().amount)
+    }
+
+    @Test
+    fun grantBudget_echoesTheServersOwnOverGrantMarking() = runTest {
+        // The marking is derived server-side and sits inside the signed
+        // payload; the client reports what was recorded, not what it asked for.
+        val api = FakeApprovalsApi(
+            proposals = listOf(proposalTicket("t1", "25.00")),
+            grantOutcome = BudgetGrantOutcome(
+                ok = true,
+                granted = GrantedBudget(
+                    "250.00", "USDC", "fee", null, null, null, null,
+                    signed = true, exceedsRequest = true, requestedAmountAtGrant = "25.00",
+                ),
+            ),
+        )
+        val (vm, _) = viewModel(api)
+        vm.refresh()
+        advanceUntilIdle()
+
+        vm.grantBudget("t1", "250.00", "USDC", "fee", 24, promote = false, overGrantConfirmed = true)
+        advanceUntilIdle()
+
+        assertTrue(vm.successMessage.value!!.contains("above the 25.00 requested"))
+    }
+
+    @Test
+    fun grantBudget_doesNotClaimAnOverGrantOnAnOrdinaryOne() = runTest {
+        val api = FakeApprovalsApi(proposals = listOf(proposalTicket("t1", "25.00")))
+        val (vm, _) = viewModel(api)
+        vm.refresh()
+        advanceUntilIdle()
+
+        vm.grantBudget("t1", "10.00", "USDC", "fee", 24, promote = false)
+        advanceUntilIdle()
+
+        assertFalse(vm.successMessage.value!!.contains("above"))
+    }
+
+    @Test
+    fun anIssuedOverGrantSurfacesTheServerDerivedMarkingFromTicketMetadata() = runTest {
+        val api = FakeApprovalsApi(
+            proposals = listOf(
+                proposalTicket("t1", requestedAmount = "25.00", grantedAmount = "250.00", exceedsRequest = true)
+            )
+        )
+        val (vm, _) = viewModel(api)
+
+        vm.refresh()
+        advanceUntilIdle()
+
+        val granted = vm.approvals.value.single().grantedBudget
+        assertNotNull(granted)
+        assertTrue(granted.exceedsRequest)
+        // The snapshot from the grant, not a live read of the ticket's request.
+        assertEquals("25.00", granted.requestedAmountAtGrant)
+    }
+
+    @Test
+    fun grantBudget_confirmationDoesNotOverrideTheTrustEnvelope() = runTest {
+        // The ceiling is the real bound and no acknowledgement talks past it.
+        val api = FakeApprovalsApi(
+            proposals = listOf(proposalTicket("t1", "25.00")),
+            budgetState = budgetState(headroomAmount = "40"),
+        )
+        val (vm, _) = viewModel(api)
+        vm.refresh()
+        vm.loadBudgetState("t1")
+        advanceUntilIdle()
+
+        var outcome: BudgetGrantOutcome? = null
+        vm.grantBudget(
+            "t1", "250.00", "USDC", "fee", 24, promote = false, overGrantConfirmed = true,
+        ) { outcome = it }
+        advanceUntilIdle()
+
+        assertEquals(BudgetGrantError.NESTING_VIOLATION, outcome?.error)
+        assertTrue(api.grantCalls.isEmpty())
     }
 
     @Test

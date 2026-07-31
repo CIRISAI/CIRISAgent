@@ -62,6 +62,26 @@ is silence, and it has already been wrong in both directions:
   that filter is itself an approximation.
 * It was SILENTLY DEAD for every non-Latin script until ``words()`` replaced
   ``\\w+``, and it passed a deliberately-collided Tamil file while dead.
+* It CANNOT SEE SEMITIC ROOT MORPHOLOGY, and there is a concrete instance. In
+  ``ar`` the approval card had ``الباقي`` (remaining) against ``المتبقي``
+  (headroom): the SAME triliteral root ب-ق-ي, both meaning "remaining", both
+  LINE-INITIAL — which in RTL is precisely where the eye lands. Shared 3-grams
+  between them: **zero**. ``الباقي`` yields {الب, لبا, باق, اقي} and ``المتبقي``
+  yields {الم, لمت, متب, تبق, بقي}, disjoint, because Arabic root consonants are
+  not adjacent — *bāqī* carries an alif between ب and ق that *mutabaqqī* does
+  not. Substring matching sees two unrelated words.
+
+  What this check DID fire on was ``المت`` — remaining's *second* word against
+  headroom's *first*, a milder and differently-positioned overlap. **It flagged a
+  symptom two words away from a same-root collision it was structurally blind
+  to.** Consequence: a green run on a Semitic or Ethiopic locale (ar, fa, ur, am,
+  he) is WEAKER evidence than the same result on a concatenative language like
+  de or id. Read those by eye regardless of the exit code.
+
+  Related noise floor, for the same script: bare ``الم`` matches any ال+م noun
+  and fires on essentially every pair on a money card, including ones nobody
+  thinks collide. Treat it as unreportable — a flag that cries wolf trains people
+  to dismiss the flag that matters.
 
 So: this check is a net, not a proof. A human reading the labels of a render
 group side by side outranks it, and any new render group should be read once by

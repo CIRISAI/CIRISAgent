@@ -3097,7 +3097,7 @@
   "approval_budget_justification": "السبب الذي يذكره الوكيل لحاجته إلى ذلك",
   "approval_budget_purpose": "الغرض",
   "approval_budget_regrant_note": "الاعتماد الإضافي يرفع السقف، ولا يعيد ما أُنفق بالفعل.",
-  "approval_budget_remaining": "الباقي المتاح للإنفاق",
+  "approval_budget_remaining": "الرصيد المتاح",
   "approval_budget_remaining_unknown": "غير معروف",
   "approval_budget_requested": "الوكيل يطلب",
   "approval_budget_spent": "المنفَق على هذه التذكرة حتى الآن",

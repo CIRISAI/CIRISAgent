@@ -150,10 +150,24 @@ BUILTIN_TOOL_SERVICES: Dict[str, Tuple[str, str, str]] = {
     ),
     # NOTE: the CLI platform registers CLIAdapter itself as its ServiceType.TOOL
     # provider (ciris_engine/logic/adapters/cli/adapter.py:110-116), NOT the
-    # CLIToolService in cli_tools.py. CLIToolService defines shell_command /
-    # write_file / search_text but has no registration path, so enabling "cli"
-    # does not grant them and the disclosure must not claim it does. The
-    # provider-registration test below is what keeps this pointer honest.
+    # CLIToolService in cli_tools.py. That is still true, and it is why this
+    # pointer targets CLIAdapter.
+    #
+    # What changed in #941: CLIToolService is no longer unreachable. On a desktop
+    # install CLIAdapter constructs one and borrows its shell_command /
+    # write_file / search_text implementations into its own tool table
+    # (cli_adapter.py:111-123, gated on is_desktop()). So enabling "cli" DOES
+    # grant shell execution and arbitrary file writes on desktop, and the
+    # disclosure MUST say so. It does, correctly and without a change here,
+    # because this module reads a live get_all_tool_info() rather than a static
+    # table and derives capability flags structurally from parameter names.
+    #
+    # The grant is platform-dependent, so the disclosure is too: the same code
+    # discloses six tools on desktop and three on Android/iOS, which is the
+    # behaviour we want — an operator is told about the capabilities their own
+    # platform actually confers. See FSD/CLI_TOOLS_DESKTOP.md §4.
+    #
+    # The provider-registration test below is what keeps this pointer honest.
     "cli": (
         "ciris_engine.logic.adapters.cli.cli_adapter",
         "CLIAdapter",

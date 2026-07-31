@@ -245,8 +245,8 @@ ToolInfo(
         ethical_considerations="Weather data is informational only",
         prerequisite_actions=["verify_location"],
         followup_actions=["log_weather_query"],
-        min_confidence=0.3,  # 0.0-1.0
-        requires_approval=False,  # If True, triggers DEFER
+        min_confidence=0.3,  # 0.0-1.0 — declared but read by nothing (#942)
+        requires_approval=False,  # PROMPT TEXT ONLY — does NOT trigger DEFER (#942)
     ),
 
     # NEW: Categorization
@@ -267,7 +267,20 @@ ToolInfo(
 | `ToolDocumentation` | Rich documentation with examples and gotchas |
 | `UsageExample` | Code example with title and language |
 | `ToolGotcha` | Common pitfall with severity level |
-| `ToolDMAGuidance` | Guidance for DMA tool selection decisions |
+| `ToolDMAGuidance` | Guidance for DMA tool selection decisions — **advisory prompt content, not a gate** (see below) |
+
+> **`ToolDMAGuidance` does not enforce anything.** Every field on it is either
+> rendered into the action-selection prompt or read by nothing at all. In
+> particular `requires_approval=True` does **not** trigger DEFER, does not
+> interpose a human, and does not block dispatch — it appends one markdown line
+> to the prompt (`ciris_engine/logic/dma/tsaspdma.py:247`) and one label to the
+> first-run consent disclosure
+> (`ciris_engine/logic/services/tool/tool_disclosure.py:118`). `min_confidence`
+> and `followup_actions` are not even rendered. Filed as
+> [#942](https://github.com/CIRISAI/CIRISAgent/issues/942). If your adapter ships
+> a destructive or financial tool, set the field for the operator's benefit — but
+> design as though the tool will be executed the moment the model selects it,
+> because it will. See `FSD/THREAT_MODEL_2.9.7.md`.
 
 ### Benefits for Adapters
 

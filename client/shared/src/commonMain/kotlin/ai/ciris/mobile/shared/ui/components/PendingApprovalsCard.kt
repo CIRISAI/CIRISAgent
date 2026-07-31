@@ -557,6 +557,34 @@ fun ProposalApprovalDialog(
                     // because the hazard is a mis-typed extra zero and only a
                     // ratio makes that legible: 250 next to 25 is easy to scroll
                     // past, "10×" is not.
+                    //
+                    // ⚠️ RTL BIDI CONSTRAINT on approval_over_grant_ratio and
+                    // approval_over_grant_percent — read before editing those
+                    // strings in ar / fa / ur.
+                    //
+                    // Both templates interpolate TWO adjacent numeric runs:
+                    // {ratio} ("10×", "20%") and {requested} ("25.00"). In an
+                    // RTL paragraph, if the only thing between those two
+                    // placeholders is neutral (space, punctuation, an ASCII
+                    // hyphen, a bare currency symbol), UAX#9 resolves the
+                    // neutrals into the surrounding numeric context and merges
+                    // both numbers into ONE left-to-right run. The two figures
+                    // then render in swapped visual order — the operator reads
+                    // "25.00" where the ratio should be and vice versa, on the
+                    // money dialog, in RTL locales only, with no error and no
+                    // test failure.
+                    //
+                    // The invariant: **keep at least one script-bearing word
+                    // between {ratio} and {requested}** (in either order). A
+                    // strong-directional character breaks the neutral span and
+                    // forces two separately-placed runs.
+                    //
+                    // It holds today only as an accident of phrasing — ar uses
+                    // ' عن ' / ' ما طلبه الوكيل البالغ ', fa ' بیشتر از ' /
+                    // ' مبلغ ', ur ' سے ' / ' کا '. A translator "tightening"
+                    // any of those to a bare dash or comma reintroduces the bug.
+                    // Recorded in FSD/HITL_APPROVAL_SURFACE.md; not currently
+                    // checked by the localization lint.
                     overGrant?.let { over ->
                         Surface(
                             shape = RoundedCornerShape(8.dp),

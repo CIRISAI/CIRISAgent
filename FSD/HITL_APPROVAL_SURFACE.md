@@ -1,8 +1,8 @@
 # HITL Approval Surface (client)
 
-**Issue:** #938 (task-scoped authorization / budget envelope) · #939 (`send_money` is unbounded on every fiat rail)
+**Issue:** #938 (task-scoped authorization / budget envelope) · #939 (the wallet spend path — `send_money` *was* unbounded on every fiat rail; the budget envelope closed that in this release) · #944 (WA deferral resolutions are unsigned)
 **Scope:** `client/` only — Kotlin Multiplatform (Android, iOS, desktop, wasmJs). No backend Python is changed by this work.
-**Companion:** `FSD/BUDGET_ENVELOPE.md` owns the wire contract. This document owns the human-facing half.
+**Companions:** `FSD/BUDGET_ENVELOPE.md` owns the wire contract and the server-side gate; this document owns the human-facing half. `FSD/TASK_ENVELOPE.md` owns task identity. `FSD/THREAT_MODEL_2.9.7.md` places all three among the release's other controls and states what none of them cover.
 
 ---
 
@@ -210,6 +210,47 @@ checkbox (`chk_over_grant_confirm`) that gates the approve buttons; it **resets 
 amount changes**, so a confirmation given for one figure can never carry to another. The
 prompt stays on screen after ticking rather than vanishing at the moment of decision.
 
+#### ⚠️ RTL bidi constraint on the two ratio strings — read before editing them
+
+`approval_over_grant_ratio` and `approval_over_grant_percent` both interpolate **two numeric runs
+that are near each other**: `{ratio}` (`"10×"`, `"20%"`) and `{requested}` (`"25.00"`).
+
+In an RTL paragraph, if the only thing separating those two placeholders is *neutral* — a space, a
+comma, an ASCII hyphen, a bare currency symbol — the Unicode bidi algorithm (UAX #9) resolves those
+neutrals into the surrounding numeric context and merges both figures into **one** left-to-right
+run. The two numbers then render **in swapped visual order**. On the money dialog. In RTL locales
+only. With no exception, no lint failure, and no test that would catch it.
+
+**The invariant, stated so it can be checked:**
+
+> In every RTL locale, `approval_over_grant_ratio` and `approval_over_grant_percent` must keep at
+> least one **script-bearing word** between `{ratio}` and `{requested}` — in whichever order the
+> grammar puts them.
+
+A strong-directional character breaks the neutral span and forces two separately-placed runs, each
+positioned correctly by the RTL flow.
+
+**This holds today only as an accident of phrasing**, which is exactly why it is written down. The
+current separators are:
+
+| Locale | `_ratio` | `_percent` | Order |
+|---|---|---|---|
+| `ar` | ` ما طلبه الوكيل البالغ ` | ` عن ` | `{ratio}` … `{requested}` |
+| `fa` | ` مبلغ ` | ` بیشتر از ` | `{ratio}` … `{requested}` |
+| `ur` | ` کا ` | ` سے ` | `{requested}` … `{ratio}` |
+
+Each is one or more Arabic-script words. A translator "tightening" any of them to a bare dash,
+colon or comma — an entirely reasonable-looking edit — reintroduces the bug silently, in all six
+mirrored copies of each bundle.
+
+**Not currently machine-checked.** `tools/dev/check_localization_integrity.py` (#952) has seven
+checks covering placeholder parity, corruption, doubling and script bleed; none of them looks at
+what sits *between* two placeholders. An eighth check — "in an RTL locale, two placeholders known
+to render as numerals must not be separated by neutrals alone" — is the natural home for this
+invariant and would retire the table above. The same reasoning applies to any future string that
+interpolates two adjacent numbers. Mirrored in a comment at the call site,
+`ui/components/PendingApprovalsCard.kt`.
+
 Fail-closed by construction: `validateGrant` returns `OVER_GRANT_UNCONFIRMED` until
 `overGrantConfirmed = true` is passed, so a caller that never passes it cannot submit an
 over-grant at all.
@@ -379,11 +420,24 @@ so deferrals still render.
 - **It does not enforce anything security-relevant.** Client-side validation is a usability
   affordance. The AUTHORITY role, the trust-envelope ceiling and spend against the grant are
   all enforced server-side; a modified client changes nothing about what the agent is
-  permitted to do. The one place this client is *stricter* than the server — refusing
-  `granted > requested` — is a UI promise, not a boundary.
-- **It does not cover unapproved spend paths.** #939 documents that `_execute_send_money`
-  performs no limit check on any fiat rail. This surface issues a budget; whether that budget
-  is *consulted* before `provider.send` is the backend's enforcement point, not the client's.
+  permitted to do. **This client is nowhere stricter than the server.** An earlier revision of
+  this bullet cited "refusing `granted > requested`" as a place it was — that restriction was
+  removed on the maintainer ruling recorded above, and the client now renders a
+  ratio-named confirmation instead. The over-grant checkbox is friction, not a bound: a caller
+  that passes `overGrantConfirmed = true` submits, and a caller bypassing this client entirely
+  submits without it.
+- **It does not cover human spend paths, and it is not the enforcement point for agent spend.**
+  Two separate things, previously conflated in one bullet:
+  - *Agent spend is gated.* An earlier revision of this bullet said "#939 documents that
+    `_execute_send_money` performs no limit check on any fiat rail". **That is no longer
+    true** — closing it is precisely what #939 delivered. The budget envelope now sits in
+    `_execute_send_money` ahead of `provider.send(...)` on every rail and denies by default.
+    See `FSD/BUDGET_ENVELOPE.md` § "Enforcement point". This surface issues the budget that
+    gate consults.
+  - *Human spend is not gated.* `POST /v1/wallet/transfer` calls `provider.send()` directly,
+    bypassing the tool service and therefore the budget envelope. It is an ADMIN-authed human
+    path, out of scope by design, but it means "all spend flows through this approval surface"
+    would be false. See `FSD/BUDGET_ENVELOPE.md` § "What this does NOT do".
 - **It does not surface budget burn-down in detail.** `metadata.__budget_spent__` is parsed
   (total + record count) and folded into the remaining figure plus one "spent" line. The
   per-record ledger is not rendered.
@@ -392,9 +446,21 @@ so deferrals still render.
   nor names that as revocation.
 - **It does not assert the over-grant marking itself.** That is deliberate — see below; the
   server derives it. The client only reads and displays it.
-- **It does not localize into all 29 languages.** English strings are added to the six
-  `en.json` copies; other locales fall back to English via the existing localizer, which
-  returns the key when a translation is absent.
+- **It localizes into 27 of the 29 languages, not all of them.** The original text here said the
+  surface was English-only; that was superseded by `b08b354a8` (54 approval and tool-disclosure
+  keys fanned across 26 non-English locales, over-grant bands split into distinct sentences) and
+  `bcb97a811` (Indic refinements). **`my` (Burmese) and `yo` (Yoruba) carry none of these keys**
+  and fall back to English via the existing localizer, which returns the key when a translation
+  is absent — verified against `ciris_engine/data/localized/*.json` at this release. Those are
+  the two locales this project has previously found most prone to machine-translation word-salad,
+  so their absence reads as deliberate rather than accidental; either way, an operator on `my` or
+  `yo` sees the money-approval dialog in English. Note also the RTL bidi constraint above, which
+  the fan-out satisfies by phrasing and which nothing currently enforces.
+- **It does not verify that a deferral resolution came from the human it names.**
+  `DeferralResponse.signature` is a formatted string, never signed and never checked (#944).
+  This surface renders and submits resolutions; it cannot make them attributable, and neither
+  can the server today. This is the reason the document gives above for keeping budget off the
+  deferral path, and it applies equally to the non-budget deferrals this surface also handles.
 - **No new platform code.** wasmJs notifications remain a console log — that is the existing
   `ScheduledTaskNotifications` implementation, unchanged. Desktop uses the system tray when
   one is available.
@@ -408,7 +474,7 @@ so deferrals still render.
 | Path | Role |
 |---|---|
 | `approvals/ApprovalModels.kt` | `PendingApproval`, `RequestedBudget`/`GrantedBudget` (disjoint), `BudgetCapability`, `BudgetGrantError` |
-| `approvals/BudgetApprovalSeam.kt` | **the seam** — wire keys, paths, bodies, status mapping, fixed-point amounts, ≤ constraint |
+| `approvals/BudgetApprovalSeam.kt` | **the seam** — wire keys, paths, bodies, status mapping, fixed-point amounts, over-grant band + confirmation gate, trust-ceiling check |
 | `approvals/ApprovalNotifier.kt` | dedupe + persistence + platform sink; no new `expect`/`actual` |
 | `approvals/ApprovalsApi.kt` | narrow API interface + `CIRISApiClient` adapter + projections |
 | `ui/components/PendingApprovalsCard.kt` | the "blocked waiting on you" card, `CountPill`, `ProposalApprovalDialog` |

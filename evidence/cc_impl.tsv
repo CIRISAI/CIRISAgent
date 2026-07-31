@@ -19,9 +19,29 @@ decimal_id	claim_id	repo	path#symbol	status
 1.3	CLM-pdma-ordermax	CIRISAgent	ciris_engine/logic/conscience/thought_depth_guardrail.py#ThoughtDepthGuardrail.check	impl
 1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/handlers/control/defer_handler.py#DeferHandler.handle	impl
 8.8.9	CLM-discrimination-gate	CIRISAgent	ciris_engine/logic/buses/wise_bus.py#WiseBus._validate_capability	impl
-8.8.9	CLM-discrimination-gate	CIRISAgent	ciris_engine/logic/utils/localization.py#get_prohibition_guidance	staged
+# 8.8.9 second pointer flipped staged->impl 2026-07-30: #910 landed via PR #912 —
+# get_prohibition_guidance generates the round-1 DMA prohibition block from
+# PROHIBITED_CAPABILITIES at assembly time; injected by
+# formatters/prompt_blocks.py#append_round1_accord_blocks (PDMA/CSDMA/DSDMA only).
+8.8.9	CLM-discrimination-gate	CIRISAgent	ciris_engine/logic/utils/localization.py#get_prohibition_guidance	impl
 —	CLM-h3ere-steppoints	CIRISAgent	ciris_engine/schemas/services/runtime_control.py#StepPoint	impl
 6.2.3.1	CLM-sigma-attest	—	—	substrate
 1.2	CLM-admission	—	—	substrate
 1.13.3	CLM-adversary	—	—	normative
 1.13.3.3	CLM-adversary-classes	—	—	normative
+# Consumer-tier claims retagged off impl:CIRISServer per the 2026-07-04 sweep
+# (surfaced by CIRISServer#155's evidence map — they live in the consumer):
+#
+# 4.4.1 Frickerian discipline (identity-prejudice-resistant weighting: no
+# testimonial_witness downweighting for low-density cohorts, no non_maleficence
+# downweighting on long partner track records, lexical-vulnerability-priority
+# tie-breaks). NO agent code implements this yet — the agent is not yet a CEG
+# verdict-composing consumer (typed-envelope emission is itself staged,
+# CIRISAgent#803). Honest status: staged, no symbol — do not overclaim.
+4.4.1	CLM-frickerian	—	—	staged
+# 4.5.8.3 "Settled in CIRISAgent, carried as-is": the load-bearing settled
+# behavior with real agent code is the CC 3.4.5 capacity-self-emission
+# anti-Goodhart gate — the agent NEVER reads/scores its own capacity:*; the
+# lens-scored value is user-facing only, kept out of the agent's context via a
+# route-local cache (structurally not registered as context enrichment).
+4.5.8.3	CLM-settled	CIRISAgent	ciris_engine/logic/adapters/api/routes/my_data.py#get_capacity	impl

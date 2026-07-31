@@ -34,4 +34,24 @@ except ImportError:  # pragma: no cover - dev env without the consolidated wheel
 
     SUBSTRATE_SOURCE = "ciris_persist"
 
-__all__ = ["Engine", "NotFound", "reset_engine", "init_edge_runtime", "SUBSTRATE_SOURCE"]
+# #937 — the Rust `tracing` subscriber installer. Without it every substrate
+# log event is discarded at the source, which is why persist's "migration
+# phase begin (advisory lock acquired)" never appeared during the 15-minute
+# boot hang. Optional: older wheels and the standalone ciris_persist build
+# may not expose it, and `utils/substrate_logging.py` degrades to a warning.
+try:
+    from ciris_server import init_tracing  # type: ignore[import-not-found, import-untyped, unused-ignore]
+except ImportError:  # pragma: no cover - substrate without the entry point
+    try:
+        from ciris_persist import init_tracing  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    except ImportError:
+        init_tracing = None  # type: ignore[assignment, unused-ignore]
+
+__all__ = [
+    "Engine",
+    "NotFound",
+    "reset_engine",
+    "init_edge_runtime",
+    "init_tracing",
+    "SUBSTRATE_SOURCE",
+]

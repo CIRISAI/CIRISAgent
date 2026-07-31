@@ -63,6 +63,12 @@ _test_db_path: Optional[str] = None
 # long migration or backfill mid-flight is a worse failure than the hang
 # it would prevent; the wall-clock bound already covers that case.
 # Operators with a known-fast migration set can opt in.
+# NOTE — every default below is JUDGEMENT, not measurement. Nobody has yet
+# timed a cold migration against a production-sized shared database; these
+# were chosen to survive N-occurrence cold-start serialization with room to
+# spare, not fitted to observed data. Do not cite them as empirical. If you
+# measure a real cold-migration wall time, set them from it and delete this
+# note.
 DB_INIT_TIMEOUT_ENV = "CIRIS_DB_INIT_TIMEOUT_SECONDS"
 DB_INIT_TIMEOUT_SECONDS_DEFAULT = 300.0
 
@@ -499,6 +505,14 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     dsn, sentinel_dir = _persist_dsn_and_sentinel(db_path)
 
     signing_key_id = os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
+
+    # #937 — safety net. `setup_basic_logging` normally installs this, but
+    # not every entry point (tests, tooling, embedded hosts) goes through it,
+    # and the migration-phase logs we most need are emitted by the very next
+    # call. Idempotent, so the usual double-call costs nothing.
+    from ciris_engine.logic.utils.substrate_logging import install_substrate_tracing
+
+    install_substrate_tracing()
 
     try:
         from ciris_engine.logic.persistence._substrate import Engine  # one-wheel seam (#896)

@@ -167,6 +167,15 @@ def setup_basic_logging(
     logging.getLogger("discord").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)
 
+    # #937 — install the substrate's Rust tracing subscriber at the moment
+    # logging becomes real. Without it persist/edge events are discarded at
+    # the source, which is why a 15-minute migration-phase block logged
+    # nothing. Idempotent, never raises, and adds NO Python logging handler —
+    # so substrate output cannot reach incidents_latest.log (#935).
+    from ciris_engine.logic.utils.substrate_logging import install_substrate_tracing
+
+    install_substrate_tracing(log_dir=log_dir if log_to_file else None)
+
     log_msg = f"Logging configured. Level: {logging.getLevelName(level)}"
     if log_to_file:
         log_msg += f", Log file: {log_filename}"

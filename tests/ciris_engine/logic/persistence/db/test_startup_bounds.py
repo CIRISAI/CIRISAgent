@@ -115,10 +115,14 @@ def test_timeouts_never_applied_for_sqlite(
 
 
 def test_bare_sqlite_path_resolution_carries_no_options(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # A literal path, not `tmp_path`: resolution is pure string/Path work and
+    # touches no filesystem, and the repo's conftest rmtree's the tmpfs base
+    # that backs `tmp_path` (tests/conftest.py:39-59), which makes any
+    # tmp_path dependency a flake magnet.
     monkeypatch.setenv(core.DB_INIT_LOCK_TIMEOUT_ENV, "30s")
-    dsn, _sentinel = core._persist_dsn_and_sentinel(str(tmp_path / "engine.db"))
+    dsn, _sentinel = core._persist_dsn_and_sentinel("/var/lib/ciris/engine.db")
     assert "options" not in dsn
 
 
@@ -338,7 +342,7 @@ def test_timeout_is_a_timeout_error() -> None:
 
 
 def test_timeout_is_not_retried_by_the_stale_lockfile_heuristic(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A timeout must never be misread as a stale lockfile.
 
@@ -369,7 +373,9 @@ def test_timeout_is_not_retried_by_the_stale_lockfile_heuristic(
     prev_dsn = graph_persistence._engine_dsn
     try:
         with pytest.raises(core.DatabaseInitializationTimeout):
-            core._bootstrap_persist_engine(str(tmp_path / "engine.db"))
+            # Never constructed (the patch raises first), so the path need
+            # not exist — and must not depend on `tmp_path`, see above.
+            core._bootstrap_persist_engine("/var/lib/ciris/engine.db")
     finally:
         graph_persistence._engine = prev_engine
         graph_persistence._engine_dsn = prev_dsn

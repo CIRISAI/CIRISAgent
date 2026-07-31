@@ -125,6 +125,87 @@ def _get_metrics_env(name: str, default: str = "") -> str:
 _PII_LOCATION_FUZZ_DECIMALS = 1
 
 
+# --- #933 repeated-failure log hygiene --------------------------------------
+# The 2.7.x-era HTTP flush hot loop (fixed-cadence 401 retries, one full
+# traceback per attempt, ~3/min forever) was structurally removed by the
+# 2.9.6 LensCore fold (#857 "no second shipping mechanism"): there is no
+# agent-side HTTP shipping path left to retry. Two repeated-failure surfaces
+# remain that could reproduce the same log-spam pattern under a persistent
+# substrate fault:
+#   * the per-event capture path (`LensClient.capture_event` — a
+#     persistently failing seal, e.g. `verify_unknown_key` while the lens/
+#     persist backend does not know the signer key, would otherwise log one
+#     ERROR per event), and
+#   * the periodic sweep loop (`_periodic_sweep` — a persistent
+#     orphan_sweep/persist failure would otherwise log a full traceback per
+#     interval, forever).
+# Policy (#933): log the FIRST failure of a streak and state transitions
+# only; steady-state failures go to counters (exposed via get_metrics), and
+# the one timer-driven loop backs off exponentially while failing.
+SWEEP_BACKOFF_MULTIPLIER = 2.0
+# Cap for the backed-off sweep cadence — the slow re-probe interval #933
+# asks for: frequent enough to recover promptly once the substrate heals,
+# slow enough to be quiet in the meantime. Never drops below the configured
+# sweep interval.
+SWEEP_BACKOFF_MAX_SECONDS = 900.0
+
+# Bounded event buffer (#933 buffer policy): the ONLY agent-side buffering
+# post-fold is the reasoning-stream subscription queue created in start().
+# It is hard-capped at this size; when full, the PUBLISHER drops the new
+# update with a WARNING (step_streaming.py: asyncio.QueueFull →
+# "Subscriber queue is full, dropping reasoning event") — drop-newest,
+# never unbounded growth. A failed capture is dropped, never re-queued, so
+# a persistent substrate fault cannot become a retry hot loop: capture
+# attempts are paced by the reasoning stream itself, not a timer.
+REASONING_QUEUE_MAXSIZE = 1000
+
+# Marker persist's trace verifier uses when rejecting a seal signed by a
+# key it does not know (`Engine.receive_and_persist` → ValueError
+# "verify_unknown_key"). This is the post-fold manifestation of the
+# 2.7.x-era HTTP 401 {"error":"verify_unknown_key"}: an auth/registration
+# failure that retrying cannot fix — only registering the signer key with
+# the verifying backend can.
+_AUTH_FAILURE_MARKER = "verify_unknown_key"
+
+
+class CaptureHealthState(str, Enum):
+    """Health of a repeated-failure domain (#933 log hygiene).
+
+    HEALTHY: normal operation — the streak tracker logs nothing.
+    DEGRADED: consecutive failures of a presumed-transient class
+        (substrate/db errors, timeouts) — first failure logged with
+        traceback, the rest counted.
+    DEGRADED_AUTH: the signer key is not registered with the verifying
+        backend (verify_unknown_key) — non-retryable by waiting; the named
+        remedy is logged ONCE, no traceback, and recovery is automatic at
+        the next capture once the key is accepted (the lens collector
+        migration window makes keys valid without an agent restart).
+    """
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    DEGRADED_AUTH = "degraded_auth"
+
+
+@dataclass
+class FailureStreak:
+    """Per-domain repeated-failure bookkeeping (#933).
+
+    A gauge, not a log stream: the service logs the streak's FIRST failure
+    (= the state transition, including a change of failure class) and the
+    recovery transition; everything in between increments counters that
+    get_metrics() surfaces.
+    """
+
+    domain: str
+    state: CaptureHealthState = CaptureHealthState.HEALTHY
+    consecutive_failures: int = 0
+    suppressed_log_count: int = 0
+    total_failures: int = 0
+    last_error_class: str = ""
+    last_error_message: str = ""
+
+
 class TraceDetailLevel(str, Enum):
     """Trace detail levels for privacy/bandwidth control.
 
@@ -374,6 +455,14 @@ class AccordMetricsService:
         self._traces_signed = 0
         self._traces_consent_blocked = 0
         self._last_send_time: Optional[datetime] = None
+
+        # 933 log hygiene: per-domain failure streaks + the sweep loop's
+        # current (possibly backed-off) cadence. While healthy,
+        # _sweep_interval_current == _sweep_interval and nothing here has
+        # any observable effect — the happy path is unchanged.
+        self._capture_streak = FailureStreak("capture")
+        self._sweep_streak = FailureStreak("sweep")
+        self._sweep_interval_current: float = self._sweep_interval
 
         # Runtime self-heal: while consent is OFF, the event path re-checks the
         # CEG grant (throttled) so a grant written AFTER the service started
@@ -738,10 +827,10 @@ class AccordMetricsService:
         try:
             from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
 
-            self._reasoning_queue = asyncio.Queue(maxsize=1000)
+            self._reasoning_queue = asyncio.Queue(maxsize=REASONING_QUEUE_MAXSIZE)
             reasoning_event_stream.subscribe(self._reasoning_queue)
             self._reasoning_task = asyncio.create_task(self._process_reasoning_events())
-            logger.info("✅ SUBSCRIBED to reasoning_event_stream (queue maxsize=1000)")
+            logger.info(f"✅ SUBSCRIBED to reasoning_event_stream (queue maxsize={REASONING_QUEUE_MAXSIZE})")
         except Exception as e:
             logger.error(f"❌ FAILED to subscribe to reasoning_event_stream: {e}")
             logger.error("   Traces will NOT be captured!")
@@ -789,6 +878,88 @@ class AccordMetricsService:
         logger.info(f"   Events received: {self._events_received}")
         logger.info("=" * 70)
 
+    @staticmethod
+    def _classify_failure(exc: BaseException) -> CaptureHealthState:
+        """Map an exception to the degraded state class it drives (#933).
+
+        ``verify_unknown_key`` (persist's unknown-signer rejection at
+        ``Engine.receive_and_persist``) is the post-fold analog of the
+        2.7.x HTTP 401: an auth/registration failure retrying cannot fix.
+        Everything else is presumed transient/retryable.
+        """
+        if _AUTH_FAILURE_MARKER in str(exc):
+            return CaptureHealthState.DEGRADED_AUTH
+        return CaptureHealthState.DEGRADED
+
+    def _record_failure(self, streak: FailureStreak, exc: BaseException, context: str) -> None:
+        """Count a failure; log ONLY on a state transition (#933).
+
+        The first failure of a streak (or a change of failure class
+        mid-streak) logs one ERROR naming the remedy. Steady-state failures
+        increment counters (surfaced by get_metrics) and emit a DEBUG
+        one-liner instead of an ERROR+traceback per attempt.
+        """
+        streak.consecutive_failures += 1
+        streak.total_failures += 1
+        streak.last_error_class = type(exc).__name__
+        streak.last_error_message = str(exc)[:300]
+        new_state = self._classify_failure(exc)
+        if streak.state is not new_state:
+            streak.state = new_state
+            if new_state is CaptureHealthState.DEGRADED_AUTH:
+                # ONE stable ERROR line, no traceback: the cause is known
+                # and the remedy is named — a traceback per attempt is the
+                # exact #933 anti-pattern.
+                logger.error(
+                    "[ACCORD_HEALTH] %s DEGRADED (auth) — %s: %s: %s. The engine signer key is "
+                    "not registered with the trace verifier (verify_unknown_key). Remedy: register "
+                    "the federation signing key with the lens/persist backend (lens collector "
+                    "migration or node re-key). Capture keeps running and the service recovers "
+                    "automatically once the key is accepted — no restart needed. Further failures "
+                    "are counted, not logged (see get_metrics).",
+                    streak.domain,
+                    context,
+                    type(exc).__name__,
+                    exc,
+                )
+            else:
+                logger.error(
+                    "[ACCORD_HEALTH] %s DEGRADED — %s: %s: %s. First failure of this streak; "
+                    "further failures are counted, not logged (see get_metrics).",
+                    streak.domain,
+                    context,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
+        else:
+            streak.suppressed_log_count += 1
+            logger.debug(
+                "[ACCORD_HEALTH] %s still %s (streak=%d): %s: %s",
+                streak.domain,
+                streak.state.value,
+                streak.consecutive_failures,
+                type(exc).__name__,
+                exc,
+            )
+
+    def _record_success(self, streak: FailureStreak) -> None:
+        """Close a failure streak; log the recovery transition once (#933)."""
+        if streak.state is CaptureHealthState.HEALTHY:
+            return
+        logger.info(
+            "[ACCORD_HEALTH] %s RECOVERED after %d consecutive failure(s) "
+            "(%d repeat log line(s) suppressed; last error: %s: %s)",
+            streak.domain,
+            streak.consecutive_failures,
+            streak.suppressed_log_count,
+            streak.last_error_class,
+            streak.last_error_message,
+        )
+        streak.state = CaptureHealthState.HEALTHY
+        streak.consecutive_failures = 0
+        streak.suppressed_log_count = 0
+
     async def _periodic_sweep(self) -> None:
         """Pace the substrate orphan sweep + events-total persistence.
 
@@ -796,11 +967,18 @@ class AccordMetricsService:
         design — no action means it never happened; the substrate purges
         them after `_orphan_trace_max_age` rather than force-emitting
         partial traces.
+
+        Failure hygiene (#933): this is the only timer-driven loop left in
+        the service. While failing it backs off exponentially (base = the
+        configured sweep interval, ×SWEEP_BACKOFF_MULTIPLIER per
+        consecutive failure, capped at SWEEP_BACKOFF_MAX_SECONDS) and logs
+        only the streak's first failure; a clean pass logs recovery once
+        and resets the cadence.
         """
         try:
             while True:
                 try:
-                    await asyncio.sleep(self._sweep_interval)
+                    await asyncio.sleep(self._sweep_interval_current)
                     if self._lens is not None:
                         purged = await asyncio.to_thread(self._lens.orphan_sweep, int(self._orphan_trace_max_age))
                         if purged:
@@ -817,12 +995,24 @@ class AccordMetricsService:
                         for tid in stale:
                             self._open_thoughts.pop(tid, None)
                     self._persist_events_total()
+                    # 933: a clean pass closes any failure streak and resets
+                    # the backed-off cadence (no-op while healthy).
+                    self._record_success(self._sweep_streak)
+                    self._sweep_interval_current = self._sweep_interval
                 except Exception as e:
                     if isinstance(e, asyncio.CancelledError):
                         raise  # Re-raise to exit cleanly
-                    logger.error(
-                        f"Error in periodic sweep: {type(e).__name__}: {e!r}",
-                        exc_info=True,
+                    # 933: transition-logged, steady-state-counted — no
+                    # fixed-cadence traceback spam while the substrate is
+                    # down. Back off up to the cap; never below the
+                    # configured interval.
+                    self._record_failure(self._sweep_streak, e, "periodic sweep")
+                    self._sweep_interval_current = max(
+                        self._sweep_interval,
+                        min(
+                            self._sweep_interval_current * SWEEP_BACKOFF_MULTIPLIER,
+                            SWEEP_BACKOFF_MAX_SECONDS,
+                        ),
                     )
         except asyncio.CancelledError:
             pass  # Clean exit on cancellation
@@ -876,9 +1066,18 @@ class AccordMetricsService:
                 await self._process_single_event(event)
             except Exception as e:
                 self._events_failed += 1
-                logger.error(
+                # 933: transition-logged, steady-state-counted. The failed
+                # event is DROPPED, never re-queued — capture attempts are
+                # paced by the reasoning stream itself (no timer), so a
+                # persistent substrate fault (e.g. verify_unknown_key while
+                # the backend does not know the signer key) cannot become a
+                # fixed-cadence retry hot loop; the next reasoning event is
+                # the re-probe, and recovery is automatic.
+                self._record_failure(
+                    self._capture_streak,
+                    e,
                     f"capture failed for event {event.get('event_type', '?')} "
-                    f"(thought {event.get('thought_id', '?')}): {type(e).__name__}: {e!r}"
+                    f"(thought {event.get('thought_id', '?')})",
                 )
 
     async def _process_single_event(self, event: Dict[str, Any]) -> None:
@@ -934,6 +1133,9 @@ class AccordMetricsService:
         # and seal ordering depend on it.
         async with self._capture_lock:
             outcome = await asyncio.to_thread(self._lens.capture_event, component)
+        # 933: a successful substrate round-trip closes any failure streak
+        # (logs the recovery transition once; no-op while healthy).
+        self._record_success(self._capture_streak)
         kind = outcome.get("outcome", "")
 
         if kind == "opened":
@@ -1664,12 +1866,20 @@ class AccordMetricsService:
         try:
             async with self._capture_lock:
                 outcome = await asyncio.to_thread(self._lens.capture_event, component)
+            # 933: same capture domain — success closes any streak.
+            self._record_success(self._capture_streak)
             self._events_received += 1
             if outcome.get("outcome") == "opened":
                 self._open_thoughts[request.thought_id] = time.monotonic()
             logger.info(f"🧭 WBD deferral captured for thought {request.thought_id} (outcome={outcome.get('outcome')})")
-        except Exception:
-            logger.exception("Failed to capture WBD deferral")
+        except Exception as e:
+            # 933: transition-logged, steady-state-counted (was a full
+            # traceback per failed deferral capture).
+            self._record_failure(
+                self._capture_streak,
+                e,
+                f"WBD deferral capture (thought {request.thought_id})",
+            )
 
         return deferral_id
 
@@ -1908,6 +2118,18 @@ class AccordMetricsService:
             "has_signing_key": signer_key_id is not None,
             "agent_id_hash": self._agent_id_hash,
             "substrate": "ciris-lens-core",
+            # 933 failure-hygiene surface: the degraded condition is adapter
+            # STATE, not a log stream — a steady-state failure is a gauge.
+            "capture_state": self._capture_streak.state.value,
+            "capture_consecutive_failures": self._capture_streak.consecutive_failures,
+            "capture_failures_total": self._capture_streak.total_failures,
+            "capture_last_error_class": self._capture_streak.last_error_class or None,
+            "sweep_state": self._sweep_streak.state.value,
+            "sweep_consecutive_failures": self._sweep_streak.consecutive_failures,
+            "sweep_interval_current_seconds": self._sweep_interval_current,
+            "failure_logs_suppressed": (
+                self._capture_streak.suppressed_log_count + self._sweep_streak.suppressed_log_count
+            ),
         }
 
     def queue_lens_deletion_on_revoke(self) -> None:

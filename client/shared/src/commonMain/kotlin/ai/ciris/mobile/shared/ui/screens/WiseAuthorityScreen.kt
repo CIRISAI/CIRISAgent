@@ -2,7 +2,13 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.DeferralData
 import ai.ciris.mobile.shared.api.WAStatusData
+import ai.ciris.mobile.shared.approvals.ApprovalKind
+import ai.ciris.mobile.shared.approvals.BudgetCapability
+import ai.ciris.mobile.shared.approvals.PendingApproval
+import ai.ciris.mobile.shared.approvals.TicketBudgetState
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.ui.components.PendingApprovalsCard
+import ai.ciris.mobile.shared.ui.components.ProposalApprovalDialog
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
@@ -38,13 +44,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
- * Wise Authority screen for managing deferrals and viewing WA status
+ * Wise Authority screen — the human-in-the-loop approval surface.
  *
  * Features:
+ * - "The agent is blocked waiting on you" card, top of the screen, listing
+ *   every pending human decision from both sources (deferrals + agent ticket
+ *   proposals) with the requested amount surfaced for budget approvals
  * - WA service status overview
  * - Pending deferrals list
  * - Deferral details and resolution
- * - Auto-refresh every 10 seconds
+ * - Budget issuance (#938/#939) for proposals that ask for money
+ * - Auto-refresh every 10 seconds while visible; a slower session-wide watch in
+ *   the ViewModel keeps the nav badge and notifications live off-screen
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,10 +67,37 @@ fun WiseAuthorityScreen(
     onResolveDeferral: (deferralId: String, resolution: String, guidance: String) -> Unit,
     onRefresh: () -> Unit,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Unified pending approvals: deferrals + unapproved agent proposals. */
+    approvals: List<PendingApproval> = emptyList(),
+    /** Whether this server exposes budget issuance. Degrades the dialog when not. */
+    budgetCapability: BudgetCapability = BudgetCapability.UNKNOWN,
+    /**
+     * Freshly-read budget state for the approval currently open — grant, spend
+     * ledger and remaining trust envelope. Loaded on open via [onApprovalOpened].
+     */
+    selectedBudgetState: TicketBudgetState? = null,
+    /** Fired when a proposal dialog opens, so headroom can be fetched for it. */
+    onApprovalOpened: (approvalId: String) -> Unit = {},
+    /** Fired when the proposal dialog closes, so loaded state can be dropped. */
+    onApprovalClosed: () -> Unit = {},
+    onGrantBudget: (
+        approvalId: String,
+        amount: String,
+        currency: String,
+        expiryHours: Int,
+        reason: String,
+        promote: Boolean,
+        overGrantConfirmed: Boolean,
+    ) -> Unit = { _, _, _, _, _, _, _ -> },
+    onPromoteProposal: (approvalId: String, note: String) -> Unit = { _, _ -> },
+    onRejectProposal: (approvalId: String, reason: String) -> Unit = { _, _ -> },
+    /** "Not now" — record why, issue nothing, leave the agent fail-closed. */
+    onDeferProposal: (approvalId: String, note: String) -> Unit = { _, _ -> },
 ) {
     var selectedDeferral by remember { mutableStateOf<DeferralData?>(null) }
     var showResolveDialog by remember { mutableStateOf(false) }
+    var selectedProposal by remember { mutableStateOf<PendingApproval?>(null) }
 
     Scaffold(
         topBar = {
@@ -114,6 +152,29 @@ fun WiseAuthorityScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // "The agent is blocked waiting on you" — first thing on the screen,
+            // above service status, because a stuck agent is more urgent than a
+            // health readout. Renders nothing when nothing is pending.
+            item {
+                PendingApprovalsCard(
+                    approvals = approvals,
+                    onApprovalClick = { approval ->
+                        when (approval.kind) {
+                            ApprovalKind.TICKET_PROPOSAL -> {
+                                selectedProposal = approval
+                                onApprovalOpened(approval.id)
+                            }
+                            ApprovalKind.DEFERRAL -> {
+                                deferrals.firstOrNull { it.deferralId == approval.id }?.let {
+                                    selectedDeferral = it
+                                    showResolveDialog = true
+                                }
+                            }
+                        }
+                    },
+                )
+            }
+
             // WA Status Overview
             item {
                 WAStatusCard(waStatus = waStatus)
@@ -191,6 +252,49 @@ fun WiseAuthorityScreen(
                 showResolveDialog = false
                 selectedDeferral = null
             }
+        )
+    }
+
+    // Proposal / budget-issuance dialog. This is the #938/#939 path: the
+    // human's approval is the issuance event for the budget envelope.
+    selectedProposal?.let { proposal ->
+        val close = {
+            selectedProposal = null
+            onApprovalClosed()
+        }
+        ProposalApprovalDialog(
+            approval = proposal,
+            capability = budgetCapability,
+            isSubmitting = isResolving,
+            budgetState = selectedBudgetState?.takeIf { it.ticketId == proposal.id },
+            onDismiss = close,
+            onApprove = { amount, expiryHours, reason, promote, overGrantConfirmed ->
+                if (amount != null && proposal.requestedBudget != null) {
+                    onGrantBudget(
+                        proposal.id,
+                        amount,
+                        proposal.requestedBudget.requestedCurrency,
+                        expiryHours,
+                        reason,
+                        promote,
+                        overGrantConfirmed,
+                    )
+                } else {
+                    onPromoteProposal(proposal.id, reason)
+                }
+                close()
+            },
+            onReject = { reason ->
+                onRejectProposal(proposal.id, reason)
+                close()
+            },
+            onDefer = { reason ->
+                // "Not now" leaves the ticket blocked and records why. Nothing
+                // is issued and the work does not start — the agent stays
+                // fail-closed, which is the correct default.
+                onDeferProposal(proposal.id, reason)
+                close()
+            },
         )
     }
 }

@@ -9221,7 +9221,8 @@ class CIRISApiClient(
                     lastUpdated = ticket.lastUpdated,
                     completedAt = ticket.completedAt,
                     notes = ticket.notes,
-                    automated = ticket.automated
+                    automated = ticket.automated,
+                    metadata = ticket.metadata
                 )
             }
         } catch (e: Exception) {
@@ -9262,12 +9263,196 @@ class CIRISApiClient(
                 lastUpdated = ticket.lastUpdated,
                 completedAt = ticket.completedAt,
                 notes = ticket.notes,
-                automated = ticket.automated
+                automated = ticket.automated,
+                metadata = ticket.metadata
             )
         } catch (e: Exception) {
             logException(method, e)
             throw e
         }
+    }
+
+    /**
+     * Update a ticket's status (and optionally its notes).
+     *
+     * Used by the HITL approval surface to **promote** an agent proposal
+     * (`blocked` → `pending`, which is what actually starts the work) or to
+     * refuse it (`blocked` → `cancelled`). Granting a budget does neither —
+     * approving money and starting work are separate decisions.
+     *
+     * @return true on success; false when the server refused (the caller
+     *   surfaces a message rather than throwing into a poll loop).
+     */
+    suspend fun updateTicketStatus(ticketId: String, status: String, notes: String? = null): Boolean {
+        val method = "updateTicketStatus"
+        logInfo(method, "Updating ticket $ticketId -> status=$status")
+
+        return try {
+            val request = ai.ciris.api.models.UpdateTicketRequest(
+                status = status,
+                notes = notes
+            )
+            val response = ticketsApi.updateExistingTicketV1TicketsTicketIdPatch(ticketId, request)
+            logDebug(method, "Response: status=${response.status}")
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                return false
+            }
+            true
+        } catch (e: Exception) {
+            logException(method, e, "ticketId=$ticketId status=$status")
+            false
+        }
+    }
+
+    /**
+     * Issue a human-approved budget envelope against a proposal ticket.
+     *
+     * `POST /v1/tickets/{ticket_id}/budget/grant` — requires the AUTHORITY role
+     * (level 3; ADMIN at level 2 is not sufficient). This is the *issuance
+     * event* for the budget envelope described in #938/#939: it is what turns a
+     * fail-closed denial into a bounded permission.
+     *
+     * Issued through a raw Ktor call rather than the generated SDK because the
+     * endpoint post-dates the current OpenAPI snapshot. Wire shapes and the
+     * status→error mapping live in
+     * [ai.ciris.mobile.shared.approvals.BudgetApprovalSeam]; this method only
+     * moves bytes.
+     */
+    suspend fun grantTicketBudget(
+        ticketId: String,
+        amount: String,
+        currency: String,
+        purpose: String,
+        expiresInHours: Int
+    ): ai.ciris.mobile.shared.approvals.BudgetGrantOutcome {
+        val method = "grantTicketBudget"
+        logInfo(method, "Granting budget on ticket=$ticketId amount=$amount $currency expiry=${expiresInHours}h")
+
+        val client = HttpClient {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
+            }
+        }
+
+        return try {
+            val path = ai.ciris.mobile.shared.approvals.BudgetApprovalSeam.grantPath(ticketId)
+            val response = client.post("$baseUrl$path") {
+                header("Authorization", "Bearer $accessToken")
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ai.ciris.mobile.shared.approvals.BudgetApprovalSeam.buildGrantBody(
+                        amount = amount,
+                        currency = currency,
+                        purpose = purpose,
+                        expiresInHours = expiresInHours
+                    )
+                )
+            }
+            val statusCode = response.status.value
+            val bodyText = response.bodyAsText()
+            logDebug(method, "Response: status=$statusCode")
+
+            if (statusCode !in 200..299) {
+                val error = ai.ciris.mobile.shared.approvals.BudgetApprovalSeam
+                    .classifyHttpError(statusCode, bodyText)
+                logError(method, "Grant refused: status=$statusCode error=$error")
+                return ai.ciris.mobile.shared.approvals.BudgetGrantOutcome(
+                    ok = false,
+                    error = error,
+                    message = extractDetail(bodyText)
+                )
+            }
+
+            val root = Json.parseToJsonElement(bodyText).jsonObject
+            val data = root["data"]?.jsonObject ?: root
+            val granted = ai.ciris.mobile.shared.approvals.BudgetApprovalSeam.parseGrantResponse(data)
+                ?: return ai.ciris.mobile.shared.approvals.BudgetGrantOutcome(
+                    ok = false,
+                    error = ai.ciris.mobile.shared.approvals.BudgetGrantError.UNKNOWN,
+                    message = "Server accepted the grant but returned an unrecognized body"
+                )
+
+            logInfo(method, "Budget granted: ${granted.grantedAmount} ${granted.grantedCurrency}, signed=${granted.signed}")
+            ai.ciris.mobile.shared.approvals.BudgetGrantOutcome(ok = true, granted = granted)
+        } catch (e: Exception) {
+            logException(method, e, "ticketId=$ticketId")
+            ai.ciris.mobile.shared.approvals.BudgetGrantOutcome(
+                ok = false,
+                error = ai.ciris.mobile.shared.approvals.BudgetGrantError.UNKNOWN,
+                message = e.message
+            )
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * Read the full budget state of a ticket, including remaining trust headroom.
+     *
+     * `GET /v1/tickets/{ticket_id}/budget` (OBSERVER). The headroom it returns is
+     * resolved through the wallet tool service's own `_resolve_trust_envelope` —
+     * the same code the spend gate runs — so the figure shown to an operator
+     * cannot drift from the figure enforced when money moves. Approving an
+     * amount with no view of the remaining envelope is not meaningful consent,
+     * which is why this is a separate read rather than an inference from
+     * ticket metadata.
+     *
+     * Returns null when the endpoint is absent or the body is unrecognized; the
+     * caller then falls back to what ticket metadata already provided rather
+     * than blanking a dialog the operator is reading.
+     */
+    suspend fun getTicketBudget(
+        ticketId: String
+    ): ai.ciris.mobile.shared.approvals.TicketBudgetState? {
+        val method = "getTicketBudget"
+        logInfo(method, "Fetching budget state for ticket=$ticketId")
+
+        val client = HttpClient {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
+            }
+        }
+
+        return try {
+            val path = ai.ciris.mobile.shared.approvals.BudgetApprovalSeam.budgetPath(ticketId)
+            val response = client.get("$baseUrl$path") {
+                header("Authorization", "Bearer $accessToken")
+            }
+            val statusCode = response.status.value
+            val bodyText = response.bodyAsText()
+            logDebug(method, "Response: status=$statusCode")
+
+            if (statusCode !in 200..299) {
+                logWarn(method, "Budget state unavailable: status=$statusCode")
+                return null
+            }
+
+            val root = Json.parseToJsonElement(bodyText).jsonObject
+            val data = root["data"]?.jsonObject ?: root
+            ai.ciris.mobile.shared.approvals.BudgetApprovalSeam.parseTicketBudgetState(data)
+        } catch (e: Exception) {
+            // Non-fatal by construction: headroom is an enhancement to the
+            // dialog, never a precondition for rendering it.
+            logWarn(method, "Failed to fetch budget state for $ticketId: ${e.message}")
+            null
+        } finally {
+            client.close()
+        }
+    }
+
+    /** Pull FastAPI's `detail` out of an error body, when it is a plain string. */
+    private fun extractDetail(body: String?): String? {
+        if (body.isNullOrBlank()) return null
+        return runCatching {
+            Json.parseToJsonElement(body).jsonObject["detail"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull()
     }
 
     /**
@@ -11575,7 +11760,15 @@ data class TicketData(
     val lastUpdated: String,
     val completedAt: String?,
     val notes: String?,
-    val automated: Boolean
+    val automated: Boolean,
+    /**
+     * Raw ticket metadata. Carries the reserved budget-envelope keys
+     * (`__proposal__`, `__requested_budget__`, `__granted_budget__`,
+     * `__budget_spent__`) that the HITL approval surface reads via
+     * [ai.ciris.mobile.shared.approvals.BudgetApprovalSeam]. Defaulted so
+     * existing construction sites are unaffected.
+     */
+    val metadata: Map<String, JsonElement> = emptyMap()
 ) {
     /**
      * Check if this ticket is urgent (priority >= 8)

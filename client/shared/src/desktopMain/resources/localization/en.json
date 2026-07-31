@@ -3114,5 +3114,6 @@
   "approval_over_grant_ratio": "Approving {amount} — {ratio} the {requested} the agent asked for. Confirm this is what you mean.",
   "approval_over_grant_slight": "Approving {amount}, slightly above the {requested} the agent asked for. Confirm this is what you mean.",
   "approval_budget_exceeded_request": "Approved above the {requested} the agent asked for",
-  "approval_budget_exceeded_request_unknown": "Approved above the agent's request"
+  "approval_budget_exceeded_request_unknown": "Approved above the agent's request",
+  "approval_over_grant_percent": "Approving {amount} — {ratio} above the {requested} the agent asked for. Confirm this is what you mean."
 }

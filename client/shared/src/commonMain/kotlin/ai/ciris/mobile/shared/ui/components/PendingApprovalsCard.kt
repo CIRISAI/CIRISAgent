@@ -587,6 +587,21 @@ fun ProposalApprovalDialog(
                                                 "requested" to over.requestedAmount,
                                             ),
                                         )
+                                        // PERCENT and MULTIPLE need DIFFERENT sentences, not one
+                                        // template. `display` is "20%" for PERCENT (a percentage
+                                        // ABOVE the request) but "10×" for MULTIPLE (a multiple OF
+                                        // it). Feeding both into "{ratio} the {requested}" renders
+                                        // "20% the 25", which is ungrammatical and reads as 20% OF
+                                        // the request — understating the over-grant on a money
+                                        // dialog, in the direction that matters least safely.
+                                        OverGrantMagnitude.PERCENT -> localizedString(
+                                            "approval_over_grant_percent",
+                                            mapOf(
+                                                "amount" to "${over.amount} ${over.currency}",
+                                                "ratio" to over.display,
+                                                "requested" to over.requestedAmount,
+                                            ),
+                                        )
                                         else -> localizedString(
                                             "approval_over_grant_ratio",
                                             mapOf(

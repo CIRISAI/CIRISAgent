@@ -607,25 +607,13 @@ class GrantBudgetRequest(BaseModel):
     )
     wa_id: Optional[str] = Field(None, description="WA identity to sign as (defaults to the calling user)")
 
-    # --- Accepted and IGNORED (transitional) -------------------------------
-    # The HITL client briefly sent these while the audit marking was being
-    # coordinated. The server derives both authoritatively from the ticket, so
-    # these are no-ops. Declared rather than rejected so that client keeps
-    # working while it drops them; `extra="forbid"` below then makes any OTHER
-    # unknown field a loud 422 instead of a silent default — which matters on a
-    # money endpoint, where a typo'd `expires_in_hours` would otherwise quietly
-    # take the 24h default. Remove once the client confirms.
-    exceeds_request: Optional[bool] = Field(
-        None,
-        deprecated=True,
-        description="IGNORED. Server derives this from the ticket; a client-asserted audit flag is not trustworthy.",
-    )
-    requested_amount_at_grant: Optional[Decimal] = Field(
-        None,
-        deprecated=True,
-        description="IGNORED. Server snapshots the requested amount from the ticket at issuance.",
-    )
-
+    # `extra="forbid"`: an unknown field is a loud 422 rather than a silent
+    # default. On a money endpoint that matters — a typo'd `expires_in_hours`
+    # would otherwise quietly take the 24h default. It also means a client
+    # cannot assert the over-grant audit marking (`exceeds_request`,
+    # `requested_amount_at_grant`): those are derived server-side in
+    # `issue_grant` from the ticket, and a request that tries to supply them is
+    # rejected outright rather than silently ignored.
     model_config = ConfigDict(extra="forbid")
 
 

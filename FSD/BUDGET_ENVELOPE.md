@@ -403,8 +403,22 @@ round-trip for no safety gain. The bound the server does enforce is
 
 #### RULED — over-request grants are permitted
 
-The user ruled: *"yes an AUTHORITY can approve above what the agent requested, of
-course, the agent may have requested too little."*
+**Provenance:** relayed to this branch by the HITL approval-surface agent, quoting
+the maintainer as: *"yes an AUTHORITY can approve above what the agent requested,
+of course, the agent may have requested too little."* It was **not received
+first-hand on this branch**, so it is recorded as a relayed ruling rather than a
+direct instruction. Confirm before treating it as settled. Sourcing it this way
+is deliberate: the whole point of this design is that authorization comes from a
+named human through a checkable path, and a design document that launders a
+second-hand report into "the user decided" would be committing, in its own prose,
+the error the code is built to prevent.
+
+What the ruling changed in this codebase is **nothing enforced** — the server
+never checked `granted ≤ requested`, so no restriction was lifted. It settled
+that no such check would be *added*, and that over-request grants would be
+recorded instead. Both the recording and the no-check status quo stand on their
+own merits if the relay is ever contradicted; only this paragraph's attribution
+would need correcting.
 
 So **`granted ≤ requested` is a constraint nowhere in the system** — not in the
 server, and not in the HITL client either, which dropped its local restriction on

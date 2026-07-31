@@ -437,36 +437,62 @@ class TestOverRequestGrants:
                 trust_ceiling=Decimal("1000"),
             )
 
-    @pytest.mark.asyncio
-    async def test_client_asserted_marking_is_ignored(self, ticket_with_task):
-        """A caller cannot hide an over-grant by lying in the request body.
+    def test_request_body_cannot_assert_the_marking(self):
+        """A caller cannot supply the audit marking at all — the body is rejected.
 
-        The API model accepts the transitional client fields but the server
-        derives the authoritative values from the ticket. This is the whole
-        reason the marking is not client-supplied.
+        Stronger than ignoring it: `extra="forbid"` means an attempt to assert
+        `exceeds_request` fails loudly instead of appearing to have been honoured.
         """
+        from pydantic import ValidationError
+
         from ciris_engine.logic.adapters.api.routes.tickets import GrantBudgetRequest
 
+        with pytest.raises(ValidationError):
+            GrantBudgetRequest(
+                amount=Decimal("250"), currency="USDC", purpose="fee", exceeds_request=False
+            )
+        with pytest.raises(ValidationError):
+            GrantBudgetRequest(
+                amount=Decimal("250"),
+                currency="USDC",
+                purpose="fee",
+                requested_amount_at_grant=Decimal("9999"),
+            )
+
+    def test_unknown_request_field_is_rejected_not_defaulted(self):
+        """A typo'd field must 422, not silently take a default.
+
+        `expires_in_hourz` quietly taking the 24h default is the money-endpoint
+        version of the silent-default bug this codebase keeps finding.
+        """
+        from pydantic import ValidationError
+
+        from ciris_engine.logic.adapters.api.routes.tickets import GrantBudgetRequest
+
+        with pytest.raises(ValidationError):
+            GrantBudgetRequest(amount=Decimal("1"), currency="USDC", purpose="p", expires_in_hourz=1)
+
+    @pytest.mark.asyncio
+    async def test_marking_is_derived_from_the_ticket_not_the_caller(self, ticket_with_task):
+        """The issuance path takes no marking parameters; it reads the ticket."""
         self._set_requested("25")
-        body = GrantBudgetRequest(
-            amount=Decimal("250"),
-            currency="USDC",
-            purpose="fee",
-            exceeds_request=False,  # a lie
-            requested_amount_at_grant=Decimal("9999"),  # also a lie
-        )
-        # issue_grant takes no such parameters — they cannot reach the record.
         grant = await issue_grant(
             ticket_id=TICKET_ID,
-            granted_amount=body.amount,
-            granted_currency=body.currency,
-            purpose=body.purpose,
+            granted_amount=Decimal("250"),
+            granted_currency="USDC",
+            purpose="fee",
             expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
             granted_by_wa_id="wa-1",
             granted_by_user_id="mallory",
         )
         assert grant.exceeds_request is True
         assert grant.requested_amount_at_grant == Decimal("25")
+
+        import inspect
+
+        params = set(inspect.signature(issue_grant).parameters)
+        assert "exceeds_request" not in params
+        assert "requested_amount_at_grant" not in params
 
 
 class TestRegrantSemantics:

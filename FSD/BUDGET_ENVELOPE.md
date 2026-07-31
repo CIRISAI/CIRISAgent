@@ -1,7 +1,8 @@
 # Budget Envelope — human-approved spend, nested in the trust envelope
 
-**Status:** implemented on `feat/938-create-ticket`
-**Issues:** #938 (task envelope), #905 (tool gate), #939 (wallet spend path)
+**Status:** implemented; merged to `release/2.9.7` (was `feat/938-create-ticket`)
+**Issues:** #938 (task envelope), #905 (tool gate), #939 (wallet spend path), #942 (inert `requires_approval`), #944 (unsigned WA resolutions)
+**Companions:** `FSD/TASK_ENVELOPE.md` (the task-identity half) · `FSD/HITL_APPROVAL_SURFACE.md` (the human-facing half) · `FSD/THREAT_MODEL_2.9.7.md` (where this control sits among the others)
 
 ---
 
@@ -305,43 +306,76 @@ Deliberate, and worth arguing:
   denial-of-service-on-the-human that #905 warns about ("asking a human 70 times
   is not a control").
 
-Separately: **`requires_approval` is not enforced anywhere.** Its single
-consumption site is `dma/tsaspdma.py:247`, which appends the markdown line
-`**⚠️ Requires wise authority approval**` to an LLM prompt. Nothing branches on
-it — not the handler, not the bus, not a conscience. `send_money` has carried
-`requires_approval=True` since it shipped and it has never gated anything. The
-docs in `CLAUDE.md:429` and `ciris_adapters/README.md:249` claiming it "triggers
-DEFER" are inaccurate. **That is precisely why this design does not rely on it**;
+Separately: **`requires_approval` is not enforced anywhere.** It has exactly two
+consumption sites and neither one blocks anything:
+
+1. `dma/tsaspdma.py:247` appends the markdown line
+   `**⚠️ Requires wise authority approval**` to an LLM prompt.
+2. `logic/services/tool/tool_disclosure.py:118` adds a `REQUIRES_APPROVAL`
+   capability label to the first-run consent disclosure the operator sees in the
+   setup wizard.
+
+Nothing branches on it — not the handler, not the bus, not a conscience.
+`send_money` has carried `requires_approval=True` since it shipped and it has
+never gated anything. **That is precisely why this design does not rely on it**;
 the budget gate is deterministic and sits on the spend path.
+
+> An earlier revision of this paragraph said the field had a "single consumption
+> site". That undercounted by one, and the second site is the more consequential
+> of the two because it is *operator-facing*: the setup wizard renders
+> `tool_cap_requires_approval` as "Marked as needing wise-authority approval
+> before it is used", in 29 locales, for `shell_command` and `send_money`. The
+> wording hedges correctly ("Marked as"), but an operator reading a consent
+> screen will reasonably take it for a control. Tracked in #942. The inaccurate
+> docs at `CLAUDE.md`, `ciris_adapters/README.md`,
+> `FSD/ADAPTER_DEVELOPMENT_GUIDE.md`, `FSD/WALLET_ADAPTER.md`,
+> `FSD/WALLET_REGULATORY_COMPLIANCE.md` and `compliance/D19_partner_role.md` were
+> corrected in the 2.9.7 documentation pass.
 
 ---
 
-## The seam to `TaskEnvelope` (Phase 1, `feat/938-task-envelope`)
+## The seam to `TaskEnvelope` (Phase 1 — now merged alongside this work)
 
-That branch owns `TaskEnvelope` and `ToolBus.execute_tool`. Nothing here touches
-either. No competing envelope type is defined — `GrantedBudget` is a *spend*
-authorization on a ticket, not a capability envelope on a task.
+`FSD/TASK_ENVELOPE.md` owns `TaskEnvelope` and `ToolBus.execute_tool`. Nothing
+here touches either. No competing envelope type is defined — `GrantedBudget` is a
+*spend* authorization on a ticket, not a capability envelope on a task. The two
+documents describe adjacent halves of the same seam and should be read together.
 
-The intended fold, when `TaskEnvelope` lands:
+### ✅ Closed: the spoofable `task_id` (commit `b8aeebfaf`)
 
-1. `authorize_spend(task_id=...)` currently reads `task_id` from tool
-   **parameters**, injected by `ToolHandler._build_tool_params:138`. That line is
-   `if thought.source_task_id and "task_id" not in tool_params` — **a
-   model-authored `task_id` is not overwritten**, so today it is spoofable. This
-   does not currently escalate (see below) but it should become
-   handler-authoritative, or better, arrive via `TaskEnvelope` rather than through
-   the parameter dict at all. **This is the single seam to change.**
-2. `TaskEnvelope` should carry the resolved `ticket_id` so
+> **Superseded.** This section previously described a live weakness: that
+> `authorize_spend(task_id=...)` read `task_id` from the tool **parameter dict**,
+> injected by `ToolHandler._build_tool_params` under the condition
+> `if thought.source_task_id and "task_id" not in tool_params` — so a
+> model-authored `task_id` was never overwritten and was therefore spoofable. It
+> was described here as "the single seam to change".
+>
+> **It was changed, in this same release.** The handler is now authoritative: it
+> always stamps `thought.source_task_id`, logs any attempt to supply a different
+> one, and **drops** a model-supplied `task_id` entirely when the thought has no
+> source task, on the grounds that an unverifiable identity is worse than none
+> for anything that authorizes on it. Locked by
+> `test_model_supplied_task_id_is_overwritten_by_the_handler` and
+> `test_unverifiable_task_id_is_dropped_not_passed_through`. See
+> `FSD/TASK_ENVELOPE.md` §2 "Task identity is handler-authoritative", which is
+> the authoritative description.
+>
+> The residual risk that was documented here — that spoofing `task_id` lets a
+> task point at a *different ticket*, a weakness in attribution rather than in
+> magnitude, since the grant is ticket-bound and the ledger is per-ticket — no
+> longer applies on the reasoning path.
+
+### Still to fold
+
+1. `TaskEnvelope` should carry the resolved `ticket_id` so
    `resolve_ticket_id_for_task` (which today re-reads the raw persist row because
    `TaskContext` is `extra="forbid"` and drops `ticket_id`) becomes a field read.
-3. The spend gate can then move to the bus as one more envelope-keyed policy,
-   with `_execute_send_money` keeping its check as defense in depth.
-
-**On the spoofable `task_id`:** spoofing it only lets a task point at a *different
-ticket*, and the grant is bound to that ticket with an expiry and a purpose. It
-cannot conjure a grant where none exists, and the total spend across all tasks
-pointing at one ticket is still capped by that ticket's single ledger. It is a
-real weakness in attribution, not in magnitude. It should still be fixed.
+2. The spend gate can then move to the bus as one more envelope-keyed policy,
+   with `_execute_send_money` keeping its check as defense in depth. **Not yet
+   possible:** `TaskEnvelope` Phase 1 issues envelopes but nothing enforces them
+   (`FSD/TASK_ENVELOPE.md` §0), so there is no bus-side policy point to move the
+   gate into. Until Phase 2 (#905 Ask 1) lands, `_execute_send_money` is not
+   defense in depth — it is the *only* depth. Do not relocate it.
 
 ---
 
@@ -519,7 +553,19 @@ nobody can audit.
   conscience layer and WBD, which are semantic, not deterministic.
 - **It does not cover non-spend consequential actions.** Kick/ban and the rest stay
   where they are, gated by judgment about specific content, exactly as #938's
-  correction requires.
+  correction requires. Worth stating in the negative: **this is the only
+  deterministic gate on any consequential capability in the release.** Shell
+  execution, file writes, arbitrary HTTP egress and secret decryption all have
+  none. See `FSD/THREAT_MODEL_2.9.7.md` §2.
+- **It does not benefit from `TaskEnvelope` enforcement, because there is none.**
+  Phase 1 issues envelopes and nothing reads them to deny
+  (`FSD/TASK_ENVELOPE.md` §0). The `task_id` this gate authorizes on is now
+  handler-authoritative, which is a real strengthening, but it arrives through
+  the tool parameter dict, not through the envelope.
+- **It does not defend the `purpose` field.** A grant is bound to a ticket, an
+  amount, a currency and an expiry. `purpose` is prose; nothing compares the
+  spend to it. A human approving "$25 for API credits" has approved $25, not
+  $25-for-API-credits.
 
 ---
 
@@ -528,14 +574,34 @@ nobody can audit.
 1. **CIRISPersist** — add a `proposed` variant to the ticket-status enum. Today
    proposals ride `blocked`, which is semantically defensible but conflates
    "waiting on a human decision to start" with "waiting on an external
-   dependency mid-flight".
-2. **CIRISAgent** — make `ToolHandler._build_tool_params` authoritative for
-   `task_id` (drop the `not in tool_params` condition), or thread task identity
-   outside the parameter dict.
-3. **CIRISAgent** — either enforce `ToolDMAGuidance.requires_approval` or delete
-   it and fix the docs that claim it works. It is `sandbox_mode` in a different
-   costume, and it is currently the *only* thing standing between a selected
-   `send_money` and a fiat merchant API (#939).
+   dependency mid-flight". *(Open.)*
+2. ~~**CIRISAgent** — make `ToolHandler._build_tool_params` authoritative for
+   `task_id`.~~ **Done in this release** (`b8aeebfaf`); see the seam section
+   above.
+3. **CIRISAgent (#942)** — either enforce `ToolDMAGuidance.requires_approval` or
+   delete it and fix the docs that claim it works. It is `sandbox_mode` in a
+   different costume. *(Open. The docs were corrected in the 2.9.7 pass; the
+   field is still inert.)*
+
+   > **Scope correction.** This ask previously said `requires_approval` was "the
+   > *only* thing standing between a selected `send_money` and a fiat merchant
+   > API". That was true when written and is **no longer true** — it is the
+   > premise this entire document exists to falsify. The budget envelope now sits
+   > in `_execute_send_money` ahead of `provider.send(...)` on every rail, and it
+   > denies by default: no grant means `NO_GRANTED_BUDGET`, not an unbounded
+   > send. `requires_approval` was never standing between anything and anything;
+   > it has always been inert. What made the sentence dangerous is that it framed
+   > an inert marker as a last line of defence, which is exactly the misreading
+   > #942 exists to correct.
+4. **CIRISAgent (#944)** — sign WA deferral resolutions and verify on read.
+   `DeferralResponse.signature` is a formatted string
+   (`routes/wa.py:183`) that nothing reads, and `verify_task_signature` has zero
+   production callers. This document already declines to route money over the
+   deferral path for exactly that reason (§"Why not `Task.signed_by`"); #944 is
+   the fix that would make the deferral path trustworthy for anything.
+5. **CIRISAgent (#939 item 3)** — give `SpendingLimits` a currency (or a
+   per-currency map), and make the outer trust envelope durable and
+   cross-occurrence. Both are named under "What this does NOT do" below.
 
 ---
 

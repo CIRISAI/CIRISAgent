@@ -1,9 +1,10 @@
 # TaskEnvelope — task-scoped authorization, Phase 1
 
-**Issue:** CIRISAgent#938 (this phase) · #905 (enforcement, Phases 2–4)
-**Status:** Phase 1 landed. **No enforcement ships in this phase.**
+**Issue:** CIRISAgent#938 (this phase) · #905 (enforcement, Phases 2–4) · #942 (inert `requires_approval`)
+**Status:** Phase 1 landed and merged to `release/2.9.7`. **No enforcement ships in this phase.**
 **Scope:** the *subject* a tool gate would authorize, and the plumbing that
 puts that subject in front of the gate. Not the gate.
+**Companions:** `FSD/BUDGET_ENVELOPE.md` (the one deterministic gate that *did* ship, on spend) · `FSD/HITL_APPROVAL_SURFACE.md` (its human surface) · `FSD/CLI_TOOLS_DESKTOP.md` (what the near-total grant now includes on desktop) · `FSD/THREAT_MODEL_2.9.7.md` (the consolidated posture)
 
 ---
 
@@ -29,11 +30,20 @@ under-read.
   `ToolBus.dispatch_to_provider` carrying a `CONTEXT_ENRICHMENT` subject, so
   Phase 2 has one gate site rather than two. See §8.
 - **It does not close the other three bypasses** named in #938's gate-placement
-  analysis: adapter-internal second dispatch (`DiscordAdapter.execute_tool` →
-  `_tool_handler.execute_tool`), write-then-load into adapter discovery paths,
-  or the fact that `curl`/`http_get`/`http_post` ship free with the API
-  adapter (#941). Those are registration and containment problems, not subject
-  problems.
+  analysis. Of the four identified there, exactly one is closed:
+
+  | # | Bypass | Status after 2.9.7 |
+  |---|---|---|
+  | 1 | Context enrichment invoked directly on the tool-service instance, skipping `ToolBus` entirely, on *every* thought | **Closed** — routed through `ToolBus.dispatch_to_provider` with a `CONTEXT_ENRICHMENT` subject (§8). One residual: the startup-cache path still falls back to direct invocation when no bus exists yet, and logs that it did. |
+  | 2 | Adapter-internal second dispatch — `DiscordAdapter.execute_tool` → `_tool_handler.execute_tool`, two registered aliases of one surface | **Open** |
+  | 3 | `curl` / `http_get` / `http_post` ship free with the API adapter, which is the *default* adapter (#941) | **Open**, and the sharpest of the four — `api_tools.py:117` performs no URL validation of any kind |
+  | 4 | Write-then-load into `AdapterDiscoveryService.DISCOVERY_PATHS` | **Open, and newly reachable.** It had been withdrawn as non-existent because `write_file` was unregistered; `feat/cli-tools-desktop` (#941) makes `write_file` and `shell_command` reachable on a desktop run that loads the `cli` adapter, which makes it live again. See `FSD/CLI_TOOLS_DESKTOP.md` §6 — which also corrects the timing: discovery is reached *during reasoning*, not only at restart. |
+
+  These are registration and containment problems, not subject problems, which
+  is why Phase 1 does not address them. The numbering is from the #938
+  gate-placement thread and exists only there — it is reproduced here and in
+  `FSD/CLI_TOOLS_DESKTOP.md` §6 so the two documents agree, but there is no
+  in-repo artifact to check it against.
 - **It does not make the reasoning loop unable to mint an envelope in a
   sandbox sense.** It makes an accidental mint fail loudly and a deliberate one
   require editing a file that has a test watching it. See §5.
@@ -195,6 +205,18 @@ Anything carrying `ToolDMAGuidance(requires_approval=True)` — kick/ban,
 financial tools, destructive tools — is controlled by **judgement about the
 specific content**: the four epistemic consciences plus Wisdom-Based Deferral
 to a human. That is the existing design and it is the right one.
+
+> **Do not read `requires_approval` as the thing doing that work.** The flag
+> itself enforces nothing (#942): its two read sites are
+> `dma/tsaspdma.py:247`, which appends one markdown line to the
+> action-selection prompt, and `services/tool/tool_disclosure.py:118`, which
+> adds a label to the first-run consent disclosure. Nothing branches on it. It
+> is being used in this section purely as a **naming convention for the class of
+> tools under discussion**, not as a control that exists. The controls that do
+> exist for that class are the semantic ones named above — and, for spend only,
+> the deterministic budget envelope (`FSD/BUDGET_ENVELOPE.md`). Two shipped tools
+> set the flag (`shell_command`, `send_money`); neither has ever been gated by
+> it.
 
 **Phase 1 does not model "requires approval" as an envelope-level denial, and
 Phase 2 must not either.** An envelope-level pre-authorization decision cannot
@@ -476,6 +498,18 @@ task-bound subject to masquerade as a component subject or vice versa.
   load-bearing in Phases 3–4.
 - **Other buses.** CommunicationBus, MemoryBus, LLMBus carry the same argument
   and are not covered.
+- **Things a tool gate structurally cannot reach**, worth naming here so Phase 2's
+  coverage claim is scoped correctly from the start:
+  - **Observation-time network fetches.** `BaseObserver.handle_incoming_message`
+    calls `_enhance_message` at `base_observer.py:893` — which fetches inbound
+    attachment, embed and document URLs — *before* the adaptive filter (`:905`)
+    and *before* task creation (`:940`). No tool is involved, so no tool gate
+    applies. See `FSD/THREAT_MODEL_2.9.7.md` §4.5.
+  - **Secrets scope.** `recall_secret` is a tool and would be gated, but the
+    envelope grants it to every task, and the secrets store itself has no task
+    scope — so gating the *tool* would not scope the *secret* (#940).
+  Both are named in `FSD/THREAT_MODEL_2.9.7.md`, which is the consolidated
+  posture for this release and the place to look before claiming coverage.
 
 ---
 

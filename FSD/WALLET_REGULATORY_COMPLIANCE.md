@@ -184,19 +184,49 @@ The mobile app performs geolocation checks and disables wallet features accordin
 
 ### 6.1 Ethics Pipeline Integration
 
-All money operations pass through the H3ERE/DMA evaluation pipeline:
+All money operations pass through the H3ERE/DMA evaluation pipeline, which is a
+**semantic** control — the model and the conscience layer reason about the
+action — and one **deterministic** control on the spend path itself:
 
 ```
-send_money() → H3ERE Pipeline → DMA Approval → Execution
-                    |
-                    v
-            - Attestation check
-            - Spending limit check
-            - Recipient validation
-            - Duplication detection
+send_money()
+   → H3ERE pipeline (semantic: DMA action selection + conscience review)
+   → _execute_send_money
+       → authorize_spend            ← DETERMINISTIC, fail-closed
+           amount ≤ min(granted_remaining, trust_remaining)
+       → provider.send(...)
 ```
 
-`requires_approval: true` ensures no automated spending without explicit user intent.
+The deterministic half is the budget envelope (`FSD/BUDGET_ENVELOPE.md`): a spend
+is denied unless a human with the AUTHORITY role has issued a signed budget grant
+bound to the originating ticket, and the amount is bounded by both that grant and
+the deployment's configured trust envelope. Absence of a grant is a denial, not a
+fallthrough.
+
+> **Correction — `requires_approval` is not one of these controls.** An earlier
+> revision of this section stated that "`requires_approval: true` ensures no
+> automated spending without explicit user intent." **That was false and is the
+> most consequential inaccuracy this document has carried.** The field is
+> advisory prompt content: its only effects are one markdown line in the
+> action-selection prompt (`ciris_engine/logic/dma/tsaspdma.py:247`) and one
+> label in the first-run consent disclosure
+> (`ciris_engine/logic/services/tool/tool_disclosure.py:118`). Nothing branches
+> on it to defer, block, or require consent. `send_money` has carried
+> `requires_approval=True` since it shipped and it has never gated a payment.
+> Filed as [#942](https://github.com/CIRISAI/CIRISAgent/issues/942). The control
+> that does bound automated spending is the budget envelope described above,
+> which post-dates this document. See `FSD/THREAT_MODEL_2.9.7.md`.
+
+**The four sub-checks in the earlier diagram were aspirational and are recorded
+here as unverified.** "Attestation check", "recipient validation" and
+"duplication detection" were listed as steps in the send path; they are not
+described anywhere in `FSD/BUDGET_ENVELOPE.md`'s fail-closed ladder, which is
+the authoritative enumeration of what `authorize_spend` actually checks. Do not
+cite them as implemented controls without confirming them in
+`ciris_adapters/wallet/tool_service.py` first. "Spending limit check" is real but
+is not where this diagram put it: `WalletAdapterConfig.spending_limits` had zero
+readers until #939 and is now read by `_resolve_trust_envelope` on the spend
+path, not by the H3ERE pipeline.
 
 ### 6.2 Audit Trail
 

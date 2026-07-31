@@ -426,11 +426,33 @@ ToolInfo(
 Financial and destructive tools MUST have:
 ```python
 dma_guidance=ToolDMAGuidance(
-    requires_approval=True,  # Triggers Wise Authority deferral
-    min_confidence=0.95,     # High confidence required
+    requires_approval=True,  # PROMPT TEXT ONLY — does NOT gate execution (#942)
+    min_confidence=0.95,     # currently has no reader at all (#942)
     ethical_considerations="...",
 )
 ```
+
+⚠️ **`requires_approval` is not a control. Do not rely on it.** It has two read
+sites and neither one blocks anything:
+`ciris_engine/logic/dma/tsaspdma.py:247` appends the line
+`**⚠️ Requires wise authority approval**` to the action-selection prompt, and
+`ciris_engine/logic/services/tool/tool_disclosure.py:118` adds a
+`REQUIRES_APPROVAL` label to the first-run consent disclosure. No handler, no
+bus, no conscience and no deferral path reads the field. **A model that selects
+`send_money` executes `send_money`.** Making the field load-bearing is
+[#942](https://github.com/CIRISAI/CIRISAgent/issues/942).
+
+`min_confidence` is weaker still: nothing reads it, not even the prompt
+renderer. `_format_dma_guidance` renders `when_not_to_use`,
+`ethical_considerations`, `prerequisite_actions` and `requires_approval` — not
+`min_confidence` and not `followup_actions`.
+
+What actually constrains a consequential tool today is **semantic and
+model-mediated**: the conscience layer reviewing the selected action, `DEFER`
+as a real action routing to a Wise Authority, and the guidance prose itself
+arguing against misuse. Those are real; they are not deterministic. The one
+deterministic gate that exists on any consequential path is the budget envelope
+on spend (`FSD/BUDGET_ENVELOPE.md`). See `FSD/THREAT_MODEL_2.9.7.md`.
 
 **Reference Implementations:**
 - `ciris_adapters/sample_adapter/` - Complete template

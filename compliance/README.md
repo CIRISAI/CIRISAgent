@@ -115,6 +115,38 @@ Documented in the seed-population commit (`bd330545b`) and inventoried here for 
 | 9 | Localization parity partial — D04 category list is English-only; 29 locales carry framing but not canonical capability list | D04 |
 | 10 | CONSCIENCE_V3 Stages 2–4 unshipped; ~60% IRIS-O/IRIS-H overlap persists | D12 |
 
+## What this compliance set does NOT do (2.9.7)
+
+Four limits on how these documents should be read. The first is new in this release and is the
+important one.
+
+1. **A credited control is not necessarily an *enforced* control, and this set does not
+   consistently distinguish them.** Several dimensions describe agent-side mechanisms whose
+   strength is **semantic** (a model or a conscience reasoning about content) or
+   **documentation-only** (a declared field with no reader) rather than **deterministic** (code
+   that returns a denial). The 2.9.7 pass found and corrected instances in D19 and D23 where a
+   marker was described as a gate. Others may remain. `FSD/THREAT_MODEL_2.9.7.md` classifies the
+   agent's controls along exactly this axis and is the document to read against any
+   implementation claim here before relying on it. Two concrete corrections landed in this pass:
+   - **D19** described `ToolDMAGuidance(requires_approval=True)` as "the partner-role financial-tool
+     gate". It gates nothing ([#942](https://github.com/CIRISAI/CIRISAgent/issues/942)).
+   - **D23** said WA escalations are recorded with "the human's signed response", named by "Ed25519
+     public-key hash". The resolution signature is a formatted string that nothing reads
+     ([#944](https://github.com/CIRISAI/CIRISAgent/issues/944)).
+2. **The substrate-enforced facet table is credited by citation, not by CI.** The
+   CIRISConformance evidence is real and was run against the published wheels, but nothing in this
+   repo re-checks it on each change. Until the CI lane in the TODO above exists, a wheel-matrix
+   regression would not fail anything here. Treat the six credited facets as verified *as of* the
+   cited runs.
+3. **These documents describe the agent, not a deployment.** Whether a given control is active
+   depends on which adapters an operator loaded, whether a wallet is configured, whether a WA
+   signing key exists, and which platform the runtime is on. Several claims are conditional in ways
+   the prose does not always foreground.
+4. **"Known gaps" sections are not an exhaustive threat model.** They record gaps against each
+   dimension's own framework mapping. Attack paths that cross dimensions — the ones that matter
+   most — do not appear in any single stub by construction. That is what
+   `FSD/THREAT_MODEL_2.9.7.md` is for.
+
 ## Substrate dependencies
 
 Many dimensions depend on upstream CIRIS substrates landing first. The substrate substitution trajectory (per project memory and `MISSION.md`) is:

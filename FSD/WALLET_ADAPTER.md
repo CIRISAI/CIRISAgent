@@ -26,7 +26,7 @@ This is an open specification. Any payment provider implementing the `WalletProv
 1. **Provider Agnostic** - The three tools (`send_money`, `request_money`, `get_statement`) work identically regardless of whether the underlying provider is crypto or fiat
 2. **Currency as Routing Hint** - USDC routes to x402, KES routes to M-Pesa, ETB routes to Chapa
 3. **Adapter Pattern** - Wallet is a standard CIRIS adapter providing tools via ToolBus
-4. **Ethics Pipeline Integration** - All money operations go through H3ERE/DMA evaluation with `requires_approval=True`
+4. **Ethics Pipeline Integration** - All money operations go through H3ERE/DMA evaluation. `send_money` declares `requires_approval=True`, but **that flag gates nothing** — it is advisory prompt text (#942). The deterministic control on spend is the budget envelope in `FSD/BUDGET_ENVELOPE.md`, enforced in `_execute_send_money` before `provider.send(...)`
 5. **No Core Engine Changes** - The wallet lives entirely in the adapter layer
 
 ### 1.2 Why This Matters

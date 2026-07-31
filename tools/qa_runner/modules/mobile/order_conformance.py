@@ -35,6 +35,14 @@ _EVENT_PATTERNS: List[Tuple[str, str, re.Pattern]] = [
     ("E8", "announced", re.compile(r"\[ORDER\] announced to federation")),
     ("E8x", "announce_failed", re.compile(r"\[ORDER\] announce FAILED")),
     ("E8s", "announce_skipped", re.compile(r"\[ORDER\] announce SKIPPED")),
+    # E8c — the replication grant. Absent from this table until 2026-07-31, so a
+    # run that never authored consent verified CONFORMANT while its traces were
+    # guaranteed to strand at (cohort_scope=self, tier=local): the promoter only
+    # lifts rows whose dimension a live grant's prefixes cover. An unobserved
+    # step cannot be checked, so the saga silently certified the broken run.
+    ("E8c", "federation_consent", re.compile(r"\[ORDER\] federation_consent authored")),
+    ("E8cx", "federation_consent_failed", re.compile(r"\[ORDER\] federation_consent FAILED")),
+    ("E8cs", "federation_consent_skipped", re.compile(r"\[ORDER\] federation_consent SKIPPED")),
     ("E9", "claim_settled", re.compile(r"\[ORDER\] claim_settled")),
     ("E9t", "settle_await_timeout", re.compile(r"\[ORDER\] settle_await TIMEOUT")),
     ("E10", "complete_begin", re.compile(r"\[ORDER\] complete_setup begin")),
@@ -57,6 +65,8 @@ _EDGES: List[Tuple[str, str]] = [
     ("E6", "E9"),   # settle covers owner login
     ("E7", "E9"),   # settle covers age record
     ("E8", "E9"),   # settle covers announce
+    ("E5", "E8c"),  # consent grant is owner-gated, post-claim
+    ("E8c", "E9"),  # settle covers the replication grant
     ("E5", "E9"),   # settle only after claim outcome
     ("E9", "E10"),  # THE GATE: no config-write/restart until settled
     ("E10", "E11"),

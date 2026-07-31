@@ -1356,6 +1356,26 @@ class SetupViewModel(
                                     "authored (retry via Manage Consent)",
                             )
                         }
+                    } else {
+                        // A SILENT skip here is indistinguishable from success and
+                        // costs a whole debugging cycle: the node seals traces, keeps
+                        // them at (cohort_scope=self, tier=local) forever because no
+                        // grant covers `trace:`, converges to its consent peer, and
+                        // reports healthy. A live run skipped this step and the saga
+                        // still verified CONFORMANT, because the step was not in the
+                        // edge list — so nothing anywhere said the word "skipped".
+                        //
+                        // Name which conjunct failed. Emitted under the same [ORDER]
+                        // key as the success path so the saga sees the step either way.
+                        PlatformLogger.w(
+                            TAG,
+                            "[ORDER] federation_consent SKIPPED (session=$sessionKind): " +
+                                "owner_login=$ownerLoginOk trace_opt_in=${_state.value.accordMetricsConsent} " +
+                                "announce_on=${_state.value.announceOwnership} — " +
+                                "traces will seal locally and NEVER replicate to the canonical " +
+                                "(no grant covers trace:; rows strand at self/local). " +
+                                "Fix: enable Data & Privacy → Send traces, which authors the grant.",
+                        )
                     }
 
                     // Persist the OPTIONAL friendly device name (e.g. "Mac mini")

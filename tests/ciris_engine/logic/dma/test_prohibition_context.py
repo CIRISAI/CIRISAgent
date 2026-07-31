@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import pathlib
 
+import pytest
+
 from ciris_engine.logic.buses.prohibitions import (
     CATEGORY_GUIDANCE,
     PROHIBITED_CAPABILITIES,
@@ -152,3 +154,168 @@ def test_prohibition_block_fully_localized_every_language() -> None:
             if script and not re.search(f"[{script}]", block):
                 failures.append(f"{lang}: no {lang}-script characters in block (English placeholder?)")
     assert not failures, "prohibition localization incomplete:\n  " + "\n  ".join(failures)
+
+
+# --- #910 test plan, part 1 (behavioral half): the block is ON THE WIRE -------
+#
+# test_round1_dmas_inject_but_aspdma_does_not (above) proves the call-graph at
+# the source level; this proves the BEHAVIOR — the round-1 helper actually
+# appends the generated prohibition block as a system message in the message
+# list the DMAs ship to the LLM.
+
+
+def test_round1_helper_appends_prohibition_block_to_wire_messages() -> None:
+    from ciris_engine.logic.buses.prohibitions import PROHIBITION_HEADER_EN, PROHIBITION_TIER_NEVER_EN
+    from ciris_engine.logic.formatters.prompt_blocks import append_round1_accord_blocks
+
+    messages: list[dict[str, str]] = []
+    append_round1_accord_blocks(messages, language="en", accord_mode="default")
+
+    assert messages, "round-1 helper appended nothing"
+    assert all(m["role"] == "system" for m in messages)
+    prohibition_msgs = [m for m in messages if PROHIBITION_HEADER_EN in m["content"]]
+    assert len(prohibition_msgs) == 1, "exactly one system message must carry the prohibition block"
+    block = prohibition_msgs[0]["content"]
+    assert PROHIBITION_TIER_NEVER_EN in block
+    # The wire block is the same generated-at-assembly-time block (single source).
+    assert get_prohibition_guidance("en") in block
+
+
+# --- #910 test plan, part 3: flow-forward into ASPDMA context ----------------
+#
+# A prohibition-trending thought gets its category NAMED in a round-1 DMA
+# output field (PDMA rationale; CSDMA/DSDMA flags + reasoning), and those exact
+# fields are plumbed into ASPDMA's context by the context builder — so the
+# category reaches ASPDMA in reasoning content WITHOUT the block being restated
+# there. Mock-LLM level per the issue: we assert on the plumbing (what ASPDMA's
+# LLM call actually receives), not on live model output.
+
+
+@pytest.mark.asyncio
+async def test_prohibition_category_flows_forward_into_aspdma_context() -> None:
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, Mock
+
+    from ciris_engine.logic.buses.prohibitions import PROHIBITION_HEADER_EN, PROHIBITION_TIER_NEVER_EN
+    from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
+    from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
+    from ciris_engine.schemas.dma.results import ASPDMALLMResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+    from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus, ThoughtType
+    from ciris_engine.schemas.runtime.models import Thought, ThoughtContext
+    from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+    registry = Mock()
+    registry.get_services_by_type.return_value = []
+
+    thought = Thought(
+        thought_id="prohib-thought-1",
+        source_task_id="prohib-task-1",
+        content="User asks which neighborhoods to exclude from loan offers",
+        status=ThoughtStatus.PROCESSING,
+        thought_type=ThoughtType.STANDARD,
+        thought_depth=1,
+        created_at=datetime.now(timezone.utc).isoformat(),
+        updated_at=datetime.now(timezone.utc).isoformat(),
+        context=ThoughtContext(task_id="prohib-task-1", round_number=1, depth=1, correlation_id="prohib-corr"),
+    )
+    snapshot = SystemSnapshot(
+        agent_identity={"agent_id": "test_agent", "description": "t", "role": "t"},
+        channel_id="test_channel",
+        agent_version="1.0.0",
+        system_counts={"total_tasks": 1, "total_thoughts": 1},
+    )
+    # Round-1 outputs name the category, as the injected block instructs.
+    inputs = EnhancedDMAInputs(
+        original_thought=thought,
+        processing_context={"system_snapshot": snapshot.model_dump()},
+        ethical_pdma_result=EthicalDMAResult(
+            action=HandlerActionType.DEFER,
+            rationale=(
+                "This request trends toward the prohibited capability category "
+                "DISCRIMINATION (redlining) — naming it as out-of-scope so later "
+                "stages can weigh and defer it."
+            ),
+            weight_alignment_score=0.4,
+            ethical_alignment_score=0.1,
+        ),
+        csdma_result=CSDMAResult(
+            plausibility_score=0.8,
+            flags=["prohibition_trend:DISCRIMINATION"],
+            reasoning="Request pattern-matches redlining; flagged for downstream weighing.",
+        ),
+        dsdma_result=DSDMAResult(
+            domain="general",
+            domain_alignment=0.2,
+            flags=["prohibition_trend:DISCRIMINATION"],
+            reasoning="Domain analysis concurs: DISCRIMINATION-trending.",
+        ),
+        permitted_actions=[HandlerActionType.SPEAK, HandlerActionType.DEFER, HandlerActionType.PONDER],
+    )
+
+    evaluator = ActionSelectionPDMAEvaluator(service_registry=registry)
+    evaluator.call_llm_structured = AsyncMock(
+        return_value=(
+            ASPDMALLMResult(
+                selected_action=HandlerActionType.DEFER,
+                reasoning="Prohibited-capability trend named upstream; deferring.",
+                defer_reason="DISCRIMINATION trend",
+            ),
+            None,
+        )
+    )
+
+    await evaluator.evaluate(inputs)
+
+    evaluator.call_llm_structured.assert_called_once()
+    messages = evaluator.call_llm_structured.call_args.kwargs["messages"]
+    joined = "\n".join(m["content"] for m in messages)
+
+    # The category named in round-1 outputs reaches ASPDMA's context via the
+    # DMA-summary plumbing (rationale + flags + reasoning are all carried).
+    assert "DISCRIMINATION" in joined
+    assert "redlining" in joined
+    assert "prohibition_trend:DISCRIMINATION" in joined
+    # ...and it arrives as flowed-forward reasoning content, NOT as a restated
+    # prohibition block (round-1 scope only, by design).
+    assert PROHIBITION_HEADER_EN not in joined
+    assert PROHIBITION_TIER_NEVER_EN not in joined
+
+
+# --- #910 test plan, part 4: the WiseBus gate is unchanged -------------------
+#
+# The structural gate is the enforcement point and must be indifferent to the
+# reasoning-context injection: whether the prompt block renders fully, or not at
+# all, _validate_capability behaves identically. (Full gate coverage lives in
+# tests/logic/buses/test_wise_bus_medical_blocking.py and
+# tests/test_prohibition_system.py; this pins the injection-independence seam.)
+
+
+def test_wisebus_gate_unchanged_by_injection_state(monkeypatch) -> None:
+    from unittest.mock import MagicMock
+
+    from ciris_engine.logic.buses.wise_bus import WiseBus
+
+    registry = MagicMock()
+    registry.get_services_by_type.return_value = []
+    bus = WiseBus(registry, MagicMock())
+
+    def gate_behavior() -> tuple[bool, bool, bool]:
+        try:
+            bus._validate_capability("capability:redlining")
+            never_raises = False
+        except ValueError:
+            never_raises = True
+        module_defers = bus._validate_capability("domain:medical") is not None
+        safe_allowed = bus._validate_capability("domain:weather") is None
+        return (never_raises, module_defers, safe_allowed)
+
+    baseline = gate_behavior()
+    assert baseline == (True, True, True)
+
+    # Simulate a language with NOTHING localized: the reasoning block vanishes...
+    import ciris_engine.logic.utils.localization as L
+
+    monkeypatch.setattr(L, "_get_language_data", lambda lang: {})
+    assert get_prohibition_guidance("xx") == ""
+    # ...and the gate does not move an inch.
+    assert gate_behavior() == baseline

@@ -77,6 +77,8 @@ Under the **CEG-native agent** (CIRISAgent#840, `FSD/CEG_NATIVE_AGENT.md`), the 
 - **Startup attestation budget**:
     - The agent will not transition out of WAKEUP until attestation completes or a 15-second budget expires.
 
+**Substrate-observable facet: L2 hardware-rooted (inherited via CIRISServer).** The L2 rung — the hardware-rooted key facet — is now substrate-observable through the wheels shipping inside the agent's deployment, and independently verified against the real published wheels by CIRISConformance [`test_070_hsm_transport_identity.py`](https://github.com/CIRISAI/CIRISConformance/blob/main/tests/test_070_hsm_transport_identity.py) (a `hardware_hsm_only` cohabitation init with a hardware-rooted signer yields a 32-byte transport identity; runs for real on TPM-equipped hosts) and [`test_080_mobile_target.py`](https://github.com/CIRISAI/CIRISConformance/blob/main/tests/test_080_mobile_target.py) (the engine reports a recognized keystore kind — the storage-kind taxonomy — under Android/Chaquopy bundling). The rest of the ladder is unchanged: L1/L3/L4/L5 remain consumer-side composition, exactly as §8.1.9 Policy I above already states — the substrate supplies the L2 data points, the agent composes the picture. The [CIRISConformance coverage map](https://github.com/CIRISAI/CIRISConformance#compliance-coverage-map) marks D18 lane = substrate + agent.
+
 ## How you can tell it's working (observability)
 
 If you want to verify the agent's attestation claim, you can re-run the same checks downstream.

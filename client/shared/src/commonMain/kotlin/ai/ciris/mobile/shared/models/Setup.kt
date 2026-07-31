@@ -94,6 +94,115 @@ data class CommunicationAdapter(
     val enabled_by_default: Boolean = false
 )
 
+// ========== GET /v1/setup/tool-disclosure ==========
+//
+// Exhaustive, GENERATED disclosure of what each setup choice actually grants the
+// agent. Wide tool access is intended -- this surface restricts nothing and
+// defaults nothing off. It exists so the operator accepting the (enabled-by-
+// default) optional features is told what they are accepting, including the
+// tools no choice controls.
+//
+// Every field originates in a live tool service's get_all_tool_info() on the
+// Python side. Nothing here is a transcription, so it cannot drift the way
+// ciris_templates/echo.yaml's `moderation_tools` did.
+
+/**
+ * A consequential capability a tool grants, derived server-side from the tool's
+ * declared parameter shape (not from a name table).
+ *
+ * Unknown values from a newer server are preserved verbatim so the UI degrades
+ * to showing the raw flag rather than silently dropping a disclosure.
+ */
+object ToolCapabilityFlags {
+    const val NETWORK_FETCH = "network_fetch"
+    const val CUSTOM_HEADERS = "custom_headers"
+    const val REQUEST_BODY = "request_body"
+    const val SHELL_EXECUTION = "shell_execution"
+    const val FILE_READ = "file_read"
+    const val FILE_WRITE = "file_write"
+    const val SECRET_PLAINTEXT = "secret_plaintext"
+    const val AFFECTS_OTHER_PEOPLE = "affects_other_people"
+    const val REQUIRES_APPROVAL = "requires_approval"
+
+    /** Localization key carrying the plain-language sentence for [flag]. */
+    fun localizationKey(flag: String): String = "mobile.tool_cap_$flag"
+
+    /**
+     * Flags whose consequences the operator is least likely to expect, ordered
+     * by how surprising they are. Used to decide what a collapsed summary says.
+     */
+    val NOTABLE: List<String> = listOf(
+        SHELL_EXECUTION,
+        SECRET_PLAINTEXT,
+        NETWORK_FETCH,
+        CUSTOM_HEADERS,
+        FILE_WRITE,
+        AFFECTS_OTHER_PEOPLE,
+        REQUEST_BODY,
+        FILE_READ,
+        REQUIRES_APPROVAL
+    )
+}
+
+/** Where a disclosed tool list was read from. Mirrors ToolDisclosureSource. */
+object ToolDisclosureSources {
+    const val RUNTIME = "runtime"
+    const val PROSPECTIVE = "prospective"
+    const val UNAVAILABLE = "unavailable"
+}
+
+/** One tool, as disclosed at the consent point. */
+@Serializable
+data class ToolDisclosure(
+    val name: String,
+    val description: String = "",
+    val category: String = "general",
+    val model_authored_parameters: List<String> = emptyList(),
+    val capability_flags: List<String> = emptyList()
+)
+
+/** Every tool one wizard choice grants (or that no choice controls). */
+@Serializable
+data class AdapterToolDisclosure(
+    val adapter_id: String,
+    val adapter_name: String = "",
+    val always_on: Boolean = false,
+    val source: String = ToolDisclosureSources.PROSPECTIVE,
+    val source_note: String? = null,
+    val tools: List<ToolDisclosure> = emptyList()
+)
+
+/** Response from GET /v1/setup/tool-disclosure. */
+@Serializable
+data class ToolDisclosureReport(
+    val adapters: List<AdapterToolDisclosure> = emptyList(),
+    val always_on: List<AdapterToolDisclosure> = emptyList(),
+    val total_tools: Int = 0
+)
+
+/**
+ * Find the disclosure for [adapterId], or null if the server sent none.
+ *
+ * A null result means "not disclosed", never "grants nothing" -- callers MUST
+ * render the difference, because showing an empty tool list for an adapter whose
+ * grants are unknown is precisely the false assurance this feature exists to
+ * remove.
+ */
+fun ToolDisclosureReport.forAdapter(adapterId: String): AdapterToolDisclosure? =
+    adapters.firstOrNull { it.adapter_id == adapterId }
+
+/**
+ * Distinct capability flags across [tools], ordered by [ToolCapabilityFlags.NOTABLE]
+ * so a collapsed summary leads with the least expected consequence. Flags the
+ * client does not know about sort last and are kept, not dropped.
+ */
+fun summarizeCapabilityFlags(tools: List<ToolDisclosure>): List<String> {
+    val present = tools.flatMap { it.capability_flags }.toSet()
+    val known = ToolCapabilityFlags.NOTABLE.filter { it in present }
+    val unknown = present.filter { it !in ToolCapabilityFlags.NOTABLE }.sorted()
+    return known + unknown
+}
+
 // ========== POST /v1/setup/validate-llm ==========
 
 /**

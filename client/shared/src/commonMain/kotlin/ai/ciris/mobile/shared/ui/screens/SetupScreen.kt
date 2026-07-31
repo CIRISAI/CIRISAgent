@@ -8,6 +8,10 @@ import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.safety.AgeBand
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
+import ai.ciris.mobile.shared.models.forAdapter
+import ai.ciris.mobile.shared.ui.components.setup.AdapterToolDisclosure
+import ai.ciris.mobile.shared.ui.components.setup.ALWAYS_ON_DISCLOSURE_ID
+import ai.ciris.mobile.shared.ui.components.setup.AlwaysOnToolDisclosure
 import ai.ciris.mobile.shared.platform.DirectoryPickerDialog
 import ai.ciris.mobile.shared.platform.LocalInferenceCapability
 import ai.ciris.mobile.shared.platform.PlatformLogger
@@ -318,6 +322,13 @@ fun SetupScreen(
             if (state.availableTemplates.isEmpty()) {
                 viewModel.loadAvailableTemplates {
                     apiClient.getSetupTemplates()
+                }
+            }
+            // Load the generated tool disclosure (#941) so the operator can see
+            // exactly what each of these enabled-by-default choices grants.
+            if (state.toolDisclosure == null && !state.toolDisclosureLoading) {
+                viewModel.loadToolDisclosure {
+                    apiClient.getSetupToolDisclosure()
                 }
             }
         }
@@ -2237,6 +2248,15 @@ private fun OptionalFeaturesStep(
                 onToggle = {},
                 onConfigure = null
             )
+            // The api adapter is on regardless, so disclose what it grants even
+            // when the adapter list itself could not be fetched.
+            AdapterToolDisclosure(
+                adapterId = "api",
+                disclosure = state.toolDisclosure?.forAdapter("api"),
+                expanded = "api" in state.expandedToolDisclosureIds,
+                onToggle = { viewModel.toggleToolDisclosureExpanded("api") },
+                loading = state.toolDisclosureLoading
+            )
         } else {
             state.availableAdapters.forEach { adapter ->
                 val isEnabled = state.enabledAdapterIds.contains(adapter.id)
@@ -2267,9 +2287,29 @@ private fun OptionalFeaturesStep(
                     }
                 )
 
+                // #941: what this choice actually grants the agent. Disclosure
+                // only -- expanding it changes nothing, and the toggle above
+                // keeps whatever default it had.
+                AdapterToolDisclosure(
+                    adapterId = adapter.id,
+                    disclosure = state.toolDisclosure?.forAdapter(adapter.id),
+                    expanded = adapter.id in state.expandedToolDisclosureIds,
+                    onToggle = { viewModel.toggleToolDisclosureExpanded(adapter.id) },
+                    loading = state.toolDisclosureLoading
+                )
+
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+
+        // #941: tools registered regardless of every choice above. They appear in
+        // no other list in this wizard and cannot be declined, so say so.
+        Spacer(modifier = Modifier.height(12.dp))
+        AlwaysOnToolDisclosure(
+            groups = state.toolDisclosure?.always_on ?: emptyList(),
+            expanded = ALWAYS_ON_DISCLOSURE_ID in state.expandedToolDisclosureIds,
+            onToggle = { viewModel.toggleToolDisclosureExpanded(ALWAYS_ON_DISCLOSURE_ID) }
+        )
 
         // Section 3: Advanced Settings (collapsible)
         Spacer(modifier = Modifier.height(16.dp))

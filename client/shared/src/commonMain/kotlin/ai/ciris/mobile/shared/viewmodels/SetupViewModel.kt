@@ -1492,6 +1492,70 @@ class SetupViewModel(
         }
     }
 
+    // ========== Tool Disclosure (#941) ==========
+    //
+    // Wide tool access is intended. None of this restricts, gates, or defaults
+    // anything off -- it exists so the operator accepting the enabled-by-default
+    // optional features is told what those choices actually grant, including the
+    // always-on tools that no choice controls.
+
+    /**
+     * Load the generated tool disclosure from the setup API.
+     * Call this when entering the OPTIONAL_FEATURES step.
+     *
+     * A failure leaves [SetupFormState.toolDisclosure] null, which the UI renders
+     * as "could not be listed" -- never as "grants nothing".
+     */
+    suspend fun loadToolDisclosure(
+        fetchFunc: suspend () -> ai.ciris.mobile.shared.models.ToolDisclosureReport
+    ) {
+        _state.value = _state.value.copy(toolDisclosureLoading = true)
+        try {
+            val disclosure = fetchFunc()
+            _state.value = _state.value.copy(
+                toolDisclosure = disclosure,
+                toolDisclosureLoading = false
+            )
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(
+                toolDisclosure = null,
+                toolDisclosureLoading = false
+            )
+        }
+    }
+
+    /**
+     * Expand or collapse one group's tool list. Purely presentational -- expanding
+     * a disclosure never changes which adapters are enabled.
+     */
+    fun toggleToolDisclosureExpanded(groupId: String) {
+        val current = _state.value.expandedToolDisclosureIds
+        _state.value = _state.value.copy(
+            expandedToolDisclosureIds =
+                if (groupId in current) current - groupId else current + groupId
+        )
+    }
+
+    /** Whether [groupId]'s tool list is currently expanded. */
+    fun isToolDisclosureExpanded(groupId: String): Boolean =
+        groupId in _state.value.expandedToolDisclosureIds
+
+    /**
+     * Disclosure for [adapterId], or null when the server listed none.
+     *
+     * Null means "not disclosed", not "grants nothing" -- callers must render
+     * that difference.
+     */
+    fun toolDisclosureFor(adapterId: String): ai.ciris.mobile.shared.models.AdapterToolDisclosure? =
+        _state.value.toolDisclosure?.adapters?.firstOrNull { it.adapter_id == adapterId }
+
+    /**
+     * Tool groups that are registered regardless of every wizard choice and
+     * therefore cannot be declined.
+     */
+    fun alwaysOnToolDisclosures(): List<ai.ciris.mobile.shared.models.AdapterToolDisclosure> =
+        _state.value.toolDisclosure?.always_on ?: emptyList()
+
     /**
      * Toggle an adapter's enabled state.
      * Note: "api" adapter cannot be disabled.

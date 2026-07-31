@@ -313,6 +313,44 @@ class BudgetApprovalSeamTest {
         )
     }
 
+    // ─── Re-grant semantics: the spend ledger survives ─────────────────────
+    //
+    // Mirrors the backend's TestRegrantSemantics. `granted_amount` alone
+    // overstates availability after any spend, and on a money surface that is
+    // the difference between "you have 40" and "you have 15".
+
+    @Test
+    fun remainingAmount_subtractsTheSurvivingSpendLedgerFromANewGrant() {
+        // grant 25 → spend 25 → re-grant 40 ⇒ 15 spendable, NOT 40.
+        assertEquals("15", BudgetApprovalSeam.remainingAmount("40", "25"))
+    }
+
+    @Test
+    fun remainingAmount_clampsAtZeroAndNeverGoesNegative() {
+        // grant 50 → spend 40 → re-grant 10 ⇒ 0. This is the de-facto revoke,
+        // since the API has no explicit revoke verb.
+        assertEquals("0", BudgetApprovalSeam.remainingAmount("10", "40"))
+    }
+
+    @Test
+    fun remainingAmount_equalsTheGrantWhenNothingHasBeenSpent() {
+        assertEquals("25", BudgetApprovalSeam.remainingAmount("25.00", null))
+        assertEquals("25", BudgetApprovalSeam.remainingAmount("25.00", ""))
+        assertEquals("25", BudgetApprovalSeam.remainingAmount("25.00", "0"))
+    }
+
+    @Test
+    fun remainingAmount_keepsSubUnitPrecision() {
+        assertEquals("0.000001", BudgetApprovalSeam.remainingAmount("25.000001", "25"))
+    }
+
+    @Test
+    fun remainingAmount_returnsNullRatherThanGuessingOnBadInput() {
+        // Callers render nothing rather than a fabricated figure.
+        assertNull(BudgetApprovalSeam.remainingAmount("lots", "25"))
+        assertNull(BudgetApprovalSeam.remainingAmount("25", "some"))
+    }
+
     // ─── GET /v1/tickets/{id}/budget ───────────────────────────────────────
 
     @Test

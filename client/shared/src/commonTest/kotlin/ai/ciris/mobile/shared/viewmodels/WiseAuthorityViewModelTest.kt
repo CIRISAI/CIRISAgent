@@ -8,6 +8,7 @@ import ai.ciris.mobile.shared.approvals.ApprovalKind
 import ai.ciris.mobile.shared.approvals.ApprovalNotificationSink
 import ai.ciris.mobile.shared.approvals.ApprovalNotifier
 import ai.ciris.mobile.shared.approvals.ApprovalsApi
+import ai.ciris.mobile.shared.approvals.BudgetApprovalSeam
 import ai.ciris.mobile.shared.approvals.BudgetCapability
 import ai.ciris.mobile.shared.approvals.BudgetGrantError
 import ai.ciris.mobile.shared.approvals.BudgetGrantOutcome
@@ -177,11 +178,22 @@ class WiseAuthorityViewModelTest {
             id: String,
             requestedAmount: String? = "25.00",
             status: String = "blocked",
+            grantedAmount: String? = null,
+            spentTotal: String? = null,
         ): TicketData {
             val budget = requestedAmount?.let {
                 """, "__requested_budget__": {"requested_amount": "$it",
                      "requested_currency": "USDC", "purpose": "Opt-out fee",
                      "justification": "registry charges"}"""
+            }.orEmpty()
+            val grant = grantedAmount?.let {
+                """, "__granted_budget__": {"granted_amount": "$it",
+                     "granted_currency": "USDC", "purpose": "Opt-out fee",
+                     "expires_at": "2026-08-01T00:00:00Z", "signed": true}"""
+            }.orEmpty()
+            val spend = spentTotal?.let {
+                """, "__budget_spent__": {"total_spent": "$it",
+                     "currency": "USDC", "records": [{}]}"""
             }.orEmpty()
             return TicketData(
                 ticketId = id,
@@ -199,7 +211,7 @@ class WiseAuthorityViewModelTest {
                 automated = false,
                 metadata = meta(
                     """{"__proposal__": {"proposed_by": "agent",
-                        "goal_description": "Pay the opt-out fee and file the deletion"}$budget}"""
+                        "goal_description": "Pay the opt-out fee and file the deletion"}$budget$grant$spend}"""
                 ),
             )
         }
@@ -454,6 +466,77 @@ class WiseAuthorityViewModelTest {
         assertTrue(vm.error.value!!.contains("AUTHORITY", ignoreCase = true))
         // Capability is unchanged — the endpoint exists, the caller lacks the role.
         assertEquals(BudgetCapability.UNKNOWN, vm.budgetCapability.value)
+    }
+
+    // ─── Re-grant: what the surface must show after a spend ────────────────
+
+    @Test
+    fun afterGrantSpendAndRegrant_theSurfaceShowsRemainingNotGranted() = runTest {
+        // The backend's TestRegrantSemantics case: grant 25 → spend 25 →
+        // re-grant 40. The ledger survives, so 15 is spendable, not 40.
+        // Rendering granted_amount here would tell an approving human a number
+        // 25 USDC above what the system will actually permit.
+        val api = FakeApprovalsApi(
+            proposals = listOf(
+                proposalTicket("t1", requestedAmount = "50.00", grantedAmount = "40", spentTotal = "25")
+            )
+        )
+        val (vm, _) = viewModel(api)
+
+        vm.refresh()
+        advanceUntilIdle()
+
+        val approval = vm.approvals.value.single()
+        assertEquals("40", approval.grantedBudget?.grantedAmount)
+        assertEquals("25", approval.budgetSpend?.totalSpent)
+
+        // This is the figure the dialog and the list chip render.
+        val remaining = BudgetApprovalSeam.remainingAmount(
+            approval.grantedBudget!!.grantedAmount,
+            approval.budgetSpend?.totalSpent,
+        )
+        assertEquals("15", remaining)
+        assertTrue(remaining != approval.grantedBudget.grantedAmount)
+    }
+
+    @Test
+    fun aRegrantBelowWhatIsAlreadySpentReadsAsZeroRemaining() = runTest {
+        // grant 50 → spend 40 → re-grant 10. The de-facto revoke; there is no
+        // explicit revoke verb on the API.
+        val api = FakeApprovalsApi(
+            proposals = listOf(
+                proposalTicket("t1", requestedAmount = "50.00", grantedAmount = "10", spentTotal = "40")
+            )
+        )
+        val (vm, _) = viewModel(api)
+
+        vm.refresh()
+        advanceUntilIdle()
+
+        val approval = vm.approvals.value.single()
+        assertEquals(
+            "0",
+            BudgetApprovalSeam.remainingAmount(
+                approval.grantedBudget!!.grantedAmount,
+                approval.budgetSpend?.totalSpent,
+            ),
+        )
+    }
+
+    @Test
+    fun anApprovalWithAnIssuedBudgetNoLongerCountsAsNeedingABudgetDecision() = runTest {
+        val api = FakeApprovalsApi(
+            proposals = listOf(proposalTicket("t1", grantedAmount = "25.00"))
+        )
+        val (vm, _) = viewModel(api)
+
+        vm.refresh()
+        advanceUntilIdle()
+
+        val approval = vm.approvals.value.single()
+        assertFalse(approval.needsBudgetDecision)
+        // …but it still awaits promotion, so it stays on the surface.
+        assertTrue(approval.needsPromotion)
     }
 
     // ─── Trust headroom ────────────────────────────────────────────────────

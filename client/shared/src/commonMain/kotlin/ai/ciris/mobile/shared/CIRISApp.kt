@@ -2504,11 +2504,12 @@ fun CIRISApp(
                     },
                     approvals = approvals,
                     budgetCapability = budgetCapability,
-                    // Remaining trust envelope for the open approval, fetched on
-                    // open from GET /v1/tickets/{id}/budget. This is the same
-                    // number the spend gate applies; null when no wallet adapter
-                    // is loaded, in which case the row is simply omitted.
-                    envelopeHeadroom = selectedBudgetState?.headroom,
+                    // Grant + spend ledger + remaining trust envelope for the
+                    // open approval, fetched from GET /v1/tickets/{id}/budget.
+                    // The headroom is the same number the spend gate applies;
+                    // null when no wallet adapter is loaded, in which case the
+                    // row is simply omitted.
+                    selectedBudgetState = selectedBudgetState,
                     onApprovalOpened = { approvalId ->
                         wiseAuthorityViewModel.loadBudgetState(approvalId)
                     },

@@ -392,6 +392,34 @@ object BudgetApprovalSeam {
     }
 
     /**
+     * Spend still available against an issued grant: `granted − spent`, clamped
+     * at zero.
+     *
+     * **`granted_amount` alone overstates availability after any spend**, and
+     * rendering it as though it were the remaining budget is simply wrong. A
+     * second grant on a ticket raises the *ceiling*; it does not top the balance
+     * up and it does not reset the ledger:
+     *
+     * ```
+     * grant 25 → spend 25 → grant 40  ⇒  15 remaining   (not 40)
+     * grant 50 → spend 40 → grant 10  ⇒   0 remaining   (clamped, never negative)
+     * ```
+     *
+     * The second case is the de-facto revoke, since the API has no explicit
+     * revoke verb.
+     *
+     * @return the remaining amount, or null when either side is unparseable —
+     *   callers must render nothing rather than guess.
+     */
+    fun remainingAmount(grantedAmount: String, spentTotal: String?): String? {
+        val granted = parseAmount(grantedAmount) ?: return null
+        if (spentTotal.isNullOrBlank()) return formatAmount(granted)
+        val spent = parseAmount(spentTotal) ?: return null
+        val remaining = granted - spent
+        return formatAmount(if (remaining < 0L) 0L else remaining)
+    }
+
+    /**
      * Compare two decimal-as-string amounts.
      * @return negative / zero / positive like [Comparable], or null when either
      *   side is unparseable (callers must not silently treat that as equal).

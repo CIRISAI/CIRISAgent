@@ -3085,5 +3085,11 @@
   "approval_budget_approve": "Approve budget",
   "approval_budget_approve_and_start": "Approve budget & start work",
   "approval_budget_unsupported": "This server does not support budget approval yet — nothing can be issued from here.",
-  "approval_budget_headroom_detail": "{daily} remaining today, {max} per-transaction ceiling"
+  "approval_budget_headroom_detail": "{daily} remaining today, {max} per-transaction ceiling",
+  "approval_budget_remaining": "Still spendable",
+  "approval_budget_remaining_unknown": "Unknown",
+  "approval_budget_granted": "Budget approved",
+  "approval_budget_expires_at": "Expires",
+  "approval_budget_unsigned": "Unsigned — no WA signing key on this deployment",
+  "approval_budget_regrant_note": "A further approval raises the ceiling. It does not refund what has already been spent."
 }

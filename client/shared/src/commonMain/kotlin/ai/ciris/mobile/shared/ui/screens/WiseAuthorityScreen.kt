@@ -5,7 +5,7 @@ import ai.ciris.mobile.shared.api.WAStatusData
 import ai.ciris.mobile.shared.approvals.ApprovalKind
 import ai.ciris.mobile.shared.approvals.BudgetCapability
 import ai.ciris.mobile.shared.approvals.PendingApproval
-import ai.ciris.mobile.shared.approvals.TrustHeadroom
+import ai.ciris.mobile.shared.approvals.TicketBudgetState
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.components.PendingApprovalsCard
 import ai.ciris.mobile.shared.ui.components.ProposalApprovalDialog
@@ -73,10 +73,10 @@ fun WiseAuthorityScreen(
     /** Whether this server exposes budget issuance. Degrades the dialog when not. */
     budgetCapability: BudgetCapability = BudgetCapability.UNKNOWN,
     /**
-     * Remaining trust envelope for the approval currently open, when the server
-     * reports it. Loaded on open via [onApprovalOpened].
+     * Freshly-read budget state for the approval currently open — grant, spend
+     * ledger and remaining trust envelope. Loaded on open via [onApprovalOpened].
      */
-    envelopeHeadroom: TrustHeadroom? = null,
+    selectedBudgetState: TicketBudgetState? = null,
     /** Fired when a proposal dialog opens, so headroom can be fetched for it. */
     onApprovalOpened: (approvalId: String) -> Unit = {},
     /** Fired when the proposal dialog closes, so loaded state can be dropped. */
@@ -265,7 +265,7 @@ fun WiseAuthorityScreen(
             approval = proposal,
             capability = budgetCapability,
             isSubmitting = isResolving,
-            headroom = envelopeHeadroom,
+            budgetState = selectedBudgetState?.takeIf { it.ticketId == proposal.id },
             onDismiss = close,
             onApprove = { amount, expiryHours, reason, promote ->
                 if (amount != null && proposal.requestedBudget != null) {

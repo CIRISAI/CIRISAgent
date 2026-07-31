@@ -184,16 +184,68 @@ a dialog that quietly allows more than the request on screen can surprise its op
 a product decision, not a security boundary, and a modified client bypassing it is not a
 vulnerability.
 
+> **Open decision — flat refusal vs. confirmed over-grant.** The backend author argues the
+> flat refusal should become a confirmation path: a UI-only restriction the server does not
+> share teaches an operator who genuinely needs to over-grant to reach for `curl`, and the
+> grant then happens outside every rendering, log line and confirmation this dialog provides.
+> The alternative — make the agent re-propose — also burns its 3-proposals-per-task runaway
+> budget. If it is built, the friction should name the *real* hazard, a mis-typed extra zero:
+> show the multiple ("granting 250 USDC, **10×** the 25 requested"), because a generic "are
+> you sure?" catches nothing. **Not implemented. This is a user decision, and two agents
+> agreeing is not user approval.** The flat refusal stands until the user rules.
+
 **`granted ≤ trust ceiling` — the real bound, owned by the server.** Checked client-side only
 so the operator learns at the point of decision rather than through a rejected round-trip. It
 is enforced at issuance (422 `NestingViolation`) and again at every spend. Headroom is ignored
 when its currency differs from the requested currency — a USD ceiling says nothing about a
 USDC request, and comparing them would block a legitimate grant on a meaningless mismatch.
 
+> **The headroom currency is an assumption, not a declared fact.** `SpendingLimits.max_transaction`
+> and `daily_limit` are bare `Decimal`s with **no declared currency**, while `SpendingTracker`
+> keys its accumulator *by* currency. `max_transaction=100` therefore means "100 of whatever
+> is being sent" — 100 USDC and 100 KES both pass and are ~1000× apart in value. The server
+> stamps the ticket's own currency onto the headroom, which is the best available answer, but
+> **a multi-currency deployment does not have one meaningful ceiling.** Filed backend-side
+> (the fix adds a currency, or a per-currency map, to `SpendingLimits` — operator-visible
+> config, belongs with #939's wallet work). Consequence for this client: display the headroom,
+> but **build nothing that reasons across currencies on top of it.** The currency guard above
+> cannot currently fire for that reason; it is retained because it is cheap and fails safe.
+
 Amounts are compared as **fixed-point integers at 8 decimal places**, never as `Double` —
 money in a binary float is how you approve 25.000000000000004. Anything that is not a plain
 non-negative decimal (signs, exponents, thousands separators, currency symbols) is rejected
 rather than coerced.
+
+### Re-granting, and why `granted_amount` must never be shown alone
+
+A second grant on a ticket raises the **ceiling**. It does not top the balance up, and the
+spend ledger survives it. Verified backend-side and locked by `TestRegrantSemantics`:
+
+```
+grant 25 → spend 25 → grant 40   ⇒  15 remaining   (not 40)
+grant 50 → spend 40 → grant 10   ⇒   0 remaining   (clamped, never negative)
+```
+
+So **`granted_amount` on its own overstates availability after any spend** — by exactly the
+spent amount, on a money surface, for precisely the tickets that have already been partly
+spent. The UI therefore renders **remaining** (`granted − spent`, clamped at zero) as the
+prominent figure, with granted and spent demoted to context beneath it. The list chip follows
+the same rule. `BudgetApprovalSeam.remainingAmount` is the only place that arithmetic
+happens, and it returns null on unparseable input so the UI renders nothing rather than a
+fabricated number.
+
+This is the same reasoning as the headroom guard: a figure that can drift from what the
+system will actually permit is worse than no figure.
+
+Because a re-grant is a ceiling raise, **re-approval on an existing ticket already works** —
+an operator who under-granted can raise it without the agent re-proposing.
+
+**There is no explicit revoke endpoint.** Revocation today is a *side effect* of granting
+below the amount already spent, which clamps remaining to zero. That is operator folklore
+rather than an API: it is not named as a revoke anywhere, it cannot be distinguished in the
+record from an ordinary small grant, and nothing in the client surfaces it as a revoke
+affordance. Whoever needs real revocation should expect to add a verb, not document this
+trick.
 
 ### Grant ≠ start
 
@@ -274,7 +326,12 @@ so deferrals still render.
   performs no limit check on any fiat rail. This surface issues a budget; whether that budget
   is *consulted* before `provider.send` is the backend's enforcement point, not the client's.
 - **It does not surface budget burn-down in detail.** `metadata.__budget_spent__` is parsed
-  (total + record count) and shown as one line. The per-record ledger is not rendered.
+  (total + record count) and folded into the remaining figure plus one "spent" line. The
+  per-record ledger is not rendered.
+- **It does not offer a revoke affordance.** There is no revoke endpoint; granting below the
+  spent amount clamps remaining to zero as a side effect, and this client neither surfaces
+  nor names that as revocation.
+- **It cannot grant above the requested amount.** See the open decision above.
 - **It does not localize into all 29 languages.** English strings are added to the six
   `en.json` copies; other locales fall back to English via the existing localizer, which
   returns the key when a translation is absent.
@@ -305,17 +362,17 @@ so deferrals still render.
 `card_pending_approvals`, `pill_approval_count`, `item_approval_{id8}`, `chip_budget_{id8}`,
 `nav_badge_wise_authority`, `nav_badge_group_{groupId}`, `dialog_budget_approval`,
 `txt_budget_requested_amount`, `txt_budget_validation_error`, `txt_budget_unsupported`,
-`row_budget_headroom`, `input_budget_amount`, `input_budget_expiry`, `input_budget_reason`,
-`btn_budget_approve`, `btn_budget_approve_start`, `btn_budget_reject`, `btn_budget_defer`,
-`btn_budget_cancel`.
+`row_budget_headroom`, `row_budget_issued`, `txt_budget_remaining`, `txt_budget_unsigned`,
+`input_budget_amount`, `input_budget_expiry`, `input_budget_reason`, `btn_budget_approve`,
+`btn_budget_approve_start`, `btn_budget_reject`, `btn_budget_defer`, `btn_budget_cancel`.
 
 ## Tests
 
-`client/shared/src/commonTest/.../approvals/BudgetApprovalSeamTest.kt` (33),
+`client/shared/src/commonTest/.../approvals/BudgetApprovalSeamTest.kt` (38),
 `.../approvals/ApprovalNotifierTest.kt` (15),
-`.../viewmodels/WiseAuthorityViewModelTest.kt` (23).
+`.../viewmodels/WiseAuthorityViewModelTest.kt` (26).
 
 ```
 cd client && ./gradlew :shared:compileCommonMainKotlinMetadata   # commonMain type-checks for all targets
-cd client && ./gradlew :shared:desktopTest                       # 293 tests, 0 failures
+cd client && ./gradlew :shared:desktopTest                       # 301 tests, 0 failures
 ```

@@ -4,7 +4,7 @@ import ai.ciris.mobile.shared.approvals.ApprovalKind
 import ai.ciris.mobile.shared.approvals.BudgetApprovalSeam
 import ai.ciris.mobile.shared.approvals.BudgetCapability
 import ai.ciris.mobile.shared.approvals.PendingApproval
-import ai.ciris.mobile.shared.approvals.TrustHeadroom
+import ai.ciris.mobile.shared.approvals.TicketBudgetState
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
@@ -161,11 +161,24 @@ private fun ApprovalRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (approval.needsBudgetDecision) {
+                // The chip shows what is at stake. For an un-granted request
+                // that is the amount asked for; once a budget exists it is what
+                // is actually left, never the granted ceiling — after a spend
+                // those differ, and the larger of the two is the wrong one.
+                val chip = when {
+                    approval.grantedBudget != null -> approval.grantedBudget.let { g ->
+                        BudgetApprovalSeam.remainingAmount(g.grantedAmount, approval.budgetSpend?.totalSpent)
+                            ?.let { it to g.grantedCurrency }
+                    }
+                    approval.requestedBudget != null ->
+                        approval.requestedBudget.requestedAmount to approval.requestedBudget.requestedCurrency
+                    else -> null
+                }
+                chip?.let { (amount, currency) ->
                     Spacer(Modifier.width(8.dp))
                     BudgetChip(
-                        amount = approval.requestedBudget!!.requestedAmount,
-                        currency = approval.requestedBudget.requestedCurrency,
+                        amount = amount,
+                        currency = currency,
                         tag = "chip_budget_$shortId",
                     )
                 }
@@ -268,16 +281,22 @@ fun ProposalApprovalDialog(
     capability: BudgetCapability,
     isSubmitting: Boolean,
     /**
-     * Remaining trust envelope, when the server reports it. Null when no wallet
-     * adapter is loaded — the row is then omitted rather than guessed at.
+     * Freshly-read budget state for this ticket, when available. Preferred over
+     * the copy carried on [approval] (which came from the list fetch) because
+     * it is the only source of trust headroom and is current as of dialog open.
+     * Null is normal — the dialog then renders from list data alone.
      */
-    headroom: TrustHeadroom?,
+    budgetState: TicketBudgetState?,
     onDismiss: () -> Unit,
     onApprove: (amount: String?, expiryHours: Int, reason: String, promote: Boolean) -> Unit,
     onReject: (reason: String) -> Unit,
     onDefer: (reason: String) -> Unit,
 ) {
     val requested = approval.requestedBudget
+    // Prefer the freshly-read state; fall back to what the list already carried.
+    val headroom = budgetState?.headroom
+    val granted = budgetState?.granted ?: approval.grantedBudget
+    val spent = budgetState?.spent ?: approval.budgetSpend
 
     var amount by remember(approval.id) { mutableStateOf(requested?.requestedAmount.orEmpty()) }
     var expiryText by remember(approval.id) {
@@ -375,12 +394,74 @@ fun ProposalApprovalDialog(
                                 }
                             }
                         }
-                        approval.budgetSpend?.let {
-                            Spacer(Modifier.height(4.dp))
-                            LabelledLine(
-                                localizedString("approval_budget_spent"),
-                                "${it.totalSpent} ${it.currency}",
+                    }
+                }
+
+                // ─── An already-issued budget, and what is left of it ───────
+                //
+                // granted_amount ALONE OVERSTATES AVAILABILITY after any spend.
+                // A re-grant raises the ceiling; the spend ledger survives it.
+                // Grant 25 → spend 25 → re-grant 40 leaves 15 spendable, not 40.
+                // So `remaining` is the prominent figure and `granted` is
+                // demoted to context.
+                granted?.let { g ->
+                    val remaining = BudgetApprovalSeam.remainingAmount(
+                        g.grantedAmount,
+                        spent?.totalSpent,
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth().testable("row_budget_issued"),
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(
+                                text = localizedString("approval_budget_remaining"),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
                             )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = remaining?.let { "$it ${g.grantedCurrency}" }
+                                    ?: localizedString("approval_budget_remaining_unknown"),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = SemanticColors.Default.info,
+                                modifier = Modifier.testable("txt_budget_remaining"),
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            LabelledLine(
+                                localizedString("approval_budget_granted"),
+                                "${g.grantedAmount} ${g.grantedCurrency}",
+                            )
+                            spent?.let {
+                                Spacer(Modifier.height(4.dp))
+                                LabelledLine(
+                                    localizedString("approval_budget_spent"),
+                                    "${it.totalSpent} ${it.currency}",
+                                )
+                            }
+                            g.expiresAt?.takeIf { it.isNotBlank() }?.let {
+                                Spacer(Modifier.height(4.dp))
+                                LabelledLine(localizedString("approval_budget_expires_at"), it)
+                            }
+                            if (!g.signed) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = localizedString("approval_budget_unsigned"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = SemanticColors.Default.warning,
+                                    modifier = Modifier.testable("txt_budget_unsigned"),
+                                )
+                            }
+                            if (requested != null) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = localizedString("approval_budget_regrant_note"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }

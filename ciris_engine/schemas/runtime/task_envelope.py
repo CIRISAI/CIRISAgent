@@ -156,6 +156,13 @@ class EnvelopeIssuerKind(str, Enum):
     NODE_OWNER = "node_owner"
     """Issued explicitly by the node owner (boot provisioning, operator action)."""
 
+    SYSTEM_COMPONENT = "system_component"
+    """Issued to a named, code-declared component for one unit of non-model work
+    — a DSAR erasure request, an operator connector setup. Bound to that unit's
+    id rather than to a reasoning task, and granting exactly the tools the
+    component's code actually calls. These paths would otherwise be denied on
+    day one by a fail-closed gate, which would take GDPR erasure with them."""
+
 
 class TargetAuthKind(str, Enum):
     """How a credential is presented to its target."""
@@ -354,6 +361,15 @@ class EnvelopeIssuer(BaseModel):
         return self
 
 
+_NON_TASK_ISSUERS: FrozenSet[EnvelopeIssuerKind] = frozenset({EnvelopeIssuerKind.SYSTEM_COMPONENT})
+"""Issuer kinds whose envelopes bind to a non-reasoning unit of work.
+
+Kept as a set so the anti-laundering check in :class:`ToolInvocationSubject`
+stays one membership test: a component subject may only carry an envelope
+issued by one of these, and a task subject may never carry one of these.
+"""
+
+
 class EnvelopeWideningError(ValueError):
     """Raised when an attenuation request would grant more than it holds."""
 
@@ -369,7 +385,15 @@ class TaskEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, defer_build=True)
 
     envelope_id: str = Field(..., description="Unique envelope identifier")
-    task_id: str = Field(..., description="The task this envelope is bound to. Its lifetime is the task's.")
+    task_id: str = Field(
+        ...,
+        description=(
+            "The unit of work this envelope is bound to, and whose lifetime it shares. "
+            "A reasoning task id for DEPLOYMENT_RESOLVED/WA/owner envelopes; the "
+            "component's own work-unit id (a DSAR request id, an operator action id) "
+            "for SYSTEM_COMPONENT envelopes."
+        ),
+    )
     issued_at: str = Field(..., description="ISO8601 issuance timestamp")
     issuer: EnvelopeIssuer = Field(..., description="Who minted this envelope")
     deployment: DeploymentScope = Field(..., description="Deployment coordinates the grant resolved from")
@@ -547,12 +571,14 @@ class ToolInvocationSubject(BaseModel):
     on it. Every field is set by CIRIS code at the call site — none of it is
     model-authored.
 
-    The validators make two shapes unrepresentable:
+    The validators make three shapes unrepresentable:
 
     * a task-bound subject without task **and** thought identity — the exact
       blindness #938 is about;
-    * a non-task-bound subject carrying a task envelope, i.e. the reasoning
-      path laundering itself as a system caller.
+    * a task-bound subject carrying a ``SYSTEM_COMPONENT`` envelope, i.e. the
+      reasoning path borrowing a governance component's grant;
+    * a component subject carrying a *task's* envelope, i.e. the reasoning path
+      laundering itself as a system caller.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, defer_build=True)
@@ -585,15 +611,24 @@ class ToolInvocationSubject(BaseModel):
                 raise ValueError(f"a {self.origin.value} tool invocation must carry both task_id and thought_id")
             if self.component is not None:
                 raise ValueError(f"a {self.origin.value} tool invocation must not name a component")
+            if self.envelope is not None:
+                if self.envelope.issuer.kind in _NON_TASK_ISSUERS:
+                    raise ValueError(
+                        f"a {self.origin.value} tool invocation must not carry a "
+                        f"{self.envelope.issuer.kind.value} envelope — that grant belongs to a component, not a task"
+                    )
+                if self.envelope.task_id != self.task_id:
+                    raise ValueError("envelope.task_id does not match the subject's task_id")
         else:
             if self.task_id or self.thought_id:
                 raise ValueError(f"{self.origin.value} invocations are not task-bound; task/thought id must be absent")
-            if self.envelope is not None:
-                raise ValueError(f"{self.origin.value} invocations must not carry a task envelope")
             if not (self.component or "").strip():
                 raise ValueError(f"{self.origin.value} invocations must name the initiating component")
-        if self.envelope is not None and self.envelope.task_id != self.task_id:
-            raise ValueError("envelope.task_id does not match the subject's task_id")
+            if self.envelope is not None and self.envelope.issuer.kind not in _NON_TASK_ISSUERS:
+                raise ValueError(
+                    f"{self.origin.value} invocations must not carry a "
+                    f"{self.envelope.issuer.kind.value} envelope — a component cannot borrow a task's grant"
+                )
         return self
 
     @classmethod
@@ -633,12 +668,14 @@ class ToolInvocationSubject(BaseModel):
         component: str,
         handler_name: str = "default",
         agent_occurrence_id: str = "default",
+        envelope: Optional[TaskEnvelope] = None,
     ) -> "ToolInvocationSubject":
         """Subject for a non-task, non-model-authored caller.
 
-        These are *not* covered by task-scoped authorization — they are named
-        explicitly so Phase 2 has to decide about them rather than inheriting a
-        silent exemption.
+        ``envelope`` must be a ``SYSTEM_COMPONENT`` grant when present — the
+        narrow, code-declared tool list that component actually calls. Passing
+        one is strongly preferred over passing ``None``: absence is a denial to
+        Phase 2, and for the DSAR erasure path that denial is a GDPR failure.
         """
         if origin in _TASK_BOUND_ORIGINS:
             raise ValueError("use for_task() for task-bound invocations")
@@ -647,14 +684,15 @@ class ToolInvocationSubject(BaseModel):
             handler_name=handler_name,
             agent_occurrence_id=agent_occurrence_id,
             component=component,
+            envelope=envelope,
         )
 
     def describe(self) -> str:
         """Short, log-safe description of the subject."""
+        env = self.envelope.envelope_id if self.envelope else "no-envelope"
         if self.is_task_bound:
-            env = self.envelope.envelope_id if self.envelope else "no-envelope"
             return f"{self.origin.value} task={self.task_id} thought={self.thought_id} envelope={env}"
-        return f"{self.origin.value} component={self.component}"
+        return f"{self.origin.value} component={self.component} envelope={env}"
 
 
 __all__ = [

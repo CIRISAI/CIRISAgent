@@ -11,6 +11,7 @@ For multi-source DSAR, use this orchestrator.
 """
 
 import logging
+import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, cast
 
@@ -18,6 +19,7 @@ from fastapi import HTTPException, status
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.buses.tool_bus import ToolBus
+from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_system_component_envelope
 from ciris_engine.logic.services.governance.consent import ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
 from ciris_engine.logic.services.governance.consent.exceptions import ConsentNotFoundError
@@ -30,7 +32,7 @@ from ciris_engine.schemas.consent.core import (
     ConsentStream,
     DSARExportFormat,
 )
-from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolInvocationSubject
+from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolCapability, ToolInvocationSubject
 
 from .schemas import (
     DataSourceDeletion,
@@ -43,13 +45,48 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
-# DSAR acts on a statutory obligation, not on a task and not on anything the
-# model authored. It is named explicitly (CIRISAgent#938) so a Phase 2 tool
-# gate has to decide about it rather than inheriting a silent exemption.
-_DSAR_SUBJECT = ToolInvocationSubject.for_component(
-    origin=ToolCallOrigin.GOVERNANCE_SERVICE,
-    component="DSARModificationOrchestrator",
+_DSAR_COMPONENT = "DSARModificationOrchestrator"
+
+# The exact SQL tools this orchestrator's code calls. Written out here rather
+# than inherited from the deployment grant, so DSAR runs *narrower* than a
+# reasoning task, not as an exemption from authorization (CIRISAgent#938).
+_DSAR_TOOLS = (
+    "sql_anonymize_user",
+    "sql_export_user",
+    "sql_delete_user",
+    "sql_verify_deletion",
 )
+
+
+def _dsar_subject(request_id: Optional[str]) -> ToolInvocationSubject:
+    """The authorization subject for one DSAR request (CIRISAgent#938).
+
+    DSAR acts on a statutory obligation. It reaches ToolBus with no task and no
+    thought, so under a fail-closed Phase 2 gate it would be denied on day one —
+    and that denial would take GDPR erasure with it. It therefore carries a
+    SYSTEM_COMPONENT envelope: non-model-authored, bound to the DSAR request id,
+    granting exactly the four SQL tools above.
+
+    Issuance failure degrades to an envelope-less subject rather than blocking
+    the erasure: in Phase 1 nothing enforces, and a compliance operation must
+    not fail because authorization bookkeeping did.
+    """
+    work_unit_id = (request_id or "").strip() or f"DSAR-UNIDENTIFIED-{uuid.uuid4().hex[:12]}"
+    try:
+        envelope = issue_system_component_envelope(
+            component=_DSAR_COMPONENT,
+            work_unit_id=work_unit_id,
+            granted_tools=_DSAR_TOOLS,
+            capabilities=(ToolCapability.OBSERVE_LOCAL, ToolCapability.WRITE_TARGET),
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("DSAR %s: could not issue component envelope: %s", work_unit_id, exc)
+        envelope = None
+    return ToolInvocationSubject.for_component(
+        origin=ToolCallOrigin.GOVERNANCE_SERVICE,
+        component=_DSAR_COMPONENT,
+        envelope=envelope,
+    )
 
 
 class DSAROrchestrator:
@@ -176,7 +213,7 @@ class DSAROrchestrator:
 
         for connector_id in sql_connectors:
             try:
-                export = await self._export_from_sql(connector_id, user_identifier)
+                export = await self._export_from_sql(connector_id, user_identifier, request_id=request_id)
                 external_sources.append(export)
             except Exception as e:
                 logger.error(f"Failed to export from SQL connector {connector_id}: {e}")
@@ -296,7 +333,7 @@ class DSAROrchestrator:
 
         for connector_id in sql_connectors:
             try:
-                export = await self._export_from_sql(connector_id, user_identifier)
+                export = await self._export_from_sql(connector_id, user_identifier, request_id=request_id)
                 external_exports.append(export)
             except Exception as e:
                 logger.error(f"Failed to export from SQL connector {connector_id}: {e}")
@@ -445,7 +482,9 @@ class DSAROrchestrator:
 
         for connector_id in sql_connectors:
             try:
-                deletion = await self._delete_from_sql(connector_id, user_identifier, verify=True)
+                deletion = await self._delete_from_sql(
+                    connector_id, user_identifier, verify=True, request_id=request_id
+                )
                 external_deletions.append(deletion)
             except Exception as e:
                 logger.error(f"Failed to delete from SQL connector {connector_id}: {e}")
@@ -582,7 +621,7 @@ class DSAROrchestrator:
                         "corrections": corrections,
                     },
                     handler_name="default",
-                    subject=_DSAR_SUBJECT,
+                    subject=_dsar_subject(request_id),
                 )
 
                 if update_result.success and update_result.data:
@@ -688,7 +727,9 @@ class DSAROrchestrator:
         for connector_id in sql_connectors:
             try:
                 # Verify deletion for this connector
-                verification_passed = await self._verify_deletion_sql(connector_id, user_identifier)
+                verification_passed = await self._verify_deletion_sql(
+                    connector_id, user_identifier, request_id=request_id
+                )
 
                 # Create deletion status entry
                 external_deletions.append(
@@ -822,7 +863,9 @@ class DSAROrchestrator:
         # TODO: Implement HL7 connector discovery
         raise NotImplementedError("HL7 connector discovery not yet implemented")
 
-    async def _export_from_sql(self, connector_id: str, user_identifier: str) -> DataSourceExport:
+    async def _export_from_sql(
+        self, connector_id: str, user_identifier: str, request_id: Optional[str] = None
+    ) -> DataSourceExport:
         """Export user data from SQL connector.
 
         Args:
@@ -847,7 +890,7 @@ class DSAROrchestrator:
                     "identifier_type": "email",  # Default to email for DSAR requests
                 },
                 handler_name="default",
-                subject=_DSAR_SUBJECT,
+                subject=_dsar_subject(request_id),
             )
 
             # Parse export result from ToolExecutionResult
@@ -888,7 +931,7 @@ class DSAROrchestrator:
             )
 
     async def _delete_from_sql(
-        self, connector_id: str, user_identifier: str, verify: bool = True
+        self, connector_id: str, user_identifier: str, verify: bool = True, request_id: Optional[str] = None
     ) -> DataSourceDeletion:
         """Delete user data from SQL connector.
 
@@ -913,7 +956,7 @@ class DSAROrchestrator:
                     "verify": verify,
                 },
                 handler_name="default",
-                subject=_DSAR_SUBJECT,
+                subject=_dsar_subject(request_id),
             )
 
             # Parse deletion result from ToolExecutionResult
@@ -930,7 +973,9 @@ class DSAROrchestrator:
             # Verify deletion if requested
             verification_passed = False
             if verify and success:
-                verification_passed = await self._verify_deletion_sql(connector_id, user_identifier)
+                verification_passed = await self._verify_deletion_sql(
+                    connector_id, user_identifier, request_id=request_id
+                )
 
             return DataSourceDeletion(
                 source_id=connector_id,
@@ -955,7 +1000,9 @@ class DSAROrchestrator:
                 errors=[str(e)],
             )
 
-    async def _verify_deletion_sql(self, connector_id: str, user_identifier: str) -> bool:
+    async def _verify_deletion_sql(
+        self, connector_id: str, user_identifier: str, request_id: Optional[str] = None
+    ) -> bool:
         """Verify user data deletion from SQL connector.
 
         Args:
@@ -977,7 +1024,7 @@ class DSAROrchestrator:
                     "identifier_type": "email",  # Default to email for DSAR requests
                 },
                 handler_name="default",
-                subject=_DSAR_SUBJECT,
+                subject=_dsar_subject(request_id),
             )
 
             # Parse verification result from ToolExecutionResult

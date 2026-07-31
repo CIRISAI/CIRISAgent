@@ -71,9 +71,16 @@ class StubToolSource:
 
 @pytest.fixture(autouse=True)
 def clean_enabled_tools():
+    # The cold-cache warning is emitted once per process (it fires for every
+    # wakeup task at boot otherwise, and a warning repeated six times per boot
+    # is a warning people filter out). Reset it so each test sees a fresh one.
+    from ciris_engine.logic.infrastructure.authorization import envelope_issuer as _issuer
+
     reset_enabled_tools_cache()
+    _issuer._COLD_CACHE_WARNED = False
     yield
     reset_enabled_tools_cache()
+    _issuer._COLD_CACHE_WARNED = False
 
 
 @pytest.fixture
@@ -437,3 +444,87 @@ async def test_conscience_style_read_modify_write_preserves_the_envelope(clean_e
     assert final.context is not None
     assert final.context.envelope == envelope
     assert final.context.envelope.granted_tools == frozenset(DEPLOYMENT_TOOLS)
+
+
+# --------------------- system-component grants for non-task callers (#938)
+
+
+def test_system_component_issuance_grants_only_what_the_component_calls(clean_env):
+    """DSAR and operator setup reach the bus with no task and no thought.
+
+    Absence-is-denial would take GDPR erasure with it on day one, so they get a
+    non-model-authored grant — and a *narrow* one, naming exactly the tools the
+    component's code calls rather than inheriting the deployment default.
+    """
+    from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
+        issue_system_component_envelope,
+    )
+
+    envelope = issue_system_component_envelope(
+        component="DSARModificationOrchestrator",
+        work_unit_id="DSAR-DELETE-20260730-120000",
+        granted_tools=["sql_export_user", "sql_delete_user", "sql_verify_deletion", "sql_anonymize_user"],
+        capabilities=[ToolCapability.WRITE_TARGET],
+    )
+    assert envelope.issuer.kind is EnvelopeIssuerKind.SYSTEM_COMPONENT
+    assert envelope.issuer.issuer_id == "DSARModificationOrchestrator"
+    assert envelope.task_id == "DSAR-DELETE-20260730-120000"
+    assert envelope.permits_tool("sql_delete_user") is True
+    assert envelope.permits_tool("curl") is False
+    assert len(envelope.granted_tools) == 4
+
+
+def test_system_component_issuance_is_forbidden_inside_the_reasoning_loop(clean_env):
+    """Otherwise the reasoning loop could mint itself a governance grant."""
+    from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
+        EnvelopeIssuanceForbidden,
+        issue_system_component_envelope,
+    )
+    from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
+
+    with reasoning_scope(task_id="t", thought_id="th", phase="test"):
+        with pytest.raises(EnvelopeIssuanceForbidden):
+            issue_system_component_envelope(
+                component="DSARModificationOrchestrator",
+                work_unit_id="w",
+                granted_tools=["sql_delete_user"],
+                capabilities=[ToolCapability.WRITE_TARGET],
+            )
+
+
+def test_dsar_orchestrator_carries_a_component_envelope(clean_env):
+    """The real DSAR subject builder, not a stand-in."""
+    from ciris_engine.logic.services.governance.dsar.orchestrator import _DSAR_TOOLS, _dsar_subject
+
+    subject = _dsar_subject("DSAR-DELETE-20260730-120000")
+    assert subject.envelope is not None
+    assert subject.envelope.granted_tools == frozenset(_DSAR_TOOLS)
+    assert subject.envelope.task_id == "DSAR-DELETE-20260730-120000"
+    assert subject.component == "DSARModificationOrchestrator"
+    assert subject.task_id is None and subject.thought_id is None
+
+
+def test_dsar_subject_survives_a_missing_request_id(clean_env):
+    """A compliance operation must not fail because bookkeeping did."""
+    from ciris_engine.logic.services.governance.dsar.orchestrator import _dsar_subject
+
+    subject = _dsar_subject(None)
+    assert subject.envelope is not None
+    assert subject.envelope.task_id.startswith("DSAR-UNIDENTIFIED-")
+
+
+def test_connector_route_carries_an_operator_envelope(clean_env):
+    """Operator connector setup gets its grant where the route's auth runs."""
+    from ciris_engine.logic.adapters.api.routes.connectors import _CONNECTOR_TOOLS, _connector_subject
+
+    class FakeUser:
+        username = "ops"
+        user_id = "u-ops"
+        role = "ADMIN"
+
+    subject = _connector_subject("conn-1", FakeUser())
+    assert subject.envelope is not None
+    assert subject.envelope.granted_tools == frozenset(_CONNECTOR_TOOLS)
+    assert subject.envelope.requester.user_id == "u-ops"
+    assert subject.envelope.requester.role.value == "ADMIN"
+    assert subject.envelope.task_id == "connector-setup:conn-1"

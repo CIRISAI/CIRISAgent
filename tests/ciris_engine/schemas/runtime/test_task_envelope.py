@@ -341,9 +341,13 @@ def test_task_bound_subject_requires_task_and_thought_identity():
 
 
 def test_component_subject_cannot_carry_a_task_envelope():
-    """A system caller cannot launder itself as a task, or vice versa."""
+    """A system caller cannot launder itself as a task, or vice versa.
+
+    A component subject may carry a SYSTEM_COMPONENT grant (see the DSAR tests
+    below) but never a task's own envelope.
+    """
     envelope = make_envelope()
-    with pytest.raises(ValidationError, match="must not carry a task envelope"):
+    with pytest.raises(ValidationError, match="cannot borrow a task"):
         ToolInvocationSubject(
             origin=ToolCallOrigin.GOVERNANCE_SERVICE,
             handler_name="default",
@@ -400,3 +404,64 @@ def test_context_enrichment_is_task_bound_but_distinct_from_reasoning():
     )
     assert subject.is_task_bound is True
     assert subject.origin is not ToolCallOrigin.REASONING
+
+
+# ------------------------- system-component grants (DSAR / operator setup)
+
+
+def make_component_envelope(**overrides) -> TaskEnvelope:
+    kwargs = dict(
+        envelope_id="env_sys",
+        task_id="DSAR-DELETE-20260730-120000",
+        issued_at="2026-07-30T00:00:00+00:00",
+        issuer=EnvelopeIssuer(
+            kind=EnvelopeIssuerKind.SYSTEM_COMPONENT, issuer_id="DSARModificationOrchestrator"
+        ),
+        deployment=DEPLOYMENT,
+        granted_tools=frozenset({"sql_export_user", "sql_delete_user"}),
+        capabilities=frozenset({ToolCapability.WRITE_TARGET}),
+    )
+    kwargs.update(overrides)
+    return TaskEnvelope(**kwargs)
+
+
+def test_system_component_envelope_requires_a_named_component():
+    with pytest.raises(ValidationError):
+        EnvelopeIssuer(kind=EnvelopeIssuerKind.SYSTEM_COMPONENT)
+
+
+def test_component_subject_may_carry_a_system_component_envelope():
+    """DSAR erasure must not be denied on day one for want of a grant."""
+    envelope = make_component_envelope()
+    subject = ToolInvocationSubject.for_component(
+        origin=ToolCallOrigin.GOVERNANCE_SERVICE, component="DSARModificationOrchestrator", envelope=envelope
+    )
+    assert subject.envelope is envelope
+    assert envelope_permits_tool(subject.envelope, "sql_delete_user") is True
+    assert envelope_permits_tool(subject.envelope, "curl") is False
+
+
+def test_component_subject_still_cannot_carry_a_task_envelope():
+    """A component cannot borrow a reasoning task's grant."""
+    with pytest.raises(ValidationError, match="cannot borrow a task"):
+        ToolInvocationSubject.for_component(
+            origin=ToolCallOrigin.GOVERNANCE_SERVICE, component="DSAR", envelope=make_envelope()
+        )
+
+
+def test_task_subject_cannot_carry_a_system_component_envelope():
+    """And the reasoning path cannot borrow a component's grant."""
+    envelope = make_component_envelope(task_id="task_1")
+    with pytest.raises(ValidationError, match="belongs to a component, not a task"):
+        ToolInvocationSubject.for_task(
+            task_id="task_1", thought_id="th_1", handler_name="ToolHandler", envelope=envelope
+        )
+
+
+def test_component_envelope_is_narrower_than_a_deployment_grant():
+    """The point of the component grant: it names only what that code calls."""
+    component = make_component_envelope()
+    deployment = make_envelope()
+    assert component.granted_tools < deployment.granted_tools | component.granted_tools
+    assert len(component.granted_tools) == 2
+    assert "*" not in component.granted_tools

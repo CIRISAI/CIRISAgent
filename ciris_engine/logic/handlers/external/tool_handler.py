@@ -162,7 +162,22 @@ class ToolHandler(BaseActionHandler):
             return False, f"TOOL {params.name} execution failed: {str(e_tool)}"
 
     def _build_tool_params(self, params: ToolParams, thought: Thought) -> Dict[str, Any]:
-        """Build tool parameters with channel and task context."""
+        """Build tool parameters with channel and task context.
+
+        **Task identity is handler-authoritative** (CIRISAgent#938). It used to
+        be injected only ``if "task_id" not in tool_params``, which meant a
+        model-authored ``task_id`` was never overwritten — the model could name
+        whichever task it liked, and consumers that key on it (``authorize_spend``
+        reads ``task_id`` from tool parameters) were reading a model-supplied
+        value. The whole premise of the task envelope is that the enforcement
+        point can key policy on a *trustworthy* task identity, so the handler
+        now always sets it and logs any attempt to supply one.
+
+        When the thought has no source task there is nothing to vouch for, so a
+        model-supplied ``task_id`` is dropped rather than passed through: an
+        unverifiable identity is worse than none for anything that authorizes on
+        it.
+        """
         tool_params = dict(params.parameters)
 
         # Add channel_id if provided in action params but not in tool parameters
@@ -170,10 +185,24 @@ class ToolHandler(BaseActionHandler):
             tool_params["channel_id"] = params.channel_id
             self.logger.debug(f"Added channel_id {params.channel_id} to tool parameters")
 
-        # Add task_id for tools that need billing interaction_id (e.g., web_search)
-        if thought.source_task_id and "task_id" not in tool_params:
+        model_supplied_task_id = tool_params.get("task_id")
+        if thought.source_task_id:
+            if model_supplied_task_id is not None and model_supplied_task_id != thought.source_task_id:
+                self.logger.warning(
+                    "[TOOL_HANDLER] Tool call supplied task_id=%r; overriding with the handler-authoritative "
+                    "source task %r (CIRISAgent#938 — task identity is never model-authored).",
+                    model_supplied_task_id,
+                    thought.source_task_id,
+                )
             tool_params["task_id"] = thought.source_task_id
-            self.logger.debug(f"Added task_id {thought.source_task_id} to tool parameters")
+        elif model_supplied_task_id is not None:
+            self.logger.warning(
+                "[TOOL_HANDLER] Tool call supplied task_id=%r but thought %s has no source task; "
+                "dropping it rather than passing an unverifiable identity (CIRISAgent#938).",
+                model_supplied_task_id,
+                thought.thought_id,
+            )
+            tool_params.pop("task_id", None)
 
         return tool_params
 

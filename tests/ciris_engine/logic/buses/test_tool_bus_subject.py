@@ -261,3 +261,145 @@ async def test_tool_handler_passes_task_identity_to_the_bus(monkeypatch):
     assert subject.task_id == "task_42"
     assert subject.thought_id == "th_42"
     assert subject.envelope is None
+
+
+# ------------------------------- task identity is handler-authoritative (#938)
+
+
+def _handler():
+    from ciris_engine.logic.handlers.external.tool_handler import ToolHandler
+
+    handler = object.__new__(ToolHandler)
+    handler.logger = logging.getLogger("test_tool_handler_authoritative")
+    return handler
+
+
+class _FakeThought:
+    thought_id = "th_1"
+    source_task_id = "task_REAL"
+    agent_occurrence_id = "default"
+
+
+def test_model_supplied_task_id_is_overwritten_by_the_handler():
+    """A model-authored `task_id` must never survive into tool parameters.
+
+    `authorize_spend` and anything else that authorizes on `task_id` reads it
+    from the tool parameters. It used to be injected only when the model had not
+    already set one, so the model could name whichever task it liked. The whole
+    premise of the task envelope is a trustworthy task identity at the
+    enforcement point.
+    """
+    from ciris_engine.schemas.actions import ToolParams
+
+    params = ToolParams(name="send_money", parameters={"task_id": "task_ATTACKER_CHOSE", "amount": 100})
+    built = _handler()._build_tool_params(params, _FakeThought())
+    assert built["task_id"] == "task_REAL"
+    assert built["amount"] == 100
+
+
+def test_task_id_is_stamped_even_when_the_model_omits_it():
+    from ciris_engine.schemas.actions import ToolParams
+
+    built = _handler()._build_tool_params(ToolParams(name="web_search", parameters={"q": "x"}), _FakeThought())
+    assert built["task_id"] == "task_REAL"
+
+
+def test_unverifiable_task_id_is_dropped_not_passed_through():
+    """With no source task there is nothing to vouch for, so the model value is
+    removed rather than forwarded to a consumer that would trust it."""
+    from ciris_engine.schemas.actions import ToolParams
+
+    class NoTask(_FakeThought):
+        source_task_id = ""
+
+    built = _handler()._build_tool_params(
+        ToolParams(name="send_money", parameters={"task_id": "task_ATTACKER_CHOSE"}), NoTask()
+    )
+    assert "task_id" not in built
+
+
+# --------------------------- one dispatch point covers the enrichment path
+
+
+async def test_dispatch_to_provider_is_the_single_execution_seam(bus_and_service):
+    """`execute_tool` must reach a provider only through `dispatch_to_provider`.
+
+    A Phase 2 gate placed in `execute_tool` alone would miss the
+    context-enrichment path, which resolves providers itself and runs on every
+    thought. Both now converge here.
+    """
+    bus, service = bus_and_service
+    calls = []
+    original = bus.dispatch_to_provider
+
+    async def recording(*args, **kwargs):
+        calls.append((args[1], kwargs.get("subject")))
+        return await original(*args, **kwargs)
+
+    bus.dispatch_to_provider = recording
+    subject = ToolInvocationSubject.for_task(
+        task_id="task_1", thought_id="th_1", handler_name="ToolHandler", envelope=make_envelope()
+    )
+    await bus.execute_tool("weather", {}, "ToolHandler", subject=subject)
+    assert calls == [("weather", subject)]
+
+
+async def test_dispatch_to_provider_records_the_subject(bus_and_service, caplog):
+    bus, service = bus_and_service
+    with caplog.at_level(logging.WARNING, logger="ciris_engine.logic.buses.tool_bus"):
+        await bus.dispatch_to_provider(service, "weather", {}, handler_name="context_enrichment")
+    warned = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("context_enrichment" in m for m in warned)
+
+
+def _enrichment_tool():
+    from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+
+    return ToolInfo(
+        name="weather",
+        description="d",
+        parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+        context_enrichment=True,
+        context_enrichment_params={},
+    )
+
+
+async def test_context_enrichment_routes_through_the_bus(bus_and_service):
+    """`_execute_enrichment_tool` dispatches via the bus, not via the instance."""
+    from ciris_engine.logic.context.system_snapshot_helpers import _execute_enrichment_tool
+
+    bus, service = bus_and_service
+    seen = {}
+    original = bus.dispatch_to_provider
+
+    async def recording(svc, tool_name, params, **kwargs):
+        seen["tool"] = tool_name
+        seen["subject"] = kwargs.get("subject")
+        seen["handler"] = kwargs.get("handler_name")
+        return await original(svc, tool_name, params, **kwargs)
+
+    bus.dispatch_to_provider = recording
+    subject = ToolInvocationSubject.for_task(
+        task_id="task_1",
+        thought_id="th_1",
+        handler_name="context_enrichment",
+        origin=ToolCallOrigin.CONTEXT_ENRICHMENT,
+    )
+    _key, result = await _execute_enrichment_tool(
+        [(service, "api")], "api", _enrichment_tool(), tool_bus=bus, subject=subject
+    )
+    assert seen["tool"] == "weather"
+    assert seen["subject"] is subject
+    assert seen["handler"] == "context_enrichment"
+    assert result is not None
+
+
+async def test_context_enrichment_still_works_without_a_bus(bus_and_service):
+    """Startup cache population runs before the bus manager is wired; that path
+    must keep working — a design that blocks weather lookups has failed."""
+    from ciris_engine.logic.context.system_snapshot_helpers import _execute_enrichment_tool
+
+    _, service = bus_and_service
+    _key, result = await _execute_enrichment_tool([(service, "api")], "api", _enrichment_tool())
+    assert result is not None
+    assert service.calls

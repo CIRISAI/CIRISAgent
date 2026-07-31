@@ -22,10 +22,18 @@ under-read.
 - **It does not gate CommunicationBus, MemoryBus or LLMBus.** Outward messages,
   memory writes and context egress carry the same argument and are named
   follow-on work in #938, not silently covered.
-- **It does not cover the context-enrichment path.** `context_enrichment=True`
-  providers are invoked directly against the tool service in
-  `ciris_engine/logic/context/system_snapshot_helpers.py:1239`, bypassing
-  `ToolBus` entirely. Phase 2 gating the bus would not see them. See §8.
+- **It does not gate the context-enrichment path — but that path now goes
+  through the bus.** `context_enrichment=True` providers used to be invoked
+  directly against the tool service instance, bypassing `ToolBus` entirely
+  while running on *every* thought. They now dispatch through
+  `ToolBus.dispatch_to_provider` carrying a `CONTEXT_ENRICHMENT` subject, so
+  Phase 2 has one gate site rather than two. See §8.
+- **It does not close the other three bypasses** named in #938's gate-placement
+  analysis: adapter-internal second dispatch (`DiscordAdapter.execute_tool` →
+  `_tool_handler.execute_tool`), write-then-load into adapter discovery paths,
+  or the fact that `curl`/`http_get`/`http_post` ship free with the API
+  adapter (#941). Those are registration and containment problems, not subject
+  problems.
 - **It does not make the reasoning loop unable to mint an envelope in a
   sandbox sense.** It makes an accidental mint fail loudly and a deliberate one
   require editing a file that has a test watching it. See §5.
@@ -107,6 +115,40 @@ grant differs.
 
 `resolve_envelope_for_task_id` (read-only, in a separate module with no minting
 surface) is what the handler layer uses at the bus call site.
+
+### Task identity is handler-authoritative
+
+The envelope is only as good as the task identity the enforcement point sees.
+`ToolHandler._build_tool_params` used to inject the source task id **only if the
+model had not already supplied one** — so a model-authored `task_id` was never
+overwritten, and consumers that authorize on it (`authorize_spend` reads
+`task_id` straight out of tool parameters) were reading a model-chosen value.
+
+The handler now always stamps `thought.source_task_id`, logs any attempt to
+supply a different one, and **drops** a model-supplied `task_id` entirely when
+the thought has no source task — an unverifiable identity is worse than none for
+anything that authorizes on it. Locked in by
+`test_model_supplied_task_id_is_overwritten_by_the_handler` and
+`test_unverifiable_task_id_is_dropped_not_passed_through`.
+
+### Non-task callers get a narrow system-component grant
+
+DSAR erasure (`sql_export_user`, `sql_delete_user`, `sql_verify_deletion`,
+`sql_anonymize_user`) and operator connector setup (`initialize_sql_connector`,
+`sql_query`) reach the bus with no task and no thought. Absence-is-denial is the
+right rule, and on day one it would have denied **GDPR erasure**.
+
+They therefore carry `EnvelopeIssuerKind.SYSTEM_COMPONENT` envelopes, issued
+where each path's own auth already runs: bound to the DSAR request id or the
+connector action, granting the literal list of tools that component's code
+calls, and carrying the authenticated operator's `UserRole` for the connector
+route. That is *narrower* than the deployment default, not an exemption from it
+— attenuation at issuance, the shape #905 Phase 5 argues for.
+
+Two anti-laundering invariants keep this from becoming a hole, both
+schema-enforced: a component subject may carry **only** a `SYSTEM_COMPONENT`
+envelope (never a task's), and a task-bound subject may carry **only** a
+task envelope (never a component's).
 
 ### Threat assumptions
 
@@ -310,7 +352,33 @@ maintains a list. If a Phase 2 reviewer proposes a wildcard, the answer is
 
 ## 8. What Phase 2 consumes, and what it must not do
 
-Phase 2 (#905 Ask 1) gates `ToolBus.execute_tool` and receives:
+### One dispatch seam
+
+`ToolBus.dispatch_to_provider` is the single point at which a provider is
+actually invoked. `execute_tool` resolves by tool name and delegates to it; the
+context-enrichment path resolves adapter-scoped (unchanged — `_find_tool_service`
+still picks the provider, so routing behaviour is identical) and calls it
+directly instead of invoking the instance itself.
+
+**Phase 2's gate belongs in `dispatch_to_provider`, not in `execute_tool`.** A
+gate in `execute_tool` alone would miss enrichment, which runs on *every*
+thought — more often than the model-selected path. It would also let enrichment
+be permitted by omission rather than explicitly, which is the `sandbox_mode`
+shape again.
+
+Enrichment carries `ToolCallOrigin.CONTEXT_ENRICHMENT`: task-bound (it runs for
+a specific thought's context build) but not model-selected (the pipeline ran it
+before the model chose anything). Phase 2 should treat it as explicitly
+always-permitted, and say so, rather than silently.
+
+When no bus is available — startup cache population runs before the bus manager
+is wired — enrichment falls back to direct invocation and logs that it did. That
+fallback is the remaining hole in "one seam"; closing it means ordering bus
+construction before `populate_enrichment_cache_at_startup`.
+
+
+Phase 2 (#905 Ask 1) gates `ToolBus.dispatch_to_provider` (see above) and
+receives:
 
 ```python
 subject: Optional[ToolInvocationSubject]
@@ -336,10 +404,13 @@ task-bound subject to masquerade as a component subject or vice versa.
 3. **`subject is None` and `subject.envelope is None` are both denials**, never
    exemptions. The fail-closed predicates already exist:
    `envelope_permits_tool(None, x) is False`.
-4. **Decide explicitly about non-task origins.** `GOVERNANCE_SERVICE` (DSAR),
-   `OPERATOR_API` and `ADAPTER_LIFECYCLE` are named so they cannot inherit a
-   silent exemption. They are not model-authored; they are also not covered by
-   task-scoped authorization. Pick a policy and write it down.
+4. **Non-task origins already carry grants — honour them, don't exempt them.**
+   `GOVERNANCE_SERVICE` (DSAR) and `ADAPTER_LIFECYCLE` (connector setup) arrive
+   with `SYSTEM_COMPONENT` envelopes naming exactly the tools those code paths
+   call. Gate them against that grant like any other. Do **not** add a blanket
+   "non-reasoning origins are permitted" branch — that is the exemption this
+   design exists to avoid, and it would also lose the narrowing those grants
+   already provide.
 5. **Route denial to WBD deferral where a human is reachable.** A fail-closed
    gate that is not survivable gets switched off.
 6. **Attest denials.** A signed trace of denials is evidence; "we deny X" is a
@@ -372,12 +443,15 @@ task-bound subject to masquerade as a component subject or vice versa.
 
   All of these resolve to `None`, which under Phase 2 denies. Wire them or
   exempt them deliberately — do not discover this when wakeup stops working.
-- **The context-enrichment bypass.** `context_enrichment=True` providers are
-  called directly on the tool service in `system_snapshot_helpers.py:1239` and
-  never touch `ToolBus`. Gating the bus leaves this path ungated — which is
-  *safe* for availability (weather keeps working) but means the gate's coverage
-  claim must exclude it, or the path must be routed through the bus first.
-  `ToolCallOrigin.CONTEXT_ENRICHMENT` exists ready for that rerouting.
+- **Remaining bypasses.** The context-enrichment path is now routed through
+  `ToolBus.dispatch_to_provider` (see below), but three others named in #938's
+  gate-placement analysis are open: `DiscordAdapter.execute_tool` delegating to
+  its own `_tool_handler` (two registered aliases of one surface),
+  write-then-load into `AdapterDiscoveryService.DISCOVERY_PATHS`, and the
+  `curl`/`http_get`/`http_post` egress tools arriving free with the API adapter
+  (#941). Phase 2's coverage claim must exclude them or they must be closed
+  first. The strongest fix for the first two is Phase 5's: filter the *provider
+  set* at `ToolBus.__init__`, since both resolve from the same registry.
 - **`correlation_id` is still a fresh uuid4** at `tool_bus.py` (unchanged by
   design — `get_tool_result(correlation_id)` consumers depend on the format).
   The subject, not the correlation id, is now the identity carrier.
@@ -417,6 +491,8 @@ task-bound subject to masquerade as a component subject or vice versa.
 | `ciris_engine/logic/infrastructure/authorization/envelope_reader.py` | read-only lookup; no minting surface |
 | `ciris_engine/schemas/runtime/models.py` | `TaskContext.envelope` |
 | `ciris_engine/logic/persistence/models/tasks.py`, `.../persistence/utils.py` | round-trip + fail-closed decode |
-| `ciris_engine/logic/buses/tool_bus.py` | `execute_tool(..., subject=...)`, identity-less warning, registers as enabled-tool source |
-| `ciris_engine/logic/handlers/external/tool_handler.py` | builds the reasoning subject |
+| `ciris_engine/logic/buses/tool_bus.py` | `execute_tool(..., subject=...)`, `dispatch_to_provider` (the single execution seam), identity-less warning, registers as enabled-tool source |
+| `ciris_engine/logic/handlers/external/tool_handler.py` | builds the reasoning subject; stamps handler-authoritative `task_id` |
+| `ciris_engine/logic/context/system_snapshot_helpers.py`, `.../batch_context.py` | context enrichment routed through the bus with a `CONTEXT_ENRICHMENT` subject |
+| `ciris_engine/logic/services/governance/dsar/orchestrator.py`, `.../api/routes/connectors.py` | per-request `SYSTEM_COMPONENT` grants for the non-task callers |
 | `ciris_engine/logic/infrastructure/handlers/action_dispatcher.py`, `.../thought_processor/main.py` | enter the reasoning scope |

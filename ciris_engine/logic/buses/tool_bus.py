@@ -2,6 +2,7 @@
 Tool message bus - handles all tool service operations
 """
 
+import inspect
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
@@ -137,7 +138,6 @@ class ToolBus(BaseBus[ToolService]):
         """
         # Resolve aliases before lookup
         tool_name = self.resolve_tool_name(tool_name)
-        self._note_subject(tool_name, handler_name, subject)
         logger.debug(f"execute_tool called with tool_name={tool_name}, parameters={parameters}")
 
         # Step 1: Get ALL tool services to find which ones support this tool
@@ -180,6 +180,9 @@ class ToolBus(BaseBus[ToolService]):
         # Step 3: If no service supports this tool, return NOT_FOUND
         if not supporting_services:
             logger.error(f"No service supports tool: {tool_name}")
+            # No provider is reached, so dispatch_to_provider never runs — record
+            # the subject here so an identity-less caller is still named.
+            self._note_subject(tool_name, handler_name, subject)
 
             # Track error metrics
             self._executions_count += 1
@@ -228,12 +231,46 @@ class ToolBus(BaseBus[ToolService]):
 
             logger.debug(f"Selected {type(selected_service).__name__} from {len(supporting_services)} options")
 
-        # Step 5: Execute the tool
+        # Step 5: Execute the tool through the single dispatch point.
+        assert selected_service is not None, "Selected service must not be None"
+        return await self.dispatch_to_provider(
+            selected_service, tool_name, parameters, handler_name=handler_name, subject=subject
+        )
+
+    async def dispatch_to_provider(
+        self,
+        service: Any,
+        tool_name: str,
+        parameters: JSONDict,
+        *,
+        handler_name: str = "default",
+        subject: Optional[ToolInvocationSubject] = None,
+    ) -> ToolExecutionResult:
+        """The single point at which a tool provider is actually invoked.
+
+        Every bus-mediated execution ends here, whichever way the provider was
+        resolved: :meth:`execute_tool` resolves by tool name and delegates, and
+        the context-enrichment path (which resolves adapter-scoped, and runs on
+        every thought) calls this directly instead of reaching into the registry
+        and invoking the instance itself.
+
+        That matters for CIRISAgent#938: a gate placed only in
+        :meth:`execute_tool` would miss the enrichment path entirely — the path
+        that executes *more often* than the intended one. **Phase 2's gate
+        belongs here**, so both paths inherit it from one place.
+
+        It is a dispatch point, not a resolver: provider selection stays with
+        the caller, so adapter-scoped enrichment routing is preserved exactly.
+        """
+        self._note_subject(tool_name, handler_name, subject)
         try:
-            # Logic guarantees selected_service is not None at this point
-            assert selected_service is not None, "Selected service must not be None"
-            logger.debug(f"Executing tool '{tool_name}' with {type(selected_service).__name__}")
-            result: ToolExecutionResult = await selected_service.execute_tool(tool_name, parameters)
+            logger.debug(f"Executing tool '{tool_name}' with {type(service).__name__}")
+            # Providers are async per ToolServiceProtocol, but the
+            # context-enrichment path historically tolerated sync ones
+            # (_call_async_or_sync_method). Keep tolerating them: routing that
+            # path through here must not break a provider it used to accept.
+            raw = service.execute_tool(tool_name, parameters)
+            result: ToolExecutionResult = await raw if inspect.isawaitable(raw) else raw
 
             # Track metrics
             self._executions_count += 1

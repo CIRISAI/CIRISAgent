@@ -26,6 +26,7 @@ site. It never mints.
 from __future__ import annotations
 
 import logging
+import secrets
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, FrozenSet, Iterable, Optional, Tuple
@@ -80,6 +81,41 @@ def _forbid_in_reasoning_scope(operation: str) -> None:
         )
 
 
+def _new_envelope_id() -> str:
+    """A fresh envelope identifier.
+
+    Uses ``secrets`` rather than ``uuid4`` deliberately: issuance runs inside
+    task creation, and several call sites there have tests that patch
+    ``uuid.uuid4`` with a fixed sequence. Drawing envelope ids from the same
+    global generator would silently consume those callers' uuids.
+    """
+    return f"env_{secrets.token_hex(16)}"
+
+
+_COLD_CACHE_WARNED = False
+
+
+def _warn_cold_cache(task_id: str, path: str) -> None:
+    """Warn once per process, then drop to debug.
+
+    A cold enabled-tool cache is a real Phase 2 blocker (see
+    ``FSD/TASK_ENVELOPE.md`` §8) and must be visible — but every wakeup task
+    at boot hits it, and a warning repeated six times per boot is a warning
+    people filter out. Loud once is louder than loud always.
+    """
+    global _COLD_CACHE_WARNED
+    message = (
+        "TaskEnvelope: issuing envelope for task %s with an EMPTY tool grant — "
+        "the tool registry has not been observed yet (%s). Inert in Phase 1; "
+        "under Phase 2 enforcement this would deny every tool call for this task."
+    )
+    if _COLD_CACHE_WARNED:
+        logger.debug(message, task_id, path)
+        return
+    _COLD_CACHE_WARNED = True
+    logger.warning(message, task_id, path)
+
+
 def _now_iso(time_service: Optional["TimeServiceProtocol"] = None) -> str:
     if time_service is not None:
         try:
@@ -116,15 +152,10 @@ async def issue_deployment_envelope(
 
     granted_tools = await prime_enabled_tools(tool_source)
     if not granted_tools:
-        logger.warning(
-            "TaskEnvelope: issuing envelope for task %s with an EMPTY tool grant — "
-            "the tool registry has not been observed yet. Inert in Phase 1; under "
-            "Phase 2 enforcement this would deny every tool call for this task.",
-            task_id,
-        )
+        _warn_cold_cache(task_id, "async issuance path")
 
     return TaskEnvelope(
-        envelope_id=f"env_{uuid.uuid4().hex}",
+        envelope_id=_new_envelope_id(),
         task_id=task_id,
         issued_at=_now_iso(time_service),
         issuer=EnvelopeIssuer(kind=EnvelopeIssuerKind.DEPLOYMENT_RESOLVED),
@@ -159,17 +190,11 @@ def issue_deployment_envelope_from_cache(
 
     granted_tools = cached_enabled_tools()
     if granted_tools is None:
-        logger.warning(
-            "TaskEnvelope: issuing envelope for task %s with an EMPTY tool grant — "
-            "the tool registry has not been observed yet (sync issuance path). "
-            "Inert in Phase 1; under Phase 2 enforcement this would deny every "
-            "tool call for this task.",
-            task_id,
-        )
+        _warn_cold_cache(task_id, "sync issuance path")
         granted_tools = frozenset()
 
     return TaskEnvelope(
-        envelope_id=f"env_{uuid.uuid4().hex}",
+        envelope_id=_new_envelope_id(),
         task_id=task_id,
         issued_at=_now_iso(time_service),
         issuer=EnvelopeIssuer(kind=EnvelopeIssuerKind.DEPLOYMENT_RESOLVED),
@@ -213,7 +238,7 @@ def issue_authority_envelope(
         )
 
     return TaskEnvelope(
-        envelope_id=f"env_{uuid.uuid4().hex}",
+        envelope_id=_new_envelope_id(),
         task_id=task_id,
         issued_at=_now_iso(time_service),
         issuer=EnvelopeIssuer(kind=issuer_kind, issuer_id=issuer_id),
@@ -223,6 +248,51 @@ def issue_authority_envelope(
         capabilities=frozenset(capabilities),
         target_roots=tuple(target_roots),
         credentials=tuple(credentials),
+    )
+
+
+def issue_system_component_envelope(
+    *,
+    component: str,
+    work_unit_id: str,
+    granted_tools: Iterable[str],
+    capabilities: Iterable[ToolCapability],
+    agent_occurrence_id: str = "default",
+    requester: Optional[RequesterAuthorization] = None,
+    time_service: Optional["TimeServiceProtocol"] = None,
+) -> TaskEnvelope:
+    """Mint the narrow grant a named, code-declared component runs under.
+
+    DSAR erasure and operator connector setup reach ``ToolBus.execute_tool``
+    with no task and no thought. Absence-is-denial is the right rule, but on
+    day one it would deny GDPR erasure — so these paths need a
+    non-model-authored grant, and they need it in Phase 1 rather than in
+    production.
+
+    ``granted_tools`` is written at the call site as the literal list of tools
+    that component's code actually calls, so the grant is *narrower* than the
+    deployment default rather than an exemption from it. That is attenuation at
+    issuance, which is the shape #905 Phase 5 argues for.
+
+    Raises:
+        EnvelopeIssuanceForbidden: if called from inside the reasoning loop.
+            A component grant minted by the reasoning loop would be exactly the
+            privilege escalation this design exists to prevent.
+    """
+    _forbid_in_reasoning_scope("issue_system_component_envelope")
+
+    if not component.strip():
+        raise ValueError("a system-component envelope must name its component")
+
+    return TaskEnvelope(
+        envelope_id=_new_envelope_id(),
+        task_id=work_unit_id,
+        issued_at=_now_iso(time_service),
+        issuer=EnvelopeIssuer(kind=EnvelopeIssuerKind.SYSTEM_COMPONENT, issuer_id=component),
+        deployment=resolve_deployment_scope(agent_occurrence_id),
+        requester=requester or RequesterAuthorization(),
+        granted_tools=frozenset(granted_tools),
+        capabilities=frozenset(capabilities),
     )
 
 
@@ -247,7 +317,7 @@ def attenuate_envelope(
     CIRISFinancial) where task purpose is knowable at creation.
     """
     return envelope.attenuate(
-        envelope_id=f"env_{uuid.uuid4().hex}",
+        envelope_id=_new_envelope_id(),
         issued_at=_now_iso(time_service),
         granted_tools=granted_tools,
         capabilities=capabilities,
@@ -336,5 +406,6 @@ __all__ = [
     "issue_authority_envelope",
     "issue_deployment_envelope",
     "issue_deployment_envelope_from_cache",
+    "issue_system_component_envelope",
     "issue_task_envelope_best_effort",
 ]

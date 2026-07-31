@@ -8,9 +8,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot, TaskSummary, TelemetrySummary
+from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolInvocationSubject
 from ciris_engine.schemas.services.attestation import AttestationResult
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
@@ -548,6 +550,38 @@ async def prefetch_batch_context(
     return batch_data
 
 
+def _build_enrichment_subject(task: Optional[Task], thought: Any) -> Optional[ToolInvocationSubject]:
+    """Task identity for the auto-run context-enrichment tools (CIRISAgent#938).
+
+    Enrichment providers execute during context gathering, before the model has
+    selected anything — so the origin is CONTEXT_ENRICHMENT, not REASONING.
+    They are still task-bound: they run for *this* thought's context build, and
+    a gate needs to know whose context it is enriching.
+
+    Returns ``None`` when identity is unavailable rather than inventing one; the
+    bus then logs the call as identity-less, which is the visible-failure
+    behaviour, not a silent exemption.
+    """
+    task_id = getattr(thought, "source_task_id", None) or (task.task_id if task is not None else None)
+    thought_id = getattr(thought, "thought_id", None)
+    if not task_id or not thought_id:
+        return None
+    try:
+        return ToolInvocationSubject.for_task(
+            task_id=str(task_id),
+            thought_id=str(thought_id),
+            handler_name="context_enrichment",
+            origin=ToolCallOrigin.CONTEXT_ENRICHMENT,
+            agent_occurrence_id=str(getattr(thought, "agent_occurrence_id", "default") or "default"),
+            envelope=resolve_envelope_for_task_id(
+                str(task_id), str(getattr(thought, "agent_occurrence_id", "default") or "default")
+            ),
+        )
+    except Exception as exc:  # pragma: no cover - defensive; must never break context building
+        logger.debug("[CONTEXT_ENRICHMENT] Could not build invocation subject: %s", exc)
+        return None
+
+
 async def build_system_snapshot_with_batch(
     task: Optional[Task],
     thought: Any,
@@ -777,8 +811,13 @@ async def build_system_snapshot_with_batch(
 
         adapter_channels = await _collect_adapter_channels(runtime)
         available_tools = await _collect_available_tools(runtime)
-        # Run context enrichment tools (e.g., ha_list_entities)
-        context_enrichment_results = await _run_context_enrichment_tools(runtime, available_tools)
+        # Run context enrichment tools (e.g., ha_list_entities).
+        # These auto-run for this thought's context build, so they carry the
+        # thought's task identity (CIRISAgent#938) — origin CONTEXT_ENRICHMENT,
+        # not REASONING, because the model did not select them.
+        context_enrichment_results = await _run_context_enrichment_tools(
+            runtime, available_tools, subject=_build_enrichment_subject(task, thought)
+        )
 
     # Get queue status for system_counts
     queue_status = persistence.get_queue_status()

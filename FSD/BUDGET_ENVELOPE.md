@@ -393,12 +393,37 @@ The client also enforces `granted ≤ requested` locally, in fixed-point integer
 That is a **usability property, not a security one** — the server remains the
 authority, and nothing about the gate depends on the client behaving.
 
-**The server deliberately does not enforce `granted ≤ requested`.** The agent's
-request is *information for the human*, not a constraint on them. An AUTHORITY
-user who knows the true cost may legitimately grant above a lowballed request,
-and forcing a re-propose instead would burn the agent's proposal rate budget and
-add a reasoning round-trip for no safety gain. The bound the server does enforce
-is `granted ≤ trust ceiling`.
+**The server does not enforce `granted ≤ requested`.** The agent's request is
+*information for the human*, not a constraint on them. An AUTHORITY user who
+knows the true cost may grant above a lowballed request, and forcing a re-propose
+instead would burn the agent's proposal rate budget and add a reasoning
+round-trip for no safety gain. The bound the server does enforce is
+`granted ≤ trust ceiling`.
+
+#### OPEN DECISION — awaiting a user ruling, do not resolve agent-side
+
+The HITL surface's instructions say the human may approve "at or below the
+requested amount, never above," enforced in the UI. That client correctly
+declined to relax it on the strength of two agents agreeing, and escalated it.
+See `FSD/HITL_APPROVAL_SURFACE.md`.
+
+**The ruling is two-sided, and the server half is the one that bites:**
+
+- **"Yes, allow over-grant"** → client adds a confirmation path showing the
+  multiple ("10× the 25 requested", which catches a mis-typed zero where a
+  generic *are you sure?* does not). No server change.
+- **"No, never above"** → **this codebase needs a change too.** Today the
+  restriction is client-only, so an AUTHORITY user with `curl` can grant above
+  the request against `POST /v1/tickets/{id}/budget/grant` and nothing stops
+  them. Honouring that ruling means an issuance-time check in `issue_grant`
+  comparing against `__requested_budget__`, plus a decision about tickets with
+  no requested budget at all (a human-opened ticket has none — a naive check
+  would make those ungrantable).
+
+Recording it here because a ruling delivered only to the client would leave the
+constraint enforced in the UI and absent in the system — the exact "control that
+was never there" shape this document is trying to avoid. Neither behaviour
+should be changed on agent judgement alone.
 
 ### Re-granting: raises the ceiling, never refunds
 
@@ -468,6 +493,12 @@ nobody can audit.
   correction requires.
 
 ---
+
+## Open decisions (need a human ruling, not an agent one)
+
+1. **`granted ≤ requested`** — enforced in the HITL client, not in the server.
+   See the OPEN DECISION block above; a "never above" ruling requires a
+   server-side check in `issue_grant`, not just the UI restriction that exists.
 
 ## Upstream asks
 

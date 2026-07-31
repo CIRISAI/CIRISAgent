@@ -77,6 +77,7 @@ Available modules:
   deferral_taxonomy - DSASPDMA taxonomy coverage and localized deferral classification
   licensed_agent  - Licensed agent device auth (RFC 8628) flow testing
   model_eval      - Model quality evaluation with tough questions (requires --live)
+  mesh_repro      - CIRISServer traceflow harness as an agent QA gate (+ prod-wheel test-anchor guard; needs $CIRIS_SERVER_REPO checkout + docker, else skips)
   api_full        - All API modules
   handlers_full   - All handler modules
   all             - Everything

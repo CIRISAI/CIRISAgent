@@ -57,8 +57,14 @@ class DeferHandler(BaseActionHandler):
             )
             await self._send_error_deferral(thought, dispatch_context)
 
-        # Update thought and task status
-        persistence.update_thought_status(thought_id=thought_id, status=ThoughtStatus.DEFERRED, final_action=result)
+        # Update thought and task status (in the thought's own occurrence —
+        # wakeup step thoughts live on the claiming occurrence, not "default").
+        persistence.update_thought_status(
+            thought_id=thought_id,
+            status=ThoughtStatus.DEFERRED,
+            occurrence_id=thought.agent_occurrence_id,
+            final_action=result,
+        )
         self.logger.info(f"Updated thought {thought_id} to DEFERRED. Info: {follow_up_info}")
 
         self._mark_task_deferred(thought)
@@ -228,10 +234,13 @@ class DeferHandler(BaseActionHandler):
         intentionally NOT surfaced to the user (it's for WA review only).
         """
         parent_task_id = thought.source_task_id
-        persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, "default")
+        # Resolve the task's real occurrence — a hard-coded "default" silently
+        # fails to mark tasks owned by other occurrences (#934 chain hygiene).
+        task = persistence.get_task_by_id_any_occurrence(parent_task_id)
+        occurrence_id = task.agent_occurrence_id if task else thought.agent_occurrence_id
+        persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, occurrence_id)
         self.logger.info(f"Marked parent task {parent_task_id} as DEFERRED due to child thought deferral.")
 
-        task = persistence.get_task_by_id(parent_task_id)
         if not task or not task.channel_id:
             return
 

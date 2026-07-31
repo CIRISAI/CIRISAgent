@@ -1326,6 +1326,35 @@ class SetupViewModel(
                         }
                     }
 
+                    // EXPLICIT trace-sharing consent (ciris-server explicit-consent
+                    // cut): consent:replication is NO LONGER auto-authored at node
+                    // boot — when the user opted into "Send traces to CIRIS L3C",
+                    // the wizard must POST /v1/federation/consent once, after the
+                    // owner claim (the route is owner-gated). Without this call the
+                    // node reports nothing to the canonical — sealed traces never
+                    // replicate (runbook §1/§3). NON-FATAL like announce: a failure
+                    // never blocks COMPLETE; the Manage Consent card can retry.
+                    if (ownerLoginOk && _state.value.accordMetricsConsent) {
+                        try {
+                            PlatformLogger.i(TAG, "[ORDER] federation_consent begin (session=$sessionKind)")
+                            val consentRaw = client.authorFederationConsent(
+                                localNodeUrl = CIRISApiClient.LOCAL_NODE_URL,
+                            )
+                            PlatformLogger.i(
+                                TAG,
+                                "[ORDER] federation_consent authored (scope=trace:,capacity: " +
+                                    "session=$sessionKind): ${consentRaw.take(200)}",
+                            )
+                        } catch (e: Exception) {
+                            PlatformLogger.w(
+                                TAG,
+                                "[ORDER] federation_consent FAILED (non-fatal, session=$sessionKind): " +
+                                    "${e.message} — traces will NOT replicate until consent is " +
+                                    "authored (retry via Manage Consent)",
+                            )
+                        }
+                    }
+
                     // Persist the OPTIONAL friendly device name (e.g. "Mac mini")
                     // the user typed in the fed-ID step as a CLIENT-SIDE preference
                     // so the UI can label "this device". Best-effort; never blocks.

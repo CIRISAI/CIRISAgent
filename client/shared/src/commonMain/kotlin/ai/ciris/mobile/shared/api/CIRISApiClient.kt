@@ -4482,6 +4482,52 @@ class CIRISApiClient(
     }
 
     /**
+     * Get the exhaustive tool disclosure for the first-run wizard.
+     * Calls GET /v1/setup/tool-disclosure (no auth required during setup).
+     *
+     * The server generates this from each tool service's own get_all_tool_info(),
+     * so it always reflects what is actually registered. Used by the
+     * OPTIONAL_FEATURES step to tell the operator what each adapter choice grants
+     * and which tools no choice controls.
+     *
+     * Not part of the generated SDK surface, so this uses a direct request in the
+     * same idiom as getAgentMode().
+     */
+    suspend fun getSetupToolDisclosure(): ToolDisclosureReport {
+        val method = "getSetupToolDisclosure"
+        logDebug(method, "Fetching tool disclosure from $baseUrl/v1/setup/tool-disclosure")
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 5000
+            }
+        }
+        return try {
+            val response = client.get("$baseUrl/v1/setup/tool-disclosure") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Tool disclosure fetch failed: ${response.status}")
+            }
+            val root = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            val data = root["data"] ?: throw RuntimeException("Tool disclosure response has no data")
+            val decoder = Json { ignoreUnknownKeys = true }
+            val report = decoder.decodeFromJsonElement(
+                ToolDisclosureReport.serializer(),
+                data
+            )
+            logInfo(method, "Fetched disclosure: ${report.total_tools} tools across " +
+                "${report.adapters.size} adapters + ${report.always_on.size} always-on groups")
+            report
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
      * Validate LLM configuration by testing the connection.
      * Calls POST /v1/setup/validate-llm
      *

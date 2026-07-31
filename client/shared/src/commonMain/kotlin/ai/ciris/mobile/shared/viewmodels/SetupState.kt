@@ -7,6 +7,7 @@ import ai.ciris.mobile.shared.models.DiscoveredItemData
 import ai.ciris.mobile.shared.models.LoadableAdaptersData
 import ai.ciris.mobile.shared.models.SelectOptionData
 import ai.ciris.mobile.shared.models.SetupMode
+import ai.ciris.mobile.shared.models.ToolDisclosureReport
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -579,6 +580,17 @@ data class SetupFormState(
     val enabledAdapterIds: Set<String> = setOf("api"),
     // Loading state for adapter list
     val adaptersLoading: Boolean = false,
+
+    // Tool disclosure (#941): exactly what each adapter choice grants the agent,
+    // generated server-side from the live tool services. Disclosure only --
+    // wide tool access is intended and nothing here gates or defaults anything off.
+    // null = not fetched (or fetch failed); the UI must say so rather than imply
+    // that a choice grants nothing.
+    @kotlinx.serialization.Transient
+    val toolDisclosure: ToolDisclosureReport? = null,
+    val toolDisclosureLoading: Boolean = false,
+    // Adapter ids (and always-on group ids) whose tool list is expanded
+    val expandedToolDisclosureIds: Set<String> = emptySet(),
 
     // Adapter wizard state (for adapters that require configuration)
     // This mirrors AdaptersViewModel's wizard state for use during setup

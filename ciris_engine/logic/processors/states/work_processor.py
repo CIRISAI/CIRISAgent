@@ -24,6 +24,7 @@ from ciris_engine.schemas.processors.results import WorkResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task
+from ciris_engine.schemas.services.budget_envelope import PROPOSAL_TICKET_STATUS
 
 logger = logging.getLogger(__name__)
 
@@ -283,8 +284,23 @@ class WorkProcessor(BaseProcessor):
         )
 
     def _should_skip_ticket_by_status(self, ticket_status: str) -> bool:
-        """Check if ticket should be skipped based on status."""
-        return ticket_status in ["blocked", "deferred", "completed", "failed", "cancelled"]
+        """Check if ticket should be skipped based on status.
+
+        Note (#938): agent-created *proposals* ride ``blocked`` — the persist
+        substrate's ticket-status enum is closed, so there is no ``proposed``
+        variant to add without a CIRISPersist change. ``blocked`` is already
+        skipped here and is not listed by either discovery query, which is what
+        makes "a proposal never becomes an executing task" hold. Do not remove
+        ``blocked`` from this list without re-reading
+        ``ciris_engine/schemas/services/budget_envelope.py``.
+        """
+        return ticket_status in [
+            PROPOSAL_TICKET_STATUS,  # == "blocked"; proposals awaiting human approval
+            "deferred",
+            "completed",
+            "failed",
+            "cancelled",
+        ]
 
     def _attempt_claim_pending_ticket(self, ticket: Dict[str, Any]) -> bool:
         """Attempt to atomically claim a pending ticket.

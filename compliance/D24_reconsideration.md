@@ -95,6 +95,8 @@ This is one of the most concretely implemented dimensions in CIRIS. The canonica
 - `EssentialConfig.security.max_thought_depth` (default 5) — the reconsideration ceiling
 - `ConscienceConfig.optimization_veto_ratio=10.0` — the threshold that triggers reconsideration
 
+**Substrate-enforced facet (inherited via CIRISServer).** Bounded reconsideration *admission* — the anti-DoS and harassment-cluster gates on who may file a reconsideration, how often — now ships inside the agent's own deployment via CIRISServer's integration of the substrate. The facet is independently verified against the *real published wheels* by CIRISConformance [`test_220_reconsider_dos.py`](https://github.com/CIRISAI/CIRISConformance/blob/main/tests/test_220_reconsider_dos.py) (F-AV-RECONSIDER-DOS): `ciris_server.ReconsiderDosGuard` admits a fresh filing, refuses filings past the per-actor budget, refuses repeat same-pair filings as `HarassmentClusterDetected`, and refills the budget on a successful reversal — on both sqlite and postgres, across py3.10/3.12 on x86_64 + aarch64. D24 is one of the three controls the [CIRISConformance compliance coverage map](https://github.com/CIRISAI/CIRISConformance#compliance-coverage-map) marks fully substrate-gated (lane = substrate). The agent-side reconsideration surfaces above (PONDER depth bound, retry-with-guidance, DEFER→resolve) remain the in-pipeline half; the substrate guard bounds the federation-facing admission half.
+
 Proposed pointer (from seed): `CIRISNodeCore reconsideration primitive`
 
 ## How you can tell it's working (observability)
@@ -117,7 +119,7 @@ Proposed pointer (from seed): `CIRISNodeCore reconsideration primitive`
 - **`reconsideration:negotiation_reopening`**: shared work with the upstream substrate — re-opening a previously-resolved decision uses the upstream `ReconsiderationRequest` primitive. The WiseBus broadcast pattern is the agent-side hook for emitting the request once the federation surface lands.
 - **Per-task reconsideration budget** (next step, tracked in `CIRISAgent#815`): `max_thought_depth=5` is a hard per-thought floor, but a long task can accumulate many reconsiderations across thoughts without a task-level budget. The upstream substrate provides a per-ground recursion bound + 180-day time bound; an agent-side task-level budget will complement that.
 - **ASEAN does not address reconsideration** (it is a forward-looking 2024 document with no predecessor to reconsider) — CIRIS exceeds ASEAN's surface here.
-- **Harassment-pattern bound**: shared work with the upstream substrate (FSD-002 §3.7 `ratchet:flag:harassment_pattern` — three or more reconsiderations on a single attestation triggers review). An equivalent agent-side rate-limiter on PONDER/DEFER cycling against the same target is a next step.
+- **Harassment-pattern bound**: the federation-facing half is now substrate-enforced — `ciris_server.ReconsiderDosGuard` refuses repeat same-pair filings as `HarassmentClusterDetected` and budgets per-actor filings (CIRISConformance [`test_220`](https://github.com/CIRISAI/CIRISConformance/blob/main/tests/test_220_reconsider_dos.py), see above). An equivalent agent-side rate-limiter on PONDER/DEFER cycling against the same target remains a next step.
 
 ## Tracked requirements
 

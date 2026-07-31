@@ -90,6 +90,11 @@ CIRIS takes a different approach to accountability than naming it as a single ax
 - `AuditEventType` enum (21 values) — locks the accountability vocabulary at the persistence layer
 - Wise Authority registration in `service_initializer.py:704, 2050` — declares which endpoints carry the `RESOLVE_DEFERRALS` permission
 
+**Substrate-enforced facet vs agent-side facet (the D23 split).** With the CIRISServer adoption this dimension splits cleanly in two:
+
+- *Tamper-evident log* (substrate-enforced, inherited via CIRISServer): the hash-chained, Ed25519 + ML-DSA-65 hybrid-signed audit log is enforced by the substrate wheels shipping inside the agent's deployment, independently verified against the real published wheels by CIRISConformance [`test_320_audit_accountability.py`](https://github.com/CIRISAI/CIRISConformance/blob/main/tests/test_320_audit_accountability.py) — `ciris_server.LensAudit` writes, persist's `audit_verify_chain` walks the chain and returns `ok` with a typed break diagnostic on tamper (sqlite + postgres, py3.10/3.12, x86_64 + aarch64). Same evidence as D02; the [CIRISConformance coverage map](https://github.com/CIRISAI/CIRISConformance#compliance-coverage-map) marks D23 lane = substrate + agent.
+- *Named accountability* (agent-side, unchanged): who decided, on what rationale, and which human resolved the escalation — the Wise Authority surface, `RESOLVE_DEFERRALS`, per-decision `rationale`, and the DEFER→`resolve_deferral` pair above remain owned by this map.
+
 Proposed pointer (from seed): `(none specified in seed; please fill)`
 
 ## How you can tell it's working (observability)

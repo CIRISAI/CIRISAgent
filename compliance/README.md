@@ -134,6 +134,21 @@ Per-dimension upstream substrate ownership:
 | CIRISLensCore (RATCHET detectors, F-3 family) | D05, D06, D07, D13, D14, D15, D19, D26 |
 | CIRISVerify (attestation ladder) | D17, D18, D27 |
 
+## Substrate-enforced facets (CIRISServer adoption)
+
+Six controls carry facets that are **substrate-enforced** — inherited via CIRISServer's integration of the substrate wheels (`ciris-persist` + `ciris-edge` + `ciris-verify`, lens folded into server) and independently verified against the real published wheels by [CIRISConformance](https://github.com/CIRISAI/CIRISConformance#compliance-coverage-map) on both sqlite + postgres across py3.10/3.12 on x86_64 + aarch64 (CIRISAgent#902):
+
+| Control | Facet credited | Conformance evidence |
+|---|---|---|
+| D02 — integrity (full) | tamper-evident hash-chained Ed25519 + ML-DSA-65 audit log | `test_320` |
+| D15 — moderation (full) | delegated, revocable moderation authority at the emit boundary | `test_270` |
+| D24 — reconsideration (full) | bounded admission (anti-DoS + harassment-cluster) | `test_220` |
+| D23 — accountability (partial) | tamper-evident-log facet (named-accountability stays agent-side) | `test_320` |
+| D18 — attestation (partial) | L2 hardware-rooted key facet (L1/L3/L4/L5 stay consumer-side per CEG §8.1.9 Policy I) | `test_070` / `test_080` |
+| D26 — key_boundary (partial) | hardware-rooted signer + storage-kind taxonomy; non-downgradable X25519 + ML-KEM-768 DEK-grant wrap (`no_seed_in_heap` stays a known gap) | `test_070` / `test_080` / `test_250` |
+
+**TODO — wire the substrate-side evidence artifact into CI.** There is no dedicated compliance CI lane in `.github/workflows/` today (the safety-battery and build lanes are the nearest neighbors). When one lands, the substrate half of the evidence should be consumed mechanically rather than by citation: run CIRISConformance's `pytest --conformance-report=conformance.json` against the pinned wheel matrix (`matrices/current.yaml`) and assert the report's top-level `passed_all_gates` boolean — that JSON (pinned matrix, per-marker rollup, per-test outcomes) is the machine-readable cross-wheel evidence for the six substrate-enforced facets above.
+
 ## Contributing
 
 1. **Don't hand-edit the auto-rendered top portion of any `D*.md` stub.** Re-run `python3 tools/compliance/generate_ciris_compliance_stubs.py tools/compliance/SEED_DIMENSIONS.yaml compliance/` after seed updates.

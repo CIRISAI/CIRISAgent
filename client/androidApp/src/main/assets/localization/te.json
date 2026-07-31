@@ -3091,7 +3091,7 @@
   "approval_budget_expires_at": "గడువు",
   "approval_budget_expiry_hours": "గడువు ముగియడానికి (గంటలు)",
   "approval_budget_granted": "బడ్జెట్ ఆమోదించబడింది",
-  "approval_budget_headroom": "ఈ డిప్లాయ్‌మెంట్ మొత్తం పరిమితిలో మిగిలినది",
+  "approval_budget_headroom": "ఈ డిప్లాయ్‌మెంట్ పరిమితిలో మిగిలినది",
   "approval_budget_headroom_detail": "ఈరోజు {daily} మిగిలింది, ఒక్కో లావాదేవీకి గరిష్ఠం {max}",
   "approval_budget_intent": "ఏజెంట్ ఏమి చేయాలనుకుంటోంది",
   "approval_budget_justification": "ఇది ఎందుకు అవసరమని ఏజెంట్ చెబుతోంది",

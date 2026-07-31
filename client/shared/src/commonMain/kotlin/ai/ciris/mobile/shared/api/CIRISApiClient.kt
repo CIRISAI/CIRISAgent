@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.api
 
+import ai.ciris.mobile.shared.models.federation.FederationConsentScopes
+
 import ai.ciris.mobile.shared.models.*
 import ai.ciris.mobile.shared.models.safety.AgeBand
 import ai.ciris.mobile.shared.models.safety.AgeStatusResponse
@@ -1871,7 +1873,7 @@ class CIRISApiClient(
      */
     suspend fun authorFederationConsent(
         peerKeyId: String? = null,
-        attestationPrefixes: List<String> = listOf("trace:", "capacity:"),
+        attestationPrefixes: List<String> = FederationConsentScopes.TO_CANONICAL,
         analyze: Boolean = true,
         localNodeUrl: String = LOCAL_NODE_URL,
         token: String? = accessToken,

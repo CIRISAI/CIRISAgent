@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.mobile.shared.models.federation.FederationConsentScopes
+
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.models.NodeProfile
 import ai.ciris.mobile.shared.models.federation.PeeringRequest
@@ -58,8 +60,8 @@ class ConsentObjectsViewModel(
 
     companion object {
         private const val TAG = "ConsentObjectsVM"
-        val DEFAULT_A_TO_B_PREFIXES = listOf("capacity:")
-        val DEFAULT_B_TO_A_PREFIXES = listOf("health:")
+        val DEFAULT_A_TO_B_PREFIXES = FederationConsentScopes.TO_CANONICAL
+        val DEFAULT_B_TO_A_PREFIXES = FederationConsentScopes.FROM_PEER
     }
 
     private val _state = MutableStateFlow(ConsentObjectsState())

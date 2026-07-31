@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.mobile.shared.models.federation.FederationConsentScopes
+
 import ai.ciris.mobile.shared.CIRISBuild
 import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.models.*
@@ -1342,7 +1344,8 @@ class SetupViewModel(
                             )
                             PlatformLogger.i(
                                 TAG,
-                                "[ORDER] federation_consent authored (scope=trace:,capacity: " +
+                                "[ORDER] federation_consent authored (scope=" +
+                                    "${FederationConsentScopes.describe(FederationConsentScopes.TO_CANONICAL)} " +
                                     "session=$sessionKind): ${consentRaw.take(200)}",
                             )
                         } catch (e: Exception) {

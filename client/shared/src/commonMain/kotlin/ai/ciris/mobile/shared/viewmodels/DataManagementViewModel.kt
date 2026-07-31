@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.mobile.shared.models.federation.FederationConsentScopes
+
 import ai.ciris.mobile.shared.api.AccordSettingsData
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.LensDeletionResult
@@ -368,7 +370,8 @@ class DataManagementViewModel(
                     // uses; non-fatal (the status card surfaces any gap).
                     try {
                         val consentRaw = apiClient.authorFederationConsent()
-                        logInfo(method, "[ORDER] federation_consent authored via data card (scope=trace:,capacity: analyze=true): ${consentRaw.take(160)}")
+                        logInfo(method, "[ORDER] federation_consent authored via data card (scope=" +
+                            "${FederationConsentScopes.describe(FederationConsentScopes.TO_CANONICAL)} analyze=true): ${consentRaw.take(160)}")
                     } catch (e: Exception) {
                         logError(method, "[ORDER] federation_consent FAILED via data card (non-fatal): ${e.message} — traces will not replicate until consent is authored")
                     }

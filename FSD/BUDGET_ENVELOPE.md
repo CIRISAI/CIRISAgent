@@ -393,6 +393,29 @@ The client also enforces `granted ≤ requested` locally, in fixed-point integer
 That is a **usability property, not a security one** — the server remains the
 authority, and nothing about the gate depends on the client behaving.
 
+**The server deliberately does not enforce `granted ≤ requested`.** The agent's
+request is *information for the human*, not a constraint on them. An AUTHORITY
+user who knows the true cost may legitimately grant above a lowballed request,
+and forcing a re-propose instead would burn the agent's proposal rate budget and
+add a reasoning round-trip for no safety gain. The bound the server does enforce
+is `granted ≤ trust ceiling`.
+
+### Re-granting: raises the ceiling, never refunds
+
+Issuing a second grant on a ticket **replaces the grant and preserves the spend
+ledger**. Granting 40 after 25 was already spent leaves 15 remaining, not 40.
+This is a security property, not a convenience: if a re-grant reset the ledger,
+"raising the budget" would silently refund spent money and repeated re-grants
+would be an unbounded spend channel. Locked by
+`TestRegrantSemantics::test_regrant_preserves_the_spend_ledger`.
+
+Re-granting *below* the amount already spent clamps remaining to zero — the
+effective revocation path, since there is no explicit revoke verb yet.
+
+Consequence for any UI: never render the granted amount alone. Render
+granted / spent / remaining, because after any spend the granted figure alone
+overstates what is available.
+
 ---
 
 ## What this does NOT do
@@ -405,6 +428,22 @@ nobody can audit.
   ADMIN-authed human path, not the reasoning loop, so it is out of scope by
   design — but it means "all spend is budget-gated" would be a false claim.
   **Agent spend is gated. Human spend is not.**
+- **The trust envelope's limits carry no currency.** `SpendingLimits.max_transaction`
+  and `.daily_limit` are bare `Decimal`s with no declared unit, while
+  `SpendingTracker` keys its accumulator *by* currency. So `max_transaction=100`
+  means "100 of whatever is being sent" — 100 USDC and 100 KES are ~1000× apart
+  in value and both pass. The `GET /{id}/budget` response stamps
+  `trust_headroom.currency` with the *ticket's* currency, which is the best
+  available answer but is strictly an assumption, not a declared fact from
+  config. A deployment transacting in more than one currency does not have one
+  meaningful ceiling. Fixing this means adding a currency (or a per-currency map)
+  to `SpendingLimits` — an operator-visible config change, filed rather than done
+  here.
+- **There is no explicit revoke endpoint.** Re-issuing a grant below the amount
+  already spent is the effective revocation (remaining clamps to zero), and
+  re-issuing above it raises the ceiling while preserving the ledger. Both are
+  locked by tests, but "revoke" deserves to be its own verb rather than a
+  side effect operators have to know about.
 - **The outer trust envelope is still process-global and lost on restart.**
   `SpendingTracker` is in-memory, wall-clock-windowed, keyed by currency only.
   N occurrences give N× the daily limit against one shared wallet, and a restart

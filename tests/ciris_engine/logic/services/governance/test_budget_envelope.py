@@ -331,6 +331,56 @@ class TestSpendDecrementsBoth:
         assert d.granted_remaining == Decimal("0")
 
 
+class TestRegrantSemantics:
+    """Re-granting raises the CEILING; it does not top up spent money.
+
+    This is security-relevant, not cosmetic: if a second grant reset the ledger,
+    a human "raising the budget" would silently refund everything already spent,
+    and repeated re-grants would be an unbounded spend channel.
+    """
+
+    @pytest.mark.asyncio
+    async def test_regrant_preserves_the_spend_ledger(self, ticket_with_task):
+        await _grant(amount="25")
+        record_spend(ticket_id=TICKET_ID, amount=Decimal("25"), currency="USDC")
+
+        exhausted = await authorize_spend(
+            task_id=TASK_ID, amount=Decimal("1"), currency="USDC", trust_envelope=_trust()
+        )
+        assert exhausted.allowed is False
+
+        # Human raises the ceiling 25 -> 40.
+        await _grant(amount="40")
+
+        ledger = load_spent_ledger(get_ticket(TICKET_ID))
+        assert ledger.total_spent == Decimal("25"), "re-grant reset the ledger — spent money was refunded"
+
+        d = await authorize_spend(
+            task_id=TASK_ID, amount=Decimal("15"), currency="USDC", trust_envelope=_trust()
+        )
+        assert d.allowed is True
+        assert d.granted_remaining == Decimal("15")  # 40 granted - 25 spent
+
+        over = await authorize_spend(
+            task_id=TASK_ID, amount=Decimal("16"), currency="USDC", trust_envelope=_trust()
+        )
+        assert over.allowed is False
+
+    @pytest.mark.asyncio
+    async def test_regrant_below_spent_revokes_rather_than_going_negative(self, ticket_with_task):
+        """Lowering a grant below what is already spent is an effective revocation."""
+        await _grant(amount="50")
+        record_spend(ticket_id=TICKET_ID, amount=Decimal("40"), currency="USDC")
+
+        await _grant(amount="10")
+
+        d = await authorize_spend(
+            task_id=TASK_ID, amount=Decimal("1"), currency="USDC", trust_envelope=_trust()
+        )
+        assert d.granted_remaining == Decimal("0")
+        assert d.allowed is False
+
+
 class TestSignature:
     @pytest.mark.asyncio
     async def test_signature_binds_the_ticket_id(self, ticket_with_task):

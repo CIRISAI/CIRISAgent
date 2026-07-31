@@ -134,20 +134,45 @@ class BudgetApprovalSeamTest {
         )
     }
 
+    private fun headroom(amount: String, currency: String = "USDC") = TrustHeadroom(
+        amount = amount,
+        currency = currency,
+        maxTransaction = "100",
+        dailyRemaining = amount,
+        source = "wallet",
+    )
+
     @Test
     fun validateGrant_refusesGrantsWiderThanTheEnclosingEnvelope() {
         // A nested envelope may never be wider than the envelope it nests in,
         // even when it is within what the agent asked for.
-        val outcome = BudgetApprovalSeam.validateGrant(requested, "20.00", 24, "fee", headroom = "5.00")
+        val outcome = BudgetApprovalSeam.validateGrant(requested, "20.00", 24, "fee", headroom = headroom("5.00"))
         assertFalse(outcome.ok)
         assertEquals(BudgetGrantError.NESTING_VIOLATION, outcome.error)
     }
 
     @Test
+    fun validateGrant_allowsAGrantExactlyEqualToTheHeadroom() {
+        // The gate allows a spend of exactly `amount`, so the UI must not be
+        // stricter than the number it is showing the operator.
+        assertTrue(BudgetApprovalSeam.validateGrant(requested, "5.00", 24, "fee", headroom = headroom("5.00")).ok)
+    }
+
+    @Test
     fun validateGrant_ignoresHeadroomWhenTheServerDoesNotReportIt() {
-        // Headroom is not exposed by any endpoint today; its absence must be
+        // trust_headroom is null when no wallet adapter is loaded. That must be
         // normal, not a block.
         assertTrue(BudgetApprovalSeam.validateGrant(requested, "25.00", 24, "fee", headroom = null).ok)
+    }
+
+    @Test
+    fun validateGrant_ignoresHeadroomDenominatedInADifferentCurrency() {
+        // A USD ceiling says nothing about a USDC request; comparing them would
+        // block a legitimate grant on a meaningless mismatch.
+        val outcome = BudgetApprovalSeam.validateGrant(
+            requested, "25.00", 24, "fee", headroom = headroom("5.00", currency = "USD"),
+        )
+        assertTrue(outcome.ok)
     }
 
     // ─── Proposal / budget metadata parsing ────────────────────────────────
@@ -246,16 +271,104 @@ class BudgetApprovalSeamTest {
     }
 
     @Test
-    fun classifyHttpError_disambiguates404OnTheBody() {
+    fun classifyHttpError_pinsOn404ErrorCodeNotProse() {
+        // The contract path: a structured detail carrying a machine-readable code.
         assertEquals(
             BudgetGrantError.TICKET_NOT_FOUND,
-            BudgetApprovalSeam.classifyHttpError(404, """{"detail":"Ticket abc not found"}"""),
+            BudgetApprovalSeam.classifyHttpError(
+                404,
+                """{"detail":{"error_code":"TICKET_NOT_FOUND","message":"PROP-1 is gone"}}""",
+            ),
         )
-        // A route that does not exist answers with the bare FastAPI 404.
+    }
+
+    @Test
+    fun classifyHttpError_bareNotFoundMeansTheEndpointIsAbsent() {
+        // A route that does not exist answers with the bare FastAPI 404 and no
+        // error_code. This is what keeps the capability check working against
+        // servers predating the budget feature.
         assertEquals(
             BudgetGrantError.ENDPOINT_UNAVAILABLE,
             BudgetApprovalSeam.classifyHttpError(404, """{"detail":"Not Found"}"""),
         )
+        assertEquals(BudgetGrantError.ENDPOINT_UNAVAILABLE, BudgetApprovalSeam.classifyHttpError(404, null))
+    }
+
+    @Test
+    fun classifyHttpError_fallsBackToProseForServersWithoutTheStructuredDetail() {
+        assertEquals(
+            BudgetGrantError.TICKET_NOT_FOUND,
+            BudgetApprovalSeam.classifyHttpError(404, """{"detail":"Ticket abc not found"}"""),
+        )
+    }
+
+    @Test
+    fun classifyHttpError_doesNotGuessAtAnUnknownErrorCode() {
+        // A structured detail we don't recognize is UNKNOWN, not silently
+        // coerced into "the endpoint is missing" — that would flip the
+        // capability check off on an unrelated error.
+        assertEquals(
+            BudgetGrantError.UNKNOWN,
+            BudgetApprovalSeam.classifyHttpError(404, """{"detail":{"error_code":"SOMETHING_ELSE"}}"""),
+        )
+    }
+
+    // ─── GET /v1/tickets/{id}/budget ───────────────────────────────────────
+
+    @Test
+    fun parseTicketBudgetState_readsTheWholeBudgetPictureInOneRead() {
+        val data = Json.parseToJsonElement(
+            """
+            {"ticket_id": "PROP-1",
+             "is_proposal": true,
+             "requested_budget": {"requested_amount": "50.00", "requested_currency": "USDC",
+                                  "purpose": "fee", "justification": "why"},
+             "granted_budget": null,
+             "spent": {"total_spent": "30", "currency": "USDC", "records": [{},{},{}]},
+             "trust_headroom": {"amount": "40", "currency": "USDC", "max_transaction": "100",
+                                "daily_remaining": "40", "source": "wallet"}}
+            """.trimIndent()
+        ) as JsonObject
+
+        val state = BudgetApprovalSeam.parseTicketBudgetState(data)
+        assertNotNull(state)
+        assertEquals("PROP-1", state.ticketId)
+        assertTrue(state.isProposal)
+        assertEquals("50.00", state.requested?.requestedAmount)
+        assertNull(state.granted)
+        assertEquals(3, state.spent?.recordCount)
+        assertEquals("40", state.headroom?.amount)
+        // Both bounds are carried so the UI can say which one is binding.
+        assertEquals("100", state.headroom?.maxTransaction)
+        assertEquals("40", state.headroom?.dailyRemaining)
+        assertEquals("wallet", state.headroom?.source)
+    }
+
+    @Test
+    fun parseTicketBudgetState_toleratesAbsentHeadroom() {
+        // trust_headroom is null when no wallet adapter is loaded — correct
+        // behaviour, not a gap.
+        val data = Json.parseToJsonElement(
+            """{"ticket_id": "PROP-1", "is_proposal": true, "trust_headroom": null}"""
+        ) as JsonObject
+        val state = BudgetApprovalSeam.parseTicketBudgetState(data)
+        assertNotNull(state)
+        assertNull(state.headroom)
+    }
+
+    @Test
+    fun parseTicketBudgetState_returnsNullOnAnUnrecognizedBody() {
+        assertNull(BudgetApprovalSeam.parseTicketBudgetState(null))
+        assertNull(
+            BudgetApprovalSeam.parseTicketBudgetState(
+                Json.parseToJsonElement("""{"unexpected": true}""") as JsonObject
+            )
+        )
+    }
+
+    @Test
+    fun budgetPath_targetsTheReadOnlyStateEndpoint() {
+        assertEquals("/v1/tickets/t-123/budget", BudgetApprovalSeam.budgetPath("t-123"))
     }
 
     @Test

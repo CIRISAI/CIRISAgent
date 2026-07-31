@@ -40,6 +40,13 @@ interface ApprovalsApi {
      */
     suspend fun fetchProposals(): List<TicketData>
 
+    /**
+     * Full budget state for one ticket, including remaining trust headroom.
+     * Returns null when the server does not expose it — headroom enhances the
+     * approval dialog, it is never a precondition for showing it.
+     */
+    suspend fun fetchTicketBudget(ticketId: String): TicketBudgetState?
+
     /** Issue a budget envelope against a proposal ticket. */
     suspend fun grantBudget(
         ticketId: String,
@@ -87,6 +94,9 @@ class CIRISApprovalsApi(private val client: CIRISApiClient) : ApprovalsApi {
         PlatformLogger.d(TAG, "[fetchProposals] tickets unavailable (${e.message}) — treating as none")
         emptyList()
     }
+
+    override suspend fun fetchTicketBudget(ticketId: String): TicketBudgetState? =
+        client.getTicketBudget(ticketId)
 
     override suspend fun grantBudget(
         ticketId: String,

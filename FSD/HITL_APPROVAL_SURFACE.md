@@ -37,8 +37,9 @@ approvals like budget."*
    desktop.
 4. **A budget request is rendered as a budget request**, with the amount, currency, purpose
    and the agent's stated intent — not as an opaque "approve/reject" prompt.
-5. **A human can approve at or below the requested amount, never above.** Enforced in the UI
-   as well as on the server.
+5. **A human can approve at or below the requested amount, never above.** This is a UI
+   guarantee — see the asymmetry note below; the server permits over-granting and this
+   client does not.
 6. **Approving money and starting work are separate decisions**, and both are visible.
 7. **Nothing in this surface can crash or block on a platform capability that is missing.**
    Notifications, budget issuance and the tickets API each degrade to a clear, non-fatal
@@ -51,7 +52,7 @@ approvals like budget."*
 | | Deferral | Ticket proposal |
 |---|---|---|
 | What it is | Wisdom-Based Deferral — the agent asked a human a question mid-reasoning | A ticket the agent proposed and may not itself start |
-| Read | `GET /v1/wa/deferrals` | `GET /v1/tickets?status_filter=blocked`, filtered to those with `metadata.__proposal__` |
+| Read | `GET /v1/wa/deferrals` | `GET /v1/tickets?status_filter=blocked`, filtered to those with `metadata.__proposal__`; `GET /v1/tickets/{id}/budget` on dialog open |
 | Decide | `POST /v1/wa/deferrals/{id}/resolve` | `POST /v1/tickets/{id}/budget/grant` and/or `PATCH /v1/tickets/{id}` |
 | Carries money | No | Optionally, via `metadata.__requested_budget__` |
 
@@ -157,17 +158,42 @@ Error surfacing: **403** wrong role, **404** ticket not found *or* endpoint abse
 below), **422** `NestingViolation` — the grant exceeds the deployment's trust-envelope
 ceiling. Each maps to a distinct message; none fails silently.
 
-### The ≤-requested constraint
+### Reading the budget state
 
-`BudgetApprovalSeam.validateGrant` refuses any amount greater than the request, before the
-request leaves the device. Amounts are compared as **fixed-point integers at 8 decimal
-places**, never as `Double` — money in a binary float is how you approve 25.000000000000004.
-Anything that is not a plain non-negative decimal (signs, exponents, thousands separators,
-currency symbols) is rejected rather than coerced.
+`GET /v1/tickets/{ticket_id}/budget` (OBSERVER) returns request, grant, spend ledger and
+`trust_headroom` in one read. The dialog fetches it on open. It is an *enhancement* to the
+dialog, never a precondition: the dialog renders immediately from data already in the list
+and the headroom row appears a moment later, or not at all.
 
-Client-side enforcement here is a **usability property, not a security one**. The server
-remains the authority. The point is that the constraint is visible at the moment of decision
-instead of arriving as a rejected round-trip.
+`trust_headroom.amount` is `min(max_transaction, daily_remaining)` and is **the same number
+the spend gate applies** — the server resolves it through the wallet tool service's own
+`_resolve_trust_envelope`, not a re-derivation, so what an operator is shown cannot drift
+from what is enforced when money moves. Both bounds are carried so the UI can say *which one
+is binding* ("40 remaining today, 100 per-transaction ceiling") rather than an unexplained
+number. `trust_headroom` is null when no wallet adapter is loaded; the row is then omitted.
+
+### The two amount constraints, and their different standing
+
+`BudgetApprovalSeam.validateGrant` checks two things that are easy to conflate:
+
+**`granted ≤ requested` — a UI policy, and this client is stricter than the server.** The
+server does **not** enforce it: an AUTHORITY user is permitted to grant more than the agent
+asked for, e.g. when the agent lowballed. This client refuses it anyway, because "approve at
+or below what was asked" is the promise the approval dialog makes to the person using it, and
+a dialog that quietly allows more than the request on screen can surprise its operator. It is
+a product decision, not a security boundary, and a modified client bypassing it is not a
+vulnerability.
+
+**`granted ≤ trust ceiling` — the real bound, owned by the server.** Checked client-side only
+so the operator learns at the point of decision rather than through a rejected round-trip. It
+is enforced at issuance (422 `NestingViolation`) and again at every spend. Headroom is ignored
+when its currency differs from the requested currency — a USD ceiling says nothing about a
+USDC request, and comparing them would block a legitimate grant on a meaningless mismatch.
+
+Amounts are compared as **fixed-point integers at 8 decimal places**, never as `Double` —
+money in a binary float is how you approve 25.000000000000004. Anything that is not a plain
+non-negative decimal (signs, exponents, thousands separators, currency symbols) is rejected
+rather than coerced.
 
 ### Grant ≠ start
 
@@ -209,12 +235,20 @@ There is no probe endpoint, so `BudgetCapability` is discovered lazily:
   whole surface exists to prevent.
 - `AVAILABLE` — set on the first successful grant.
 
-404 is genuinely ambiguous — "no such ticket" or "no such endpoint" — and the two need
-different UI. They are disambiguated on the response body: a route that exists answers with a
-`detail` mentioning the ticket; a route that does not exist answers with the bare FastAPI
-`{"detail":"Not Found"}`. Getting this wrong in the safe direction (reporting the feature
-unavailable when a ticket merely vanished) is recoverable; the reverse leaves the operator
-retrying a button that can never work.
+404 is genuinely ambiguous — "no such ticket" or "no such endpoint" — and only one of them
+means the feature is missing. The server disambiguates with a structured detail:
+
+```json
+{"detail": {"error_code": "TICKET_NOT_FOUND", "message": "Ticket PROP-X not found — …"}}
+```
+
+The client pins on `error_code` (`TICKET_NOT_FOUND_ERROR_CODE` in `routes/tickets.py`), never
+on prose. A substring match on the message is retained purely as a fallback for servers
+predating the structured detail, and is deliberately checked last. A bare
+`{"detail": "Not Found"}` carries no `error_code` and correctly reads as the endpoint being
+absent, which is what keeps the capability check working against older servers. An
+*unrecognized* `error_code` maps to `UNKNOWN` rather than being coerced into
+"endpoint missing" — coercing it would flip the capability check off on an unrelated error.
 
 A deployment with no tickets API at all returns an empty proposal list rather than throwing,
 so deferrals still render.
@@ -228,17 +262,14 @@ so deferrals still render.
   service polls for them. Adding deferral/ticket events to the existing WebSocket stream
   would remove the 30 s floor and the app-must-be-running limitation; that is a backend ask,
   not something this surface can fix.
-- **No trust-envelope headroom display.** No endpoint exposes it. Internally it resolves as
-  `min(spending_limits.max_transaction, daily_remaining)`; the nearest existing surface,
-  `GET /v1/wallet/status`, is x402-only and reports a *different* number than the gate
-  enforces. `BudgetApprovalSeam.parseHeadroom` and the UI row exist and are wired, but read a
-  field no server currently sends, so the row does not render. **Showing a number that
-  disagrees with the gate would be worse than showing none.** This is the single named
-  follow-up ask to the backend.
-- **It does not enforce anything.** Client-side validation is a usability affordance. Every
-  constraint that matters — the ≤ bound, the AUTHORITY role, the envelope ceiling, spend
-  against the grant — is enforced server-side. A modified client changes nothing about what
-  the agent is permitted to do.
+- **It does not show headroom when no wallet adapter is loaded.** `trust_headroom` is null in
+  that case and the row is omitted. That is correct behaviour, not a gap — there is no
+  envelope to report.
+- **It does not enforce anything security-relevant.** Client-side validation is a usability
+  affordance. The AUTHORITY role, the trust-envelope ceiling and spend against the grant are
+  all enforced server-side; a modified client changes nothing about what the agent is
+  permitted to do. The one place this client is *stricter* than the server — refusing
+  `granted > requested` — is a UI promise, not a boundary.
 - **It does not cover unapproved spend paths.** #939 documents that `_execute_send_money`
   performs no limit check on any fiat rail. This surface issues a budget; whether that budget
   is *consulted* before `provider.send` is the backend's enforcement point, not the client's.
@@ -274,16 +305,17 @@ so deferrals still render.
 `card_pending_approvals`, `pill_approval_count`, `item_approval_{id8}`, `chip_budget_{id8}`,
 `nav_badge_wise_authority`, `nav_badge_group_{groupId}`, `dialog_budget_approval`,
 `txt_budget_requested_amount`, `txt_budget_validation_error`, `txt_budget_unsupported`,
-`input_budget_amount`, `input_budget_expiry`, `input_budget_reason`, `btn_budget_approve`,
-`btn_budget_approve_start`, `btn_budget_reject`, `btn_budget_defer`, `btn_budget_cancel`.
+`row_budget_headroom`, `input_budget_amount`, `input_budget_expiry`, `input_budget_reason`,
+`btn_budget_approve`, `btn_budget_approve_start`, `btn_budget_reject`, `btn_budget_defer`,
+`btn_budget_cancel`.
 
 ## Tests
 
-`client/shared/src/commonTest/.../approvals/BudgetApprovalSeamTest.kt` (24),
+`client/shared/src/commonTest/.../approvals/BudgetApprovalSeamTest.kt` (33),
 `.../approvals/ApprovalNotifierTest.kt` (15),
-`.../viewmodels/WiseAuthorityViewModelTest.kt` (18).
+`.../viewmodels/WiseAuthorityViewModelTest.kt` (23).
 
 ```
 cd client && ./gradlew :shared:compileCommonMainKotlinMetadata   # commonMain type-checks for all targets
-cd client && ./gradlew :shared:desktopTest                       # 279 tests, 0 failures
+cd client && ./gradlew :shared:desktopTest                       # 293 tests, 0 failures
 ```

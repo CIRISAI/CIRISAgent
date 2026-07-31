@@ -13,6 +13,9 @@ import ai.ciris.mobile.shared.approvals.BudgetGrantError
 import ai.ciris.mobile.shared.approvals.BudgetGrantOutcome
 import ai.ciris.mobile.shared.approvals.GrantedBudget
 import ai.ciris.mobile.shared.approvals.InMemoryNotifiedApprovalStore
+import ai.ciris.mobile.shared.approvals.RequestedBudget
+import ai.ciris.mobile.shared.approvals.TicketBudgetState
+import ai.ciris.mobile.shared.approvals.TrustHeadroom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -68,6 +71,8 @@ class WiseAuthorityViewModelTest {
         var statusUpdateOk: Boolean = true,
         var deferralsThrow: Exception? = null,
         var proposalsThrow: Exception? = null,
+        var budgetState: TicketBudgetState? = null,
+        var budgetStateThrow: Exception? = null,
     ) : ApprovalsApi {
         val grantCalls = mutableListOf<GrantCall>()
         val statusUpdates = mutableListOf<Pair<String, String>>()
@@ -100,6 +105,11 @@ class WiseAuthorityViewModelTest {
         override suspend fun fetchProposals(): List<TicketData> {
             proposalsThrow?.let { throw it }
             return proposals
+        }
+
+        override suspend fun fetchTicketBudget(ticketId: String): TicketBudgetState? {
+            budgetStateThrow?.let { throw it }
+            return budgetState
         }
 
         override suspend fun grantBudget(
@@ -444,6 +454,100 @@ class WiseAuthorityViewModelTest {
         assertTrue(vm.error.value!!.contains("AUTHORITY", ignoreCase = true))
         // Capability is unchanged — the endpoint exists, the caller lacks the role.
         assertEquals(BudgetCapability.UNKNOWN, vm.budgetCapability.value)
+    }
+
+    // ─── Trust headroom ────────────────────────────────────────────────────
+
+    private fun budgetState(
+        ticketId: String = "t1",
+        headroomAmount: String? = "40",
+        currency: String = "USDC",
+    ) = TicketBudgetState(
+        ticketId = ticketId,
+        isProposal = true,
+        requested = RequestedBudget("25.00", currency, "fee", null),
+        granted = null,
+        spent = null,
+        headroom = headroomAmount?.let {
+            TrustHeadroom(it, currency, maxTransaction = "100", dailyRemaining = it, source = "wallet")
+        },
+    )
+
+    @Test
+    fun loadBudgetState_exposesTheHeadroomForTheOpenApproval() = runTest {
+        val api = FakeApprovalsApi(
+            proposals = listOf(proposalTicket("t1")),
+            budgetState = budgetState(),
+        )
+        val (vm, _) = viewModel(api)
+
+        vm.loadBudgetState("t1")
+        advanceUntilIdle()
+
+        assertEquals("40", vm.selectedBudgetState.value?.headroom?.amount)
+        assertEquals("100", vm.selectedBudgetState.value?.headroom?.maxTransaction)
+    }
+
+    @Test
+    fun loadBudgetState_isNonFatalWhenTheServerHasNoSuchEndpoint() = runTest {
+        val api = FakeApprovalsApi(budgetStateThrow = RuntimeException("404"))
+        val (vm, _) = viewModel(api)
+
+        vm.loadBudgetState("t1")
+        advanceUntilIdle()
+
+        // Headroom enhances the dialog; it is never a precondition for it.
+        assertNull(vm.selectedBudgetState.value)
+        assertNull(vm.error.value)
+    }
+
+    @Test
+    fun clearBudgetState_dropsItOnDialogClose() = runTest {
+        val api = FakeApprovalsApi(budgetState = budgetState())
+        val (vm, _) = viewModel(api)
+
+        vm.loadBudgetState("t1")
+        advanceUntilIdle()
+        vm.clearBudgetState()
+
+        assertNull(vm.selectedBudgetState.value)
+    }
+
+    @Test
+    fun grantBudget_refusesAnAmountAboveTheLoadedHeadroom() = runTest {
+        val api = FakeApprovalsApi(
+            proposals = listOf(proposalTicket("t1", "25.00")),
+            budgetState = budgetState(headroomAmount = "10"),
+        )
+        val (vm, _) = viewModel(api)
+        vm.refresh()
+        vm.loadBudgetState("t1")
+        advanceUntilIdle()
+
+        var outcome: BudgetGrantOutcome? = null
+        vm.grantBudget("t1", "20.00", "USDC", "fee", 24, promote = false) { outcome = it }
+        advanceUntilIdle()
+
+        assertEquals(BudgetGrantError.NESTING_VIOLATION, outcome?.error)
+        assertTrue(api.grantCalls.isEmpty())
+    }
+
+    @Test
+    fun grantBudget_ignoresHeadroomLoadedForADifferentApproval() = runTest {
+        // A stale figure from a previously-open dialog must never gate a grant.
+        val api = FakeApprovalsApi(
+            proposals = listOf(proposalTicket("t1", "25.00")),
+            budgetState = budgetState(ticketId = "OTHER", headroomAmount = "1"),
+        )
+        val (vm, _) = viewModel(api)
+        vm.refresh()
+        vm.loadBudgetState("OTHER")
+        advanceUntilIdle()
+
+        vm.grantBudget("t1", "25.00", "USDC", "fee", 24, promote = false)
+        advanceUntilIdle()
+
+        assertEquals(1, api.grantCalls.size)
     }
 
     // ─── Proposal lifecycle ────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import ai.ciris.mobile.shared.approvals.ApprovalKind
 import ai.ciris.mobile.shared.approvals.BudgetApprovalSeam
 import ai.ciris.mobile.shared.approvals.BudgetCapability
 import ai.ciris.mobile.shared.approvals.PendingApproval
+import ai.ciris.mobile.shared.approvals.TrustHeadroom
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
@@ -266,8 +267,11 @@ fun ProposalApprovalDialog(
     approval: PendingApproval,
     capability: BudgetCapability,
     isSubmitting: Boolean,
-    /** Trust-envelope headroom, when the server reports it. Null today. */
-    headroom: String?,
+    /**
+     * Remaining trust envelope, when the server reports it. Null when no wallet
+     * adapter is loaded — the row is then omitted rather than guessed at.
+     */
+    headroom: TrustHeadroom?,
     onDismiss: () -> Unit,
     onApprove: (amount: String?, expiryHours: Int, reason: String, promote: Boolean) -> Unit,
     onReject: (reason: String) -> Unit,
@@ -343,14 +347,33 @@ fun ProposalApprovalDialog(
                             LabelledLine(localizedString("approval_budget_intent"), it)
                         }
                         // Headroom renders only when the server actually reports
-                        // it. Showing a number that disagrees with the gate would
-                        // be worse than showing none.
-                        headroom?.takeIf { requested != null }?.let {
+                        // it — this is the same number the spend gate applies,
+                        // not a client re-derivation, so it cannot disagree with
+                        // what is enforced when the money moves.
+                        headroom?.takeIf { requested != null }?.let { room ->
                             Spacer(Modifier.height(4.dp))
-                            LabelledLine(
-                                localizedString("approval_budget_headroom"),
-                                "$it ${requested?.requestedCurrency.orEmpty()}",
-                            )
+                            Column(modifier = Modifier.testable("row_budget_headroom")) {
+                                LabelledLine(
+                                    localizedString("approval_budget_headroom"),
+                                    "${room.amount} ${room.currency}",
+                                )
+                                // Say WHICH bound is binding. "You have 40 left"
+                                // is far less actionable than "40 left today,
+                                // against a 100 per-transaction ceiling".
+                                if (room.maxTransaction.isNotBlank() && room.dailyRemaining.isNotBlank()) {
+                                    Text(
+                                        text = localizedString(
+                                            "approval_budget_headroom_detail",
+                                            mapOf(
+                                                "max" to room.maxTransaction,
+                                                "daily" to room.dailyRemaining,
+                                            ),
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                         approval.budgetSpend?.let {
                             Spacer(Modifier.height(4.dp))

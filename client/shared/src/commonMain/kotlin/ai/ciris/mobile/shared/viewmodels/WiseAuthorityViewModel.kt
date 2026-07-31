@@ -14,6 +14,7 @@ import ai.ciris.mobile.shared.approvals.InMemoryNotifiedApprovalStore
 import ai.ciris.mobile.shared.approvals.PendingApproval
 import ai.ciris.mobile.shared.approvals.PlatformApprovalNotificationSink
 import ai.ciris.mobile.shared.approvals.SecureStorageNotifiedApprovalStore
+import ai.ciris.mobile.shared.approvals.TicketBudgetState
 import ai.ciris.mobile.shared.approvals.toPendingApproval
 import ai.ciris.mobile.shared.approvals.toPendingApprovalOrNull
 import ai.ciris.mobile.shared.platform.PlatformLogger
@@ -132,6 +133,19 @@ class WiseAuthorityViewModel(
     /** Whether this server exposes budget *issuance*. See [BudgetCapability]. */
     private val _budgetCapability = MutableStateFlow(BudgetCapability.UNKNOWN)
     val budgetCapability: StateFlow<BudgetCapability> = _budgetCapability.asStateFlow()
+
+    /**
+     * Full budget state for the approval currently open in the dialog, fetched
+     * on open. Its [TicketBudgetState.headroom] is what lets an operator see how
+     * much room the deployment has left — approving an amount with no view of
+     * the remaining envelope is not meaningful consent.
+     *
+     * Null while nothing is open, and null when the server does not expose the
+     * endpoint; the dialog then renders from ticket metadata alone and simply
+     * omits the headroom row.
+     */
+    private val _selectedBudgetState = MutableStateFlow<TicketBudgetState?>(null)
+    val selectedBudgetState: StateFlow<TicketBudgetState?> = _selectedBudgetState.asStateFlow()
 
     // Loading state
     private val _isLoading = MutableStateFlow(false)
@@ -377,6 +391,44 @@ class WiseAuthorityViewModel(
     }
 
     /**
+     * Load the budget state (and remaining trust headroom) for an approval the
+     * user has just opened.
+     *
+     * Deliberately fire-and-forget and non-fatal: the dialog renders
+     * immediately from data already in the list, and the headroom row appears
+     * a moment later if the server supplies it. A server without the endpoint
+     * produces no error state — only a missing row.
+     */
+    fun loadBudgetState(approvalId: String) {
+        val method = "loadBudgetState"
+        viewModelScope.launch {
+            try {
+                val state = api.fetchTicketBudget(approvalId)
+                // Guard against a late response for a dialog the user already
+                // dismissed or replaced.
+                if (state == null || state.ticketId == approvalId) {
+                    _selectedBudgetState.value = state
+                }
+                if (state?.headroom != null) {
+                    logDebug(
+                        method,
+                        "Headroom for $approvalId: ${state.headroom.amount} ${state.headroom.currency} " +
+                            "(max_tx=${state.headroom.maxTransaction}, daily=${state.headroom.dailyRemaining})"
+                    )
+                }
+            } catch (e: Exception) {
+                logDebug(method, "Budget state unavailable for $approvalId: ${e.message}")
+                _selectedBudgetState.value = null
+            }
+        }
+    }
+
+    /** Drop the loaded budget state when the dialog closes. */
+    fun clearBudgetState() {
+        _selectedBudgetState.value = null
+    }
+
+    /**
      * Issue a budget envelope against an agent proposal — the human approval
      * that unblocks spend.
      *
@@ -419,6 +471,11 @@ class WiseAuthorityViewModel(
             amount = amount,
             expiresInHours = expiresInHours,
             purpose = purpose,
+            // Only apply headroom actually loaded for THIS approval, so a stale
+            // figure from a previously-open dialog can never gate a grant.
+            headroom = _selectedBudgetState.value
+                ?.takeIf { it.ticketId == approvalId }
+                ?.headroom,
         )
         if (!validation.ok) {
             logWarn(method, "Local validation refused grant: ${validation.error} (${validation.message})")

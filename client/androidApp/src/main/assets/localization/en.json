@@ -3084,5 +3084,6 @@
   "approval_budget_expiry_hours": "Expires in (hours)",
   "approval_budget_approve": "Approve budget",
   "approval_budget_approve_and_start": "Approve budget & start work",
-  "approval_budget_unsupported": "This server does not support budget approval yet — nothing can be issued from here."
+  "approval_budget_unsupported": "This server does not support budget approval yet — nothing can be issued from here.",
+  "approval_budget_headroom_detail": "{daily} remaining today, {max} per-transaction ceiling"
 }

@@ -1,5 +1,6 @@
 package ai.ciris.mobile.shared.approvals
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -52,15 +53,22 @@ import kotlinx.serialization.json.put
  * i.e. withdrawing it) and refuses to write any of the four reserved metadata
  * keys. The human really is the only issuer.
  *
- * ── What is NOT available ───────────────────────────────────────────────────
+ * **Budget state, in one read.** `GET /v1/tickets/{ticket_id}/budget` (OBSERVER)
+ * returns request, grant, spend ledger and remaining trust headroom together.
+ * The headroom is resolved through the wallet tool service's own
+ * `_resolve_trust_envelope` — the same code path the spend gate runs — so the
+ * number shown to an operator cannot drift from the number enforced when money
+ * actually moves. It is null when no wallet adapter is loaded, and the UI then
+ * renders nothing rather than inventing a figure.
  *
- * **Trust-envelope headroom is not exposed by any endpoint today.** Internally
- * it resolves as `min(spending_limits.max_transaction, daily_remaining)`. The
- * nearest existing surface, `GET /v1/wallet/status`, is x402-only and reports a
- * *different* number than the one the gate enforces. So [parseHeadroom] reads a
- * field that no server currently sends, and the UI renders the headroom row
- * only when it is non-null. Showing a number that disagrees with the gate would
- * be worse than showing nothing.
+ * ── One asymmetry worth knowing ─────────────────────────────────────────────
+ *
+ * The server enforces `granted ≤ trust ceiling`. It does **not** enforce
+ * `granted ≤ requested` — an AUTHORITY user is permitted to grant more than the
+ * agent asked for, e.g. when the agent lowballed. [validateGrant] refuses that
+ * anyway, which makes this client deliberately **stricter than the server**.
+ * That is a product policy choice, not a security boundary; see the note on
+ * [validateGrant].
  */
 object BudgetApprovalSeam {
 
@@ -106,8 +114,18 @@ object BudgetApprovalSeam {
     private const val AMOUNT_SCALE = 8
     private const val SCALE_FACTOR = 100_000_000L // 10^8
 
+    /**
+     * Machine-readable code the server returns when the *ticket* is missing, as
+     * opposed to the *endpoint* being missing. Mirrors
+     * `TICKET_NOT_FOUND_ERROR_CODE` in `routes/tickets.py`.
+     */
+    const val ERROR_CODE_TICKET_NOT_FOUND = "TICKET_NOT_FOUND"
+
     /** Path of the issuance endpoint for [ticketId]. */
     fun grantPath(ticketId: String): String = "/v1/tickets/$ticketId/budget/grant"
+
+    /** Path of the read-only budget-state endpoint for [ticketId]. */
+    fun budgetPath(ticketId: String): String = "/v1/tickets/$ticketId/budget"
 
     // ═══════════════════════════════════════════════════════════════════════
     // Parsing — ticket metadata → typed model
@@ -132,8 +150,10 @@ object BudgetApprovalSeam {
      * Parse the agent's ask. Returns null when the proposal asks for no money —
      * which is a normal, common case, not an error.
      */
-    fun parseRequestedBudget(metadata: Map<String, JsonElement>): RequestedBudget? {
-        val obj = metadata[KEY_REQUESTED_BUDGET]?.asObjectOrNull() ?: return null
+    fun parseRequestedBudget(metadata: Map<String, JsonElement>): RequestedBudget? =
+        metadata[KEY_REQUESTED_BUDGET]?.asObjectOrNull()?.let { parseRequestedObject(it) }
+
+    private fun parseRequestedObject(obj: JsonObject): RequestedBudget? {
         val amount = obj.str("requested_amount") ?: return null
         val currency = obj.str("requested_currency") ?: return null
         return RequestedBudget(
@@ -151,8 +171,10 @@ object BudgetApprovalSeam {
     }
 
     /** Parse the burn-down ledger, when spend has occurred. */
-    fun parseBudgetSpend(metadata: Map<String, JsonElement>): BudgetSpend? {
-        val obj = metadata[KEY_BUDGET_SPENT]?.asObjectOrNull() ?: return null
+    fun parseBudgetSpend(metadata: Map<String, JsonElement>): BudgetSpend? =
+        metadata[KEY_BUDGET_SPENT]?.asObjectOrNull()?.let { parseSpendObject(it) }
+
+    private fun parseSpendObject(obj: JsonObject): BudgetSpend? {
         val total = obj.str("total_spent") ?: return null
         val records = runCatching { obj["records"]?.jsonArray?.size }.getOrNull() ?: 0
         return BudgetSpend(
@@ -163,14 +185,42 @@ object BudgetApprovalSeam {
     }
 
     /**
-     * Remaining trust-envelope headroom, if the server ever reports it.
+     * Parse the `data` object of `GET /v1/tickets/{id}/budget`.
      *
-     * No server sends this today (see the class doc). Kept as the single place
-     * that would need to change when it lands, so the UI wiring is already
-     * correct and simply renders nothing until then.
+     * Returns null when the body is not the shape we expect — callers then fall
+     * back to whatever the ticket metadata already gave them rather than
+     * blanking a dialog the operator is reading.
      */
-    fun parseHeadroom(metadata: Map<String, JsonElement>): String? =
-        metadata["__trust_envelope_remaining__"]?.asObjectOrNull()?.str("amount")
+    fun parseTicketBudgetState(data: JsonObject?): TicketBudgetState? {
+        if (data == null) return null
+        val ticketId = data.str("ticket_id") ?: return null
+        return TicketBudgetState(
+            ticketId = ticketId,
+            isProposal = runCatching { data["is_proposal"]?.jsonPrimitive?.booleanOrNull }.getOrNull() ?: false,
+            requested = data["requested_budget"]?.asObjectOrNull()?.let { parseRequestedObject(it) },
+            granted = data["granted_budget"]?.asObjectOrNull()?.let { parseGrantObject(it) },
+            spent = data["spent"]?.asObjectOrNull()?.let { parseSpendObject(it) },
+            headroom = data["trust_headroom"]?.asObjectOrNull()?.let { parseHeadroomObject(it) },
+        )
+    }
+
+    /**
+     * Remaining trust-envelope headroom.
+     *
+     * `amount` is `min(max_transaction, daily_remaining)` and is **the number
+     * the spend gate applies**, not a re-derivation — both bounds are carried so
+     * the UI can explain which one is binding.
+     */
+    private fun parseHeadroomObject(obj: JsonObject): TrustHeadroom? {
+        val amount = obj.str("amount") ?: return null
+        return TrustHeadroom(
+            amount = amount,
+            currency = obj.str("currency").orEmpty(),
+            maxTransaction = obj.str("max_transaction").orEmpty(),
+            dailyRemaining = obj.str("daily_remaining").orEmpty(),
+            source = obj.str("source").orEmpty(),
+        )
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // Issuance — building the request, reading the response
@@ -217,27 +267,52 @@ object BudgetApprovalSeam {
     }
 
     /**
-     * Map an HTTP status from the grant endpoint onto a typed error.
+     * Map an HTTP status from the budget endpoints onto a typed error.
      *
-     * 404 is genuinely ambiguous — it is either "no such ticket" or "no such
-     * endpoint" — and the two need different UI. We disambiguate on the body:
-     * a FastAPI route that exists answers 404 with a `detail` mentioning the
-     * ticket; a route that does not exist answers with the bare
-     * `{"detail":"Not Found"}`. Getting this wrong in the safe direction means
-     * telling the operator the feature is unavailable when the ticket merely
-     * vanished, which is recoverable; the reverse would leave them retrying a
-     * button that can never work.
+     * 404 is genuinely ambiguous — "no such ticket" and "no such endpoint" need
+     * different UI, and only one of them means the feature is missing. The
+     * server disambiguates for us with a structured detail:
+     *
+     * ```json
+     * {"detail": {"error_code": "TICKET_NOT_FOUND", "message": "Ticket X not found — …"}}
+     * ```
+     *
+     * We pin on [ERROR_CODE_TICKET_NOT_FOUND], never on prose. The substring
+     * check is retained only as a fallback for a server that predates the
+     * structured detail; a bare `{"detail": "Not Found"}` carries no
+     * `error_code` and correctly reads as the endpoint being absent, which is
+     * what keeps the capability check working against older servers.
      */
     fun classifyHttpError(status: Int, body: String?): BudgetGrantError = when (status) {
         403 -> BudgetGrantError.FORBIDDEN_ROLE
         422 -> BudgetGrantError.NESTING_VIOLATION
         405 -> BudgetGrantError.ENDPOINT_UNAVAILABLE
-        404 -> if (body != null && body.contains("ticket", ignoreCase = true)) {
+        404 -> classify404(body)
+        else -> BudgetGrantError.UNKNOWN
+    }
+
+    private fun classify404(body: String?): BudgetGrantError {
+        if (body.isNullOrBlank()) return BudgetGrantError.ENDPOINT_UNAVAILABLE
+        val detail = runCatching {
+            Json.parseToJsonElement(body).jsonObject["detail"]
+        }.getOrNull()
+
+        // Contract path: structured detail carrying a machine-readable code.
+        detail?.asObjectOrNull()?.str("error_code")?.let { code ->
+            return if (code == ERROR_CODE_TICKET_NOT_FOUND) {
+                BudgetGrantError.TICKET_NOT_FOUND
+            } else {
+                BudgetGrantError.UNKNOWN
+            }
+        }
+
+        // Fallback for servers predating the structured detail. Deliberately
+        // last: prose is not a contract.
+        return if (body.contains("ticket", ignoreCase = true)) {
             BudgetGrantError.TICKET_NOT_FOUND
         } else {
             BudgetGrantError.ENDPOINT_UNAVAILABLE
         }
-        else -> BudgetGrantError.UNKNOWN
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -245,25 +320,35 @@ object BudgetApprovalSeam {
     // ═══════════════════════════════════════════════════════════════════════
 
     /**
-     * Validate a proposed grant against the agent's ask, **before** it leaves
-     * the device.
+     * Validate a proposed grant **before** it leaves the device.
      *
-     * The load-bearing rule: a human may approve **at or below** the requested
-     * amount, never above. The server enforces this too; the client enforces it
-     * as well so the constraint is visible at the point of decision rather than
-     * arriving as a rejected round-trip. Client-side enforcement is a usability
-     * property, not a security one — the server remains the authority.
+     * Two different rules are checked here, and they have different standing:
      *
-     * @param headroom optional trust-envelope ceiling; when present, the grant
-     *   must also fit inside it (a nested envelope may never be wider than the
-     *   one it nests in).
+     * **`granted ≤ requested` is a product policy, and this client is stricter
+     * than the server.** The server does *not* enforce it — an AUTHORITY user is
+     * permitted to grant more than the agent asked for, e.g. when the agent
+     * lowballed. We refuse it anyway, because "approve at or below what was
+     * asked" is the promise the approval UI makes to the person using it, and a
+     * dialog that silently allows more than the request on screen is a dialog
+     * that can surprise its operator. This is a UI guarantee, not a security
+     * boundary.
+     *
+     * **`granted ≤ trust ceiling` is the real bound, and the server owns it.**
+     * We check it here only so the operator learns at the point of decision
+     * rather than through a rejected round-trip. A modified client changes
+     * nothing: the ceiling is enforced at issuance and again at every spend.
+     *
+     * @param headroom remaining trust envelope, when the server reports it.
+     *   Ignored when its currency differs from the requested currency — a USD
+     *   ceiling says nothing about a USDC request, and comparing them would
+     *   block a legitimate grant on a meaningless mismatch.
      */
     fun validateGrant(
         requested: RequestedBudget,
         amount: String,
         expiresInHours: Int,
         purpose: String,
-        headroom: String? = null,
+        headroom: TrustHeadroom? = null,
     ): BudgetGrantOutcome {
         val requestedScaled = parseAmount(requested.requestedAmount)
             ?: return BudgetGrantOutcome(false, BudgetGrantError.INVALID_AMOUNT, "Requested amount is not a valid number")
@@ -280,12 +365,17 @@ object BudgetApprovalSeam {
                 "You can approve at most ${requested.requestedAmount} ${requested.requestedCurrency}",
             )
         }
-        val headroomScaled = headroom?.let { parseAmount(it) }
+        // Only compare against headroom denominated in the same currency.
+        val comparableHeadroom = headroom?.takeIf {
+            it.currency.isBlank() || it.currency.equals(requested.requestedCurrency, ignoreCase = true)
+        }
+        val headroomScaled = comparableHeadroom?.let { parseAmount(it.amount) }
         if (headroomScaled != null && amountScaled > headroomScaled) {
             return BudgetGrantOutcome(
                 false,
                 BudgetGrantError.NESTING_VIOLATION,
-                "Only $headroom ${requested.requestedCurrency} remains in this deployment's envelope",
+                "Only ${comparableHeadroom.amount} ${requested.requestedCurrency} remains in " +
+                    "this deployment's envelope",
             )
         }
         if (expiresInHours < MIN_EXPIRY_HOURS || expiresInHours > MAX_EXPIRY_HOURS) {

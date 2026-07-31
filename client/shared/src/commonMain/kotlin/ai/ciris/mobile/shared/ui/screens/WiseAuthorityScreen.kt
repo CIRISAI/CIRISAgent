@@ -5,6 +5,7 @@ import ai.ciris.mobile.shared.api.WAStatusData
 import ai.ciris.mobile.shared.approvals.ApprovalKind
 import ai.ciris.mobile.shared.approvals.BudgetCapability
 import ai.ciris.mobile.shared.approvals.PendingApproval
+import ai.ciris.mobile.shared.approvals.TrustHeadroom
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.components.PendingApprovalsCard
 import ai.ciris.mobile.shared.ui.components.ProposalApprovalDialog
@@ -71,8 +72,15 @@ fun WiseAuthorityScreen(
     approvals: List<PendingApproval> = emptyList(),
     /** Whether this server exposes budget issuance. Degrades the dialog when not. */
     budgetCapability: BudgetCapability = BudgetCapability.UNKNOWN,
-    /** Trust-envelope headroom when the server reports it. Null today. */
-    envelopeHeadroom: String? = null,
+    /**
+     * Remaining trust envelope for the approval currently open, when the server
+     * reports it. Loaded on open via [onApprovalOpened].
+     */
+    envelopeHeadroom: TrustHeadroom? = null,
+    /** Fired when a proposal dialog opens, so headroom can be fetched for it. */
+    onApprovalOpened: (approvalId: String) -> Unit = {},
+    /** Fired when the proposal dialog closes, so loaded state can be dropped. */
+    onApprovalClosed: () -> Unit = {},
     onGrantBudget: (
         approvalId: String,
         amount: String,
@@ -151,7 +159,10 @@ fun WiseAuthorityScreen(
                     approvals = approvals,
                     onApprovalClick = { approval ->
                         when (approval.kind) {
-                            ApprovalKind.TICKET_PROPOSAL -> selectedProposal = approval
+                            ApprovalKind.TICKET_PROPOSAL -> {
+                                selectedProposal = approval
+                                onApprovalOpened(approval.id)
+                            }
                             ApprovalKind.DEFERRAL -> {
                                 deferrals.firstOrNull { it.deferralId == approval.id }?.let {
                                     selectedDeferral = it
@@ -246,12 +257,16 @@ fun WiseAuthorityScreen(
     // Proposal / budget-issuance dialog. This is the #938/#939 path: the
     // human's approval is the issuance event for the budget envelope.
     selectedProposal?.let { proposal ->
+        val close = {
+            selectedProposal = null
+            onApprovalClosed()
+        }
         ProposalApprovalDialog(
             approval = proposal,
             capability = budgetCapability,
             isSubmitting = isResolving,
             headroom = envelopeHeadroom,
-            onDismiss = { selectedProposal = null },
+            onDismiss = close,
             onApprove = { amount, expiryHours, reason, promote ->
                 if (amount != null && proposal.requestedBudget != null) {
                     onGrantBudget(
@@ -265,18 +280,18 @@ fun WiseAuthorityScreen(
                 } else {
                     onPromoteProposal(proposal.id, reason)
                 }
-                selectedProposal = null
+                close()
             },
             onReject = { reason ->
                 onRejectProposal(proposal.id, reason)
-                selectedProposal = null
+                close()
             },
             onDefer = { reason ->
                 // "Not now" leaves the ticket blocked and records why. Nothing
                 // is issued and the work does not start — the agent stays
                 // fail-closed, which is the correct default.
                 onDeferProposal(proposal.id, reason)
-                selectedProposal = null
+                close()
             },
         )
     }

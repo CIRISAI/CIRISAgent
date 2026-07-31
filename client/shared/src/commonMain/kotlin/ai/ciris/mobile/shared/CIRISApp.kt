@@ -2456,6 +2456,7 @@ fun CIRISApp(
                 val waSuccess by wiseAuthorityViewModel.successMessage.collectAsState()
                 val approvals by wiseAuthorityViewModel.approvals.collectAsState()
                 val budgetCapability by wiseAuthorityViewModel.budgetCapability.collectAsState()
+                val selectedBudgetState by wiseAuthorityViewModel.selectedBudgetState.collectAsState()
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
@@ -2503,10 +2504,15 @@ fun CIRISApp(
                     },
                     approvals = approvals,
                     budgetCapability = budgetCapability,
-                    // No endpoint exposes trust-envelope headroom yet, so this
-                    // is deliberately null and the headroom row does not render.
-                    // See FSD/HITL_APPROVAL_SURFACE.md § "What this does NOT do".
-                    envelopeHeadroom = null,
+                    // Remaining trust envelope for the open approval, fetched on
+                    // open from GET /v1/tickets/{id}/budget. This is the same
+                    // number the spend gate applies; null when no wallet adapter
+                    // is loaded, in which case the row is simply omitted.
+                    envelopeHeadroom = selectedBudgetState?.headroom,
+                    onApprovalOpened = { approvalId ->
+                        wiseAuthorityViewModel.loadBudgetState(approvalId)
+                    },
+                    onApprovalClosed = { wiseAuthorityViewModel.clearBudgetState() },
                     onGrantBudget = { approvalId, amount, currency, expiryHours, reason, promote ->
                         PlatformLogger.i(
                             "CIRISApp",

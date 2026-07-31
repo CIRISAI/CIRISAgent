@@ -91,6 +91,46 @@ data class BudgetSpend(
     val recordCount: Int,
 )
 
+/**
+ * Remaining room in the deployment's trust envelope, which any issued grant
+ * must nest inside.
+ *
+ * [amount] is **the same number the spend gate applies**, not a client-side
+ * re-derivation: the server resolves it through the wallet tool service's own
+ * `_resolve_trust_envelope`, so what an operator is shown cannot drift from
+ * what is enforced when the money actually moves. It is `min(maxTransaction,
+ * dailyRemaining)`; both bounds are carried so the UI can say *why* the
+ * headroom is what it is.
+ *
+ * Null when no wallet adapter is loaded — that is correct behaviour, not a gap,
+ * and the UI renders nothing rather than inventing a number.
+ */
+data class TrustHeadroom(
+    val amount: String,
+    val currency: String,
+    val maxTransaction: String,
+    val dailyRemaining: String,
+    /** "wallet" when resolved from the live gate. */
+    val source: String,
+)
+
+/**
+ * Everything a human needs to decide on a budget for one ticket, in one read.
+ *
+ * From `GET /v1/tickets/{ticket_id}/budget` (OBSERVER). Supersedes reading the
+ * four reserved metadata keys off the ticket individually — the metadata path
+ * still works and is still used for the list view, but the dialog wants the
+ * headroom, which only this endpoint can supply.
+ */
+data class TicketBudgetState(
+    val ticketId: String,
+    val isProposal: Boolean,
+    val requested: RequestedBudget?,
+    val granted: GrantedBudget?,
+    val spent: BudgetSpend?,
+    val headroom: TrustHeadroom?,
+)
+
 /** Provenance of a ticket the agent proposed. */
 data class TicketProposal(
     val originTaskId: String?,

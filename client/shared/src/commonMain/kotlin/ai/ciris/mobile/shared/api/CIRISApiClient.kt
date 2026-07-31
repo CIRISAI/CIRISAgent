@@ -9390,6 +9390,63 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Read the full budget state of a ticket, including remaining trust headroom.
+     *
+     * `GET /v1/tickets/{ticket_id}/budget` (OBSERVER). The headroom it returns is
+     * resolved through the wallet tool service's own `_resolve_trust_envelope` —
+     * the same code the spend gate runs — so the figure shown to an operator
+     * cannot drift from the figure enforced when money moves. Approving an
+     * amount with no view of the remaining envelope is not meaningful consent,
+     * which is why this is a separate read rather than an inference from
+     * ticket metadata.
+     *
+     * Returns null when the endpoint is absent or the body is unrecognized; the
+     * caller then falls back to what ticket metadata already provided rather
+     * than blanking a dialog the operator is reading.
+     */
+    suspend fun getTicketBudget(
+        ticketId: String
+    ): ai.ciris.mobile.shared.approvals.TicketBudgetState? {
+        val method = "getTicketBudget"
+        logInfo(method, "Fetching budget state for ticket=$ticketId")
+
+        val client = HttpClient {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
+            }
+        }
+
+        return try {
+            val path = ai.ciris.mobile.shared.approvals.BudgetApprovalSeam.budgetPath(ticketId)
+            val response = client.get("$baseUrl$path") {
+                header("Authorization", "Bearer $accessToken")
+            }
+            val statusCode = response.status.value
+            val bodyText = response.bodyAsText()
+            logDebug(method, "Response: status=$statusCode")
+
+            if (statusCode !in 200..299) {
+                logWarn(method, "Budget state unavailable: status=$statusCode")
+                return null
+            }
+
+            val root = Json.parseToJsonElement(bodyText).jsonObject
+            val data = root["data"]?.jsonObject ?: root
+            ai.ciris.mobile.shared.approvals.BudgetApprovalSeam.parseTicketBudgetState(data)
+        } catch (e: Exception) {
+            // Non-fatal by construction: headroom is an enhancement to the
+            // dialog, never a precondition for rendering it.
+            logWarn(method, "Failed to fetch budget state for $ticketId: ${e.message}")
+            null
+        } finally {
+            client.close()
+        }
+    }
+
     /** Pull FastAPI's `detail` out of an error body, when it is a plain string. */
     private fun extractDetail(body: String?): String? {
         if (body.isNullOrBlank()) return null

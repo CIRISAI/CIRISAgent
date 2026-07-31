@@ -5,6 +5,7 @@ import logging
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
@@ -117,7 +118,27 @@ class ActionDispatcher:
         thought: Thought,
         dispatch_context: DispatchContext,
     ) -> ActionResponse:
-        """Dispatch the selected action to its registered handler."""
+        """Dispatch the selected action to its registered handler.
+
+        Handler execution is reasoning-loop execution: the action being
+        dispatched is the one the model selected. The whole body runs inside a
+        reasoning scope so the task-envelope issuer refuses to mint from here
+        (CIRISAgent#938). Narrowing an existing envelope stays permitted.
+        """
+        with reasoning_scope(
+            task_id=dispatch_context.task_id,
+            thought_id=thought.thought_id,
+            phase="action_dispatch",
+        ):
+            return await self._dispatch_inner(action_selection_result, thought, dispatch_context)
+
+    async def _dispatch_inner(
+        self,
+        action_selection_result: ActionSelectionDMAResult,
+        thought: Thought,
+        dispatch_context: DispatchContext,
+    ) -> ActionResponse:
+        """Dispatch body. Always runs inside a reasoning scope — see dispatch()."""
         # Extract action type and final action result
         final_action_result, action_type = self._extract_action_info(action_selection_result)
 

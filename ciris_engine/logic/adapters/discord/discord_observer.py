@@ -608,6 +608,9 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 priority=8,  # High priority for guidance
                 user_id=msg.author_id,
             )
+            # Task-scoped authorization envelope, issued outside the reasoning
+            # loop at task creation (CIRISAgent#938).
+            await self._issue_task_envelope(task)
             persistence.add_task(task)
             logger.info(
                 f"Created unsolicited guidance task {task.task_id} - seed thought will be generated automatically"

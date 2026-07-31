@@ -13,8 +13,61 @@ logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_system_component_envelope
+from ciris_engine.schemas.api.auth import UserRole
+from ciris_engine.schemas.runtime.task_envelope import (
+    RequesterAuthorization,
+    ToolCallOrigin,
+    ToolCapability,
+    ToolInvocationSubject,
+)
+
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
+
+_CONNECTOR_COMPONENT = "api.routes.connectors"
+
+# The exact tools this route's code calls. Enumerated here so operator connector
+# setup runs under a *narrower* grant than a reasoning task rather than as an
+# exemption from authorization (CIRISAgent#938).
+_CONNECTOR_TOOLS = ("initialize_sql_connector", "sql_query")
+
+
+def _connector_subject(connector_id: str, current_user: Optional[TokenData] = None) -> ToolInvocationSubject:
+    """Authorization subject for one operator connector action (CIRISAgent#938).
+
+    Connector registration and connectivity probing are adapter-lifecycle work
+    driven by an authenticated operator — no task, no thought, nothing the model
+    authored. A fail-closed Phase 2 gate would deny them on day one, so they
+    carry a SYSTEM_COMPONENT envelope issued here, where the route's own auth
+    has already run: the operator's identity and role travel in the envelope's
+    requester, and the grant is the two tools above.
+    """
+    requester = None
+    if current_user is not None:
+        try:
+            requester = RequesterAuthorization(
+                user_id=getattr(current_user, "user_id", None) or getattr(current_user, "username", None),
+                role=UserRole(str(getattr(current_user, "role", UserRole.OBSERVER.value))),
+            )
+        except Exception:  # pragma: no cover - role parsing must never break setup
+            requester = RequesterAuthorization(user_id=getattr(current_user, "username", None))
+    try:
+        envelope = issue_system_component_envelope(
+            component=_CONNECTOR_COMPONENT,
+            work_unit_id=f"connector-setup:{connector_id}",
+            granted_tools=_CONNECTOR_TOOLS,
+            capabilities=(ToolCapability.OBSERVE_LOCAL, ToolCapability.WRITE_TARGET),
+            requester=requester,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Could not issue connector-setup envelope for %s: %s", connector_id, exc)
+        envelope = None
+    return ToolInvocationSubject.for_component(
+        origin=ToolCallOrigin.ADAPTER_LIFECYCLE,
+        component=_CONNECTOR_COMPONENT,
+        envelope=envelope,
+    )
 
 router = APIRouter(prefix="/connectors", tags=["Connectors"])
 
@@ -232,6 +285,7 @@ async def register_sql_connector(
                     "dialect": db_type,
                     "privacy_schema": request.config.get("privacy_schema"),
                 },
+                subject=_connector_subject(connector_id, current_user),
             )
             if init_result.success:
                 logger.info("Registered connector with tool bus")
@@ -320,7 +374,9 @@ async def list_connectors(
     )
 
 
-async def _test_sql_connector(connector_id: str, tool_bus: Any) -> tuple[bool, str]:
+async def _test_sql_connector(
+    connector_id: str, tool_bus: Any, current_user: Optional[TokenData] = None
+) -> tuple[bool, str]:
     """Test SQL connector via tool bus."""
     if not tool_bus:
         return True, "SQL connection test successful (tool bus unavailable, skipped)"
@@ -329,6 +385,7 @@ async def _test_sql_connector(connector_id: str, tool_bus: Any) -> tuple[bool, s
         test_result = await tool_bus.execute_tool(
             "sql_query",
             {"connector_id": connector_id, "sql": "SELECT 1"},
+            subject=_connector_subject(connector_id, current_user),
         )
         if test_result.success:
             return True, "SQL connection test successful"
@@ -379,7 +436,7 @@ async def test_connector(
 
     if connector_type == "sql":
         tool_bus = getattr(req.app.state, "tool_bus", None)
-        success, message = await _test_sql_connector(connector_id, tool_bus)
+        success, message = await _test_sql_connector(connector_id, tool_bus, current_user)
     elif connector_type == "rest":
         success, message = _test_rest_connector()
     else:

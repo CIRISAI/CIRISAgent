@@ -1,12 +1,30 @@
 import json
 import logging
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import FinalAction, Task, TaskContext, TaskOutcome, Thought, ThoughtContext
+from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
 
 logger = logging.getLogger(__name__)
+
+
+def _decode_task_envelope(raw: Any, task_id: Any) -> Optional[TaskEnvelope]:
+    """Decode a persisted task-scoped authorization envelope (CIRISAgent#938).
+
+    Failure resolves to ``None`` — absence of an envelope is a denial to a
+    future tool gate, never "unconstrained".
+    """
+    if raw is None:
+        return None
+    try:
+        return TaskEnvelope.model_validate(raw)
+    except Exception as exc:
+        logger.warning(
+            "Failed to decode task envelope for task %s; treating as no envelope (deny): %s", task_id, exc
+        )
+        return None
 
 
 def map_row_to_task(row: Any) -> Task:
@@ -34,6 +52,10 @@ def map_row_to_task(row: Any) -> Task:
                     # impact (every conscience falling through to env-default
                     # locale regardless of the user's actual language).
                     preferred_language=ctx_data.get("preferred_language"),
+                    # Task-scoped authorization envelope (CIRISAgent#938). A
+                    # decode failure resolves to None, the fail-closed
+                    # direction: absence is denial, never "unconstrained".
+                    envelope=_decode_task_envelope(ctx_data.get("envelope"), row_dict.get("task_id")),
                 )
                 # Mirror onto the Task's top-level field — Task is the record
                 # of truth for preferred_language. The schema field defaults

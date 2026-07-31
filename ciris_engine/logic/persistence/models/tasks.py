@@ -25,6 +25,7 @@ from ciris_engine.schemas.runtime.models import (
     TaskContext,
     TaskOutcome,
 )
+from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
 from ciris_engine.schemas.services.graph.audit import AuditEventData
 
 if TYPE_CHECKING:
@@ -101,6 +102,27 @@ def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
     return payload
 
 
+def _decode_envelope(raw: Any, task_id: Any) -> Optional[TaskEnvelope]:
+    """Decode the task-scoped authorization envelope from a persisted context.
+
+    A decode failure resolves to ``None``, which is the fail-closed direction:
+    absence of an envelope is a denial to a future tool gate (CIRISAgent#938),
+    never "unconstrained". The failure is logged loudly because a task silently
+    losing its envelope would look identical to a task that never had one.
+    """
+    if raw is None:
+        return None
+    try:
+        return TaskEnvelope.model_validate(raw)
+    except Exception as exc:
+        logger.warning(
+            "Failed to decode task envelope for task %s; treating as no envelope (deny): %s",
+            task_id,
+            exc,
+        )
+        return None
+
+
 def _persist_row_to_task(row: Dict[str, Any]) -> Task:
     """Materialize a persist task row into a Task model."""
     agent_occurrence_id = str(row.get("agent_occurrence_id", "default"))
@@ -132,6 +154,7 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
                 parent_task_id=ctx_data.get("parent_task_id"),
                 agent_occurrence_id=ctx_data.get("agent_occurrence_id", agent_occurrence_id),
                 preferred_language=ctx_data.get("preferred_language"),
+                envelope=_decode_envelope(ctx_data.get("envelope"), row.get("task_id")),
             )
         except Exception as e:
             logger.warning(f"Failed to decode context for task {row.get('task_id')}: {e}")

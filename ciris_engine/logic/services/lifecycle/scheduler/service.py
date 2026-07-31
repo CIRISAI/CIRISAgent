@@ -63,6 +63,26 @@ except ImportError:
     logger.warning("croniter not installed. Cron scheduling will be disabled.")
 
 
+# Wakeup step-task prefixes (mirrors database_maintenance._is_wakeup_or_shutdown_task
+# and the wakeup processor's step sequence). Used to NAME the wakeup step in the
+# single ERROR emitted when a wakeup-step re-activation cannot proceed (#934) —
+# a silently-skipped step leaves the agent spinning empty wakeup rounds forever
+# while reporting healthy.
+WAKEUP_STEP_PREFIXES = (
+    "VERIFY_IDENTITY_",
+    "VALIDATE_INTEGRITY_",
+    "EVALUATE_RESILIENCE_",
+    "ACCEPT_INCOMPLETENESS_",
+    "EXPRESS_GRATITUDE_",
+)
+
+# Consecutive identical trigger failures before a scheduled task is dead-lettered
+# (#934). Deterministic failures (missing FK target detected at trigger time) skip
+# the count and quarantine immediately — retrying a constraint violation can never
+# succeed (~80k futile re-fires observed on one production agent over 8 weeks).
+DEAD_LETTER_THRESHOLD = 3
+
+
 class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
     """
     Manages scheduled tasks and integrates with the DEFER system.
@@ -79,11 +99,19 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         self._active_tasks: Dict[str, ScheduledTask] = {}
         self._shutdown_event = asyncio.Event()
 
+        # Dead-letter quarantine (#934): tasks that deterministically fail
+        # (missing FK target) or fail DEAD_LETTER_THRESHOLD consecutive times
+        # are moved here — they stop re-firing and stay visible via
+        # get_scheduled_tasks() / the /v1/scheduler API with status FAILED.
+        self._dead_lettered_tasks: Dict[str, ScheduledTask] = {}
+        self._task_failure_counts: Dict[str, int] = {}
+
         # Task tracking metrics
         self._tasks_scheduled = 0
         self._tasks_triggered = 0
         self._tasks_completed = 0
         self._tasks_failed = 0
+        self._tasks_dead_lettered = 0
         self._recurring_tasks = 0
         self._oneshot_tasks = 0
 
@@ -215,12 +243,161 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             logger.error(f"Invalid cron expression for task {safe_task_id}: parse error")
             return False
 
+    def _wakeup_step_name(self, task_id: str) -> Optional[str]:
+        """Return the wakeup step name if task_id is a wakeup step task, else None."""
+        for prefix in WAKEUP_STEP_PREFIXES:
+            if task_id.startswith(prefix):
+                return prefix.rstrip("_")
+        return None
+
+    def _dead_letter_task(self, task: ScheduledTask, root_cause: str) -> None:
+        """Quarantine a scheduled task that can never (or will no longer) succeed (#934).
+
+        The task stops re-firing, is marked FAILED, and remains visible via
+        get_scheduled_tasks() / the scheduler API. Exactly ONE ERROR is emitted
+        at the transition — not one per minute forever.
+        """
+        task.status = "FAILED"
+        self._active_tasks.pop(task.task_id, None)
+        self._task_failure_counts.pop(task.task_id, None)
+        self._dead_lettered_tasks[task.task_id] = task
+        self._tasks_dead_lettered += 1
+        # Single transition ERROR: task_id + name + origin thought (the closest
+        # thing a ScheduledTask has to a correlation id) + root cause.
+        logger.error(
+            f"Dead-lettered scheduled task {_sanitize_for_log(task.task_id)} "
+            f"({_sanitize_for_log(task.name)}): {_sanitize_for_log(root_cause, max_length=256)} "
+            f"[origin_thought_id={_sanitize_for_log(task.origin_thought_id)}]. "
+            "Task will not re-fire; inspect via /v1/scheduler/tasks?status=FAILED."
+        )
+
+    def _reactivate_deferred_task(self, task: ScheduledTask, deferred_task_id: str) -> bool:
+        """Re-activate a self-deferred task + its deferred thought.
+
+        Returns True when reactivation proceeded (normal completion follows);
+        False when the task was dead-lettered (caller must stop).
+
+        The re-activation deliberately touches ONLY rows that already exist —
+        it never inserts a thought FK'd to the synthetic scheduled-task id
+        (the #934 `FOREIGN KEY constraint failed` loop that kept a production
+        agent spinning ~933k empty wakeup rounds over 55 days).
+        """
+        from ciris_engine.logic.persistence import (
+            get_task_by_id_any_occurrence,
+            update_task_status,
+            update_thought_status,
+        )
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+
+        safe_deferred_id = _sanitize_for_log(deferred_task_id)
+        logger.info(f"Reactivating deferred task {safe_deferred_id}")
+
+        # Resolve the REAL deferred task row across occurrences — wakeup step
+        # tasks live on the claiming occurrence, not necessarily "default".
+        deferred_task = get_task_by_id_any_occurrence(deferred_task_id)
+        if deferred_task is None:
+            step_name = self._wakeup_step_name(deferred_task_id)
+            if step_name:
+                root_cause = (
+                    f"wakeup step {step_name} cannot be re-activated: deferred task row "
+                    "no longer exists — the wakeup sequence cannot complete"
+                )
+            else:
+                root_cause = "deferred task row no longer exists — nothing to reactivate"
+            self._dead_letter_task(task, root_cause)
+            return False
+
+        occurrence_id = deferred_task.agent_occurrence_id
+
+        # (1) Task: deferred -> ACTIVE. PENDING is NOT sufficient: only the
+        # WORK processor promotes PENDING→ACTIVE (activate_pending_tasks), the
+        # wakeup processor skips non-ACTIVE steps, and
+        # get_pending_thoughts_for_active_tasks() filters thoughts to ACTIVE
+        # tasks — so a task re-pended during WAKEUP left its thought invisible
+        # and the agent kept spinning empty rounds (#934 layer B).
+        if not update_task_status(deferred_task_id, TaskStatus.ACTIVE, occurrence_id):
+            raise RuntimeError(f"failed to set deferred task {deferred_task_id} ACTIVE")
+
+        # (2) Thought: re-pend the deferred thought. Setting the task ACTIVE
+        # alone is NOT enough — get_tasks_needing_seed_thought only seeds
+        # tasks that have ZERO thoughts, and the original deferred thought
+        # still exists, so without this the thought stays DEFERRED forever
+        # and the agent never reconsiders (the missing transition of #865).
+        if task.origin_thought_id:
+            if not update_thought_status(
+                thought_id=task.origin_thought_id,
+                status=ThoughtStatus.PENDING,
+                occurrence_id=occurrence_id,
+            ):
+                logger.warning(
+                    f"Reactivate {safe_deferred_id}: deferred thought "
+                    f"{_sanitize_for_log(task.origin_thought_id)} not found to re-pend; "
+                    "task is ACTIVE — processor will generate a fresh thought"
+                )
+            else:
+                logger.info(
+                    f"Reactivated deferred task {safe_deferred_id}: task ACTIVE + thought "
+                    f"{_sanitize_for_log(task.origin_thought_id)} re-pended"
+                )
+        else:
+            logger.info(
+                f"Reactivated deferred task {safe_deferred_id}: task ACTIVE "
+                "(no origin thought; a fresh seed thought will be generated)"
+            )
+        return True
+
+    def _create_scheduled_thought(self, task: ScheduledTask) -> bool:
+        """Create the trigger thought for a regular scheduled task.
+
+        Returns True when the thought was created (normal completion follows);
+        False when the task was dead-lettered because its FK target is gone.
+        """
+        from ciris_engine.logic.persistence import get_task_by_id_any_occurrence
+
+        # Validate the FK target BEFORE inserting. A ScheduledTask can outlive
+        # its task row (cleanup, data wipe, a one-time defer whose task already
+        # completed); creating a thought with a dangling source_task_id violates
+        # the thoughts→tasks foreign key ("FOREIGN KEY constraint failed") —
+        # deterministically, on every trigger, forever. Quarantine instead (#934).
+        source_task = get_task_by_id_any_occurrence(task.task_id)
+        if source_task is None:
+            self._dead_letter_task(
+                task,
+                "source task row does not exist — creating its thought would "
+                "violate the thoughts→tasks foreign key on every trigger",
+            )
+            return False
+
+        now_iso = (self._time_service.now() if self._time_service else datetime.now(timezone.utc)).isoformat()
+        thought = Thought(
+            thought_id=f"thought_{(self._time_service.now() if self._time_service else datetime.now(timezone.utc)).timestamp()}",
+            content=task.trigger_prompt,
+            status=ThoughtStatus.PENDING,
+            thought_type=ThoughtType.SCHEDULED,
+            source_task_id=task.task_id,
+            agent_occurrence_id=source_task.agent_occurrence_id,
+            created_at=now_iso,
+            updated_at=now_iso,
+            final_action=FinalAction(
+                action_type="SCHEDULED_TASK",
+                action_params={
+                    "scheduled_task_id": task.task_id,
+                    "scheduled_task_name": task.name,
+                    "goal_description": task.goal_description,
+                    "trigger_type": "scheduled",
+                },
+                reasoning=f"Scheduled task '{task.name}' triggered",
+            ),
+        )
+        add_thought(thought)
+        return True
+
     async def _trigger_task(self, task: ScheduledTask) -> None:
         """Trigger a scheduled task by creating a new thought or reactivating a deferred task."""
+        # Sanitize for logging (CWE-117)
+        safe_name = _sanitize_for_log(task.name)
+        safe_task_id = _sanitize_for_log(task.task_id)
         try:
-            # Sanitize for logging (CWE-117)
-            safe_name = _sanitize_for_log(task.name)
-            safe_task_id = _sanitize_for_log(task.task_id)
             logger.info(f"Triggering scheduled task: {safe_name} ({safe_task_id})")
 
             # Increment triggered counter
@@ -238,90 +415,11 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                     deferred_task_id = last_entry.get("deferred_task_id")
 
             if deferred_task_id:
-                safe_deferred_id = _sanitize_for_log(deferred_task_id)
-                logger.info(f"Reactivating deferred task {safe_deferred_id}")
-
-                from ciris_engine.logic.persistence import get_task_by_id, update_task_status
-                from ciris_engine.schemas.runtime.enums import TaskStatus
-
-                # Guard on the REAL deferred task id (not the synthetic
-                # "Reactivate task ..." scheduled-task id). If the deferred task
-                # was removed, there is nothing to reactivate — skipping here
-                # also avoids the #863-C FK orphan (a thought pointing at a
-                # task row that no longer exists).
-                if get_task_by_id(deferred_task_id, "default") is None:
-                    logger.warning(
-                        f"Reactivate {safe_deferred_id}: deferred task no longer exists — nothing to reactivate"
-                    )
-                else:
-                    # (1) Task: deferred -> pending so it re-activates for work.
-                    update_task_status(deferred_task_id, TaskStatus.PENDING, "default")
-
-                    # (2) Thought: re-pend the deferred thought. Setting the task
-                    # PENDING alone is NOT enough — get_tasks_needing_seed_thought
-                    # only seeds tasks that have ZERO thoughts, and the original
-                    # deferred thought still exists, so without this the thought
-                    # stays DEFERRED forever and the agent never reconsiders.
-                    # This is the missing transition at the heart of #865.
-                    if task.origin_thought_id:
-                        from ciris_engine.logic.persistence import update_thought_status
-
-                        update_thought_status(
-                            thought_id=task.origin_thought_id,
-                            status=ThoughtStatus.PENDING,
-                        )
-                        logger.info(
-                            f"Reactivated deferred task {safe_deferred_id}: task PENDING + thought "
-                            f"{_sanitize_for_log(task.origin_thought_id)} re-pended"
-                        )
-                    else:
-                        logger.info(
-                            f"Reactivated deferred task {safe_deferred_id}: task PENDING "
-                            "(no origin thought; a fresh seed thought will be generated)"
-                        )
-
+                if not self._reactivate_deferred_task(task, deferred_task_id):
+                    return  # dead-lettered — must not re-fire or count as triggered success
             else:
-                # Create a new thought for regular scheduled tasks — but only
-                # if the source task row still exists. A ScheduledTask can
-                # outlive its task (cleanup, data wipe, a one-time defer whose
-                # task already completed); creating a thought with a dangling
-                # source_task_id violates the thoughts→tasks foreign key
-                # ("upsert_thought insert: FOREIGN KEY constraint failed").
-                from ciris_engine.logic.persistence import get_task_by_id
-
-                if get_task_by_id(task.task_id, "default") is None:
-                    logger.warning(
-                        f"Scheduled task {safe_task_id}: source task no longer exists — "
-                        "skipping thought creation (nothing to trigger)"
-                    )
-                else:
-                    thought = Thought(
-                        thought_id=f"thought_{(self._time_service.now() if self._time_service else datetime.now(timezone.utc)).timestamp()}",
-                        content=task.trigger_prompt,
-                        status=ThoughtStatus.PENDING,
-                        thought_type=ThoughtType.SCHEDULED,
-                        source_task_id=task.task_id,
-                        agent_occurrence_id="default",  # Scheduled tasks run on default occurrence
-                        created_at=(
-                            self._time_service.now() if self._time_service else datetime.now(timezone.utc)
-                        ).isoformat(),
-                        updated_at=(
-                            self._time_service.now() if self._time_service else datetime.now(timezone.utc)
-                        ).isoformat(),
-                        final_action=FinalAction(
-                            action_type="SCHEDULED_TASK",
-                            action_params={
-                                "scheduled_task_id": task.task_id,
-                                "scheduled_task_name": task.name,
-                                "goal_description": task.goal_description,
-                                "trigger_type": "scheduled",
-                            },
-                            reasoning=f"Scheduled task '{task.name}' triggered",
-                        ),
-                    )
-
-                    # Add thought to database
-                    add_thought(thought)
+                if not self._create_scheduled_thought(task):
+                    return  # dead-lettered
 
             # Update scheduled task status
             await self._update_task_triggered(task)
@@ -330,11 +428,29 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             if task.defer_until and not task.schedule_cron:
                 await self._complete_task(task)
 
-        except Exception:
+            # Success clears the consecutive-failure streak.
+            self._task_failure_counts.pop(task.task_id, None)
+
+        except Exception as trigger_error:
             # Increment failed counter
             self._tasks_failed += 1
-            # Sanitize task_id for logging (CWE-117) - don't log exception details
-            logger.error(f"Failed to trigger task {safe_task_id}: task execution error")
+            # Track CONSECUTIVE failures per task; after DEAD_LETTER_THRESHOLD
+            # the task is quarantined with one ERROR instead of re-firing
+            # every interval forever (#934).
+            failures = self._task_failure_counts.get(task.task_id, 0) + 1
+            self._task_failure_counts[task.task_id] = failures
+            if failures >= DEAD_LETTER_THRESHOLD:
+                self._dead_letter_task(
+                    task,
+                    f"{failures} consecutive trigger failures; last: "
+                    f"{type(trigger_error).__name__}: {trigger_error}",
+                )
+            else:
+                # Sanitize task_id for logging (CWE-117) - don't log exception details
+                logger.error(
+                    f"Failed to trigger task {safe_task_id}: task execution error "
+                    f"(consecutive failure {failures}/{DEAD_LETTER_THRESHOLD})"
+                )
 
     async def _update_task_triggered(self, task: ScheduledTask) -> None:
         """Update task after triggering."""
@@ -495,18 +611,27 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             task = self._active_tasks[task_id]
             task.status = "CANCELLED"
             del self._active_tasks[task_id]
+            self._task_failure_counts.pop(task_id, None)
             # Sanitize task name and ID for logging to prevent log injection (CWE-117)
             safe_name = _sanitize_for_log(task.name)
             safe_id = _sanitize_for_log(task_id)
             logger.info(f"Cancelled task: {safe_name} ({safe_id})")
             return True
 
+        if task_id in self._dead_lettered_tasks:
+            task = self._dead_lettered_tasks.pop(task_id)
+            task.status = "CANCELLED"
+            safe_name = _sanitize_for_log(task.name)
+            safe_id = _sanitize_for_log(task_id)
+            logger.info(f"Cleared dead-lettered task: {safe_name} ({safe_id})")
+            return True
+
         return False
 
     async def get_scheduled_tasks(self) -> List[ScheduledTaskInfo]:
-        """Get all scheduled tasks."""
+        """Get all scheduled tasks, including dead-lettered (status FAILED) ones."""
         tasks = []
-        for task in self._active_tasks.values():
+        for task in list(self._active_tasks.values()) + list(self._dead_lettered_tasks.values()):
             tasks.append(
                 ScheduledTaskInfo(
                     task_id=task.task_id,
@@ -627,6 +752,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 "tasks_triggered": float(self._tasks_triggered),
                 "tasks_completed": float(self._tasks_completed),
                 "tasks_failed": float(self._tasks_failed),
+                "tasks_dead_lettered": float(len(self._dead_lettered_tasks)),
                 "task_success_rate": success_rate,
                 "recurring_tasks": float(recurring),
                 "oneshot_tasks": float(oneshot),
@@ -692,6 +818,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 "tasks_scheduled_total": float(self._tasks_scheduled),
                 "tasks_completed_total": float(self._tasks_completed),
                 "tasks_failed_total": float(self._tasks_failed),
+                "tasks_dead_lettered": float(len(self._dead_lettered_tasks)),
                 "tasks_pending": float(len(self._active_tasks)),
                 "scheduler_uptime_seconds": self._calculate_uptime(),
             }

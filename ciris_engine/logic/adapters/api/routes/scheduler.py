@@ -77,6 +77,10 @@ class SchedulerStatsResponse(BaseModel):
     tasks_scheduled_total: int = Field(..., description="Total tasks ever scheduled")
     tasks_completed_total: int = Field(..., description="Total tasks completed")
     tasks_failed_total: int = Field(..., description="Total tasks that failed")
+    tasks_dead_lettered: int = Field(
+        default=0,
+        description="Tasks quarantined after deterministic/repeated trigger failures (#934); list via /scheduler/tasks?status=FAILED",
+    )
     tasks_pending: int = Field(..., description="Currently pending tasks")
     recurring_tasks: int = Field(..., description="Number of recurring tasks")
     oneshot_tasks: int = Field(..., description="Number of one-time tasks")
@@ -263,6 +267,7 @@ async def get_scheduler_stats(
             tasks_scheduled_total=int(metrics.get("tasks_scheduled_total", 0)),
             tasks_completed_total=int(metrics.get("tasks_completed_total", 0)),
             tasks_failed_total=int(metrics.get("tasks_failed_total", 0)),
+            tasks_dead_lettered=int(metrics.get("tasks_dead_lettered", 0)),
             tasks_pending=int(metrics.get("tasks_pending", 0)),
             recurring_tasks=int(metrics.get("recurring_tasks", 0)),
             oneshot_tasks=int(metrics.get("oneshot_tasks", 0)),

@@ -228,6 +228,18 @@ class ConfigNode(TypedGraphNode):
         if not isinstance(value_data, dict):
             value_data = {}
 
+        # `key` is the contract field; to_graph_node() always writes it AND
+        # encodes it in the node id (id == f"config:{key}"), so the id is an
+        # authoritative fallback. Legacy CONFIG-typed nodes written by other
+        # services before they carried `key` (e.g. the pre-2.9.0
+        # accord_metrics "accord_metrics/events_total" counter) survive in
+        # long-lived graphs; deriving the key from the id lets them
+        # round-trip instead of raising KeyError('key') on every config
+        # scan — which flooded incidents_latest.log every ~10s (#935).
+        key = attrs.get("key")
+        if not key:
+            key = node.id[len("config:") :] if node.id.startswith("config:") else node.id
+
         return cls(
             id=node.id,
             type=node.type,
@@ -237,7 +249,7 @@ class ConfigNode(TypedGraphNode):
             updated_by=updated_by,
             updated_at=updated_at or datetime.now(timezone.utc),  # Final fallback
             # Extra fields from attributes
-            key=attrs["key"],
+            key=key,
             value=ConfigValue(**value_data),
             previous_version=attrs.get("previous_version"),
         )

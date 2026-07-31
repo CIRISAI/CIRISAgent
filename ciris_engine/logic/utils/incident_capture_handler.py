@@ -37,6 +37,10 @@ class IncidentCaptureHandler(logging.Handler):
     These incidents are stored in the graph for analysis, pattern detection, and self-improvement.
     """
 
+    # Rotated backups kept per session (see rotation-handler comment in
+    # __init__ for the disk-ceiling math).
+    INCIDENT_BACKUP_COUNT = 20
+
     def __init__(
         self,
         log_dir: str = "logs",
@@ -53,8 +57,10 @@ class IncidentCaptureHandler(logging.Handler):
 
         self._graph_audit_service = graph_audit_service
 
-        # Clean up old incident logs on startup (keep last 3 sessions)
-        _cleanup_old_incident_logs(self.log_dir, prefix=filename_prefix, keep_count=2)
+        # Clean up old incident logs on startup. keep_count must exceed the
+        # rotating set (1 active + INCIDENT_BACKUP_COUNT backups) or a restart
+        # deletes the trail the rotation just preserved (#935).
+        _cleanup_old_incident_logs(self.log_dir, prefix=filename_prefix, keep_count=self.INCIDENT_BACKUP_COUNT + 5)
 
         # Create incident log file with timestamp
         timestamp = self._time_service.now().strftime("%Y%m%d_%H%M%S")
@@ -82,11 +88,16 @@ class IncidentCaptureHandler(logging.Handler):
         )
         self.setFormatter(formatter)
 
-        # Create rotating file handler: 2MB max, keep 2 backups (6MB total per session)
+        # Create rotating file handler: 2MB per file, 20 backups.
+        # Disk ceiling: (1 active + 20 backups) x 2MB = 42MB per session, and
+        # the startup sweep above caps cross-session leftovers at
+        # INCIDENT_BACKUP_COUNT + 5 files (~50MB worst case). Sized so a
+        # multi-week soak leaves a reviewable incident trail — backupCount=2
+        # retained only 2.5-5 HOURS on 7-week production runs (#935).
         self._rotating_handler = RotatingFileHandler(
             self.log_file,
             maxBytes=2 * 1024 * 1024,  # 2MB
-            backupCount=2,
+            backupCount=self.INCIDENT_BACKUP_COUNT,
             encoding="utf-8",
         )
         self._rotating_handler.setFormatter(formatter)

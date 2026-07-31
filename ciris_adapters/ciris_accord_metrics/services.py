@@ -1981,13 +1981,27 @@ class AccordMetricsService:
         else:
             config_consent = bool(self._config.get("consent_given", False))
             env_consent = _get_metrics_env("CONSENT", "").lower() == "true"
-            logger.warning(
-                "[CONSENT] trace consent ABSENT — traces will NOT seal "
-                "(checked: ceg=none config=%s env=%s). Opt in via the setup wizard "
-                "or Data & Privacy → Send traces; the service SELF-ARMS at the next "
-                "reasoning event once the grant lands (no restart needed).",
+            # On a first run this fires BEFORE the setup wizard can possibly have
+            # granted consent — it describes the expected pre-wizard state, not a
+            # fault. Logged as a WARNING saying "traces will NOT seal", it reads
+            # as the cause of any later trace problem and gets blamed for
+            # failures it precedes by a minute. Say which state this is, and only
+            # raise the volume once the wizard has had its chance.
+            pre_wizard = not bool(self._config.get("setup_complete", False))
+            logger.log(
+                logging.INFO if pre_wizard else logging.WARNING,
+                "[CONSENT] trace consent %s — traces will not seal yet "
+                "(checked: ceg=none config=%s env=%s). %s",
+                "not yet granted (pre-wizard, expected)" if pre_wizard else "ABSENT",
                 config_consent,
                 env_consent,
+                (
+                    "The setup wizard has not run; it grants consent at the FED-ID step."
+                    if pre_wizard
+                    else "Opt in via the setup wizard or Data & Privacy → Send traces; the "
+                    "service SELF-ARMS at the next reasoning event once the grant lands "
+                    "(no restart needed)."
+                ),
             )
 
     def _maybe_self_heal_consent(self) -> None:

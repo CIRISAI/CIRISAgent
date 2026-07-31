@@ -1595,6 +1595,30 @@ def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> Test
                 message=f"No agent SPEAK/trace after 180s — {evidence}",
                 screenshots=screenshots,
             )
+        # Ship-confirmation is a GATE, not a note.
+        #
+        # This test previously reported PASS while printing "ship-unconfirmed",
+        # so a run in which the trace sealed locally and reached nobody was
+        # indistinguishable from one that delivered. That is green-by-
+        # concealment: the suite goes green on precisely the broken state it
+        # exists to detect, and once the filmstrip guards CI it would keep
+        # going green there too.
+        #
+        # A sealed-but-undelivered trace is the failure this test is FOR.
+        if not ev.get("trace_shipped"):
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=(
+                    f"Trace sealed but delivery NOT confirmed — {evidence}. "
+                    "The reasoning worked and the trace signed; what is unproven is that "
+                    "it reached the federation. Check the local scores store "
+                    "(GET :4243/lens/api/v1/scores) — an empty store with a healthy read "
+                    "path is a replication/consent-direction question, not a routing one."
+                ),
+                screenshots=screenshots,
+            )
         return TestReport(
             name="test_chat_interaction",
             result=TestResult.PASSED,

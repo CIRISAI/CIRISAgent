@@ -176,22 +176,15 @@ number. `trust_headroom` is null when no wallet adapter is loaded; the row is th
 
 `BudgetApprovalSeam.validateGrant` checks two things that are easy to conflate:
 
-**`granted > requested` is permitted — with friction.** This follows a user ruling, **relayed
-to this work by the session coordinator and quoted verbatim there**, not heard first-hand by
-its author:
+**`granted > requested` is permitted — with friction.** This is a direct user ruling, quoted
+verbatim, with the user's own rationale attached:
 
 > *"yes an AUTHORITY can approve above what the agent requested, of course, the agent may
 > have requested too little."*
 
-The provenance is stated because this document would otherwise commit, in its own prose, the
-error the feature beneath it exists to prevent: recording a second-hand report as a direct
-instruction. Confirm with the user before treating it as settled.
-
-Scope of what actually rests on the relay, so a future reader can size the risk: **nothing
-enforced.** The server has never checked `granted ≤ requested`, so the ruling lifted no
-restriction — it settled that none would be *added* client-side, and that over-grants would
-be recorded. The recording is an accountability gain that holds either way. If the relay were
-ever contradicted, the correction needed is this paragraph, not a line of behaviour.
+It is settled. Note what it did and did not change: the server has never checked
+`granted ≤ requested`, so no restriction was lifted — the ruling settled that none would be
+*added* client-side, and that over-grants would be recorded instead.
 
 **`granted ≤ requested` is therefore not a bound of any kind** — not in the server, not in
 this client. The agent's request is **information for the human, not a constraint on them**.

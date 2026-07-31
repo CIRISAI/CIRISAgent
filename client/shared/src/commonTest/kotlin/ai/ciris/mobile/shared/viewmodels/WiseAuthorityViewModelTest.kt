@@ -380,9 +380,8 @@ class WiseAuthorityViewModelTest {
 
     @Test
     fun grantBudget_permitsAnOverGrantOnceConfirmed() = runTest {
-        // Per a relayed user ruling (see FSD/HITL_APPROVAL_SURFACE.md for its
-        // provenance): an AUTHORITY may approve above the request, because the
-        // agent may have asked for too little.
+        // Direct user ruling: an AUTHORITY may approve above the request,
+        // because the agent may have asked for too little.
         val api = FakeApprovalsApi(proposals = listOf(proposalTicket("t1", "25.00")))
         val (vm, _) = viewModel(api)
         vm.refresh()

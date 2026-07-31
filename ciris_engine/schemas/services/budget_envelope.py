@@ -173,6 +173,36 @@ class GrantedBudget(BaseModel):
     granted_by_wa_id: str = Field(..., description="WA identity that issued the grant")
     granted_by_user_id: str = Field(..., description="API user (AUTHORITY role) that performed the issuance")
     granted_at: datetime = Field(..., description="Issuance timestamp")
+
+    # --- Audit marking for over-request grants -----------------------------
+    # An AUTHORITY user may grant above what the agent asked for — the agent may
+    # simply have requested too little. That is permitted, but it must not be
+    # indistinguishable afterwards from an ordinary grant.
+    #
+    # Both fields are DERIVED SERVER-SIDE at issuance from the ticket's
+    # __requested_budget__. They are never read from the request body: a
+    # client-asserted audit flag is worthless, because the operator who most
+    # wants to hide an over-grant is the one calling the endpoint directly and
+    # simply omitting it.
+    #
+    # Both are inside the canonical signed payload, so the marking cannot be
+    # stripped or forged without invalidating the grant's signature.
+    requested_amount_at_grant: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Snapshot of what the agent requested, as of issuance. None when the ticket "
+            "carried no requested budget (e.g. a human-opened ticket). Stored so the ratio "
+            "stays reconstructable from the grant alone, even if ticket metadata changes later."
+        ),
+    )
+    exceeds_request: bool = Field(
+        False,
+        description=(
+            "True when granted_amount exceeded the agent's requested amount at issuance. "
+            "Server-derived; permitted but recorded. False when there was no request to exceed."
+        ),
+    )
+
     signature: Optional[str] = Field(
         None,
         description=(

@@ -18,7 +18,7 @@ from decimal import Decimal
 from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.logic.persistence.models.tickets import (
     create_ticket,
@@ -590,7 +590,14 @@ async def cancel_ticket(
 
 
 class GrantBudgetRequest(BaseModel):
-    """Request to grant a spend budget on a ticket. Requires AUTHORITY role."""
+    """Request to grant a spend budget on a ticket. Requires AUTHORITY role.
+
+    An AUTHORITY user may grant **above** what the agent requested — the agent
+    may simply have asked for too little. There is no ``granted ≤ requested``
+    bound anywhere in the system. The real bound is ``granted ≤ trust ceiling``.
+    Over-request grants are *recorded* (see ``GrantedBudget.exceeds_request``),
+    which is derived server-side, never taken from this body.
+    """
 
     amount: Decimal = Field(..., gt=0, description="Maximum total spend authorized against this ticket")
     currency: str = Field(..., min_length=2, max_length=8, description="Currency code, e.g. USDC")
@@ -599,6 +606,27 @@ class GrantBudgetRequest(BaseModel):
         24.0, gt=0, le=8760, description="Grant lifetime in hours (default 24, max 1 year)"
     )
     wa_id: Optional[str] = Field(None, description="WA identity to sign as (defaults to the calling user)")
+
+    # --- Accepted and IGNORED (transitional) -------------------------------
+    # The HITL client briefly sent these while the audit marking was being
+    # coordinated. The server derives both authoritatively from the ticket, so
+    # these are no-ops. Declared rather than rejected so that client keeps
+    # working while it drops them; `extra="forbid"` below then makes any OTHER
+    # unknown field a loud 422 instead of a silent default — which matters on a
+    # money endpoint, where a typo'd `expires_in_hours` would otherwise quietly
+    # take the 24h default. Remove once the client confirms.
+    exceeds_request: Optional[bool] = Field(
+        None,
+        deprecated=True,
+        description="IGNORED. Server derives this from the ticket; a client-asserted audit flag is not trustworthy.",
+    )
+    requested_amount_at_grant: Optional[Decimal] = Field(
+        None,
+        deprecated=True,
+        description="IGNORED. Server snapshots the requested amount from the ticket at issuance.",
+    )
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class GrantBudgetResponse(BaseModel):
@@ -613,6 +641,12 @@ class GrantBudgetResponse(BaseModel):
     granted_by_user_id: str
     granted_at: str
     signed: bool = Field(..., description="Whether the grant carries a verifiable signature")
+    exceeds_request: bool = Field(
+        ..., description="True when the grant exceeded the agent's request (permitted, but recorded)"
+    )
+    requested_amount_at_grant: Optional[str] = Field(
+        None, description="What the agent requested, as of issuance; null when it requested nothing"
+    )
 
 
 @router.post(
@@ -675,6 +709,10 @@ async def grant_ticket_budget(
             granted_by_user_id=grant.granted_by_user_id,
             granted_at=grant.granted_at.isoformat(),
             signed=grant.signature is not None,
+            exceeds_request=grant.exceeds_request,
+            requested_amount_at_grant=(
+                str(grant.requested_amount_at_grant) if grant.requested_amount_at_grant is not None else None
+            ),
         ).model_dump(),
         message=f"Budget granted on ticket {ticket_id}",
     )

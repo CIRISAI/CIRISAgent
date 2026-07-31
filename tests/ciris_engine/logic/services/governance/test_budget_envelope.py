@@ -31,6 +31,7 @@ from ciris_engine.logic.services.governance.budget_envelope import (
 from ciris_engine.schemas.services.budget_envelope import (
     BUDGET_SPENT_METADATA_KEY,
     GRANTED_BUDGET_METADATA_KEY,
+    REQUESTED_BUDGET_METADATA_KEY,
     BudgetDenialReason,
     GrantedBudget,
     TrustEnvelope,
@@ -329,6 +330,143 @@ class TestSpendDecrementsBoth:
         )
         assert d.allowed is False
         assert d.granted_remaining == Decimal("0")
+
+
+class TestOverRequestGrants:
+    """An AUTHORITY user may grant ABOVE the agent's request.
+
+    User ruling: "yes an AUTHORITY can approve above what the agent requested,
+    of course, the agent may have requested too little."
+
+    So `granted <= requested` is NOT a bound anywhere. It is only *recorded*, so
+    an over-request grant is distinguishable in audit from an ordinary one.
+    """
+
+    @staticmethod
+    def _set_requested(amount: str) -> None:
+        from ciris_engine.logic.persistence.models.tickets import update_ticket_metadata
+
+        from ciris_engine.schemas.services.budget_envelope import REQUESTED_BUDGET_METADATA_KEY, RequestedBudget
+
+        requested = RequestedBudget(
+            requested_amount=Decimal(amount), requested_currency="USDC", purpose="fee"
+        )
+        metadata = get_ticket(TICKET_ID)["metadata"] or {}
+        metadata[REQUESTED_BUDGET_METADATA_KEY] = requested.model_dump(mode="json")
+        update_ticket_metadata(TICKET_ID, metadata)
+
+    @pytest.mark.asyncio
+    async def test_granting_above_the_request_is_allowed(self, ticket_with_task):
+        self._set_requested("25")
+        grant = await _grant(amount="250")
+        assert grant.granted_amount == Decimal("250")
+
+        # ...and it actually spends, up to the granted amount.
+        d = await authorize_spend(
+            task_id=TASK_ID, amount=Decimal("200"), currency="USDC", trust_envelope=_trust("1000", "1000")
+        )
+        assert d.allowed is True
+
+    @pytest.mark.asyncio
+    async def test_over_request_grant_is_marked(self, ticket_with_task):
+        self._set_requested("25")
+        grant = await _grant(amount="250")
+        assert grant.exceeds_request is True
+        assert grant.requested_amount_at_grant == Decimal("25")
+
+    @pytest.mark.asyncio
+    async def test_at_or_below_request_is_not_marked(self, ticket_with_task):
+        self._set_requested("25")
+        at = await _grant(amount="25")
+        assert at.exceeds_request is False
+        assert at.requested_amount_at_grant == Decimal("25")
+
+        below = await _grant(amount="10")
+        assert below.exceeds_request is False
+
+    @pytest.mark.asyncio
+    async def test_ticket_with_no_requested_budget_is_grantable(self, ticket_with_task):
+        """A human-opened ticket requests nothing. It must still be grantable."""
+        assert REQUESTED_BUDGET_METADATA_KEY not in (get_ticket(TICKET_ID)["metadata"] or {})
+
+        grant = await _grant(amount="500")
+        assert grant.granted_amount == Decimal("500")
+        assert grant.requested_amount_at_grant is None
+        # No request to exceed => not an over-request grant.
+        assert grant.exceeds_request is False
+
+        d = await authorize_spend(
+            task_id=TASK_ID, amount=Decimal("10"), currency="USDC", trust_envelope=_trust()
+        )
+        assert d.allowed is True
+
+    @pytest.mark.asyncio
+    async def test_marking_is_covered_by_the_signature(self, ticket_with_task):
+        """The over-request marker cannot be stripped without breaking the signature."""
+        self._set_requested("25")
+        grant = await _grant(amount="250")
+        laundered = grant.model_copy(update={"exceeds_request": False, "requested_amount_at_grant": None})
+        assert canonical_grant_payload(grant) != canonical_grant_payload(laundered)
+
+    @pytest.mark.asyncio
+    async def test_over_request_grant_is_still_bounded_by_trust_headroom(self, ticket_with_task):
+        """The ruling relaxed nothing about the real bound."""
+        self._set_requested("25")
+        await _grant(amount="10000")
+
+        d = await authorize_spend(
+            task_id=TASK_ID, amount=Decimal("200"), currency="USDC", trust_envelope=_trust("100", "1000")
+        )
+        assert d.allowed is False
+        assert d.reason is BudgetDenialReason.TRUST_ENVELOPE_EXCEEDED
+        assert d.binding_constraint == "trust_envelope"
+
+    @pytest.mark.asyncio
+    async def test_issuance_still_refuses_to_exceed_the_trust_ceiling(self, ticket_with_task):
+        """Over-request is fine; over-*ceiling* is not, request or no request."""
+        self._set_requested("25")
+        with pytest.raises(NestingViolation):
+            await issue_grant(
+                ticket_id=TICKET_ID,
+                granted_amount=Decimal("5000"),
+                granted_currency="USDC",
+                purpose="too much",
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                granted_by_wa_id="wa-1",
+                granted_by_user_id="alice",
+                trust_ceiling=Decimal("1000"),
+            )
+
+    @pytest.mark.asyncio
+    async def test_client_asserted_marking_is_ignored(self, ticket_with_task):
+        """A caller cannot hide an over-grant by lying in the request body.
+
+        The API model accepts the transitional client fields but the server
+        derives the authoritative values from the ticket. This is the whole
+        reason the marking is not client-supplied.
+        """
+        from ciris_engine.logic.adapters.api.routes.tickets import GrantBudgetRequest
+
+        self._set_requested("25")
+        body = GrantBudgetRequest(
+            amount=Decimal("250"),
+            currency="USDC",
+            purpose="fee",
+            exceeds_request=False,  # a lie
+            requested_amount_at_grant=Decimal("9999"),  # also a lie
+        )
+        # issue_grant takes no such parameters — they cannot reach the record.
+        grant = await issue_grant(
+            ticket_id=TICKET_ID,
+            granted_amount=body.amount,
+            granted_currency=body.currency,
+            purpose=body.purpose,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            granted_by_wa_id="wa-1",
+            granted_by_user_id="mallory",
+        )
+        assert grant.exceeds_request is True
+        assert grant.requested_amount_at_grant == Decimal("25")
 
 
 class TestRegrantSemantics:

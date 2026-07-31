@@ -389,9 +389,10 @@ Rationale: a human asked to approve $X with no view of whether the deployment ha
 $50 or $50,000 of remaining envelope cannot give meaningful consent, which would
 undercut the point of making approval the issuance event.
 
-The client also enforces `granted ≤ requested` locally, in fixed-point integers.
-That is a **usability property, not a security one** — the server remains the
-authority, and nothing about the gate depends on the client behaving.
+The client no longer enforces `granted ≤ requested` (see the ruling below); it
+now renders an explicit confirmation naming the ratio instead, because the hazard
+on an over-grant is a mis-typed zero rather than a policy disagreement. Nothing
+about the gate depends on the client behaving either way.
 
 **The server does not enforce `granted ≤ requested`.** The agent's request is
 *information for the human*, not a constraint on them. An AUTHORITY user who
@@ -400,30 +401,46 @@ instead would burn the agent's proposal rate budget and add a reasoning
 round-trip for no safety gain. The bound the server does enforce is
 `granted ≤ trust ceiling`.
 
-#### OPEN DECISION — awaiting a user ruling, do not resolve agent-side
+#### RULED — over-request grants are permitted
 
-The HITL surface's instructions say the human may approve "at or below the
-requested amount, never above," enforced in the UI. That client correctly
-declined to relax it on the strength of two agents agreeing, and escalated it.
-See `FSD/HITL_APPROVAL_SURFACE.md`.
+The user ruled: *"yes an AUTHORITY can approve above what the agent requested, of
+course, the agent may have requested too little."*
 
-**The ruling is two-sided, and the server half is the one that bites:**
+So **`granted ≤ requested` is a constraint nowhere in the system** — not in the
+server, and not in the HITL client either, which dropped its local restriction on
+the same ruling. The agent's request is information for the human, not a bound on
+them. An agent that lowballs a fee out of ignorance must not be able to cap what
+a human who knows better may authorize.
 
-- **"Yes, allow over-grant"** → client adds a confirmation path showing the
-  multiple ("10× the 25 requested", which catches a mis-typed zero where a
-  generic *are you sure?* does not). No server change.
-- **"No, never above"** → **this codebase needs a change too.** Today the
-  restriction is client-only, so an AUTHORITY user with `curl` can grant above
-  the request against `POST /v1/tickets/{id}/budget/grant` and nothing stops
-  them. Honouring that ruling means an issuance-time check in `issue_grant`
-  comparing against `__requested_budget__`, plus a decision about tickets with
-  no requested budget at all (a human-opened ticket has none — a naive check
-  would make those ungrantable).
+The real bound is unchanged and unweakened: **`granted ≤ trust ceiling`**, checked
+at issuance and again as `min()` at every spend. Tests assert that an
+over-request grant is still denied when it exceeds headroom, and that issuance
+still raises `NestingViolation` above the ceiling — the ruling relaxed the
+request comparison, nothing else.
 
-Recording it here because a ruling delivered only to the client would leave the
-constraint enforced in the UI and absent in the system — the exact "control that
-was never there" shape this document is trying to avoid. Neither behaviour
-should be changed on agent judgement alone.
+**Over-request grants are recorded, not blocked.** Two fields on `GrantedBudget`:
+
+| Field | Meaning |
+|---|---|
+| `exceeds_request: bool` | True when `granted_amount` exceeded the request at issuance |
+| `requested_amount_at_grant: Decimal \| None` | Snapshot of the request, so the ratio stays reconstructable from the grant alone |
+
+Both are **derived server-side** in `issue_grant` from the ticket's
+`__requested_budget__`, and are never read from the request body. A
+client-asserted audit flag would be worthless: the operator most motivated to
+hide an over-grant is the one calling the endpoint directly, who would simply
+omit it — the same curl-bypass argument that decided the ruling. The API model
+accepts the client's transitional fields and ignores them; a test asserts a lying
+body cannot change the record.
+
+Both fields sit inside the canonical signed payload, so the marking cannot be
+stripped or forged without invalidating the signature.
+
+`requested_amount_at_grant` is `None` when the ticket carried no request at all —
+a human-opened ticket, or an agent proposal that asked for work but not money.
+Those are ordinary, grantable, and explicitly tested: **a null request must never
+block issuance**, which is the failure mode a naive comparison would have
+introduced.
 
 ### Re-granting: raises the ceiling, never refunds
 
@@ -493,12 +510,6 @@ nobody can audit.
   correction requires.
 
 ---
-
-## Open decisions (need a human ruling, not an agent one)
-
-1. **`granted ≤ requested`** — enforced in the HITL client, not in the server.
-   See the OPEN DECISION block above; a "never above" ruling requires a
-   server-side check in `issue_grant`, not just the UI restriction that exists.
 
 ## Upstream asks
 

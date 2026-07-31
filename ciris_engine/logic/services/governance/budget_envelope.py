@@ -28,6 +28,7 @@ from typing import Any, Dict, Optional, Tuple
 from ciris_engine.schemas.services.budget_envelope import (
     BUDGET_SPENT_METADATA_KEY,
     GRANTED_BUDGET_METADATA_KEY,
+    REQUESTED_BUDGET_METADATA_KEY,
     BudgetDenialReason,
     BudgetSpendDecision,
     BudgetSpendRecord,
@@ -205,6 +206,23 @@ def load_grant(ticket: Dict[str, Any]) -> Tuple[Optional[GrantedBudget], Optiona
     except Exception as e:
         logger.warning("Malformed granted budget on ticket %s: %s", ticket.get("ticket_id"), e)
         return None, BudgetDenialReason.GRANT_MALFORMED
+
+
+def _read_requested_amount(ticket: Dict[str, Any]) -> Optional[Decimal]:
+    """Read the agent's requested amount from a ticket, or None.
+
+    Returns None for a ticket that carried no requested budget at all — a
+    human-opened ticket, or an agent proposal that asked for work but not money.
+    That is an ordinary, grantable case: nothing compares granted against
+    requested, so a null request must never block issuance.
+    """
+    metadata = ticket.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        return None
+    raw = metadata.get(REQUESTED_BUDGET_METADATA_KEY)
+    if not isinstance(raw, dict):
+        return None
+    return _coerce_decimal(raw.get("requested_amount"))
 
 
 def load_spent_ledger(ticket: Dict[str, Any]) -> BudgetSpentLedger:
@@ -474,6 +492,14 @@ async def issue_grant(
     if not ticket:
         raise ValueError(f"Ticket {ticket_id} not found")
 
+    # Derive the over-request audit marking from the ticket, never from the
+    # caller. Granting above the request is PERMITTED — the agent may simply
+    # have asked for too little — but it is recorded so it is distinguishable
+    # afterwards from an ordinary grant. This is a marking, not a bound: nothing
+    # below compares against it to reject anything.
+    requested_at_grant = _read_requested_amount(ticket)
+    exceeds_request = requested_at_grant is not None and granted_amount > requested_at_grant
+
     grant = GrantedBudget(
         ticket_id=ticket_id,
         granted_amount=granted_amount,
@@ -483,6 +509,8 @@ async def issue_grant(
         granted_by_wa_id=granted_by_wa_id,
         granted_by_user_id=granted_by_user_id,
         granted_at=now,
+        requested_amount_at_grant=requested_at_grant,
+        exceeds_request=exceeds_request,
         signature=None,
     )
     signature = await sign_grant(grant, auth_service)

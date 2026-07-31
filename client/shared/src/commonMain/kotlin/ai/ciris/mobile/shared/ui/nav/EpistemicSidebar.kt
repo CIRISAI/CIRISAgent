@@ -24,8 +24,10 @@ import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
+import ai.ciris.mobile.shared.ui.components.CountPill
 import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
+import ai.ciris.mobile.shared.ui.theme.SemanticColors
 
 /**
  * The Epistemic Commons Framework sidebar — load-bearing nav chrome for 2.9.4.
@@ -70,6 +72,15 @@ fun EpistemicSidebar(
     // content is also the CIRIS signet so the open/close affordances are
     // visually identical and always anchored at the top.
     onCloseRequest: (() -> Unit)? = null,
+    /**
+     * Per-surface attention counts, keyed by [NavSurface.id]. A non-zero entry
+     * renders a count pill on that surface's row and on every ancestor group
+     * header, so an operator sees "something needs you" from anywhere in the
+     * app without opening the surface. Used by the HITL approval surface
+     * (#938) — a fail-closed gate whose block is invisible is a silent
+     * denial-of-service on the agent.
+     */
+    badges: Map<String, Int> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
     val scroll = rememberScrollState()
@@ -173,10 +184,17 @@ fun EpistemicSidebar(
             EPISTEMIC_NAV_GROUPS.forEach { group ->
                 val expanded = groupExpanded[group.id] ?: false
                 val isActiveGroup = group == activeGroup
+                // Roll the group's descendants' badges up to the header, so a
+                // collapsed group still shows that something inside needs the
+                // operator.
+                val groupBadge = group.surfaces
+                    .flatMap { it.descendantsAndSelf() }
+                    .sumOf { badges[it.id] ?: 0 }
                 NavGroupHeader(
                     group = group,
                     expanded = expanded,
                     isActive = isActiveGroup,
+                    badgeCount = groupBadge,
                     onToggle = {
                         // Pure expand/collapse. The earlier "useful landing"
                         // jump to the first non-gated surface produced an
@@ -196,6 +214,7 @@ fun EpistemicSidebar(
                             expandedMap = surfaceExpanded,
                             onSurfaceSelected = onSurfaceSelected,
                             onIssueClick = onIssueClick,
+                            badges = badges,
                         )
                     }
                 }
@@ -312,6 +331,7 @@ private fun NavGroupHeader(
     expanded: Boolean,
     isActive: Boolean,
     onToggle: () -> Unit,
+    badgeCount: Int = 0,
 ) {
     val accent = group.accentHex?.let { parseHex(it) }
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -347,6 +367,14 @@ private fun NavGroupHeader(
             letterSpacing = 1.4.sp,
             modifier = Modifier.weight(1f),
         )
+        if (badgeCount > 0) {
+            CountPill(
+                count = badgeCount,
+                color = SemanticColors.Default.warning,
+                tag = "nav_badge_group_${group.id}",
+            )
+            Spacer(Modifier.width(6.dp))
+        }
         Icon(
             imageVector = if (expanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
             contentDescription = null,
@@ -368,6 +396,7 @@ private fun NavSurfaceRow(
     expandedMap: MutableMap<String, Boolean>,
     onSurfaceSelected: (NavSurface) -> Unit,
     onIssueClick: (String) -> Unit,
+    badges: Map<String, Int> = emptyMap(),
 ) {
     val isActive = surface == activeSurface
     val isAncestorOfActive = activeSurface != null &&
@@ -433,6 +462,18 @@ private fun NavSurfaceRow(
                 fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
                 modifier = Modifier.weight(1f),
             )
+            // Attention badge — "this surface is waiting on you". Rendered
+            // before the Coming Soon chip so the count sits closest to the
+            // label it belongs to.
+            val badgeCount = badges[surface.id] ?: 0
+            if (badgeCount > 0) {
+                CountPill(
+                    count = badgeCount,
+                    color = SemanticColors.Default.warning,
+                    tag = "nav_badge_${surface.id.replace('-', '_')}",
+                )
+                Spacer(Modifier.width(4.dp))
+            }
             // Coming Soon chip — pinned to substrate issue (lives inside
             // the nav zone so the chip's tap doesn't trigger expand)
             if (surface.gate != null) {
@@ -484,6 +525,7 @@ private fun NavSurfaceRow(
                 expandedMap = expandedMap,
                 onSurfaceSelected = onSurfaceSelected,
                 onIssueClick = onIssueClick,
+                badges = badges,
             )
         }
     }

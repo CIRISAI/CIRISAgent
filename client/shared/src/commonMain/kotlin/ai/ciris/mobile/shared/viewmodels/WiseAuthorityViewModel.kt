@@ -1,9 +1,23 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
-import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.api.DeferralData
 import ai.ciris.mobile.shared.api.WAStatusData
+import ai.ciris.mobile.shared.approvals.ApprovalNotifier
+import ai.ciris.mobile.shared.approvals.ApprovalsApi
+import ai.ciris.mobile.shared.approvals.BudgetApprovalSeam
+import ai.ciris.mobile.shared.approvals.BudgetCapability
+import ai.ciris.mobile.shared.approvals.BudgetGrantError
+import ai.ciris.mobile.shared.approvals.BudgetGrantOutcome
+import ai.ciris.mobile.shared.approvals.CIRISApprovalsApi
+import ai.ciris.mobile.shared.approvals.InMemoryNotifiedApprovalStore
+import ai.ciris.mobile.shared.approvals.PendingApproval
+import ai.ciris.mobile.shared.approvals.PlatformApprovalNotificationSink
+import ai.ciris.mobile.shared.approvals.SecureStorageNotifiedApprovalStore
+import ai.ciris.mobile.shared.approvals.toPendingApproval
+import ai.ciris.mobile.shared.approvals.toPendingApprovalOrNull
+import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.SecureStorage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -15,21 +29,69 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Shared ViewModel for Wise Authority screen
+ * Shared ViewModel for the human-in-the-loop approval surface.
  *
- * Features:
- * - WA service status monitoring
- * - Pending deferrals list
- * - Deferral resolution
- * - Auto-refresh with configurable interval
+ * Folds the two sources of pending human decisions into one list:
+ *  - Wisdom-Based Deferrals (`/v1/wa/deferrals`), and
+ *  - agent ticket proposals awaiting approval, which may carry a **requested
+ *    budget** (#938/#939) that only a human may issue.
+ *
+ * ── How the client learns about new approvals ───────────────────────────────
+ *
+ * **Polling. There is no push.** The API exposes WebSocket streams for
+ * messages / telemetry / reasoning / logs, but deferrals and tickets are not
+ * among them, so nothing arrives unsolicited. Two loops run at different
+ * cadences for different reasons:
+ *
+ *  - [startApprovalWatch] — [WATCH_INTERVAL_MS], runs for the whole
+ *    authenticated session regardless of which screen is showing. This is what
+ *    makes the nav badge and the notification possible; without it an operator
+ *    only discovers a blocked agent by navigating to this screen, which is the
+ *    exact failure the surface exists to prevent.
+ *  - [startPolling] — [POLL_INTERVAL_MS], while the approval screen is visible,
+ *    so the list feels live under a decision.
+ *
+ * Both feed the same [ApprovalNotifier], which dedupes, so overlapping loops
+ * cannot produce duplicate notifications.
  */
 class WiseAuthorityViewModel(
-    private val apiClient: CIRISApiClient
+    private val api: ApprovalsApi,
+    private val notifier: ApprovalNotifier? = null,
 ) : ViewModel() {
+
+    /**
+     * Production constructor. Persists notification dedupe state to
+     * [SecureStorage] so an app restart does not re-announce everything the
+     * operator has already seen.
+     */
+    constructor(apiClient: CIRISApiClient, secureStorage: SecureStorage) : this(
+        api = CIRISApprovalsApi(apiClient),
+        notifier = ApprovalNotifier(
+            sink = PlatformApprovalNotificationSink,
+            store = SecureStorageNotifiedApprovalStore(secureStorage),
+        ),
+    )
+
+    /**
+     * Constructor for hosts without secure storage wired. Dedupe is
+     * process-scoped: a restart may re-announce still-pending approvals once.
+     */
+    constructor(apiClient: CIRISApiClient) : this(
+        api = CIRISApprovalsApi(apiClient),
+        notifier = ApprovalNotifier(
+            sink = PlatformApprovalNotificationSink,
+            store = InMemoryNotifiedApprovalStore(),
+        ),
+    )
 
     companion object {
         private const val TAG = "WiseAuthorityViewModel"
-        private const val POLL_INTERVAL_MS = 10000L // Poll every 10 seconds
+
+        /** Foreground cadence while the approval screen is open. */
+        private const val POLL_INTERVAL_MS = 10000L
+
+        /** Session-wide cadence that drives the badge + notifications. */
+        private const val WATCH_INTERVAL_MS = 30000L
     }
 
     private fun log(level: String, method: String, message: String) {
@@ -52,9 +114,24 @@ class WiseAuthorityViewModel(
     private val _waStatus = MutableStateFlow<WAStatusData?>(null)
     val waStatus: StateFlow<WAStatusData?> = _waStatus.asStateFlow()
 
-    // Deferrals list
+    // Deferrals list (raw — retained for the existing deferral UI)
     private val _deferrals = MutableStateFlow<List<DeferralData>>(emptyList())
     val deferrals: StateFlow<List<DeferralData>> = _deferrals.asStateFlow()
+
+    /** The unified pending-approval list: deferrals + unapproved ticket proposals. */
+    private val _approvals = MutableStateFlow<List<PendingApproval>>(emptyList())
+    val approvals: StateFlow<List<PendingApproval>> = _approvals.asStateFlow()
+
+    /**
+     * How many decisions the agent is blocked on. Drives the nav badge. Kept
+     * as a separate flow so nav can observe a count without holding the list.
+     */
+    private val _pendingApprovalCount = MutableStateFlow(0)
+    val pendingApprovalCount: StateFlow<Int> = _pendingApprovalCount.asStateFlow()
+
+    /** Whether this server exposes budget *issuance*. See [BudgetCapability]. */
+    private val _budgetCapability = MutableStateFlow(BudgetCapability.UNKNOWN)
+    val budgetCapability: StateFlow<BudgetCapability> = _budgetCapability.asStateFlow()
 
     // Loading state
     private val _isLoading = MutableStateFlow(false)
@@ -72,19 +149,60 @@ class WiseAuthorityViewModel(
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    // Resolving deferral state
+    // Resolving deferral / granting budget state
     private val _isResolving = MutableStateFlow(false)
     val isResolving: StateFlow<Boolean> = _isResolving.asStateFlow()
 
-    // Polling job
+    // Polling jobs
     private var pollingJob: Job? = null
+    private var watchJob: Job? = null
     private var isFirstLoad = true
     private var pollingStarted = false
+    private var watchStarted = false
 
     init {
         logInfo("init", "WiseAuthorityViewModel initialized (polling deferred until startPolling() called)")
         // NOTE: Don't auto-start polling here - wait for startPolling() to be called
         // when the screen becomes visible and has a valid auth token
+    }
+
+    /**
+     * Start the session-wide approval watch.
+     *
+     * Call once the user is authenticated, not when a screen opens — the whole
+     * point is that the operator learns about a blocked agent *without*
+     * navigating anywhere. Idempotent.
+     */
+    fun startApprovalWatch() {
+        if (watchStarted) {
+            logDebug("startApprovalWatch", "Watch already running, skipping")
+            return
+        }
+        watchStarted = true
+        val method = "startApprovalWatch"
+        logInfo(method, "Starting session-wide approval watch (interval=${WATCH_INTERVAL_MS}ms)")
+
+        watchJob = viewModelScope.launch {
+            while (isActive) {
+                try {
+                    fetchDataInternal()
+                    _isConnected.value = true
+                } catch (e: Exception) {
+                    // Quiet: the watch runs everywhere, so a blip must not paint
+                    // an error banner over an unrelated screen.
+                    logDebug(method, "Watch cycle failed: ${e::class.simpleName}: ${e.message}")
+                }
+                delay(WATCH_INTERVAL_MS)
+            }
+        }
+    }
+
+    /** Stop the session-wide watch (logout / shutdown). */
+    fun stopApprovalWatch() {
+        logInfo("stopApprovalWatch", "Stopping approval watch")
+        watchJob?.cancel()
+        watchJob = null
+        watchStarted = false
     }
 
     /**
@@ -170,27 +288,62 @@ class WiseAuthorityViewModel(
     }
 
     /**
-     * Fetch WA status and deferrals from API
+     * Fetch WA status, deferrals and proposal tickets, rebuild the unified
+     * approval list, and hand it to the notifier.
+     *
+     * Deferral fetch failures propagate (the screen shows a connection error);
+     * proposal fetch failures do not, because a deployment may legitimately
+     * have no tickets API and that must not blank the deferral list.
      */
     private suspend fun fetchDataInternal() {
         val method = "fetchDataInternal"
-        logDebug(method, "Fetching WA data from API")
+        logDebug(method, "Fetching approval data from API")
 
         try {
-            // Fetch status
-            val status = apiClient.getWAStatus()
+            val status = api.fetchWAStatus()
             _waStatus.value = status
-            logDebug(method, "WA status: healthy=${status.serviceHealthy}, activeWAs=${status.activeWAs}, " +
-                    "pendingDeferrals=${status.pendingDeferrals}")
+            logDebug(
+                method,
+                "WA status: healthy=${status.serviceHealthy}, activeWAs=${status.activeWAs}, " +
+                    "pendingDeferrals=${status.pendingDeferrals}"
+            )
 
-            // Fetch deferrals
-            val deferrals = apiClient.getDeferrals()
+            val deferrals = api.fetchDeferrals()
             _deferrals.value = deferrals
             logDebug(method, "Fetched ${deferrals.size} deferrals")
 
+            val proposals = api.fetchProposals().mapNotNull { it.toPendingApprovalOrNull() }
+            if (proposals.isNotEmpty()) {
+                logDebug(method, "Fetched ${proposals.size} agent proposal(s) awaiting approval")
+            }
+
+            val unified = deferrals.map { it.toPendingApproval() } + proposals
+            _approvals.value = unified
+            _pendingApprovalCount.value = unified.count { it.status.equals("pending", ignoreCase = true) ||
+                it.status.equals(BudgetApprovalSeam.PROPOSAL_STATUS, ignoreCase = true) }
+
+            notifyNewApprovals(unified)
         } catch (e: Exception) {
-            logError(method, "Failed to fetch WA data: ${e::class.simpleName}: ${e.message}")
+            logError(method, "Failed to fetch approval data: ${e::class.simpleName}: ${e.message}")
             throw e
+        }
+    }
+
+    /**
+     * Hand the current approvals to the notifier.
+     *
+     * Wrapped: a notification failure must never break a poll cycle or blank
+     * the list the operator is reading.
+     */
+    private suspend fun notifyNewApprovals(approvals: List<PendingApproval>) {
+        val n = notifier ?: return
+        try {
+            val notified = n.onApprovalsObserved(approvals)
+            if (notified.isNotEmpty()) {
+                logInfo("notifyNewApprovals", "Notified ${notified.size} new approval(s)")
+            }
+        } catch (e: Exception) {
+            logWarn("notifyNewApprovals", "Notification failed (non-fatal): ${e.message}")
         }
     }
 
@@ -206,14 +359,14 @@ class WiseAuthorityViewModel(
             _error.value = null
 
             try {
-                val result = apiClient.resolveDeferral(deferralId, resolution, guidance)
+                val result = api.resolveDeferral(deferralId, resolution, guidance)
                 logInfo(method, "Deferral resolved: ${result.deferralId}, success=${result.success}")
 
                 _successMessage.value = "Deferral resolved successfully"
+                notifier?.forget(deferralId)
 
                 // Refresh to update the list
                 fetchDataInternal()
-
             } catch (e: Exception) {
                 logError(method, "Failed to resolve deferral: ${e::class.simpleName}: ${e.message}")
                 _error.value = "Failed to resolve deferral: ${e.message}"
@@ -221,6 +374,175 @@ class WiseAuthorityViewModel(
                 _isResolving.value = false
             }
         }
+    }
+
+    /**
+     * Issue a budget envelope against an agent proposal — the human approval
+     * that unblocks spend.
+     *
+     * The ≤-requested constraint is checked here as well as server-side, so an
+     * over-approval is refused at the point of decision instead of arriving as
+     * a rejected round-trip. Client-side enforcement is a usability property,
+     * not a security one: the server remains the authority.
+     *
+     * @param promote when true, also PATCH the ticket to `pending` so the work
+     *   actually starts. Granting money and starting work are separate
+     *   decisions, and the UI makes both visible.
+     */
+    fun grantBudget(
+        approvalId: String,
+        amount: String,
+        currency: String,
+        purpose: String,
+        expiresInHours: Int,
+        promote: Boolean,
+        onResult: (BudgetGrantOutcome) -> Unit = {},
+    ) {
+        val method = "grantBudget"
+        val approval = _approvals.value.firstOrNull { it.id == approvalId }
+        val requested = approval?.requestedBudget
+
+        if (requested == null) {
+            logError(method, "No requested budget on approval $approvalId")
+            val outcome = BudgetGrantOutcome(
+                ok = false,
+                error = BudgetGrantError.UNKNOWN,
+                message = "This approval does not carry a budget request",
+            )
+            _error.value = outcome.message
+            onResult(outcome)
+            return
+        }
+
+        val validation = BudgetApprovalSeam.validateGrant(
+            requested = requested,
+            amount = amount,
+            expiresInHours = expiresInHours,
+            purpose = purpose,
+        )
+        if (!validation.ok) {
+            logWarn(method, "Local validation refused grant: ${validation.error} (${validation.message})")
+            _error.value = validation.message
+            onResult(validation)
+            return
+        }
+
+        logInfo(method, "Granting $amount $currency on $approvalId (expiry=${expiresInHours}h, promote=$promote)")
+
+        viewModelScope.launch {
+            _isResolving.value = true
+            _error.value = null
+
+            try {
+                val outcome = api.grantBudget(approvalId, amount, currency, purpose, expiresInHours)
+
+                if (outcome.ok) {
+                    _budgetCapability.value = BudgetCapability.AVAILABLE
+                    val signedNote = if (outcome.granted?.signed == false) " (unsigned — no WA signing key)" else ""
+                    _successMessage.value = "Approved $amount $currency$signedNote"
+                    notifier?.forget(approvalId)
+
+                    if (promote) {
+                        val promoted = api.updateTicketStatus(
+                            approvalId,
+                            BudgetApprovalSeam.PROMOTED_STATUS,
+                            null,
+                        )
+                        if (!promoted) {
+                            _error.value = "Budget approved, but starting the work failed — promote it manually"
+                            logWarn(method, "Grant succeeded but promotion failed for $approvalId")
+                        }
+                    }
+                } else {
+                    if (outcome.error == BudgetGrantError.ENDPOINT_UNAVAILABLE) {
+                        _budgetCapability.value = BudgetCapability.UNAVAILABLE
+                    }
+                    _error.value = outcome.message ?: describe(outcome.error)
+                    logError(method, "Grant refused: ${outcome.error} ${outcome.message}")
+                }
+
+                fetchDataInternal()
+                onResult(outcome)
+            } catch (e: Exception) {
+                logError(method, "Grant failed: ${e::class.simpleName}: ${e.message}")
+                val outcome = BudgetGrantOutcome(false, BudgetGrantError.UNKNOWN, e.message)
+                _error.value = "Failed to approve budget: ${e.message}"
+                onResult(outcome)
+            } finally {
+                _isResolving.value = false
+            }
+        }
+    }
+
+    /**
+     * Start the work on a proposal without changing its budget — the promotion
+     * half of the decision, for proposals that ask for no money or whose budget
+     * was already issued.
+     */
+    fun promoteProposal(approvalId: String, note: String?) {
+        val method = "promoteProposal"
+        logInfo(method, "Promoting proposal $approvalId to ${BudgetApprovalSeam.PROMOTED_STATUS}")
+        updateProposalStatus(approvalId, BudgetApprovalSeam.PROMOTED_STATUS, note, "Approved — work started")
+    }
+
+    /** Refuse a proposal outright. Nothing is issued and the work never starts. */
+    fun rejectProposal(approvalId: String, reason: String?) {
+        val method = "rejectProposal"
+        logInfo(method, "Rejecting proposal $approvalId")
+        updateProposalStatus(approvalId, BudgetApprovalSeam.REJECTED_STATUS, reason, "Proposal rejected")
+    }
+
+    /**
+     * "Not now" — record why and leave the proposal blocked. Nothing is issued,
+     * the work does not start, and the agent stays fail-closed, which is the
+     * correct default when a human has not decided.
+     */
+    fun deferProposal(approvalId: String, note: String?) {
+        val method = "deferProposal"
+        logInfo(method, "Deferring proposal $approvalId (status unchanged)")
+        updateProposalStatus(approvalId, BudgetApprovalSeam.PROPOSAL_STATUS, note, "Left for later")
+    }
+
+    private fun updateProposalStatus(
+        approvalId: String,
+        status: String,
+        note: String?,
+        successText: String,
+    ) {
+        viewModelScope.launch {
+            _isResolving.value = true
+            _error.value = null
+            try {
+                val ok = api.updateTicketStatus(approvalId, status, note)
+                if (ok) {
+                    _successMessage.value = successText
+                    notifier?.forget(approvalId)
+                } else {
+                    _error.value = "Server refused the update"
+                }
+                fetchDataInternal()
+            } catch (e: Exception) {
+                logError("updateProposalStatus", "Failed: ${e.message}")
+                _error.value = "Failed to update: ${e.message}"
+            } finally {
+                _isResolving.value = false
+            }
+        }
+    }
+
+    private fun describe(error: BudgetGrantError?): String = when (error) {
+        BudgetGrantError.FORBIDDEN_ROLE ->
+            "Approving a budget requires the AUTHORITY role — an admin account is not enough"
+        BudgetGrantError.TICKET_NOT_FOUND -> "That proposal no longer exists"
+        BudgetGrantError.NESTING_VIOLATION ->
+            "That exceeds this deployment's trust envelope — approve a smaller amount"
+        BudgetGrantError.ENDPOINT_UNAVAILABLE ->
+            "This server does not support budget approval yet"
+        BudgetGrantError.EXCEEDS_REQUESTED -> "You cannot approve more than the agent asked for"
+        BudgetGrantError.INVALID_AMOUNT -> "Enter a valid amount"
+        BudgetGrantError.INVALID_EXPIRY -> "Enter a valid expiry"
+        BudgetGrantError.MISSING_PURPOSE -> "Say what the money is for"
+        else -> "Budget approval failed"
     }
 
     /**
@@ -242,8 +564,9 @@ class WiseAuthorityViewModel(
     }
 
     override fun onCleared() {
-        logInfo("onCleared", "ViewModel cleared, cancelling polling job")
+        logInfo("onCleared", "ViewModel cleared, cancelling polling jobs")
         super.onCleared()
         pollingJob?.cancel()
+        watchJob?.cancel()
     }
 }

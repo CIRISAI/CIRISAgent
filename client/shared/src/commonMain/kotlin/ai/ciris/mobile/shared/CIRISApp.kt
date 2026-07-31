@@ -435,6 +435,7 @@ fun CIRISApp(
         TestAutomation.setCurrentScreen(currentScreen::class.simpleName ?: "unknown")
     }
 
+
     // Handle system back button - navigate back to appropriate parent screen
     PlatformBackHandler(enabled = currentScreen !is Screen.Startup && currentScreen !is Screen.Interact) {
         currentScreen = when (currentScreen) {
@@ -680,8 +681,27 @@ fun CIRISApp(
         AdaptersViewModel(apiClient, baseUrl)
     }
     val wiseAuthorityViewModel: WiseAuthorityViewModel = viewModel {
-        WiseAuthorityViewModel(apiClient)
+        // secureStorage persists the notification dedupe set, so restarting the
+        // app does not re-announce approvals the operator has already seen.
+        WiseAuthorityViewModel(apiClient, secureStorage)
     }
+
+    // ── HITL approval watch (#938) ──────────────────────────────────────────
+    // Runs for the whole authenticated session, NOT per-screen. This is what
+    // lets the nav badge and the "new approval arrived" notification exist at
+    // all: an approval gate the operator only discovers by navigating to its
+    // screen is a silent denial-of-service on the agent. Stopped on logout so a
+    // signed-out client isn't polling an endpoint it cannot authenticate to.
+    LaunchedEffect(currentAccessToken) {
+        if (currentAccessToken != null) {
+            wiseAuthorityViewModel.startApprovalWatch()
+        } else {
+            wiseAuthorityViewModel.stopApprovalWatch()
+        }
+    }
+    // Drives the nav badge — see EpistemicSidebar(badges = ...) below.
+    val pendingApprovalCount by wiseAuthorityViewModel.pendingApprovalCount.collectAsState()
+
     val servicesViewModel: ServicesViewModel = viewModel {
         ServicesViewModel(apiClient)
     }
@@ -2434,6 +2454,8 @@ fun CIRISApp(
                 val isResolving by wiseAuthorityViewModel.isResolving.collectAsState()
                 val waError by wiseAuthorityViewModel.error.collectAsState()
                 val waSuccess by wiseAuthorityViewModel.successMessage.collectAsState()
+                val approvals by wiseAuthorityViewModel.approvals.collectAsState()
+                val budgetCapability by wiseAuthorityViewModel.budgetCapability.collectAsState()
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
@@ -2478,7 +2500,42 @@ fun CIRISApp(
                     onNavigateBack = {
                         PlatformLogger.i("CIRISApp", "[Screen.WiseAuthority] Navigating back to Interact")
                         currentScreen = Screen.Interact
-                    }
+                    },
+                    approvals = approvals,
+                    budgetCapability = budgetCapability,
+                    // No endpoint exposes trust-envelope headroom yet, so this
+                    // is deliberately null and the headroom row does not render.
+                    // See FSD/HITL_APPROVAL_SURFACE.md § "What this does NOT do".
+                    envelopeHeadroom = null,
+                    onGrantBudget = { approvalId, amount, currency, expiryHours, reason, promote ->
+                        PlatformLogger.i(
+                            "CIRISApp",
+                            "[Screen.WiseAuthority] Granting budget $amount $currency on $approvalId (promote=$promote)"
+                        )
+                        wiseAuthorityViewModel.grantBudget(
+                            approvalId = approvalId,
+                            amount = amount,
+                            currency = currency,
+                            purpose = reason.ifBlank {
+                                approvals.firstOrNull { it.id == approvalId }
+                                    ?.requestedBudget?.purpose.orEmpty()
+                            },
+                            expiresInHours = expiryHours,
+                            promote = promote,
+                        )
+                    },
+                    onPromoteProposal = { approvalId, note ->
+                        PlatformLogger.i("CIRISApp", "[Screen.WiseAuthority] Promoting proposal $approvalId")
+                        wiseAuthorityViewModel.promoteProposal(approvalId, note.ifBlank { null })
+                    },
+                    onRejectProposal = { approvalId, reason ->
+                        PlatformLogger.i("CIRISApp", "[Screen.WiseAuthority] Rejecting proposal $approvalId")
+                        wiseAuthorityViewModel.rejectProposal(approvalId, reason.ifBlank { null })
+                    },
+                    onDeferProposal = { approvalId, note ->
+                        PlatformLogger.i("CIRISApp", "[Screen.WiseAuthority] Deferring proposal $approvalId")
+                        wiseAuthorityViewModel.deferProposal(approvalId, note.ifBlank { null })
+                    },
                 )
             }
 
@@ -3713,6 +3770,15 @@ fun CIRISApp(
                             }
                         },
                         onIssueClick = { url -> uriHandler.openUri(url) },
+                        // "The agent is blocked waiting on you", visible from
+                        // every screen. Keyed by NavSurface.id.
+                        badges = if (pendingApprovalCount > 0) {
+                            mapOf(
+                                ai.ciris.mobile.shared.ui.nav.NavSurface.WiseAuthority.id to pendingApprovalCount
+                            )
+                        } else {
+                            emptyMap()
+                        },
                         appVersion = "v2.9.4",
                         // Theme strip at the bottom of the drawer — Light /
                         // System / Dark segmented control. Wired straight to

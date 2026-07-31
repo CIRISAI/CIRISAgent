@@ -479,6 +479,24 @@ class TestSelfApprovalImpossible:
         assert UserRole.AUTHORITY.has_permission(UserRole.AUTHORITY) is True
         assert UserRole.SYSTEM_ADMIN.has_permission(UserRole.AUTHORITY) is True
 
+    def test_ticket_not_found_detail_is_disambiguable(self):
+        """A missing ticket must be distinguishable from a missing endpoint.
+
+        The HITL client cannot otherwise tell "no such ticket" from "this server
+        predates the budget feature", which need different UI.
+        """
+        from ciris_engine.logic.adapters.api.routes.tickets import (
+            TICKET_NOT_FOUND_ERROR_CODE,
+            _ticket_not_found_detail,
+        )
+
+        detail = _ticket_not_found_detail("PROP-MISSING")
+        # Structured code is the robust discriminator.
+        assert detail["error_code"] == TICKET_NOT_FOUND_ERROR_CODE == "TICKET_NOT_FOUND"
+        # ...and the prose contains lowercase "ticket" for substring matchers.
+        assert "ticket" in detail["message"]
+        assert "PROP-MISSING" in detail["message"]
+
     def test_issue_grant_is_not_reachable_from_any_tool(self):
         """No tool service imports the issuance function."""
         import pathlib

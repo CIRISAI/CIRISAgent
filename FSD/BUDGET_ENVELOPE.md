@@ -345,6 +345,56 @@ real weakness in attribution, not in magnitude. It should still be fixed.
 
 ---
 
+## The human-approval surface (client contract)
+
+The HITL approval UI lives in `client/` on `feat/938-hitl-approval-ui` and is
+documented in `FSD/HITL_APPROVAL_SURFACE.md`. Its `approvals/BudgetApprovalSeam.kt`
+is the **sole owner** on the client side of the metadata key names, the endpoint
+paths, the request/response bodies, the fixed-point amount math and the
+≤-requested constraint. If a field name here changes, that one file changes.
+
+Wire contract:
+
+| Direction | Call | Auth |
+|---|---|---|
+| read proposals | `GET /v1/tickets?status_filter=blocked`, proposal iff `status=="blocked"` **and** `metadata.__proposal__` present | OBSERVER |
+| read budget state | `GET /v1/tickets/{id}/budget` | OBSERVER |
+| issue grant | `POST /v1/tickets/{id}/budget/grant` | **AUTHORITY** |
+| promote to work | `PATCH /v1/tickets/{id}` `{"status": "pending"}` | existing |
+
+**Granting and promoting are deliberately separate calls.** Approving money and
+starting work are different decisions and the UI keeps them distinct.
+
+**404 disambiguation.** A missing ticket returns a structured detail:
+
+```json
+{"detail": {"error_code": "TICKET_NOT_FOUND",
+            "message": "Ticket PROP-X not found — no such ticket on this node"}}
+```
+
+A server predating this feature answers a bare `{"detail": "Not Found"}`. Clients
+should branch on `detail.error_code` (`TICKET_NOT_FOUND_ERROR_CODE`), never on
+prose; the lowercase word "ticket" is also present in the message for
+substring-matching clients, but that is a courtesy, not the contract.
+
+**Trust headroom.** `GET /v1/tickets/{id}/budget` returns `trust_headroom` with
+`{amount, currency, max_transaction, daily_remaining, source}`. This is the
+**same number the gate applies** — it is resolved by calling the wallet tool
+service's own `_resolve_trust_envelope`, not by re-deriving it in the API layer,
+so the figure shown to the approving human cannot drift from the figure enforced
+at spend. It is `null` when no wallet adapter is loaded, and the client renders
+nothing rather than guessing.
+
+Rationale: a human asked to approve $X with no view of whether the deployment has
+$50 or $50,000 of remaining envelope cannot give meaningful consent, which would
+undercut the point of making approval the issuance event.
+
+The client also enforces `granted ≤ requested` locally, in fixed-point integers.
+That is a **usability property, not a security one** — the server remains the
+authority, and nothing about the gate depends on the client behaving.
+
+---
+
 ## What this does NOT do
 
 Stated plainly, because a security control described in absolutes is a control
@@ -403,6 +453,7 @@ nobody can audit.
 | `ciris_engine/schemas/services/budget_envelope.py` | Schemas, reserved keys, `is_unapproved_proposal` |
 | `ciris_engine/logic/services/governance/budget_envelope.py` | Resolution, `authorize_spend`, `record_spend`, `issue_grant` |
 | `ciris_engine/logic/services/tools/core_tool_service/service.py` | `create_ticket` tool, reserved-key + promotion guards |
-| `ciris_engine/logic/adapters/api/routes/tickets.py` | `POST /{ticket_id}/budget/grant` (AUTHORITY) |
+| `ciris_engine/logic/adapters/api/routes/tickets.py` | `POST /{ticket_id}/budget/grant` (AUTHORITY), `GET /{ticket_id}/budget` (headroom) |
+| `client/.../approvals/BudgetApprovalSeam.kt` | Client-side sole owner of the wire contract (separate branch) |
 | `ciris_adapters/wallet/tool_service.py` | The spend gate, `_resolve_trust_envelope` |
 | `ciris_engine/logic/processors/states/work_processor.py` | Comment documenting the `blocked` dependency |

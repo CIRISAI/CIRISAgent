@@ -247,6 +247,34 @@ class TestTrustEnvelopeIsLoadBearing:
         assert result.data["binding_constraint"] == "task_grant"
 
 
+class TestHeadroomMatchesTheGate:
+    """The headroom shown to a human must be the number the gate applies."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_trust_envelope_is_the_gate_number(self, ticket_and_task):
+        """The API headroom endpoint calls this exact method — no re-derivation."""
+        provider = _fake_provider("stripe")
+        service = _service(provider, max_transaction="40", daily_limit="1000")
+
+        envelope = service._resolve_trust_envelope("USDC", provider)
+        assert envelope.remaining == Decimal("40")  # min(max_tx, daily)
+
+        # And that number is what actually bounds a spend.
+        await _grant(amount="500")
+        denied = await service.execute_tool(
+            "send_money",
+            {"recipient": RECIPIENT, "amount": 41, "currency": "USDC", "task_id": TASK_ID},
+        )
+        assert denied.success is False
+        assert denied.data["trust_remaining"] == str(envelope.remaining)
+
+        allowed = await service.execute_tool(
+            "send_money",
+            {"recipient": RECIPIENT, "amount": 40, "currency": "USDC", "task_id": TASK_ID},
+        )
+        assert allowed.success is True
+
+
 class TestSpendDecrementsTheGrant:
     @pytest.mark.asyncio
     async def test_successful_spend_is_charged_to_the_ticket(self, ticket_and_task):

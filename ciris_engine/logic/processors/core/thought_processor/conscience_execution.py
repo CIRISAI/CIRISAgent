@@ -207,9 +207,18 @@ class ConscienceExecutionPhase:
         # EpistemicHumility) each make an INDEPENDENT LLM call; a sequential
         # await-loop serialized 4 LLM round-trips per thought, dominating
         # cycle time on slow/edge inference. They have no inter-dependency
-        # (each reads the same final_action + context), so gather them.
-        # Results are processed below in priority order, preserving the
-        # original break-on-first-failure override precedence exactly.
+        # (each reads the same final_action + context, none consumes another's
+        # output, and each conscience is a separate instance with no shared
+        # mutable state), so gather them. Results are folded below in
+        # registry priority order: the FIRST failing conscience in priority
+        # order wins, yielding the identical override decision +
+        # override_reason as the old serial break-on-first-failure loop.
+        #
+        # Intended behavioral delta (documented in #889): all checks now
+        # always RUN (the serial loop broke early and skipped later checks),
+        # and every completed check's results are folded in — so
+        # epistemic_data and the per-check result fields are complete even
+        # when an early check fails. The override decision is unchanged.
         entries = self.conscience_registry.get_consciences()
         check_results = await asyncio.gather(
             *(self._run_single_conscience(entry, final_action, context) for entry in entries)
@@ -281,7 +290,14 @@ class ConscienceExecutionPhase:
                 if result.CIRIS_OBSERVATION_UPDATED_STATUS:
                     updated_status_content = result.CIRIS_OBSERVATION_UPDATED_STATUS
 
-            if not result.passed:
+            # First failing conscience in PRIORITY ORDER wins (the fold walks
+            # entries in registry priority order, so the `not overridden`
+            # guard reproduces the serial loop's break-on-first-failure
+            # precedence exactly: same override decision, same
+            # override_reason, same final_action). Later entries keep
+            # folding their epistemic data above — that is the intended
+            # #889 delta — but can no longer change the override.
+            if not result.passed and not overridden:
                 overridden = True
                 override_reason = result.reason
 
@@ -316,7 +332,6 @@ class ConscienceExecutionPhase:
                         evaluation_time_ms=None,
                         resource_usage=None,
                     )
-                break
 
         # If this was a conscience retry and we didn't override, force PONDER
         # unless the override was from thought depth guardrail

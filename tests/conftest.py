@@ -7,6 +7,7 @@ This file is automatically loaded by pytest and contains setup that applies to a
 # CRITICAL: Set import protection BEFORE any other imports
 import os
 import tempfile
+import time
 
 os.environ["CIRIS_IMPORT_MODE"] = "true"
 os.environ["CIRIS_MOCK_LLM"] = "true"
@@ -42,20 +43,37 @@ if os.path.isdir("/dev/shm"):
 
     is_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER") is not None
 
+    # INVARIANT: no process deletes a directory it does not exclusively own.
+    #
+    # The previous version gave the non-worker process `_TMPFS_BASE` ITSELF and
+    # rmtree'd it. Because every worker's dir is a CHILD of that base, any
+    # process importing this conftest without PYTEST_XDIST_WORKER set — the
+    # xdist controller included — destroyed every live worker's TMPDIR
+    # mid-session. Workers then failed in `tempfile.mkdtemp()` itself, so
+    # switching a test away from `tmp_path` did NOT help; the failure counts
+    # varied run to run (302-412 errors) and made every `-n` result unreadable.
+    # See #947.
     if is_xdist_worker:
-        # Worker process — isolate temp files under a worker-specific subdir
-        # so xdist session cleanup of one worker's dir can't hit another's.
         worker_id = os.environ["PYTEST_XDIST_WORKER"]  # e.g. "gw23"
         _TMPFS_DIR = os.path.join(_TMPFS_BASE, worker_id)
     else:
-        # Main process (single-worker run) — clean stale tmp files from prior
-        # runs to prevent /dev/shm filling up.
-        _TMPFS_DIR = _TMPFS_BASE
-        if os.path.isdir(_TMPFS_DIR):
+        # The controller/serial process gets its OWN subdir, a sibling of the
+        # workers' rather than their parent.
+        _TMPFS_DIR = os.path.join(_TMPFS_BASE, "main")
+
+    # Stale-sweep, not an eager wipe: the stated goal is keeping /dev/shm from
+    # filling up over time, which an age check satisfies without touching
+    # anything a concurrent run is using. Only the base's direct children are
+    # considered, and only when nothing has written to them for an hour.
+    if not is_xdist_worker and os.path.isdir(_TMPFS_BASE):
+        _stale_cutoff = time.time() - 3600
+        for _entry in os.listdir(_TMPFS_BASE):
+            _path = os.path.join(_TMPFS_BASE, _entry)
             try:
-                shutil.rmtree(_TMPFS_DIR)
+                if os.path.getmtime(_path) < _stale_cutoff:
+                    shutil.rmtree(_path, ignore_errors=True)
             except OSError:
-                pass  # May fail if files are in use by another test run
+                pass  # racing another run's cleanup is fine; it owns that dir
 
     os.makedirs(_TMPFS_DIR, exist_ok=True)
     os.environ["TMPDIR"] = _TMPFS_DIR
@@ -100,7 +118,6 @@ except ImportError:
     pass
 
 import gc  # noqa: E402
-import time  # noqa: E402
 
 # Import database fixtures and API fixtures - must be imported after os.environ setup
 from tests.fixtures.api import random_api_port  # noqa: E402

@@ -354,6 +354,7 @@ class QARunner:
             QAModule.SAFETY_INTERPRET,
             QAModule.SECRETS_ENCRYPTION,
             QAModule.MEMORY_BENCHMARK,
+            QAModule.MESH_REPRO,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -1062,11 +1063,39 @@ class QARunner:
         )
 
         rooted = bool(transport_rooted)
+
+        # Trace-delta assert (#924 §3): when the mesh_repro stage ran in this
+        # invocation, its harness verdict already proves (or refutes) the
+        # trace-delta at the LOCAL harness canonical — stage `arrive` is a
+        # direct trace_events DB count there, and stage `score` is a capacity
+        # attestation authored ABOUT the agent BY a distinct identity. Reuse
+        # that verdict rather than re-probing; the manual Node-A note remains
+        # the fallback when the harness didn't run.
+        _mesh = getattr(self, "_mesh_repro_verdict", None)
+        if _mesh is not None and _mesh.success and _mesh.stage_counts.get("arrive", 0) > 0:
+            trace_note = (
+                "Trace-delta PROVEN at the LOCAL harness canonical (mesh_repro: "
+                f"arrive={_mesh.stage_counts.get('arrive')} trace_events, "
+                f"summarize={_mesh.stage_counts.get('summarize', 0)}, "
+                f"score={_mesh.stage_counts.get('score', 0)} — capacity attestation authored)."
+            )
+        elif _mesh is not None:
+            trace_note = (
+                "mesh_repro harness ran and did NOT prove the trace-delta "
+                f"(exit={_mesh.exit_code}, broken_at={_mesh.broken_stage or 'unknown'}) — "
+                "see qa_reports/mesh_repro/ for the harness evidence."
+            )
+        else:
+            trace_note = (
+                "Confirm trace arrival via Node A trace_events / the mesh-repro trace gate "
+                "(CIRISServer#260) — or run the mesh_repro QA stage to prove it locally."
+            )
+
         if transport_rooted and kex_state == "PRESENT":
             verdict = (
                 "✅ Federation delivery preconditions GREEN — canonical rooted (edge.knows_peer) and "
                 "peer KEX resolvable: attestations replicate via rounds AND trace envelopes can seal. "
-                "Confirm trace arrival via Node A trace_events / the mesh-repro trace gate (CIRISServer#260)."
+                f"{trace_note}"
             )
             self.console.print(f"[bold green]{verdict}[/bold green]")
             logger.info("[FEDERATION-DELIVERY] %s", verdict)
@@ -1367,6 +1396,7 @@ class QARunner:
         from .modules.licensed_agent_tests import LicensedAgentTests
         from .modules.mcp_tests import MCPTests
         from .modules.memory_benchmark_tests import MemoryBenchmarkTests
+        from .modules.mesh_repro_tests import MeshReproTests
         from .modules.model_eval_tests import ModelEvalTests
         from .modules.parallel_locales_tests import ParallelLocalesTests
         from .modules.safety_battery import SafetyBatteryTests
@@ -1429,6 +1459,7 @@ class QARunner:
             QAModule.SAFETY_INTERPRET: SafetyInterpretTests,
             QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
             QAModule.MEMORY_BENCHMARK: MemoryBenchmarkTests,
+            QAModule.MESH_REPRO: MeshReproTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):
@@ -1590,6 +1621,13 @@ class QARunner:
 
                 _mod_t0 = time.time()
                 results = await test_instance.run()
+
+                # mesh_repro (#924 §3): stash the parsed harness verdict so
+                # _verify_federation_delivery can assert the trace-delta
+                # against the LOCAL harness canonical (stage arrive/score)
+                # instead of the "confirm at Node A manually" note.
+                if module == QAModule.MESH_REPRO:
+                    self._mesh_repro_verdict = getattr(test_instance, "harness_verdict", None)
                 # Real wall time for this SDK module (accumulate — a module
                 # can run twice across a re-auth retry).
                 self._module_wall[module.value] = self._module_wall.get(module.value, 0.0) + (

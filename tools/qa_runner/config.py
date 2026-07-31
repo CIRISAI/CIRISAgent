@@ -62,6 +62,7 @@ class QAModule(Enum):
     SAFETY_INTERPRET = "safety_interpret"  # Apply a rubric's criteria.json to a capture bundle; emit signed verdicts (CIRISNodeCore FSD/JUDGE_MODEL.md)
     SECRETS_ENCRYPTION = "secrets_encryption"  # Secrets encryption testing (CIRISVerify v1.6.0+)
     MEMORY_BENCHMARK = "memory_benchmark"  # Memory usage benchmark under message load
+    MESH_REPRO = "mesh_repro"  # CIRISServer traceflow harness as an agent QA gate + prod-wheel test-anchor guard (#924)
 
     # Cognitive state live testing modules
     SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing
@@ -460,6 +461,12 @@ class QAConfig:
             return HE300BenchmarkModule.get_he300_benchmark_tests()
         elif module == QAModule.DEGRADED_MODE:
             # Degraded mode tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.MESH_REPRO:
+            # Mesh-repro drives the external CIRISServer harness (no CIRIS
+            # server, no HTTP test cases). External-dep module — NOT in the
+            # ALL sequence (same exclusion class as billing_integration);
+            # run it standalone where a CIRISServer checkout + docker exist.
             return []  # Will be handled separately by runner
 
         # Handler test modules

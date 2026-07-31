@@ -57,6 +57,9 @@ _REGISTRY: Dict[QAModule, tuple] = {
     QAModule.MODEL_EVAL: ("tools.qa_runner.modules.model_eval_tests", "ModelEvalTests"),
     QAModule.PARALLEL_LOCALES: ("tools.qa_runner.modules.parallel_locales_tests", "ParallelLocalesTests"),
     QAModule.DEGRADED_MODE: ("tools.qa_runner.modules.degraded_mode_tests", "DegradedModeTests"),
+    # mesh_repro declares REQUIRES_CIRIS_SERVER=False — the traceflow harness
+    # runs its own two-node compose stack; no agent API server involved.
+    QAModule.MESH_REPRO: ("tools.qa_runner.modules.mesh_repro_tests", "MeshReproTests"),
 }
 
 

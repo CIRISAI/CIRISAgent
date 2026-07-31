@@ -6,6 +6,7 @@ Test cases for automated UI testing with ADB and UI Automator.
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -15,6 +16,7 @@ from typing import List, Optional, Tuple
 
 from .adb_helper import ADBHelper
 from .ui_automator import UIAutomator
+from tools.qa_runner.modules.mobile.llm_preflight import PROVIDER_BASE_URLS
 
 
 class TestResult(Enum):
@@ -365,6 +367,12 @@ class TestServerClient:
             time.sleep(interval)
         return None
 
+
+
+def _env_value(env_text: str, key: str) -> str:
+    """Read KEY="value" out of a device .env dump (quotes optional)."""
+    m = re.search(rf'^{re.escape(key)}\s*=\s*"?([^"\n\r]*)"?\s*$', env_text, re.M)
+    return m.group(1).strip() if m else ""
 
 def _click_or_tap(client: TestServerClient, adb: ADBHelper, test_tag: str) -> bool:
     """Click via registered handler; fall back to coordinate tap if the tag is
@@ -1036,6 +1044,37 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
 
         if completed_via is None:
             return fail("complete", f"still on Setup with btn_next after 150s (screen={client.screen()!r})")
+
+        # ── Step 6: ASSERT the device is configured with what we ASKED for ──
+        #
+        # The wizard only writes LLM config when it actually runs. If the app was
+        # already configured (data not cleared, or a prior run left state), the
+        # run silently proceeds on the PREVIOUS key/model and the flags are
+        # ignored. That is how a run launched with --llm-provider openrouter
+        # failed on a Together 402: the .env still said together/gemma, and
+        # nothing checked. The preflight validated a provider the agent never used.
+        #
+        # So: read the persisted .env back and refuse to continue on a mismatch.
+        if llm_api_key and llm_model:
+            expected_base = PROVIDER_BASE_URLS.get(llm_provider.lower(), "")
+            env = adb.shell(f"run-as {CIRISAppConfig.PACKAGE} cat files/ciris/.env") or ""
+            got_base = _env_value(env, "OPENAI_API_BASE")
+            got_model = _env_value(env, "OPENAI_MODEL")
+            if expected_base and got_base != expected_base:
+                return fail(
+                    "llm_verify",
+                    f"device is configured for a DIFFERENT provider than requested: "
+                    f"asked {llm_provider!r} ({expected_base}), device has {got_base!r}. "
+                    f"The wizard did not apply this run's flags — most likely app data "
+                    f"was not cleared, so a prior run's config is still in place.",
+                )
+            if got_model != llm_model:
+                return fail(
+                    "llm_verify",
+                    f"device model mismatch: asked {llm_model!r}, device has {got_model!r}. "
+                    f"The chat step would exercise a model this run never validated.",
+                )
+            print(f"  [7/7] verified device LLM config: {got_base} / {got_model}")
 
         return TestReport(
             name="test_setup_wizard",

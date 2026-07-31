@@ -308,6 +308,18 @@ class ADBHelper:
         result = self._run_adb(["shell", "run-as", package, "ls"])
         return result.returncode == 0
 
+    def shell(self, command: str, timeout: int = 30) -> str:
+        """Run a shell command on the device; return stdout ('' on failure).
+
+        Returns empty string rather than raising, because callers use this to
+        READ device state (config files, properties) where "absent" and
+        "unreadable" warrant the same handling. Callers that need to distinguish
+        a genuine empty value from a failed command must check for the value
+        they expect rather than treating '' as authoritative.
+        """
+        result = self._run_adb(["shell", command], timeout=timeout)
+        return result.stdout if result.returncode == 0 else ""
+
     def _pull_logs_via_backup(self, output_path: Path, package: str, verbose: bool = True) -> List[str]:
         """Pull logs via adb backup when run-as is unavailable.
 

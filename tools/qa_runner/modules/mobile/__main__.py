@@ -44,6 +44,7 @@ from typing import Dict, List, Optional, Tuple
 # Add parent paths for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
+from tools.qa_runner.modules.mobile.llm_preflight import PROVIDER_BASE_URLS, preflight_llm
 from tools.qa_runner.modules.mobile.adb_helper import ADBHelper
 from tools.qa_runner.modules.mobile.device_helper import DeviceHelper, Platform, create_device_helper, detect_platform
 from tools.qa_runner.modules.mobile.test_runner import MobileTestConfig, MobileTestRunner
@@ -528,7 +529,7 @@ def build_command(args) -> int:
 
         # Create config
         config = iOSBuildConfig(
-            project_dir=Path(__file__).parent.parent.parent.parent.parent / "mobile" / "iosApp",
+            project_dir=Path(__file__).parent.parent.parent.parent.parent / "client" / "iosApp",
             scheme=args.scheme,
             configuration=args.configuration,
             prepare_bundle=not args.no_prepare,
@@ -572,7 +573,7 @@ def build_command(args) -> int:
         print("[INFO] Building Android APK...")
         import subprocess
 
-        mobile_dir = Path(__file__).parent.parent.parent.parent.parent / "mobile"
+        mobile_dir = Path(__file__).parent.parent.parent.parent.parent / "client"
 
         # Build APK
         gradle_cmd = ["./gradlew", ":androidApp:assembleDebug"]
@@ -1043,7 +1044,7 @@ def test_command(args) -> int:
 
         result = subprocess.run(
             ["./gradlew", ":androidApp:assembleDebug"],
-            cwd=Path(__file__).parent.parent.parent.parent.parent / "mobile",
+            cwd=Path(__file__).parent.parent.parent.parent.parent / "client",
             capture_output=True,
             text=True,
         )
@@ -1095,6 +1096,15 @@ def test_command(args) -> int:
     print(f"  Tests: {', '.join(args.tests)}")
     print(f"  Reinstall app: {config.reinstall_app}")
     print(f"  Clear data: {config.clear_data}")
+
+    # Fail fast on a bad key/model BEFORE touching the device. A filmstrip that
+    # dies at the chat step has already spent minutes on install + wizard + login,
+    # and the failure surfaces as "no SPEAK / ship-unconfirmed" — which reads like
+    # an agent defect rather than an expired credit card.
+    ok, diagnosis = preflight_llm(config.llm_provider, llm_api_key, config.llm_model)
+    print(diagnosis)
+    if not ok:
+        return 2
 
     # Run tests
     runner = MobileTestRunner(config)

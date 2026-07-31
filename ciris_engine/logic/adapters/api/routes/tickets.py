@@ -11,8 +11,10 @@ Architecture:
 - Task generation by WorkProcessor for incomplete tickets
 """
 
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -26,10 +28,14 @@ from ciris_engine.logic.persistence.models.tickets import (
     update_ticket_metadata,
     update_ticket_status,
 )
+from ciris_engine.logic.services.governance.budget_envelope import NestingViolation, issue_grant
 from ciris_engine.schemas.config.tickets import TicketsConfig, TicketSOPConfig
 
 from ..auth import get_current_user
+from ..dependencies.auth import AuthContext, require_authority
 from ..models import StandardResponse, TokenData
+
+logger = logging.getLogger(__name__)
 
 # Type alias for authenticated user dependency (S8410 compliance)
 CurrentUserDep = Annotated[TokenData, Depends(get_current_user)]
@@ -565,3 +571,130 @@ async def cancel_ticket(
         success=True,
         message=f"Ticket {ticket_id} cancelled/deleted successfully",
     )
+
+
+# ============================================================================
+# Budget envelope — the issuance event (#938)
+#
+# This is the ONLY write path for a granted budget. It requires the AUTHORITY
+# role and lives outside the reasoning loop entirely: no tool, no handler and no
+# DMA can reach it. The agent may propose an envelope (create_ticket) but never
+# mint or widen one.
+# ============================================================================
+
+
+class GrantBudgetRequest(BaseModel):
+    """Request to grant a spend budget on a ticket. Requires AUTHORITY role."""
+
+    amount: Decimal = Field(..., gt=0, description="Maximum total spend authorized against this ticket")
+    currency: str = Field(..., min_length=2, max_length=8, description="Currency code, e.g. USDC")
+    purpose: str = Field(..., min_length=1, description="What this grant authorizes spend for")
+    expires_in_hours: float = Field(
+        24.0, gt=0, le=8760, description="Grant lifetime in hours (default 24, max 1 year)"
+    )
+    wa_id: Optional[str] = Field(None, description="WA identity to sign as (defaults to the calling user)")
+
+
+class GrantBudgetResponse(BaseModel):
+    """The granted budget, as written to the ticket."""
+
+    ticket_id: str
+    granted_amount: str
+    granted_currency: str
+    purpose: str
+    expires_at: str
+    granted_by_wa_id: str
+    granted_by_user_id: str
+    granted_at: str
+    signed: bool = Field(..., description="Whether the grant carries a verifiable signature")
+
+
+@router.post(
+    "/{ticket_id}/budget/grant",
+    responses={
+        403: {"description": "AUTHORITY role required"},
+        404: {"description": "Ticket not found"},
+        422: {"description": "Grant would exceed the trust-driven envelope"},
+    },
+)
+async def grant_ticket_budget(
+    ticket_id: str,
+    request: GrantBudgetRequest,
+    req: Request,
+    auth: Annotated[AuthContext, Depends(require_authority)],
+) -> StandardResponse:
+    """Grant a spend budget on a ticket. **Requires AUTHORITY role.**
+
+    This is the human decision point that converts an agent's *request* into an
+    *authorization*. The resulting grant is bound to this ticket, expires, and
+    is enforced at every spend as ``min(granted remaining, trust envelope
+    remaining)``.
+
+    A grant cannot widen the deployment's trust-driven envelope: it is checked
+    against the configured ceiling here, and bounded again at spend time.
+    """
+    ticket = get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticket {ticket_id} not found")
+
+    auth_service = getattr(req.app.state, "authentication_service", None)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=request.expires_in_hours)
+
+    try:
+        grant = await issue_grant(
+            ticket_id=ticket_id,
+            granted_amount=request.amount,
+            granted_currency=request.currency,
+            purpose=request.purpose,
+            expires_at=expires_at,
+            granted_by_wa_id=request.wa_id or auth.user_id,
+            granted_by_user_id=auth.user_id,
+            trust_ceiling=_resolve_trust_ceiling(req),
+            auth_service=auth_service,
+        )
+    except NestingViolation as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+
+    return StandardResponse(
+        success=True,
+        data=GrantBudgetResponse(
+            ticket_id=grant.ticket_id,
+            granted_amount=str(grant.granted_amount),
+            granted_currency=grant.granted_currency,
+            purpose=grant.purpose,
+            expires_at=grant.expires_at.isoformat(),
+            granted_by_wa_id=grant.granted_by_wa_id,
+            granted_by_user_id=grant.granted_by_user_id,
+            granted_at=grant.granted_at.isoformat(),
+            signed=grant.signature is not None,
+        ).model_dump(),
+        message=f"Budget granted on ticket {ticket_id}",
+    )
+
+
+def _resolve_trust_ceiling(req: Request) -> Optional[Decimal]:
+    """Resolve the deployment trust-envelope ceiling a grant must nest inside.
+
+    Reads the wallet adapter's ``spending_limits`` when a wallet tool service is
+    registered. Returns None when no wallet is loaded — in which case issuance is
+    unbounded here but every spend is still bounded by the ``min()`` in
+    ``authorize_spend``, which is the authoritative check.
+    """
+    try:
+        registry = getattr(req.app.state, "service_registry", None)
+        if registry is None or not hasattr(registry, "_services"):
+            return None
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        for provider in registry._services.get(ServiceType.TOOL, []):
+            instance = getattr(provider, "instance", None)
+            config = getattr(instance, "config", None)
+            limits = getattr(config, "spending_limits", None)
+            if limits is not None:
+                ceiling: Decimal = limits.daily_limit
+                return ceiling
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"Could not resolve trust ceiling for budget grant: {e}")
+    return None

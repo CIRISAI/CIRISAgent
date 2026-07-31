@@ -119,6 +119,15 @@ class SubstrateLib:
     # agent (persist/edge/lens) — vs. ctypes-FFI libs whose .so is loaded
     # directly via JNI (verify), which don't need this.
     has_android_wheels: bool = False
+    # Fetch the Chaquopy-shaped Android wheels from PyPI rather than a GitHub
+    # release tarball. ciris-server publishes per-ABI android_24 wheels to PyPI
+    # and does NOT publish an `-android-wheels.tar.gz` release asset, so the
+    # release-tarball path silently finds nothing for it.
+    android_wheels_from_pypi: bool = False
+    # Whether the lib ships loose per-ABI .so files for client/androidApp/src/
+    # main/jniLibs/. False for wheel-only libs: the wheel already carries its
+    # own .so, and there is no `-android.tar.gz` release asset to fetch.
+    has_jni_libs: bool = True
 
     # --- iOS ---
     framework_name: str = ""  # e.g. "CIRISVerify"
@@ -248,6 +257,34 @@ LIBS: Dict[str, SubstrateLib] = {
         # reports PENDING with the actionable note below instead of a
         # generic download failure.
         release_pending_note=_LENS_PENDING_NOTE,
+    ),
+    # ── ciris-server ────────────────────────────────────────────────────
+    # THE substrate entry point. The trio (persist / edge / lens-core) is no
+    # longer fetched directly by this repo — it arrives transitively through
+    # ciris-server, which ships every wheel the agent needs.
+    #
+    # This entry exists because its ABSENCE cost a day. `client/androidApp/
+    # build.gradle` carries an EXACT pin, `install "ciris-server==X"`, which no
+    # tool updated: bumping the requirements.txt floor to 0.5.146 left the pin
+    # at 0.5.138, so every APK shipped a wheel eight releases stale. The node
+    # fold on-device therefore ran pre-fix code while the host ran the fix, and
+    # a whole diagnosis was conducted against that stale runtime.
+    #
+    # Android wheels come from PyPI (per-ABI android_24_*), NOT from a GitHub
+    # release tarball — CIRISServer publishes only target-triple server
+    # binaries as release assets.
+    "server": SubstrateLib(
+        name="server",
+        github_repo="CIRISAI/CIRISServer",
+        pypi_package="ciris-server",
+        tarball_prefix="ciris-server",
+        bindings_package="ciris_server",
+        so_filename="",           # no jniLibs leg — the wheel carries its own .so
+        has_android_wheels=True,
+        android_wheels_from_pypi=True,
+        has_jni_libs=False,
+        is_pyo3=True,
+        has_adapter=False,
     ),
     # Future:
     # "nodecore": SubstrateLib(...),
@@ -412,6 +449,66 @@ def install_jni_libs(lib: SubstrateLib, extract_dir: Path) -> bool:
     return True
 
 
+
+def _install_android_wheels_from_pypi(lib: SubstrateLib, version: str) -> bool:
+    """Pull per-ABI `android_24_*` wheels for `lib` straight from PyPI.
+
+    ciris-server publishes its Chaquopy-shaped Android wheels to PyPI, not as a
+    GitHub release asset. The release-tarball path finds nothing for it and
+    returns a warning, which is how `client/androidApp/build.gradle` sat at an
+    exact pin of ciris-server==0.5.138 while requirements.txt moved to 0.5.146:
+    a SIXTH copy of a version that is supposed to have one source, and the only
+    one no tool was updating. Every APK built from it shipped the stale wheel,
+    so the node fold on-device ran eight releases behind the agent.
+
+    PyPI publishes the sdist/wheel index per version, so the version is not
+    discovered here — it comes from requirements.txt like every other lib.
+    """
+    import json as _json
+    import urllib.request as _url
+
+    url = f"https://pypi.org/pypi/{lib.pypi_package}/{version}/json"
+    try:
+        with _url.urlopen(url, timeout=60) as r:
+            meta = _json.loads(r.read().decode())
+    except Exception as e:  # noqa: BLE001
+        print(f"  ERROR: PyPI metadata for {lib.pypi_package}=={version}: {e}")
+        return False
+
+    android = [u for u in meta.get("urls", []) if "android_" in u["filename"]]
+    if not android:
+        print(
+            f"  ERROR: {lib.pypi_package}=={version} publishes NO android_* wheels on PyPI.\n"
+            f"         The substrate trio reaches this repo only through ciris-server, so a\n"
+            f"         missing ABI wheel is an upstream release gap — open an issue against\n"
+            f"         {lib.github_repo} rather than vendoring a wheel by hand."
+        )
+        return False
+
+    WHEELS_DIR.mkdir(parents=True, exist_ok=True)
+    wheel_prefix = lib.pypi_package.replace("-", "_") + "-"
+    for stale in WHEELS_DIR.glob(f"{wheel_prefix}*.whl"):
+        if version not in stale.name:
+            stale.unlink()
+            print(f"  pruned stale wheel: {stale.name}")
+
+    for u in android:
+        dest = WHEELS_DIR / u["filename"]
+        if dest.exists() and dest.stat().st_size == u.get("size", -1):
+            print(f"  {dest.relative_to(REPO_ROOT)} (cached)")
+            continue
+        try:
+            with _url.urlopen(u["url"], timeout=600) as r, open(dest, "wb") as f:
+                shutil.copyfileobj(r, f)
+        except Exception as e:  # noqa: BLE001
+            print(f"  ERROR downloading {u['filename']}: {e}")
+            return False
+        print(f"  {dest.relative_to(REPO_ROOT)} ({dest.stat().st_size / 1024 / 1024:.1f}MB)")
+
+    print(f"  {len(android)} Android wheel(s) from PyPI for {lib.pypi_package}=={version}")
+    return True
+
+
 def install_android_wheels(lib: SubstrateLib, version: str, skip_checksums: bool = False) -> bool:
     """Download `*-android-wheels.tar.gz` and drop wheels into wheels dir.
 
@@ -424,6 +521,8 @@ def install_android_wheels(lib: SubstrateLib, version: str, skip_checksums: bool
     if not lib.has_android_wheels:
         return True
     print(f"\n  Installing Android wheels for {lib.name}...")
+    if lib.android_wheels_from_pypi:
+        return _install_android_wheels_from_pypi(lib, version)
     tag = f"v{version}"
     pattern = f"{lib.tarball_prefix}-v{version}-android-wheels.tar.gz"
     with tempfile.TemporaryDirectory() as tmp:
@@ -668,22 +767,26 @@ def update_lib_android(
     print(f"  Repo: {lib.github_repo}")
     print(f"{'='*60}")
 
-    with tempfile.TemporaryDirectory() as tmp:
-        dl_dir = Path(tmp)
+    # Wheel-only libs (ciris-server) publish no `-android.tar.gz`; their .so
+    # rides inside the Chaquopy wheel. Attempting the jniLibs download first
+    # made the whole update FAIL before it ever reached the wheels step.
+    if lib.has_jni_libs:
+        with tempfile.TemporaryDirectory() as tmp:
+            dl_dir = Path(tmp)
 
-        tarball = download_release_tarball(lib, version, "android", dl_dir)
-        if not tarball:
-            return _report_download_failure(lib, version, "android")
+            tarball = download_release_tarball(lib, version, "android", dl_dir)
+            if not tarball:
+                return _report_download_failure(lib, version, "android")
 
-        if not verify_tarball_checksum(lib, version, tarball, skip=skip_checksums):
-            return UpdateStatus.FAILED
+            if not verify_tarball_checksum(lib, version, tarball, skip=skip_checksums):
+                return UpdateStatus.FAILED
 
-        extract_dir = dl_dir / "extracted"
-        extract_dir.mkdir()
-        run_cmd(["tar", "-xzf", str(tarball), "-C", str(extract_dir)])
+            extract_dir = dl_dir / "extracted"
+            extract_dir.mkdir()
+            run_cmd(["tar", "-xzf", str(tarball), "-C", str(extract_dir)])
 
-        if not install_jni_libs(lib, extract_dir):
-            return UpdateStatus.FAILED
+            if not install_jni_libs(lib, extract_dir):
+                return UpdateStatus.FAILED
 
     # Chaquopy-shaped Android wheels go into client/androidApp/wheels/ for
     # PyO3 libs the agent has to `import` from Python (separate release

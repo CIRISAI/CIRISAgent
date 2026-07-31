@@ -111,6 +111,90 @@ def _reprime_federation_delivery(path: str) -> None:
         logger.warning("Node fold: reprime_federation_delivery(%s) failed (non-fatal): %s", path, exc)
 
 
+def _author_federation_consent(path: str) -> None:
+    """Author the owner's replication consent in-process (ciris-server >=0.5.147).
+
+    THE USER CONSENTS; THE SUBSTRATE ONLY TRUSTS. Since 0.5.146 the substrate no
+    longer boot-authors a ``consent:replication`` grant on the owner's behalf —
+    correctly, because consent is the owner's act. But the only route that could
+    express it, ``POST /v1/federation/consent``, is mounted in
+    ``serve_with_adapter``; the embedded agent boots via
+    ``federation_delivery::start_and_hold``, which mounts no HTTP router at all.
+    So on-device the wizard's call 404'd and NO grant existed.
+
+    Without a grant covering ``trace:``, ``promote_consented_backlog`` never
+    lifts a sealed trace out of (cohort_scope=self, tier=local). The node roots
+    the canonical, converges to its consent peer, seals signed traces, reports
+    healthy — and offers nothing. Observed for a full day: canonical
+    ``trace_events`` zero, from every agent.
+
+    0.5.147 adds the in-process entry point. The prefixes are READ from
+    ``default_attestation_prefixes()``, never restated here: a restated list is
+    exactly how ``["capacity:"]`` shipped while the authority said
+    ``["capacity:", "trace:"]``, and a copy that drifts silently strands every
+    trace it fails to name.
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        author = getattr(ciris_server, "author_federation_consent", None)
+        defaults = getattr(ciris_server, "default_attestation_prefixes", None)
+        if author is None or defaults is None:
+            logger.info(
+                "Node fold: author_federation_consent unavailable (wheel <0.5.147) — "
+                "no owner consent grant; sealed traces will stay at (self, local) and never ship (%s)",
+                path,
+            )
+            return
+
+        # Discover the canonical from the live delivery status rather than a
+        # constant: CIRIS_CANONICAL_BOOTSTRAP_PEERS is empty by default, and a
+        # hardcoded key_id is one more copy to drift.
+        targets: list = []
+        ds = getattr(ciris_server, "delivery_status", None)
+        if ds is not None:
+            try:
+                status = ds()
+                if isinstance(status, str):
+                    import json as _json
+
+                    status = _json.loads(status)
+                targets = list((status or {}).get("canonical_targets") or [])
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Node fold: delivery_status unreadable for consent (%s): %s", path, exc)
+
+        if not targets:
+            logger.warning(
+                "Node fold: no canonical delivery target yet — owner consent NOT authored (%s). "
+                "Traces will seal and stay at (self, local) until a grant covering trace: exists.",
+                path,
+            )
+            return
+
+        prefixes = list(defaults())
+        for peer in targets:
+            try:
+                author(peer, prefixes)
+                logger.info(
+                    "Node fold: owner consent authored → peer=%s prefixes=%s (%s)",
+                    peer,
+                    prefixes,
+                    path,
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Loud: this is the difference between traces shipping and
+                # stranding, and it failed silently for a full day.
+                logger.warning(
+                    "Node fold: author_federation_consent(%s) FAILED (%s): %s — "
+                    "sealed traces will NOT replicate (no grant covers trace:)",
+                    peer,
+                    path,
+                    exc,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Node fold: owner consent authoring failed (non-fatal, %s): %s", path, exc)
+
+
 def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Optional[str] = None) -> None:
     """Boot the node (4243) on the agent's engine/edge, brain proxied to :8080.
 
@@ -188,6 +272,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
         # capture (the wizard's self-claim may run after this reload).
         _surface_first_run_claim_pin()
         _reprime_federation_delivery("reuse")
+        _author_federation_consent("reuse")
         return
 
     try:
@@ -315,6 +400,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
         )
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 ✅")
     _reprime_federation_delivery("post-bind")
+    _author_federation_consent("post-bind")
     # Surface the one-time first-run CLAIM PIN (minted during compose, stashed
     # in-process by ciris-server ≥0.5.119) so the client's capture latches it.
     _surface_first_run_claim_pin()

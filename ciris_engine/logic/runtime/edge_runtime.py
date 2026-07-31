@@ -322,6 +322,32 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.debug("[DELIVERY-STATUS] phase=%s accessor error (non-fatal): %s", phase, exc)
 
+    def _try_author_consent(peer_key_id: str) -> bool:
+        """Author the owner's replication consent; True once it lands.
+
+        Refuses until the node is claimed, which is expected for the whole
+        pre-claim part of the window — logged at debug so the retry loop does
+        not shout every 15s, then once at info when it succeeds.
+        """
+        try:
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            author = getattr(ciris_server, "author_federation_consent", None)
+            defaults = getattr(ciris_server, "default_attestation_prefixes", None)
+            if author is None or defaults is None:
+                return False
+            prefixes = list(defaults())  # READ the authority; never restate it
+            author(peer_key_id, prefixes)
+            logger.info(
+                "[DELIVERY-PROBE] owner consent AUTHORED for %s prefixes=%s — sealed traces can now promote",
+                peer_key_id,
+                prefixes,
+            )
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[DELIVERY-PROBE] consent not yet authorable for %s: %s", peer_key_id, exc)
+            return False
+
     def _envelopes_sent_total() -> Optional[int]:
         """Read round_diagnostics.envelopes_sent_total from delivery_status()
         (>=0.5.125). The tighter-pants terminal signal: delivery is CONFIRMED
@@ -400,6 +426,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
             kex_seen_at: Optional[int] = None
             last_status = 0
             last_reprime = 0
+            _consent_authored = False
             while waited < window_deadline:
                 _t.sleep(15)
                 waited += 15
@@ -439,6 +466,22 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                                 )
                         except Exception as rp_exc:  # noqa: BLE001
                             logger.debug("[DELIVERY-PROBE] reprime attempt failed (non-fatal): %s", rp_exc)
+                # The owner's consent grant is a PRECONDITION for any envelope
+                # to exist: promote_consented_backlog only lifts a sealed trace
+                # out of (cohort_scope=self, tier=local) when a live grant covers
+                # its dimension. Since 0.5.146 the substrate correctly refuses to
+                # author that grant on the owner's behalf, and 0.5.147's
+                # in-process entry point refuses on an UNCLAIMED node — which the
+                # node always is at bind time, because the claim happens later in
+                # the wizard.
+                #
+                # So retry it on this loop instead of at a fixed point in boot:
+                # the fold cannot know when the claim lands, and a one-shot
+                # attempt at the only moment it is guaranteed to fail is worse
+                # than none. Idempotent, and stops as soon as it takes.
+                if not _consent_authored:
+                    _consent_authored = _try_author_consent(ckey)
+
                 # tighter pants: terminal condition is envelopes actually SENT
                 sent = _envelopes_sent_total()
                 if sent and sent > 0:

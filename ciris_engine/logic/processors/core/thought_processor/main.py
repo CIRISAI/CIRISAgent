@@ -10,6 +10,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
+from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
@@ -120,15 +121,27 @@ class ThoughtProcessor(
         if not thought:
             return None
 
-        # Execute pipeline phases
-        pipeline_result = await self._execute_pipeline_phases(thought_item, thought, context, correlation, start_time)
+        # Everything from here to the end of the round is the reasoning loop.
+        # Task envelopes are issued from OUTSIDE it (CIRISAgent#938): the
+        # issuer refuses to mint while this marker is set. Narrowing an
+        # existing envelope stays permitted — giving capability away is not
+        # privilege escalation.
+        with reasoning_scope(
+            task_id=thought.source_task_id,
+            thought_id=thought_item.thought_id,
+            phase="process_thought",
+        ):
+            # Execute pipeline phases
+            pipeline_result = await self._execute_pipeline_phases(
+                thought_item, thought, context, correlation, start_time
+            )
 
-        # Record completion and finalize
-        await self._record_processing_completion(thought, pipeline_result)
-        await self._finalize_correlation(correlation, pipeline_result, start_time)
+            # Record completion and finalize
+            await self._record_processing_completion(thought, pipeline_result)
+            await self._finalize_correlation(correlation, pipeline_result, start_time)
 
-        # Complete the round
-        final_result = await self._round_complete_step(thought_item, pipeline_result)
+            # Complete the round
+            final_result = await self._round_complete_step(thought_item, pipeline_result)
         # _round_complete_step returns the same type as pipeline_result (ConscienceApplicationResult or ActionSelectionDMAResult)
         return final_result  # type: ignore[no-any-return]
 

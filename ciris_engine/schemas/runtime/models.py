@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.types import JSONDict
 
 from .enums import TaskStatus, ThoughtStatus, ThoughtType
+from .task_envelope import TaskEnvelope
 
 
 class ImageContent(BaseModel):
@@ -53,6 +54,15 @@ class TaskContext(BaseModel):
             "task. When present, takes priority over user/system defaults in "
             "the localization chain. Set by adapters from the originating "
             "channel/user metadata (e.g. MessageContext.metadata.language)."
+        ),
+    )
+    envelope: Optional[TaskEnvelope] = Field(
+        None,
+        description=(
+            "Task-scoped authorization envelope (CIRISAgent#938). Issued at task "
+            "creation from outside the reasoning loop and bound to this task id; "
+            "its lifetime is the task's. None means DENY to a future tool gate — "
+            "never 'unconstrained'. Nothing enforces it in Phase 1."
         ),
     )
 

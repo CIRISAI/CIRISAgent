@@ -457,6 +457,51 @@ class BaseObserver(Generic[MessageT], ABC):
         except Exception as e:  # pragma: no cover - rarely hit in tests
             logger.error("Error adding WA feedback message %s to queue: %s", msg.message_id, e)  # type: ignore[attr-defined]
 
+    async def _issue_task_envelope(self, task: Any) -> None:
+        """Issue and bind this task's authorization envelope (CIRISAgent#938).
+
+        Runs at task creation, from the observer — i.e. from outside the
+        reasoning loop, which is the whole point. The grant resolves from
+        ``(environment tier, agent role/template, enabled tools, requester
+        authorization)``; the task's *purpose* is deliberately not an input,
+        because it is not knowable here. An inbound message may be a greeting
+        or may be CSAM, and the task that needs ``discord_ban_user`` is exactly
+        the one that could not have declared that need in advance.
+
+        Best-effort: an issuance failure must never drop a user's message.
+        A task with no envelope is a denial to a future gate, not a bypass.
+        """
+        try:
+            from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
+                attach_envelope_to_task,
+                issue_deployment_envelope,
+            )
+            from ciris_engine.schemas.runtime.task_envelope import RequesterAuthorization
+
+            ctx = getattr(task, "context", None)
+            requester = RequesterAuthorization(
+                user_id=getattr(ctx, "user_id", None),
+                channel_id=getattr(task, "channel_id", None),
+                source_ref=getattr(ctx, "correlation_id", None),
+                is_wise_authority=bool(self.observer_wa_id and task.signed_by == self.observer_wa_id),
+            )
+            tool_source = self.bus_manager.tool if self.bus_manager else None
+            envelope = await issue_deployment_envelope(
+                task_id=task.task_id,
+                agent_occurrence_id=getattr(task, "agent_occurrence_id", "default"),
+                requester=requester,
+                tool_source=tool_source,
+                time_service=self.time_service,
+            )
+            attach_envelope_to_task(task, envelope)
+        except Exception as e:
+            logger.warning(
+                "Failed to issue task envelope for task %s: %s. Task proceeds with no envelope "
+                "(a denial to any future tool gate, never a bypass).",
+                getattr(task, "task_id", "<unknown>"),
+                e,
+            )
+
     async def _sign_and_add_task(self, task: Any) -> None:
         """Sign the task with observer's WA certificate before adding."""
         # If auth service and observer WA ID are available, sign the task
@@ -470,6 +515,12 @@ class BaseObserver(Generic[MessageT], ABC):
             except Exception as e:
                 logger.error(f"Failed to sign observer task: {e}")
                 # Continue without signature
+
+        # Issue the task-scoped authorization envelope before the task is
+        # persisted, so it lands in the same row and shares the task's lifetime
+        # (CIRISAgent#938). Signing runs first so the envelope's requester can
+        # record whether the task carries observer-WA standing.
+        await self._issue_task_envelope(task)
 
         # Import persistence here to avoid circular import
 

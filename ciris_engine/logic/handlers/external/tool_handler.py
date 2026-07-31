@@ -2,6 +2,7 @@ import logging
 import uuid
 from typing import Any, Dict, Optional, Tuple, cast
 
+from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.schemas.actions import ToolParams
@@ -10,6 +11,7 @@ from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolInvocationSubject
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
@@ -81,6 +83,34 @@ class ToolHandler(BaseActionHandler):
             )
             return follow_up_id or ""  # Return empty string if None (should not happen)
 
+    def _build_invocation_subject(
+        self, thought: Thought, dispatch_context: DispatchContext
+    ) -> ToolInvocationSubject:
+        """Build the authorization subject for this tool call (CIRISAgent#938).
+
+        This is the last point before ``ToolBus.execute_tool`` at which task and
+        thought identity are available — and until now they were dropped here.
+        The envelope is *read*, never minted: ``resolve_envelope_for_task_id``
+        has no minting surface, and a missing envelope resolves to ``None``,
+        which is a denial to Phase 2 rather than "unconstrained".
+        """
+        task_id = thought.source_task_id or dispatch_context.task_id
+        envelope = resolve_envelope_for_task_id(task_id, thought.agent_occurrence_id)
+        if envelope is None:
+            self.logger.debug(
+                "[TOOL_HANDLER] No task envelope bound to task %s; tool call proceeds unauthorized "
+                "(Phase 1 has no gate — see CIRISAgent#938).",
+                task_id,
+            )
+        return ToolInvocationSubject.for_task(
+            task_id=task_id,
+            thought_id=thought.thought_id,
+            handler_name=self.__class__.__name__,
+            origin=ToolCallOrigin.REASONING,
+            agent_occurrence_id=thought.agent_occurrence_id,
+            envelope=envelope,
+        )
+
     async def _execute_tool(
         self, params: ToolParams, thought: Thought, dispatch_context: DispatchContext
     ) -> Tuple[bool, str]:
@@ -95,10 +125,16 @@ class ToolHandler(BaseActionHandler):
             # Build tool parameters with channel and task context
             tool_params = self._build_tool_params(params, thought)
 
+            # The subject the Phase 2 tool gate will authorize (CIRISAgent#938).
+            subject = self._build_invocation_subject(thought, dispatch_context)
+
             # Execute via tool bus
             self.logger.info(f"[TOOL_HANDLER] Calling bus_manager.tool.execute_tool for '{params.name}'...")
             tool_result = await self.bus_manager.tool.execute_tool(
-                tool_name=params.name, parameters=cast(JSONDict, tool_params), handler_name=self.__class__.__name__
+                tool_name=params.name,
+                parameters=cast(JSONDict, tool_params),
+                handler_name=self.__class__.__name__,
+                subject=subject,
             )
 
             self.logger.info(

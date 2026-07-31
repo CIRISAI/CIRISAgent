@@ -13,8 +13,19 @@ logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolInvocationSubject
+
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
+
+# Connector registration and connectivity probing are adapter-lifecycle work
+# driven by an authenticated operator, not by a task and not by anything the
+# model authored. Named explicitly (CIRISAgent#938) so a Phase 2 tool gate has
+# to decide about this path rather than inheriting a silent exemption.
+_CONNECTOR_SUBJECT = ToolInvocationSubject.for_component(
+    origin=ToolCallOrigin.ADAPTER_LIFECYCLE,
+    component="api.routes.connectors",
+)
 
 router = APIRouter(prefix="/connectors", tags=["Connectors"])
 
@@ -232,6 +243,7 @@ async def register_sql_connector(
                     "dialect": db_type,
                     "privacy_schema": request.config.get("privacy_schema"),
                 },
+                subject=_CONNECTOR_SUBJECT,
             )
             if init_result.success:
                 logger.info("Registered connector with tool bus")
@@ -329,6 +341,7 @@ async def _test_sql_connector(connector_id: str, tool_bus: Any) -> tuple[bool, s
         test_result = await tool_bus.execute_tool(
             "sql_query",
             {"connector_id": connector_id, "sql": "SELECT 1"},
+            subject=_CONNECTOR_SUBJECT,
         )
         if test_result.success:
             return True, "SQL connection test successful"

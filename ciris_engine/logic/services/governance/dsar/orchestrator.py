@@ -30,6 +30,7 @@ from ciris_engine.schemas.consent.core import (
     ConsentStream,
     DSARExportFormat,
 )
+from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolInvocationSubject
 
 from .schemas import (
     DataSourceDeletion,
@@ -41,6 +42,14 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# DSAR acts on a statutory obligation, not on a task and not on anything the
+# model authored. It is named explicitly (CIRISAgent#938) so a Phase 2 tool
+# gate has to decide about it rather than inheriting a silent exemption.
+_DSAR_SUBJECT = ToolInvocationSubject.for_component(
+    origin=ToolCallOrigin.GOVERNANCE_SERVICE,
+    component="DSARModificationOrchestrator",
+)
 
 
 class DSAROrchestrator:
@@ -573,6 +582,7 @@ class DSAROrchestrator:
                         "corrections": corrections,
                     },
                     handler_name="default",
+                    subject=_DSAR_SUBJECT,
                 )
 
                 if update_result.success and update_result.data:
@@ -837,6 +847,7 @@ class DSAROrchestrator:
                     "identifier_type": "email",  # Default to email for DSAR requests
                 },
                 handler_name="default",
+                subject=_DSAR_SUBJECT,
             )
 
             # Parse export result from ToolExecutionResult
@@ -902,6 +913,7 @@ class DSAROrchestrator:
                     "verify": verify,
                 },
                 handler_name="default",
+                subject=_DSAR_SUBJECT,
             )
 
             # Parse deletion result from ToolExecutionResult
@@ -965,6 +977,7 @@ class DSAROrchestrator:
                     "identifier_type": "email",  # Default to email for DSAR requests
                 },
                 handler_name="default",
+                subject=_DSAR_SUBJECT,
             )
 
             # Parse verification result from ToolExecutionResult

@@ -940,30 +940,33 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             this_file = Path(__file__)
             adapters_dir = this_file.parent.parent.parent.parent / "ciris_adapters"
             manifest_path = adapters_dir / adapter_type / "manifest.json"
-            logger.warning(
+            # Diagnostic breadcrumbs only (path resolution on Android/Chaquopy).
+            # DEBUG level — at WARNING these landed in incidents_latest.log
+            # thousands of times per soak window (#935).
+            logger.debug(
                 f"[AUTH_STEP_INFO] {adapter_type}: __file__={this_file}, adapters_dir={adapters_dir}, manifest_path={manifest_path}"
             )
-            logger.warning(f"[AUTH_STEP_INFO] {adapter_type}: manifest exists={manifest_path.exists()}")
+            logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: manifest exists={manifest_path.exists()}")
 
             if not manifest_path.exists():
-                logger.info(f"[AUTH_STEP_INFO] {adapter_type}: manifest not found, returning False")
+                logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: manifest not found, returning False")
                 return False, None
 
             with open(manifest_path) as f:
                 manifest_data = json.load(f)
 
             interactive_config = manifest_data.get("interactive_config")
-            logger.info(f"[AUTH_STEP_INFO] {adapter_type}: has interactive_config={interactive_config is not None}")
+            logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: has interactive_config={interactive_config is not None}")
             if not interactive_config:
                 return False, None
 
             steps = interactive_config.get("steps", [])
-            logger.info(f"[AUTH_STEP_INFO] {adapter_type}: found {len(steps)} steps")
+            logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: found {len(steps)} steps")
             for step in steps:
                 step_type = step.get("step_type", "")
                 if step_type in ("oauth", "device_auth"):
                     step_id = step.get("step_id")
-                    logger.info(f"[AUTH_STEP_INFO] {adapter_type}: found auth step type={step_type}, id={step_id}")
+                    logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: found auth step type={step_type}, id={step_id}")
                     return True, step_id
 
             return False, None

@@ -388,3 +388,46 @@ async def test_config_service_path_values(config_service):
     configs = await config_service.list_configs(prefix="paths.")
     assert "paths.test" in configs
     assert configs["paths.test"] == "/home/user/test.txt"
+
+
+@pytest.mark.asyncio
+async def test_config_scan_survives_legacy_keyless_config_node(config_service, memory_service, caplog):
+    """Regression (#935): a legacy CONFIG node without `key` must not warn on every scan.
+
+    Pre-2.9.0 accord_metrics wrote `accord_metrics/events_total` as a
+    CONFIG-typed GraphNode with only counter attributes (no `key`). The
+    node survives in long-lived production graphs, and every config lookup
+    (~10s cadence) logged "Failed to convert node accord_metrics/events_total
+    to ConfigNode: 'key'" into incidents_latest.log. The converter now
+    derives the key from the node id, so scans convert it cleanly.
+    """
+    import logging as _logging
+    from datetime import datetime, timezone
+
+    from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
+
+    now = datetime.now(timezone.utc)
+    legacy_node = GraphNode(
+        id="accord_metrics/events_total",
+        type=NodeType.CONFIG,
+        scope=GraphScope.LOCAL,
+        attributes={
+            "events_sent_total": 42,
+            "last_updated": now.isoformat(),
+        },
+        updated_by="accord_metrics_service",
+        updated_at=now,
+    )
+    result = await memory_service.memorize(legacy_node)
+    assert result.status.value == "ok"
+
+    # A regular config write + read scans all CONFIG nodes, including the
+    # legacy one.
+    await config_service.set_config("soak.test", "value", updated_by="test_user")
+
+    with caplog.at_level(_logging.WARNING, logger="ciris_engine.logic.services.graph.config_service.service"):
+        fetched = await config_service.get_config("soak.test")
+
+    assert fetched is not None
+    assert fetched.value.value == "value"
+    assert not [r for r in caplog.records if "Failed to convert node" in r.getMessage()]

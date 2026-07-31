@@ -390,9 +390,11 @@ class TestIncidentCaptureHandlerRotation:
         assert hasattr(handler, "_rotating_handler")
         assert isinstance(handler._rotating_handler, RotatingFileHandler)
 
-        # Verify rotation settings (2MB max, 2 backups)
+        # Verify rotation settings (2MB max, 20 backups — #935 raised
+        # retention so multi-week soaks keep a reviewable incident trail)
         assert handler._rotating_handler.maxBytes == 2 * 1024 * 1024
-        assert handler._rotating_handler.backupCount == 2
+        assert handler._rotating_handler.backupCount == IncidentCaptureHandler.INCIDENT_BACKUP_COUNT
+        assert handler._rotating_handler.backupCount == 20
 
     def test_emit_uses_rotating_handler(self, log_dir, mock_time_service):
         """Test that emit delegates to the rotating handler."""
@@ -412,11 +414,15 @@ class TestIncidentCaptureHandlerRotation:
         log_dir = tmp_path / "logs"
         log_dir.mkdir()
 
-        # Create 5 old incident log files
-        for i in range(5):
+        # Create more old incident log files than the startup sweep keeps
+        # (INCIDENT_BACKUP_COUNT + 5 — must exceed the rotating set so a
+        # restart does not delete the rotated trail, #935)
+        keep_count = IncidentCaptureHandler.INCIDENT_BACKUP_COUNT + 5
+        n_files = keep_count + 5
+        for i in range(n_files):
             log_file = log_dir / f"incidents_{i:02d}.log"
             log_file.write_text(f"old content {i}")
-            mtime = time.time() - (5 - i) * 1000
+            mtime = time.time() - (n_files - i) * 1000
             os.utime(log_file, (mtime, mtime))
 
         # Create handler - should trigger cleanup
@@ -426,5 +432,6 @@ class TestIncidentCaptureHandlerRotation:
         all_incident_logs = list(log_dir.glob("incidents_*.log"))
         old_files = [f for f in all_incident_logs if f != handler.log_file and not f.is_symlink()]
 
-        # Cleanup keeps 3, so we should have at most 3 old files remaining
-        assert len(old_files) <= 3
+        # Cleanup keeps at most keep_count files; the newest survivors remain
+        assert len(old_files) <= keep_count
+        assert len(old_files) < n_files

@@ -76,6 +76,34 @@ def get_platform_name() -> str:
     return "unknown"
 
 
+# Platform names that denote a full desktop/server host: a real filesystem, a
+# shell, and a user who installed the agent deliberately. Deliberately a
+# positive allow-list -- anything not named here (android, ios, unknown) is
+# treated as NOT desktop, so an unrecognized platform loses capability rather
+# than gaining it.
+DESKTOP_PLATFORM_NAMES = frozenset({"linux", "macos", "windows"})
+
+
+def is_desktop() -> bool:
+    """Detect if running on a desktop/server host rather than a mobile device.
+
+    Used to gate host-level capabilities (shell execution, file writes) that are
+    meaningful on a desktop install and meaningless-or-worse inside a sandboxed
+    mobile app. See ``FSD/CLI_TOOLS_DESKTOP.md``.
+
+    **Fails closed.** ``get_platform_name()`` returns ``"unknown"`` for anything
+    it does not positively recognize, and ``"unknown"`` is not in
+    :data:`DESKTOP_PLATFORM_NAMES`, so an unrecognized platform gets the mobile
+    (no-shell) answer. Android is recognized via ``ANDROID_ROOT`` /
+    ``ANDROID_DATA`` / ``sys.getandroidapilevel`` (Chaquopy) / ``/data/data``;
+    iOS via ``sys.platform == 'ios'`` or a simulator/device home path.
+
+    Returns:
+        True only on a positively-identified desktop platform.
+    """
+    return get_platform_name() in DESKTOP_PLATFORM_NAMES
+
+
 # ============================================================================
 # Security Capability Detection
 # ============================================================================
@@ -293,6 +321,8 @@ __all__ = [
     # Core detection (is_android imported from path_resolution)
     "is_android",
     "is_ios",
+    "is_desktop",
+    "DESKTOP_PLATFORM_NAMES",
     "get_platform_name",
     "detect_platform_capabilities",
     "refresh_auth_state",

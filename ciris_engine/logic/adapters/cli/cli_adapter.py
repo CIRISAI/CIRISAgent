@@ -8,12 +8,13 @@ import logging
 import sys
 import uuid
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional
 
 import aiofiles
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.base import Service
+from ciris_engine.logic.utils.platform_detection import is_desktop
 from ciris_engine.protocols.services import CommunicationService, ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.cli import (
@@ -37,13 +38,35 @@ from ciris_engine.schemas.telemetry.core import (
 )
 from ciris_engine.schemas.types import JSONDict
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .cli_tools import CLIToolService
+
 logger = logging.getLogger(__name__)
+
+# Tools contributed by CLIToolService on desktop installs only (#941).
+#
+# These are host-level capabilities -- arbitrary shell execution and arbitrary
+# file writes -- and they exist to make the agent useful for coding on a machine
+# the operator owns. On Android/iOS the app is sandboxed: a shell would have
+# nothing meaningful to run and a file write nothing meaningful to write, so the
+# mobile grant is unchanged.
+#
+# `list_files` and `read_file` are deliberately NOT taken from CLIToolService:
+# CLIAdapter already implements both, and one tool name must have exactly one
+# implementation. Two providers offering the same name make ToolBus's
+# multi-provider fallback (tool_bus.py:140-172) resolve by registry order.
+DESKTOP_ONLY_TOOLS = ("write_file", "shell_command", "search_text")
 
 
 class CLIAdapter(Service, CommunicationService, ToolService):
     """
     CLI adapter implementing CommunicationService and ToolService protocols.
     Provides command-line interface for interacting with the CIRIS agent.
+
+    This is the CLI platform's single ``ServiceType.TOOL`` provider. On a desktop
+    install its tool set is the union of its own tools and the host-level tools
+    in :class:`~ciris_engine.logic.adapters.cli.cli_tools.CLIToolService`; on
+    mobile it is its own tools alone. See ``FSD/CLI_TOOLS_DESKTOP.md``.
     """
 
     def __init__(
@@ -81,6 +104,25 @@ class CLIAdapter(Service, CommunicationService, ToolService):
             "read_file": self._tool_read_file,
             "system_info": self._tool_system_info,
         }
+
+        # Desktop installs additionally get the host-level tools (#941). The
+        # predicate fails closed: android, ios and any unrecognized platform all
+        # leave this None, and nothing below adds a tool.
+        self._desktop_tools: Optional["CLIToolService"] = None
+        if is_desktop():
+            from .cli_tools import CLIToolService
+
+            # Constructed for its implementations and metadata only; CLIAdapter
+            # owns dispatch, so CLIToolService.execute_tool (the only path that
+            # needs a time service) is never called through here.
+            self._desktop_tools = CLIToolService()
+            for tool_name in DESKTOP_ONLY_TOOLS:
+                tool_callable = self._desktop_tools.get_tool_callable(tool_name)
+                if tool_callable is not None:
+                    self._available_tools[tool_name] = tool_callable
+            logger.info("CLIAdapter: desktop install - host tools enabled: %s", ", ".join(DESKTOP_ONLY_TOOLS))
+        else:
+            logger.info("CLIAdapter: non-desktop platform - host tools (shell/file-write) NOT enabled")
 
         self._guidance_queue: asyncio.Queue[str] = asyncio.Queue()
 
@@ -323,6 +365,11 @@ class CLIAdapter(Service, CommunicationService, ToolService):
             result = await self._available_tools[tool_name](parameters)
             execution_time = (time.time() - start_time) * 1000
 
+            # This adapter's own tools always set an explicit "success"; the
+            # delegated desktop tools report failure via "error" alone, so fall
+            # back to that rather than defaulting a failed write/shell to True.
+            success = bool(result.get("success", result.get("error") is None))
+
             # Track successful command execution
             self._commands_executed_count += 1
 
@@ -334,7 +381,7 @@ class CLIAdapter(Service, CommunicationService, ToolService):
                     "adapter_type": "cli",
                     "tool_name": tool_name,
                     "execution_time_ms": str(execution_time),
-                    "success": str(result.get("success", True)),
+                    "success": str(success),
                 },
             )
 
@@ -356,7 +403,7 @@ class CLIAdapter(Service, CommunicationService, ToolService):
                         timeout_seconds=None,
                     ),
                     response_data=ServiceResponseData(
-                        success=result.get("success", True),
+                        success=success,
                         result_summary=f"Tool {tool_name} executed",
                         execution_time_ms=execution_time,
                         response_timestamp=now,
@@ -384,8 +431,8 @@ class CLIAdapter(Service, CommunicationService, ToolService):
 
             return ToolExecutionResult(
                 tool_name=tool_name,
-                status=ToolExecutionStatus.COMPLETED if result.get("success", True) else ToolExecutionStatus.FAILED,
-                success=result.get("success", True),
+                status=ToolExecutionStatus.COMPLETED if success else ToolExecutionStatus.FAILED,
+                success=success,
                 data=result,
                 error=result.get("error"),
                 correlation_id=correlation_id,
@@ -432,6 +479,12 @@ class CLIAdapter(Service, CommunicationService, ToolService):
             return True
         elif tool_name == "system_info":
             return True
+        elif tool_name == "write_file":
+            return "path" in parameters and "content" in parameters
+        elif tool_name == "shell_command":
+            return "command" in parameters
+        elif tool_name == "search_text":
+            return "path" in parameters and "pattern" in parameters
 
         return True
 
@@ -741,6 +794,12 @@ Tools available:
         if tool_name not in self._available_tools:
             return None
 
+        # Desktop-only tools: the schema lives with the implementation, so it is
+        # read from CLIToolService rather than restated here (restating is how
+        # tool metadata drifts from tool behaviour).
+        if self._desktop_tools is not None and tool_name in DESKTOP_ONLY_TOOLS:
+            return await self._desktop_tools.get_tool_schema(tool_name)
+
         # Return basic schema info for CLI tools
         from ciris_engine.schemas.adapters.tools import ToolParameterSchema
 
@@ -762,6 +821,13 @@ Tools available:
         """Get detailed information about a specific tool."""
         if tool_name not in self._available_tools:
             return None
+
+        # Desktop-only tools: description, documentation, gotchas and
+        # ToolDMAGuidance all come from CLIToolService, which owns them. This is
+        # also what makes the generated first-run tool disclosure correct without
+        # any extra wiring -- it calls get_all_tool_info() on this adapter.
+        if self._desktop_tools is not None and tool_name in DESKTOP_ONLY_TOOLS:
+            return await self._desktop_tools.get_tool_info(tool_name)
 
         from ciris_engine.schemas.adapters.tools import ToolParameterSchema
 

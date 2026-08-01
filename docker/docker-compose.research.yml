@@ -14,10 +14,18 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.research
+      # Build on the host network: the default buildkit network's resolver
+      # (10.19.16.1) times out against registry-1.docker.io on some hosts while
+      # the host itself resolves fine. Harmless when the default already works.
+      network: host
     environment:
       # --- the four knobs that matter -----------------------------------
       PROVIDER: "${PROVIDER:-openrouter}"     # openrouter|together|groq|openai|deepinfra
-      API_KEY: "${API_KEY:?set API_KEY=sk-...}"
+      # NOT ${API_KEY:?...}: compose interpolates at BUILD time too, so the
+      # required-variable form made `docker compose build` fail without a key.
+      # capture_traces.sh already refuses with exit 2 and a clear message.
+      API_KEY: "${API_KEY:-}"
+      API_KEY_FILE: "${API_KEY_FILE:-}"
       MODEL: "${MODEL:-meta-llama/llama-4-scout}"
       LANGUAGES: "${LANGUAGES:-en}"
       # --- optional -----------------------------------------------------

@@ -4,6 +4,18 @@ Signed CEG traces from a live model run, at three detail levels.
 
 ## Isolated (recommended when sharing a box)
 
+Published to GHCR with every release — pull a pinned image rather than building
+from a working tree:
+
+```bash
+docker run --rm \
+  -e API_KEY=sk-... \
+  -v "$PWD/traces:/out" \
+  ghcr.io/cirisai/ciris-research-capture:latest
+```
+
+Or build locally from source:
+
 ```bash
 cd docker
 API_KEY=sk-... docker compose -f docker-compose.research.yml run --rm capture
@@ -75,3 +87,17 @@ Every path logs its verdict — grep the adapter log for `Local-copy` and
 `CEG seal NOT teed (no local_copy_dir)`, or
 `CEG seal teed NOTHING: no carrier row matches trace_id=...` (a source-side
 defect, not a capture one).
+
+## Notes
+
+**Building on a host where buildkit's DNS fails.** Some hosts resolve
+`registry-1.docker.io` fine but buildkit's network does not
+(`i/o timeout ... on 10.19.16.1:53`). `docker pull python:3.12-slim` then
+`DOCKER_BUILDKIT=0 docker build -f docker/Dockerfile.research -t ciris-research-capture:local .`
+works, because the legacy builder resolves the base locally. Pulling from GHCR
+avoids the problem entirely.
+
+**Verified end-to-end** at 2.9.7: image builds clean, container run returns
+exit 0 with 6 traces across generic/detailed/full_traces, all 6 PQC-signed,
+written through the volume mount to the host. Guards verified in-container:
+exit 2 with no key, exit 3 on a bad key naming the cause.

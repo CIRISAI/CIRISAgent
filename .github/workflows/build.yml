@@ -1056,7 +1056,33 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
+      # Research trace-capture harness — published alongside the agent image so
+      # the research team can pull a pinned, reproducible capture environment
+      # instead of building from a working tree. Isolated by construction:
+      # container-local DB, logs and port, so a capture run on a shared box
+      # cannot collide with development or with another run.
+      - name: Extract metadata (research capture)
+        id: meta_research
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/cirisai/ciris-research-capture
+          tags: |
+            type=ref,event=branch
+            type=sha
+            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
+            type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Build and push research capture image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.research
+          push: ${{ github.repository == 'CIRISAI/CIRISAgent' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+          tags: ${{ steps.meta_research.outputs.tags }}
+          labels: ${{ steps.meta_research.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
       - name: Build Summary
         if: always()

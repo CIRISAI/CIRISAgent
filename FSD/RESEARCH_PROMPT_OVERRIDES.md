@@ -1,8 +1,64 @@
 # Research-Bound Prompt Overrides
 
-**Status**: DESIGN ONLY — nothing in this document is implemented.
+**Status**: **IMPLEMENTED, with two carve-outs stated below.** §§2–3, 5.1, 5.2, 6.1
+are built. §4.3 is NOT — and the implementation refuses condition (b) because of
+it, rather than running and producing fabricated scalars.
 **Branch**: `research/covenant-overrides` (from `release/2.9.7`, `bc5819d20`)
 **Audience**: whoever implements this, and whoever reviews the research it enables.
+
+---
+
+## 0.0 What shipped, and what did not
+
+Implementation lives in `ciris_engine/logic/utils/research_overrides.py`, with
+interception at the five real loaders and tests in
+`tests/ciris_engine/logic/utils/test_research_prompt_overrides.py`.
+
+**Built:**
+
+| § | thing | note |
+|---|---|---|
+| 2.3–2.4 | two-key gate + refusal naming both remedies | `CIRIS_RESEARCH_PROMPT_OVERRIDES` × `CIRIS_TESTING_MODE` |
+| 2.3 | `_TRUTHY` promoted to a shared util | `ciris_engine/logic/utils/env_flags.py`; `setup/config.py` now imports it |
+| 3.1 | five namespaces, `extra="forbid"`, no `inline` namespace | 97 keys total: string 44, dma_prompt 34, conscience_prompt 12, corpus 4, template 3 |
+| 3.2 | R1–R5, all collected into one error at load | R1 checks against a **live AST scan** of `get_string` call sites, not a hardcoded list, so a dead key can never be accepted |
+| 3.3 | precedence refusal vs `AgentTemplate.*_overrides` | refuses; does not pick a winner |
+| 5.1 | `research_hashes` | an unregistered accord file under an active manifest now **raises** instead of warning |
+| 5.2 | corpus substitution is in-memory at the loader boundary | never writes to `ciris_engine/data/`; test asserts the file on disk is unchanged |
+| 6.1 | `residue_digest` over an enumerated inline inventory | 16 sites anchored on **symbols**, not line numbers |
+| 2.5 | enforcement wired to CI | the tests live under `tests/`, which `build.yml:141` runs as `pytest tests/`; no bespoke workflow needed |
+
+**Deliberately not built:**
+
+1. **§4.3 truthfulness fixes.** Out of scope for this change — they are fixes to
+   the conscience layer's honesty, not to overrides, and bundling them would mix
+   two review surfaces. §9 says nothing may land without them. The implementation
+   honours that constraint the only way it can without doing them: **a manifest
+   declaring `condition: "b"` is refused**, with a message naming §4.2(i)/(iii)
+   and explaining that the (b) trace would carry `entropy=0.1, coherence=0.9` in
+   the same fields that carry measurements in (c). The refusal lifts by itself
+   the moment `EpistemicData.entropy_level` becomes `Optional[float]` — the check
+   reads the schema, not a flag. A test asserts both branches.
+
+2. **`guide.comprehensive` as an independent corpus key.** The comprehensive
+   guide is concatenated into `ACCORD_TEXT` at `constants.py` **import** time,
+   before any override can exist, so it has no substitution point of its own. It
+   is covered as part of `accord.polyglot_full` and cannot be swapped separately.
+   §3.1 listed it as a key; that was not implementable as specified.
+
+**Also corrected against §3.1:** the accord corpus enum is three keys, not two —
+`accord.polyglot_full` was missing. Without it a deployment running
+`CIRIS_ACCORD_MODE=full` would have kept the real covenant while the manifest
+declared it replaced, which is §7.1's failure re-created inside the fix for
+§7.1. R5 now requires all three together.
+
+**Operator commands:**
+
+```bash
+python -m ciris_engine.logic.utils.research_overrides digest    # current residue digest, to pin
+python -m ciris_engine.logic.utils.research_overrides skeleton  # totality-complete strict manifest
+python -m ciris_engine.logic.utils.research_overrides keyspace  # every overridable key, by namespace
+```
 
 ---
 

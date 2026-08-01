@@ -95,6 +95,43 @@ def safe_format(template: str, *, source: str, **kwargs: Any) -> str:
     return rendered
 
 
+def _apply_research_overrides(template_name: str, collection: PromptCollection) -> PromptCollection:
+    """Overlay the manifest's `dma_prompt` namespace onto a parsed collection.
+
+    No-op (and constructs no state) unless the research gate is fully open.
+    Fails loudly rather than partially: a manifest key naming a field the base
+    template does not define is rejected at manifest load (R1), so anything
+    reaching here must resolve.
+    """
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+    manifest = get_active_overrides()
+    if manifest is None:
+        return collection
+
+    applied = []
+    for key, value in manifest.overrides.dma_prompt.items():
+        name, _, field = key.partition(".")
+        if name != template_name:
+            continue
+        if not hasattr(collection, field):
+            raise RuntimeError(
+                f"research override {key!r} names a PromptCollection field that does "
+                f"not exist. Manifest validation should have caught this — the key "
+                f"space and the schema have diverged."
+            )
+        setattr(collection, field, value)
+        applied.append(field)
+
+    if applied:
+        logger.warning(
+            "[RESEARCH-OVERRIDES] DMA template %s: replaced %s",
+            template_name,
+            sorted(applied),
+        )
+    return collection
+
+
 class DMAPromptLoader:
     """Loads and manages DMA prompts from YAML files.
 
@@ -166,23 +203,30 @@ class DMAPromptLoader:
         blank lines inside a ``|`` scalar).
         """
 
+        from ciris_engine.logic.utils.research_overrides import override_corpus
+
         def _replace(m: "re.Match[str]") -> str:
             indent = m.group("indent")
             name = m.group("name")
+
+            # corpus namespace: polyglot.<name>. Substituted in-memory at the
+            # loader boundary — never by writing to ciris_engine/data/, so the
+            # production hash-pinned integrity guarantee stays intact.
+            research_block = override_corpus(f"polyglot.{name.lower()}")
+            if research_block is not None:
+                logger.warning("[RESEARCH-OVERRIDES] polyglot block %s replaced in-memory", name.lower())
+                return "\n".join(f"{indent}{ln}" if ln else "" for ln in research_block.rstrip("\n").split("\n"))
+
             polyglot_path = POLYGLOT_DIR / f"{name.lower()}.txt"
             if not polyglot_path.exists():
                 logger.error(
-                    f"[DMA-PROMPT] Polyglot block not found: {polyglot_path} "
-                    f"(referenced from {template_path})"
+                    f"[DMA-PROMPT] Polyglot block not found: {polyglot_path} " f"(referenced from {template_path})"
                 )
-                raise FileNotFoundError(
-                    f"Polyglot block {{{{POLYGLOT_{name}}}}} not found at {polyglot_path}"
-                )
+                raise FileNotFoundError(f"Polyglot block {{{{POLYGLOT_{name}}}}} not found at {polyglot_path}")
             block_text = polyglot_path.read_text(encoding="utf-8").rstrip("\n")
             indented = "\n".join(f"{indent}{ln}" if ln else "" for ln in block_text.split("\n"))
             logger.debug(
-                f"[DMA-PROMPT] Substituted {{{{POLYGLOT_{name}}}}} "
-                f"({len(block_text)} chars) from {polyglot_path}"
+                f"[DMA-PROMPT] Substituted {{{{POLYGLOT_{name}}}}} " f"({len(block_text)} chars) from {polyglot_path}"
             )
             return indented
 
@@ -218,6 +262,22 @@ class DMAPromptLoader:
         if template_path is None:
             template_path = self.prompts_dir / f"{template_name}.yml"
             if self.language != DEFAULT_LANGUAGE:
+                # R3 — no silent locale fallback under an active manifest. This
+                # fallback is a `debug` log in production; in a research arm it
+                # means a locale missing one YAML silently serves the original
+                # CIRIS English prompt, so the arm contains exactly what it was
+                # built to exclude.
+                from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+                if get_active_overrides() is not None:
+                    raise RuntimeError(
+                        f"research overrides active: no localized DMA prompt "
+                        f"{template_name}.yml for language {self.language!r} "
+                        f"({self.localized_dir}). Falling back to the English CIRIS base "
+                        f"would put the original CIRIS prompt into a research arm. "
+                        f"Provide the localized template or override "
+                        f"'{template_name}.*' in the manifest."
+                    )
                 logger.debug(f"Localized prompt not found for {self.language}, using English: {template_path}")
 
         if not template_path.exists():
@@ -273,7 +333,7 @@ class DMAPromptLoader:
                 elif key not in PromptCollection.model_fields and isinstance(value, str):
                     prompt_collection.custom_prompts[key] = value
 
-            return prompt_collection
+            return _apply_research_overrides(template_name, prompt_collection)
 
         except yaml.YAMLError as e:
             logger.error(f"Failed to parse YAML template {template_path}: {e}")

@@ -125,6 +125,22 @@ class ConsciencePromptLoader:
         if template_path is None:
             template_path = self.prompts_dir / f"{conscience_type}.yml"
             if self.language != DEFAULT_LANGUAGE:
+                # R3 — no silent locale fallback under an active manifest.
+                # optimization_veto_conscience.yml is localized in ZERO of the 28
+                # locales, so this branch is not hypothetical: without the guard
+                # the largest conscience prompt (27 KB) runs as original CIRIS
+                # English in every arm of every locale.
+                from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+                if get_active_overrides() is not None:
+                    raise RuntimeError(
+                        f"research overrides active: no localized conscience prompt "
+                        f"{conscience_type}.yml for language {self.language!r} "
+                        f"({self.localized_dir}). Falling back to the English CIRIS base "
+                        f"would put the original CIRIS conscience prompt into a research "
+                        f"arm. Provide the localized file or override "
+                        f"'{conscience_type}.*' in the manifest."
+                    )
                 logger.debug(
                     f"Localized conscience prompt not found for {self.language}, using English: {template_path}"
                 )
@@ -147,6 +163,26 @@ class ConsciencePromptLoader:
                 user_prompt_template=data.get("user_prompt_template", ""),
                 user_prompt_with_image_template=data.get("user_prompt_with_image_template", ""),
             )
+
+            # conscience_prompt namespace. No state constructed unless the
+            # research gate is fully open.
+            from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+            manifest = get_active_overrides()
+            if manifest is not None:
+                applied = []
+                for key, value in manifest.overrides.conscience_prompt.items():
+                    name, _, field = key.partition(".")
+                    if name != conscience_type:
+                        continue
+                    setattr(prompts, field, value)
+                    applied.append(field)
+                if applied:
+                    logger.warning(
+                        "[RESEARCH-OVERRIDES] conscience %s: replaced %s",
+                        conscience_type,
+                        sorted(applied),
+                    )
 
             self._cache[cache_key] = prompts
             logger.debug(f"Loaded conscience prompts: {conscience_type}")

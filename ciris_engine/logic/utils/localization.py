@@ -214,9 +214,32 @@ def get_string(
         >>> get_string("xx", "nonexistent.key", default="Fallback text")
         "Fallback text"
     """
+    # Research-bound override (FSD/RESEARCH_PROMPT_OVERRIDES.md §3.1, `string`
+    # namespace). Unreachable unless BOTH CIRIS_RESEARCH_PROMPT_OVERRIDES and
+    # CIRIS_TESTING_MODE are set; the accessor returns None with zero state
+    # otherwise. Checked before resolution so the override is what reaches the
+    # prompt, not a locale-fallback of it.
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+    _manifest = get_active_overrides()
+    if _manifest is not None:
+        _override = _manifest.overrides.string.get(key)
+        if _override is not None:
+            return _interpolate(_override, **params) if params else _override
+
     # Try requested language first
     lang_data = _get_language_data(lang_code)
     result = _resolve_key(lang_data, key)
+
+    # R4 — no [EN] laundering. Under an active manifest an override that IS
+    # present must never be silently replaced by English.
+    if _manifest is not None and result is not None and result.startswith("[EN]"):
+        raise RuntimeError(
+            f"research overrides active: key {key!r} resolves to an [EN]-prefixed "
+            f"placeholder in locale {lang_code!r}, which get_string treats as absent and "
+            f"silently replaces with English. A supposedly non-CIRIS arm would contain "
+            f"CIRIS English. Override the key in the manifest or fix the bundle."
+        )
 
     # Check for [EN] placeholder marker (indicates untranslated)
     if result is not None and result.startswith("[EN]"):
@@ -245,6 +268,16 @@ def get_string(
             )
             result = default
         else:
+            # R4 — no raw-key leakage. Returning the key as content injects
+            # e.g. the literal `prompts.dma.pdma_headr` into the prompt, which
+            # under an experiment is a silently contaminated sample rather than
+            # a cosmetic defect.
+            if _manifest is not None:
+                raise RuntimeError(
+                    f"research overrides active: key {key!r} is missing from both "
+                    f"{lang_code!r} and English, and get_string would return the raw key "
+                    f"string as prompt content. Add the key to the manifest or the bundle."
+                )
             logger.warning(f"[LOCALIZATION] MISSING key: {key} (lang={lang_code}) - returning raw key")
             result = key
     else:
@@ -423,7 +456,19 @@ def get_prohibition_guidance(lang_code: str) -> str:
     # against the language's own bundle.
     lang_data = _get_language_data(lang_code)
 
+    # This function deliberately bypasses get_string's English-fallback chain,
+    # so it must consult the override registry itself — otherwise the whole
+    # prohibition block (22 of the 44 reachable prompt keys) would be the one
+    # part of the `string` namespace that silently kept its CIRIS text.
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+    _manifest = get_active_overrides()
+    _string_overrides = _manifest.overrides.string if _manifest is not None else {}
+
     def _local(key: str) -> str:
+        override = _string_overrides.get(key)
+        if override is not None:
+            return override.strip()
         value = _resolve_key(lang_data, key)
         return value.strip() if isinstance(value, str) else ""
 

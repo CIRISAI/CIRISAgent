@@ -165,13 +165,38 @@ def format_coordinates_for_trace(location: UserLocation) -> Optional[Dict[str, A
         return None
 
     result: Dict[str, Any] = {}
-    if location.location_string:
-        result["user_location"] = location.location_string
     if location.timezone:
         result["user_timezone"] = location.timezone
+
+    # RAW COORDINATES ARE NOT EMITTED. See CIRISAgent#959.
+    #
+    # This used to ship user_latitude / user_longitude / an ISO-6709 string at
+    # {:.6f} — roughly 11 cm — plus a location_string containing the city.
+    #
+    # CEG 0.8 §0.8 defines exactly one location representation: a signed
+    # LocationProof carrying an H3 cell_id at resolution <= 7, which persist
+    # enforces at admission via validate_location_cell. Raw lat/lon in a trace
+    # payload is not a LocationProof, so that check never runs on it — this was
+    # a PARALLEL CHANNEL around the rough-only bound, and persist's own comment
+    # calls the substrate "the second line of defense after client UI gating".
+    # A second line of defense is not much use if there is a path that misses it.
+    #
+    # And it bought nothing. Regional membership comes from matching an H3 cell
+    # against communities_containing; no cell means no match, so the precise
+    # fields enabled no feature while carrying the whole privacy cost.
+    #
+    # The proof itself is not minted here: this repo has no H3 encoder, and
+    # persist already implements the representation. Emitting our own would be
+    # authoring a trust primitive at the agent tier — the thing that keeps
+    # forking when it is restated rather than read. Tracked in #959; when an
+    # encoder is exposed, a `location_proof` goes here and its resolution is
+    # READ from consent_disclosure()["location"]["max_resolution"], never
+    # restated as a literal 7.
     if location.has_coordinates():
-        result["user_latitude"] = location.latitude
-        result["user_longitude"] = location.longitude
-        result["user_coordinates_iso6709"] = location.to_iso6709_string()
+        logger.info(
+            "location: coordinates present but NOT shared in traces — CEG 0.8 §0.8.1 is "
+            "rough-only (H3 cell, resolution <= max_resolution from consent_disclosure). "
+            "Regional membership stays unavailable until a signed location_proof is minted (#959)."
+        )
 
     return result if result else None

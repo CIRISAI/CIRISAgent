@@ -336,12 +336,42 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
             defaults = getattr(ciris_server, "default_attestation_prefixes", None)
             if author is None or defaults is None:
                 return False
-            prefixes = list(defaults())  # READ the authority; never restate it
-            author(peer_key_id, prefixes)
+            # prefixes=None: the build supplies its own default. Restating the
+            # list is what hid a dead trace plane for eight releases — a harness
+            # passed ["capacity:"] explicitly and never exercised the default,
+            # while its log printed a hardcoded "trace:,capacity:".
+            #
+            # analyze=True (0.5.151) is not optional decoration: without it the
+            # grant is incomplete. It is the consent to BE SCORED, and a peer
+            # that skips it builds no reputation and may be refused outright.
+            author(peer_key_id, None, True)
+
+            # ASSERT THE STANCE, NOT THE CALL. A consent row can EXIST and still
+            # fold to `unspecified` — which reads as consented to anything
+            # counting rows, while the serve gate goes on refusing. That is the
+            # state ~240 nodes are already in, and it is invisible from the
+            # authoring side. Returning True here on a successful call alone
+            # would reproduce exactly that.
+            stance = None
+            probe = getattr(ciris_server, "analyze_consent_stance", None)
+            if probe is not None:
+                try:
+                    stance = probe(peer_key_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("[DELIVERY-PROBE] consent stance unreadable for %s: %s", peer_key_id, exc)
+            if stance is not None and stance != "granted":
+                logger.warning(
+                    "[DELIVERY-PROBE] consent authored for %s but stance is %r, not 'granted' — "
+                    "the row exists and the gate will still refuse; traces will not promote",
+                    peer_key_id,
+                    stance,
+                )
+                return False
             logger.info(
-                "[DELIVERY-PROBE] owner consent AUTHORED for %s prefixes=%s — sealed traces can now promote",
+                "[DELIVERY-PROBE] owner consent AUTHORED for %s (analyze=True, build-default prefixes), "
+                "stance=%s — sealed traces can now promote",
                 peer_key_id,
-                prefixes,
+                stance or "unverified(pre-0.5.151)",
             )
             return True
         except Exception as exc:  # noqa: BLE001

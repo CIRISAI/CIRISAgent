@@ -134,6 +134,25 @@ def _author_federation_consent(path: str) -> None:
     ``["capacity:", "trace:"]``, and a copy that drifts silently strands every
     trace it fails to name.
     """
+    # THE OWNER CONSENTS, NOT THE FOLD. Booting a node is not consenting to
+    # replicate your reasoning traces off it, and a grant the machinery created
+    # is indistinguishable downstream from one the owner asked for. The
+    # substrate stopped boot-authoring in 0.5.146 for exactly this reason;
+    # authoring here without the opt-in would reintroduce it one layer up.
+    #
+    # CIRIS_ACCORD_METRICS_CONSENT is where the wizard's "Send traces" choice
+    # lands, and it is what the QA runner sets for a consented live capture —
+    # so the legacy env route IS the import path into CEG consent state.
+    # Fails CLOSED: unreadable => no consent authored.
+    if os.environ.get("CIRIS_ACCORD_METRICS_CONSENT", "").lower() != "true":
+        logger.info(
+            "Node fold: owner has not opted into trace replication "
+            "(CIRIS_ACCORD_METRICS_CONSENT != true) — no consent authored (%s). "
+            "Traces will seal locally and stay at (self, local), which is correct.",
+            path,
+        )
+        return
+
     try:
         import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
@@ -171,10 +190,13 @@ def _author_federation_consent(path: str) -> None:
             )
             return
 
-        prefixes = list(defaults())
+        prefixes = list(defaults())  # read for the log only; the CALL passes None
         for peer in targets:
             try:
-                author(peer, prefixes)
+                # prefixes=None -> the build's own default (never restated);
+                # analyze=True -> the consent to BE SCORED, without which the
+                # grant is incomplete and the peer builds no reputation.
+                author(peer, None, True)
                 logger.info(
                     "Node fold: owner consent authored → peer=%s prefixes=%s (%s)",
                     peer,

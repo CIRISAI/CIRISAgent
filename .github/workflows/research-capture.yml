@@ -201,6 +201,22 @@ jobs:
         run: |
           python3 tools/research/summarise_cohort.py "$GITHUB_WORKSPACE/research-traces" \
             >> "$GITHUB_STEP_SUMMARY" || true
+          # qa_runner FAILS a run on incidents, so the incident text has to be
+          # visible in the run itself — otherwise the only signal is a count and
+          # the evidence lives on a runner that is about to be destroyed.
+          {
+            echo ""
+            echo "### Incidents"
+            echo ""
+            F=$(ls -t logs/**/incidents_*.log 2>/dev/null | head -1)
+            if [ -z "$F" ]; then
+              echo "_none recorded_"
+            else
+              echo '```'
+              grep -E " - (ERROR|CRITICAL) " "$F" | tail -20 || echo "(no ERROR/CRITICAL lines)"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Attest capture bundle
         # Sigstore provenance over the traces themselves. Without this the
@@ -218,6 +234,8 @@ jobs:
           path: |
             research-traces/
             capture.log
+            logs/**/incidents_*.log
+            logs/**/latest.log
           retention-days: 90
           overwrite: true
           if-no-files-found: error

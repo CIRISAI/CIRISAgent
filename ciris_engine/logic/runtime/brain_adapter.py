@@ -18,8 +18,25 @@ Contract (CIRISServer#80 ``crate::py_adapter``, all members duck-typed):
     adapter_type: str          # "brain"
     enabled: bool              # True
     proxy_routes(self) -> [{"prefix": ..., "upstream": ...}]
-    start(self)                # one-shot: boot the cognitive runtime + :8080
+    start(self)                # one-shot; see BOOT ORDERING below
     stop(self)                 # teardown
+
+BOOT ORDERING — the brain comes up FIRST, and this contract used to say otherwise.
+
+In the shipped 2.9.7 path the API adapter boots the cognitive runtime and the
+:8080 listener, and only THEN calls start_node_fold (api/adapter.py:1032), which
+composes the node around an already-running brain. So node_fold constructs
+``BrainAdapter(upstream=...)`` with NO ``runtime_boot`` on purpose: nothing is
+left to boot, and this adapter's job is to hand the node its ``proxy_routes`` so
+4243 reverse-proxies onto the live :8080.
+
+``runtime_boot`` remains for the inverse topology — a node that starts its own
+brain — which is not how the agent boots today. This line still described that
+older design, and ``start()`` logged "no runtime_boot injected — cognitive loop
+will NOT run" at ERROR on every boot of the real path. The loop was running and
+traces were being produced. Not cosmetic: qa_runner fails a run on any logged
+error, so a stale doc-line failed captures that had succeeded and sent people
+hunting a cognitive loop that was never broken.
 """
 
 from __future__ import annotations
@@ -110,7 +127,32 @@ class BrainAdapter:
         """
         runtime_boot = self._runtime_boot
         if runtime_boot is None:
-            logger.error("BrainAdapter.start: no runtime_boot injected — cognitive loop will NOT run")
+            # PROXY-ONLY MODE, and it is the normal case. node_fold.py:314
+            # constructs `BrainAdapter(upstream=...)` with no runtime_boot on
+            # purpose: there the cognitive runtime is already up on the sibling
+            # listener and this adapter only reverse-proxies to it. The boot
+            # hook exists for the embedded path where the NODE starts the brain.
+            #
+            # This was logged at ERROR with "cognitive loop will NOT run" — a
+            # consequence that is FALSE in the path that hits it every single
+            # boot. The loop was running and traces were being produced. The
+            # cost was not cosmetic: qa_runner fails a run on any logged error,
+            # so this line failed captures that had succeeded, and the incident
+            # count sent people looking for a broken cognitive loop.
+            #
+            # An error is now reserved for the case that is genuinely wrong:
+            # no boot hook AND no upstream to proxy to, which really does mean
+            # nothing will serve.
+            if self._upstream:
+                logger.info(
+                    "BrainAdapter.start: proxy-only mode — no runtime_boot injected; "
+                    "reverse-proxying to the already-running cognitive runtime at %s",
+                    self._upstream,
+                )
+            else:
+                logger.error(
+                    "BrainAdapter.start: no runtime_boot AND no upstream — nothing will serve the brain routes"
+                )
             return
 
         def _boot() -> None:

@@ -730,9 +730,15 @@ class QARunner:
         try:
             with open(incidents_log, "r") as f:
                 for line in f:
-                    if "WARNING" in line:
+                    # Match the LEVEL FIELD, not the word anywhere in the line.
+                    # A bare substring test counts the file's own header —
+                    # "=== This file contains WARNING and ERROR messages ..." —
+                    # as a warning, and counts any message that merely mentions
+                    # the word. The counts then drive a hard failure, so an
+                    # inflated count fails a run for text rather than for events.
+                    if " - WARNING " in line or " - WARNING - " in line:
                         warning_count += 1
-                    elif "ERROR" in line:
+                    elif " - ERROR " in line or " - ERROR - " in line:
                         error_count += 1
                         # Check if it's a critical error we should report
                         if not any(pattern in line for pattern in ignore_patterns):

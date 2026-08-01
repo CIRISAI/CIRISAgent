@@ -564,6 +564,22 @@ def get_localized_accord_text(lang: Optional[str] = None) -> str:
     # Import here to avoid circular imports
     from ciris_engine.logic.utils.localization import get_preferred_language
 
+    # HONOR ACCORD_MODE — the polyglot path always has, this one never did.
+    #
+    # `CIRIS_ACCORD_MODE=none` made get_accord_text() return "" for the four
+    # reasoning DMAs while this function kept returning the FULL accord to the
+    # action-selection DMAs (ASPDMA/TSASPDMA) — the ones that actually pick the
+    # verb. Startup logged "[ACCORD] Active mode: none", so the operator's
+    # intended change was confirmed while roughly 55 KB of accord stayed in the
+    # prompt that matters most.
+    #
+    # A research arm built that way measures a covenant that is still largely
+    # present and is biased toward UNDERSTATING its effect — a wrong number
+    # produced by a setting that reported success. One env var, one meaning,
+    # both surfaces.
+    if ACCORD_MODE == "none":
+        return ""
+
     if lang is None:
         lang = get_preferred_language()
 

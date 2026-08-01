@@ -193,10 +193,53 @@ def format_coordinates_for_trace(location: UserLocation) -> Optional[Dict[str, A
     # READ from consent_disclosure()["location"]["max_resolution"], never
     # restated as a literal 7.
     if location.has_coordinates():
-        logger.info(
-            "location: coordinates present but NOT shared in traces — CEG 0.8 §0.8.1 is "
-            "rough-only (H3 cell, resolution <= max_resolution from consent_disclosure). "
-            "Regional membership stays unavailable until a signed location_proof is minted (#959)."
-        )
+        proof = _mint_location_proof(location)
+        if proof is not None:
+            result["location_proof"] = proof
 
     return result if result else None
+
+
+def _mint_location_proof(location: UserLocation) -> Optional[str]:
+    """Ask the SUBSTRATE for a signed LocationProof. Never mint one here.
+
+    The wheel owns this representation: persist implements H3 in
+    ``src/federation/location.rs`` and enforces the CEG 0.8 §0.8.1 rough-only
+    bound at admission via ``validate_location_cell``. ``Engine`` can already
+    READ them (``list_signed_location_proofs_since``); minting is the missing
+    half, tracked upstream at CIRISServer#341.
+
+    Deliberately not implemented in Python. Doing so would mean:
+
+    * restating a rule the substrate owns — the failure mode this project keeps
+      hitting. A harness restated the consent prefixes and hid a dead trace
+      plane for eight releases; a docstring restated the consent route and
+      404'd the wizard two releases after the code was fixed; and
+    * an unshippable dependency: ``h3`` publishes NO Android wheel and is a C
+      extension, so Chaquopy cannot build it. ciris-server already ships
+      android_24 wheels for all three ABIs.
+
+    getattr-guarded so this activates by itself the moment the wheel exposes
+    the entry point — no agent release required to turn it on. Resolution is
+    READ from the disclosure, never restated as a literal 7.
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        mint = getattr(ciris_server, "mint_location_proof", None)
+        if mint is None:
+            logger.debug(
+                "location: coordinates present, no location_proof emitted — the substrate "
+                "exposes no mint yet (CIRISServer#341). Rough-only holds; regional "
+                "membership stays unavailable, which is the correct degradation."
+            )
+            return None
+
+        # resolution=None => the build's own default, the same convention
+        # author_federation_consent(peer, None, True) uses for prefixes.
+        proof = mint(location.latitude, location.longitude, None)
+        logger.info("location: signed location_proof minted by the substrate (rough-only, build default)")
+        return str(proof)
+    except Exception as exc:  # noqa: BLE001 — location must never break a trace
+        logger.warning("location: proof mint failed (non-fatal): %s", exc)
+        return None

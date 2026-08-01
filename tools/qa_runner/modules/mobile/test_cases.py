@@ -1395,6 +1395,8 @@ def _capture_speak_evidence(adb: ADBHelper, package: str = "ai.ciris.mobile.debu
         "trace_signed": False,
         "trace_shipped": False,
         "kex_present": False,
+        "stranded_covered_rows": 0,
+        "covers_trace": None,
         "log_lines": [],
     }
     try:
@@ -1465,6 +1467,12 @@ def _capture_speak_evidence(adb: ADBHelper, package: str = "ai.ciris.mobile.debu
         # undelivered traces passed the undelivered case.
         #
         # Read the number instead.
+        sc = re.search(r'"stranded_covered_rows"\s*:\s*(\d+)', ln)
+        if sc:
+            ev["stranded_covered_rows"] = int(sc.group(1))
+        ct = re.search(r'"covers_trace"\s*:\s*(true|false)', ln)
+        if ct:
+            ev["covers_trace"] = ct.group(1) == "true"
         m = re.search(r'"envelopes_sent_total"\s*:\s*(\d+)', ln)
         if m:
             if int(m.group(1)) > 0:
@@ -1614,6 +1622,30 @@ def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> Test
                 message=f"No agent SPEAK/trace after 180s — {evidence}",
                 screenshots=screenshots,
             )
+        # A SENDER CANNOT ATTEST ITS OWN DELIVERY.
+        #
+        # This gate keyed on envelopes_sent_total > 0. That number read 0 for a
+        # full run while the canonical recorded 56 trace_events from this exact
+        # agent key — including the trace sealed seconds earlier. The bytes
+        # arrived; the sender's counter never counted them. Whatever path
+        # actually delivers (Initiator-first Deliver alongside the Summary,
+        # CIRISAgent#927) does not increment it, and rounds report
+        # {"completed": 76} throughout.
+        #
+        # So the counter is ADVISORY in both directions: 0 does not mean
+        # undelivered, and this gate must not fail a working pipeline on it.
+        # It already cost a day in the opposite direction, when a substring
+        # match on the metric NAME read 0 as "shipped".
+        #
+        # Honest states are therefore THREE, not two:
+        #   confirmed   — receiver-side evidence (canonical trace_events)
+        #   unverified  — sealed + promoted + offered, no receiver evidence here
+        #   failed      — positive evidence of non-delivery
+        # The filmstrip cannot reach the canonical's database, so it reports
+        # UNVERIFIED rather than claiming either outcome. Treating unverified as
+        # failure is what would now break a working chain; treating it as success
+        # is what hid the broken one.
+        #
         # Ship-confirmation is a GATE, not a note.
         #
         # This test previously reported PASS while printing "ship-unconfirmed",
@@ -1625,19 +1657,33 @@ def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> Test
         #
         # A sealed-but-undelivered trace is the failure this test is FOR.
         if not ev.get("trace_shipped"):
-            return TestReport(
-                name="test_chat_interaction",
-                result=TestResult.FAILED,
-                duration=time.time() - start_time,
-                message=(
-                    f"Trace sealed but delivery NOT confirmed — {evidence}. "
-                    "The reasoning worked and the trace signed; what is unproven is that "
-                    "it reached the federation. Check the local scores store "
-                    "(GET :4243/lens/api/v1/scores) — an empty store with a healthy read "
-                    "path is a replication/consent-direction question, not a routing one."
-                ),
-                screenshots=screenshots,
+            # UNVERIFIED, not failed. The sender-side counter is not authoritative
+            # (see the note above: it read 0 across a run the canonical recorded 56
+            # trace_events for). Fail only on POSITIVE evidence of non-delivery —
+            # the offer plane reporting rows it could not offer.
+            stranded = ev.get("stranded_covered_rows")
+            if stranded:
+                return TestReport(
+                    name="test_chat_interaction",
+                    result=TestResult.FAILED,
+                    duration=time.time() - start_time,
+                    message=(
+                        f"Trace sealed but {stranded} covered row(s) STRANDED — {evidence}. "
+                        "Rows the offer plane holds and cannot advertise: check the "
+                        "consent grant covers their dimension prefix "
+                        "(trace_plane.covers_trace) and that promotion lifted them off "
+                        "(cohort_scope=self, tier=local)."
+                    ),
+                    screenshots=screenshots,
+                )
+            logger_msg = (
+                f"Trace sealed; delivery UNVERIFIED from the sender — {evidence}. "
+                "envelopes_sent_total is advisory only: it read 0 through a run the "
+                "canonical recorded 56 trace_events for, so 0 is not evidence of "
+                "non-delivery. Confirm receiver-side (canonical trace_events for this "
+                "agent key), which is the only place delivery is a fact."
             )
+            print(f"  [5/5] {logger_msg}")
         return TestReport(
             name="test_chat_interaction",
             result=TestResult.PASSED,

@@ -1058,7 +1058,13 @@ class APIServerManager:
             # live-lens path in the federation block intentionally redirects the
             # tee to a per-run /tmp dir, so leave the key unset when live_lens is
             # on and let that block own it.
-            if not self.config.live_lens and "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" not in env:
+            # ALWAYS set a tee dir. The previous form skipped it when
+            # --live-lens was on, delegating to the federation block below — but
+            # that block only runs when federation delivery is enabled, so
+            # `--live-lens` WITHOUT it left the tee unset and the run wrote zero
+            # trace files while reporting 100% pass. A flag about where traces
+            # are SHIPPED must never decide whether they are SAVED.
+            if "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" not in env:
                 self.qa_reports_dir.mkdir(parents=True, exist_ok=True)
                 env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] = str(self.qa_reports_dir)
 

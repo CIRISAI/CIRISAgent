@@ -53,6 +53,7 @@ import base64
 import hashlib
 import logging
 import os
+import json
 import re
 import time
 from dataclasses import dataclass, field
@@ -341,7 +342,14 @@ class AccordMetricsService:
         # so two instances (e.g. the QA multi-level generic/detailed/
         # full_traces trio) sharing one dir silently overwrite each
         # other's lens-batch-00000000.json.
-        env_local_copy_dir = _get_metrics_env("LOCAL_COPY_DIR") or None
+        # Per-adapter CONFIG takes precedence over env, matching trace_level's
+        # resolution one block below. Without this, an adapter registered at
+        # RUNTIME over the API (the QA runner's accord_detailed / accord_full —
+        # the two that carry the actual detailed + full-text traces) had no way
+        # to be told where to tee: its registration payload carries trace_level
+        # and consent, and local_copy_dir was env-only.
+        config_local_copy_dir = str(self._config.get("local_copy_dir", "") or "") or None
+        env_local_copy_dir = config_local_copy_dir or _get_metrics_env("LOCAL_COPY_DIR") or None
         self._local_copy_dir: Optional[Path] = None
         if env_local_copy_dir:
             try:
@@ -362,6 +370,19 @@ class AccordMetricsService:
                     f"is not writable ({e}); proceeding without local copies."
                 )
                 self._local_copy_dir = None
+        else:
+            # A run that captures reasoning events, seals traces, and writes
+            # NOTHING to disk is indistinguishable from a healthy run unless it
+            # says so. Observed exactly that: 28 events received, traces sealed,
+            # zero lens-batch files, "Success Rate 100.0%". Anything downstream
+            # that reads the tee dir then computes on an empty set and reports a
+            # clean result.
+            logger.warning(
+                f"📂 [{self._adapter_instance_id}] Local-copy OFF (trace_level={self._config.get('trace_level') or _get_metrics_env('TRACE_LEVEL') or 'generic'}) "
+                f"— sealed batches are NOT written to disk. Set local_copy_dir in the adapter "
+                f"config or CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR in the env. Any harness reading "
+                f"a tee dir will find zero traces and may report that as a clean run."
+            )
 
         # Sweep cadence — reuses the historical FLUSH_INTERVAL knob so QA
         # configs keep working; post-fold it paces orphan_sweep + the
@@ -1153,6 +1174,8 @@ class AccordMetricsService:
                 f"✅ TRACE SEALED #{self._traces_completed} "
                 f"({inserted} trace_events, {outcome.get('signatures_verified', 0)} signature(s) verified)"
             )
+            # Tee the CEG carriers on SEAL — never gated on delivery.
+            self._tee_ceg_on_seal(thought_id, outcome.get("trace_id"))
         elif kind == "consent_blocked":
             self._open_thoughts.pop(thought_id, None)
             self._traces_consent_blocked += 1
@@ -1169,6 +1192,122 @@ class AccordMetricsService:
             self._events_rejected += 1
             logger.warning(f"🚫 Substrate rejected unknown event_type {outcome.get('raw')!r} (thought {thought_id})")
         # "appended" needs no bookkeeping
+
+
+    def _tee_ceg_on_seal(self, thought_id: str, trace_id: Optional[str]) -> None:
+        """Write the sealed CEG carriers to disk as SIGNED, WIRE-READY envelopes.
+
+        Two properties, both load-bearing:
+
+        1. WRITTEN ON SEAL, NEVER ON SHIP. The substrate's own local-copy tees a
+           batch only when that batch ships, so an unreachable canonical yielded
+           zero local trace files while the rows sat sealed in persist. Local
+           capture must not depend on remote reachability — offline is exactly
+           when the corpus matters most.
+
+        2. FULL PQC WIRE FORM. Every column is captured, including
+           scrub_signature_classical / scrub_signature_pqc / scrub_key_id /
+           scrub_timestamp / original_content_hash / persist_row_hash. An
+           envelope without its signatures is not importable into the mesh; it
+           is a transcript. What lands here is what a peer would receive and
+           can verify.
+
+        Bytes are hex-encoded so the JSON round-trips losslessly.
+        """
+        if not self._local_copy_dir:
+            logger.warning(
+                f"⚠️ [{self._adapter_instance_id}] CEG seal NOT teed (no local_copy_dir) "
+                f"thought={thought_id} — set local_copy_dir in adapter config or "
+                f"CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"
+            )
+            return
+        if not trace_id:
+            logger.warning(
+                f"⚠️ [{self._adapter_instance_id}] CEG seal NOT teed (seal returned no trace_id) "
+                f"thought={thought_id}"
+            )
+            return
+        try:
+            # The persist Engine is a Rust PyO3 object with no Python DBAPI
+            # handle, so read the SQLite file directly, READ-ONLY. The runtime
+            # holds it in WAL mode; a read-only URI connection is safe alongside
+            # the writer and cannot disturb it.
+            import sqlite3
+
+            from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
+
+            db_path = get_sqlite_db_full_path()
+            like = f"%{trace_id}%"
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5.0)
+            try:
+                cur = conn.execute(
+                    "SELECT * FROM federation_attestations "
+                    "WHERE CAST(attestation_envelope AS TEXT) LIKE ?",
+                    (like,),
+                )
+                cols = [d[0] for d in cur.description]
+                rows = cur.fetchall()
+            finally:
+                conn.close()
+            if not rows:
+                logger.warning(
+                    f"⚠️ [{self._adapter_instance_id}] CEG seal teed NOTHING: no federation_attestations "
+                    f"row matches trace_id={trace_id}. The seal reported success but no carrier row "
+                    f"exists — that is a source-side defect, not a capture one."
+                )
+                return
+
+            def _enc(v: object) -> object:
+                if isinstance(v, (bytes, bytearray)):
+                    return {"__hex__": bytes(v).hex()}
+                return v
+
+            ceg_rows = []
+            for r in rows:
+                d = {c: _enc(v) for c, v in zip(cols, r)}
+                env = d.get("attestation_envelope")
+                if isinstance(env, (str, bytes, bytearray)):
+                    try:
+                        d["attestation_envelope"] = json.loads(
+                            env.decode() if isinstance(env, (bytes, bytearray)) else env
+                        )
+                    except Exception:  # noqa: BLE001 — keep the raw form if it is not JSON
+                        pass
+                ceg_rows.append(d)
+
+            signed = sum(
+                1
+                for d in ceg_rows
+                if d.get("scrub_signature_classical") or d.get("scrub_signature_pqc")
+            )
+            payload = {
+                "thought_id": thought_id,
+                "trace_id": trace_id,
+                "adapter_instance": self._adapter_instance_id,
+                "trace_level": self._trace_level.value,
+                "wire_form": "federation_attestations row, all columns, bytes hex-encoded as {__hex__: ...}",
+                "signed_rows": signed,
+                "ceg_rows": ceg_rows,
+            }
+            safe = re.sub(r"[^A-Za-z0-9._-]", "_", str(trace_id))[:120]
+            out = self._local_copy_dir / f"ceg-seal-{safe}.json"
+            out.write_text(json.dumps(payload, indent=1, ensure_ascii=False, default=str))
+            if signed == 0:
+                logger.warning(
+                    f"⚠️ [{self._adapter_instance_id}] CEG seal teed {out.name} but {len(ceg_rows)} row(s) "
+                    f"carry NO scrub signature — not mesh-importable as-is (PQC scrub may still be pending)"
+                )
+            else:
+                logger.info(
+                    f"📂 [{self._adapter_instance_id}] CEG seal teed: {out.name} — "
+                    f"{len(ceg_rows)} carrier row(s), {signed} signed, full wire envelope "
+                    f"(written on SEAL, independent of delivery)"
+                )
+        except Exception as exc:  # noqa: BLE001 — capture must never break the seal
+            logger.warning(
+                f"⚠️ [{self._adapter_instance_id}] CEG seal tee FAILED trace_id={trace_id}: "
+                f"{type(exc).__name__}: {exc}"
+            )
 
     def _extract_component_data(self, event_type: str, event: Dict[str, Any]) -> Dict[str, Any]:
         """Extract reasoning data from event based on configured trace detail level.

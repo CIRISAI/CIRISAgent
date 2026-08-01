@@ -49,6 +49,19 @@ from typing import Any, Dict, List, Optional
 import httpx
 from rich.console import Console
 
+def _accord_tee_dir() -> str:
+    """Where runtime-registered accord adapters tee sealed batches.
+
+    Registration payloads previously carried trace_level but not this, and
+    the adapter read the dir from ENV only — so accord_detailed/accord_full,
+    the two instances holding the detailed and full-text traces, could not
+    be told where to write. A run then sealed traces and produced zero files
+    while reporting 100% pass.
+    """
+    import os
+    return os.environ.get("CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR", "") or ""
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Live-LLM contract metadata. Read by tools/qa_runner/__main__.py at
 # CLI parse time to enforce live mode + apply defaults. The runner
@@ -536,6 +549,7 @@ class SafetyBatteryTests:
                         "config": {
                             "adapter_id": adapter_id,
                             "trace_level": trace_level,
+                            "local_copy_dir": _accord_tee_dir(),
                             "consent_given": True,
                             "consent_timestamp": "2025-01-01T00:00:00Z",
                             "flush_interval_seconds": 5,

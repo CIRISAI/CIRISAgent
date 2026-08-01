@@ -1,0 +1,43 @@
+# Research trace-capture harness — isolated from the dev box.
+#
+# WHY A CONTAINER: the research team runs on the same machine as active
+# development. A bare `python3 -m tools.qa_runner` writes to ~/ciris/data/,
+# binds :8080, and shares the pip site-packages — so two people running at once
+# corrupt each other's database and race for the port, with no error that says
+# so. Everything here is scoped to the container: its own DB, its own port, its
+# own venv. The ONLY shared surface is the output directory, mounted read-write.
+#
+# Pinned to the same base as docker/Dockerfile so the substrate wheels resolve
+# identically to production.
+
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gcc \
+    git \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Dependencies first — this layer is the slow one and changes rarely.
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip wheel \
+ && pip install --no-cache-dir -r /app/requirements.txt
+
+COPY . /app
+
+# Container-local runtime state. Never the host's ~/ciris — that is the whole
+# point of the isolation.
+ENV CIRIS_HOME=/work/ciris \
+    CIRIS_DATA_DIR=/work/ciris/data \
+    CIRIS_LOG_DIR=/work/ciris/logs \
+    PYTHONUNBUFFERED=1
+
+# Traces land here; the compose file mounts it to the host.
+VOLUME ["/out"]
+
+RUN mkdir -p /work/ciris/data /work/ciris/logs /out
+
+ENTRYPOINT ["/app/tools/research/capture_traces.sh"]

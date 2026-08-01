@@ -322,6 +322,23 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.debug("[DELIVERY-STATUS] phase=%s accessor error (non-fatal): %s", phase, exc)
 
+    def _user_opted_into_traces() -> bool:
+        """Did the OWNER opt in to trace replication? Consent is theirs to give.
+
+        Returns False when the signal cannot be read, so the failure mode is
+        "no consent authored" rather than "consented on the user's behalf".
+        """
+        try:
+            from ciris_engine.logic.utils.env_utils import get_env_var  # noqa: PLC0415
+
+            if str(get_env_var("CIRIS_ACCORD_METRICS_CONSENT", "")).lower() == "true":
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+        import os
+
+        return os.environ.get("CIRIS_ACCORD_METRICS_CONSENT", "").lower() == "true"
+
     def _try_author_consent(peer_key_id: str) -> bool:
         """Author the owner's replication consent; True once it lands.
 
@@ -509,7 +526,18 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                 # the fold cannot know when the claim lands, and a one-shot
                 # attempt at the only moment it is guaranteed to fail is worse
                 # than none. Idempotent, and stops as soon as it takes.
-                if not _consent_authored:
+                # GATED ON THE USER'S OPT-IN. The substrate stopped
+                # boot-authoring consent in 0.5.146 precisely because consent is
+                # the owner's act, not the fabric's — and this loop would have
+                # quietly reintroduced that: it fires whenever the node is
+                # CLAIMED, and claiming a node is not consenting to replicate
+                # your reasoning traces off it.
+                #
+                # The wizard's own HTTP call cannot carry the intent (POST
+                # /v1/federation/consent 404s in the fold by construction), so
+                # the opt-in is read from the accord-metrics adapter, which is
+                # where the wizard's "Send traces" choice lands.
+                if not _consent_authored and _user_opted_into_traces():
                     _consent_authored = _try_author_consent(ckey)
 
                 # tighter pants: terminal condition is envelopes actually SENT

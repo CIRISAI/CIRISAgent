@@ -1072,6 +1072,7 @@ def test_command(args) -> int:
         apk_path=args.apk,
         reinstall_app=not args.no_reinstall,
         clear_data=not args.no_clear,
+        preserve_identity=getattr(args, "preserve_identity", False),
         login_mode=args.login_mode,
         setup_username=args.setup_username,
         setup_password=args.setup_password,
@@ -1096,6 +1097,7 @@ def test_command(args) -> int:
     print(f"  Tests: {', '.join(args.tests)}")
     print(f"  Reinstall app: {config.reinstall_app}")
     print(f"  Clear data: {config.clear_data}")
+    print(f"  Preserve identity: {config.preserve_identity}")
 
     # Fail fast on a bad key/model BEFORE touching the device. A filmstrip that
     # dies at the chat step has already spent minutes on install + wizard + login,
@@ -1462,6 +1464,17 @@ Examples:
     )
     test_parser.add_argument("--no-reinstall", action="store_true", help="Don't reinstall the app")
     test_parser.add_argument("--no-clear", action="store_true", help="Don't clear app data before tests")
+    test_parser.add_argument(
+        "--preserve-identity",
+        action="store_true",
+        help=(
+            "Keep the node's federation identity across the run: clears app DATA but "
+            "restores files/ciris/identity/, so the agent re-uses its existing key_id "
+            "instead of re-minting. Required for repeat QA against a canonical that has "
+            "primed this agent — a fresh identity is admitted by announce at Advisory "
+            "and lands back in the un-rooted hole (CIRISEdge#432)."
+        ),
+    )
     test_parser.add_argument(
         "--email",
         default="ciristest1@gmail.com",

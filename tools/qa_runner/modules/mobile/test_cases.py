@@ -462,9 +462,35 @@ def test_app_launch(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport
         # bundle, and on a storage-constrained device re-extraction on relaunch
         # can fail (app crashes back to home). Only clear when explicitly asked.
         if config.get("clear_data", True):
+            # --preserve-identity: back the node's federation identity out before
+            # the wipe and restore it after. A re-minted agent is re-admitted by
+            # announce at Advisory and strands on the un-rooted path
+            # (CIRISEdge#432), so every `pm clear` puts repeat QA back in the
+            # hole a primed canonical just got it out of. Data is still cleared —
+            # only files/ciris/identity/ survives.
+            preserve = config.get("preserve_identity", False)
+            stash = "/data/local/tmp/ciris_identity_stash"
+            if preserve:
+                ident = f"/data/data/{CIRISAppConfig.PACKAGE}/files/ciris/identity"
+                adb.shell(f"rm -rf {stash}; mkdir -p {stash}")
+                adb.shell(f"run-as {CIRISAppConfig.PACKAGE} sh -c 'cp -r {ident}/. {stash}/ 2>/dev/null'")
+                kept = (adb.shell(f"ls {stash} 2>/dev/null") or "").split()
+                print(f"  [2/5] Preserving identity ({len(kept)} file(s)) across data clear")
             print("  [2/5] Clearing app data...")
             adb.clear_app_data(CIRISAppConfig.PACKAGE)
             time.sleep(1)
+            if preserve:
+                ident = f"/data/data/{CIRISAppConfig.PACKAGE}/files/ciris/identity"
+                adb.shell(f"run-as {CIRISAppConfig.PACKAGE} sh -c 'mkdir -p {ident}'")
+                adb.shell(f"run-as {CIRISAppConfig.PACKAGE} sh -c 'cp -r {stash}/. {ident}/ 2>/dev/null'")
+                back = (adb.shell(f"run-as {CIRISAppConfig.PACKAGE} ls {ident} 2>/dev/null") or "").split()
+                adb.shell(f"rm -rf {stash}")
+                if back:
+                    print(f"  [2/5] Identity restored ({len(back)} file(s)) — key_id preserved")
+                else:
+                    # Loud: a silent failure here re-mints, and the run then fails
+                    # for a reason that looks like a federation defect.
+                    print("  [2/5] WARNING: identity restore produced NO files — the node WILL re-mint")
         else:
             print("  [2/5] Skipping data clear (clear_data=False)")
 

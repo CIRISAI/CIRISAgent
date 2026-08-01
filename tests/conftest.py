@@ -6,6 +6,7 @@ This file is automatically loaded by pytest and contains setup that applies to a
 
 # CRITICAL: Set import protection BEFORE any other imports
 import os
+import sys
 import tempfile
 import time
 
@@ -614,3 +615,56 @@ def api_required():
             pytest.skip("API not running on localhost:8080")
     except Exception:
         pytest.skip("Cannot check API availability")
+
+
+def pytest_sessionfinish(session, exitstatus):  # noqa: D401
+    """Guarantee the process exits once the run is genuinely over (#956).
+
+    THE PROBLEM: a full `pytest -n 16 tests/` executed the entire suite — ~27.8k
+    tests, 0 failures — and then never terminated. No summary, no exit code. The
+    xdist controller sat with 97 threads: 16 execnet receiver threads blocked in
+    `anon_pipe_read` on workers that had already exited, plus a thread parked in
+    `inet_csk_accept` holding a LISTENING socket with live ESTABLISHED clients.
+    A non-daemon thread blocked in accept() keeps the interpreter alive forever,
+    so teardown could not complete. Two runs hung this way, 50 and 90 minutes,
+    before being killed.
+
+    The suite PASSED both times. What was lost was the ability to say so: no
+    developer could get a full-suite verdict locally, and every pass/fail count
+    in this repo had to be read out of raw log markers instead of a summary line.
+
+    THE FIX: this hook runs AFTER the terminal summary is written and after
+    exitstatus is decided, so forcing the exit here discards nothing the run
+    produced. It names any non-daemon threads still alive first — a leaked
+    listener should be FIXED at its source, and a silent force-exit would hide
+    it exactly the way the hang did. Then it exits with the real status.
+
+    Deliberately controller-only: xdist workers have their own teardown protocol
+    and must be left alone.
+    """
+    import threading
+
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        return  # worker — not ours to end
+
+    lingering = [
+        t
+        for t in threading.enumerate()
+        if t is not threading.current_thread() and t.is_alive() and not t.daemon
+    ]
+    if not lingering:
+        return  # clean exit; let Python do it normally
+
+    sys.stderr.write(
+        f"\n[conftest #956] {len(lingering)} non-daemon thread(s) still alive after "
+        f"sessionfinish; the interpreter would hang. Forcing exit({exitstatus}).\n"
+        f"[conftest #956] These are LEAKS — fix them at the source:\n"
+    )
+    for t in lingering[:20]:
+        sys.stderr.write(f"[conftest #956]   - {t.name}\n")
+    sys.stderr.flush()
+    try:
+        sys.stdout.flush()
+    except Exception:  # noqa: BLE001
+        pass
+    os._exit(exitstatus)

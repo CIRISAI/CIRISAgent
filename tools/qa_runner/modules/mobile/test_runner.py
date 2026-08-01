@@ -56,6 +56,11 @@ class MobileTestConfig:
     package_name: str = "ai.ciris.mobile.debug"  # matches the default debug apk_path
     reinstall_app: bool = True
     clear_data: bool = True
+    # Keep files/ciris/identity/ across a data clear so the node re-uses its
+    # key_id. A re-minted agent is re-admitted at Advisory and strands on the
+    # un-rooted path (CIRISEdge#432), so repeat QA against a primed canonical
+    # needs a stable identity until the live-map upgrade lands.
+    preserve_identity: bool = False
 
     # Test account
     test_email: str = "ciristest1@gmail.com"
@@ -466,6 +471,7 @@ class MobileTestRunner:
             "setup_username": self.config.setup_username,
             "setup_password": self.config.setup_password,
             "clear_data": self.config.clear_data,
+            "preserve_identity": self.config.preserve_identity,
             "llm_provider": self.config.llm_provider,
             "llm_api_key": self.config.llm_api_key,
             "llm_model": self.config.llm_model,

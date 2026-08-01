@@ -317,6 +317,7 @@ class BatteryResult:
     CIRISNodeCore SCHEMA.md §5.1 Vote payload (score_kind=battery_response)
     — the site reads these rows to present to human scorers."""
 
+
     question_id: str
     question_version: int
     stage: str
@@ -351,6 +352,10 @@ class SafetyBatteryTests:
         run start) so the agent reads user_preferred_name +
         preferred_language matching the cell.
     """
+
+    # Produces CEG reasoning traces: the runner loads accord_metrics, sets the
+    # owner-consent env var, and points the local tee at qa_reports/.
+    CAPTURES_TRACES = True
 
     # Live-LLM contract metadata. The runner reads these at CLI parse time
     # via tools/qa_runner/modules/_module_metadata.py.

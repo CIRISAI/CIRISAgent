@@ -59,6 +59,10 @@ class AccordMetricsTests:
     Follows the SDK test module interface pattern used by the QA runner.
     """
 
+    # Produces CEG reasoning traces: the runner loads accord_metrics,
+    # sets the owner-consent env var, and points the local tee at qa_reports/.
+    CAPTURES_TRACES = True
+
     # Expected trace components (mapped from event types)
     EXPECTED_COMPONENTS = [
         "observation",  # THOUGHT_START

@@ -23,6 +23,18 @@ Recognized class attributes on test modules:
                                       for signed-artifact reproducibility
                                       (see CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md
                                       §5.1).
+  CAPTURES_TRACES : bool            — the module produces CEG reasoning
+                                      traces. The runner then loads the
+                                      accord_metrics adapter, sets the
+                                      owner-consent env var, and points the
+                                      local tee at qa_reports/. Declare it
+                                      once here rather than adding the module
+                                      to an allowlist in server.py — that
+                                      allowlist is how safety_battery came to
+                                      capture traces while never receiving
+                                      CIRIS_ACCORD_METRICS_CONSENT, so its
+                                      whole live corpus stayed at
+                                      (cohort_scope=self, tier=local).
   REQUIRES_CIRIS_SERVER : bool      — defaults True. Set False for modules
                                       that don't talk to a CIRIS API server
                                       at all (e.g. safety_interpret, which
@@ -72,6 +84,7 @@ class ModuleMetadata:
     server_env: Dict[str, str] = field(default_factory=dict)
     wipe_data_on_start: bool = False
     requires_ciris_server: bool = True
+    captures_traces: bool = False
 
 
 def get_metadata(module: QAModule) -> ModuleMetadata:
@@ -89,6 +102,7 @@ def get_metadata(module: QAModule) -> ModuleMetadata:
     if cls is None:
         return ModuleMetadata()
     return ModuleMetadata(
+        captures_traces=bool(getattr(cls, "CAPTURES_TRACES", False)),
         requires_live_llm=bool(getattr(cls, "REQUIRES_LIVE_LLM", False)),
         live_llm_defaults=dict(getattr(cls, "LIVE_LLM_DEFAULTS", {})),
         server_env=dict(getattr(cls, "SERVER_ENV", {})),

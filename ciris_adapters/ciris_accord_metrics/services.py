@@ -1214,7 +1214,8 @@ class AccordMetricsService:
             if not path or _os.environ.get("CIRIS_TESTING_MODE", "").lower() != "true":
                 return None
             with open(path) as fh:
-                return _json.load(fh).get("condition")
+                declared = _json.load(fh).get("condition")
+            return str(declared) if declared is not None else None
         except Exception:  # noqa: BLE001 — a manifest problem must not break the seal
             return None
 

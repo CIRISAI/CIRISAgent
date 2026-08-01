@@ -107,6 +107,7 @@ def _strip_question_wrapper(text: str) -> str:
 
 @dataclass(frozen=True)
 class EvalQuestion:
+
     category: str
     question: str  # English baseline, used when no translation exists for a target language
     evaluates: str
@@ -268,6 +269,10 @@ def load_questions_from_file(path: str) -> List[EvalQuestion]:
 
 class ModelEvalTests:
     """Run multilingual live model eval with per-language channel isolation."""
+
+    # Produces CEG reasoning traces: the runner loads accord_metrics, sets the
+    # owner-consent env var, and points the local tee at qa_reports/.
+    CAPTURES_TRACES = True
 
     # Live-LLM and server-env contract read by tools/qa_runner/modules/_module_metadata.py.
     # Same rationale as the original hardcoded conditional in server.py:889 —

@@ -1020,9 +1020,34 @@ class APIServerManager:
         # accord block above sets CONSENT=true)") and prints trace_level/env
         # keys this block binds. Without this, `qa_runner <module>
         # --federation-delivery` crashed UnboundLocalError at server start.
+        # DERIVED FROM WHAT THE MODULES DECLARE, not from an allowlist here.
+        #
+        # This was a hand-maintained list of module flags, and safety_battery was
+        # missing from it — used a few lines below to pick the trace level, but
+        # never to enable the adapter. So a mental-health battery captured traces
+        # (it registers accord_detailed/accord_full itself post-auth) while never
+        # receiving CIRIS_ACCORD_METRICS_CONSENT.
+        #
+        # That env var is the OWNER'S CONSENT, and the fold now gates authoring on
+        # it — correctly, since booting a node is not consenting to replicate your
+        # reasoning off it. Without it no CEG grant covers `trace:`, so
+        # promote_consented_backlog never lifts the rows and the entire live
+        # corpus stays at (cohort_scope=self, tier=local).
+        #
+        # _module_metadata exists so modules "declare their CI requirements as
+        # class attributes ... without per-module special-casing". A module that
+        # captures traces now says so once, and every live-capture flow — research
+        # or mental-health — gets the same consent, adapter and tee wiring.
+        from tools.qa_runner.modules._module_metadata import get_metadata
+
+        modules_capture_traces = any(get_metadata(m).captures_traces for m in self.modules)
         accord_metrics_enabled = (
-            accord_metrics_requested
-            or model_eval_requested
+            modules_capture_traces
+            # accord_metrics itself is not in the metadata _REGISTRY, so
+            # get_metadata returns defaults for it. Kept explicitly rather than
+            # assumed — dropping it would silently disable the adapter for the
+            # very module named after it.
+            or accord_metrics_requested
             or self.config.live_lens
             or self.config.federation_delivery
         )

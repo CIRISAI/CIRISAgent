@@ -14,6 +14,20 @@ import json
 from pathlib import Path
 from typing import List, Set
 
+# Locales deliberately shipped INCOMPLETE, with English fallback, because a
+# translator declined to certify them. Withholding is a decision, not a gap:
+# recorded here so the suite states it rather than a shard failing with a
+# bare count, and so removing a locale from this dict is a deliberate act.
+#
+# xfail (not skip) because the keys ARE expected to be missing — an xpass
+# means someone filled them in and the entry should go.
+WITHHELD_LOCALES = {
+    "yo": "tone is lexical; a wrong diacritic yields a real word with a different meaning that no self-check catches",
+    "my": "withdrawn by the translator on its own assessment of its output",
+}
+
+
+
 import pytest
 
 # Project root for file lookups
@@ -118,6 +132,12 @@ class TestLocalizationKeyCompleteness:
 
         lang_keys = get_nested_keys(lang_data)
         missing = english_keys - lang_keys
+
+        if lang_code in WITHHELD_LOCALES and missing:
+            pytest.xfail(
+                f"{lang_code} is WITHHELD ({WITHHELD_LOCALES[lang_code]}); "
+                f"{len(missing)} key(s) fall back to English by design"
+            )
 
         assert len(missing) == 0, (
             f"{lang_code}.json is missing {len(missing)} keys. " f"First 10 missing: {sorted(missing)[:10]}"

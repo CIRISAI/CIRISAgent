@@ -22,7 +22,7 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ def _author_federation_consent(path: str) -> None:
         # Discover the canonical from the live delivery status rather than a
         # constant: CIRIS_CANONICAL_BOOTSTRAP_PEERS is empty by default, and a
         # hardcoded key_id is one more copy to drift.
-        targets: list = []
+        targets: List[str] = []
         ds = getattr(ciris_server, "delivery_status", None)
         if ds is not None:
             try:

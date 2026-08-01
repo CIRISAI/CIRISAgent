@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import cast, Any, List, Optional
 
 import yaml
 from pydantic import ValidationError
@@ -114,7 +114,7 @@ async def load_template(template_path: Optional[Path]) -> Optional[AgentTemplate
         # refuses rather than picking a winner. No-op unless the gate is open.
         from ciris_engine.logic.utils.research_overrides import apply_template_overrides
 
-        template = apply_template_overrides(template)
+        template = cast(AgentTemplate, apply_template_overrides(template))
 
         logger.info(f"Successfully loaded template '{template.name}' from {template_path}")
         return template

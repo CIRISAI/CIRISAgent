@@ -917,17 +917,26 @@ class CoreToolService(BaseService, ToolService):
             logger.error(f"Error deferring ticket: {e}")
             return ToolResult(success=False, error=str(e))
 
+    # ONE list, so the count and the names cannot disagree. metadata.tool_count
+    # was a hand-maintained literal 6 while this returned 7 (#938 added the
+    # create_ticket proposal channel), and nothing failed — telemetry and
+    # capability negotiation simply under-counted.
+    _TOOL_NAMES: List[str] = [
+        "recall_secret",
+        "update_secrets_filter",
+        "self_help",
+        "create_ticket",
+        "update_ticket",
+        "get_ticket",
+        "defer_ticket",
+    ]
+
+    def _tool_names(self) -> List[str]:
+        return list(self._TOOL_NAMES)
+
     async def get_available_tools(self) -> List[str]:
         """Get list of available tool names."""
-        return [
-            "recall_secret",
-            "update_secrets_filter",
-            "self_help",
-            "create_ticket",
-            "update_ticket",
-            "get_ticket",
-            "defer_ticket",
-        ]
+        return self._tool_names()
 
     async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
         """Get detailed information about a specific tool."""
@@ -1404,8 +1413,14 @@ humans understand why the ticket was deferred.
 
         # Add custom metadata using model_copy
         if capabilities.metadata:
+            # DERIVED, not hardcoded. This was literal 6 while the service
+            # actually exposed 7 — #938 added the create_ticket proposal channel
+            # and the constant was never updated, so anything reading
+            # metadata.tool_count (telemetry, capability negotiation) under-counted
+            # by one and nothing failed. A count that is maintained by hand
+            # against a list that grows is a stale value waiting to happen.
             capabilities.metadata = capabilities.metadata.model_copy(
-                update={"adapter": self.adapter_name, "tool_count": 6}
+                update={"adapter": self.adapter_name, "tool_count": len(self._tool_names())}
             )
 
         return capabilities

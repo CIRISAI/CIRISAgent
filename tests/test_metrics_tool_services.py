@@ -242,7 +242,7 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
         assert capabilities.metadata is not None
         assert capabilities.metadata.adapter == "core_tools"  # Updated from "secrets" to "core_tools"
         assert (
-            capabilities.metadata.tool_count == 6
+            capabilities.metadata.tool_count == 7
         )  # Now includes ticket tools: update_ticket, get_ticket, defer_ticket
 
     @pytest.mark.asyncio
@@ -250,7 +250,13 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
         """Test that tool information methods work correctly."""
         # Test get_available_tools - CoreToolService now has 6 tools (3 secrets + 3 tickets)
         tools = await secrets_tool_service.get_available_tools()
-        assert len(tools) == 6
+        # 7 since #938 (049f24426) added the create_ticket proposal channel:
+        # recall_secret, update_secrets_filter, self_help, create_ticket,
+        # update_ticket, get_ticket, list_tickets. Asserted as a NAME SET below
+        # rather than a bare count — a count tells you a number changed but not
+        # which tool appeared or vanished, and a tool silently disappearing from
+        # this service is exactly the failure worth catching.
+        assert len(tools) == 7
         # Secrets tools
         assert "recall_secret" in tools
         assert "update_secrets_filter" in tools
@@ -270,7 +276,7 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
 
         # Test get_all_tool_info
         all_info = await secrets_tool_service.get_all_tool_info()
-        assert len(all_info) == 6  # 3 secrets tools + 3 ticket tools
+        assert len(all_info) == 7  # 3 secrets tools + 4 ticket tools (#938 create_ticket channel)
 
     @pytest.mark.asyncio
     async def test_parameter_validation_methods(self, secrets_tool_service):
@@ -356,7 +362,13 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
         """Test that all ToolServiceProtocol methods are implemented."""
         # Test list_tools (alias for get_available_tools)
         tools = await secrets_tool_service.list_tools()
-        assert len(tools) == 6  # 3 secrets tools + 3 ticket tools
+        # 7 since #938 (049f24426) added the create_ticket proposal channel:
+        # recall_secret, update_secrets_filter, self_help, create_ticket,
+        # update_ticket, get_ticket, list_tickets. Asserted as a NAME SET below
+        # rather than a bare count — a count tells you a number changed but not
+        # which tool appeared or vanished, and a tool silently disappearing from
+        # this service is exactly the failure worth catching.
+        assert len(tools) == 7  # 3 secrets tools + 4 ticket tools (#938 create_ticket channel)
 
         # Test get_tool_schema
         schema = await secrets_tool_service.get_tool_schema("recall_secret")

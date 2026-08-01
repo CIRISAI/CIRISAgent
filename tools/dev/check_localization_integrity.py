@@ -201,6 +201,27 @@ _PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
 _VALID_TOKEN = re.compile(r"[A-Za-z0-9_]+")
 _LATIN_RUN = re.compile(r"[A-Za-z]+")
 
+# Letters that are decisive evidence of a DIFFERENT language sharing the same
+# script. check_script compares Unicode blocks, so it is structurally blind here:
+# Ukrainian and Russian are both Cyrillic, so Russian text in uk.json produces
+# zero foreign codepoints and zero findings. check_sibling_similarity does see
+# the overlap, but only as a WARN and only in aggregate ("45% byte-identical"),
+# which cannot say WHICH values are wrong and does not gate.
+#
+# Alphabet conformance can. These four letters do not exist in the Ukrainian
+# alphabet and these four do not exist in the Russian one, so a value carrying
+# them is not a loanword, a borrowing, or a shared term — it is the other
+# language. That makes this ERROR-level and per-key, unlike the ratio above.
+#
+# Deliberately narrow: only declared for pairs actually shipped and actually
+# confusable. A wrong entry here would fail honest translations, so a pair goes
+# in only when the exclusivity is a fact about the alphabets.
+FOREIGN_ALPHABET: Dict[str, Tuple[str, str]] = {
+    # lang: (letters exclusive to the confusable sibling, sibling name)
+    "uk": ("ыэъё", "Russian"),
+    "ru": ("іїєґ", "Ukrainian"),
+}
+
 LEVEL_ERROR = "ERROR"
 LEVEL_WARN = "WARN"
 
@@ -494,6 +515,37 @@ def english_common_words(en: Dict[str, str], df: float) -> Set[str]:
     return {w for w, c in doc_freq.items() if c / n > df}
 
 
+def check_alphabet(lang: str, loc: Dict[str, str], en: Dict[str, str]) -> List[Finding]:
+    """ERROR 8: letters from a confusable same-script sibling language.
+
+    The complement of check_script. That one asks "is this the right writing
+    system"; this asks "is it the right LANGUAGE within that writing system" —
+    the question 45%-of-uk.json-is-Russian (CIRISAgent#949) turns on, and the
+    one a Unicode-block comparison can never answer.
+    """
+    out: List[Finding] = []
+    profile = FOREIGN_ALPHABET.get(lang)
+    if not profile:
+        return out
+    letters, sibling = profile
+    forbidden = set(letters)
+    for key, value in loc.items():
+        # A letter the English source itself carries is quoted material, not
+        # evidence — same carve-out check_script makes for brand names.
+        hits = sorted(forbidden & set(value.lower()) - set(en.get(key, "").lower()))
+        if hits:
+            out.append(
+                Finding(
+                    LEVEL_ERROR,
+                    lang,
+                    "foreign-alphabet",
+                    key,
+                    f"contains {sibling}-only letters {''.join(hits)!r} — this value is {sibling}, not {lang}",
+                )
+            )
+    return out
+
+
 def check_sibling_similarity(files: Dict[str, Dict[str, str]], threshold: float) -> List[Finding]:
     """WARN 5: locales that are largely byte-identical to another locale."""
     out: List[Finding] = []
@@ -609,6 +661,7 @@ def main() -> int:
         native = native_scripts(hist)
         findings += check_placeholders(lang, loc, en, allow.get(lang, set()))
         findings += check_script(lang, loc, en, native)
+        findings += check_alphabet(lang, loc, en)
         findings += check_latin(lang, loc, en, en_common, native, dominant_script(hist))
         findings += check_render_groups(lang, loc, derived_stopwords(loc, args.stopword_df))
     findings += check_sibling_similarity(files, args.similarity)

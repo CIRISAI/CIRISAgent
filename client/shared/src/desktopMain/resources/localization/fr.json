@@ -2610,7 +2610,7 @@
   "users_no_filters": "Aucun filtre appliqué",
   "users_no_users": "Aucun utilisateur trouvé",
   "users_oauth_accounts": "Comptes OAuth",
-  "users_page_count": "Page {current} sur {total}",
+  "users_page_count": "Page {page} sur {total}",
   "users_permissions": "Permissions",
   "users_search_clear": "Effacer la recherche",
   "users_search_placeholder": "Rechercher des utilisateurs...",

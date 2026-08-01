@@ -2610,7 +2610,7 @@
   "users_no_filters": "Hakuna vichujio",
   "users_no_users": "Hakuna watumiaji walioorodheshwa",
   "users_oauth_accounts": "Akaunti za OAuth",
-  "users_page_count": "Ukurasa {current} wa {total}",
+  "users_page_count": "Ukurasa {page} wa {total}",
   "users_permissions": "Ruhusa",
   "users_search_clear": "Futa Utafutaji",
   "users_search_placeholder": "Tafuta watumiaji...",

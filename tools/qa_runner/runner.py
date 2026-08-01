@@ -59,6 +59,32 @@ def _expand_module_aggregates(modules: List[QAModule]) -> List[QAModule]:
     return expanded
 
 
+
+def _err_text(result: dict, limit: int = 100) -> str:
+    """Error text for the summary, safe against a present-but-None `error`.
+
+    `dict.get(key, default)` returns the default only when the key is MISSING —
+    when it is present and None, you get None, and `None[:100]` raises. That
+    crashed the runner at the moment it was reporting a failure:
+
+        TypeError: 'NoneType' object is not subscriptable
+
+    The capture itself had succeeded, so the damage was not the exit code — it
+    was that the reporter died BEFORE printing the underlying error, so the
+    thing it was trying to tell you was lost. An error path that fails while
+    describing an error destroys the only evidence of what went wrong.
+
+    This was already known: safety_battery.py emits an explicit "" on success
+    specifically to dodge it, with a comment naming this line. That fixed one
+    caller and left every other module able to trip it. Fixed here instead, so
+    no caller has to know.
+    """
+    raw = result.get("error")
+    if raw is None:
+        raw = result.get("status") or "Unknown error"
+    return str(raw)[:limit]
+
+
 class QARunner:
     """Main QA test runner."""
 
@@ -2292,7 +2318,7 @@ class QARunner:
                 if "status_code" in result:
                     details = f"Status: {result['status_code']} (expected {result.get('expected_status', 200)})"
                 else:
-                    details = result.get("error", "Unknown error")[:100]
+                    details = _err_text(result)
 
             html += f"""
         <tr>
@@ -2353,7 +2379,7 @@ class QARunner:
                     parts = key.split("::", 1)
                     module = parts[0]
                     test = parts[1] if len(parts) > 1 else "unknown"
-                    error = result.get("error", "Unknown error")[:100]
+                    error = _err_text(result)
                     self.console.print(f"  • {module}::{test}: {error}")
 
         # Print tests with incidents

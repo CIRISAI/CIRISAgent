@@ -401,7 +401,16 @@ async def get_app_attest_nonce(request: Request) -> SuccessResponse[Dict[str, An
 
         # Run on 8MB stack thread (CIRISVerify Rust runtime compatibility)
         threading.stack_size(8 * 1024 * 1024)
-        t = threading.Thread(target=_inner)
+        # daemon=True (#956): this CIRISVerify FFI call is ABANDONED on the
+        # join timeout below — the code reads `result` and returns whether or
+        # not the thread finished. A thread you are willing to walk away from
+        # must never be able to block interpreter exit; a non-daemon one that
+        # is still in the Rust FFI when the process tries to shut down wedges
+        # it until the CI job's 30-min timeout (all tests already passed, no
+        # per-test timeout applies at shutdown). The sibling FFI sites
+        # (verifier_singleton.py, play_integrity.py) already daemonize; these
+        # three were the outliers, and the intermittent pytest-xdist exit-hang.
+        t = threading.Thread(target=_inner, daemon=True)
         t.start()
         t.join(timeout=15)
         threading.stack_size(0)
@@ -485,7 +494,16 @@ async def verify_app_attest(
                 result["error"] = str(e)
 
         threading.stack_size(8 * 1024 * 1024)
-        t = threading.Thread(target=_inner)
+        # daemon=True (#956): this CIRISVerify FFI call is ABANDONED on the
+        # join timeout below — the code reads `result` and returns whether or
+        # not the thread finished. A thread you are willing to walk away from
+        # must never be able to block interpreter exit; a non-daemon one that
+        # is still in the Rust FFI when the process tries to shut down wedges
+        # it until the CI job's 30-min timeout (all tests already passed, no
+        # per-test timeout applies at shutdown). The sibling FFI sites
+        # (verifier_singleton.py, play_integrity.py) already daemonize; these
+        # three were the outliers, and the intermittent pytest-xdist exit-hang.
+        t = threading.Thread(target=_inner, daemon=True)
         t.start()
         t.join(timeout=30)
         threading.stack_size(0)
@@ -570,7 +588,16 @@ async def get_play_integrity_nonce(request: Request) -> SuccessResponse[Dict[str
                 result["error"] = str(e)
 
         threading.stack_size(8 * 1024 * 1024)
-        t = threading.Thread(target=_inner)
+        # daemon=True (#956): this CIRISVerify FFI call is ABANDONED on the
+        # join timeout below — the code reads `result` and returns whether or
+        # not the thread finished. A thread you are willing to walk away from
+        # must never be able to block interpreter exit; a non-daemon one that
+        # is still in the Rust FFI when the process tries to shut down wedges
+        # it until the CI job's 30-min timeout (all tests already passed, no
+        # per-test timeout applies at shutdown). The sibling FFI sites
+        # (verifier_singleton.py, play_integrity.py) already daemonize; these
+        # three were the outliers, and the intermittent pytest-xdist exit-hang.
+        t = threading.Thread(target=_inner, daemon=True)
         t.start()
         t.join(timeout=15)
         threading.stack_size(0)

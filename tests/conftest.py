@@ -5,10 +5,35 @@ This file is automatically loaded by pytest and contains setup that applies to a
 """
 
 # CRITICAL: Set import protection BEFORE any other imports
+import faulthandler
 import os
+import signal
 import sys
 import tempfile
 import time
+
+# #956 DIAGNOSTIC — make a hang self-report instead of dying silently.
+#
+# The intermittent pytest-xdist exit-hang was root-caused (non-daemon FFI
+# threads in setup/attestation.py that leaked past their join timeout), but a
+# leak that recurs from a NEW source must not cost another 30-minute silent
+# timeout to diagnose. faulthandler here dumps EVERY thread's stack — naming the
+# blocked frame's file:line — in two situations the sessionfinish guard below
+# cannot cover on its own:
+#   * on a fatal signal (segfault etc.), and
+#   * on SIGTERM, which is exactly how CI kills the hang: the shard wraps pytest
+#     in `timeout --signal=SIGTERM ... 1800`, so registering here converts the
+#     30-min silent death into a full per-thread traceback for whichever process
+#     received the signal (at minimum the controller).
+# Pure diagnostics: fires only on an actual signal, never during a healthy run.
+faulthandler.enable()
+if hasattr(faulthandler, "register") and hasattr(signal, "SIGTERM"):
+    try:
+        faulthandler.register(signal.SIGTERM, all_threads=True, chain=True)
+    except (ValueError, OSError):
+        # Some environments disallow registering handlers (e.g. non-main thread
+        # at import). Diagnostics are best-effort; never break collection.
+        pass
 
 os.environ["CIRIS_IMPORT_MODE"] = "true"
 os.environ["CIRIS_MOCK_LLM"] = "true"
@@ -675,8 +700,17 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: D401
         f"[conftest #956] These are LEAKS — fix them at the source:\n"
     )
     for t in lingering[:20]:
-        sys.stderr.write(f"[conftest #956]   - {t.name}\n")
+        sys.stderr.write(f"[conftest #956]   - {t.name} (ident={t.ident})\n")
+    # Dump the STACK of every lingering thread, not just its name. A name like
+    # "Thread-7" is unactionable; the frame it is parked in (e.g. a CIRISVerify
+    # FFI call, socket.accept) names the source to fix. Cheap, and only runs on
+    # the leak path.
+    sys.stderr.write("[conftest #956] --- stacks of all threads (find the blocked frame) ---\n")
     sys.stderr.flush()
+    try:
+        faulthandler.dump_traceback(all_threads=True)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         sys.stdout.flush()
     except Exception:  # noqa: BLE001

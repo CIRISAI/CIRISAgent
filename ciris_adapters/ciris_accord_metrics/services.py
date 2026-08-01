@@ -1175,7 +1175,11 @@ class AccordMetricsService:
                 f"({inserted} trace_events, {outcome.get('signatures_verified', 0)} signature(s) verified)"
             )
             # Tee the CEG carriers on SEAL — never gated on delivery.
-            self._tee_ceg_on_seal(thought_id, outcome.get("trace_id"))
+            self._tee_ceg_on_seal(
+                thought_id,
+                outcome.get("trace_id"),
+                observed_skipped=outcome.get("ethical_faculties_skipped"),
+            )
         elif kind == "consent_blocked":
             self._open_thoughts.pop(thought_id, None)
             self._traces_consent_blocked += 1
@@ -1194,7 +1198,74 @@ class AccordMetricsService:
         # "appended" needs no bookkeeping
 
 
-    def _tee_ceg_on_seal(self, thought_id: str, trace_id: Optional[str]) -> None:
+
+    def _declared_condition(self) -> Optional[str]:
+        """The research condition the operator DECLARED, if any.
+
+        Read from the research-override manifest, which is gated on
+        CIRIS_RESEARCH_PROMPT_OVERRIDES + CIRIS_TESTING_MODE. Absent outside a
+        research run, which is the normal case.
+        """
+        try:
+            import json as _json
+            import os as _os
+
+            path = _os.environ.get("CIRIS_RESEARCH_PROMPT_OVERRIDES")
+            if not path or _os.environ.get("CIRIS_TESTING_MODE", "").lower() != "true":
+                return None
+            with open(path) as fh:
+                return _json.load(fh).get("condition")
+        except Exception:  # noqa: BLE001 — a manifest problem must not break the seal
+            return None
+
+    def _condition_attestation(self, observed_skipped: Optional[bool]) -> Optional[Dict[str, Any]]:
+        """Bind the DECLARED research condition to the OBSERVED runtime state.
+
+        WHY THIS IS IN THE SEAL AND NOT A CHECK.
+
+        A research arm's condition is currently an unverified self-report: a run
+        labelled (c) with the faculties disabled by hand satisfies every rule and
+        produces fabricated-looking scalars under a clean manifest. Deriving the
+        condition post-hoc catches it — but a post-hoc gate fires AFTER the
+        compute is spent, which creates pressure to reclassify the run rather
+        than discard it. A gate someone can talk past is weaker than evidence
+        they would have to talk over.
+
+        So the contradiction is recorded HERE, inside the PQC-signed carrier,
+        at the moment of sealing. Overriding the classification later is still
+        possible — it is just no longer invisible, because the signed artifact
+        says what the runtime actually did. Tampering with that is detectable by
+        construction.
+
+        `ethical_faculties_skipped` is the observable: it now reflects whether
+        anything was actually measured (it was hardcoded False until this
+        release, so it could never report the thing it names).
+        """
+        declared = self._declared_condition()
+        if declared is None and observed_skipped is None:
+            return None
+        # (b) = design declared, pipeline off. (c) = declared and running.
+        implied = None
+        if observed_skipped is True:
+            implied = "b"
+        elif observed_skipped is False:
+            implied = "c"
+        contradicts = bool(declared and implied and declared != implied)
+        return {
+            "declared_condition": declared,
+            "observed_ethical_faculties_skipped": observed_skipped,
+            "implied_condition": implied,
+            "contradicts_declaration": contradicts,
+            "note": (
+                "declared is operator self-report; implied is derived from runtime state. "
+                "A true contradicts_declaration means the cohort must not be scored under "
+                "the declared arm."
+            ),
+        }
+
+    def _tee_ceg_on_seal(
+        self, thought_id: str, trace_id: Optional[str], observed_skipped: Optional[bool] = None
+    ) -> None:
         """Write the sealed CEG carriers to disk as SIGNED, WIRE-READY envelopes.
 
         Two properties, both load-bearing:
@@ -1287,6 +1358,7 @@ class AccordMetricsService:
                 "trace_level": self._trace_level.value,
                 "wire_form": "federation_attestations row, all columns, bytes hex-encoded as {__hex__: ...}",
                 "signed_rows": signed,
+                "condition_attestation": self._condition_attestation(observed_skipped),
                 "ceg_rows": ceg_rows,
             }
             safe = re.sub(r"[^A-Za-z0-9._-]", "_", str(trace_id))[:120]

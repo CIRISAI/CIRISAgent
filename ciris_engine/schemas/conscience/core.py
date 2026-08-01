@@ -193,8 +193,21 @@ class EpistemicHumilityResult(BaseModel):
 class EpistemicData(BaseModel):
     """Epistemic safety metadata - core epistemic metrics only"""
 
-    entropy_level: float = Field(ge=0.0, le=1.0, description="Current entropy level")
-    coherence_level: float = Field(ge=0.0, le=1.0, description="Current coherence level")
+    # NULLABLE ON PURPOSE: None means NOT MEASURED, and there must be a way to
+    # say that. These were non-nullable, so a code path with no measurement had
+    # no honest value to write and substituted entropy=0.1 / coherence=0.9 —
+    # numbers that are indistinguishable downstream from a faculty that actually
+    # ran and returned them. A trace then carried a confident scalar for a check
+    # that never happened.
+    #
+    # Anything consuming these must handle None as "unmeasured" rather than
+    # coercing it to a number; a default here is a fabricated measurement.
+    entropy_level: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="Current entropy level; None if not measured"
+    )
+    coherence_level: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="Current coherence level; None if not measured"
+    )
     uncertainty_acknowledged: bool = Field(description="Whether uncertainty was acknowledged")
     reasoning_transparency: float = Field(ge=0.0, le=1.0, description="Transparency of reasoning")
     # NEW: Stores the actual content of a new observation that arrived during processing

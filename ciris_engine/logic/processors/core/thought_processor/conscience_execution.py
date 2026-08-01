@@ -369,10 +369,15 @@ class ConscienceExecutionPhase:
                 f"All consciences must provide epistemic_data for non-exempt actions."
             )
 
-        # Use actual data from conscience checks - no defaults for missing metrics
+        # Use actual data from conscience checks — and NO defaults, which the
+        # comment above this block always claimed while the code substituted
+        # entropy=0.1 / coherence=0.9. Those numbers are indistinguishable
+        # downstream from a faculty that ran and returned them, so a trace could
+        # carry a confident scalar for a check that never happened. None now
+        # means not measured, and says so.
         epistemic_data = EpistemicData(
-            entropy_level=entropy_level if entropy_level is not None else 0.1,  # Default safe value
-            coherence_level=coherence_level if coherence_level is not None else 0.9,  # Default high coherence
+            entropy_level=entropy_level,
+            coherence_level=coherence_level,
             uncertainty_acknowledged=uncertainty_acknowledged,
             reasoning_transparency=reasoning_transparency,
         )
@@ -391,7 +396,16 @@ class ConscienceExecutionPhase:
             thought_depth_current=thought_depth_current,
             thought_depth_max=thought_depth_max,
             # Ethical faculties (None if skipped due to exempt action)
-            ethical_faculties_skipped=False,  # Non-exempt actions always run faculties
+            # DERIVED, not asserted. This was hardcoded False with the comment
+            # "Non-exempt actions always run faculties" — a reporting field with
+            # no writer, so it could never report the thing it names. Anything
+            # keying on it (a research arm distinguishing "pipeline ran" from
+            # "pipeline skipped", an auditor asking whether a decision was
+            # checked) read a constant.
+            #
+            # Now it reflects what actually happened: the ethical faculties are
+            # skipped exactly when neither scalar was measured.
+            ethical_faculties_skipped=(entropy_level is None and coherence_level is None),
             entropy_check=entropy_check_result,
             coherence_check=coherence_check_result,
             optimization_veto_check=optimization_veto_result,

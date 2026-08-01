@@ -307,8 +307,18 @@ class TestExceptionParity:
         assert result.final_action.selected_action == HandlerActionType.SPEAK
         assert result.entropy_check is None
         # Missing entropy falls back to the serial code's default safe value.
-        assert result.epistemic_data.entropy_level == pytest.approx(0.1)
+        # Entropy RAISED in this scenario, so it was never measured -> None. This
+        # previously asserted 0.1, the value substituted when a faculty produced
+        # nothing: a fabricated scalar indistinguishable downstream from a real
+        # measurement.
+        assert result.epistemic_data.entropy_level is None
+        # Coherence actually RAN and returned 0.9 — a genuine measurement that the
+        # old default happened to equal, which is precisely why the substitution
+        # was invisible. Asserted as a real value, not as a default.
         assert result.epistemic_data.coherence_level == pytest.approx(0.9)
+        # Something DID measure, so the faculties were not skipped. The flag is now
+        # derived from that rather than hardcoded False.
+        assert result.ethical_faculties_skipped is False
 
 
 class TestCompleteFoldDelta:

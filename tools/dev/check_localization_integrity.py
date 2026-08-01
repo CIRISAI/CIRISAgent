@@ -628,6 +628,19 @@ def main() -> int:
     ap.add_argument("--stopword-df", type=float, default=0.005, help="doc-frequency above which a word is a stopword")
     ap.add_argument("--similarity", type=float, default=0.25, help="sibling-similarity warning threshold")
     ap.add_argument("--max-per-check", type=int, default=6, help="examples printed per locale per check")
+    ap.add_argument(
+        "--fail-on",
+        action="append",
+        default=[],
+        metavar="CHECK",
+        help=(
+            "fail ONLY on these check names (repeatable), ignoring every other finding. "
+            "This is the ratchet: a class repaired to zero goes in the CI invocation so it "
+            "cannot come back, while the classes still carrying debt stay reportable without "
+            "blocking. Bare --strict on this corpus would fail on 1116 pre-existing errors and "
+            "teach everyone to skip the step."
+        ),
+    )
     args = ap.parse_args()
 
     bundle = REPO_ROOT / args.bundle
@@ -697,6 +710,19 @@ def main() -> int:
         print()
 
     print(f"   {len(errors)} error(s), {len(warnings)} warning(s) across {len(files)} locale file(s)")
+
+    if args.fail_on:
+        gated = [f for f in findings if f.check in set(args.fail_on)]
+        names = ", ".join(sorted(set(args.fail_on)))
+        if gated:
+            print(f"❌ ratcheted check(s) regressed: {len(gated)} finding(s) in [{names}]")
+            for f in gated[: args.max_per_check]:
+                print(f"      [{f.check}] {f.lang} {f.key}: {f.detail}")
+            return 1
+        print(f"✅ ratcheted check(s) still clean: [{names}]")
+        print("   (other findings above are pre-existing debt and do not gate)")
+        return 0
+
     if errors or (args.strict and warnings):
         print("❌ localization integrity check failed")
         return 1

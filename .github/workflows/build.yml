@@ -36,6 +36,19 @@ jobs:
       - name: Localization guard (reference coverage + mirror parity)
         run: python tools/dev/check_localization_sync.py
 
+      # Value-integrity ratchet. check_localization_integrity has existed since
+      # #952 but nothing ever invoked it, which is how 1116 errors sat in the
+      # corpus through green run after green run — the tool was treated as the
+      # fix. Running it bare would fail on all of that pre-existing debt and
+      # teach everyone to skip the step, so it gates ONLY on classes already
+      # repaired to zero: reintroducing one is a regression a reviewer can act
+      # on, while the standing debt stays visible without blocking.
+      #
+      # Add a check name here as its class reaches zero. Removing one is a
+      # decision to let that defect back in, and should be argued for.
+      - name: Localization value-integrity ratchet (repaired classes stay repaired)
+        run: python tools/dev/check_localization_integrity.py --fail-on placeholder-corrupt
+
       # D27: runtime code must not depend on its own .md (outside L4 attestation
       # tree). Stdlib-only AST gate, no deps. CIRISAgent#807.
       - name: D27 runtime .md-reference gate

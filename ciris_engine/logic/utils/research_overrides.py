@@ -945,6 +945,71 @@ def strict_manifest_skeleton(experiment_id: str = "CHANGE-ME", condition: str = 
     }
 
 
+
+def baseline_manifest() -> Dict[str, Any]:
+    """A strict manifest pre-filled with the CURRENT live values.
+
+    `strict_manifest_skeleton()` emits `REPLACE::<key>` placeholders for all 97
+    keys. That is right for a wholesale variant — a non-CIRIS arm is a complete
+    replacement — but it is a footgun for a SURGICAL change: submitting it as-is
+    replaces the entire covenant with placeholder text, when the operator only
+    meant to alter one prompt.
+
+    Strict mode is total-or-refuse on purpose: a run that applies half its
+    overrides and reports clean is exactly the failure this facility exists to
+    prevent. So a targeted experiment still has to supply all 97 keys — it just
+    needs the other 96 to be what they already are.
+
+    Emit this, change the one line you mean to change, and every other key
+    round-trips to its current value.
+    """
+    from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
+    from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
+    from ciris_engine.logic.utils.localization import get_string
+
+    skeleton = strict_manifest_skeleton()
+    out: Dict[str, Any] = dict(skeleton)
+    out["experiment_id"] = "CHANGE-ME"
+    filled: Dict[str, Dict[str, str]] = {ns: {} for ns in skeleton["overrides"]}
+
+    for key in skeleton["overrides"].get("string", {}):
+        try:
+            filled["string"][key] = get_string("en", key)
+        except Exception:  # noqa: BLE001 — an unresolvable key keeps its marker
+            filled["string"][key] = skeleton["overrides"]["string"][key]
+
+    cl = ConsciencePromptLoader()
+    for key, marker in skeleton["overrides"].get("conscience_prompt", {}).items():
+        name, _, field = key.rpartition(".")
+        try:
+            filled["conscience_prompt"][key] = getattr(cl.load_prompts(name), field)
+        except Exception:  # noqa: BLE001
+            filled["conscience_prompt"][key] = marker
+
+    dl = DMAPromptLoader()
+    for key, marker in skeleton["overrides"].get("dma_prompt", {}).items():
+        name, _, field = key.rpartition(".")
+        try:
+            tmpl = dl.load_prompt_template(name)
+            val = tmpl.get(field) if isinstance(tmpl, dict) else getattr(tmpl, field, None)
+            filled["dma_prompt"][key] = str(val) if val is not None else marker
+        except Exception:  # noqa: BLE001
+            filled["dma_prompt"][key] = marker
+
+    # corpus / template values are large or structural; leave their markers so
+    # an operator has to opt into replacing them deliberately.
+    for ns in ("corpus", "template"):
+        filled[ns] = dict(skeleton["overrides"].get(ns, {}))
+
+    out["overrides"] = filled
+    unresolved = sum(1 for ns in filled.values() for v in ns.values() if str(v).startswith("REPLACE::"))
+    out["_baseline_note"] = (
+        f"{unresolved} key(s) still carry REPLACE:: markers and MUST be filled or the run is "
+        f"not measuring what it claims. Change only the keys your experiment alters."
+    )
+    return out
+
+
 if __name__ == "__main__":  # pragma: no cover - operator convenience
     import sys
 
@@ -953,6 +1018,8 @@ if __name__ == "__main__":  # pragma: no cover - operator convenience
         print(compute_residue_digest())
     elif command == "skeleton":
         print(json.dumps(strict_manifest_skeleton(), indent=2, ensure_ascii=False))
+    elif command == "baseline":
+        print(json.dumps(baseline_manifest(), indent=2, ensure_ascii=False))
     elif command == "keyspace":
         for namespace, keys in (
             ("string", scan_reachable_string_keys()),

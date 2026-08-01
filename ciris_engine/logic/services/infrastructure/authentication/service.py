@@ -52,6 +52,7 @@ from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.models import Task
+    from ciris_engine.schemas.services.authority_core import DeferralResponse
 
 logger = logging.getLogger(__name__)
 
@@ -1511,6 +1512,56 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             return self.sign_data(data, private_key)
 
         raise ValueError(f"No signing key available for WA {wa_id}")
+
+    async def sign_deferral_resolution(self, deferral_id: str, response: "DeferralResponse", signed_at: str) -> str:
+        """Sign a WA's deferral resolution with that WA's key (#944).
+
+        Wires the existing capability (``sign_as_wa``) to the existing field.
+        Before this the ``signature`` on a resolved deferral was
+        ``f"api_{user_id}_{timestamp}"`` — an identifier and a clock reading,
+        forgeable by anything able to write the row. Under #938 that record is
+        the budget-issuance event, so "approval can be verified after the fact"
+        has to be true of it rather than merely claimed.
+
+        Canonicalization matches ``sign_task``/``verify_task_signature`` (sorted
+        compact JSON). #944 suggests JCS to share one story with the 2.9.6 trace
+        cut; adopting it here alone would create two stories *inside* the
+        signing code instead of one, so unifying all three belongs in its own
+        change.
+        """
+        from ciris_engine.schemas.services.authority_core import deferral_resolution_payload
+
+        payload = deferral_resolution_payload(deferral_id, response, signed_at)
+        canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return await self.sign_as_wa(response.wa_id, canonical_json.encode("utf-8"))
+
+    async def verify_deferral_resolution(self, deferral_id: str, response: "DeferralResponse", signed_at: str) -> bool:
+        """Verify a deferral resolution's signature. **Fails closed.**
+
+        Returns False for an absent, legacy-placeholder, or invalid signature,
+        and for an unknown WA. A caller must not act on an unverified approval;
+        a signature nothing checks is the same defect one layer along.
+
+        Legacy records are distinguishable via
+        ``is_unverifiable_legacy_signature`` so they can be surfaced as
+        *unverified* rather than reported as forged — the difference between a
+        migration gap and an attack.
+        """
+        from ciris_engine.schemas.services.authority_core import (
+            deferral_resolution_payload,
+            is_unverifiable_legacy_signature,
+        )
+
+        if not response.signature or is_unverifiable_legacy_signature(response.signature):
+            return False
+
+        wa = await self.get_wa(response.wa_id)
+        if not wa:
+            return False
+
+        payload = deferral_resolution_payload(deferral_id, response, signed_at)
+        canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return self._verify_signature(canonical_json.encode("utf-8"), response.signature, wa.pubkey)
 
     async def verify_task_signature(self, task: "Task") -> bool:
         """Verify a task's signature.

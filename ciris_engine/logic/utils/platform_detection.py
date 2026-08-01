@@ -171,6 +171,25 @@ def _detect_ios_capabilities() -> set[PlatformRequirement]:
     return capabilities
 
 
+def _detect_unknown_capabilities() -> set[PlatformRequirement]:
+    """Capabilities for a host we could not positively identify: none.
+
+    ``get_platform_name()`` returns ``"unknown"`` only after android, ios and
+    the three desktop platforms have all failed to match, so reaching here means
+    the runtime genuinely does not know where it is. Every capability in this
+    module is a claim about the host — that a Secure Enclave exists, that a TPM
+    is reachable, that shell access is meaningful. None of those can be asserted
+    about an unidentified machine, so the honest answer is the empty set.
+
+    Notably this withholds ``DESKTOP_CLI``, which previously came free with the
+    desktop fallthrough (#948). ``is_desktop()`` in this same file already fails
+    closed by testing membership in ``DESKTOP_PLATFORM_NAMES`` rather than
+    "not one of the platforms I recognize"; this brings capability detection
+    onto that footing so the two cannot disagree.
+    """
+    return set()
+
+
 def _detect_desktop_capabilities() -> set[PlatformRequirement]:
     """Detect security capabilities available on desktop platforms.
 
@@ -225,12 +244,19 @@ def detect_platform_capabilities() -> PlatformCapabilities:
     platform = get_platform_name()
 
     # Detect platform-specific capabilities
+    # Every branch is a POSITIVE match. The desktop arm used to be a bare
+    # `else`, so a host the runtime could not classify was handed the desktop
+    # capability set — including DESKTOP_CLI, the predicate that gates shell
+    # execution and file writes (#948). Unknown is now its own branch with an
+    # empty set, which is what `is_desktop()` has always done a few lines up.
     if platform == "android":
         capabilities = _detect_android_capabilities()
     elif platform == "ios":
         capabilities = _detect_ios_capabilities()
-    else:
+    elif platform in DESKTOP_PLATFORM_NAMES:
         capabilities = _detect_desktop_capabilities()
+    else:
+        capabilities = _detect_unknown_capabilities()
 
     # Build the capabilities object
     platform_caps = PlatformCapabilities(

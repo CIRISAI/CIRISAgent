@@ -1,0 +1,204 @@
+name: Research Trace Capture
+
+# Signed CEG trace capture for the research team, run from the Actions tab.
+#
+# Patterned on safety-battery.yml: same secret-check-then-skip shape, same
+# umask-077 key write, same Sigstore attestation on the bundle, same artifact
+# conventions. The API key is a repository secret; everything else is a form
+# field, so a capture leaves no credential in the run configuration.
+#
+# WHY A WORKFLOW RATHER THAN A LOCAL IMAGE: a pre-registered campaign has to be
+# able to say which artifact produced which number. A run URL plus an
+# attestation does that; "the capture I ran on Tuesday" does not. It also means
+# no image build, no digest to track, and no contention for a shared dev box.
+#
+# Outputs: one ceg-seal-<trace_id>.json per sealed trace at three detail levels
+# (generic / detailed / full_traces). Each is the CEG carrier AS IT WOULD SHIP —
+# the full federation_attestations row including scrub_signature_classical,
+# scrub_signature_pqc and original_content_hash.
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'LLM provider (selects which *_API_KEY secret is used)'
+        default: 'openrouter'
+        type: choice
+        options: [openrouter, together, groq, openai, deepinfra]
+      model:
+        description: 'Model id — CASE-SENSITIVE. Together lists both google/gemma-4-31B-it and pearl-ai/gemma-4-31b-it'
+        default: 'meta-llama/llama-4-scout'
+        type: string
+      languages:
+        description: 'Comma-separated locales, e.g. en or en,es,ja'
+        default: 'en'
+        type: string
+      questions_file:
+        description: 'Repo-relative probe corpus (blank = built-in)'
+        default: ''
+        type: string
+      concurrency:
+        description: 'Parallel probes'
+        default: '1'
+        type: string
+      base_url:
+        description: 'Override the provider default endpoint (blank = provider default)'
+        default: ''
+        type: string
+      overrides_manifest:
+        description: 'Research-bound prompt overrides as INLINE JSON. Applied through the audited facility, so the run records having been manipulated. Blank = none.'
+        default: ''
+        type: string
+
+permissions:
+  id-token: write # Sigstore attestation issuance
+  attestations: write
+  contents: read
+
+concurrency:
+  # One capture at a time per ref — concurrent runs share qa_reports/ and would
+  # interleave their traces into a single cohort.
+  group: research-capture-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install --upgrade pip wheel
+          pip install -r requirements.txt
+
+      - name: Check for the provider secret
+        id: secrets_check
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+        run: |
+          # Secrets are not exposed to fork PRs. Skip loudly with the remedy
+          # named rather than failing with an opaque auth error 40 minutes in.
+          case "${{ inputs.provider }}" in
+            openrouter) KEY="$OPENROUTER_API_KEY" ;;
+            together)   KEY="$TOGETHER_API_KEY" ;;
+            groq)       KEY="$GROQ_API_KEY" ;;
+            openai)     KEY="$OPENAI_API_KEY" ;;
+            deepinfra)  KEY="$DEEPINFRA_API_KEY" ;;
+          esac
+          if [ -z "$KEY" ]; then
+            echo "have_secret=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No API key secret in scope for provider '${{ inputs.provider }}' (commonly a fork PR). A maintainer can re-run on a trusted branch."
+            {
+              echo "### Skipped"
+              echo ""
+              echo "This run has no \`${{ inputs.provider }}\` API key in scope."
+              echo "Set the matching repository secret, or pick a provider whose secret exists."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "have_secret=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write provider API key
+        if: steps.secrets_check.outputs.have_secret == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+        run: |
+          umask 077
+          case "${{ inputs.provider }}" in
+            openrouter) printf '%s' "$OPENROUTER_API_KEY" > "$HOME/.openrouter_key" ;;
+            together)   printf '%s' "$TOGETHER_API_KEY"   > "$HOME/.together_key" ;;
+            groq)       printf '%s' "$GROQ_API_KEY"       > "$HOME/.groq_key" ;;
+            openai)     printf '%s' "$OPENAI_API_KEY"     > "$HOME/.openai_key" ;;
+            deepinfra)  printf '%s' "$DEEPINFRA_API_KEY"  > "$HOME/.deepinfra_key" ;;
+          esac
+
+      - name: Record the instrument
+        id: instrument
+        if: steps.secrets_check.outputs.have_secret == 'true'
+        run: |
+          # Written BEFORE the run so it survives a failure. A campaign must be
+          # able to tell which artifact produced which number.
+          SERVER=$(python3 -c 'import importlib.metadata as m;print(m.version("ciris-server"))')
+          echo "server=$SERVER" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Instrument"
+            echo ""
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| commit | \`${{ github.sha }}\` |"
+            echo "| ciris-server | \`$SERVER\` |"
+            echo "| provider / model | \`${{ inputs.provider }}\` / \`${{ inputs.model }}\` |"
+            echo "| languages | \`${{ inputs.languages }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stage the override manifest
+        id: manifest
+        if: steps.secrets_check.outputs.have_secret == 'true' && inputs.overrides_manifest != ''
+        run: |
+          mkdir -p /tmp/research
+          printf '%s' '${{ inputs.overrides_manifest }}' > /tmp/research/manifest.json
+          python3 -c "import json;json.load(open('/tmp/research/manifest.json'))" \
+            || { echo '::error::overrides_manifest is not valid JSON'; exit 1; }
+          echo "OVERRIDES=/tmp/research/manifest.json" >> "$GITHUB_ENV"
+
+      - name: Capture
+        if: steps.secrets_check.outputs.have_secret == 'true'
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          MODEL: ${{ inputs.model }}
+          LANGUAGES: ${{ inputs.languages }}
+          CONCURRENCY: ${{ inputs.concurrency }}
+          BASE_URL: ${{ inputs.base_url }}
+          QUESTIONS_FILE: ${{ inputs.questions_file }}
+          OUT_DIR: ${{ github.workspace }}/research-traces
+        run: |
+          case "$PROVIDER" in
+            openrouter) export API_KEY_FILE="$HOME/.openrouter_key" ;;
+            together)   export API_KEY_FILE="$HOME/.together_key" ;;
+            groq)       export API_KEY_FILE="$HOME/.groq_key" ;;
+            openai)     export API_KEY_FILE="$HOME/.openai_key" ;;
+            deepinfra)  export API_KEY_FILE="$HOME/.deepinfra_key" ;;
+          esac
+          ./tools/research/capture_traces.sh 2>&1 | tee "$GITHUB_WORKSPACE/capture.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Summarise the cohort
+        if: always() && steps.secrets_check.outputs.have_secret == 'true'
+        run: |
+          python3 tools/research/summarise_cohort.py "$GITHUB_WORKSPACE/research-traces" \
+            >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Attest capture bundle
+        # Sigstore provenance over the traces themselves. Without this the
+        # artifact is just a zip someone uploaded; with it, a campaign can prove
+        # which run and which commit produced the cohort it scored.
+        if: steps.secrets_check.outputs.have_secret == 'true'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'research-traces/**/ceg-seal-*.json'
+
+      - uses: actions/upload-artifact@v6
+        if: always() && steps.secrets_check.outputs.have_secret == 'true'
+        with:
+          name: ceg-traces-${{ inputs.provider }}-${{ inputs.languages }}-${{ github.run_id }}
+          path: |
+            research-traces/
+            capture.log
+          retention-days: 90
+          overwrite: true
+          if-no-files-found: error

@@ -196,6 +196,19 @@ class DocumentParser:
 
     async def _download_file(self, url: str) -> Optional[bytes]:
         """Download file from URL with security limits."""
+        # SSRF guard (#941). This URL comes off an INBOUND MESSAGE attachment,
+        # so it is fetched during observation — before any thought exists,
+        # before any DMA runs, upstream of every gate #938 can impose. An
+        # attacker-supplied attachment URL was fetched by the runtime as a
+        # consequence of receiving a message. No authorization design that
+        # starts at action selection covers this; it has to stop here.
+        from ciris_engine.logic.utils.url_guard import validate_url_for_ssrf  # noqa: PLC0415
+
+        is_valid, _ = validate_url_for_ssrf(url)
+        if not is_valid:
+            logger.warning("[SSRF] document_parser._download_file: refused to fetch attachment URL")
+            return None
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:

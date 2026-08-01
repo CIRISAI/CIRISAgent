@@ -329,7 +329,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
         "no consent authored" rather than "consented on the user's behalf".
         """
         try:
-            from ciris_engine.logic.utils.env_utils import get_env_var  # noqa: PLC0415
+            from ciris_engine.logic.config.env_utils import get_env_var  # noqa: PLC0415
 
             if str(get_env_var("CIRIS_ACCORD_METRICS_CONSENT", "")).lower() == "true":
                 return True

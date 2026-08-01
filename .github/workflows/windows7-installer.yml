@@ -64,9 +64,29 @@ jobs:
       - name: Download + verify Win7-capable CPython (fail-closed)
         id: win7py
         shell: pwsh
+        env:
+          # NOTHING REACHES THE SCRIPT BODY THROUGH ${{ }}. See CIRISAgent#964.
+          #
+          # The 64-hex guard below is real, but it used to run too late to
+          # matter: `${{ }}` is substituted before pwsh parses the script, so a
+          # sha256 input of `"; <powershell>; "` closed the string literal and
+          # ran on the runner — the validation it was supposedly subject to
+          # never got the chance to reject it. A check downstream of the
+          # injection point cannot gate the injection.
+          #
+          # Read through env: instead. The guard then runs against a value that
+          # is data by construction, and it is the same guard as before.
+          INPUT_PY_VERSION: ${{ inputs.python_win7_version }}
+          INPUT_PY_SHA256: ${{ inputs.python_win7_sha256 }}
         run: |
-          $ver = "${{ inputs.python_win7_version }}"
-          $expected = "${{ inputs.python_win7_sha256 }}".Trim().ToLower()
+          $ver = "$env:INPUT_PY_VERSION".Trim()
+          $expected = "$env:INPUT_PY_SHA256".Trim().ToLower()
+          # $ver lands in a URL and a filesystem path — constrain it to the
+          # CPython version shapes PythonVista actually publishes.
+          if ($ver -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
+            Write-Error "python_win7_version must be a plain X.Y.Z CPython version. Refusing to build."
+            exit 1
+          }
           if ($expected -notmatch '^[0-9a-f]{64}$') {
             Write-Error "python_win7_sha256 must be a 64-hex SHA256 you verified upstream. Refusing to build."
             exit 1
@@ -88,9 +108,15 @@ jobs:
       - name: Silent-install the Win7 CPython + create venv
         id: venv
         shell: pwsh
+        env:
+          #: Step outputs go through env: too. #961 set the rule as "nothing
+          #: reaches the script body through ${{ }}" precisely so there is no
+          #: judgement call at each site about whether this particular value
+          #: happens to be trustworthy today.
+          WIN7PY_INSTALLER_EXE: ${{ steps.win7py.outputs.installer_exe }}
         run: |
           $dir = "$env:RUNNER_TEMP\py-win7"
-          $exe = "${{ steps.win7py.outputs.installer_exe }}"
+          $exe = "$env:WIN7PY_INSTALLER_EXE"
           # Official-installer CLI (PythonVista is the official installer + Win7
           # patches): per-user, no PATH pollution, no test suite.
           Start-Process -FilePath $exe -ArgumentList @(
@@ -106,8 +132,10 @@ jobs:
 
       - name: Install Python deps into the Win7 venv
         shell: pwsh
+        env:
+          WIN7_VENV: ${{ steps.venv.outputs.venv }}
         run: |
-          $py = "${{ steps.venv.outputs.venv }}\Scripts\python.exe"
+          $py = "$env:WIN7_VENV\Scripts\python.exe"
           & $py -m pip install --upgrade pip
           & $py -m pip install -r requirements.txt
           & $py -m pip install pyinstaller
@@ -126,8 +154,10 @@ jobs:
 
       - name: Build PyInstaller bundle (under the Win7 interpreter)
         shell: pwsh
+        env:
+          WIN7_VENV: ${{ steps.venv.outputs.venv }}
         run: |
-          $py = "${{ steps.venv.outputs.venv }}\Scripts\python.exe"
+          $py = "$env:WIN7_VENV\Scripts\python.exe"
           cd installers\windows
           & $py -m PyInstaller ciris-agent.spec --noconfirm
           Get-ChildItem dist\ciris-agent\ | Select-Object -First 20

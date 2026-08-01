@@ -209,6 +209,32 @@ _UNAVAILABLE_NOTE = (
 )
 
 
+def _unavailable_note(discovery: Any, adapter_name: str) -> str:
+    """The most specific thing we can honestly say about an unenumerable adapter.
+
+    #945: discovery used to collapse every failure to (None, None), so this
+    surface could only ever say "unavailable" — honest and unhelpful, at the
+    exact moment an operator is deciding what to enable, for wallet and
+    home_assistant among others. Now that discovery records a reason, say it.
+
+    Falls back to the generic note rather than inventing a cause, and keeps the
+    "enabling it grants whatever it registers" sentence in every branch: that is
+    the part an operator actually needs, and it is true regardless of why the
+    list could not be read.
+    """
+    reason: Optional[str] = None
+    try:
+        reason = discovery.enumeration_failure_reason(adapter_name)
+    except Exception:  # pragma: no cover - never let disclosure fail on this
+        reason = None
+    if not reason:
+        return _UNAVAILABLE_NOTE
+    return (
+        f"This adapter's tool list could not be read because {reason}. "
+        "Enabling it grants whatever tools it registers at that point."
+    )
+
+
 async def _tools_from_service_class(
     module_path: str, class_name: str
 ) -> Tuple[ToolDisclosureSource, List[ToolInfo], Optional[str]]:
@@ -262,7 +288,7 @@ async def _disclose_discovered_adapters(skip_ids: Set[str]) -> List[AdapterToolD
             note: Optional[str] = None
         else:
             source = ToolDisclosureSource.UNAVAILABLE
-            note = _UNAVAILABLE_NOTE
+            note = _unavailable_note(discovery, status.name)
         groups.append(
             AdapterToolDisclosure(
                 adapter_id=status.name,
@@ -290,7 +316,7 @@ async def _disclose_discovered_adapters(skip_ids: Set[str]) -> List[AdapterToolD
                     adapter_name=manifest.module.description or name,
                     always_on=False,
                     source=ToolDisclosureSource.UNAVAILABLE,
-                    source_note=_UNAVAILABLE_NOTE,
+                    source_note=_unavailable_note(discovery, name),
                     tools=[],
                 )
             )

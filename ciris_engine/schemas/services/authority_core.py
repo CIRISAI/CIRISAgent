@@ -251,7 +251,15 @@ class DeferralRequest(BaseModel):
 
 
 class DeferralResponse(BaseModel):
-    """WA response to deferral request."""
+    """WA response to deferral request.
+
+    ``signature`` must be an Ed25519 signature by ``wa_id`` over
+    :func:`deferral_resolution_payload`. It was historically an f-string
+    (``api_{user}_{timestamp}``) or the empty string (CIRISAgent#944) — forms
+    that carry no key material and prove nothing. Use
+    :func:`is_unverifiable_legacy_signature` to recognise those rather than
+    letting them be mistaken for signatures.
+    """
 
     approved: bool
     reason: Optional[str] = None
@@ -260,6 +268,39 @@ class DeferralResponse(BaseModel):
     signature: str
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+def deferral_resolution_payload(deferral_id: str, response: "DeferralResponse", signed_at: str) -> Dict[str, object]:
+    """The exact fields a WA's signature commits to when resolving a deferral.
+
+    ONE function, called by both the signer and the verifier. ``sign_task`` and
+    ``verify_task_signature`` each build their canonical dict inline, so the two
+    can drift apart silently and a signature would simply stop verifying with no
+    indication why. This does not repeat that.
+
+    It commits to the decision, not to a rendering of it: which deferral, the
+    verdict, the guidance given, who decided, and when. ``signed_at`` is inside
+    the payload so a signature cannot be lifted onto a different moment, and
+    ``deferral_id`` so it cannot be replayed onto a different deferral.
+    """
+    return {
+        "deferral_id": deferral_id,
+        "approved": response.approved,
+        "reason": response.reason,
+        "wa_id": response.wa_id,
+        "signed_at": signed_at,
+    }
+
+
+def is_unverifiable_legacy_signature(signature: str) -> bool:
+    """True for the pre-#944 placeholder forms: empty, or the ``api_`` f-string.
+
+    Records written before signing existed must stay readable and be clearly
+    marked unverified — never silently treated as signed, and never silently
+    treated as a forgery either, which would misattribute a data-migration
+    problem to an attacker.
+    """
+    return not signature.strip() or signature.startswith("api_")
 
 
 class GuidanceRequest(BaseModel):

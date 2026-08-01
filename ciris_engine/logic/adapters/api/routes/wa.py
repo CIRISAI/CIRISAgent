@@ -175,13 +175,37 @@ async def resolve_deferral(
     wa_service = get_wa_service(request)
 
     try:
+        # SIGN THE DECISION (#944). This used to be
+        # f"api_{auth.user_id}_{timestamp}" — an identifier and a clock reading,
+        # forgeable by anything able to write the row, on the record that governs
+        # the agent's most consequential actions. Under #938 it is the
+        # budget-issuance event, so it has to be attributable to the authority
+        # who made it rather than merely asserted to be.
+        #
+        # Fails closed: if the resolution cannot be signed we refuse the
+        # resolution rather than record an unverifiable one. An approval nobody
+        # can verify is the exact artifact this issue is about.
+        signed_at = datetime.now(timezone.utc).isoformat()
         deferral_response = DeferralResponse(
             approved=(resolve_request.resolution == "approve"),
             reason=resolve_request.guidance or f"Resolved by {auth.user_id}",
             modified_time=None,
             wa_id=auth.user_id,
-            signature=f"api_{auth.user_id}_{datetime.now(timezone.utc).isoformat()}",
+            signature="",
         )
+        auth_service = getattr(request.app.state, "authentication_service", None)
+        if auth_service is None:
+            raise_wa_error(
+                "Cannot resolve deferral: authentication service unavailable, so the decision could not be signed",
+                status_code=503,
+            )
+        try:
+            deferral_response.signature = await auth_service.sign_deferral_resolution(
+                deferral_id, deferral_response, signed_at
+            )
+        except Exception as exc:
+            logger.error(f"Refusing to record an unsigned deferral resolution for {sanitize_for_log(deferral_id)}")
+            raise_wa_error(f"Cannot resolve deferral: signing failed ({type(exc).__name__})", status_code=503)
 
         success = await wa_service.resolve_deferral(deferral_id, deferral_response)
 

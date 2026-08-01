@@ -102,6 +102,15 @@ Each file is the CEG carrier **as it would ship**: the full
 Byte columns are hex-encoded as `{"__hex__": "..."}`. Written on **seal**, so an
 unreachable canonical does not cost you the corpus.
 
+`capture_traces.sh` sets `CIRIS_ACCORD_METRICS_CEG_SEAL_TEE=true` for you.
+Writing these files is **off by default everywhere else**, and deliberately not
+folded into `CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR` — that var governs the
+lens-batch tee, which is a pure write and is on for every QA run. Producing a
+CEG carrier is a *read* of the live persist database through a second SQLite
+handle, which is unsafe alongside the Rust writer on a WAL file in the same
+process: it took the staged-QA sqlite leg down mid-run. Enable it for a
+research capture, not as a general-purpose trace switch.
+
 ```python
 import json
 d = json.load(open("ceg-seal-<id>.json"))

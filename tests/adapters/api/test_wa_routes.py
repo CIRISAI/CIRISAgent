@@ -51,8 +51,17 @@ def wa_client():
     mock_wa.resolve_deferral = AsyncMock(return_value=True)
     app.state.wise_authority_service = mock_wa
 
+    # Resolving a deferral now SIGNS the decision (#944) and fails closed when
+    # it cannot, so a signing authority is part of the working configuration
+    # rather than optional scaffolding. Before #944 these tests passed with the
+    # signature field holding an f-string, which is what the issue was about.
+    mock_auth = AsyncMock()
+    mock_auth.sign_deferral_resolution = AsyncMock(return_value="c2lnbmF0dXJlLWJ5dGVz")
+    app.state.authentication_service = mock_auth
+
     client = TestClient(app)
     client._mock_wa = mock_wa
+    client._mock_auth = mock_auth
 
     yield client
 
@@ -202,6 +211,42 @@ class TestResolveDeferralEndpoint:
             json={"resolution": "approve", "guidance": "Test"},
         )
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    def test_the_decision_is_actually_signed(self, wa_client):
+        """The signature must come from the signing authority, not the route (#944)."""
+        wa_client.post(
+            "/v1/wa/deferrals/def-1/resolve",
+            json={"resolution": "approve", "guidance": "Approved"},
+        )
+        wa_client._mock_auth.sign_deferral_resolution.assert_awaited_once()
+        recorded = wa_client._mock_wa.resolve_deferral.call_args[0][1]
+        assert recorded.signature == "c2lnbmF0dXJlLWJ5dGVz"
+        # The pre-#944 forms must not survive anywhere on this path.
+        assert not recorded.signature.startswith("api_")
+
+    def test_refuses_to_record_an_unsigned_resolution(self):
+        """Fails closed when nothing can sign.
+
+        The alternative — record it unsigned and carry on — is precisely the
+        artifact #944 is about: an approval that cannot be verified, only
+        believed. A 503 is the honest outcome.
+        """
+        app = create_app()
+        app.dependency_overrides[require_observer] = _make_observer_auth
+        app.dependency_overrides[require_authority] = _make_observer_auth
+        mock_wa = AsyncMock()
+        mock_wa.resolve_deferral = AsyncMock(return_value=True)
+        app.state.wise_authority_service = mock_wa
+        app.state.authentication_service = None  # no signing authority
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/wa/deferrals/def-1/resolve",
+                json={"resolution": "approve", "guidance": "Approved"},
+            )
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        mock_wa.resolve_deferral.assert_not_awaited()
+        app.dependency_overrides.clear()
 
 
 class TestPermissionsEndpoint:

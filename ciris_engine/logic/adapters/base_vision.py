@@ -104,6 +104,16 @@ class BaseVisionHelper(ABC):
             logger.warning(f"Attachment {attachment.filename} is not an image: {content_type}")
             return None
 
+        # SSRF guard (#941). attachment.url is attacker-controlled: it arrives
+        # on an INBOUND message and is fetched during observation, upstream of
+        # every gate #938 can impose.
+        from ciris_engine.logic.utils.url_guard import validate_url_for_ssrf  # noqa: PLC0415
+
+        is_valid, _ = validate_url_for_ssrf(attachment.url)
+        if not is_valid:
+            logger.warning(f"[SSRF] base_vision: refused to fetch attachment {attachment.filename}")
+            return None
+
         try:
             # Download the image
             async with aiohttp.ClientSession() as session:
@@ -146,6 +156,14 @@ class BaseVisionHelper(ABC):
         Returns:
             ImageContent object or None if conversion failed
         """
+        # SSRF guard (#941) — same reasoning as the attachment path above.
+        from ciris_engine.logic.utils.url_guard import validate_url_for_ssrf  # noqa: PLC0415
+
+        is_valid, _ = validate_url_for_ssrf(url)
+        if not is_valid:
+            logger.warning("[SSRF] base_vision: refused to fetch image URL")
+            return None
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:

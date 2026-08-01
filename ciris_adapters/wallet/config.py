@@ -12,20 +12,59 @@ from pydantic import BaseModel, Field, SecretStr
 
 
 class SpendingLimits(BaseModel):
-    """Spending limits for wallet operations."""
+    """Spending limits for wallet operations.
 
+    The ceilings are denominated in :attr:`currency`. They used to be bare
+    ``Decimal``s with no currency at all (CIRISAgent#946) while
+    ``SpendingTracker`` accumulates spend keyed BY currency — so
+    ``max_transaction=100`` passed 100 USDC and 100 KES alike, values that
+    differ by roughly three orders of magnitude. A limit meant "N of whatever
+    is being sent", which is not a bound on value.
+
+    ``currency`` is intentionally ``Optional`` with no default. An existing
+    config must not silently acquire a denomination it never declared — that
+    would be inventing the operator's intent and calling it a fix. Undeclared
+    means undeclared: :meth:`applies_to` reports it, the caller warns, and the
+    ceilings apply as before until someone says what they meant.
+    """
+
+    currency: Optional[str] = Field(
+        default=None,
+        description=(
+            "Currency the ceilings below are denominated in, e.g. 'USDC'. "
+            "Leave unset only to preserve pre-#946 behaviour; a set value is "
+            "enforced, and a transaction in another currency is denied."
+        ),
+    )
     max_transaction: Decimal = Field(
         default=Decimal("100.00"),
-        description="Maximum amount per transaction",
+        description="Maximum amount per transaction, in `currency`",
     )
     daily_limit: Decimal = Field(
         default=Decimal("1000.00"),
-        description="Maximum daily spending",
+        description="Maximum daily spending, in `currency`",
     )
     session_limit: Decimal = Field(
         default=Decimal("500.00"),
-        description="Maximum spending per session",
+        description="Maximum spending per session, in `currency`",
     )
+
+    def applies_to(self, currency: str) -> Optional[bool]:
+        """Do these ceilings bound a transaction in ``currency``?
+
+        Tri-state, because the three answers are genuinely different:
+
+        * ``True``  — declared, and it matches. Compare them.
+        * ``False`` — declared, and it does not. **Deny**: comparing a ceiling
+          in one currency against spend in another is not a weaker check, it is
+          a meaningless one, and #946 asks for a configuration error rather
+          than a silent pass.
+        * ``None``  — undeclared (legacy). The caller decides, and should say
+          so out loud rather than quietly assuming the operator meant this one.
+        """
+        if self.currency is None:
+            return None
+        return self.currency.strip().upper() == currency.strip().upper()
 
 
 # =============================================================================

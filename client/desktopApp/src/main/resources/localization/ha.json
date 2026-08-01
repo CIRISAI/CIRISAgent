@@ -2595,7 +2595,7 @@
   "users_no_filters": "Babu tacewa da aka amfani",
   "users_no_users": "Ba a sami masu amfani ba",
   "users_oauth_accounts": "Asusun OAuth",
-  "users_page_count": "Shafi {current} na {total}",
+  "users_page_count": "Shafi {page} na {total}",
   "users_permissions": "Izini",
   "users_search_clear": "Share",
   "users_search_placeholder": "Nema masu amfani...",

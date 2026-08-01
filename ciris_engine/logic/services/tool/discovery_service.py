@@ -71,6 +71,14 @@ class AdapterDiscoveryService:
         self.checker = eligibility_checker or ToolEligibilityChecker()
         self.extra_paths = extra_paths or []
 
+        # Why a given adapter's tools could not be enumerated (#945).
+        # "provides no tools", "instantiation failed: <what>" and "needs live
+        # collaborators" are three different answers, and collapsing all of
+        # them to (None, None) is what left the first-run wizard telling an
+        # operator only "unavailable" for wallet and home_assistant — the two
+        # adapters whose tools an operator would most want disclosed.
+        self._enumeration_failures: Dict[str, str] = {}
+
         # Parse CIRIS_EXTRA_ADAPTERS env var
         extra_from_env = os.environ.get("CIRIS_EXTRA_ADAPTERS", "")
         if extra_from_env:
@@ -432,6 +440,7 @@ class AdapterDiscoveryService:
 
         service = self._try_instantiate_service(manifest, service_def, deps, adapter_name)
         if not service:
+            # Reason was recorded by _try_instantiate_service (#945).
             return None, None
 
         # Check if service has get_all_tool_info (tool service)
@@ -460,6 +469,7 @@ class AdapterDiscoveryService:
 
         except Exception as e:
             logger.debug(f"Error checking eligibility for {adapter_name}: {e}")
+            self._record_enumeration_failure(adapter_name, f"its tool list could not be read ({type(e).__name__}: {e})")
             return None, None
 
     def _try_instantiate_service(
@@ -472,6 +482,7 @@ class AdapterDiscoveryService:
         """Try to instantiate a service with deps, falling back to no-args."""
         service_class = self.load_service_class(manifest, service_def.class_path)
         if not service_class:
+            self._record_enumeration_failure(adapter_name, "its tool service class could not be imported")
             return None
 
         try:
@@ -481,7 +492,30 @@ class AdapterDiscoveryService:
                 return service_class()
             except Exception as e:
                 logger.debug(f"Cannot instantiate {adapter_name}: {e}")
+                # The reason, not just the fact (#945). A TypeError on the
+                # no-args path means the constructor requires collaborators
+                # this context cannot supply — which is "enumerable after
+                # load", a different and much more useful thing to tell an
+                # operator than "unavailable".
+                if isinstance(e, TypeError):
+                    reason = "its tool service needs runtime collaborators, so its tools are listed once it loads"
+                else:
+                    reason = f"its tool service could not be constructed ({type(e).__name__}: {e})"
+                self._record_enumeration_failure(adapter_name, reason)
                 return None
+
+    def _record_enumeration_failure(self, adapter_name: str, reason: str) -> None:
+        """Remember why an adapter's tools could not be listed."""
+        self._enumeration_failures[adapter_name] = reason
+
+    def enumeration_failure_reason(self, adapter_name: str) -> Optional[str]:
+        """Why this adapter's tools could not be enumerated, if they could not.
+
+        Consumed by the first-run tool disclosure so it can say *why* rather
+        than only *that* — an operator deciding what to enable is owed the
+        difference between "needs credentials first" and "is broken".
+        """
+        return self._enumeration_failures.get(adapter_name)
 
     def _check_tools_eligibility(self, tools: List[ToolInfo]) -> EligibilityResult:
         """Check eligibility of all tools and return combined result."""

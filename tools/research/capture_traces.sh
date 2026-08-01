@@ -121,6 +121,12 @@ echo "  OK: $PROVIDER / $MODEL"
 
 mkdir -p "$OUT_DIR"
 export CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR="$OUT_DIR"
+# The ceg-seal-*.json carriers ARE the product of this script, and only this
+# script asks for them. The tee reads the live persist DB through a second
+# SQLite handle, which is unsafe alongside the Rust writer on a WAL database
+# (it took the staged-QA sqlite leg down), so it is off by default and opted
+# into here rather than riding along on LOCAL_COPY_DIR.
+export CIRIS_ACCORD_METRICS_CEG_SEAL_TEE="true"
 
 BEFORE=$(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null | wc -l)
 

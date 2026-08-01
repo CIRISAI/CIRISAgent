@@ -384,6 +384,27 @@ class AccordMetricsService:
                 f"a tee dir will find zero traces and may report that as a clean run."
             )
 
+        # CEG seal-tee: separate opt-in, and deliberately NOT folded into
+        # local_copy_dir. That var means "tee the sealed batches lens-core
+        # hands us" — a pure write, which the QA runner turns on for every
+        # run because accord_metrics_tests reads those lens-batch files. The
+        # CEG carrier dump is a different act: it READS the live persist DB
+        # through a second SQLite library in this process (see
+        # _tee_ceg_on_seal), which is what killed the staged-QA sqlite leg.
+        # Overloading one var made the dangerous read default-on everywhere
+        # the safe write was. Only tools/research/capture_traces.sh sets this.
+        config_ceg_seal_tee = self._config.get("ceg_seal_tee")
+        if config_ceg_seal_tee is None:
+            ceg_seal_tee_raw = _get_metrics_env("CEG_SEAL_TEE", "")
+        else:
+            ceg_seal_tee_raw = str(config_ceg_seal_tee)
+        self._ceg_seal_tee_enabled: bool = ceg_seal_tee_raw.strip().lower() in ("1", "true", "yes", "on")
+        if self._ceg_seal_tee_enabled:
+            logger.info(
+                f"🔬 [{self._adapter_instance_id}] CEG seal-tee ENABLED — sealed carriers will be read "
+                f"from the persist DB and written as signed envelopes. Research capture only."
+            )
+
         # Sweep cadence — reuses the historical FLUSH_INTERVAL knob so QA
         # configs keep working; post-fold it paces orphan_sweep + the
         # events-total persistence, not an HTTP flush.
@@ -1285,7 +1306,25 @@ class AccordMetricsService:
            can verify.
 
         Bytes are hex-encoded so the JSON round-trips losslessly.
+
+        OPT-IN ONLY (CIRIS_ACCORD_METRICS_CEG_SEAL_TEE). Reading the carriers
+        means opening a SECOND SQLite connection — Python's sqlite3 — against
+        the very database the Rust persist engine holds open for writing, from
+        inside the same process. Those are two independently-linked copies of
+        the SQLite library, and WAL's shared-memory index assumes exactly one
+        per process; the pair is unsupported and takes the process down hard
+        (no traceback, mid-log-line). Staged QA hit it reproducibly on the
+        sqlite leg, dying inside the 7th tee while the postgres leg — where
+        the connect fails fast because there is no SQLite file — ran clean.
+        So this stays off unless a research capture asks for it, and the
+        normal QA/production path never opens the second handle.
         """
+        if not self._ceg_seal_tee_enabled:
+            logger.debug(
+                "CEG seal tee disabled (set CIRIS_ACCORD_METRICS_CEG_SEAL_TEE=true to enable); thought=%s",
+                thought_id,
+            )
+            return
         if not self._local_copy_dir:
             logger.warning(
                 f"⚠️ [{self._adapter_instance_id}] CEG seal NOT teed (no local_copy_dir) "

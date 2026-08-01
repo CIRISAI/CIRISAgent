@@ -28,6 +28,14 @@ OUT_DIR="${OUT_DIR:-/out}"
 BASE_URL="${BASE_URL:-}"
 API_KEY="${API_KEY:-}"
 API_KEY_FILE="${API_KEY_FILE:-}"
+# Research-bound prompt overrides. Path to a manifest INSIDE the container
+# (mount it read-only, e.g. -v ./manifests:/manifests:ro then
+# OVERRIDES=/manifests/arm-b.json). Reaching the prompts any other way — bind-
+# mounting over a YAML, editing the image — bypasses the audited facility, so
+# the run carries no record of having been manipulated. That reproduces the
+# condition-self-report problem in a new place, which is self-defeating when the
+# thing you are testing IS the override path.
+OVERRIDES="${OVERRIDES:-}"
 
 # Provider -> default base URL. Override with BASE_URL for anything else.
 case "$PROVIDER" in
@@ -83,6 +91,30 @@ echo "  OK: $PROVIDER / $MODEL"
 
 mkdir -p "$OUT_DIR"
 export CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR="$OUT_DIR"
+
+if [ -n "$OVERRIDES" ]; then
+  if [ ! -f "$OVERRIDES" ]; then
+    echo "ERROR: OVERRIDES=$OVERRIDES not found in the container." >&2
+    echo "       Mount it read-only, e.g.  -v \$PWD/manifests:/manifests:ro" >&2
+    exit 5
+  fi
+  # Two keys by design: one says WHAT to apply, the other says you are ALLOWED
+  # to. A single key would let a stray line in a production .env swap the
+  # covenant out of a live agent.
+  export CIRIS_RESEARCH_PROMPT_OVERRIDES="$OVERRIDES"
+  export CIRIS_TESTING_MODE=true
+  echo "── overrides ─────────────────────────────────────────────"
+  echo "  manifest : $OVERRIDES"
+  python3 - "$OVERRIDES" <<'EOP' || { echo "  manifest is not valid JSON" >&2; exit 5; }
+import json, sys
+m = json.load(open(sys.argv[1]))
+print(f"  condition: {m.get('condition', '(none declared)')}")
+ov = m.get("overrides") or {}
+print(f"  keys     : {len(ov)}")
+for k in list(ov)[:6]:
+    print(f"    - {k}")
+EOP
+fi
 
 BEFORE=$(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null | wc -l)
 

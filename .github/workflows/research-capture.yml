@@ -174,8 +174,27 @@ jobs:
             openai)     export API_KEY_FILE="$HOME/.openai_key" ;;
             deepinfra)  export API_KEY_FILE="$HOME/.deepinfra_key" ;;
           esac
+          set +e
           ./tools/research/capture_traces.sh 2>&1 | tee "$GITHUB_WORKSPACE/capture.log"
-          exit "${PIPESTATUS[0]}"
+          RC=${PIPESTATUS[0]}
+          set -e
+          echo "capture_rc=$RC" >> "$GITHUB_OUTPUT"
+
+          # THE TRACES ARE THE PRODUCT. qa_runner exits non-zero when ANY
+          # incident is logged, even with every test passing — a real run did
+          # exactly that: 3/3 passed, 14 signed traces captured, exit 1 from two
+          # unrelated incidents. Failing the step there skipped attestation and
+          # very nearly binned a valid cohort.
+          #
+          # So: a non-zero rc WITH traces is reported loudly and the artifact is
+          # still attested and uploaded. A non-zero rc with NO traces is a real
+          # failure — capture_traces.sh already exits 4 for the empty-cohort case.
+          N=$(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null | wc -l)
+          if [ "$RC" -ne 0 ] && [ "$N" -gt 0 ]; then
+            echo "::warning::qa_runner exited $RC but $N traces were captured — cohort preserved. Check the incidents log before scoring."
+            exit 0
+          fi
+          exit "$RC"
 
       - name: Summarise the cohort
         if: always() && steps.secrets_check.outputs.have_secret == 'true'
@@ -187,7 +206,7 @@ jobs:
         # Sigstore provenance over the traces themselves. Without this the
         # artifact is just a zip someone uploaded; with it, a campaign can prove
         # which run and which commit produced the cohort it scored.
-        if: steps.secrets_check.outputs.have_secret == 'true'
+        if: always() && steps.secrets_check.outputs.have_secret == 'true' && hashFiles('research-traces/**/ceg-seal-*.json') != ''
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: 'research-traces/**/ceg-seal-*.json'

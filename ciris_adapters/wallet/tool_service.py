@@ -444,7 +444,7 @@ Only request details when needed.
         self._providers[provider.provider_id] = provider
         logger.info(f"Registered wallet provider: {provider.provider_id}")
 
-    def _resolve_trust_envelope(self, currency: str, provider: Optional[WalletProvider]) -> "TrustEnvelope":
+    def _resolve_trust_envelope(self, currency: str, provider: Optional[WalletProvider]) -> Optional["TrustEnvelope"]:
         """Resolve the deployment-scoped (trust-driven) outer envelope for a spend.
 
         This is the bound a human-approved task budget nests *inside*. It is
@@ -458,6 +458,32 @@ Only request details when needed.
         (gas sponsorship) are three distinct objects and are not folded together.
         """
         limits = self.config.spending_limits
+
+        # CURRENCY MUST MATCH (#946). These ceilings are denominated in
+        # limits.currency; the tracker below accumulates per currency. Comparing
+        # across the two is not a weaker bound, it is a meaningless one — 100
+        # USDC and 100 KES differ by about three orders of magnitude.
+        applies = limits.applies_to(currency)
+        if applies is False:
+            # Returns None rather than a zeroed envelope: TrustEnvelope pins
+            # max_transaction to gt=0, so "an envelope permitting nothing" is
+            # not expressible — by design, since an envelope is a permission and
+            # a permission of zero is just absence. The caller denies.
+            logger.error(
+                f"[WALLET TOOL] spending_limits are denominated in {limits.currency} but this "
+                f"transaction is in {currency.upper()} — refusing. Declare limits for {currency.upper()} "
+                f"or route this currency through a provider that has its own."
+            )
+            return None
+        if applies is None:
+            # Legacy config that never declared a denomination. Apply as before
+            # rather than inventing one, but say so — a silent assumption is
+            # what #946 is about.
+            logger.warning(
+                f"[WALLET TOOL] spending_limits declare no currency; applying them to {currency.upper()} "
+                f"as pre-#946 behaviour. Set spending_limits.currency to make this a real bound."
+            )
+
         max_transaction = limits.max_transaction
         daily_remaining = limits.daily_limit
 
@@ -743,6 +769,27 @@ Only request details when needed.
         # ------------------------------------------------------------------
         task_id = params.get("task_id")
         trust_envelope = self._resolve_trust_envelope(currency, provider)
+        if trust_envelope is None:
+            # No envelope could be resolved for this currency (#946): the
+            # configured ceilings are denominated in a different one. Deny
+            # rather than compare across currencies, which would be a
+            # meaningless bound dressed as an enforced one.
+            return ToolExecutionResult(
+                tool_name="send_money",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data={
+                    "denied_by": "spending_limits_currency_mismatch",
+                    "configured_currency": self.config.spending_limits.currency,
+                    "requested_currency": currency.upper(),
+                },
+                error=(
+                    f"Spend denied: spending_limits are denominated in "
+                    f"{self.config.spending_limits.currency}, but this transaction is in "
+                    f"{currency.upper()}. A ceiling in one currency is not a bound on another."
+                ),
+                correlation_id=correlation_id,
+            )
         decision = await authorize_spend(
             task_id=str(task_id) if task_id else None,
             amount=amount,

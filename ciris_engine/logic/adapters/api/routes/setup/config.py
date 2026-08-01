@@ -193,7 +193,7 @@ _PROVIDER_KEY_VARS: dict[str, list[str]] = {
     "local": [],
 }
 
-_TRUTHY = {"true", "1", "yes", "on"}
+from ciris_engine.logic.utils.env_flags import TRUTHY as _TRUTHY  # noqa: E402  (single boolean-env convention)
 
 
 def _is_mock_llm(request: Request) -> bool:

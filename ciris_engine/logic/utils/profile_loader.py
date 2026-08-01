@@ -106,6 +106,16 @@ async def load_template(template_path: Optional[Path]) -> Optional[AgentTemplate
             template_data["permitted_actions"] = [a for a in converted_actions if isinstance(a, HandlerActionType)]
 
         template = AgentTemplate(**template_data)
+
+        # Research `template` namespace + precedence refusal (§3.3). AgentTemplate
+        # ALREADY carries ungated prompt overrides (csdma/pdma/action_selection),
+        # and pdma.py consults them BEFORE the prompt loader — a leftover template
+        # override would silently beat a manifest entry for the same field. This
+        # refuses rather than picking a winner. No-op unless the gate is open.
+        from ciris_engine.logic.utils.research_overrides import apply_template_overrides
+
+        template = apply_template_overrides(template)
+
         logger.info(f"Successfully loaded template '{template.name}' from {template_path}")
         return template
 

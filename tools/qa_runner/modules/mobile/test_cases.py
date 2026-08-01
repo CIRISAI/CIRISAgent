@@ -469,28 +469,65 @@ def test_app_launch(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport
             # hole a primed canonical just got it out of. Data is still cleared —
             # only files/ciris/identity/ survives.
             preserve = config.get("preserve_identity", False)
-            stash = "/data/local/tmp/ciris_identity_stash"
+            # The node's identity is NOT just files/ciris/identity/. The
+            # bootstrap seed blobs live there, but the wizard-minted federation
+            # keys live in files/ciris/keys/ and the binding in files/ciris/config/.
+            # Restoring only the first set produced a node that reported
+            # "identity restored" and then minted a brand-new key_id anyway.
+            ident_dirs = ["files/ciris/identity", "files/ciris/keys", "files/ciris/config"]
+
+            def _node_key_id() -> str:
+                """key_id as the node itself names it — from the seed blob filename."""
+                listing = adb.shell(f"run-as {CIRISAppConfig.PACKAGE} ls files/ciris/identity") or ""
+                for n in listing.split():
+                    m = re.match(r"(ciris-agent-bootstrap-[a-z0-9]+)\.", n)
+                    if m:
+                        return m.group(1)
+                return ""
+
+            stashed: dict = {}
+            key_before = ""
             if preserve:
-                ident = f"/data/data/{CIRISAppConfig.PACKAGE}/files/ciris/identity"
-                adb.shell(f"rm -rf {stash}; mkdir -p {stash}")
-                adb.shell(f"run-as {CIRISAppConfig.PACKAGE} sh -c 'cp -r {ident}/. {stash}/ 2>/dev/null'")
-                kept = (adb.shell(f"ls {stash} 2>/dev/null") or "").split()
-                print(f"  [2/5] Preserving identity ({len(kept)} file(s)) across data clear")
+                key_before = _node_key_id()
+                for d in ident_dirs:
+                    for n in (adb.shell(f"run-as {CIRISAppConfig.PACKAGE} ls {d}") or "").split():
+                        blob = adb._run_adb(
+                            ["shell", "run-as", CIRISAppConfig.PACKAGE, "base64", f"{d}/{n}"],
+                            timeout=60,
+                        )
+                        if blob.returncode == 0 and blob.stdout.strip():
+                            stashed[f"{d}/{n}"] = "".join(blob.stdout.split())
+                print(f"  [2/5] Preserving identity: key_id={key_before or '?'} ({len(stashed)} file(s))")
+
             print("  [2/5] Clearing app data...")
             adb.clear_app_data(CIRISAppConfig.PACKAGE)
             time.sleep(1)
-            if preserve:
-                ident = f"/data/data/{CIRISAppConfig.PACKAGE}/files/ciris/identity"
-                adb.shell(f"run-as {CIRISAppConfig.PACKAGE} sh -c 'mkdir -p {ident}'")
-                adb.shell(f"run-as {CIRISAppConfig.PACKAGE} sh -c 'cp -r {stash}/. {ident}/ 2>/dev/null'")
-                back = (adb.shell(f"run-as {CIRISAppConfig.PACKAGE} ls {ident} 2>/dev/null") or "").split()
-                adb.shell(f"rm -rf {stash}")
-                if back:
-                    print(f"  [2/5] Identity restored ({len(back)} file(s)) — key_id preserved")
+
+            if preserve and stashed:
+                for d in ident_dirs:
+                    adb.shell(f"run-as {CIRISAppConfig.PACKAGE} mkdir -p {d}")
+                for path, b64 in stashed.items():
+                    adb._run_adb(
+                        ["shell", f"run-as {CIRISAppConfig.PACKAGE} sh -c 'echo {b64} | base64 -d > {path}'"],
+                        timeout=60,
+                    )
+                # ASSERT THE THING THAT MATTERS. The previous check compared FILE
+                # COUNT and reported "key_id preserved" while the node came up as
+                # a different agent entirely. A restore is only successful if the
+                # key_id is the same one.
+                key_after = _node_key_id()
+                if key_after and key_after == key_before:
+                    print(f"  [2/5] Identity restored — key_id={key_after} UNCHANGED")
                 else:
-                    # Loud: a silent failure here re-mints, and the run then fails
-                    # for a reason that looks like a federation defect.
-                    print("  [2/5] WARNING: identity restore produced NO files — the node WILL re-mint")
+                    return fail(
+                        "preserve_identity",
+                        f"identity NOT preserved: key_id was {key_before or '(none)'}, "
+                        f"is now {key_after or '(none)'}. A re-minted agent is re-admitted at "
+                        f"Advisory and strands un-rooted (CIRISEdge#432), so this run would "
+                        f"measure the wrong thing. NOTE: full_flow re-runs the setup wizard, "
+                        f"which mints a fresh federation ID BY DESIGN — --preserve-identity is "
+                        f"for repeat runs that skip setup (e.g. chat_interaction --no-clear).",
+                    )
         else:
             print("  [2/5] Skipping data clear (clear_data=False)")
 

@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scheduler dead-letters an orphaned task after 3 consecutive FK failures instead of retrying forever (#934).
 - accord_metrics telemetry stops retrying a non-retryable 401 in a hot loop; classified + backed off (#933).
 - Incident log is incident-only again — `AUTH_STEP_INFO` demoted, the `events_total` legacy-config `ConfigNode` round-trip fixed at the cause, retention raised (#935).
-- pytest `-n` no longer deletes live workers' TMPDIR (#947). The full-suite exit-hang (#956) is much reduced (the exit guard now runs in workers) but **recurs intermittently** — a shard can finish every test and still hang on exit until the job times out; re-running the shard clears it. Tracked open, not claimed fixed.
+- pytest `-n` no longer deletes live workers' TMPDIR (#947). The full-suite exit-hang (#956) is **root-caused and fixed**: three CIRISVerify FFI calls in `setup/attestation.py` ran on non-daemon threads joined with a timeout, so when the FFI blocked the test passed but the abandoned thread wedged interpreter shutdown until the 30-min job timeout. Daemonized (matching the sibling FFI sites); an AST lint now forbids any non-daemon `Thread()` in production, and the sessionfinish guard + a SIGTERM faulthandler make any residual leak self-report with full stacks instead of dying silently.
 - 78 mechanical localization placeholder breaks repaired across 11 locales (#952); `yo.json` iOS mirror re-synced.
 - Parallel epistemic consciences (#889); first-run provisioning-saga race; substrate tracing bridge installed at boot so persist/edge logs stop vanishing (#937).
 
@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Localization corpus**: `uk.json` is ~53% Russian (#949), `pt.json` holds Italian and `pa.json` Bengali (#950); `yo`/`my` withheld on translator assessment. Ship decisions per-language are a release call, not a code gap.
 - **Controls not yet enforced**: #938 Phase 2, #905, #909, #940, #942, #954 — and the residuals #967 (wise_bus placeholder signature), #968 (per-currency spend map).
-- **CI reliability**: the pytest-xdist exit-hang (#956) is intermittent, not eliminated — a shard can pass every test and time out on exit. A re-run clears it; do not read a single red shard as a real failure without checking whether it hung after 100%.
+- **CI reliability**: the pytest-xdist exit-hang (#956) is root-caused and fixed (see Fixed). Residual risk is a different mechanism — a leaked child process holding the execnet fd — which is not known to occur and now self-reports via the SIGTERM faulthandler if it ever does.
 
 ## [2.9.6] - 2026-06-12
 

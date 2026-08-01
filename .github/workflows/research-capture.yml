@@ -81,6 +81,7 @@ jobs:
       - name: Check for the provider secret
         id: secrets_check
         env:
+          PROVIDER: ${{ inputs.provider }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -89,7 +90,7 @@ jobs:
         run: |
           # Secrets are not exposed to fork PRs. Skip loudly with the remedy
           # named rather than failing with an opaque auth error 40 minutes in.
-          case "${{ inputs.provider }}" in
+          case "$PROVIDER" in
             openrouter) KEY="$OPENROUTER_API_KEY" ;;
             together)   KEY="$TOGETHER_API_KEY" ;;
             groq)       KEY="$GROQ_API_KEY" ;;
@@ -98,11 +99,11 @@ jobs:
           esac
           if [ -z "$KEY" ]; then
             echo "have_secret=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No API key secret in scope for provider '${{ inputs.provider }}' (commonly a fork PR). A maintainer can re-run on a trusted branch."
+            echo "::notice::No API key secret in scope for provider '$PROVIDER' (commonly a fork PR). A maintainer can re-run on a trusted branch."
             {
               echo "### Skipped"
               echo ""
-              echo "This run has no \`${{ inputs.provider }}\` API key in scope."
+              echo "This run has no \`$PROVIDER\` API key in scope."
               echo "Set the matching repository secret, or pick a provider whose secret exists."
             } >> "$GITHUB_STEP_SUMMARY"
           else
@@ -112,6 +113,7 @@ jobs:
       - name: Write provider API key
         if: steps.secrets_check.outputs.have_secret == 'true'
         env:
+          PROVIDER: ${{ inputs.provider }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -119,7 +121,7 @@ jobs:
           DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
         run: |
           umask 077
-          case "${{ inputs.provider }}" in
+          case "$PROVIDER" in
             openrouter) printf '%s' "$OPENROUTER_API_KEY" > "$HOME/.openrouter_key" ;;
             together)   printf '%s' "$TOGETHER_API_KEY"   > "$HOME/.together_key" ;;
             groq)       printf '%s' "$GROQ_API_KEY"       > "$HOME/.groq_key" ;;
@@ -130,6 +132,10 @@ jobs:
       - name: Record the instrument
         id: instrument
         if: steps.secrets_check.outputs.have_secret == 'true'
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          MODEL: ${{ inputs.model }}
+          LANGUAGES: ${{ inputs.languages }}
         run: |
           # Written BEFORE the run so it survives a failure. A campaign must be
           # able to tell which artifact produced which number.
@@ -142,17 +148,33 @@ jobs:
             echo "|---|---|"
             echo "| commit | \`${{ github.sha }}\` |"
             echo "| ciris-server | \`$SERVER\` |"
-            echo "| provider / model | \`${{ inputs.provider }}\` / \`${{ inputs.model }}\` |"
-            echo "| languages | \`${{ inputs.languages }}\` |"
+            echo "| provider / model | \`$PROVIDER\` / \`$MODEL\` |"
+            echo "| languages | \`$LANGUAGES\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stage the override manifest
         id: manifest
         if: steps.secrets_check.outputs.have_secret == 'true' && inputs.overrides_manifest != ''
+        env:
+          # VIA env:, NEVER interpolated into the script body.
+          #
+          # This was `printf '%s' '${{ inputs.overrides_manifest }}'`. A manifest
+          # is free prose describing an experiment, so an apostrophe is close to
+          # inevitable — "the run's signed manifest" closed the quote early and
+          # the rest of the line was parsed as shell. The researcher saw
+          # `syntax error near unexpected token 'open'` and would reasonably
+          # conclude their JSON was malformed. It was valid.
+          #
+          # It was also a script-injection surface: a manifest containing
+          # '; curl ... | sh; ' would have executed on the runner with the
+          # provider secret in scope. Passing untrusted input through env: and
+          # quoting the reference fixes the parsing and closes the injection in
+          # one move, which is GitHub's own guidance.
+          OVERRIDES_MANIFEST: ${{ inputs.overrides_manifest }}
         run: |
           mkdir -p /tmp/research
-          printf '%s' '${{ inputs.overrides_manifest }}' > /tmp/research/manifest.json
-          python3 -c "import json;json.load(open('/tmp/research/manifest.json'))" \
+          printf '%s' "$OVERRIDES_MANIFEST" > /tmp/research/manifest.json
+          python3 -c "import json,sys;json.load(open('/tmp/research/manifest.json'))" \
             || { echo '::error::overrides_manifest is not valid JSON'; exit 1; }
           echo "OVERRIDES=/tmp/research/manifest.json" >> "$GITHUB_ENV"
 
@@ -174,20 +196,55 @@ jobs:
             openai)     export API_KEY_FILE="$HOME/.openai_key" ;;
             deepinfra)  export API_KEY_FILE="$HOME/.deepinfra_key" ;;
           esac
+          set +e
           ./tools/research/capture_traces.sh 2>&1 | tee "$GITHUB_WORKSPACE/capture.log"
-          exit "${PIPESTATUS[0]}"
+          RC=${PIPESTATUS[0]}
+          set -e
+          echo "capture_rc=$RC" >> "$GITHUB_OUTPUT"
+
+          # THE TRACES ARE THE PRODUCT. qa_runner exits non-zero when ANY
+          # incident is logged, even with every test passing — a real run did
+          # exactly that: 3/3 passed, 14 signed traces captured, exit 1 from two
+          # unrelated incidents. Failing the step there skipped attestation and
+          # very nearly binned a valid cohort.
+          #
+          # So: a non-zero rc WITH traces is reported loudly and the artifact is
+          # still attested and uploaded. A non-zero rc with NO traces is a real
+          # failure — capture_traces.sh already exits 4 for the empty-cohort case.
+          N=$(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null | wc -l)
+          if [ "$RC" -ne 0 ] && [ "$N" -gt 0 ]; then
+            echo "::warning::qa_runner exited $RC but $N traces were captured — cohort preserved. Check the incidents log before scoring."
+            exit 0
+          fi
+          exit "$RC"
 
       - name: Summarise the cohort
         if: always() && steps.secrets_check.outputs.have_secret == 'true'
         run: |
           python3 tools/research/summarise_cohort.py "$GITHUB_WORKSPACE/research-traces" \
             >> "$GITHUB_STEP_SUMMARY" || true
+          # qa_runner FAILS a run on incidents, so the incident text has to be
+          # visible in the run itself — otherwise the only signal is a count and
+          # the evidence lives on a runner that is about to be destroyed.
+          {
+            echo ""
+            echo "### Incidents"
+            echo ""
+            F=$(ls -t logs/**/incidents_*.log 2>/dev/null | head -1)
+            if [ -z "$F" ]; then
+              echo "_none recorded_"
+            else
+              echo '```'
+              grep -E " - (ERROR|CRITICAL) " "$F" | tail -20 || echo "(no ERROR/CRITICAL lines)"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Attest capture bundle
         # Sigstore provenance over the traces themselves. Without this the
         # artifact is just a zip someone uploaded; with it, a campaign can prove
         # which run and which commit produced the cohort it scored.
-        if: steps.secrets_check.outputs.have_secret == 'true'
+        if: always() && steps.secrets_check.outputs.have_secret == 'true' && hashFiles('research-traces/**/ceg-seal-*.json') != ''
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: 'research-traces/**/ceg-seal-*.json'
@@ -199,6 +256,8 @@ jobs:
           path: |
             research-traces/
             capture.log
+            logs/**/incidents_*.log
+            logs/**/latest.log
           retention-days: 90
           overwrite: true
           if-no-files-found: error

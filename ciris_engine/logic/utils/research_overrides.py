@@ -945,7 +945,6 @@ def strict_manifest_skeleton(experiment_id: str = "CHANGE-ME", condition: str = 
     }
 
 
-
 def baseline_manifest() -> Dict[str, Any]:
     """A strict manifest pre-filled with the CURRENT live values.
 
@@ -1010,12 +1009,112 @@ def baseline_manifest() -> Dict[str, Any]:
     return out
 
 
+def validate_manifest_file(path: str) -> Tuple[bool, str]:
+    """Validate a manifest EXACTLY as the agent will, and return (ok, report).
+
+    Why this exists as a callable rather than only as agent-startup behaviour:
+    the agent's refusal is correct and must stay, but it arrives ~10 minutes
+    into a run, after dependency install, preflight and boot. The same verdict
+    is available in seconds from the manifest and the source tree alone, so
+    every caller that is about to spend those ten minutes should ask first
+    (#962).
+
+    This is a MIRROR of the startup gate, never a replacement and never a
+    softening: it calls the same loader, so a manifest that passes here passes
+    there for the same reasons, and one that fails here would have failed there.
+    Nothing about a failure is downgraded to a warning — the caller is expected
+    to stop.
+
+    The report names the remedy, which the raw exception does not. Two failures
+    are unfixable from the error text alone:
+
+    * ``residue_digest`` — the researcher cannot derive the value; it is a hash
+      over this tree's uncovered inline surface. So the report prints the
+      RUNNING digest, as a pasteable JSON line, for this exact commit.
+    * R2 totality — a strict manifest names ~97 keys, and "omits 44 fields"
+      is a worse authoring tool than a generated skeleton. So the report points
+      at ``skeleton`` / ``baseline``.
+    """
+    manifest_path = Path(path)
+    if not manifest_path.is_file():
+        return False, f"{path} is not a readable file"
+
+    # The anchor is a RUNTIME gate on whether this process may swap the
+    # covenant out. Validating a file swaps nothing, so the validator sets both
+    # keys on itself: refusing to check a manifest because the checker is not
+    # authorised to apply one would only teach researchers to skip the check.
+    #
+    # Both keys and the registry are restored on the way out. This runs in a
+    # subprocess in CI, where that would not matter — but it is also importable,
+    # and an in-process caller left holding an active manifest would have every
+    # later get_string() raise on a key the manifest does not name. A checker
+    # that changes the thing it checked is its own bug class.
+    saved = {k: os.environ.get(k) for k in (ENV_MANIFEST, ENV_ANCHOR)}
+    os.environ[ENV_MANIFEST] = str(manifest_path)
+    os.environ[ENV_ANCHOR] = "true"
+    reset_research_overrides()
+    try:
+        manifest = get_active_overrides()
+    except Exception as exc:  # noqa: BLE001 - pydantic and our own errors both land here
+        detail = str(exc)
+        lines = [f"manifest REJECTED: {manifest_path}", "", detail, ""]
+        if "residue_digest" in detail:
+            lines += [
+                "residue_digest pins the inline English action doctrine that overrides do",
+                "NOT cover — it is present in every arm, so a mid-campaign change to it is",
+                "a confound. It cannot be guessed; it is computed from THIS source tree.",
+                "The value for this exact commit is:",
+                "",
+                f'    "residue_digest": "{compute_residue_digest()}",',
+                "",
+                "Paste that into the manifest. If it disagrees with a digest you pinned",
+                "earlier, the doctrine moved: re-pin deliberately, do not paper over.",
+            ]
+        if "R2 strict mode" in detail:
+            lines += [
+                "A strict manifest must name every reachable key — partial replacement",
+                "leaves CIRIS text in a supposedly non-CIRIS arm. Do not hand-write it:",
+                "",
+                "    python3 -m ciris_engine.logic.utils.research_overrides skeleton   # REPLACE:: markers",
+                "    python3 -m ciris_engine.logic.utils.research_overrides baseline   # current live values",
+                "",
+                "Use 'additive' mode for a pilot — it is recorded in the trace, so an",
+                "additive run cannot later be read as a total replacement.",
+            ]
+        return False, "\n".join(lines)
+    finally:
+        for key, previous in saved.items():
+            if previous is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = previous
+        reset_research_overrides()
+
+    if manifest is None:  # pragma: no cover - unreachable: env var is set above
+        return False, f"{manifest_path} produced no manifest"
+    return True, (
+        f"manifest OK: {manifest_path}\n"
+        f"  experiment: {manifest.experiment_id}\n"
+        f"  condition : {manifest.condition}\n"
+        f"  mode      : {manifest.mode}\n"
+        f"  residue   : {manifest.residue_digest}\n"
+        f"  {describe_coverage(manifest)}"
+    )
+
+
 if __name__ == "__main__":  # pragma: no cover - operator convenience
     import sys
 
     command = sys.argv[1] if len(sys.argv) > 1 else "digest"
     if command == "digest":
         print(compute_residue_digest())
+    elif command == "validate":
+        if len(sys.argv) < 3:
+            print("usage: ... research_overrides validate <manifest.json>", file=sys.stderr)
+            sys.exit(2)
+        ok, report = validate_manifest_file(sys.argv[2])
+        print(report, file=sys.stdout if ok else sys.stderr)
+        sys.exit(0 if ok else 1)
     elif command == "skeleton":
         print(json.dumps(strict_manifest_skeleton(), indent=2, ensure_ascii=False))
     elif command == "baseline":
@@ -1031,5 +1130,8 @@ if __name__ == "__main__":  # pragma: no cover - operator convenience
             for key in sorted(keys):
                 print(f"{namespace}\t{key}")
     else:
-        print(f"usage: python -m {__name__.rsplit('.', 1)[0]}.research_overrides [digest|skeleton|keyspace]")
+        print(
+            f"usage: python3 -m {__name__.rsplit('.', 1)[0]}.research_overrides "
+            f"[digest|skeleton|baseline|keyspace|validate <manifest.json>]"
+        )
         sys.exit(2)

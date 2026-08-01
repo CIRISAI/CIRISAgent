@@ -723,3 +723,78 @@ class TestDriftGuard:
         one would imply the action doctrine is addressable."""
         assert "inline" not in ro.OverrideSet.model_fields
         assert ro.OverrideSet.model_config.get("extra") == "forbid"
+
+
+class TestValidateIsAMirrorNotASofteningcheck:
+    """``validate_manifest_file`` is the pre-run check the workflow and the
+    capture script both call (#962).
+
+    Its whole value depends on giving the SAME verdict as the startup gate. A
+    validator that passed something the agent would refuse is worse than none —
+    it would send a researcher into a ten-minute run with false confidence. A
+    validator that was more lenient would be worse still, because leniency here
+    is what produces a clean-looking cohort that was never actually manipulated.
+    """
+
+    def test_verdict_matches_the_startup_gate(self, monkeypatch, tmp_path):
+        """Same manifests, same answers, both directions."""
+        good_dir = tmp_path / "good"
+        good_dir.mkdir()
+        good = _write_raw(good_dir, ro.strict_manifest_skeleton("mirror"))
+        ok, _ = ro.validate_manifest_file(str(good))
+        assert ok
+        _activate(monkeypatch, good)
+        assert ro.get_active_overrides() is not None  # gate agrees
+
+        payload = ro.strict_manifest_skeleton("mirror")
+        payload["overrides"]["corpus"].pop("accord.polyglot_full")
+        bad_dir = tmp_path / "bad"
+        bad_dir.mkdir()
+        bad = _write_raw(bad_dir, payload)
+        ok, _ = ro.validate_manifest_file(str(bad))
+        assert not ok
+        ro.reset_research_overrides()
+        _activate(monkeypatch, bad)
+        with pytest.raises(ResearchOverrideError):  # gate agrees
+            ro.get_active_overrides()
+
+    def test_missing_residue_digest_report_carries_the_value_to_paste(self, tmp_path):
+        """The reason #962 was a ten-minute round trip: the field name alone is
+        not actionable, because the value is a hash over this tree."""
+        payload = ro.strict_manifest_skeleton("no-digest")
+        payload.pop("residue_digest")
+        ok, report = ro.validate_manifest_file(str(_write_raw(tmp_path, payload)))
+        assert not ok
+        assert "residue_digest" in report
+        assert ro.compute_residue_digest() in report, "report names the field but not the value"
+        assert f'"residue_digest": "{ro.compute_residue_digest()}",' in report, "not pasteable as JSON"
+
+    def test_partial_strict_report_points_at_the_generator(self, tmp_path):
+        """~97 keys is not hand-writable; "omits 43 fields" is a worse authoring
+        tool than ``skeleton``, so the report has to name it."""
+        payload = ro.strict_manifest_skeleton("partial")
+        payload["overrides"]["template"] = {}
+        ok, report = ro.validate_manifest_file(str(_write_raw(tmp_path, payload)))
+        assert not ok
+        assert "R2 strict mode" in report
+        assert "research_overrides skeleton" in report
+        assert "additive" in report
+
+    def test_apostrophes_in_prose_are_not_a_failure(self, tmp_path):
+        """#961's payload, from the validator's side: a manifest describing an
+        experiment contains apostrophes, and that must be unremarkable."""
+        payload = ro.strict_manifest_skeleton("the run's signed manifest")
+        ok, report = ro.validate_manifest_file(str(_write_raw(tmp_path, payload)))
+        assert ok, report
+        assert "the run's signed manifest" in report
+
+    def test_validator_leaves_no_override_state_behind(self, tmp_path):
+        """It runs in-process in tests and in a subprocess in CI. In-process, a
+        leaked active manifest would make ``get_string`` raise suite-wide."""
+        ro.validate_manifest_file(str(_write_raw(tmp_path, ro.strict_manifest_skeleton("leak"))))
+        assert ro.get_active_overrides() is None
+
+    def test_missing_file_is_reported_not_raised(self, tmp_path):
+        ok, report = ro.validate_manifest_file(str(tmp_path / "absent.json"))
+        assert not ok
+        assert "not a readable file" in report

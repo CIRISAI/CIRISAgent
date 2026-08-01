@@ -617,6 +617,7 @@ def api_required():
         pytest.skip("Cannot check API availability")
 
 
+@pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):  # noqa: D401
     """Guarantee the process exits once the run is genuinely over (#956).
 
@@ -644,8 +645,21 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: D401
     """
     import threading
 
-    if os.environ.get("PYTEST_XDIST_WORKER"):
-        return  # worker — not ours to end
+    # RUNS IN WORKERS TOO. The first version skipped them ("not ours to end"),
+    # which protected the only process that was not stuck: measured live, all 16
+    # workers were ALIVE with 96 threads each, 94 of them parked in
+    # futex_do_wait, each still holding its socket to the controller. The
+    # controller's 16 blocked pipe-readers were the SYMPTOM — it was correctly
+    # waiting for workers that could never exit.
+    #
+    # (The earlier "workers are gone" reading came from counting them with
+    # `grep popen-gw`; execnet workers run as `python3 -u -c import sys;exec(...)`
+    # and never match that pattern. The count was zero because the probe was
+    # wrong, not because the workers had died.)
+    #
+    # trylast=True so xdist's own sessionfinish — which ships this worker's
+    # results back to the controller — has already run. Forcing the exit after
+    # that discards no test outcome.
 
     lingering = [
         t
@@ -656,7 +670,7 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: D401
         return  # clean exit; let Python do it normally
 
     sys.stderr.write(
-        f"\n[conftest #956] {len(lingering)} non-daemon thread(s) still alive after "
+        f"\n[conftest #956] {_role()}: {len(lingering)} non-daemon thread(s) still alive after "
         f"sessionfinish; the interpreter would hang. Forcing exit({exitstatus}).\n"
         f"[conftest #956] These are LEAKS — fix them at the source:\n"
     )

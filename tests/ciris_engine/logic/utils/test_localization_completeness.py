@@ -22,7 +22,14 @@ from typing import List, Set
 # xfail (not skip) because the keys ARE expected to be missing — an xpass
 # means someone filled them in and the entry should go.
 WITHHELD_LOCALES = {
-    "yo": "tone is lexical; a wrong diacritic yields a real word with a different meaning that no self-check catches",
+    # yo: 46 of 54 shipped. The 8 held back are unstandardized LOANWORD
+    # transliterations (àdírẹ́sì, nẹ́tíwọ̀kì, fáìlì, sáfà, ìbuwọ́lù...) where the
+    # translator's diacritics are invention rather than recall — proven by two
+    # independent attempts producing ìbuwọ́lù vs ìbùwọ́lù on the same word.
+    # 5 of the 8 are the tool-disclosure CONSENT screen, where a user decides
+    # what an agent may do to their device and network: the worst place in this
+    # corpus to guess, so English fallback is the safer default there.
+    "yo": "8 loanword-transliteration strings held for a native speaker; 46 shipped",
     "my": "withdrawn by the translator on its own assessment of its output",
 }
 

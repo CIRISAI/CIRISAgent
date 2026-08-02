@@ -367,6 +367,12 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
     ("logic/formatters/crisis_resources.py", "*"),
     ("logic/formatters/prompt_blocks.py", "*"),
     ("logic/formatters/escalation.py", "*"),
+    # Retry remediation dict [I-7]: re-injects the English action-verb whitelist
+    # into retry prompts BELOW the bus-layer capture hook, locale-correlated
+    # (non-English cells trigger more retries). Static and arm-invariant, which
+    # makes it residue: pinned here so it cannot drift mid-campaign, and so the
+    # §12 structural residue scan can match it in composed output.
+    ("logic/services/runtime/llm_service/service.py", "LLM_ERROR_REMEDIATIONS"),
 )
 
 
@@ -386,6 +392,18 @@ def _extract_symbol_source(path: Path, qualname: str) -> str:
                     found = find(child, qual + ".")
                     if found is not None:
                         return found
+            # Module/class-level ASSIGNMENTS are residue too (#975 / [I-7]):
+            # LLM_ERROR_REMEDIATIONS is a bare dict assignment that re-injects
+            # English action-verb doctrine into retry prompts. The extractor
+            # previously resolved only def/class, so a constant could never be
+            # pinned — which is how that dict stayed out of the inventory.
+            elif isinstance(child, ast.Assign):
+                for target in child.targets:
+                    if isinstance(target, ast.Name) and f"{prefix}{target.id}" == qualname:
+                        return child
+            elif isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
+                if f"{prefix}{child.target.id}" == qualname:
+                    return child
         return None
 
     node = find(tree, "")
@@ -565,8 +583,20 @@ def _validate_manifest(manifest: ResearchOverrideManifest) -> None:
         problems.append(f"manifest_version must be '1', got {manifest.manifest_version!r}")
     if manifest.mode not in ("strict", "additive"):
         problems.append(f"mode must be 'strict' or 'additive', got {manifest.mode!r}")
-    if manifest.condition not in ("a", "b", "c"):
-        problems.append(f"condition must be 'a', 'b' or 'c', got {manifest.condition!r}")
+    if manifest.condition == "a":
+        # R6 (FSD §6.2 / §10.4, finding M-8): no configuration of this runtime
+        # yields a bare prior. Even fully blanked, a run still carries ASPDMA
+        # scaffolding, JSON response coercion, the handler action enum and the
+        # §6.1 residue. Labelling an h3ere run (a) produces a fourth thing that
+        # is neither (a) nor (b) and invalidates every comparison against it —
+        # condition (a) must come from a separate direct-to-provider harness.
+        problems.append(
+            "condition 'a' refused: an h3ere run cannot be a bare-prior baseline "
+            "(FSD/RESEARCH_PROMPT_OVERRIDES.md §6.2). Use the direct-to-provider "
+            "harness for condition (a); this runtime only accepts 'b' or 'c'."
+        )
+    elif manifest.condition not in ("b", "c"):
+        problems.append(f"condition must be 'b' or 'c', got {manifest.condition!r}")
 
     # --- R1: every key must resolve -------------------------------------
     reachable_strings = scan_reachable_string_keys()

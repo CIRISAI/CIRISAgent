@@ -332,10 +332,25 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         Returns None if eligible, AdapterOperationResult with error if not eligible.
         """
         if adapter_id not in self.loaded_adapters:
-            logger.warning(
-                f"Adapter unload failed: '{adapter_id}' not found. "
-                f"Loaded adapters: {list(self.loaded_adapters.keys())}. "
-                f"adapter_manager id: {id(self)}"
+            # NOT an error condition. Unload is a converge-to-absent operation:
+            # if the adapter is already absent, the caller's intent is satisfied.
+            # This is DELETE semantics, and it is reached routinely — a retry, a
+            # double-unload during teardown, or two callers racing the same id.
+            #
+            # It was logged at WARNING here and re-logged at ERROR by the API
+            # route, which made ordinary teardown emit incidents: a Staged QA run
+            # with a 100% pass rate failed anyway because the incident gate
+            # counted them (2026-08-02, sqlite leg; postgres passed the same
+            # code, which is what gives the race away).
+            #
+            # `reason` lets the caller distinguish "already gone" from a genuine
+            # unload failure, so real failures keep their ERROR and this one does
+            # not. Downgraded to INFO rather than silenced — a stale adapter id
+            # is still worth seeing, just not worth failing a run over.
+            logger.info(
+                "Adapter '%s' was not loaded; nothing to unload. Loaded: %s",
+                adapter_id,
+                list(self.loaded_adapters.keys()),
             )
             return self._create_adapter_operation_result(
                 success=False,
@@ -343,6 +358,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 adapter_type="unknown",
                 message=f"Adapter with ID '{adapter_id}' not found",
                 error=f"Adapter with ID '{adapter_id}' not found",
+                details={"reason": "not_loaded"},
             )
 
         instance = self.loaded_adapters[adapter_id]
@@ -940,30 +956,33 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             this_file = Path(__file__)
             adapters_dir = this_file.parent.parent.parent.parent / "ciris_adapters"
             manifest_path = adapters_dir / adapter_type / "manifest.json"
-            logger.warning(
+            # Diagnostic breadcrumbs only (path resolution on Android/Chaquopy).
+            # DEBUG level — at WARNING these landed in incidents_latest.log
+            # thousands of times per soak window (#935).
+            logger.debug(
                 f"[AUTH_STEP_INFO] {adapter_type}: __file__={this_file}, adapters_dir={adapters_dir}, manifest_path={manifest_path}"
             )
-            logger.warning(f"[AUTH_STEP_INFO] {adapter_type}: manifest exists={manifest_path.exists()}")
+            logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: manifest exists={manifest_path.exists()}")
 
             if not manifest_path.exists():
-                logger.info(f"[AUTH_STEP_INFO] {adapter_type}: manifest not found, returning False")
+                logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: manifest not found, returning False")
                 return False, None
 
             with open(manifest_path) as f:
                 manifest_data = json.load(f)
 
             interactive_config = manifest_data.get("interactive_config")
-            logger.info(f"[AUTH_STEP_INFO] {adapter_type}: has interactive_config={interactive_config is not None}")
+            logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: has interactive_config={interactive_config is not None}")
             if not interactive_config:
                 return False, None
 
             steps = interactive_config.get("steps", [])
-            logger.info(f"[AUTH_STEP_INFO] {adapter_type}: found {len(steps)} steps")
+            logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: found {len(steps)} steps")
             for step in steps:
                 step_type = step.get("step_type", "")
                 if step_type in ("oauth", "device_auth"):
                     step_id = step.get("step_id")
-                    logger.info(f"[AUTH_STEP_INFO] {adapter_type}: found auth step type={step_type}, id={step_id}")
+                    logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: found auth step type={step_type}, id={step_id}")
                     return True, step_id
 
             return False, None

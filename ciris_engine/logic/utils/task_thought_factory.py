@@ -107,6 +107,11 @@ def create_task(
                 parent_task_id=context.parent_task_id if hasattr(context, "parent_task_id") else parent_task_id,
                 agent_occurrence_id=agent_occurrence_id,  # Override with correct one
                 preferred_language=context.preferred_language or preferred_language,
+                # Preserve the task-scoped authorization envelope through the
+                # occurrence-id correction (CIRISAgent#938). Dropping it here
+                # would silently turn an authorized task into an unauthorized
+                # one.
+                envelope=context.envelope,
             )
 
     # Task is the record of truth for preferred_language. Mirror the value

@@ -14,24 +14,19 @@ The Secrets Management module provides comprehensive protection for sensitive in
    - Custom pattern support with agent-configurable rules
    - Context-aware filtering based on security levels
 
-2. **SecretsEncryption** (`encryption.py`)
-   - AES-256-GCM encryption for all stored secrets
-   - Per-secret encryption keys with secure key derivation
-   - Cryptographically secure random initialization vectors
+2. **Persist secrets substrate** (`ciris-persist`, in the ciris-server wheel)
+   - AES-256-GCM encryption for all stored secrets (`Engine.secrets_encrypt` / `secrets_decrypt`)
+   - Encrypted storage, master-key rotation, and re-encryption (`secrets_store_detected_secret`, `secrets_rotate_master_key`, `secrets_reencrypt_all`)
+   - Comprehensive audit logging on every access
+   - Replaced the agent-side `SecretsEncryption` / `SecretsStore` shims in 2.9.7 (#896)
 
-3. **SecretsStore** (`store.py`)
-   - SQLite-based encrypted storage backend
-   - Atomic operations with transaction support
-   - Rate limiting and access control
-   - Comprehensive audit logging
-
-4. **SecretsService** (`service.py`)
-   - Unified interface for secrets operations
+3. **SecretsService** (`service.py`)
+   - Unified typed facade for secrets operations
    - Automatic detection and encryption pipeline
    - Context-aware decapsulation
    - Integration with message processing
 
-5. **SecretTools** (`tools.py`)
+4. **SecretTools** (`tools.py`)
    - Agent-accessible tools for secret management
    - RECALL_SECRET: Retrieve stored secrets with audit
    - UPDATE_SECRETS_FILTER: Configure detection patterns
@@ -165,8 +160,7 @@ pytest tests/ciris_engine/secrets/
 
 ## Dependencies
 
-- `cryptography`: Encryption operations
-- `sqlite3`: Storage backend
+- `ciris-server` wheel (persist substrate): encryption + storage backend
 - `pydantic`: Data models
 - `asyncio`: Async operations
 

@@ -47,6 +47,14 @@ class LensIdentifierResponse(BaseModel):
     agent_id: str = Field(..., description="Raw agent ID (so user can verify the hash)")
     consent_given: bool = Field(..., description="Whether accord metrics consent is currently active")
     consent_timestamp: Optional[str] = Field(None, description="When consent was last granted/revoked")
+    # CONSENT DRY (v22): the resolved federation consent set — capture alone
+    # does not ship or score traces. None = resolver unavailable on this wheel.
+    federation_consents: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Resolved v22 consent set {capture, replication, analyze, canonical, aligned} "
+        "via the engine's own readers; 'aligned' False => the Manage Consent card should "
+        "offer a one-tap confirm (authorFederationConsent).",
+    )
     trace_level: Optional[str] = Field(None, description="Current trace detail level (generic/detailed/full_traces)")
     traces_sent: int = Field(0, description="Approximate number of trace events sent this session")
     endpoint_url: Optional[str] = Field(None, description="CIRISLens endpoint traces are sent to")
@@ -158,22 +166,31 @@ class CapacityResponse(BaseModel):
 
 
 def _compute_agent_id_hash_from_signer() -> str:
-    """Compute agent_id_hash from the unified signing key.
+    """Compute agent_id_hash from the persist Engine's local signer.
 
-    This hash is unique per agent instance (based on signing key),
+    2.9.7 (second-signer removal): derived from the engine's federation
+    signing pubkey — the ONE signer identity. This CHANGES the hash from
+    the pre-2.9.7 CIRISVerify-key derivation (accepted breakage).
+
+    This hash is unique per agent instance (based on the signing key),
     not per template name. This ensures multiple instances of the same
     template (e.g., 30 "Ally" agents) have distinct hashes.
 
-    Must stay in sync with ciris_adapters/ciris_accord_metrics/services.py.
+    Must stay in sync with ciris_adapters/ciris_accord_metrics/services.py
+    (_compute_instance_hash).
     """
     try:
-        from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+        import base64
 
-        unified_key = get_unified_signing_key()
-        pubkey_bytes = unified_key.public_key_bytes
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError("persist engine not wired")
+        pubkey_bytes = base64.b64decode(engine.local_public_key_b64())
         return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
     except Exception as e:
-        logger.warning(f"Could not compute agent_id_hash from signing key: {e}")
+        logger.warning(f"Could not compute agent_id_hash from engine signer: {e}")
         return "unknown"
 
 
@@ -291,19 +308,20 @@ def _get_agent_id(request: Request) -> Optional[str]:
         logger.debug(f"_get_agent_id: Using legacy runtime.agent_id={legacy}")
         return str(legacy)
 
-    # Signing key fallback: key_id is always available (deterministic from Ed25519 pubkey)
+    # Signing key fallback: the engine's derived key id is deterministic
+    # from the local Ed25519 signing identity (2.9.7: the ONE signer).
     try:
-        from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-        unified_key = get_unified_signing_key()
-        if unified_key.has_key:
-            key_id = unified_key.key_id
-            logger.info(f"_get_agent_id: Using signing key key_id={key_id}")
+        engine = get_persist_engine()
+        if engine is not None:
+            key_id = str(engine.local_derived_key_id())
+            logger.info(f"_get_agent_id: Using engine signer key_id={key_id}")
             return key_id
         else:
-            logger.warning("_get_agent_id: Signing key exists but has_key=False")
+            logger.warning("_get_agent_id: persist engine not wired")
     except Exception as e:
-        logger.error(f"_get_agent_id: Signing key fallback FAILED: {e}", exc_info=True)
+        logger.error(f"_get_agent_id: Engine signer fallback FAILED: {e}", exc_info=True)
 
     logger.error(
         "_get_agent_id: ALL fallbacks exhausted! Could not determine agent_id. "
@@ -434,11 +452,24 @@ async def get_lens_identifier(
     if not agent_id_hash:
         agent_id_hash = _compute_agent_id_hash_from_signer()
 
+    # CONSENT DRY: resolve the full v22 consent set through the engine's own
+    # readers so the card can offer the one-tap confirm when misaligned.
+    _fed_consents = None
+    try:
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            federation_consent_status,
+        )
+
+        _fed_consents = federation_consent_status()
+    except Exception:  # noqa: BLE001 — advisory only
+        pass
+
     data = LensIdentifierResponse(
         agent_id_hash=agent_id_hash,
         agent_id=agent_id,
         consent_given=consent_given,
         consent_timestamp=consent_timestamp,
+        federation_consents=_fed_consents,
         trace_level=trace_level,
         traces_sent=traces_sent,
         endpoint_url=endpoint_url,
@@ -820,8 +851,10 @@ def _capacity_base_url() -> str:
 #
 #   * TAU_ATTESTED (0.95) — a live trust edge exists: either the CEG
 #     community-trust grant is in force (consent:community_trust:v1,
-#     newest-wins — the same artifact lens-core's consent gate reads) or
-#     at least one federation peer is reachable. The occurrence's claim
+#     newest-wins — the same artifact that drives lens-core's consent gate:
+#     directly in the sovereign path, via the adapter's config-fallback
+#     derivation in the cohabitation path — see _newest_community_trust_row)
+#     or at least one federation peer is reachable. The occurrence's claim
 #     is anchored to something outside itself, but still self-reported:
 #     capped below 1.0 forever.
 #   * TAU_ISOLATED (0.60) — no trust edge. An isolated occurrence's
@@ -838,26 +871,36 @@ TAU_ISOLATED = 0.60
 def _newest_community_trust_row(engine: Any, key_id: str) -> Optional[Dict[str, Any]]:
     """Newest attestation row on ``consent:community_trust:v1`` by key_id.
 
-    Tries a dimension-scoped filter first (keeps the community-trust row
-    from falling off page 1 as per-user consent rows accumulate); falls
-    back to the unfiltered page if persist rejects the filter key.
+    Uses persist's ``list_scores`` (v17.4 FSD-005 Appendix C, bundled in
+    ciris-server 0.5.117): the durable newest-by-(subject, dimension) seek
+    over the V106 ``scores`` projection. ``dimension_exact`` filters at the
+    substrate and rows come back newest-first, so ``limit=1`` IS the head —
+    no Python-side fetch-100-then-fold (the old ``list_attestations``
+    dimension filter silently no-op'd, forcing the fold). Structural rows
+    (withdraws/recants/supersedes) are included in the seek, so a severed
+    edge surfaces as the newest row and ``_community_grant_edge`` reads it.
+
+    Scope note — this reads the FEDERATION-TIER projection: an interim
+    LOCAL-TIER grant (unpromoted sentinel row, canonical community key
+    unpublished) is absent here. That is exactly what
+    ``_community_grant_edge`` discounts anyway (a self-authored row with no
+    counterparty is the solipsism τ exists to discount), so the "None here"
+    path and the old "sentinel excluded" path collapse to the same verdict.
+    Contrast ``current_community_grant_id`` in consent/attestation.py, which
+    MUST keep the fetch-fold to stay local-tier-visible for revocation
+    targeting (list_scores would silently fail to find the interim grant and
+    break consent withdrawal — CIRISPersist ask: local-tier dimension seek).
     """
     import json as _json
 
     try:
-        raw = engine.list_attestations(_json.dumps({"dimension": "consent:community_trust:v1"}), None, 100, key_id)
-    except Exception:
-        raw = engine.list_attestations("{}", None, 100, key_id)
-    page = _json.loads(raw)
-    rows = [
-        r
-        for r in page.get("items", [])
-        if (r.get("attestation_envelope") or {}).get("dimension") == "consent:community_trust:v1"
-    ]
-    if not rows:
+        raw = engine.list_scores(_json.dumps({"dimension_exact": "consent:community_trust:v1"}), None, 1, key_id)
+    except Exception:  # pragma: no cover - defensive (pre-0.5.117 wheels lack list_scores)
         return None
-    rows.sort(key=lambda r: (r.get("asserted_at", ""), r.get("attestation_id", "")), reverse=True)
-    newest: Dict[str, Any] = rows[0]
+    items = _json.loads(raw).get("items", [])
+    if not items:
+        return None
+    newest: Dict[str, Any] = items[0]
     return newest
 
 

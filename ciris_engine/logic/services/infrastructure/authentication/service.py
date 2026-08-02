@@ -52,6 +52,7 @@ from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.models import Task
+    from ciris_engine.schemas.services.authority_core import DeferralResponse
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,24 @@ SYSTEM_WA_KEY_FILENAME = "system_wa.key"
 # Do not raise above 20.0 without filing a NEW issue against ciris_verify.
 # The per-worker safety net is ATTESTATION_TIMEOUT=90 in verifier_runner.py;
 # that exists to prevent infinite hangs, not to license a slow happy path.
-STARTUP_ATTESTATION_BUDGET_SECONDS = 20.0
+#
+# Env-overridable (CIRISVerify#212 workaround): the 20s contract holds in
+# production, but a dev/QA/unregistered build cannot meet it while verify v10.5.0
+# blocks ~27s on the missing-registry-record fetch. CIRIS_STARTUP_ATTESTATION_
+# BUDGET_SECONDS lets those builds tolerate the slow degrade (paired with
+# CIRIS_ATTESTATION_SKIP_REGISTRY, which removes the block entirely on verify
+# that accepts it). Default unchanged → production still enforces 20s.
+def _startup_attestation_budget() -> float:
+    raw = os.environ.get("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "").strip()
+    if raw:
+        try:
+            return max(1.0, float(raw))
+        except ValueError:
+            pass
+    return 20.0
+
+
+STARTUP_ATTESTATION_BUDGET_SECONDS = _startup_attestation_budget()
 
 
 class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProtocol):
@@ -1494,6 +1512,225 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             return self.sign_data(data, private_key)
 
         raise ValueError(f"No signing key available for WA {wa_id}")
+
+    @staticmethod
+    def _deferral_canonical_bytes(deferral_id: str, response: "DeferralResponse", signed_at: str) -> bytes:
+        """Canonical bytes the deferral-resolution signature commits to.
+
+        Sorted compact JSON, matching ``sign_task``/``verify_task_signature``.
+        #944 suggests JCS to share one story with the 2.9.6 trace cut; adopting
+        it here alone would create two stories *inside* the signing code
+        instead of one, so unifying all three belongs in its own change.
+        """
+        from ciris_engine.schemas.services.authority_core import deferral_resolution_payload
+
+        payload = deferral_resolution_payload(deferral_id, response, signed_at)
+        return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    @staticmethod
+    def _owner_key_id(engine: object, signing_key_id: str) -> Optional[str]:
+        """The CEG federation identity that owns ``signing_key_id``, if any.
+
+        ``owner_of_json`` is the substrate's single-owner resolver — purpose
+        filtered to the owner-binding sub-relation, so at most one. It returns
+        JSON ``null`` for an unowned node, which is the honest answer on a
+        deployment that has not been owner-provisioned; the signature is still
+        sound, it simply does not yet chain anywhere.
+        """
+        owner_of_json = getattr(engine, "owner_of_json", None)
+        if owner_of_json is None:
+            return None
+        try:
+            raw = owner_of_json(signing_key_id)
+        except Exception as exc:
+            # Includes the substrate's fail-closed `federation_ambiguous_node_owner`
+            # pre-gate. Ambiguity is an authority problem worth seeing, but it does
+            # not make the node's own signature less valid.
+            logger.warning("Could not resolve owner of signing key %s: %s", signing_key_id, exc)
+            return None
+        if not raw:
+            return None
+        try:
+            owner = json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+        return owner if isinstance(owner, str) and owner else None
+
+    @staticmethod
+    def _signing_pubkeys(engine: object, signing_key_id: str) -> Optional[Tuple[str, Optional[str]]]:
+        """``(ed25519_b64, ml_dsa_65_b64 | None)`` for ``signing_key_id``.
+
+        The local signer first — the ordinary case, since the node that records
+        a resolution is the node that consumes it — then the federation
+        directory, which is what makes a resolution signed by a sibling
+        occurrence verifiable here.
+        """
+        try:
+            if signing_key_id == engine.local_derived_key_id():  # type: ignore[attr-defined]
+                ed: str = engine.local_public_key_b64()  # type: ignore[attr-defined]
+                try:
+                    pqc: Optional[str] = engine.local_pqc_public_key_b64()  # type: ignore[attr-defined]
+                except Exception:
+                    pqc = None  # Hybrid-pending deployment (no PQC seed).
+                return ed, pqc
+        except Exception:
+            pass  # Fall through to the directory.
+
+        try:
+            raw = engine.lookup_public_key(signing_key_id)  # type: ignore[attr-defined]
+        except Exception as exc:
+            logger.warning("Federation directory lookup failed for %s: %s", signing_key_id, exc)
+            return None
+        if not raw:
+            return None
+        try:
+            record = json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(record, dict):
+            return None
+        ed_key = record.get("pubkey_ed25519_base64")
+        if not isinstance(ed_key, str) or not ed_key:
+            return None
+        pqc_key = record.get("pubkey_ml_dsa_65_base64")
+        return ed_key, pqc_key if isinstance(pqc_key, str) and pqc_key else None
+
+    async def sign_deferral_resolution(
+        self, deferral_id: str, response: "DeferralResponse", signed_at: str
+    ) -> "DeferralResponse":
+        """Sign a deferral resolution with the owner's CEG identity chain (#944).
+
+        Before this the ``signature`` on a resolved deferral was
+        ``f"api_{user_id}_{timestamp}"`` — an identifier and a clock reading,
+        forgeable by anything able to write the row. Under #938 that record is
+        the budget-issuance event, so "approval can be verified after the fact"
+        has to be true of it rather than merely claimed.
+
+        **Which key signs.** The local node's persist signing key, hybrid
+        (Ed25519 + ML-DSA-65) via ``local_sign_hybrid`` — the substrate's single
+        hybrid-sign verb, so the bound-signature rule
+        ``pqc = Sign_PQC(message || ed25519_sig)`` is not re-derived here. That
+        key is the *delegate*: what authorizes the agent to operate at all is
+        the owner's CEG federation identity signing the delegation to it. The
+        record therefore carries ``owner_key_id`` so an approval chains to that
+        same root of authority instead of standing on a second, ad-hoc key.
+
+        The owner's own private key deliberately does not cross into this
+        process — the substrate releases it only under a verified owner session
+        — so this signs as the delegate and *names* the root, rather than
+        pretending to be the root.
+
+        Returns the response with its signing fields filled. Raises on any
+        failure: the caller must refuse to record an unsigned resolution rather
+        than record an unverifiable one.
+        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError("persist engine not initialized — cannot sign deferral resolution")
+
+        canonical = self._deferral_canonical_bytes(deferral_id, response, signed_at)
+        signing_key_id = engine.local_derived_key_id()
+
+        try:
+            signatures = engine.local_sign_hybrid(canonical)
+            classical = base64.b64encode(bytes(signatures["classical_sig"])).decode("ascii")
+            pqc: Optional[str] = base64.b64encode(bytes(signatures["pqc_sig"])).decode("ascii")
+        except ValueError:
+            # No PQC signer wired (CLIENT-mode deployments are expected to lack
+            # one). Hybrid-pending is a state the substrate models rather than
+            # an error; record the classical half and leave the PQC half null,
+            # exactly as a hybrid-pending CEG row does.
+            logger.info("Signing deferral resolution %s hybrid-pending (no PQC signer)", deferral_id)
+            classical = base64.b64encode(bytes(engine.local_sign(canonical))).decode("ascii")
+            pqc = None
+
+        return response.model_copy(
+            update={
+                "signature": classical,
+                "signature_pqc": pqc,
+                "signed_at": signed_at,
+                "signing_key_id": signing_key_id,
+                "owner_key_id": self._owner_key_id(engine, signing_key_id),
+            }
+        )
+
+    async def verify_deferral_resolution(self, deferral_id: str, response: "DeferralResponse", signed_at: str) -> bool:
+        """Verify a deferral resolution's signature. **Fails closed.**
+
+        Returns False for an absent, legacy-placeholder, or invalid signature,
+        for an unresolvable signing key, and when the substrate is unavailable
+        to check against. A caller must not act on an unverified approval; a
+        signature nothing checks is the same defect one layer along.
+
+        Legacy records are distinguishable via
+        ``is_unverifiable_legacy_signature`` so they can be surfaced as
+        *unverified* rather than reported as forged — the difference between a
+        migration gap and an attack. Callers wanting that distinction should
+        test it before calling here; this returns a bare False either way.
+
+        The owner binding is re-resolved from the federation directory rather
+        than trusted from the record. A stored ``owner_key_id`` that disagrees
+        with the directory is refused — which is what stops the field from
+        being decoration an attacker could simply fill in.
+        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.schemas.services.authority_core import is_unverifiable_legacy_signature
+
+        if not response.signature or is_unverifiable_legacy_signature(response.signature):
+            return False
+
+        if not response.signing_key_id:
+            # A signature we cannot attribute to a key is not evidence.
+            logger.warning("Deferral resolution %s carries a signature but no signing_key_id", deferral_id)
+            return False
+
+        engine = get_persist_engine()
+        if engine is None:
+            logger.error("persist engine not initialized — cannot verify deferral resolution %s", deferral_id)
+            return False
+
+        pubkeys = self._signing_pubkeys(engine, response.signing_key_id)
+        if pubkeys is None:
+            logger.warning("No public key for deferral signer %s", response.signing_key_id)
+            return False
+        ed_pubkey, pqc_pubkey = pubkeys
+
+        # The PQC signature and pubkey are paired: both present for a full
+        # hybrid verify, both absent for a hybrid-pending row.
+        if response.signature_pqc and pqc_pubkey:
+            pqc_sig: Optional[str] = response.signature_pqc
+            pqc_key: Optional[str] = pqc_pubkey
+            policy = "strict"
+        else:
+            pqc_sig = None
+            pqc_key = None
+            policy = "ed25519_fallback"
+
+        canonical = self._deferral_canonical_bytes(deferral_id, response, signed_at)
+        try:
+            engine.verify_hybrid(canonical, response.signature, pqc_sig, ed_pubkey, pqc_key, policy)
+        except Exception as exc:
+            logger.warning("Deferral resolution %s failed signature verification: %s", deferral_id, exc)
+            return False
+
+        # A claimed owner must be the one the directory actually binds — including
+        # the case where the directory binds none. Anything else would let the
+        # field be filled in at will, which is what makes it decoration rather
+        # than a control. A record claiming *no* owner is not refused: it asserts
+        # nothing, and predates provisioning rather than contradicting it.
+        directory_owner = self._owner_key_id(engine, response.signing_key_id)
+        if response.owner_key_id and response.owner_key_id != directory_owner:
+            logger.error(
+                "Deferral resolution %s claims owner %s but the directory binds %s",
+                deferral_id,
+                response.owner_key_id,
+                directory_owner,
+            )
+            return False
+
+        return True
 
     async def verify_task_signature(self, task: "Task") -> bool:
         """Verify a task's signature.

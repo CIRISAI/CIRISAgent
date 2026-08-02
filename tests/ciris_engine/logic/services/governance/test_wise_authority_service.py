@@ -80,9 +80,8 @@ async def wise_authority_service(auth_service, time_service, temp_db):
     `temp_db`) so the AuthenticationService start path runs without
     persist interference.
     """
-    from ciris_persist import Engine, reset_engine  # type: ignore[import-untyped]
-
     import ciris_engine.logic.persistence.models.graph as _graph_mod
+    from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
     from ciris_engine.logic.persistence.models.graph import set_persist_engine
 
     prior_engine = _graph_mod._engine
@@ -325,9 +324,11 @@ async def test_resolve_deferral(wise_authority_service, time_service, temp_db):
     )
     deferral_id = await wise_authority_service.send_deferral(deferral)
 
-    # Resolve it with approval
+    # Resolve it with approval. Unsigned, i.e. shaped like a record written
+    # before #944 — those must keep resolving (there is deployed data), and are
+    # recorded as unverified rather than as verified.
     response = DeferralResponse(
-        approved=True, reason="Approved after review", wa_id="wa-2025-06-24-AUTH01", signature="test-signature"
+        approved=True, reason="Approved after review", wa_id="wa-2025-06-24-AUTH01", signature=""
     )
 
     resolved = await wise_authority_service.resolve_deferral(deferral_id, response)
@@ -545,7 +546,7 @@ async def test_deferral_with_modified_time(wise_authority_service, time_service,
         reason="Approved but needs more time",
         modified_time=new_defer_time,
         wa_id="wa-2025-06-24-AUTH01",
-        signature="test-signature",
+        signature="",  # pre-#944 shape; see test_resolve_deferral
     )
 
     resolved = await wise_authority_service.resolve_deferral(deferral_id, response)
@@ -562,6 +563,143 @@ async def test_deferral_with_modified_time(wise_authority_service, time_service,
     assert raw is not None
     row = _json.loads(raw) if isinstance(raw, str) else raw
     assert row["status"] == "completed"
+
+
+# ========== Deferral Resolution Signing (#944) ==========
+
+
+def _stored_resolution(task_id: str) -> dict:
+    """The resolution as it was actually written to the task context."""
+    import json as _json
+
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    engine = get_persist_engine()
+    raw = engine.task_get(task_id)
+    assert raw is not None
+    row = _json.loads(raw) if isinstance(raw, str) else raw
+    context = row.get("context")
+    if isinstance(context, str):
+        context = _json.loads(context)
+    return context["deferral"]["resolution"]
+
+
+async def _seed_deferral(wise_authority_service, time_service, task_id: str) -> str:
+    _insert_task_via_persist(
+        task_id=task_id,
+        channel_id="test-channel",
+        description="Test task",
+        status="active",
+        priority=5,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+        agent_occurrence_id="default",
+        context={"correlation_id": f"corr-{task_id}"},
+    )
+    return await wise_authority_service.send_deferral(
+        DeferralRequest(
+            task_id=task_id,
+            thought_id=f"thought-{task_id}",
+            reason="Test resolution",
+            defer_until=time_service.now() + timedelta(hours=1),
+            context={},
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_deferral_refuses_a_signature_that_does_not_verify(wise_authority_service, time_service, temp_db):
+    """The fail-closed control, at the point where an approval takes effect.
+
+    Delete the `_verify_resolution` guard in `resolve_deferral` and this test
+    goes green while the agent acts on a forged approval — which is the whole
+    of #944. It asserts the *effects* are absent, not merely a return value:
+    the task is not completed and no guidance task is created.
+    """
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-forged")
+
+    # A signature is present and claims to have been signed — but nothing backs it.
+    response = DeferralResponse(
+        approved=True,
+        reason="Approved: release the budget",
+        wa_id="wa-2025-06-24-AUTH01",
+        signature="Zm9yZ2VkLXNpZ25hdHVyZS1ub3QtcmVhbA==",
+        signed_at="2026-08-01T12:00:00+00:00",
+        signing_key_id="agent-attacker",
+    )
+
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is False
+
+    # The deferred task must be untouched — not completed, no outcome.
+    import json as _json
+
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    row = get_persist_engine().task_get("task-forged")
+    row = _json.loads(row) if isinstance(row, str) else row
+    assert row["status"] == "deferred"
+
+
+@pytest.mark.asyncio
+async def test_resolve_deferral_refuses_a_signature_with_no_signed_at(wise_authority_service, time_service, temp_db):
+    """signed_at is inside the canonical payload; without it there is nothing
+    to rebuild the signature against, so it cannot be checked — and an
+    uncheckable signature must read as refusal."""
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-nosignedat")
+
+    response = DeferralResponse(
+        approved=True,
+        reason="Approved",
+        wa_id="wa-2025-06-24-AUTH01",
+        signature="c29tZS1zaWduYXR1cmU=",
+        signing_key_id="agent-whoever",
+    )
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is False
+
+
+@pytest.mark.asyncio
+async def test_resolve_deferral_stores_the_verification_material(wise_authority_service, time_service, temp_db):
+    """Before #944 the stored resolution held four fields and dropped the
+    signature and signed_at, making later verification impossible rather than
+    merely unwired. Remove them from `deferral_resolution_record` and this fails."""
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-stored")
+
+    response = DeferralResponse(
+        approved=True, reason="Approved after review", wa_id="wa-2025-06-24-AUTH01", signature=""
+    )
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+
+    resolution = _stored_resolution("task-stored")
+    # The four original keys keep their names — deployed readers still work.
+    assert resolution["approved"] is True
+    assert resolution["reason"] == "Approved after review"
+    assert resolution["resolved_by"] == "wa-2025-06-24-AUTH01"
+    assert "resolved_at" in resolution
+    # And the material verification needs is now written down.
+    for key in ("signature", "signed_at", "signature_pqc", "signing_key_id", "owner_key_id", "verification"):
+        assert key in resolution
+
+
+@pytest.mark.asyncio
+async def test_unsigned_legacy_resolution_is_marked_unverified_not_verified(
+    wise_authority_service, time_service, temp_db
+):
+    """A pre-#944 record must stay resolvable, and must never be recorded as
+    verified. Nor as forged — that would blame an attacker for a migration."""
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-legacy")
+
+    response = DeferralResponse(
+        approved=True,
+        reason="Approved",
+        wa_id="wa-2025-06-24-AUTH01",
+        signature="api_admin_2026-07-31T02:32:57+00:00",  # the exact legacy f-string
+    )
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+    assert _stored_resolution("task-legacy")["verification"] == "unsigned"
 
 
 # ========== Helper Method Tests ==========

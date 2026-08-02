@@ -49,6 +49,18 @@ class NetworkIdentityViewModel(
     private val _federationId = MutableStateFlow<FederationIdentityResponse?>(null)
     val federationId: StateFlow<FederationIdentityResponse?> = _federationId.asStateFlow()
 
+    /**
+     * The bound OWNER's fed-ID key_id (the human's identity, e.g.
+     * `eric-moore-v1-<fp>`) — projected from the local node's
+     * `delegates_to(user → node)` owner-binding via `GET /v1/setup/owned-nodes`
+     * (`owner` field). This is DISTINCT from [identity]'s `signer_key_id`, which
+     * is the NODE's own federation signer key. The Identity header shows this as
+     * the primary "your fed-ID" and falls back to the node key when null (the
+     * node is still unclaimed / pre-claim).
+     */
+    private val _ownerKeyId = MutableStateFlow<String?>(null)
+    val ownerKeyId: StateFlow<String?> = _ownerKeyId.asStateFlow()
+
     /** Initial load — call from a LaunchedEffect on first composition. */
     fun load() {
         refresh()
@@ -88,6 +100,14 @@ class NetworkIdentityViewModel(
                     .onSuccess { _federationId.value = it }
                     .onFailure { e ->
                         PlatformLogger.e(tag, "getFederationIdentityAggregate failed: ${e.message}", e)
+                    }
+                // Best-effort: the bound owner's fed-ID key_id (the human). Null
+                // when the node is unclaimed; failures never raise the banner —
+                // the header simply falls back to showing the node key.
+                runCatching { apiClient.getOwnedNodes().owner }
+                    .onSuccess { _ownerKeyId.value = it }
+                    .onFailure { e ->
+                        PlatformLogger.e(tag, "getOwnedNodes (owner) failed: ${e.message}", e)
                     }
             } finally {
                 _loading.value = false

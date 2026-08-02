@@ -438,13 +438,14 @@ class TestAccordMetricsAdapterLifecycle:
         the same way a missing persist blocks boot."""
         import sys
 
+        monkeypatch.setitem(sys.modules, "ciris_server", None)
         monkeypatch.setitem(sys.modules, "ciris_lens_core", None)
         adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
         )
 
-        with pytest.raises(RuntimeError, match="ciris-lens-core is REQUIRED"):
+        with pytest.raises(RuntimeError, match="LensClient is REQUIRED"):
             await adapter.start()
 
     @pytest.mark.asyncio

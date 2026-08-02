@@ -8,6 +8,9 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
+    issue_task_envelope_best_effort,
+)
 from ciris_engine.schemas.runtime.enums import TaskStatus
 from ciris_engine.schemas.runtime.models import Task, TaskContext
 from ciris_engine.schemas.types import JSONDict
@@ -78,6 +81,12 @@ class TaskManager:
             signature=None,
             signed_at=None,
         )
+
+        # Task-scoped authorization envelope (CIRISAgent#938). This site is
+        # synchronous, so it resolves the enabled-tool set from the cache the
+        # ToolBus primes; a cold cache yields an empty grant and a warning
+        # rather than an implicit "everything".
+        issue_task_envelope_best_effort(task, time_service=self._time_service)
 
         persistence.add_task(task)
         logger.info(f"Created task {task.task_id} (occurrence: {self.agent_occurrence_id}): {description}")
@@ -214,6 +223,7 @@ class TaskManager:
         )
 
         if not persistence.task_exists(root_task.task_id):
+            issue_task_envelope_best_effort(root_task, time_service=self._time_service)
             persistence.add_task(root_task)
         else:
             persistence.update_task_status(
@@ -272,6 +282,7 @@ class TaskManager:
                 signature=None,
                 signed_at=None,
             )
+            issue_task_envelope_best_effort(step_task, time_service=self._time_service)
             persistence.add_task(step_task)
             tasks.append(step_task)
 

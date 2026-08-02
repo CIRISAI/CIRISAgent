@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
+import ai.ciris.mobile.shared.models.federation.FederationConsentScopes
+
 import ai.ciris.mobile.shared.api.AccordSettingsData
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.LensDeletionResult
@@ -308,6 +310,11 @@ class DataManagementViewModel(
     fun updateAccordConsent(consent: Boolean) {
         val method = "updateAccordConsent"
         logInfo(method, "Updating accord consent to: $consent")
+        // [ORDER] trace_consent written from the post-config settings surface.
+        // Drives the SAME my-data PUT the backend uses to (re)emit / withdraw the
+        // consent:community_trust:v1 grant AND re-arm the running adapter's seal —
+        // the alternative view of the exact same CEG object the wizard writes.
+        logInfo(method, "[ORDER] trace_consent ${if (consent) "OPT_IN" else "OPT_OUT"} via Data & Privacy → Send traces (settings path)")
 
         viewModelScope.launch {
             try {
@@ -356,6 +363,18 @@ class DataManagementViewModel(
 
                 if (result.success) {
                     logInfo(method, "Accord metrics adapter loaded: ${result.adapterId}")
+                    // CONSENT DRY: capture consent (adapter) alone leaves the
+                    // federation grants missing — traces would seal but never
+                    // ship (consent:replication) or be scorable (CC#46 analyze).
+                    // Author them through the same owner-gated route the wizard
+                    // uses; non-fatal (the status card surfaces any gap).
+                    try {
+                        val consentRaw = apiClient.authorFederationConsent()
+                        logInfo(method, "[ORDER] federation_consent authored via data card (scope=" +
+                            "${FederationConsentScopes.describe(FederationConsentScopes.TO_CANONICAL)} analyze=true): ${consentRaw.take(160)}")
+                    } catch (e: Exception) {
+                        logError(method, "[ORDER] federation_consent FAILED via data card (non-fatal): ${e.message} — traces will not replicate until consent is authored")
+                    }
                     // Refresh to show the new adapter state
                     refresh()
                 } else {

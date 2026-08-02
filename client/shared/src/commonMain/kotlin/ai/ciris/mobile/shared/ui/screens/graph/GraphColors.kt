@@ -53,7 +53,17 @@ object GraphColors {
         NodeType.CONSENT to Color(0xFF10B981),     // Green
         NodeType.DECAY to Color(0xFF6B7280),       // Gray
         NodeType.MODERATION to Color(0xFFEF4444),  // Red
-        NodeType.SAFETY_SCORE to Color(0xFFEF4444) // Red
+        NodeType.SAFETY_SCORE to Color(0xFFEF4444), // Red
+        // CEG trust-root kinds (seed_ceg_graph) — the constitutional plane
+        NodeType.OWNER to Color(0xFFFACC15),          // Gold — the responsible party
+        NodeType.OWNED_NODE to Color(0xFF3B82F6),     // Blue — a node you own
+        NodeType.CANONICAL_SERVER to Color(0xFFA855F7), // Violet — the trust root
+        NodeType.FAMILY to Color(0xFFD946EF),         // Fuchsia — the accord family
+        NodeType.HOLDER to Color(0xFFE879F9),         // Light fuchsia — an accord holder seat
+        NodeType.DELEGATION to Color(0xFF14B8A6),     // Teal — delegates_to
+        NodeType.ATTESTATION to Color(0xFF64748B),    // Slate — a signed attestation
+        NodeType.PEER to Color(0xFF0EA5E9),           // Sky — a federation peer
+        NodeType.UNKNOWN to Color(0xFF6B7280)         // Gray — unrecognised kind (fallback)
     )
 
     // Default scope colors (used when no theme is set)

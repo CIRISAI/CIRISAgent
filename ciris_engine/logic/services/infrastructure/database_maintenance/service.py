@@ -310,18 +310,57 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
     async def _cleanup_invalid_thoughts(self) -> None:
         """Clean up thoughts with invalid or malformed context.
 
-        Post-2.9.0 (CIRISAgent#763) the raw `DELETE FROM thoughts` path was
-        removed: persist 1.5.19 does not expose a `thought_delete` API
-        (tracked upstream as CIRISPersist#60). Until persist gains a delete
-        method, this is a soft no-op — we log a warning so operators know
-        the cleanup pass is queued. Invalid thoughts will be revisited
-        when `thought_delete` lands.
+        A thought is "invalid" when its persisted context can't be
+        materialized into a ThoughtContext — an empty/NULL context, or one
+        missing `task_id`/`correlation_id`. This is the same criteria the
+        pre-2.9.0 raw-SQL pass used; `_persist_row_to_thought` yields
+        `context is None` for exactly those rows.
+
+        Deletion routes through persist's `thought_delete` (available since
+        persist v1.5.20; the CIRISPersist#60 that once blocked this landed
+        2026-05) via `delete_thoughts_by_ids`, which removes each thought
+        leaves-first to satisfy the `parent_thought_id` self-FK.
         """
-        logger.warning(
-            "Skipping _cleanup_invalid_thoughts: persist 1.5.19 has no "
-            "thought_delete API. Tracked upstream as CIRISPersist#60. "
-            "Invalid thought rows will accumulate until the upstream fix."
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.logic.persistence.models.thoughts import (
+            _list_with_filter,
+            delete_thoughts_by_ids,
         )
+
+        if get_persist_engine() is None:
+            logger.debug("persist engine not wired; skipping _cleanup_invalid_thoughts")
+            return
+
+        logger.info("Cleaning up thoughts with invalid context...")
+        try:
+            all_thoughts = _list_with_filter({})
+        except Exception as e:
+            logger.error(
+                f"Failed to enumerate thoughts for invalid-context cleanup: {e}",
+                exc_info=True,
+            )
+            return
+
+        # A thought is invalid when its context can't be materialized —
+        # `_persist_row_to_thought` leaves `context is None` for exactly the
+        # empty/NULL/missing-task_id/missing-correlation_id rows the legacy
+        # SQL targeted. delete_thoughts_by_ids removes each leaves-first.
+        invalid_ids = [t.thought_id for t in all_thoughts if t.context is None]
+
+        total = 0
+        if invalid_ids:
+            try:
+                total = delete_thoughts_by_ids(invalid_ids)
+            except Exception as e:
+                logger.error(
+                    f"Failed to delete invalid thoughts: {e}",
+                    exc_info=True,
+                )
+
+        if total:
+            logger.info(f"Deleted {total} thought(s) with invalid context")
+        else:
+            logger.info("No thoughts with invalid context found")
 
     # Config patterns that should be cleaned up on startup (unless preserved)
     _ADAPTER_CONFIG_PREFIX = "adapter."

@@ -87,6 +87,7 @@ fun SettingsScreen(
     onNavigateToDataManagement: () -> Unit = {},  // Navigate to Data Management screen
     onNavigateToLLMSettings: () -> Unit = {},  // Navigate to LLM Settings screen
     onNavigateToVizSettings: () -> Unit = {},  // Navigate to Visualization Settings screen
+    onNavigateToConsent: () -> Unit = {},  // Navigate to Consent management screen
     modifier: Modifier = Modifier
 ) {
     // Core state
@@ -508,6 +509,46 @@ fun SettingsScreen(
                         Icon(
                             imageVector = CIRISIcons.arrowForward,
                             contentDescription = localizedString("mobile.settings_data_management_goto"),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Consent - Navigate to consent management surface. Consent objects
+                // belong under Settings, not the Interact surface.
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToConsent() }
+                        .testableClickable("btn_consent") { onNavigateToConsent() },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = localizedString("mobile.manage_consent_title"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = localizedString("mobile.manage_consent_subtitle"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = CIRISIcons.arrowForward,
+                            contentDescription = localizedString("mobile.manage_consent_title"),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }

@@ -113,13 +113,26 @@ def _run_attestation_sync(
     # Generate a random challenge nonce (required by CIRISVerify)
     challenge = os.urandom(32)
 
+    # WORKAROUND (CIRISVerify#212): verify v10.5.0's "Agent build record fetch"
+    # blocks ~27s on an HTTPS timeout when the build is NOT in the registry
+    # (every dev/QA/unregistered build), exceeding the startup-attestation
+    # budget and bricking the processor. Skipping the registry step degrades to
+    # exactly the state an unregistered build already reaches (L4 registry check
+    # skipped) — just FAST instead of after a 27s hang. Opt-in via
+    # CIRIS_ATTESTATION_SKIP_REGISTRY so production (registered builds) keeps the
+    # full registry-checked attestation by default. run_attestation_sync accepts
+    # skip_registry on verify >=10.x; guarded with a fallback for FFIs that don't
+    # (avoids TypeError on an older bundled verify).
+    skip_registry = os.environ.get("CIRIS_ATTESTATION_SKIP_REGISTRY", "").strip().lower() in ("1", "true", "yes", "on")
+
     logger.info(
         f"[attestation] Calling run_attestation_sync with "
         f"agent_root={agent_root}, agent_version={agent_version}, "
-        f"python_hashes_count={python_hashes.module_count if python_hashes else 0}"
+        f"python_hashes_count={python_hashes.module_count if python_hashes else 0}, "
+        f"skip_registry={skip_registry}"
     )
 
-    attestation_data: Dict[str, Any] = verifier.run_attestation_sync(
+    kwargs: Dict[str, Any] = dict(
         challenge=challenge,
         spot_check_count=spot_check_count,
         partial_file_check=(attestation_mode == "partial"),
@@ -130,6 +143,21 @@ def _run_attestation_sync(
         key_fingerprint=key_fingerprint,
         portal_key_id=key_fingerprint,  # Same as key_fingerprint for signature verification
     )
+    if skip_registry:
+        kwargs["skip_registry"] = True
+
+    try:
+        attestation_data: Dict[str, Any] = verifier.run_attestation_sync(**kwargs)
+    except TypeError as exc:
+        # Bundled verify predates skip_registry — drop it and retry so we never
+        # hard-fail on the workaround itself (the budget env-gate still covers
+        # this build).
+        if "skip_registry" in kwargs:
+            logger.warning("[attestation] verifier does not accept skip_registry (%s) — retrying without it", exc)
+            kwargs.pop("skip_registry", None)
+            attestation_data = verifier.run_attestation_sync(**kwargs)
+        else:
+            raise
 
     logger.info("[attestation] run_attestation_sync completed")
     return attestation_data

@@ -270,8 +270,13 @@ class ServiceInitializer:
         # connect at all. Atomic write makes the file safe even under
         # cancellation; phase split would prevent the cancellation entirely.
         # Note: Hardware-backed key protection is handled by CIRISVerify's unified signer
+        # 2.9.7 (#896): persist's Engine owns the runtime encryption key
+        # (auto-initialized via secrets_rotate_master_key); the on-disk file
+        # bootstrap is retained for operational continuity (.ciris_keys layout
+        # is documented + monitored) but the bytes are no longer plumbed into
+        # SecretsService.
         master_key_path = keys_dir / "secrets_master.key"
-        master_key = await self._load_or_create_master_key(master_key_path)
+        await self._load_or_create_master_key(master_key_path)
 
         # Create README if it doesn't exist. Plain-text (.txt) on purpose:
         # runtime code paths must not emit/reference .md files (D27 — keeps
@@ -320,21 +325,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 await f.write(readme_content)
             logger.info("Created .ciris_keys/README.txt")
 
-        # Use the proper helper function to get secrets database path
-        # This handles PostgreSQL URL query parameter preservation correctly
-        from ciris_engine.logic.config import get_secrets_db_full_path
-
-        secrets_db_path = get_secrets_db_full_path(self.essential_config)
-
         if self.time_service is None:
             raise RuntimeError("TimeService must be initialized before SecretsService")
 
-        self.secrets_service = SecretsService(
-            db_path=secrets_db_path,
-            time_service=self.time_service,
-            master_key=master_key,
-            key_storage_mode=self.essential_config.security.secrets_key_storage_mode,
-        )
+        # Persist's Engine owns the secrets database + crypto (#896) — no
+        # db_path / master_key / key_storage_mode plumbing.
+        self.secrets_service = SecretsService(time_service=self.time_service)
         await self.secrets_service.start()
         self._services_started_count += 1
         _log_service_started(5, "SecretsService")
@@ -405,8 +401,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
            the file the instant the descriptor opens; the bytes only land
            when the write+close drain. If asyncio cancels the parent task
            before close, the canonical name is left at 0 bytes — every
-           subsequent boot then fails ``len(master_key) != 32`` validation
-           in ``SecretsEncryption.__init__`` with no self-healing path.
+           subsequent boot then fails the ``len(candidate) == 32`` length
+           validation below with no self-healing path.
            Fix: write to ``<path>.tmp``, fsync, then ``os.replace`` to the
            canonical name. POSIX rename is atomic — cancellation orphans
            ``.tmp`` and the canonical name either holds the previous file
@@ -481,12 +477,20 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.error("Memory service not initialized")
             return False
 
+        # Checked here rather than asserted inside the try below: the except
+        # catches Exception, which includes AssertionError, so a missing
+        # time_service was reported as "Memory service verification error" —
+        # naming the wrong service. Asserts are also stripped under `python -O`,
+        # so the guard would vanish entirely in an optimized run.
+        if not self.time_service:
+            logger.error("Time service not initialized")
+            return False
+
         # Test basic operations
         try:
             from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
             # Use a different node type for test - don't pollute CONFIG namespace
-            assert self.time_service is not None
             now = self.time_service.now()
             test_node = GraphNode(
                 id="_verification_test",

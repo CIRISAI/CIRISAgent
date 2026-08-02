@@ -22,16 +22,35 @@ async def build_secrets_snapshot(secrets_service: SecretsService) -> JSONDict:
     consumers can distinguish between an empty dataset and a failure.
     """
     try:
-        # Get recent secrets (limit to last 10 for context)
-        all_secrets = await secrets_service.store.list_all_secrets()
-        recent_secrets = sorted(all_secrets, key=lambda s: s.created_at, reverse=True)[:10]
+        # `detected_secrets` is deliberately EMPTY here.
+        #
+        # It used to carry the 10 most recently created secret UUIDs from
+        # `list_all_secrets()` — every task's, not this one's. `recall_secret`
+        # decrypts any UUID it is handed with no ownership check, so that made
+        # one task's secrets addressable from any other task's reasoning.
+        #
+        # Nothing is lost by removing it. A secret the agent legitimately needs
+        # is already reachable: the observer substitutes a
+        # `{SECRET:<uuid>:<description>}` placeholder INTO the message being
+        # processed (base_observer.py:299), so the reference arrives with the
+        # content it belongs to and is task-local by construction.
+        #
+        # And there is no other way in: `recall_secret`, `update_secrets_filter`
+        # and `self_help` are the only tools this service exposes — there is NO
+        # enumerate-secrets tool — and after this change `list_all_secrets()`
+        # has no caller that reaches a prompt. So the snapshot was the sole
+        # source of cross-task references, which is what makes dropping it
+        # sufficient rather than merely a mitigation.
+        #
+        # The COUNT is retained: it is situational awareness ("secrets exist")
+        # and addresses nothing.
+        detected_secrets: List[str] = []
+        all_secrets = await secrets_service.list_all_secrets()
 
-        # Convert SecretReference objects to strings for SystemSnapshot compatibility
-        detected_secrets: List[str] = [str(s.uuid) for s in recent_secrets]
-
-        # Get filter version
-        filter_config = secrets_service.filter.get_filter_config()
-        filter_version = filter_config.version
+        # Filter version comes from the substrate catalog envelope
+        filter_config = await secrets_service.get_filter_config()
+        _raw_version = filter_config.get("version", 0)
+        filter_version = int(_raw_version) if isinstance(_raw_version, (int, float, str)) else 0
 
         # Get total count
         total_secrets = len(all_secrets)

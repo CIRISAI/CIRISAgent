@@ -75,9 +75,9 @@ Available modules:
   accord_metrics - Accord metrics trace capture and signing
   homeassistant_agentic - Live Home Assistant configuration and Music Assistant verification
   deferral_taxonomy - DSASPDMA taxonomy coverage and localized deferral classification
-  cirisnode       - CIRISNode integration (deferral routing, trace forwarding)
   licensed_agent  - Licensed agent device auth (RFC 8628) flow testing
   model_eval      - Model quality evaluation with tough questions (requires --live)
+  mesh_repro      - CIRISServer traceflow harness as an agent QA gate (+ prod-wheel test-anchor guard; needs $CIRIS_SERVER_REPO checkout + docker, else skips)
   api_full        - All API modules
   handlers_full   - All handler modules
   all             - Everything
@@ -155,11 +155,16 @@ Available modules:
         help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for accord_metrics tests",
     )
 
-    # Live CIRISNode configuration (for cirisnode tests)
+    # Federation delivery verification (the Reticulum trace-flow path to canonical-server-1)
     parser.add_argument(
-        "--live-node",
+        "--federation-delivery",
         action="store_true",
-        help="Run additional tests against live CIRISNode server (node.ciris-services-1.ai) for cirisnode tests",
+        help="Boot the QA server with CEG federation delivery enabled (dials the canonical peer) and, after the run, verify traces reached canonical-server-1 (rooting + delivery metrics).",
+    )
+    parser.add_argument(
+        "--canonical-peer",
+        default="108.61.242.236:4242",
+        help="Canonical edge bootstrap peer host:port for --federation-delivery (default 108.61.242.236:4242; overrides a stale baked :4243 hint via edge #296 union).",
     )
 
     # Live Portal configuration (for licensed_agent tests)
@@ -290,6 +295,15 @@ Available modules:
         help=(
             "ISO 639-1 language code for the safety battery cell "
             "(default: am). Source of truth: ciris_engine/data/localized/manifest.json."
+        ),
+    )
+    parser.add_argument(
+        "--safety-battery-limit",
+        type=int,
+        default=0,
+        help=(
+            "Run only the first N battery questions (0 = all). "
+            "Cycle-time lever for trace-flow troubleshooting."
         ),
     )
     parser.add_argument(
@@ -618,10 +632,10 @@ def main():
         live_provider=live_provider,
         # Live Lens configuration (for accord_metrics tests)
         live_lens=args.live_lens,
+        federation_delivery=args.federation_delivery,
+        canonical_peer=args.canonical_peer,
         # Staged-env mode (server runs from canonical-staged-tree wheel in a venv)
         staged_env=staged_env,
-        # Live CIRISNode configuration (for cirisnode tests)
-        live_node=args.live_node,
         # Live Portal configuration (for licensed_agent tests)
         live_portal=args.live_portal,
         # Fail-fast configuration
@@ -641,6 +655,7 @@ def main():
         ],
         model_eval_questions_file=(args.model_eval_questions_file or None),
         safety_battery_lang=args.safety_battery_lang,
+        safety_battery_limit=args.safety_battery_limit,
         safety_battery_domain=args.safety_battery_domain,
         safety_battery_template=args.safety_battery_template,
         safety_interpret_capture_dir=args.safety_interpret_capture_dir,

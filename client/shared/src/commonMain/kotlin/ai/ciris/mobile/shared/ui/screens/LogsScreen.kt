@@ -55,7 +55,11 @@ fun LogsScreen(
     onSearchChange: (String) -> Unit,
     onToggleAutoScroll: () -> Unit,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // Existing backend mode (clientMode in CIRISApp). When the backend is a bare
+    // node (no cognitive brain) the "Agent" log source is unavailable and the
+    // dropdown item is disabled/grayed.
+    isNodeMode: Boolean = true,
 ) {
     var showFilters by remember { mutableStateOf(false) }
     var expandedLogId by remember { mutableStateOf<String?>(null) }
@@ -125,6 +129,17 @@ fun LogsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Log source selector (Node / Agent) at the top of the screen.
+            LogsSourceSelector(
+                isNodeMode = isNodeMode,
+                onSourceSelected = { _ ->
+                    // Node uses the existing getSystemLogs → /v1/telemetry/logs
+                    // path. Agent is only reachable when an agent is present;
+                    // either way we re-trigger the existing fetch.
+                    onRefresh()
+                }
+            )
+
             // Filters section
             if (showFilters) {
                 LogsFiltersSection(
@@ -220,6 +235,112 @@ fun LogsScreen(
                         .padding(8.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Source dropdown (Node / Agent) shown at the top of the Logs screen.
+ *
+ * Defaults to Node. The Agent item is disabled (and visually grayed by
+ * Material3's `enabled = false`) whenever the backend is in node mode, since a
+ * bare node has no cognitive brain to stream agent logs. Selecting Node queries
+ * node logs via the existing getSystemLogs path.
+ */
+@Composable
+private fun LogsSourceSelector(
+    isNodeMode: Boolean,
+    onSourceSelected: (LogsSource) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var selectedSource by remember { mutableStateOf(LogsSource.NODE) }
+    var expanded by remember { mutableStateOf(false) }
+
+    // If the backend reports node mode, never leave Agent selected.
+    LaunchedEffect(isNodeMode) {
+        if (isNodeMode && selectedSource == LogsSource.AGENT) {
+            selectedSource = LogsSource.NODE
+        }
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = localizedString("mobile.logs_source_label"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Box {
+            FilterChip(
+                selected = true,
+                onClick = { expanded = !expanded },
+                label = {
+                    Text(
+                        text = when (selectedSource) {
+                            LogsSource.NODE -> localizedString("mobile.source_node")
+                            LogsSource.AGENT -> localizedString("mobile.source_agent")
+                        }
+                    )
+                },
+                trailingIcon = {
+                    Icon(
+                        imageVector = if (expanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                modifier = Modifier.testableClickable("dropdown_logs_source") { expanded = !expanded }
+            )
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text(localizedString("mobile.source_node")) },
+                    onClick = {
+                        selectedSource = LogsSource.NODE
+                        expanded = false
+                        onSourceSelected(LogsSource.NODE)
+                    },
+                    modifier = Modifier.testableClickable("menu_logs_source_node") {
+                        selectedSource = LogsSource.NODE
+                        expanded = false
+                        onSourceSelected(LogsSource.NODE)
+                    }
+                )
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(localizedString("mobile.source_agent"))
+                            if (isNodeMode) {
+                                Text(
+                                    text = localizedString("mobile.source_agent_unavailable"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
+                    enabled = !isNodeMode,
+                    onClick = {
+                        selectedSource = LogsSource.AGENT
+                        expanded = false
+                        onSourceSelected(LogsSource.AGENT)
+                    },
+                    modifier = Modifier.testableClickable("menu_logs_source_agent") {
+                        if (!isNodeMode) {
+                            selectedSource = LogsSource.AGENT
+                            expanded = false
+                            onSourceSelected(LogsSource.AGENT)
+                        }
+                    }
                 )
             }
         }
@@ -521,6 +642,13 @@ private fun getLogLevelColor(level: String): Color {
 }
 
 // Data classes
+
+/**
+ * Log source for the top-of-screen dropdown. NODE = the local node's system
+ * logs (getSystemLogs → /v1/telemetry/logs). AGENT = the CIRIS agent's logs,
+ * only available when the backend is a full agent (not a bare node).
+ */
+enum class LogsSource { NODE, AGENT }
 
 /**
  * State for the Logs screen

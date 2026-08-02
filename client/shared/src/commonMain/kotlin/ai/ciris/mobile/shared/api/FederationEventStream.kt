@@ -70,7 +70,7 @@ class FederationEventStream(
                 connectTimeoutMillis = 10_000
             }
         },
-        baseUrl = api.baseUrl,
+        baseUrl = CIRISApiClient.LOCAL_NODE_URL,  // SSE is node-served (:4243) since ciris-server 0.5.115 (CIRISServer#261) — agent bridge frame vocabulary + 30s heartbeats, wire-compatible with this parser
         getToken = { api.getAccessToken() },
     )
 

@@ -70,6 +70,11 @@ fun StartupScreen(
     val verifyStepsCompleted by viewModel.verifyStepsCompleted.collectAsState()
     val hasError by viewModel.hasError.collectAsState()
     val consolidatorStatus by viewModel.consolidatorStatus.collectAsState()
+    // The node-vs-agent gate. In NODE mode there is no cognitive brain, so the 22
+    // agent service lights do not apply — hide that row. AGENT (or not-yet-probed)
+    // keeps the current 22-light behavior. Verify/prep/boot steps apply to both.
+    val clientMode by viewModel.clientMode.collectAsState()
+    val showServiceLights = clientMode?.isNode != true
 
     // Language rotation for startup screen when no explicit language selection
     val localization = LocalLocalization.current
@@ -258,23 +263,28 @@ fun StartupScreen(
                 )
             }
 
-            // Services label (shown after verify completes or starts, above service lights)
-            if (verifyStepsCompleted > 0 || servicesOnline > 0) {
-                Text(
-                    text = localizedString("mobile.startup_services"),
-                    fontSize = 10.sp,
-                    color = CIRISColors.TextDim,
-                    modifier = Modifier.padding(bottom = 4.dp)
+            // Service lights apply ONLY to an AGENT (the 22 cognitive services). A
+            // bare NODE has no cognitive brain, so the label + grid are omitted in
+            // NODE mode — the verify/prep/boot steps above still apply to a node.
+            if (showServiceLights) {
+                // Services label (shown after verify completes or starts, above service lights)
+                if (verifyStepsCompleted > 0 || servicesOnline > 0) {
+                    Text(
+                        text = localizedString("mobile.startup_services"),
+                        fontSize = 10.sp,
+                        color = CIRISColors.TextDim,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+
+                // Service lights grid (22 lights) - each light = specific service slot
+                ServiceLightsGrid(
+                    startedServiceSlots = startedServiceSlots,
+                    totalServices = totalServices,
+                    hasError = hasError,
+                    modifier = Modifier.padding(bottom = 32.dp)
                 )
             }
-
-            // Service lights grid (22 lights) - each light = specific service slot
-            ServiceLightsGrid(
-                startedServiceSlots = startedServiceSlots,
-                totalServices = totalServices,
-                hasError = hasError,
-                modifier = Modifier.padding(bottom = 32.dp)
-            )
 
             // Status message (main status text like Android) - selectable for debugging
             SelectionContainer {
@@ -287,8 +297,9 @@ fun StartupScreen(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
 
-                    // Current service name (shown during startup, cyan colored)
-                    if (servicesOnline > 0 && servicesOnline < totalServices) {
+                    // Current service name (shown during startup, cyan colored).
+                    // Agent-only — a bare node has no cognitive service count.
+                    if (showServiceLights && servicesOnline > 0 && servicesOnline < totalServices) {
                         Text(
                             text = localizedString(
                                 "mobile.startup_services_count",

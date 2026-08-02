@@ -13,7 +13,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
 from rich.console import Console
@@ -57,6 +57,32 @@ def _expand_module_aggregates(modules: List[QAModule]) -> List[QAModule]:
             if sm not in expanded:
                 expanded.append(sm)
     return expanded
+
+
+
+def _err_text(result: dict, limit: int = 100) -> str:
+    """Error text for the summary, safe against a present-but-None `error`.
+
+    `dict.get(key, default)` returns the default only when the key is MISSING —
+    when it is present and None, you get None, and `None[:100]` raises. That
+    crashed the runner at the moment it was reporting a failure:
+
+        TypeError: 'NoneType' object is not subscriptable
+
+    The capture itself had succeeded, so the damage was not the exit code — it
+    was that the reporter died BEFORE printing the underlying error, so the
+    thing it was trying to tell you was lost. An error path that fails while
+    describing an error destroys the only evidence of what went wrong.
+
+    This was already known: safety_battery.py emits an explicit "" on success
+    specifically to dodge it, with a comment naming this line. That fixed one
+    caller and left every other module able to trip it. Fixed here instead, so
+    no caller has to know.
+    """
+    raw = result.get("error")
+    if raw is None:
+        raw = result.get("status") or "Unknown error"
+    return str(raw)[:limit]
 
 
 class QARunner:
@@ -154,68 +180,27 @@ class QARunner:
         self.server_managers: Dict[str, APIServerManager] = {}
         for backend in self.database_backends:
             port = self.config.api_port if backend == "sqlite" else self.config.postgres_api_port
-            # Create a copy of config with the right port
-            backend_config = QAConfig(
+            # Copy the CLI config, overriding ONLY the backend-specific
+            # fields. dataclasses.replace ensures every OTHER field — present
+            # and future — flows through automatically. (The previous
+            # field-by-field QAConfig(...) enumeration silently dropped any
+            # newly added field: model_eval filters and safety_battery_lang
+            # each hit it before, and safety_battery_limit hit it again.)
+            import dataclasses
+
+            backend_config = dataclasses.replace(
+                self.config,
                 base_url=f"http://localhost:{port}",
                 api_port=port,
-                admin_username=self.config.admin_username,
-                admin_password=self.config.admin_password,
-                oauth_test_user_id=self.config.oauth_test_user_id,
-                oauth_test_email=self.config.oauth_test_email,
-                oauth_test_provider=self.config.oauth_test_provider,
-                oauth_test_external_id=self.config.oauth_test_external_id,
-                billing_enabled=self.config.billing_enabled,
-                billing_api_key=self.config.billing_api_key,
-                billing_api_url=self.config.billing_api_url,
-                parallel_tests=self.config.parallel_tests,
-                max_workers=self.config.max_workers,
-                timeout=self.config.timeout,
-                retry_count=self.config.retry_count,
-                retry_delay=self.config.retry_delay,
-                verbose=self.config.verbose,
-                json_output=self.config.json_output,
-                html_report=self.config.html_report,
-                report_dir=self.config.report_dir,
-                auto_start_server=self.config.auto_start_server,
-                server_startup_timeout=self.config.server_startup_timeout,
-                mock_llm=self.config.mock_llm,
-                adapter=self.config.adapter,
                 database_backends=None,  # Don't pass this recursively
-                postgres_url=self.config.postgres_url,
-                postgres_api_port=self.config.postgres_api_port,
-                # Live LLM configuration
-                live_api_key=self.config.live_api_key,
-                live_model=self.config.live_model,
-                live_base_url=self.config.live_base_url,
-                live_provider=self.config.live_provider,
-                # Live Lens configuration
-                live_lens=self.config.live_lens,
-                # Data management
-                wipe_data=self.config.wipe_data,
-                # Memory benchmark configuration
-                message_count=self.config.message_count,
-                concurrent_channels=self.config.concurrent_channels,
-                # Model eval configuration — propagate so the runner's
-                # backend-specific config (which self.config gets re-bound
-                # to at line ~129) doesn't lose the CLI-passed filters.
-                # Without this, `--model-eval-languages en` and
-                # `--model-eval-questions History` silently reset to the
-                # 4-language × 6-question defaults.
-                model_eval_languages=self.config.model_eval_languages,
-                model_eval_concurrency=self.config.model_eval_concurrency,
-                model_eval_profile_memory=self.config.model_eval_profile_memory,
-                model_eval_question_categories=self.config.model_eval_question_categories,
-                model_eval_questions_file=self.config.model_eval_questions_file,
-                # Safety battery configuration — same backend-config preservation
-                # rationale as the model_eval block above.
-                safety_battery_lang=self.config.safety_battery_lang,
-                safety_battery_domain=self.config.safety_battery_domain,
-                safety_battery_template=self.config.safety_battery_template,
-                safety_interpret_capture_dir=self.config.safety_interpret_capture_dir,
-                safety_interpret_criteria_file=self.config.safety_interpret_criteria_file,
-                safety_interpret_openrouter_key_file=self.config.safety_interpret_openrouter_key_file,
-                safety_interpret_judge_model=self.config.safety_interpret_judge_model,
-                setup_template_id=self.config.setup_template_id,
+                # staged_env is deliberately RESET (matching the historical
+                # field-by-field copy, which always dropped it): the server
+                # manager launches `python main.py` from the checkout, and
+                # the staged job's byte-parity hash gate guarantees the tree
+                # equals the wheel. Inheriting it flips the launch onto the
+                # staged `ciris-server` console script, which fails with
+                # "No module named 'main'" in CI (latent script bug).
+                staged_env=None,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -241,8 +226,11 @@ class QARunner:
         # by _run_parallel_backends).
         modules = _expand_module_aggregates(modules)
 
-        # If testing multiple backends, always use parallel mode for proper state isolation
-        # (Sequential mode doesn't properly isolate database/server state between backends)
+        # Multi-backend always routes through subprocess isolation (in-process
+        # sequential mode cross-contaminates auth/server state). Whether the
+        # isolated children run one-at-a-time (default; the node-folded
+        # substrate binds host-wide :4242/:4243 — all_1 RCA 2026-07-20) or
+        # concurrently (--parallel-backends) is decided inside.
         if len(self.database_backends) > 1:
             return self._run_parallel_backends(modules)
 
@@ -377,7 +365,6 @@ class QARunner:
             QAModule.UTILITY_ADAPTERS,
             QAModule.HOMEASSISTANT_AGENTIC,
             QAModule.DEFERRAL_TAXONOMY,
-            QAModule.CIRISNODE,
             QAModule.LICENSED_AGENT,
             QAModule.SOLITUDE_LIVE,
             QAModule.PLAY_LIVE,
@@ -393,6 +380,7 @@ class QARunner:
             QAModule.SAFETY_INTERPRET,
             QAModule.SECRETS_ENCRYPTION,
             QAModule.MEMORY_BENCHMARK,
+            QAModule.MESH_REPRO,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -518,6 +506,11 @@ class QARunner:
         if self._filter_helper:
             self._filter_helper.stop_monitoring()
             self.console.print("[cyan]⏹️  SSE monitoring stopped[/cyan]")
+
+        # Verify CEG trace delivery to canonical-server-1 BEFORE stopping the
+        # server (needs the live edge + API). Only when --federation-delivery.
+        if self.config.federation_delivery:
+            self._verify_federation_delivery()
 
         # Stop server if we started it
         if self.config.auto_start_server:
@@ -737,9 +730,15 @@ class QARunner:
         try:
             with open(incidents_log, "r") as f:
                 for line in f:
-                    if "WARNING" in line:
+                    # Match the LEVEL FIELD, not the word anywhere in the line.
+                    # A bare substring test counts the file's own header —
+                    # "=== This file contains WARNING and ERROR messages ..." —
+                    # as a warning, and counts any message that merely mentions
+                    # the word. The counts then drive a hard failure, so an
+                    # inflated count fails a run for text rather than for events.
+                    if " - WARNING " in line or " - WARNING - " in line:
                         warning_count += 1
-                    elif "ERROR" in line:
+                    elif " - ERROR " in line or " - ERROR - " in line:
                         error_count += 1
                         # Check if it's a critical error we should report
                         if not any(pattern in line for pattern in ignore_patterns):
@@ -1019,6 +1018,181 @@ class QARunner:
             self.console.print(f"[red]Authentication error: {e}[/red]")
             return False
 
+    def _verify_federation_delivery(self) -> bool:
+        """Verify CEG delivery preconditions to canonical-server-1 (log-based).
+
+        TWO delivery paths (CIRISServer#260 RCA):
+          - keys + attestations ride the anti-entropy ROUNDS (Key / Attestation /
+            IdentityOccurrence) — green once the canonical roots; confirmed by
+            round completions on the peer, not by any envelope counter.
+          - CEG traces ride SEALED ENVELOPES (start_federation_delivery), which
+            are KEX-gated: resolve_peer_kex_pubkeys(canonical) must be Some.
+
+        The old HTTP probes (/v1/federation/peers, /v1/federation/metrics) are
+        gone — the Python federation routes were substrate-deleted in 2.9.7 and
+        the node does not expose delivery counters over HTTP yet (upstream ask in
+        CIRISServer#260). AUTHORITATIVE signals are log-based: the
+        [DELIVERY-PROBE] line carries rooting (edge.knows_peer) + the post-root
+        KEX poll verdict. Best-effort + non-fatal — reports, never crashes the run.
+        """
+        self.console.print("\n" + "=" * 60)
+        self.console.print("[bold cyan]🛰️  Federation delivery verification (canonical-server-1)[/bold cyan]")
+        self.console.print("=" * 60)
+
+        # Transport rooting + KEX from the [DELIVERY-PROBE] line the server logs
+        # once the canonical roots (or times out).
+        backend = (self.database_backends[0] if getattr(self, "database_backends", None) else "sqlite")
+
+        def _read_probe_log() -> str:
+            """Read the runtime log, tolerating a missing latest.log symlink.
+
+            In containerized/sandboxed runs the latest.log symlink may not be
+            created — fall back to the newest ciris_agent_*.log. A missing
+            symlink previously produced a FALSE-NEGATIVE verdict ("probe
+            verdict not found" / knows_peer=false) on a run whose real log
+            showed ROOTED + KEX PRESENT.
+            """
+            p = Path(f"logs/{backend}/latest.log")
+            if not p.exists():
+                candidates = sorted(Path(f"logs/{backend}").glob("ciris_agent_*.log"))
+                if candidates:
+                    p = candidates[-1]
+            try:
+                return p.read_text(errors="ignore") if p.exists() else ""
+            except Exception:  # noqa: BLE001
+                return ""
+
+        transport_rooted: Optional[bool] = None  # None = probe verdict not yet available
+        kex_state = "unknown"
+        canonical_key = None
+        for _attempt in range(12):  # ~12 * 8s — give the 120s probe time to land its verdict
+            text = _read_probe_log()
+            probe_lines = [ln for ln in text.splitlines() if "[DELIVERY-PROBE]" in ln]
+            if probe_lines:
+                last = probe_lines[-1]
+                if "ROOTED" in last:
+                    transport_rooted = True
+                    kex_state = "PRESENT" if "=PRESENT" in last else ("None" if "=None" in last else "unknown")
+                    m = re.search(r"canonical (\S+)", last)
+                    canonical_key = m.group(1) if m else None
+                    break
+                if "did not root" in last:
+                    transport_rooted = False
+                    m = re.search(r"canonical (\S+)", last)
+                    canonical_key = m.group(1) if m else None
+                    break
+            time.sleep(8)
+
+        self.console.print(f"  canonical peer      : {canonical_key or '<from probe>'}")
+        rooted_str = "✅ YES" if transport_rooted else ("❌ NO" if transport_rooted is False else "❓ probe verdict not found")
+        self.console.print(f"  transport-rooted    : {rooted_str}  (edge.knows_peer — authoritative)")
+        self.console.print(f"  peer KEX resolvable : {kex_state}  (gates the sealed-envelope TRACE path)")
+        logger.info(
+            "[FEDERATION-DELIVERY] canonical=%s transport_rooted=%s kex=%s",
+            canonical_key,
+            transport_rooted,
+            kex_state,
+        )
+
+        rooted = bool(transport_rooted)
+
+        # Trace-delta assert (#924 §3): when the mesh_repro stage ran in this
+        # invocation, its harness verdict already proves (or refutes) the
+        # trace-delta at the LOCAL harness canonical — stage `arrive` is a
+        # direct trace_events DB count there, and stage `score` is a capacity
+        # attestation authored ABOUT the agent BY a distinct identity. Reuse
+        # that verdict rather than re-probing; the manual Node-A note remains
+        # the fallback when the harness didn't run.
+        _mesh = getattr(self, "_mesh_repro_verdict", None)
+        if _mesh is not None and _mesh.success and _mesh.stage_counts.get("arrive", 0) > 0:
+            trace_note = (
+                "Trace-delta PROVEN at the LOCAL harness canonical (mesh_repro: "
+                f"arrive={_mesh.stage_counts.get('arrive')} trace_events, "
+                f"summarize={_mesh.stage_counts.get('summarize', 0)}, "
+                f"score={_mesh.stage_counts.get('score', 0)} — capacity attestation authored)."
+            )
+        elif _mesh is not None:
+            trace_note = (
+                "mesh_repro harness ran and did NOT prove the trace-delta "
+                f"(exit={_mesh.exit_code}, broken_at={_mesh.broken_stage or 'unknown'}) — "
+                "see qa_reports/mesh_repro/ for the harness evidence."
+            )
+        else:
+            trace_note = (
+                "Confirm trace arrival via Node A trace_events / the mesh-repro trace gate "
+                "(CIRISServer#260) — or run the mesh_repro QA stage to prove it locally."
+            )
+
+        if transport_rooted and kex_state == "PRESENT":
+            verdict = (
+                "✅ Federation delivery preconditions GREEN — canonical rooted (edge.knows_peer) and "
+                "peer KEX resolvable: attestations replicate via rounds AND trace envelopes can seal. "
+                f"{trace_note}"
+            )
+            self.console.print(f"[bold green]{verdict}[/bold green]")
+            logger.info("[FEDERATION-DELIVERY] %s", verdict)
+        elif transport_rooted:
+            verdict = (
+                "⚠️  Canonical rooted — attestation/key delivery (anti-entropy rounds) is live, but "
+                f"peer KEX resolvable={kex_state}: the sealed-envelope TRACE path cannot seal until "
+                "resolve_peer_kex_pubkeys(canonical) returns Some (CIRISServer#260)."
+            )
+            self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
+            logger.warning("[FEDERATION-DELIVERY] %s", verdict)
+        else:
+            verdict = (
+                "❌ Canonical NOT transport-rooted (edge.knows_peer=false) — neither rounds nor "
+                "trace envelopes can flow. Check the canonical boot-prime + bootstrap dial."
+            )
+            self.console.print(f"[bold red]{verdict}[/bold red]")
+            logger.warning("[FEDERATION-DELIVERY] %s", verdict)
+
+        # Not fully green → surface delivery_status() (CIRISServer#294, >=0.5.125)
+        # and its decision tree, so a stalled gate is one query, not archaeology.
+        if not (transport_rooted and kex_state == "PRESENT"):
+            self._diagnose_delivery_status(_read_probe_log)
+        return rooted
+
+    def _diagnose_delivery_status(self, read_probe_log: Callable[[], str]) -> None:
+        """Print the ciris_server.delivery_status() snapshot + the #926 decision
+        tree from the [DELIVERY-STATUS] line the edge probe logs. Collapses a
+        stalled delivery gate into one structured read (leviculum#25 frame-loss
+        vs never-primed vs no-KEX). Best-effort; never raises."""
+        import json as _json
+
+        try:
+            lines = [ln for ln in read_probe_log().splitlines() if "[DELIVERY-STATUS]" in ln]
+            if not lines:
+                self.console.print("  delivery_status     : (no [DELIVERY-STATUS] line — ciris_server <0.5.125 or probe not run)")
+                return
+            m = re.search(r"\[DELIVERY-STATUS\]\s+phase=(\S+)\s+(\{.*\})", lines[-1])
+            if not m:
+                self.console.print(f"  delivery_status     : {lines[-1][-160:]}")
+                return
+            phase, blob = m.group(1), m.group(2)
+            st = _json.loads(blob)
+            self.console.print(f"  delivery_status     : phase={phase} started={st.get('delivery_started')} edge_up={st.get('edge_up')} targets={st.get('canonical_targets')}")
+            hint = "  → "
+            if not st.get("delivery_started"):
+                hint += "delivery_started=false — prime never ran/re-fired (call reprime_federation_delivery(); #288)"
+            else:
+                peers = st.get("peers") or []
+                canon = next((p for p in peers if p.get("key_id") in (st.get("canonical_targets") or [])), peers[0] if peers else None)
+                if canon is None:
+                    hint += "no peers in status — canonical not admitted yet"
+                elif not canon.get("knows_peer"):
+                    hint += "knows_peer=false — not promoted to a KEX'd delivery target (advisory-link exchange incomplete; #363/prime)"
+                elif not canon.get("kex_present"):
+                    hint += "kex_present=false — IdentityOccurrence enc-keys not replicated yet; give it a round"
+                elif canon.get("deliverable"):
+                    hint += "deliverable=true but trace not landing → driver-layer frame loss: grep node log for edge FramesDropped WARN (leviculum#25)"
+                else:
+                    hint += "deliverable=false with kex present — inspect the peer entry"
+            self.console.print(f"[dim]{hint}[/dim]")
+            logger.info("[FEDERATION-DELIVERY] delivery_status phase=%s %s", phase, st)
+        except Exception as exc:  # noqa: BLE001
+            self.console.print(f"  delivery_status     : (diagnosis error, non-fatal: {exc})")
+
     def _setup_oauth_test_user(self) -> bool:
         """Create/verify OAuth test user in database for billing integration tests."""
         try:
@@ -1238,7 +1412,6 @@ class QARunner:
         from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.adapter_manifest_tests import AdapterManifestTests
         from .modules.billing_integration_tests import BillingIntegrationTests
-        from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
         from .modules.deferral_taxonomy_tests import DeferralTaxonomyTests
@@ -1255,6 +1428,7 @@ class QARunner:
         from .modules.licensed_agent_tests import LicensedAgentTests
         from .modules.mcp_tests import MCPTests
         from .modules.memory_benchmark_tests import MemoryBenchmarkTests
+        from .modules.mesh_repro_tests import MeshReproTests
         from .modules.model_eval_tests import ModelEvalTests
         from .modules.parallel_locales_tests import ParallelLocalesTests
         from .modules.safety_battery import SafetyBatteryTests
@@ -1302,7 +1476,6 @@ class QARunner:
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
             QAModule.HOMEASSISTANT_AGENTIC: HomeAssistantAgenticTests,
             QAModule.DEFERRAL_TAXONOMY: DeferralTaxonomyTests,
-            QAModule.CIRISNODE: CIRISNodeTests,
             QAModule.LICENSED_AGENT: LicensedAgentTests,
             QAModule.SOLITUDE_LIVE: SolitudeLiveTests,
             QAModule.PLAY_LIVE: PlayLiveTests,
@@ -1318,6 +1491,7 @@ class QARunner:
             QAModule.SAFETY_INTERPRET: SafetyInterpretTests,
             QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
             QAModule.MEMORY_BENCHMARK: MemoryBenchmarkTests,
+            QAModule.MESH_REPRO: MeshReproTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):
@@ -1403,9 +1577,6 @@ class QARunner:
                         live_lens=self.config.live_lens,
                         qa_reports_dir=self.server_manager.qa_reports_dir,
                     )
-                # Special handling for CIRISNodeTests - pass live_node config
-                elif module == QAModule.CIRISNODE:
-                    test_instance = test_class(client, self.console, live_node=getattr(self.config, "live_node", False))
                 # Special handling for LicensedAgentTests - pass live_portal config
                 elif module == QAModule.LICENSED_AGENT:
                     test_instance = test_class(
@@ -1456,6 +1627,7 @@ class QARunner:
                         lang=getattr(self.config, "safety_battery_lang", "am"),
                         domain=getattr(self.config, "safety_battery_domain", "mental_health"),
                         template_id=getattr(self.config, "safety_battery_template", "default"),
+                        limit=getattr(self.config, "safety_battery_limit", 0),
                         model=self.config.live_model,
                         live_base_url=self.config.live_base_url,
                         live_provider=self.config.live_provider,
@@ -1481,6 +1653,13 @@ class QARunner:
 
                 _mod_t0 = time.time()
                 results = await test_instance.run()
+
+                # mesh_repro (#924 §3): stash the parsed harness verdict so
+                # _verify_federation_delivery can assert the trace-delta
+                # against the LOCAL harness canonical (stage arrive/score)
+                # instead of the "confirm at Node A manually" note.
+                if module == QAModule.MESH_REPRO:
+                    self._mesh_repro_verdict = getattr(test_instance, "harness_verdict", None)
                 # Real wall time for this SDK module (accumulate — a module
                 # can run twice across a re-auth retry).
                 self._module_wall[module.value] = self._module_wall.get(module.value, 0.0) + (
@@ -2145,7 +2324,7 @@ class QARunner:
                 if "status_code" in result:
                     details = f"Status: {result['status_code']} (expected {result.get('expected_status', 200)})"
                 else:
-                    details = result.get("error", "Unknown error")[:100]
+                    details = _err_text(result)
 
             html += f"""
         <tr>
@@ -2206,7 +2385,7 @@ class QARunner:
                     parts = key.split("::", 1)
                     module = parts[0]
                     test = parts[1] if len(parts) > 1 else "unknown"
-                    error = result.get("error", "Unknown error")[:100]
+                    error = _err_text(result)
                     self.console.print(f"  • {module}::{test}: {error}")
 
         # Print tests with incidents
@@ -2371,20 +2550,35 @@ class QARunner:
         [AUTH SERVICE DEBUG] traces, to send the postgres leg's API key →
         "Invalid API key" 401s on whichever leg lost the race. A separate
         subprocess per backend has zero shared mutable state — the cross is
-        structurally impossible — while the backends still run fully in
-        parallel. Each child is a plain single-backend qa_runner invocation.
+        structurally impossible. Each child is a plain single-backend
+        qa_runner invocation.
+
+        CONCURRENCY (2026-07-20 all_1 RCA): subprocess isolation covers
+        in-process state, but the node-folded substrate binds HOST-wide
+        singletons — :4242 (reticulum transport), :4243 (node read-API,
+        not configurable, CIRISServer#303) — and both legs share
+        CIRIS_HOME's data/edge identity. Two legs running at the same time
+        therefore cross-contaminate at the host level: the :4242 bind loser's
+        node_fold reuses the winner's :4243 node → foreign signing key →
+        every capture fails verify_unknown_key. So concurrency is OPT-IN:
+        children run one-at-a-time unless config.parallel_backends is set
+        (--parallel-backends), which is only sound once the substrate
+        supports per-instance listen addrs.
         """
         import subprocess
         import sys
 
         start_time = time.time()
 
+        sequential = not getattr(self.config, "parallel_backends", False)
+        mode_label = "sequential, isolated subprocesses" if sequential else "parallel, isolated subprocesses"
+
         self.console.print(
             Panel.fit(
-                "[bold cyan]CIRIS QA Test Runner - Parallel Backend Mode (isolated subprocesses)[/bold cyan]\n"
+                f"[bold cyan]CIRIS QA Test Runner - Multi-Backend Mode ({mode_label})[/bold cyan]\n"
                 f"Backends: {', '.join(self.database_backends)}\n"
                 f"Modules: {', '.join(m.value for m in modules)}",
-                title="🧪 Starting Parallel Backend QA Tests",
+                title="🧪 Starting Multi-Backend QA Tests",
             )
         )
 
@@ -2438,23 +2632,16 @@ class QARunner:
         # scale up under this contention. Sequential / single-backend runs
         # don't pay the penalty because the env var is unset there.
         child_env = os.environ.copy()
-        child_env["CIRIS_QA_PARALLEL_BACKENDS"] = "1"
-
-        procs = {}
-        for backend in self.database_backends:
-            child = [sys.executable, "-m", "tools.qa_runner", *_child_argv(backend)]
-            self.console.print(f"[cyan]🔄 Starting {backend.upper()} backend tests (isolated subprocess)...[/cyan]")
-            self.console.print(f"[dim]   $ {' '.join(child)}[/dim]")
-            procs[backend] = subprocess.Popen(child, env=child_env)
-
-        self.console.print("\n[cyan]⏳ Waiting for all backend subprocesses to complete...[/cyan]\n")
+        if not sequential:
+            child_env["CIRIS_QA_PARALLEL_BACKENDS"] = "1"
 
         # config.timeout is a PER-TEST budget; a whole backend leg runs many
         # modules (15-25 min). Give real headroom — the GH job's own
         # timeout-minutes is the actual outer bound.
         leg_timeout = max(self.config.timeout * 8, 2400)
         backend_results = {}
-        for backend, proc in procs.items():
+
+        def _wait_leg(backend: str, proc: "subprocess.Popen[bytes]") -> None:
             try:
                 rc = proc.wait(timeout=leg_timeout)
                 backend_results[backend] = {"success": rc == 0, "detail": f"exit {rc}"}
@@ -2465,11 +2652,29 @@ class QARunner:
                 backend_results[backend] = {"success": False, "detail": f"timeout >{leg_timeout}s"}
                 self.console.print(f"[red]❌ {backend.upper()} backend subprocess timed out after {leg_timeout}s[/red]")
 
+        procs = {}
+        for backend in self.database_backends:
+            child = [sys.executable, "-m", "tools.qa_runner", *_child_argv(backend)]
+            self.console.print(f"[cyan]🔄 Starting {backend.upper()} backend tests (isolated subprocess)...[/cyan]")
+            self.console.print(f"[dim]   $ {' '.join(child)}[/dim]")
+            proc = subprocess.Popen(child, env=child_env)
+            if sequential:
+                # One leg at a time: the child must EXIT (releasing :4242/:4243
+                # and the shared data/edge identity) before the next leg boots.
+                _wait_leg(backend, proc)
+            else:
+                procs[backend] = proc
+
+        if not sequential:
+            self.console.print("\n[cyan]⏳ Waiting for all backend subprocesses to complete...[/cyan]\n")
+            for backend, proc in procs.items():
+                _wait_leg(backend, proc)
+
         all_success = all(data["success"] for data in backend_results.values())
 
         elapsed = time.time() - start_time
         self.console.print(f"\n\n{'=' * 80}")
-        self.console.print("[bold cyan]📊 PARALLEL BACKEND TEST SUMMARY[/bold cyan]")
+        self.console.print("[bold cyan]📊 MULTI-BACKEND TEST SUMMARY[/bold cyan]")
         self.console.print(f"{'=' * 80}\n")
 
         table = Table(title="Backend Comparison (isolated subprocesses)")
@@ -2481,7 +2686,7 @@ class QARunner:
             table.add_row(backend.upper(), status, data["detail"])
         self.console.print(table)
 
-        self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s (parallel, isolated)[/dim]")
+        self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s ({mode_label})[/dim]")
         self.console.print(
             "[dim]Per-backend test counts + incidents are in each subprocess's own summary above.[/dim]"
         )
@@ -2492,7 +2697,7 @@ class QARunner:
             self.console.print(f"[dim]   • {backend} incidents: logs/{backend}/incidents_latest.log[/dim]")
 
         if all_success:
-            self.console.print("\n[bold green]✅ All backends passed all tests in parallel![/bold green]")
+            self.console.print("\n[bold green]✅ All backends passed all tests![/bold green]")
         else:
             failed_backends = [b for b, d in backend_results.items() if not d["success"]]
             self.console.print(f"\n[bold red]❌ Some backends failed: {', '.join(failed_backends)}[/bold red]")

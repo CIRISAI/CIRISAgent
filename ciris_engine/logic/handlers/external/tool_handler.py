@@ -2,6 +2,7 @@ import logging
 import uuid
 from typing import Any, Dict, Optional, Tuple, cast
 
+from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.schemas.actions import ToolParams
@@ -10,6 +11,7 @@ from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolInvocationSubject
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
@@ -81,6 +83,34 @@ class ToolHandler(BaseActionHandler):
             )
             return follow_up_id or ""  # Return empty string if None (should not happen)
 
+    def _build_invocation_subject(
+        self, thought: Thought, dispatch_context: DispatchContext
+    ) -> ToolInvocationSubject:
+        """Build the authorization subject for this tool call (CIRISAgent#938).
+
+        This is the last point before ``ToolBus.execute_tool`` at which task and
+        thought identity are available — and until now they were dropped here.
+        The envelope is *read*, never minted: ``resolve_envelope_for_task_id``
+        has no minting surface, and a missing envelope resolves to ``None``,
+        which is a denial to Phase 2 rather than "unconstrained".
+        """
+        task_id = thought.source_task_id or dispatch_context.task_id
+        envelope = resolve_envelope_for_task_id(task_id, thought.agent_occurrence_id)
+        if envelope is None:
+            self.logger.debug(
+                "[TOOL_HANDLER] No task envelope bound to task %s; tool call proceeds unauthorized "
+                "(Phase 1 has no gate — see CIRISAgent#938).",
+                task_id,
+            )
+        return ToolInvocationSubject.for_task(
+            task_id=task_id,
+            thought_id=thought.thought_id,
+            handler_name=self.__class__.__name__,
+            origin=ToolCallOrigin.REASONING,
+            agent_occurrence_id=thought.agent_occurrence_id,
+            envelope=envelope,
+        )
+
     async def _execute_tool(
         self, params: ToolParams, thought: Thought, dispatch_context: DispatchContext
     ) -> Tuple[bool, str]:
@@ -95,10 +125,16 @@ class ToolHandler(BaseActionHandler):
             # Build tool parameters with channel and task context
             tool_params = self._build_tool_params(params, thought)
 
+            # The subject the Phase 2 tool gate will authorize (CIRISAgent#938).
+            subject = self._build_invocation_subject(thought, dispatch_context)
+
             # Execute via tool bus
             self.logger.info(f"[TOOL_HANDLER] Calling bus_manager.tool.execute_tool for '{params.name}'...")
             tool_result = await self.bus_manager.tool.execute_tool(
-                tool_name=params.name, parameters=cast(JSONDict, tool_params), handler_name=self.__class__.__name__
+                tool_name=params.name,
+                parameters=cast(JSONDict, tool_params),
+                handler_name=self.__class__.__name__,
+                subject=subject,
             )
 
             self.logger.info(
@@ -126,7 +162,22 @@ class ToolHandler(BaseActionHandler):
             return False, f"TOOL {params.name} execution failed: {str(e_tool)}"
 
     def _build_tool_params(self, params: ToolParams, thought: Thought) -> Dict[str, Any]:
-        """Build tool parameters with channel and task context."""
+        """Build tool parameters with channel and task context.
+
+        **Task identity is handler-authoritative** (CIRISAgent#938). It used to
+        be injected only ``if "task_id" not in tool_params``, which meant a
+        model-authored ``task_id`` was never overwritten — the model could name
+        whichever task it liked, and consumers that key on it (``authorize_spend``
+        reads ``task_id`` from tool parameters) were reading a model-supplied
+        value. The whole premise of the task envelope is that the enforcement
+        point can key policy on a *trustworthy* task identity, so the handler
+        now always sets it and logs any attempt to supply one.
+
+        When the thought has no source task there is nothing to vouch for, so a
+        model-supplied ``task_id`` is dropped rather than passed through: an
+        unverifiable identity is worse than none for anything that authorizes on
+        it.
+        """
         tool_params = dict(params.parameters)
 
         # Add channel_id if provided in action params but not in tool parameters
@@ -134,10 +185,24 @@ class ToolHandler(BaseActionHandler):
             tool_params["channel_id"] = params.channel_id
             self.logger.debug(f"Added channel_id {params.channel_id} to tool parameters")
 
-        # Add task_id for tools that need billing interaction_id (e.g., web_search)
-        if thought.source_task_id and "task_id" not in tool_params:
+        model_supplied_task_id = tool_params.get("task_id")
+        if thought.source_task_id:
+            if model_supplied_task_id is not None and model_supplied_task_id != thought.source_task_id:
+                self.logger.warning(
+                    "[TOOL_HANDLER] Tool call supplied task_id=%r; overriding with the handler-authoritative "
+                    "source task %r (CIRISAgent#938 — task identity is never model-authored).",
+                    model_supplied_task_id,
+                    thought.source_task_id,
+                )
             tool_params["task_id"] = thought.source_task_id
-            self.logger.debug(f"Added task_id {thought.source_task_id} to tool parameters")
+        elif model_supplied_task_id is not None:
+            self.logger.warning(
+                "[TOOL_HANDLER] Tool call supplied task_id=%r but thought %s has no source task; "
+                "dropping it rather than passing an unverifiable identity (CIRISAgent#938).",
+                model_supplied_task_id,
+                thought.thought_id,
+            )
+            tool_params.pop("task_id", None)
 
         return tool_params
 

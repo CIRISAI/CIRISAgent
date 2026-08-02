@@ -94,12 +94,27 @@ def get_cognitive_state(request: Request) -> Optional[str]:
 
 
 def check_initialization_status(request: Request) -> bool:
-    """Check if system initialization is complete."""
+    """Check if system initialization is complete.
+
+    **Fails closed** (#943). No reachable initialization service means we cannot
+    know, and "initializing" is the honest rendering of not knowing — it is the
+    state that exists to describe exactly this. Returning True here made the
+    unknown case indistinguishable from a finished boot, and worse than that:
+    ``determine_overall_status`` short-circuits on ``init_complete``, so a True
+    skipped the "initializing" branch entirely and fell through to the service
+    ratio, where an empty registry satisfies ``healthy == total == 0`` and
+    reported **"healthy"**.
+
+    The window is not hypothetical: ``app.py`` sets
+    ``app.state.initialization_service = None`` at app construction, so every
+    request served between then and the service being attached took this path.
+    """
     init_service = getattr(request.app.state, "initialization_service", None)
     if init_service and hasattr(init_service, "is_initialized"):
         result: bool = init_service.is_initialized()
         return result
-    return True
+    logger.debug("No initialization service reachable — reporting 'initializing' rather than assuming complete")
+    return False
 
 
 # ============================================================================
@@ -107,8 +122,24 @@ def check_initialization_status(request: Request) -> bool:
 # ============================================================================
 
 
-async def check_provider_health(provider: Any) -> bool:
-    """Check if a single provider is healthy."""
+async def check_provider_health(provider: Any) -> Optional[bool]:
+    """Check if a single provider is healthy.
+
+    Tri-state (#943): True healthy, False unhealthy, **None unknown** — the
+    provider exposes no ``is_healthy()`` and cannot be asked.
+
+    That third case used to return True with the comment "Assume healthy if no
+    method", which contradicted the very next branch: a provider that *raises*
+    was counted unhealthy, while a provider that could not be asked at all was
+    counted healthy. The exception path already had the right default.
+
+    Unknown must not be silently promoted, because the aggregate test is
+    ``healthy_services == total_services`` — one unaskable provider counted as
+    healthy is one that can help manufacture a 100% score. Note this is not a
+    routine case: ``is_healthy()`` lives on ``base_service.py`` and the runtime
+    base protocol, so every real service inherits it. A provider without one is
+    a registration defect, which is why the caller logs it at warning.
+    """
     try:
         if hasattr(provider, "is_healthy"):
             if asyncio.iscoroutinefunction(provider.is_healthy):
@@ -117,8 +148,7 @@ async def check_provider_health(provider: Any) -> bool:
             else:
                 result_sync: bool = provider.is_healthy()
                 return result_sync
-        else:
-            return True  # Assume healthy if no method
+        return None
     except Exception:
         return False
 
@@ -136,10 +166,21 @@ async def collect_service_health(request: Request) -> Dict[str, Dict[str, int]]:
             if providers:
                 healthy_count = 0
                 for provider in providers:
-                    if await check_provider_health(provider):
+                    health = await check_provider_health(provider)
+                    if health is True:
                         healthy_count += 1
-                    else:
+                    elif health is False:
                         logger.debug(f"Service health check returned unhealthy for {service_type.value}")
+                    else:
+                        # Unknown stays in `available` but never in `healthy`, so it
+                        # drags the ratio toward degraded instead of padding it (#943).
+                        # Warning, not debug: every service inheriting base_service
+                        # has is_healthy(), so this is a registration defect and the
+                        # operator should see it rather than read a quiet 100%.
+                        logger.warning(
+                            f"Provider for {service_type.value} exposes no is_healthy() — counted as NOT healthy. "
+                            f"Provider type: {type(provider).__name__}"
+                        )
                 services[service_type.value] = {"available": len(providers), "healthy": healthy_count}
     except Exception as e:
         logger.error(f"Error checking service health: {e}")
@@ -232,6 +273,14 @@ def determine_overall_status(init_complete: bool, processor_healthy: bool, servi
         return "initializing"
     elif not processor_healthy:
         return "critical"  # Processor thread dead = critical
+    elif total_services == 0:
+        # An empty registry satisfies `healthy == total` vacuously, so the
+        # equality test below used to report a system with NO services as
+        # "healthy" (#943). Nothing has been verified in that case — it is the
+        # same absence-reads-as-success shape, one level up from the provider
+        # check. An agent with zero registered services is not well.
+        logger.warning("No services registered — reporting 'critical' rather than a vacuous 'healthy'")
+        return "critical"
     elif healthy_services == total_services:
         return "healthy"
     elif healthy_services >= total_services * 0.8:

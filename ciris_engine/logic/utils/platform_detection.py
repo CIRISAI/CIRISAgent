@@ -76,6 +76,34 @@ def get_platform_name() -> str:
     return "unknown"
 
 
+# Platform names that denote a full desktop/server host: a real filesystem, a
+# shell, and a user who installed the agent deliberately. Deliberately a
+# positive allow-list -- anything not named here (android, ios, unknown) is
+# treated as NOT desktop, so an unrecognized platform loses capability rather
+# than gaining it.
+DESKTOP_PLATFORM_NAMES = frozenset({"linux", "macos", "windows"})
+
+
+def is_desktop() -> bool:
+    """Detect if running on a desktop/server host rather than a mobile device.
+
+    Used to gate host-level capabilities (shell execution, file writes) that are
+    meaningful on a desktop install and meaningless-or-worse inside a sandboxed
+    mobile app. See ``FSD/CLI_TOOLS_DESKTOP.md``.
+
+    **Fails closed.** ``get_platform_name()`` returns ``"unknown"`` for anything
+    it does not positively recognize, and ``"unknown"`` is not in
+    :data:`DESKTOP_PLATFORM_NAMES`, so an unrecognized platform gets the mobile
+    (no-shell) answer. Android is recognized via ``ANDROID_ROOT`` /
+    ``ANDROID_DATA`` / ``sys.getandroidapilevel`` (Chaquopy) / ``/data/data``;
+    iOS via ``sys.platform == 'ios'`` or a simulator/device home path.
+
+    Returns:
+        True only on a positively-identified desktop platform.
+    """
+    return get_platform_name() in DESKTOP_PLATFORM_NAMES
+
+
 # ============================================================================
 # Security Capability Detection
 # ============================================================================
@@ -143,6 +171,25 @@ def _detect_ios_capabilities() -> set[PlatformRequirement]:
     return capabilities
 
 
+def _detect_unknown_capabilities() -> set[PlatformRequirement]:
+    """Capabilities for a host we could not positively identify: none.
+
+    ``get_platform_name()`` returns ``"unknown"`` only after android, ios and
+    the three desktop platforms have all failed to match, so reaching here means
+    the runtime genuinely does not know where it is. Every capability in this
+    module is a claim about the host — that a Secure Enclave exists, that a TPM
+    is reachable, that shell access is meaningful. None of those can be asserted
+    about an unidentified machine, so the honest answer is the empty set.
+
+    Notably this withholds ``DESKTOP_CLI``, which previously came free with the
+    desktop fallthrough (#948). ``is_desktop()`` in this same file already fails
+    closed by testing membership in ``DESKTOP_PLATFORM_NAMES`` rather than
+    "not one of the platforms I recognize"; this brings capability detection
+    onto that footing so the two cannot disagree.
+    """
+    return set()
+
+
 def _detect_desktop_capabilities() -> set[PlatformRequirement]:
     """Detect security capabilities available on desktop platforms.
 
@@ -197,12 +244,19 @@ def detect_platform_capabilities() -> PlatformCapabilities:
     platform = get_platform_name()
 
     # Detect platform-specific capabilities
+    # Every branch is a POSITIVE match. The desktop arm used to be a bare
+    # `else`, so a host the runtime could not classify was handed the desktop
+    # capability set — including DESKTOP_CLI, the predicate that gates shell
+    # execution and file writes (#948). Unknown is now its own branch with an
+    # empty set, which is what `is_desktop()` has always done a few lines up.
     if platform == "android":
         capabilities = _detect_android_capabilities()
     elif platform == "ios":
         capabilities = _detect_ios_capabilities()
-    else:
+    elif platform in DESKTOP_PLATFORM_NAMES:
         capabilities = _detect_desktop_capabilities()
+    else:
+        capabilities = _detect_unknown_capabilities()
 
     # Build the capabilities object
     platform_caps = PlatformCapabilities(
@@ -293,6 +347,8 @@ __all__ = [
     # Core detection (is_android imported from path_resolution)
     "is_android",
     "is_ios",
+    "is_desktop",
+    "DESKTOP_PLATFORM_NAMES",
     "get_platform_name",
     "detect_platform_capabilities",
     "refresh_auth_state",

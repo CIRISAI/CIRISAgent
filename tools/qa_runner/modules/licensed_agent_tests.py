@@ -292,7 +292,7 @@ class LicensedAgentTests:
                 "llm_provider": "groq",
                 "llm_api_key": "gsk_...",
                 "template_id": "default",
-                "enabled_adapters": ["api", "cirisnode"],
+                "enabled_adapters": ["api"],
                 "admin_username": "admin",
                 "admin_password": "secure_password_123",
                 # Portal-provisioned

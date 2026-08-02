@@ -1019,6 +1019,18 @@ class ApiPlatform(Service):
         print("[STARTUP] Server ready for connections")
         set_api_status("server_ready")
 
+        # Phase-4 node fold (CIRISAGENT_ADOPTION): with the brain listener up on
+        # :8080 and the embedded engine+edge composed, boot the CIRISServer node
+        # on 4243 (reusing them via CIRISServer#221) so the substrate surface —
+        # federation/self/accord/auth/config, incl. the wizard's
+        # /v1/federation/announce — is served. Node-fails ⇒ agent-fails.
+        from ciris_engine.logic.runtime.node_fold import start_node_fold
+
+        # start_node_fold blocks (serve thread spawn + a readiness poll on 4243);
+        # run it off the event loop so uvicorn (same loop) keeps serving. The
+        # await still propagates a node-fails ⇒ agent-fails RuntimeError.
+        await asyncio.get_event_loop().run_in_executor(None, start_node_fold, self.config.port)
+
     async def stop(self) -> None:
         """Stop the API server."""
         logger.info("Stopping API server...")

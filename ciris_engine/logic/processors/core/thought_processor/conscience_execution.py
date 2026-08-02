@@ -9,6 +9,7 @@ Captures detailed results from all 6 consciences:
 - Ethical Faculties (non-exempt): Entropy, Coherence, OptimizationVeto, EpistemicHumility
 """
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
@@ -201,26 +202,33 @@ class ConscienceExecutionPhase:
         optimization_veto_prompt: Optional[str] = None
         epistemic_humility_prompt: Optional[str] = None
 
-        # Get consciences from registry
-        for entry in self.conscience_registry.get_consciences():
-            conscience = entry.conscience
-            cb = entry.circuit_breaker
+        # Dispatch all conscience checks CONCURRENTLY (issue #889). The four
+        # epistemic consciences (Entropy/Coherence/OptimizationVeto/
+        # EpistemicHumility) each make an INDEPENDENT LLM call; a sequential
+        # await-loop serialized 4 LLM round-trips per thought, dominating
+        # cycle time on slow/edge inference. They have no inter-dependency
+        # (each reads the same final_action + context, none consumes another's
+        # output, and each conscience is a separate instance with no shared
+        # mutable state), so gather them. Results are folded below in
+        # registry priority order: the FIRST failing conscience in priority
+        # order wins, yielding the identical override decision +
+        # override_reason as the old serial break-on-first-failure loop.
+        #
+        # Intended behavioral delta (documented in #889): all checks now
+        # always RUN (the serial loop broke early and skipped later checks),
+        # and every completed check's results are folded in — so
+        # epistemic_data and the per-check result fields are complete even
+        # when an early check fails. The override decision is unchanged.
+        entries = self.conscience_registry.get_consciences()
+        check_results = await asyncio.gather(
+            *(self._run_single_conscience(entry, final_action, context) for entry in entries)
+        )
 
-            try:
-                if cb:
-                    cb.check_and_raise()
-                result = await conscience.check(final_action, context)
-                if cb:
-                    cb.record_success()
-                conscience_checks_ran += 1
-            except CircuitBreakerError as e:
-                logger.warning(f"conscience {entry.name} unavailable: {e}")
+        for entry, result in zip(entries, check_results):
+            if result is None:
+                # Circuit breaker open or check errored (already logged in helper).
                 continue
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"conscience {entry.name} error: {e}", exc_info=True)
-                if cb:
-                    cb.record_failure()
-                continue
+            conscience_checks_ran += 1
 
             # Aggregate epistemic metrics from conscience results
             if result.entropy_score is not None:
@@ -282,7 +290,14 @@ class ConscienceExecutionPhase:
                 if result.CIRIS_OBSERVATION_UPDATED_STATUS:
                     updated_status_content = result.CIRIS_OBSERVATION_UPDATED_STATUS
 
-            if not result.passed:
+            # First failing conscience in PRIORITY ORDER wins (the fold walks
+            # entries in registry priority order, so the `not overridden`
+            # guard reproduces the serial loop's break-on-first-failure
+            # precedence exactly: same override decision, same
+            # override_reason, same final_action). Later entries keep
+            # folding their epistemic data above — that is the intended
+            # #889 delta — but can no longer change the override.
+            if not result.passed and not overridden:
                 overridden = True
                 override_reason = result.reason
 
@@ -317,7 +332,6 @@ class ConscienceExecutionPhase:
                         evaluation_time_ms=None,
                         resource_usage=None,
                     )
-                break
 
         # If this was a conscience retry and we didn't override, force PONDER
         # unless the override was from thought depth guardrail
@@ -355,10 +369,15 @@ class ConscienceExecutionPhase:
                 f"All consciences must provide epistemic_data for non-exempt actions."
             )
 
-        # Use actual data from conscience checks - no defaults for missing metrics
+        # Use actual data from conscience checks — and NO defaults, which the
+        # comment above this block always claimed while the code substituted
+        # entropy=0.1 / coherence=0.9. Those numbers are indistinguishable
+        # downstream from a faculty that ran and returned them, so a trace could
+        # carry a confident scalar for a check that never happened. None now
+        # means not measured, and says so.
         epistemic_data = EpistemicData(
-            entropy_level=entropy_level if entropy_level is not None else 0.1,  # Default safe value
-            coherence_level=coherence_level if coherence_level is not None else 0.9,  # Default high coherence
+            entropy_level=entropy_level,
+            coherence_level=coherence_level,
             uncertainty_acknowledged=uncertainty_acknowledged,
             reasoning_transparency=reasoning_transparency,
         )
@@ -377,7 +396,16 @@ class ConscienceExecutionPhase:
             thought_depth_current=thought_depth_current,
             thought_depth_max=thought_depth_max,
             # Ethical faculties (None if skipped due to exempt action)
-            ethical_faculties_skipped=False,  # Non-exempt actions always run faculties
+            # DERIVED, not asserted. This was hardcoded False with the comment
+            # "Non-exempt actions always run faculties" — a reporting field with
+            # no writer, so it could never report the thing it names. Anything
+            # keying on it (a research arm distinguishing "pipeline ran" from
+            # "pipeline skipped", an auditor asking whether a decision was
+            # checked) read a constant.
+            #
+            # Now it reflects what actually happened: the ethical faculties are
+            # skipped exactly when neither scalar was measured.
+            ethical_faculties_skipped=(entropy_level is None and coherence_level is None),
             entropy_check=entropy_check_result,
             coherence_check=coherence_check_result,
             optimization_veto_check=optimization_veto_result,
@@ -417,6 +445,35 @@ class ConscienceExecutionPhase:
             evaluation_time_ms=None,
             resource_usage=None,
         )
+
+    async def _run_single_conscience(
+        self, entry: Any, action: ActionSelectionDMAResult, context: Any
+    ) -> Optional[Any]:
+        """Run one conscience.check() with circuit-breaker handling.
+
+        Returns the check result, or ``None`` if the circuit breaker is open
+        or the check errored (both already logged). Used to dispatch the
+        epistemic consciences CONCURRENTLY via ``asyncio.gather`` (issue #889)
+        — the override precedence is applied by the caller, which processes
+        results in priority order.
+        """
+        conscience = entry.conscience
+        cb = entry.circuit_breaker
+        try:
+            if cb:
+                cb.check_and_raise()
+            result = await conscience.check(action, context)
+            if cb:
+                cb.record_success()
+            return result
+        except CircuitBreakerError as e:
+            logger.warning(f"conscience {entry.name} unavailable: {e}")
+            return None
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"conscience {entry.name} error: {e}", exc_info=True)
+            if cb:
+                cb.record_failure()
+            return None
 
     async def _check_single_bypass_conscience(
         self, entry: Any, current_action: ActionSelectionDMAResult, context: Any

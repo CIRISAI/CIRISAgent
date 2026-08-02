@@ -5,12 +5,164 @@ This file is automatically loaded by pytest and contains setup that applies to a
 """
 
 # CRITICAL: Set import protection BEFORE any other imports
+import faulthandler
 import os
+import signal
+import sys
 import tempfile
+import threading
+import time
+
+# #956 DIAGNOSTIC — make a hang self-report instead of dying silently.
+#
+# The intermittent pytest-xdist exit-hang was root-caused (non-daemon FFI
+# threads in setup/attestation.py that leaked past their join timeout), but a
+# leak that recurs from a NEW source must not cost another 30-minute silent
+# timeout to diagnose. faulthandler here dumps EVERY thread's stack — naming the
+# blocked frame's file:line — in two situations the sessionfinish guard below
+# cannot cover on its own:
+#   * on a fatal signal (segfault etc.), and
+#   * on SIGTERM, which is exactly how CI kills the hang: the shard wraps pytest
+#     in `timeout --signal=SIGTERM ... 1800`, so registering here converts the
+#     30-min silent death into a full per-thread traceback for whichever process
+#     received the signal (at minimum the controller).
+# Pure diagnostics: fires only on an actual signal, never during a healthy run.
+faulthandler.enable()
+if hasattr(faulthandler, "register") and hasattr(signal, "SIGTERM"):
+    try:
+        faulthandler.register(signal.SIGTERM, all_threads=True, chain=True)
+    except (ValueError, OSError):
+        # Some environments disallow registering handlers (e.g. non-main thread
+        # at import). Diagnostics are best-effort; never break collection.
+        pass
+
+# WATCHDOG DUMP — the SIGTERM handler above proved insufficient: when CI's
+# job-level timeout-minutes fires, GitHub tears the process down fast enough
+# that a signal-driven dump does not reach the captured log. This is
+# signal-independent: a dedicated timer thread dumps EVERY thread's stack after
+# a fixed wall-clock interval, straight to fd 2, so a hung shard self-reports
+# INTO THE LIVE LOG well before it is killed.
+#
+# 1440s (24 min): healthy test shards finish in ~17-19 min and exit — the timer
+# dies with the process, no dump. A hung shard (killed at the 30-min job
+# timeout) gets its stacks dumped at 24 min, 6 min before death, while the step
+# log is still being tailed. Chosen to sit ABOVE the slowest healthy shard and
+# BELOW the kill. repeat=True in case the first dump races teardown.
+#
+# This is how we find the residual leak the attestation daemonization did NOT
+# fix (a non-thread mechanism — leaked child process holding the execnet fd, or
+# a C-extension thread) — it will name the exact blocked frame next hang.
+#
+# MEASURED 2026-08-02: `faulthandler.dump_traceback_later()` DOES NOT SURVIVE A
+# PYTEST RUN. Set the interval to 3s and run a 9s suite and you get zero dumps —
+# pytest's own faulthandler plugin calls `faulthandler.enable(file=<dup'd fd>)`
+# at configure time and the pending timer is lost. So this watchdog never fired,
+# which is why the 2026-08-02 shard-3 hang produced no stacks at all despite
+# being armed for exactly that.
+#
+# Replaced with a plain daemon timer thread calling `dump_traceback()` directly.
+# It is ours, nothing else touches it, and it is a daemon so it cannot itself
+# hold the process open.
+# A dup of the REAL stderr, taken at import before pytest installs capture.
+# `sys.stderr` is a capture buffer for most of a run, so anything a watchdog
+# writes there lands in a buffer that a hung or killed process never flushes —
+# which is the second reason the previous watchdog produced nothing. pytest's
+# own faulthandler plugin dups the fd for exactly this reason.
+try:
+    _REAL_STDERR_FD = os.dup(2)
+except OSError:  # pragma: no cover
+    _REAL_STDERR_FD = 2
+
+
+def _emit_stacks(header: str, tag: str = "hang") -> None:
+    """Write a header + every thread's stack to a FILE, and try stderr too.
+
+    THE FILE IS THE RELIABLE CHANNEL, and that is not a preference — pytest
+    installs fd-level capture (``--capture=fd`` is the default) BEFORE conftest
+    is imported, so even a dup of fd 2 taken here is a dup of pytest's capture
+    pipe rather than the terminal. Anything written there lands in a buffer that
+    a hung or SIGKILLed process never flushes. Measured: a 3s watchdog on a 9s
+    suite produced no visible output through any stderr route.
+
+    So write a file first and unconditionally. CI uploads it as an artifact,
+    which also survives the step log being truncated at the tail — exactly what
+    happened to the 2026-08-02 shard-3 hang, where nothing at all was captured.
+    The stderr attempt is kept as a bonus for `-s` / local runs.
+    """
+    path = os.environ.get("CIRIS_TEST_HANG_DUMP_DIR", ".")
+    role = os.environ.get("PYTEST_XDIST_WORKER", "controller")
+    try:
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, f"{tag}-stacks-{role}.txt"), "a", encoding="utf-8") as fh:
+            fh.write(header)
+            fh.write(f"# live_threads={threading.active_count()}\n")
+            for t in threading.enumerate():
+                fh.write(f"#   {t.name} daemon={t.daemon} type={type(t).__name__}\n")
+            fh.flush()
+            faulthandler.dump_traceback(file=fh, all_threads=True)
+            fh.flush()
+            os.fsync(fh.fileno())
+    except Exception:  # noqa: BLE001 — diagnostics must never break the run
+        pass
+    try:
+        os.write(_REAL_STDERR_FD, header.encode("utf-8", "replace"))
+        with os.fdopen(os.dup(_REAL_STDERR_FD), "w", closefd=True) as fh:
+            faulthandler.dump_traceback(file=fh, all_threads=True)
+            fh.flush()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+_HANG_WATCHDOG_SECONDS = int(os.environ.get("CIRIS_TEST_HANG_WATCHDOG_SECONDS", "1440"))
+if _HANG_WATCHDOG_SECONDS > 0:
+
+    def _hang_watchdog() -> None:
+        while True:
+            time.sleep(_HANG_WATCHDOG_SECONDS)
+            _emit_stacks(
+                f"\n[conftest #956] WATCHDOG: still running after "
+                f"{_HANG_WATCHDOG_SECONDS}s — every thread's stack follows.\n"
+            )
+
+    try:
+        threading.Thread(target=_hang_watchdog, name="ciris-hang-watchdog", daemon=True).start()
+    except Exception:  # noqa: BLE001
+        pass
+
+# BELT for the residual #956 leak: the CIRISVerify ThreadPoolExecutor.
+#
+# concurrent.futures registers `_python_exit` via atexit to JOIN every executor
+# worker thread at interpreter shutdown (executor workers are non-daemon since
+# 3.9). ciris_verify/ffi_bindings/client.py holds a ThreadPoolExecutor and
+# submits CIRISVerify FFI calls to it. In CI there is no attestation hardware,
+# so an FFI task can block indefinitely — and `shutdown(wait=False)` in the
+# client's __del__ cannot cancel a task already running in a worker. That leaves
+# a non-daemon worker stuck in the FFI, and `_python_exit` blocks joining it
+# FOREVER at shutdown. It is invisible to the threading.Thread AST lint (the
+# threads are stdlib-created) and it runs in the atexit phase, AFTER the
+# sessionfinish guard, which is why the guard did not catch it.
+#
+# The test process does not need in-flight executor results at exit, so drop the
+# join. The sessionfinish guard still force-exits on any lingering non-daemon
+# thread; this removes the one blocking phase that runs past it. Belt only — the
+# watchdog above still fires if a DIFFERENT residual mechanism remains, so this
+# cannot mask a further leak.
+try:
+    import atexit as _atexit
+    import concurrent.futures.thread as _cf_thread
+
+    _atexit.unregister(_cf_thread._python_exit)
+except Exception:  # noqa: BLE001 — best-effort; never break collection
+    pass
 
 os.environ["CIRIS_IMPORT_MODE"] = "true"
 os.environ["CIRIS_MOCK_LLM"] = "true"
 os.environ["CIRIS_TESTING_MODE"] = "true"  # Enable fallback admin credentials for tests
+# Unit tests never boot the real node fold (ciris-server serve on 4243): since
+# 0.5.113 the fold is fail-fast (node-fails => agent-fails) and requires a live
+# embedded edge (init_edge_runtime) + SQLite engine, which bare unit tests do
+# not stand up. Staged QA / integration boots override this explicitly.
+os.environ.setdefault("CIRIS_NODE_FOLD", "false")
 # Pin language to English so handler-content assertions stay stable regardless
 # of the developer's local CIRIS_PREFERRED_LANGUAGE in .env. Tests that
 # intentionally exercise localization can override via monkeypatch.
@@ -37,20 +189,37 @@ if os.path.isdir("/dev/shm"):
 
     is_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER") is not None
 
+    # INVARIANT: no process deletes a directory it does not exclusively own.
+    #
+    # The previous version gave the non-worker process `_TMPFS_BASE` ITSELF and
+    # rmtree'd it. Because every worker's dir is a CHILD of that base, any
+    # process importing this conftest without PYTEST_XDIST_WORKER set — the
+    # xdist controller included — destroyed every live worker's TMPDIR
+    # mid-session. Workers then failed in `tempfile.mkdtemp()` itself, so
+    # switching a test away from `tmp_path` did NOT help; the failure counts
+    # varied run to run (302-412 errors) and made every `-n` result unreadable.
+    # See #947.
     if is_xdist_worker:
-        # Worker process — isolate temp files under a worker-specific subdir
-        # so xdist session cleanup of one worker's dir can't hit another's.
         worker_id = os.environ["PYTEST_XDIST_WORKER"]  # e.g. "gw23"
         _TMPFS_DIR = os.path.join(_TMPFS_BASE, worker_id)
     else:
-        # Main process (single-worker run) — clean stale tmp files from prior
-        # runs to prevent /dev/shm filling up.
-        _TMPFS_DIR = _TMPFS_BASE
-        if os.path.isdir(_TMPFS_DIR):
+        # The controller/serial process gets its OWN subdir, a sibling of the
+        # workers' rather than their parent.
+        _TMPFS_DIR = os.path.join(_TMPFS_BASE, "main")
+
+    # Stale-sweep, not an eager wipe: the stated goal is keeping /dev/shm from
+    # filling up over time, which an age check satisfies without touching
+    # anything a concurrent run is using. Only the base's direct children are
+    # considered, and only when nothing has written to them for an hour.
+    if not is_xdist_worker and os.path.isdir(_TMPFS_BASE):
+        _stale_cutoff = time.time() - 3600
+        for _entry in os.listdir(_TMPFS_BASE):
+            _path = os.path.join(_TMPFS_BASE, _entry)
             try:
-                shutil.rmtree(_TMPFS_DIR)
+                if os.path.getmtime(_path) < _stale_cutoff:
+                    shutil.rmtree(_path, ignore_errors=True)
             except OSError:
-                pass  # May fail if files are in use by another test run
+                pass  # racing another run's cleanup is fine; it owns that dir
 
     os.makedirs(_TMPFS_DIR, exist_ok=True)
     os.environ["TMPDIR"] = _TMPFS_DIR
@@ -95,7 +264,6 @@ except ImportError:
     pass
 
 import gc  # noqa: E402
-import time  # noqa: E402
 
 # Import database fixtures and API fixtures - must be imported after os.environ setup
 from tests.fixtures.api import random_api_port  # noqa: E402
@@ -221,6 +389,39 @@ def cleanup_after_test(request):
     )
     if needs_socket_cleanup:
         time.sleep(0.1)
+
+
+@pytest.fixture(autouse=True, scope="function")
+def strip_leaked_incident_handlers():
+    """Remove any IncidentCaptureHandler left on a process-global logger after a
+    test, so it cannot leak onto the next test sharing the xdist worker process.
+
+    Root cause of the recurring 'incident_handler_injection' / logging-pollution
+    flake (git: e8a16d764, 3f254498f): ``add_incident_capture_handler()`` does
+    ``target_logger.addHandler(handler)`` on a process-global logger, and not
+    every test removes it. Under pytest-xdist the leaked handler then shows up on
+    the next test's logger — e.g. ``assert len(specific_logger.handlers) == 0``
+    sees 2. Stripping the leak at teardown fixes it at the source instead of
+    per-test ``xdist_group`` whack-a-mole. Surgical: only the IncidentCaptureHandler
+    subclass is removed, so ``caplog`` and other handlers are left untouched.
+    """
+    yield
+    import logging as _logging
+
+    try:
+        from ciris_engine.logic.utils.incident_capture_handler import IncidentCaptureHandler
+    except Exception:  # pragma: no cover - module always importable in-tree
+        return
+
+    loggers = [_logging.getLogger()]
+    loggers += [_logging.getLogger(name) for name in list(_logging.Logger.manager.loggerDict)]
+    for lg in loggers:
+        handlers = getattr(lg, "handlers", None)
+        if not handlers:
+            continue
+        kept = [h for h in handlers if not isinstance(h, IncidentCaptureHandler)]
+        if len(kept) != len(handlers):
+            lg.handlers = kept
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -559,3 +760,162 @@ def api_required():
             pytest.skip("API not running on localhost:8080")
     except Exception:
         pytest.skip("Cannot check API availability")
+
+
+_EXIT_DEADLINE_SECONDS = int(os.environ.get("CIRIS_TEST_EXIT_DEADLINE_SECONDS", "90"))
+
+
+def _arm_exit_deadline(exitstatus: int) -> None:
+    """Force the process out if finalization is still running N seconds from now.
+
+    Armed at sessionfinish, after the terminal summary and after xdist has
+    shipped this worker's results, so nothing the run produced is discarded.
+
+    Daemon thread on purpose: it must never be the reason a process stays up.
+    A healthy run exits during normal finalization and this never fires, so
+    coverage writing and other atexit work are untouched.
+
+    Writes stacks to a FILE as well as stderr. When CI kills the job, the tail
+    of the step log is the first thing lost, and stderr from an xdist worker may
+    never be relayed at all — a file survives as an uploadable artifact and is
+    the only reliable way to see what the next hang was parked on.
+    """
+    if _EXIT_DEADLINE_SECONDS <= 0:
+        return
+
+    def _bail() -> None:
+        time.sleep(_EXIT_DEADLINE_SECONDS)
+        role = _role()
+        path = os.environ.get("CIRIS_TEST_HANG_DUMP_DIR", ".")
+        try:
+            os.makedirs(path, exist_ok=True)
+            with open(os.path.join(path, f"hang-stacks-{role}.txt"), "w", encoding="utf-8") as fh:
+                fh.write(f"# finalization still running {_EXIT_DEADLINE_SECONDS}s after sessionfinish\n")
+                fh.write(f"# role={role} exitstatus={exitstatus} live_threads={threading.active_count()}\n")
+                for t in threading.enumerate():
+                    fh.write(f"#   {t.name} daemon={t.daemon} type={type(t).__name__}\n")
+                fh.flush()
+                faulthandler.dump_traceback(file=fh, all_threads=True)
+        except Exception:  # noqa: BLE001 — diagnostics must never mask the exit
+            pass
+        _emit_stacks(
+            f"\n[conftest #956] {role}: interpreter still finalizing "
+            f"{_EXIT_DEADLINE_SECONDS}s after sessionfinish — forcing exit({exitstatus}).\n"
+            f"[conftest #956] {threading.active_count()} live threads; "
+            f"stacks also in hang-stacks-{role}.txt\n"
+        )
+        os._exit(exitstatus)
+
+    threading.Thread(target=_bail, name="ciris-exit-deadline", daemon=True).start()
+
+
+def _role() -> str:
+    """Which process this is, for the #956 guard's diagnostics.
+
+    Was referenced by the guard below but never defined — so on the very path
+    the guard exists for (lingering non-daemon threads at sessionfinish) it
+    raised NameError instead of dumping stacks and force-exiting, defeating its
+    own purpose. A test that leaves a default-executor worker alive surfaced it.
+    """
+    return os.environ.get("PYTEST_XDIST_WORKER", "controller")
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session, exitstatus):  # noqa: D401
+    """Guarantee the process exits once the run is genuinely over (#956).
+
+    THE PROBLEM: a full `pytest -n 16 tests/` executed the entire suite — ~27.8k
+    tests, 0 failures — and then never terminated. No summary, no exit code. The
+    xdist controller sat with 97 threads: 16 execnet receiver threads blocked in
+    `anon_pipe_read` on workers that had already exited, plus a thread parked in
+    `inet_csk_accept` holding a LISTENING socket with live ESTABLISHED clients.
+    A non-daemon thread blocked in accept() keeps the interpreter alive forever,
+    so teardown could not complete. Two runs hung this way, 50 and 90 minutes,
+    before being killed.
+
+    The suite PASSED both times. What was lost was the ability to say so: no
+    developer could get a full-suite verdict locally, and every pass/fail count
+    in this repo had to be read out of raw log markers instead of a summary line.
+
+    THE FIX: this hook runs AFTER the terminal summary is written and after
+    exitstatus is decided, so forcing the exit here discards nothing the run
+    produced. It names any non-daemon threads still alive first — a leaked
+    listener should be FIXED at its source, and a silent force-exit would hide
+    it exactly the way the hang did. Then it exits with the real status.
+
+    Deliberately controller-only: xdist workers have their own teardown protocol
+    and must be left alone.
+    """
+    import threading
+
+    # RUNS IN WORKERS TOO. The first version skipped them ("not ours to end"),
+    # which protected the only process that was not stuck: measured live, all 16
+    # workers were ALIVE with 96 threads each, 94 of them parked in
+    # futex_do_wait, each still holding its socket to the controller. The
+    # controller's 16 blocked pipe-readers were the SYMPTOM — it was correctly
+    # waiting for workers that could never exit.
+    #
+    # (The earlier "workers are gone" reading came from counting them with
+    # `grep popen-gw`; execnet workers run as `python3 -u -c import sys;exec(...)`
+    # and never match that pattern. The count was zero because the probe was
+    # wrong, not because the workers had died.)
+    #
+    # trylast=True so xdist's own sessionfinish — which ships this worker's
+    # results back to the controller — has already run. Forcing the exit after
+    # that discards no test outcome.
+
+    # DEADLINE FIRST — armed unconditionally, before the non-daemon check below.
+    #
+    # That check is necessary but NOT sufficient, and shard 3 proved it on
+    # 2026-08-02: the run reached 99% PASSED, then hung 13 minutes until CI
+    # killed it. Measured at the hang, the workers held 98-131 live threads and
+    # EVERY leaked one was a `threading._DummyThread` — the placeholder Python
+    # fabricates when a thread it did not create calls in, i.e. an alien OS
+    # thread from a native extension. `_DummyThread.daemon` is True by
+    # definition, so `not t.daemon` filtered out precisely the threads that
+    # were present, `lingering` came back empty, and this hook returned and let
+    # the interpreter hang.
+    #
+    # Daemon does not mean harmless here. Python can kill a *Python* daemon
+    # thread when it next takes the GIL; it cannot do anything about an alien
+    # thread parked in native code, which can wedge finalization regardless of
+    # what the placeholder object claims.
+    #
+    # So: arm a deadline instead of trying to classify threads. It is a daemon
+    # thread, so it never blocks exit itself. A healthy run finishes
+    # finalization in well under a second and the process is gone long before
+    # it fires — which keeps pytest-cov's XML write and every other atexit hook
+    # on the normal path. Only a genuinely wedged finalization reaches it, and
+    # that one gets stacks plus the real exit status instead of a silent kill.
+    _arm_exit_deadline(exitstatus)
+
+    lingering = [
+        t
+        for t in threading.enumerate()
+        if t is not threading.current_thread() and t.is_alive() and not t.daemon
+    ]
+    if not lingering:
+        return  # nothing obviously leaked; the deadline above covers the rest
+
+    sys.stderr.write(
+        f"\n[conftest #956] {_role()}: {len(lingering)} non-daemon thread(s) still alive after "
+        f"sessionfinish; the interpreter would hang. Forcing exit({exitstatus}).\n"
+        f"[conftest #956] These are LEAKS — fix them at the source:\n"
+    )
+    for t in lingering[:20]:
+        sys.stderr.write(f"[conftest #956]   - {t.name} (ident={t.ident})\n")
+    # Dump the STACK of every lingering thread, not just its name. A name like
+    # "Thread-7" is unactionable; the frame it is parked in (e.g. a CIRISVerify
+    # FFI call, socket.accept) names the source to fix. Cheap, and only runs on
+    # the leak path.
+    sys.stderr.write("[conftest #956] --- stacks of all threads (find the blocked frame) ---\n")
+    sys.stderr.flush()
+    try:
+        faulthandler.dump_traceback(all_threads=True)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        sys.stdout.flush()
+    except Exception:  # noqa: BLE001
+        pass
+    os._exit(exitstatus)

@@ -2,6 +2,7 @@
 Tool message bus - handles all tool service operations
 """
 
+import inspect
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
@@ -12,6 +13,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo
 from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.runtime.task_envelope import ToolInvocationSubject
 from ciris_engine.schemas.types import JSONDict
 
 from .base_bus import BaseBus, BusMessage
@@ -54,6 +56,21 @@ class ToolBus(BaseBus[ToolService]):
         # Enables imported skills to be invoked by their skillKey (e.g., "todoist" -> "skill:todoist-cli")
         self._tool_aliases: Dict[str, str] = {}
 
+        # Identity-less execute_tool calls warn once per caller, not per call —
+        # a per-call warning on a hot path gets muted, and a muted warning is
+        # the silent permissive path CIRISAgent#938 is about.
+        self._identityless_callers: Set[str] = set()
+
+        # This bus is the deployment's tool registry, so it is the resolution
+        # source for the enabled-tool set a TaskEnvelope enumerates at issuance
+        # (CIRISAgent#938). Registration only; nothing here enforces anything.
+        try:
+            from ciris_engine.logic.infrastructure.authorization.enabled_tools import register_tool_name_source
+
+            register_tool_name_source(self)
+        except Exception as exc:  # pragma: no cover - defensive, never fatal
+            logger.debug("ToolBus: could not register as enabled-tool source: %s", exc)
+
     def register_tool_alias(self, alias: str, canonical_name: str) -> None:
         """Register a tool alias so the tool can be invoked by an alternative name.
 
@@ -75,10 +92,50 @@ class ToolBus(BaseBus[ToolService]):
         """
         return self._tool_aliases.get(tool_name, tool_name)
 
+    def _note_subject(self, tool_name: str, handler_name: str, subject: Optional[ToolInvocationSubject]) -> None:
+        """Record who is asking, and complain loudly when nobody says.
+
+        CIRISAgent#938: the enforcement point could not previously see the
+        subject it would need to authorize. ``subject`` is that subject. Phase 1
+        only observes it — the gate is Phase 2 (#905 Ask 1). An identity-less
+        call is not blocked here (blocking is not this phase's job) but it is
+        named, because a silent permissive path is the exact anti-pattern this
+        work exists to remove.
+        """
+        if subject is not None:
+            logger.debug("[TOOL_BUS] execute_tool '%s' subject: %s", tool_name, subject.describe())
+            return
+        if handler_name not in self._identityless_callers:
+            self._identityless_callers.add(handler_name)
+            logger.warning(
+                "[TOOL_BUS] execute_tool('%s') called by %r with NO ToolInvocationSubject. "
+                "Task identity is unavailable at the enforcement point for this caller "
+                "(CIRISAgent#938); a Phase 2 tool gate would have to deny or exempt it. "
+                "Pass ToolInvocationSubject.for_task(...) or .for_component(...).",
+                tool_name,
+                handler_name,
+            )
+
     async def execute_tool(
-        self, tool_name: str, parameters: JSONDict, handler_name: str = "default"
+        self,
+        tool_name: str,
+        parameters: JSONDict,
+        handler_name: str = "default",
+        subject: Optional[ToolInvocationSubject] = None,
     ) -> ToolExecutionResult:
-        """Execute a tool and return the result"""
+        """Execute a tool and return the result.
+
+        Args:
+            tool_name: Tool to execute (aliases resolved).
+            parameters: Validated tool parameters.
+            handler_name: Calling handler, used for provider lookup.
+            subject: Who this call is on behalf of — task/thought identity and
+                the resolved :class:`TaskEnvelope` for a task-bound call, or a
+                named component for an operator/governance call. Optional in
+                Phase 1 so no adapter breaks; an omitted subject logs a loud
+                warning naming the caller. Nothing here authorizes anything —
+                see ``FSD/TASK_ENVELOPE.md``.
+        """
         # Resolve aliases before lookup
         tool_name = self.resolve_tool_name(tool_name)
         logger.debug(f"execute_tool called with tool_name={tool_name}, parameters={parameters}")
@@ -111,8 +168,12 @@ class ToolBus(BaseBus[ToolService]):
         supporting_services = []
         for service in all_tool_services:
             try:
-                # Service is guaranteed to exist in the list
-                assert service is not None, "Service in list should not be None"
+                # No None guard needed: both paths that populate all_tool_services
+                # already exclude it — the registry loop appends only providers
+                # passing hasattr checks, and the fallback appends only under
+                # `if service`. An assert here was worse than nothing: the
+                # `except Exception` below catches AssertionError, so it could
+                # never fail anything, and `python -O` strips it outright.
                 available_tools = await service.get_available_tools()
                 logger.debug(f"Service {type(service).__name__} supports tools: {available_tools}")
                 if tool_name in available_tools:
@@ -123,6 +184,9 @@ class ToolBus(BaseBus[ToolService]):
         # Step 3: If no service supports this tool, return NOT_FOUND
         if not supporting_services:
             logger.error(f"No service supports tool: {tool_name}")
+            # No provider is reached, so dispatch_to_provider never runs — record
+            # the subject here so an identity-less caller is still named.
+            self._note_subject(tool_name, handler_name, subject)
 
             # Track error metrics
             self._executions_count += 1
@@ -171,12 +235,46 @@ class ToolBus(BaseBus[ToolService]):
 
             logger.debug(f"Selected {type(selected_service).__name__} from {len(supporting_services)} options")
 
-        # Step 5: Execute the tool
+        # Step 5: Execute the tool through the single dispatch point.
+        assert selected_service is not None, "Selected service must not be None"
+        return await self.dispatch_to_provider(
+            selected_service, tool_name, parameters, handler_name=handler_name, subject=subject
+        )
+
+    async def dispatch_to_provider(
+        self,
+        service: Any,
+        tool_name: str,
+        parameters: JSONDict,
+        *,
+        handler_name: str = "default",
+        subject: Optional[ToolInvocationSubject] = None,
+    ) -> ToolExecutionResult:
+        """The single point at which a tool provider is actually invoked.
+
+        Every bus-mediated execution ends here, whichever way the provider was
+        resolved: :meth:`execute_tool` resolves by tool name and delegates, and
+        the context-enrichment path (which resolves adapter-scoped, and runs on
+        every thought) calls this directly instead of reaching into the registry
+        and invoking the instance itself.
+
+        That matters for CIRISAgent#938: a gate placed only in
+        :meth:`execute_tool` would miss the enrichment path entirely — the path
+        that executes *more often* than the intended one. **Phase 2's gate
+        belongs here**, so both paths inherit it from one place.
+
+        It is a dispatch point, not a resolver: provider selection stays with
+        the caller, so adapter-scoped enrichment routing is preserved exactly.
+        """
+        self._note_subject(tool_name, handler_name, subject)
         try:
-            # Logic guarantees selected_service is not None at this point
-            assert selected_service is not None, "Selected service must not be None"
-            logger.debug(f"Executing tool '{tool_name}' with {type(selected_service).__name__}")
-            result: ToolExecutionResult = await selected_service.execute_tool(tool_name, parameters)
+            logger.debug(f"Executing tool '{tool_name}' with {type(service).__name__}")
+            # Providers are async per ToolServiceProtocol, but the
+            # context-enrichment path historically tolerated sync ones
+            # (_call_async_or_sync_method). Keep tolerating them: routing that
+            # path through here must not break a provider it used to accept.
+            raw = service.execute_tool(tool_name, parameters)
+            result: ToolExecutionResult = await raw if inspect.isawaitable(raw) else raw
 
             # Track metrics
             self._executions_count += 1

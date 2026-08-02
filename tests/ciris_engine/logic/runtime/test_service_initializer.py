@@ -137,8 +137,17 @@ class TestServiceInitializer:
         assert service_initializer._db_path is not None
 
     @pytest.mark.asyncio
-    async def test_initialize_memory(self, service_initializer, mock_essential_config):
-        """Test memory services initialization."""
+    async def test_initialize_memory(self, service_initializer, mock_essential_config, persist_engine):
+        """Test memory services initialization.
+
+        Requests ``persist_engine`` so a real ciris-persist Engine is wired into
+        ``persistence.models.graph`` before ``initialize_memory_service`` starts
+        the SecretsService: post-#896 the SecretsService drives the persist
+        substrate, so ``SecretsService.start()`` → ``_check_dependencies()`` →
+        ``_get_engine()`` requires the wired engine (else "Required dependencies
+        not available"). The per-test engine reset in conftest nulls the global
+        before every test, so this fixture must supply it explicitly.
+        """
         # Initialize prerequisites
         await service_initializer.initialize_infrastructure_services()
 
@@ -154,8 +163,14 @@ class TestServiceInitializer:
         assert service_initializer.config_accessor is not None
 
     @pytest.mark.asyncio
-    async def test_initialize_identity(self, service_initializer, mock_essential_config):
-        """Test identity initialization."""
+    async def test_initialize_identity(self, service_initializer, mock_essential_config, persist_engine):
+        """Test identity initialization.
+
+        Requests ``persist_engine`` for the same reason as
+        ``test_initialize_memory``: it calls ``initialize_memory_service`` (which
+        starts the substrate-backed SecretsService) and so needs the persist
+        Engine wired into ``persistence.models.graph``.
+        """
         # Initialize prerequisites
         await service_initializer.initialize_infrastructure_services()
         await service_initializer.initialize_memory_service(mock_essential_config)

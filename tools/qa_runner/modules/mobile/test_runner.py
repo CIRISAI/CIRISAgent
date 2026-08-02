@@ -20,6 +20,7 @@ from .test_cases import (  # Screen navigation tests (new in 1.9.2)
     TestResult,
     test_all_screens,
     test_app_launch,
+    test_catchup_add_fedid,
     test_chat_interaction,
     test_connect_node,
     test_connect_node_auth,
@@ -55,6 +56,11 @@ class MobileTestConfig:
     package_name: str = "ai.ciris.mobile.debug"  # matches the default debug apk_path
     reinstall_app: bool = True
     clear_data: bool = True
+    # Keep files/ciris/identity/ across a data clear so the node re-uses its
+    # key_id. A re-minted agent is re-admitted at Advisory and strands on the
+    # un-rooted path (CIRISEdge#432), so repeat QA against a primed canonical
+    # needs a stable identity until the live-map upgrade lands.
+    preserve_identity: bool = False
 
     # Test account
     test_email: str = "ciristest1@gmail.com"
@@ -76,7 +82,12 @@ class MobileTestConfig:
     # Test settings
     test_message: str = "Hello CIRIS! This is an automated test. Please respond briefly."
     timeout: int = 300  # Total test timeout in seconds
-    keep_app_open: bool = False  # Don't force-stop app after tests
+    # Default TRUE: teardown must NOT kill the node. A full_flow run seals its
+    # trace seconds before teardown, and federation delivery ships in the
+    # background AFTER the suite — force-stopping here stranded every sealed
+    # trace on-device (the ship-unconfirmed chronic). Opt into the old
+    # behavior with --force-stop.
+    keep_app_open: bool = True
 
     # Portal / Node settings (for connect_node tests)
     portal_url: str = "https://portal.ciris.ai"
@@ -350,11 +361,26 @@ class MobileTestRunner:
             self.logcat_process.terminate()
             self.logcat_process = None
 
-        # Force stop app (unless keep_app_open is set)
+        # Leave the app (and its node) RUNNING by default: sealed traces ship
+        # via federation delivery AFTER the suite; killing the process here
+        # strands them. --force-stop opts into the old kill.
         if self.adb and not self.config.keep_app_open:
+            print("      Force-stopping app (--force-stop)")
             self.adb.force_stop_app(self.config.package_name)
-        elif self.config.keep_app_open:
-            print("      Keeping app open (--keep-open flag set)")
+        else:
+            # Not force-stopping is NOT enough: once the app falls to the
+            # BACKGROUND, PythonRuntimeService's ~3-minute background timeout
+            # stops the runtime — killing the node mid-delivery even though the
+            # process survives. Re-foreground the activity at teardown so it
+            # stays RESUMED (isAppInForeground=true → the background timeout
+            # never arms) and the federation-delivery loop keeps running long
+            # enough to dispatch the sealed trace. On the (user-less) emulator
+            # nothing backgrounds it afterward, so a single launch holds it.
+            print("      Keeping app FOREGROUNDED (re-launching activity so the runtime survives the delivery window)")
+            try:
+                self.adb.launch_app(self.config.package_name, "ai.ciris.mobile.MainActivity")
+            except Exception as e:
+                print(f"      [WARN] could not re-foreground app ({e}) — runtime may hit its background timeout")
 
     def run_tests(self, tests: Optional[List[str]] = None) -> MobileTestSuite:
         """
@@ -374,6 +400,7 @@ class MobileTestRunner:
             "google_signin": test_google_signin,
             "local_login": test_local_login,
             "setup_wizard": test_setup_wizard,
+            "catchup_add_fedid": test_catchup_add_fedid,
             "chat_interaction": test_chat_interaction,
             "full_flow": test_full_flow,
             # Screen navigation tests (new in 1.9.2)
@@ -444,8 +471,10 @@ class MobileTestRunner:
             "setup_username": self.config.setup_username,
             "setup_password": self.config.setup_password,
             "clear_data": self.config.clear_data,
+            "preserve_identity": self.config.preserve_identity,
             "llm_provider": self.config.llm_provider,
             "llm_api_key": self.config.llm_api_key,
+            "llm_model": self.config.llm_model,
             "test_message": self.config.test_message,
             # Portal / Node settings
             "portal_url": self.config.portal_url,
@@ -490,6 +519,37 @@ class MobileTestRunner:
         with open(results_path, "w") as f:
             json.dump(suite.to_dict(), f, indent=2)
 
+        # Provisioning-saga trace conformance (FSD/FIRST_RUN_STATECHART.md):
+        # validate the observed [ORDER] event trace against the precedence DAG
+        # on EVERY run — a green suite with a red conformance report is an
+        # ordering bug that happened not to bite this run. Best-effort.
+        try:
+            from .order_conformance import format_conformance, run_order_conformance
+
+            conf = run_order_conformance(self.adb)
+            print("\n" + format_conformance(conf))
+        except Exception as e:
+            print(f"  [WARN] order conformance failed ({e}) — suite result above stands")
+
+        # Fold-failure RCA: on any FAILED/ERROR, classify which layer broke
+        # (fold-panic / compose-hang / bind-window / PIN / session / delivery)
+        # instead of leaving a bare FAIL. Fully best-effort — an RCA crash
+        # must never mask the original suite failure.
+        rca_path = None
+        if not suite.success:
+            try:
+                from .fold_rca import format_rca, format_rca_markdown, run_fold_rca
+
+                print("\nSuite had failures — running fold-failure RCA...")
+                rca_result = run_fold_rca(self.adb, package=self.config.package_name)
+                print(format_rca(rca_result))
+                rca_path = output_dir / f"rca_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                with open(rca_path, "w") as f:
+                    f.write(format_rca_markdown(rca_result))
+            except Exception as e:
+                print(f"  [WARN] fold RCA failed ({e}) — original failure report above stands")
+                rca_path = None
+
         # Print summary
         print("\n" + "=" * 60)
         print("Test Summary")
@@ -502,6 +562,8 @@ class MobileTestRunner:
         print(f"  Results: {results_path}")
         if suite.logcat_path:
             print(f"  Logcat:  {suite.logcat_path}")
+        if rca_path:
+            print(f"  RCA:     {rca_path}")
         print("=" * 60 + "\n")
 
         return suite
@@ -533,7 +595,8 @@ def main():
     )
     parser.add_argument("--no-reinstall", action="store_true", help="Don't reinstall the app")
     parser.add_argument("--no-clear", action="store_true", help="Don't clear app data before tests")
-    parser.add_argument("--keep-open", action="store_true", help="Keep app running after tests (don't force-stop)")
+    parser.add_argument("--keep-open", action="store_true", help="(default) Keep app running after tests")
+    parser.add_argument("--force-stop", action="store_true", help="Force-stop the app at teardown (strands unshipped sealed traces)")
 
     # Test account
     parser.add_argument(
@@ -545,6 +608,7 @@ def main():
     # LLM settings
     parser.add_argument("--llm-key", help="LLM API key for setup wizard")
     parser.add_argument("--llm-provider", default="groq", help="LLM provider for setup")
+    parser.add_argument("--llm-model", default=None, help="LLM model id for setup (exact, case-sensitive)")
 
     # Output settings
     parser.add_argument(
@@ -570,11 +634,12 @@ def main():
         test_email=args.email,
         llm_api_key=args.llm_key or "",
         llm_provider=args.llm_provider,
+        llm_model=args.llm_model or TestConfig.llm_model,
         output_dir=args.output_dir,
         save_screenshots=not args.no_screenshots,
         save_logcat=not args.no_logcat,
         verbose=args.verbose,
-        keep_app_open=args.keep_open,
+        keep_app_open=not args.force_stop,
     )
 
     # Run tests

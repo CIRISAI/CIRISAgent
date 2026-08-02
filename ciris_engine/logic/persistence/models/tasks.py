@@ -25,6 +25,7 @@ from ciris_engine.schemas.runtime.models import (
     TaskContext,
     TaskOutcome,
 )
+from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
 from ciris_engine.schemas.services.graph.audit import AuditEventData
 
 if TYPE_CHECKING:
@@ -101,6 +102,27 @@ def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
     return payload
 
 
+def _decode_envelope(raw: Any, task_id: Any) -> Optional[TaskEnvelope]:
+    """Decode the task-scoped authorization envelope from a persisted context.
+
+    A decode failure resolves to ``None``, which is the fail-closed direction:
+    absence of an envelope is a denial to a future tool gate (CIRISAgent#938),
+    never "unconstrained". The failure is logged loudly because a task silently
+    losing its envelope would look identical to a task that never had one.
+    """
+    if raw is None:
+        return None
+    try:
+        return TaskEnvelope.model_validate(raw)
+    except Exception as exc:
+        logger.warning(
+            "Failed to decode task envelope for task %s; treating as no envelope (deny): %s",
+            task_id,
+            exc,
+        )
+        return None
+
+
 def _persist_row_to_task(row: Dict[str, Any]) -> Task:
     """Materialize a persist task row into a Task model."""
     agent_occurrence_id = str(row.get("agent_occurrence_id", "default"))
@@ -132,6 +154,7 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
                 parent_task_id=ctx_data.get("parent_task_id"),
                 agent_occurrence_id=ctx_data.get("agent_occurrence_id", agent_occurrence_id),
                 preferred_language=ctx_data.get("preferred_language"),
+                envelope=_decode_envelope(ctx_data.get("envelope"), row.get("task_id")),
             )
         except Exception as e:
             logger.warning(f"Failed to decode context for task {row.get('task_id')}: {e}")
@@ -667,29 +690,15 @@ def delete_tasks_by_ids(task_ids: List[str]) -> bool:
 
     engine = _get_engine()
     deleted_count = 0
-    fk_blocked: List[str] = []
     for tid in task_ids:
         try:
             ok = engine.task_delete(tid)
         except Exception as e:
-            # Persist 1.5.19 has no `thought_delete` API, so tasks with
-            # child thoughts can't be cascade-deleted. Mark for soft-delete
-            # fallback and continue. Tracked upstream as a CIRISPersist
-            # follow-up — until then maintenance leaves stale rows in
-            # place rather than crashing the cleanup pass.
-            err = str(e).lower()
-            if "foreign key" in err or "conflict" in err:
-                fk_blocked.append(tid)
-                logger.warning(
-                    "task_delete(%s) blocked by FK (child thoughts exist); "
-                    "soft-cancelling instead pending CIRISPersist thought_delete API.",
-                    tid,
-                )
-                try:
-                    engine.task_update_status(tid, TaskStatus.FAILED.value, None)
-                except Exception as inner_e:
-                    logger.warning("task_update_status fallback for %s failed: %s", tid, inner_e)
-                continue
+            # persist's `task_delete` cascades the task's child thoughts via
+            # migration V035, so the old "FK-blocked by child thoughts"
+            # soft-cancel fallback no longer applies. A Conflict here means
+            # some *other* row still references the task — log it honestly
+            # rather than masking a stale row as a successful cancel.
             logger.exception(f"Failed to delete task {tid}: {e}")
             continue
         if ok:
@@ -697,11 +706,6 @@ def delete_tasks_by_ids(task_ids: List[str]) -> bool:
 
     if deleted_count > 0:
         logger.info(f"Successfully deleted {deleted_count} task(s) with IDs: {task_ids}.")
-        return True
-    if fk_blocked:
-        logger.warning(
-            "Soft-cancelled %d task(s) with FK-blocked children: %s", len(fk_blocked), fk_blocked
-        )
         return True
     logger.warning(f"No tasks found with IDs: {task_ids} for deletion (or they were already deleted).")
     return False

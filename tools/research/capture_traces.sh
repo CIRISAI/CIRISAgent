@@ -63,6 +63,36 @@ fi
 KEYFILE="$(mktemp)"; trap 'rm -f "$KEYFILE"' EXIT
 printf '%s' "$API_KEY" > "$KEYFILE"
 
+# OVERRIDES FIRST — before preflight, because this check is free and local
+# while preflight spends a real provider call. A manifest the agent will refuse
+# should never reach the provider's billing.
+if [ -n "$OVERRIDES" ]; then
+  if [ ! -f "$OVERRIDES" ]; then
+    echo "ERROR: OVERRIDES=$OVERRIDES not found in the container." >&2
+    echo "       Mount it read-only, e.g.  -v \$PWD/manifests:/manifests:ro" >&2
+    exit 5
+  fi
+  # Two keys by design: one says WHAT to apply, the other says you are ALLOWED
+  # to. A single key would let a stray line in a production .env swap the
+  # covenant out of a live agent.
+  export CIRIS_RESEARCH_PROMPT_OVERRIDES="$OVERRIDES"
+  export CIRIS_TESTING_MODE=true
+  echo "── overrides ─────────────────────────────────────────────"
+  echo "  manifest : $OVERRIDES"
+  # Validate with the loader the AGENT uses, not a JSON-parses check.
+  #
+  # The agent's refusal at startup is correct and is not softened here — this
+  # asks the same question earlier, of the same loader, and stops on the same
+  # answer. A JSON-valid manifest missing residue_digest, or a strict one
+  # omitting keys, used to survive this point and die minutes later inside the
+  # run, surfacing as "Server failed to start" with the cause in a console tail
+  # (#962, #963). Failing here costs ~8s and the message names the remedy.
+  if ! python3 -m ciris_engine.logic.utils.research_overrides validate "$OVERRIDES"; then
+    echo "  -> manifest refused. The agent would not have started on it." >&2
+    exit 5
+  fi
+fi
+
 # PREFLIGHT — fail in seconds on a bad key/model rather than after a full run.
 # A 401 and a 402 both present as "no output"; one is a bad key, the other a
 # valid key on an unfunded account, and they need different fixes.
@@ -91,30 +121,12 @@ echo "  OK: $PROVIDER / $MODEL"
 
 mkdir -p "$OUT_DIR"
 export CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR="$OUT_DIR"
-
-if [ -n "$OVERRIDES" ]; then
-  if [ ! -f "$OVERRIDES" ]; then
-    echo "ERROR: OVERRIDES=$OVERRIDES not found in the container." >&2
-    echo "       Mount it read-only, e.g.  -v \$PWD/manifests:/manifests:ro" >&2
-    exit 5
-  fi
-  # Two keys by design: one says WHAT to apply, the other says you are ALLOWED
-  # to. A single key would let a stray line in a production .env swap the
-  # covenant out of a live agent.
-  export CIRIS_RESEARCH_PROMPT_OVERRIDES="$OVERRIDES"
-  export CIRIS_TESTING_MODE=true
-  echo "── overrides ─────────────────────────────────────────────"
-  echo "  manifest : $OVERRIDES"
-  python3 - "$OVERRIDES" <<'EOP' || { echo "  manifest is not valid JSON" >&2; exit 5; }
-import json, sys
-m = json.load(open(sys.argv[1]))
-print(f"  condition: {m.get('condition', '(none declared)')}")
-ov = m.get("overrides") or {}
-print(f"  keys     : {len(ov)}")
-for k in list(ov)[:6]:
-    print(f"    - {k}")
-EOP
-fi
+# The ceg-seal-*.json carriers ARE the product of this script, and only this
+# script asks for them. The tee reads the live persist DB through a second
+# SQLite handle, which is unsafe alongside the Rust writer on a WAL database
+# (it took the staged-QA sqlite leg down), so it is off by default and opted
+# into here rather than riding along on LOCAL_COPY_DIR.
+export CIRIS_ACCORD_METRICS_CEG_SEAL_TEE="true"
 
 BEFORE=$(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null | wc -l)
 

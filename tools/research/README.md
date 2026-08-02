@@ -41,7 +41,52 @@ API_KEY=sk-... ./tools/research/capture_traces.sh
 | `QUESTIONS_FILE` | built-in corpus | container path, e.g. `/questions/mine.json` |
 | `CONCURRENCY` | `1` | |
 | `BASE_URL` | per provider | override for anything unlisted |
+| `OVERRIDES` | none | path to a prompt-override manifest — see below |
 | `OUT_DIR` | `/out` | |
+
+## Prompt overrides
+
+`OVERRIDES=/path/manifest.json` applies research-bound prompt replacements
+through the audited facility, so the run records having been manipulated. The
+manifest is validated **before** the provider preflight, with the same loader
+the agent uses at startup — a manifest the agent would refuse costs ~8 seconds
+here instead of ten minutes and a "Server failed to start".
+
+Required fields: `manifest_version`, `experiment_id`, `condition`, `mode`,
+`residue_digest`.
+
+`residue_digest` is the one you cannot write from memory. It pins the inline
+English action doctrine that overrides do **not** cover — the ASPDMA user
+message, the DEFER policy, the identity blocks, the formatters — which every
+arm shares, so a mid-campaign change to it is a confound. It is a hash over the
+source tree, so it is specific to the commit you are running:
+
+```bash
+# the value for this tree
+python3 -m ciris_engine.logic.utils.research_overrides digest
+
+# a complete strict manifest, every value a visible REPLACE:: marker
+python3 -m ciris_engine.logic.utils.research_overrides skeleton > manifest.json
+
+# same, pre-filled with the CURRENT live values — for a surgical change
+python3 -m ciris_engine.logic.utils.research_overrides baseline > manifest.json
+
+# check before you run
+python3 -m ciris_engine.logic.utils.research_overrides validate manifest.json
+```
+
+`mode: strict` demands **totality**: all ~97 reachable keys across the five
+namespaces, or the manifest is refused. That is deliberate and is not going to
+be relaxed. Partial replacement leaves CIRIS text inside a supposedly non-CIRIS
+arm, and a run that applied half its overrides and reported clean is the exact
+result this facility exists to make impossible. Use `mode: additive` for a
+pilot — additive is recorded in the trace, so it can never later be read as a
+total replacement.
+
+Running via the **Research Trace Capture** workflow instead of locally: the
+`Instrument` step summary prints that run's `residue_digest`, ready to paste,
+and a rejected manifest fails at the staging step with the cause and the
+remedy — before the capture starts.
 
 ## Output
 
@@ -56,6 +101,15 @@ Each file is the CEG carrier **as it would ship**: the full
 `scrub_signature_classical`, `scrub_signature_pqc`, `original_content_hash`.
 Byte columns are hex-encoded as `{"__hex__": "..."}`. Written on **seal**, so an
 unreachable canonical does not cost you the corpus.
+
+`capture_traces.sh` sets `CIRIS_ACCORD_METRICS_CEG_SEAL_TEE=true` for you.
+Writing these files is **off by default everywhere else**, and deliberately not
+folded into `CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR` — that var governs the
+lens-batch tee, which is a pure write and is on for every QA run. Producing a
+CEG carrier is a *read* of the live persist database through a second SQLite
+handle, which is unsafe alongside the Rust writer on a WAL file in the same
+process: it took the staged-QA sqlite leg down mid-run. Enable it for a
+research capture, not as a general-purpose trace switch.
 
 ```python
 import json
@@ -73,6 +127,7 @@ d["ceg_rows"][0]["scrub_signature_pqc"]       # importable into the mesh
 | 2 | no API key / unknown provider |
 | 3 | preflight failed — names the cause (401 bad key · 402 valid key, no credit · 404 model case · 429 rate limit) |
 | 4 | **ran but captured nothing** |
+| 5 | override manifest missing or refused — the agent would not have started on it |
 
 Exit 4 exists because the failure it catches is silent: a run once reported
 `Success Rate 100.0%` while writing zero trace files, and anything reading that

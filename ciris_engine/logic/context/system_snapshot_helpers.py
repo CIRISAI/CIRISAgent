@@ -12,6 +12,7 @@ Organized by logical function groups:
 8. User Management
 """
 
+import inspect
 import json
 import logging
 import re
@@ -1200,8 +1201,31 @@ def _process_tool_result(result: Any, tool_key: str) -> Any:
         return result
 
 
+def _is_tool_bus(candidate: Any) -> bool:
+    """True only for a real ToolBus.
+
+    Deliberately an isinstance check, not ``hasattr``: every mock answers
+    ``hasattr`` truthfully, so a duck-typed check would silently route
+    enrichment into a stub and skip the provider entirely. When this is False
+    the caller falls back to the historical direct invocation, which is exactly
+    the behaviour that existed before the seam moved.
+    """
+    if candidate is None:
+        return False
+    try:
+        from ciris_engine.logic.buses.tool_bus import ToolBus
+
+        return isinstance(candidate, ToolBus)
+    except Exception:  # pragma: no cover - defensive
+        return False
+
+
 async def _execute_enrichment_tool(
-    tool_providers: List[tuple[Any, str]], adapter_type: str, tool: ToolInfo
+    tool_providers: List[tuple[Any, str]],
+    adapter_type: str,
+    tool: ToolInfo,
+    tool_bus: Optional[Any] = None,
+    subject: Optional[Any] = None,
 ) -> tuple[str, Any]:
     """Execute a single enrichment tool and return (tool_key, result).
 
@@ -1236,14 +1260,35 @@ async def _execute_enrichment_tool(
 
     logger.info(f"[CONTEXT_ENRICHMENT] Executing {tool_key} with params: {params}")
 
-    result = await _call_async_or_sync_method(tool_service, "execute_tool", tool.name, params)
+    # Route through ToolBus.dispatch_to_provider — the single dispatch point —
+    # rather than invoking the provider instance directly (CIRISAgent#938).
+    # This path runs on EVERY thought, i.e. more often than the model-selected
+    # tool path, so a gate placed only in ToolBus.execute_tool would miss it.
+    # Provider resolution stays here (adapter-scoped, via _find_tool_service),
+    # so routing behaviour is unchanged; only the dispatch seam moves.
+    if tool_bus is not None and _is_tool_bus(tool_bus):
+        result = await tool_bus.dispatch_to_provider(
+            tool_service,
+            tool.name,
+            params,
+            handler_name="context_enrichment",
+            subject=subject,
+        )
+    else:
+        # No bus available — startup cache population and adapter load both run
+        # before/outside the bus manager. Direct invocation, logged as such
+        # rather than silently taking the ungated path.
+        logger.debug("[CONTEXT_ENRICHMENT] No ToolBus available for %s; invoking provider directly", tool_key)
+        result = await _call_async_or_sync_method(tool_service, "execute_tool", tool.name, params)
     if result:
         return tool_key, _process_tool_result(result, tool_key)
     return tool_key, None
 
 
 async def _run_context_enrichment_tools(
-    runtime: Optional[Any], available_tools: Dict[str, List[ToolInfo]]
+    runtime: Optional[Any],
+    available_tools: Dict[str, List[ToolInfo]],
+    subject: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Run context enrichment tools and return their results.
 
@@ -1257,6 +1302,10 @@ async def _run_context_enrichment_tools(
     Args:
         runtime: The runtime object with service_registry and bus_manager
         available_tools: Already collected available tools by adapter type
+        subject: ToolInvocationSubject identifying the task/thought whose
+            context is being built (CIRISAgent#938). These tools are auto-run by
+            the pipeline, not selected by the model, which is why the origin is
+            CONTEXT_ENRICHMENT rather than REASONING.
 
     Returns:
         Dict mapping "adapter_type:tool_name" to tool execution results
@@ -1276,6 +1325,8 @@ async def _run_context_enrichment_tools(
 
     # Use _get_tool_providers to get (instance, adapter_name) tuples with proper adapter mapping
     tool_providers = _get_tool_providers(runtime.service_registry)
+    bus_manager = getattr(runtime, "bus_manager", None)
+    tool_bus = getattr(bus_manager, "tool", None) if bus_manager is not None else None
     cache_hits = 0
     cache_misses = 0
 
@@ -1291,7 +1342,9 @@ async def _run_context_enrichment_tools(
 
             # Cache miss - execute tool
             cache_misses += 1
-            _, result = await _execute_enrichment_tool(tool_providers, adapter_type, tool)
+            _, result = await _execute_enrichment_tool(
+                tool_providers, adapter_type, tool, tool_bus=tool_bus, subject=subject
+            )
             if result is not None:
                 # Get TTL from tool params (default: 30s)
                 params = tool.context_enrichment_params or {}

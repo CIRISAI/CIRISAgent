@@ -222,9 +222,18 @@ class WakeupProcessor(BaseProcessor):
         if result.get("status") == "failed":
             errors = 1  # At least one error if status is failed
             if "steps_status" in result:
-                # Count actual number of failed tasks - use get_list to type narrow
+                # Count actual number of failed tasks - use get_list to type narrow.
+                # "missing" (row vanished) is a failure too (#934); floor at 1 so a
+                # failed sequence never reports zero errors.
                 steps_status = get_list(result, "steps_status", [])
-                errors = sum(1 for s in steps_status if isinstance(s, dict) and get_str(s, "status", "") == "failed")
+                errors = max(
+                    1,
+                    sum(
+                        1
+                        for s in steps_status
+                        if isinstance(s, dict) and get_str(s, "status", "") in ("failed", "missing")
+                    ),
+                )
 
         return WakeupResult(
             thoughts_processed=result.get("processed_thoughts", 0),
@@ -337,15 +346,25 @@ class WakeupProcessor(BaseProcessor):
                             "processed_thoughts": False,
                         }
 
-                # We have step tasks, so we're the claiming occurrence
+                # We have step tasks, so we're the claiming occurrence.
+                # A step whose DB row has VANISHED ("missing") can never
+                # complete — treating it as in-progress left the processor
+                # spinning empty rounds forever while reporting healthy
+                # (#934: ~933k rounds over 55 days). Fail the sequence
+                # loudly instead, naming the broken step(s).
                 all_complete = all(s["status"] == "completed" for s in steps_status)
-                any_failed = any(s["status"] == "failed" for s in steps_status)
+                any_failed = any(s["status"] in ("failed", "missing") for s in steps_status)
 
                 if any_failed:
-                    # If any task failed, mark wakeup as failed
+                    # If any task failed or vanished, mark wakeup as failed
                     self.wakeup_complete = False
                     self._mark_root_task_failed()
-                    logger.error("✗ Wakeup sequence failed - one or more tasks failed!")
+                    broken_steps = ", ".join(
+                        f"{s['type']} ({s['task_id']}: {s['status']})"
+                        for s in steps_status
+                        if s["status"] in ("failed", "missing")
+                    )
+                    logger.error(f"✗ Wakeup sequence failed - steps failed or missing: {broken_steps}")
                     return {
                         "status": "failed",
                         "wakeup_complete": False,

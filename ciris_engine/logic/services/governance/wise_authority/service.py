@@ -28,10 +28,13 @@ from ciris_engine.schemas.services.authority_core import (
     DeferralApprovalContext,
     DeferralRequest,
     DeferralResponse,
+    DeferralVerification,
     GuidanceRequest,
     GuidanceResponse,
     WAPermission,
     WARole,
+    deferral_resolution_record,
+    is_unverifiable_legacy_signature,
 )
 from ciris_engine.schemas.services.context import GuidanceContext
 from ciris_engine.schemas.services.core import ServiceStatus
@@ -168,6 +171,11 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         Returns:
             Dictionary with string keys and values for UI display
         """
+        from ciris_engine.logic.infrastructure.authorization.tool_approval import (
+            TOOL_APPROVAL_DETAIL_KEY,
+            TOOL_APPROVAL_DETAIL_MAX_CHARS,
+        )
+
         ui_context: Dict[str, str] = {
             "task_description": (description[:500] if description else ""),
         }
@@ -175,8 +183,15 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         deferral_context = deferral_info.get("context", {})
         if isinstance(deferral_context, dict):
             for key, value in deferral_context.items():
-                if value is not None:
-                    ui_context[key] = str(value)[:200]
+                if value is None:
+                    continue
+                # The tool-approval detail (CIRISAgent#942) is a JSON document the
+                # approval screen parses to show WHAT is being approved. Clipping
+                # it at the generic 200-char UI budget would truncate it into
+                # unparseable JSON, and the human would be back to approving a
+                # sentence. It has its own cap, applied where it is encoded.
+                limit = TOOL_APPROVAL_DETAIL_MAX_CHARS if key == TOOL_APPROVAL_DETAIL_KEY else 200
+                ui_context[key] = str(value)[:limit]
         # Include original message if available
         original_message = deferral_info.get("original_message")
         if original_message:
@@ -527,20 +542,73 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
         return result
 
+    async def _verify_resolution(self, deferral_id: str, response: DeferralResponse) -> DeferralVerification:
+        """Classify a resolution's signature before anything acts on it (#944).
+
+        Three outcomes, because two would force a lie about one of them:
+
+        - ``VERIFIED``  — signature checks out against the signing key, and the
+          owner binding agrees with the federation directory.
+        - ``UNSIGNED``  — no signature, or one of the pre-#944 placeholder forms
+          (``""`` / ``api_{user}_{ts}``). Deployed rows look like this. They are
+          recorded as unverified and allowed through, because refusing them
+          would break resolution of every deferral written before signing
+          existed. They are never recorded as verified.
+        - ``FAILED``    — a signature is present and does not check out, or
+          cannot be checked. The caller refuses.
+
+        The gap this leaves is worth stating plainly: an attacker who can write
+        the row can also clear the signature and land in ``UNSIGNED``. Closing
+        that means refusing unsigned resolutions outright, which is a data
+        migration, not a code change. What is closed here is the weaker but
+        real hole — a *forged* or *altered* signed resolution now cannot be
+        acted on, and the record says which of the three it was.
+        """
+        if not response.signature or is_unverifiable_legacy_signature(response.signature):
+            logger.warning(
+                "Deferral %s carries no verifiable signature — recording as unverified (pre-#944 record)",
+                deferral_id,
+            )
+            return DeferralVerification.UNSIGNED
+
+        if not response.signed_at:
+            # The canonical payload commits to signed_at; without it there is
+            # nothing to rebuild the signature against.
+            logger.error("Deferral %s has a signature but no signed_at — cannot verify", deferral_id)
+            return DeferralVerification.FAILED
+
+        try:
+            ok = await self.auth_service.verify_deferral_resolution(deferral_id, response, response.signed_at)
+        except Exception:
+            logger.exception("Verification of deferral %s raised — refusing", deferral_id)
+            return DeferralVerification.FAILED
+
+        return DeferralVerification.VERIFIED if ok else DeferralVerification.FAILED
+
     async def resolve_deferral(self, deferral_id: str, response: DeferralResponse) -> bool:
         """Resolve a deferral by creating a new guidance task.
 
         When a deferral is resolved:
-        1. Original deferred task is marked COMPLETED with outcome
-        2. New guidance TASK is created (not just a thought) to ensure proper billing
-        3. New task copies context from original and includes WA guidance
-        4. New task is PENDING and ready for normal processing
+        1. Signature is verified — a signed-but-invalid resolution is refused
+        2. Original deferred task is marked COMPLETED with outcome
+        3. New guidance TASK is created (not just a thought) to ensure proper billing
+        4. New task copies context from original and includes WA guidance
+        5. New task is PENDING and ready for normal processing
 
         This ensures:
         - New billing cycle starts (new task = new credit charge)
         - Original task/thought history preserved
         - Proper task resumption flow
         """
+        # Fail closed BEFORE any mutation (#944). A resolution that presents a
+        # signature which does not verify must not complete the task, must not
+        # create the guidance task, and must not spend the budget that #938
+        # attaches to it.
+        verification = await self._verify_resolution(deferral_id, response)
+        if verification is DeferralVerification.FAILED:
+            logger.error("Refusing deferral %s: signature present but did not verify", deferral_id)
+            return False
+
         try:
             from ciris_engine.logic.utils.task_thought_factory import create_task
 
@@ -631,15 +699,16 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 except json.JSONDecodeError:
                     pass
 
-            # Add resolution to deferral info in the original task
+            # Add resolution to deferral info in the original task. This now
+            # carries the signature and the `signed_at` it commits to (#944):
+            # without them stored, verifying an approval after the fact was not
+            # merely unwired but impossible, because the material to check
+            # against was discarded at write time.
             deferral_info = context.get("deferral")
             if isinstance(deferral_info, dict):
-                deferral_info["resolution"] = {
-                    "approved": response.approved,
-                    "reason": response.reason,
-                    "resolved_by": response.wa_id,
-                    "resolved_at": self._now().isoformat(),
-                }
+                deferral_info["resolution"] = deferral_resolution_record(
+                    response, self._now().isoformat(), verification
+                )
 
             # Mark original deferred task as COMPLETED with outcome
             # Use TaskOutcome schema: status, summary, actions_taken, memories_created, errors
@@ -766,6 +835,19 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     context=task_context,
                 )
 
+                # CIRISAgent#942: when this deferral was raised by the approval
+                # gate, issue the guidance task a WISE_AUTHORITY envelope naming
+                # the approved tool. This is issuance, not widening — TaskEnvelope
+                # stays frozen and no existing envelope is touched; a new task
+                # legitimately gets a newly issued envelope.
+                self._attach_tool_approval_envelope(
+                    guidance_context_dict=guidance_context_dict,
+                    deferral_info=deferral_info,
+                    guidance_task_id=guidance_task.task_id,
+                    agent_occurrence_id=agent_occurrence_id,
+                    wa_id=response.wa_id,
+                )
+
                 # Persist the new guidance task via the substrate.
                 guidance_payload = {
                     "task_id": guidance_task.task_id,
@@ -792,6 +874,99 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         except Exception as e:
             logger.error(f"Failed to resolve deferral: {e}")
             return False
+
+    # ========== Tool-Approval Envelope Issuance (CIRISAgent#942) ==========
+
+    def _attach_tool_approval_envelope(
+        self,
+        *,
+        guidance_context_dict: Dict[str, object],
+        deferral_info: object,
+        guidance_task_id: str,
+        agent_occurrence_id: str,
+        wa_id: str,
+    ) -> None:
+        """Mint the approval envelope for a ``[WA GUIDANCE]`` task and bind it.
+
+        Completes the loop the approval gate opens. The gate
+        (``ThoughtProcessor._enforce_tool_approval``) denies an approval-requiring
+        tool and defers, carrying the tool name in the deferral context. A human
+        approves through the WA panel that already ships. Here we issue the
+        follow-up task a ``WISE_AUTHORITY`` envelope whose ``granted_tools`` names
+        exactly that tool, so the re-run of the pipeline passes the gate.
+
+        ``granted_tools`` is deliberately **narrow** — only the approved tool, not
+        the deployment's enabled set. A union would silently approve every *other*
+        ``requires_approval`` tool for this task, which is precisely the widening
+        the design forbids. Ordinary tools are unaffected because the gate only
+        consults the envelope for approval-requiring tools.
+
+        ``capabilities`` is left empty on purpose: this envelope is an approval
+        token for one named tool, not a resolved effect-class summary, and
+        claiming effect classes it did not resolve would be a false declaration.
+
+        Provenance is ``issuer_id=wa_id``. Note what that is and is not: it is the
+        identifier of the resolving Wise Authority, and the cryptographic binding
+        lives on ``DeferralResponse.signature`` (an Ed25519 signature produced
+        server-side by ``AuthenticationService.sign_as_wa``, persisted by
+        CIRISAgent#944). It is **not** the owner's post-quantum CEG federation
+        identity: that identity is minted by the substrate's node self-claim and
+        the Python side explicitly recognises and skips those rows
+        (``persistence/stores/authentication_store.py``), so no owner key material
+        is reachable in this process. Chaining approvals to the owner's PQC fedID
+        requires that identity to be exposed by the substrate first; deliberately
+        not faked here, because a second invented signer is exactly what the
+        dry297 series removed.
+
+        Best-effort and fully defensive: any failure leaves the guidance task with
+        no approval envelope, so the gate denies again on the re-run. That is the
+        fail-closed direction — a broken issuance can never turn into a grant.
+        """
+        from ciris_engine.logic.infrastructure.authorization.tool_approval import (
+            pending_tool_from_deferral_context,
+        )
+
+        if not isinstance(deferral_info, dict):
+            return
+        approved_tool = pending_tool_from_deferral_context(deferral_info.get("context"))
+        if approved_tool is None:
+            return
+
+        try:
+            from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
+                issue_authority_envelope,
+            )
+            from ciris_engine.schemas.runtime.task_envelope import EnvelopeIssuerKind
+
+            envelope = issue_authority_envelope(
+                task_id=guidance_task_id,
+                issuer_kind=EnvelopeIssuerKind.WISE_AUTHORITY,
+                issuer_id=wa_id,
+                granted_tools=frozenset({approved_tool}),
+                capabilities=frozenset(),
+                agent_occurrence_id=agent_occurrence_id,
+                time_service=self._time_service,
+            )
+        except Exception as exc:
+            logger.error(
+                "CIRISAgent#942: failed to issue tool-approval envelope for tool %r on guidance "
+                "task %s (WA %s): %s. The guidance task proceeds WITHOUT the approval, so the "
+                "approval gate will deny and defer again — never a bypass.",
+                approved_tool,
+                guidance_task_id,
+                wa_id,
+                exc,
+            )
+            return
+
+        guidance_context_dict["envelope"] = envelope.model_dump(mode="json")
+        logger.info(
+            "CIRISAgent#942: WA %s approved tool %r; issued envelope %s to guidance task %s",
+            wa_id,
+            approved_tool,
+            envelope.envelope_id,
+            guidance_task_id,
+        )
 
     # ========== Guidance Operations ==========
 

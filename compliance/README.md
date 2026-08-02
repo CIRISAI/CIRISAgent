@@ -115,6 +115,38 @@ Documented in the seed-population commit (`bd330545b`) and inventoried here for 
 | 9 | Localization parity partial — D04 category list is English-only; 29 locales carry framing but not canonical capability list | D04 |
 | 10 | CONSCIENCE_V3 Stages 2–4 unshipped; ~60% IRIS-O/IRIS-H overlap persists | D12 |
 
+## What this compliance set does NOT do (2.9.7)
+
+Four limits on how these documents should be read. The first is new in this release and is the
+important one.
+
+1. **A credited control is not necessarily an *enforced* control, and this set does not
+   consistently distinguish them.** Several dimensions describe agent-side mechanisms whose
+   strength is **semantic** (a model or a conscience reasoning about content) or
+   **documentation-only** (a declared field with no reader) rather than **deterministic** (code
+   that returns a denial). The 2.9.7 pass found and corrected instances in D19 and D23 where a
+   marker was described as a gate. Others may remain. `FSD/THREAT_MODEL_2.9.7.md` classifies the
+   agent's controls along exactly this axis and is the document to read against any
+   implementation claim here before relying on it. Two concrete corrections landed in this pass:
+   - **D19** described `ToolDMAGuidance(requires_approval=True)` as "the partner-role financial-tool
+     gate". It gates nothing ([#942](https://github.com/CIRISAI/CIRISAgent/issues/942)).
+   - **D23** said WA escalations are recorded with "the human's signed response", named by "Ed25519
+     public-key hash". The resolution signature is a formatted string that nothing reads
+     ([#944](https://github.com/CIRISAI/CIRISAgent/issues/944)).
+2. **The substrate-enforced facet table is credited by citation, not by CI.** The
+   CIRISConformance evidence is real and was run against the published wheels, but nothing in this
+   repo re-checks it on each change. Until the CI lane in the TODO above exists, a wheel-matrix
+   regression would not fail anything here. Treat the six credited facets as verified *as of* the
+   cited runs.
+3. **These documents describe the agent, not a deployment.** Whether a given control is active
+   depends on which adapters an operator loaded, whether a wallet is configured, whether a WA
+   signing key exists, and which platform the runtime is on. Several claims are conditional in ways
+   the prose does not always foreground.
+4. **"Known gaps" sections are not an exhaustive threat model.** They record gaps against each
+   dimension's own framework mapping. Attack paths that cross dimensions — the ones that matter
+   most — do not appear in any single stub by construction. That is what
+   `FSD/THREAT_MODEL_2.9.7.md` is for.
+
 ## Substrate dependencies
 
 Many dimensions depend on upstream CIRIS substrates landing first. The substrate substitution trajectory (per project memory and `MISSION.md`) is:
@@ -133,6 +165,21 @@ Per-dimension upstream substrate ownership:
 | CIRISPersist (signed trace persistence, federation evidence_refs join) | D06, D07, D13, D15 |
 | CIRISLensCore (RATCHET detectors, F-3 family) | D05, D06, D07, D13, D14, D15, D19, D26 |
 | CIRISVerify (attestation ladder) | D17, D18, D27 |
+
+## Substrate-enforced facets (CIRISServer adoption)
+
+Six controls carry facets that are **substrate-enforced** — inherited via CIRISServer's integration of the substrate wheels (`ciris-persist` + `ciris-edge` + `ciris-verify`, lens folded into server) and independently verified against the real published wheels by [CIRISConformance](https://github.com/CIRISAI/CIRISConformance#compliance-coverage-map) on both sqlite + postgres across py3.10/3.12 on x86_64 + aarch64 (CIRISAgent#902):
+
+| Control | Facet credited | Conformance evidence |
+|---|---|---|
+| D02 — integrity (full) | tamper-evident hash-chained Ed25519 + ML-DSA-65 audit log | `test_320` |
+| D15 — moderation (full) | delegated, revocable moderation authority at the emit boundary | `test_270` |
+| D24 — reconsideration (full) | bounded admission (anti-DoS + harassment-cluster) | `test_220` |
+| D23 — accountability (partial) | tamper-evident-log facet (named-accountability stays agent-side) | `test_320` |
+| D18 — attestation (partial) | L2 hardware-rooted key facet (L1/L3/L4/L5 stay consumer-side per CEG §8.1.9 Policy I) | `test_070` / `test_080` |
+| D26 — key_boundary (partial) | hardware-rooted signer + storage-kind taxonomy; non-downgradable X25519 + ML-KEM-768 DEK-grant wrap (`no_seed_in_heap` stays a known gap) | `test_070` / `test_080` / `test_250` |
+
+**TODO — wire the substrate-side evidence artifact into CI.** There is no dedicated compliance CI lane in `.github/workflows/` today (the safety-battery and build lanes are the nearest neighbors). When one lands, the substrate half of the evidence should be consumed mechanically rather than by citation: run CIRISConformance's `pytest --conformance-report=conformance.json` against the pinned wheel matrix (`matrices/current.yaml`) and assert the report's top-level `passed_all_gates` boolean — that JSON (pinned matrix, per-marker rollup, per-test outcomes) is the machine-readable cross-wheel evidence for the six substrate-enforced facets above.
 
 ## Contributing
 

@@ -62,6 +62,13 @@ The canonical edge-side boundary lives in the upstream CIRIS Edge substrate (sha
     - `ciris_adapters/ciris_verify/adapter.py:175-190` — rotates Wise Authority signing keys into hardware on first hardware-available startup.
     - `ciris_engine/logic/services/infrastructure/authentication/service.py:1780-1788` — auto-rotation logs each migrated authority.
 
+**Substrate-enforced facets (inherited via CIRISServer).** Two of this dimension's facets are now enforced by the substrate wheels shipping inside the agent's deployment, independently verified against the real published wheels by CIRISConformance (sqlite + postgres, py3.10/3.12, x86_64 + aarch64; the [coverage map](https://github.com/CIRISAI/CIRISConformance#compliance-coverage-map) marks D26 lane = substrate + agent):
+
+- *Hardware-rooted signer + storage-kind taxonomy*: [`test_070_hsm_transport_identity.py`](https://github.com/CIRISAI/CIRISConformance/blob/main/tests/test_070_hsm_transport_identity.py) (a `hardware_hsm_only` cohabitation init with a hardware-rooted signer yields a 32-byte transport identity) and [`test_080_mobile_target.py`](https://github.com/CIRISAI/CIRISConformance/blob/main/tests/test_080_mobile_target.py) (recognized keystore-kind taxonomy at cohab init, Android/Chaquopy bring-up gate).
+- *Non-downgradable PQC DEK-grant wrap*: [`test_250_key_grant_pqc.py`](https://github.com/CIRISAI/CIRISConformance/blob/main/tests/test_250_key_grant_pqc.py) (CC 5.1) — the v2 DEK-grant wrap is **X25519 + ML-KEM-768** hybrid, v1 is classical-only, and no cross-version downgrade is accepted.
+
+The full `key_boundary:no_seed_in_heap` predicate remains upstream (CIRISEdge) and is not yet drivable cross-wheel — that stays a known gap below.
+
 ## How you can tell it's working (observability)
 
 If you want to verify the cryptographic boundary, the per-trace key signals and the public-key directory give you everything you need to confirm "same hardware-backed key signed every action in this window."

@@ -157,16 +157,48 @@ class PydanticCoreFinder:
 
 
 def _detect_architecture() -> str:
-    """Detect the Android CPU architecture.
+    """Detect the Android CPU architecture OF THIS PYTHON PROCESS.
 
     Returns one of: 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+
+    Must NOT use platform.machine()/uname alone: under ndk_translation (arm64
+    APK on an x86_64 emulator image) uname reports the HOST arch (x86_64) while
+    the interpreter and every bundled .so are arm64 — picking the .imy by
+    uname then extracts x86_64 natives into an arm64 process (dlopen:
+    EM_X86_64 instead of EM_AARCH64). The interpreter's own build triplet
+    (sysconfig MULTIARCH / HOST_GNU_TYPE) is the process-ABI ground truth.
     """
     import platform
 
+    # 1) OS ground truth: the ABI directory Android actually installed for this
+    #    app (ends in /arm64, /arm, /x86_64). Survives ndk_translation, and
+    #    unlike sysconfig's MULTIARCH/HOST_GNU_TYPE it can't be polluted by the
+    #    chaquopy cross-compile build host.
+    try:
+        from java import jclass  # type: ignore[import-not-found]
+
+        native_dir = (
+            jclass("com.chaquo.python.Python")
+            .getPlatform()
+            .getApplication()
+            .getApplicationInfo()
+            .nativeLibraryDir
+        )
+        leaf = str(native_dir).rstrip("/").rsplit("/", 1)[-1].lower()
+        if leaf in ("arm64", "arm64-v8a"):
+            return "arm64-v8a"
+        if leaf in ("arm", "armeabi-v7a"):
+            return "armeabi-v7a"
+        if leaf in ("x86_64", "x86"):
+            return "x86_64"
+    except Exception:
+        pass
+
+    # 2) Last resort: uname (WRONG under ndk_translation — reports host arch).
     machine = platform.machine().lower()
     if "aarch64" in machine or "arm64" in machine:
         return "arm64-v8a"
-    if "armv7" in machine or "arm" in machine:
+    if "armv7" in machine or ("arm" in machine and "64" not in machine):
         return "armeabi-v7a"
     return "x86_64"
 
@@ -883,8 +915,26 @@ def setup_android_environment():
     os.environ["CIRIS_OFFLINE_MODE"] = "true"
     os.environ["CIRIS_CLOUD_SYNC"] = "false"
 
-    # Enable CIRISVerify debug logging (logs to stderr)
-    os.environ.setdefault("RUST_LOG", "ciris_verify_core=info")
+    # An offline mobile node has no registry entry — verify v10.5.0's startup
+    # attestation would block ~27s on the missing Agent-build-record fetch and
+    # trip the 20s budget gate, bricking the processor (CIRISVerify#212).
+    # Offline ⇒ skip the registry step (degrades to L4-skipped FAST, the same
+    # end-state the fetch reaches anyway) and give the budget headroom as a
+    # belt-and-suspenders for a bundled verify that predates skip_registry.
+    os.environ.setdefault("CIRIS_ATTESTATION_SKIP_REGISTRY", "true")
+    os.environ.setdefault("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "45")
+
+    # Rust log filter. init_tracing (edge_runtime) does `RUST_LOG or <default>`,
+    # so whatever we set here WINS over its ciris_edge=debug default — the old
+    # `ciris_verify_core=info` silenced the entire edge/transport/replication
+    # stack, leaving the federation-delivery path (the proactive Deliver, the
+    # outbound Reticulum send, link dials) DARK on-device (CIRISAgent#927 field
+    # confirm needed exactly this: did the Deliver fire, and over what path).
+    # Widen to capture delivery/transport at debug while keeping verify at info.
+    os.environ.setdefault(
+        "RUST_LOG",
+        "info,ciris_verify_core=info,ciris_edge=debug,leviculum=debug,reticulum_core=debug,ciris_server=info",
+    )
 
     # Optimize for low-resource devices
     os.environ.setdefault("CIRIS_MAX_WORKERS", "1")

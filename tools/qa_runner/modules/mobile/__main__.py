@@ -44,6 +44,7 @@ from typing import Dict, List, Optional, Tuple
 # Add parent paths for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
+from tools.qa_runner.modules.mobile.llm_preflight import PROVIDER_BASE_URLS, preflight_llm
 from tools.qa_runner.modules.mobile.adb_helper import ADBHelper
 from tools.qa_runner.modules.mobile.device_helper import DeviceHelper, Platform, create_device_helper, detect_platform
 from tools.qa_runner.modules.mobile.test_runner import MobileTestConfig, MobileTestRunner
@@ -528,7 +529,7 @@ def build_command(args) -> int:
 
         # Create config
         config = iOSBuildConfig(
-            project_dir=Path(__file__).parent.parent.parent.parent.parent / "mobile" / "iosApp",
+            project_dir=Path(__file__).parent.parent.parent.parent.parent / "client" / "iosApp",
             scheme=args.scheme,
             configuration=args.configuration,
             prepare_bundle=not args.no_prepare,
@@ -572,7 +573,7 @@ def build_command(args) -> int:
         print("[INFO] Building Android APK...")
         import subprocess
 
-        mobile_dir = Path(__file__).parent.parent.parent.parent.parent / "mobile"
+        mobile_dir = Path(__file__).parent.parent.parent.parent.parent / "client"
 
         # Build APK
         gradle_cmd = ["./gradlew", ":androidApp:assembleDebug"]
@@ -1043,7 +1044,7 @@ def test_command(args) -> int:
 
         result = subprocess.run(
             ["./gradlew", ":androidApp:assembleDebug"],
-            cwd=Path(__file__).parent.parent.parent.parent.parent / "mobile",
+            cwd=Path(__file__).parent.parent.parent.parent.parent / "client",
             capture_output=True,
             text=True,
         )
@@ -1071,6 +1072,7 @@ def test_command(args) -> int:
         apk_path=args.apk,
         reinstall_app=not args.no_reinstall,
         clear_data=not args.no_clear,
+        preserve_identity=getattr(args, "preserve_identity", False),
         login_mode=args.login_mode,
         setup_username=args.setup_username,
         setup_password=args.setup_password,
@@ -1078,12 +1080,13 @@ def test_command(args) -> int:
         test_password=test_password,
         llm_api_key=llm_api_key,
         llm_provider=args.llm_provider,
+        llm_model=getattr(args, "llm_model", None) or "",
         test_message=args.message,
         output_dir=args.output_dir,
         save_screenshots=not args.no_screenshots,
         save_logcat=not args.no_logcat,
         verbose=args.verbose,
-        keep_app_open=args.keep_open,
+        keep_app_open=not getattr(args, "force_stop", False),
     )
 
     # Print config summary
@@ -1094,6 +1097,16 @@ def test_command(args) -> int:
     print(f"  Tests: {', '.join(args.tests)}")
     print(f"  Reinstall app: {config.reinstall_app}")
     print(f"  Clear data: {config.clear_data}")
+    print(f"  Preserve identity: {config.preserve_identity}")
+
+    # Fail fast on a bad key/model BEFORE touching the device. A filmstrip that
+    # dies at the chat step has already spent minutes on install + wizard + login,
+    # and the failure surfaces as "no SPEAK / ship-unconfirmed" — which reads like
+    # an agent defect rather than an expired credit card.
+    ok, diagnosis = preflight_llm(config.llm_provider, llm_api_key, config.llm_model)
+    print(diagnosis)
+    if not ok:
+        return 2
 
     # Run tests
     runner = MobileTestRunner(config)
@@ -1383,7 +1396,12 @@ Available tests (Android):
   app_launch        - Test that app launches and shows login screen
   google_signin     - Test Google Sign-In flow with test account
   local_login       - Test local login (BYOK mode)
-  setup_wizard      - Test completing the setup wizard
+  setup_wizard      - Node-client first-run wizard (WELCOME -> ACCOUNT ->
+                      FED-ID w/ announce-gate assertions -> AGE_RANGE),
+                      driven via the in-app test server
+  catchup_add_fedid - Catch-up "Add Federation ID" flow (Manage Nodes ->
+                      btn_add_federation_id; tolerated SKIP when the entry
+                      isn't rendered)
   chat_interaction  - Test sending a message and receiving response
   full_flow         - Run complete end-to-end flow (default)
 
@@ -1447,6 +1465,17 @@ Examples:
     test_parser.add_argument("--no-reinstall", action="store_true", help="Don't reinstall the app")
     test_parser.add_argument("--no-clear", action="store_true", help="Don't clear app data before tests")
     test_parser.add_argument(
+        "--preserve-identity",
+        action="store_true",
+        help=(
+            "Keep the node's federation identity across the run: clears app DATA but "
+            "restores files/ciris/identity/, so the agent re-uses its existing key_id "
+            "instead of re-minting. Required for repeat QA against a canonical that has "
+            "primed this agent — a fresh identity is admitted by announce at Advisory "
+            "and lands back in the un-rooted hole (CIRISEdge#432)."
+        ),
+    )
+    test_parser.add_argument(
         "--email",
         default="ciristest1@gmail.com",
         help="Test Google account email (default: ciristest1@gmail.com)",
@@ -1463,7 +1492,12 @@ Examples:
         help="First-run login: 'local' creates a local account via the setup wizard "
         "(fully driveable by the test server); 'google' uses the native overlay (default).",
     )
-    test_parser.add_argument("--setup-username", default="admin", help="Local account username (login_mode=local)")
+    # NOT "admin": the server's CompleteSetupRequest validator rejects it as
+    # reserved-for-testing unless CIRIS_TESTING_MODE is set (models.py:465) —
+    # and the mobile filmstrip deliberately exercises the PRODUCTION path.
+    # (Before the encodeDefaults fix this failure was masked: "admin" == the
+    # SDK default → field omitted → server silently created user "owner".)
+    test_parser.add_argument("--setup-username", default="qauser", help="Local account username (login_mode=local)")
     test_parser.add_argument(
         "--setup-password", default="qa_test_password_12345", help="Local account password (login_mode=local)"
     )
@@ -1474,6 +1508,7 @@ Examples:
         help="Path to file containing LLM API key",
     )
     test_parser.add_argument("--llm-provider", default="groq", help="LLM provider for setup")
+    test_parser.add_argument("--llm-model", default=None, help="LLM model id for the wizard (exact, case-sensitive)")
     test_parser.add_argument(
         "--message",
         default="Hello CIRIS! This is an automated test. Please respond briefly.",
@@ -1488,7 +1523,13 @@ Examples:
     test_parser.add_argument("--no-logcat", action="store_true", help="Don't capture logcat")
     test_parser.add_argument("--build", "-b", action="store_true", help="Build APK before running tests")
     test_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
-    test_parser.add_argument("--keep-open", action="store_true", help="Keep app running after tests (don't force-stop)")
+    # Keeping the app running after tests is the DEFAULT — a full_flow seals its
+    # trace seconds before teardown and federation delivery ships in the
+    # background AFTER the suite; force-stopping here strands the sealed trace.
+    # --keep-open is kept as a harmless no-op for back-compat; --force-stop opts
+    # into the old kill.
+    test_parser.add_argument("--keep-open", action="store_true", help="(default) Keep app running after tests")
+    test_parser.add_argument("--force-stop", action="store_true", help="Force-stop the app at teardown (strands unshipped sealed traces)")
 
     # iOS physical/simulator selection
     test_parser.add_argument(
@@ -1532,6 +1573,7 @@ Examples:
             "google_signin",
             "local_login",
             "setup_wizard",
+            "catchup_add_fedid",
             "chat_interaction",
         ]:
             # Reparse with 'test' prepended

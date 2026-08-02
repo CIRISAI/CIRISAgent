@@ -218,8 +218,26 @@ def _verify_accord_integrity(filename: str, content: str) -> None:
     expected_hash = ACCORD_EXPECTED_HASHES.get(filename)
 
     if not expected_hash:
-        logger.warning(f"[ACCORD] No expected hash for {filename} - file not in integrity registry")
-        return  # Allow unknown files but warn
+        # A research locale's accord file is not in the production registry, so
+        # it would be the ONE arm with no tamper detection — precisely backwards
+        # for a pre-registered campaign whose validity rests on the arms being
+        # what they claim (FSD §5.1). `research_hashes` closes that: the
+        # registry moves, the guarantee does not.
+        from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+        manifest = get_active_overrides()
+        if manifest is not None:
+            expected_hash = manifest.research_hashes.get(filename)
+            if not expected_hash:
+                raise RuntimeError(
+                    f"[ACCORD] research overrides active and {filename} is in neither "
+                    f"ACCORD_EXPECTED_HASHES nor the manifest's research_hashes. An "
+                    f"unverified corpus file in a research arm makes the arm unattestable. "
+                    f"Pin its SHA256 in research_hashes."
+                )
+        else:
+            logger.warning(f"[ACCORD] No expected hash for {filename} - file not in integrity registry")
+            return  # Allow unknown files but warn
 
     actual_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
@@ -490,10 +508,20 @@ def get_accord_text(mode: str = "default") -> str:
     else:
         effective_mode = mode
 
+    # Research corpus substitution (FSD/RESEARCH_PROMPT_OVERRIDES.md §5.2).
+    # In-memory at the loader boundary ONLY — never by writing to
+    # ciris_engine/data/, so the production hash-pinned integrity guarantee is
+    # left intact and unmodified. Unreachable unless the research gate is fully
+    # open. R5 guarantees that if any accord.* key is set, all of them are, so
+    # this cannot half-replace the covenant.
+    from ciris_engine.logic.utils.research_overrides import override_corpus
+
     if effective_mode == "compressed":
-        return ACCORD_TEXT_COMPRESSED
+        research = override_corpus("accord.polyglot_compressed")
+        return research if research is not None else ACCORD_TEXT_COMPRESSED
     elif effective_mode in ("full", "force_full"):
-        return ACCORD_TEXT
+        research = override_corpus("accord.polyglot_full")
+        return research if research is not None else ACCORD_TEXT
     # "none" or anything else
     return ""
 
@@ -563,6 +591,30 @@ def get_localized_accord_text(lang: Optional[str] = None) -> str:
     """
     # Import here to avoid circular imports
     from ciris_engine.logic.utils.localization import get_preferred_language
+
+    # HONOR ACCORD_MODE — the polyglot path always has, this one never did.
+    #
+    # `CIRIS_ACCORD_MODE=none` made get_accord_text() return "" for the four
+    # reasoning DMAs while this function kept returning the FULL accord to the
+    # action-selection DMAs (ASPDMA/TSASPDMA) — the ones that actually pick the
+    # verb. Startup logged "[ACCORD] Active mode: none", so the operator's
+    # intended change was confirmed while roughly 55 KB of accord stayed in the
+    # prompt that matters most.
+    #
+    # A research arm built that way measures a covenant that is still largely
+    # present and is biased toward UNDERSTATING its effect — a wrong number
+    # produced by a setting that reported success. One env var, one meaning,
+    # both surfaces.
+    if ACCORD_MODE == "none":
+        return ""
+
+    # Research corpus substitution — in-memory, checked before the cache so an
+    # override is never shadowed by an earlier real read of the same locale.
+    from ciris_engine.logic.utils.research_overrides import override_corpus
+
+    research = override_corpus("accord.localized")
+    if research is not None:
+        return research
 
     if lang is None:
         lang = get_preferred_language()

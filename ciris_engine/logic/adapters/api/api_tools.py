@@ -127,6 +127,19 @@ class APIToolService(BaseService, ToolService):
             logger.error(f"[API_TOOLS] URL parameter missing. Params keys: {list(params.keys())}")
             return {"error": "URL parameter is required"}
 
+        # SSRF guard (#941). Covers http_get and http_post too, which both
+        # delegate here. This tool takes a model-authored `url` AND model-authored
+        # `headers`, so it is a credential-presentation surface as much as a fetch
+        # surface — one grant otherwise covers every target and every credential
+        # the model can spell. The guard does not address the headers half; that
+        # is #941 item 3 (ToolDMAGuidance / envelope-deny by default).
+        from ciris_engine.logic.utils.url_guard import validate_url_for_ssrf  # noqa: PLC0415
+
+        is_valid, _ = validate_url_for_ssrf(url)
+        if not is_valid:
+            logger.warning(f"[SSRF] api_tools._curl: refused {method} to {url!r}")
+            return {"error": f"URL refused by SSRF guard: {url}"}
+
         try:
             async with aiohttp.ClientSession() as session:
                 # Build kwargs with proper types

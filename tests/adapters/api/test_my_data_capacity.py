@@ -195,31 +195,39 @@ def _row(att_type: str, user_id: str, asserted_at: str = "2026-06-12T00:00:00Z",
 
 
 def _engine_with(rows: list) -> Any:
+    """Mock engine whose ``list_scores`` returns ``rows`` as a ScoresPage.
+
+    Site 1 (``_newest_community_trust_row``) reads via persist ``list_scores``
+    (the 2.9.7 migration — the durable newest-by-(subject, dimension) V106
+    seek), NOT ``list_attestations``. ``rows`` must be supplied newest-first:
+    the substrate seek returns newest-first and the code takes ``items[0]``
+    with ``limit=1`` (no Python-side sort). The ScoresPage envelope is
+    ``{"items": [...]}`` — same shape ``_attestation_page`` produces.
+    """
     engine = MagicMock()
-    engine.list_attestations.return_value = _attestation_page(rows)
+    engine.list_scores.return_value = _attestation_page(rows)
     return engine
 
 
 def test_newest_community_trust_row_newest_wins() -> None:
+    # list_scores returns newest-first; the code takes items[0] (limit=1).
     rows = [
-        _row("scores", "old", asserted_at="2026-06-01T00:00:00Z", att_id="a1"),
         _row("withdraws", "new", asserted_at="2026-06-10T00:00:00Z", att_id="a2"),
+        _row("scores", "old", asserted_at="2026-06-01T00:00:00Z", att_id="a1"),
     ]
     newest = _newest_community_trust_row(_engine_with(rows), "key-1")
     assert newest is not None
     assert newest["attestation_type"] == "withdraws"
 
 
-def test_newest_community_trust_row_filter_fallback() -> None:
-    """If persist rejects the dimension filter, the unfiltered page is used."""
+def test_newest_community_trust_row_read_error_returns_none() -> None:
+    """A list_scores read error is swallowed → None (defensive; pre-0.5.117
+    wheels lack list_scores). No filter-fallback retry: dimension_exact is
+    honored natively at the substrate since persist v17.5.2 (CIRISPersist#461).
+    """
     engine = MagicMock()
-    engine.list_attestations.side_effect = [
-        Exception("federation_invalid_argument"),
-        _attestation_page([_row("scores", "ciris:community")]),
-    ]
-    newest = _newest_community_trust_row(engine, "key-1")
-    assert newest is not None
-    assert engine.list_attestations.call_count == 2
+    engine.list_scores.side_effect = Exception("federation_invalid_argument")
+    assert _newest_community_trust_row(engine, "key-1") is None
 
 
 def test_newest_community_trust_row_empty() -> None:
@@ -247,9 +255,10 @@ def test_community_grant_edge_sentinel_is_not_an_edge() -> None:
 
 
 def test_community_grant_edge_revocation_severs() -> None:
+    # Newest-first: the recants row is the head → edge is severed.
     rows = [
-        _row("scores", "ciris:community", asserted_at="2026-06-01T00:00:00Z", att_id="a1"),
         _row("recants", "ciris:community", asserted_at="2026-06-10T00:00:00Z", att_id="a2"),
+        _row("scores", "ciris:community", asserted_at="2026-06-01T00:00:00Z", att_id="a1"),
     ]
     p1, p2 = _patched_grant_env(_engine_with(rows))
     with p1, p2:

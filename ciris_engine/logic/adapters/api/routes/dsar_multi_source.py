@@ -10,7 +10,7 @@ from typing import Annotated, Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from ciris_engine.logic.persistence.models.dsar import create_dsar_ticket, get_dsar_ticket
+from ciris_engine.logic.persistence.models.tickets import update_ticket_status
 from ciris_engine.logic.services.governance.consent import ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
 from ciris_engine.logic.services.governance.dsar.orchestrator import DSAROrchestrator
@@ -24,6 +24,7 @@ from ciris_engine.schemas.consent.core import DSARExportFormat
 
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
+from .dsar import _get_dsar_record, _store_dsar_ticket
 
 # Type alias for authenticated user dependency (S8410 compliance)
 CurrentUserDep = Annotated[TokenData, Depends(get_current_user)]
@@ -274,7 +275,7 @@ async def submit_multi_source_dsar(
     submitted_at = datetime.now(timezone.utc)
     estimated_completion = submitted_at  # Instant for multi-source
 
-    persistence_success = create_dsar_ticket(
+    persistence_success = _store_dsar_ticket(
         ticket_id=ticket_id,
         request_type=request.request_type,
         email=request.email,
@@ -364,7 +365,7 @@ async def get_multi_source_status(
 
     Returns current progress across all data sources.
     """
-    record = get_dsar_ticket(ticket_id)
+    record = _get_dsar_record(ticket_id)
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -426,7 +427,7 @@ async def get_partial_results(
     Note: Current implementation completes all sources instantly,
     but this endpoint supports future async multi-source operations.
     """
-    record = get_dsar_ticket(ticket_id)
+    record = _get_dsar_record(ticket_id)
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -476,7 +477,7 @@ async def cancel_multi_source_request(
     Note: Current implementation completes requests instantly,
     so cancellation may not be possible for most requests.
     """
-    record = get_dsar_ticket(ticket_id)
+    record = _get_dsar_record(ticket_id)
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -497,10 +498,9 @@ async def cancel_multi_source_request(
             },
         )
 
-    # Update status to cancelled
-    from ciris_engine.logic.persistence.models.dsar import update_dsar_ticket_status
-
-    update_dsar_ticket_status(ticket_id, "cancelled", "Cancelled by user request")
+    # Update status to cancelled (universal-ticket status; the DSAR API
+    # reports it back as "rejected" per the vocabulary mapping in .dsar)
+    update_ticket_status(ticket_id, "cancelled", notes="Cancelled by user request")
 
     return StandardResponse(
         success=True,

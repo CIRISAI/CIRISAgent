@@ -11,9 +11,12 @@ Tools provide the agent-facing interface for ticket updates during task executio
 """
 
 import logging
+import uuid
+from collections import deque
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.base_service import BaseService
@@ -32,6 +35,15 @@ from ciris_engine.schemas.adapters.tools import (
     UsageExample,
 )
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.budget_envelope import (
+    PROPOSAL_METADATA_KEY,
+    PROPOSAL_TICKET_STATUS,
+    REQUESTED_BUDGET_METADATA_KEY,
+    RESERVED_TICKET_METADATA_KEYS,
+    RequestedBudget,
+    TicketProposal,
+    is_unapproved_proposal,
+)
 from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.services.core.secrets import SecretContext
 from ciris_engine.schemas.types import JSONDict
@@ -44,6 +56,22 @@ logger = logging.getLogger(__name__)
 # Error message constants to avoid duplication
 ERROR_TICKET_ID_REQUIRED = "ticket_id (str) is required"
 ERROR_FILTER_NOT_EXPOSED = "Filter operations not currently exposed"
+
+# --- create_ticket: proposal defaults -------------------------------------
+DEFAULT_PROPOSAL_SOP = "AGENT_PROPOSAL"
+DEFAULT_PROPOSAL_TICKET_TYPE = "proposal"
+DEFAULT_PROPOSAL_EMAIL = "agent-proposal@local"
+
+# --- create_ticket: runaway bound ------------------------------------------
+# An agent that can create tasks can create infinite tasks. Two bounds, both
+# fail with an explicit error rather than silently dropping the proposal:
+#   * per originating task — catches a single task stuck in a propose loop
+#   * per rolling window   — catches runaway spread across many tasks
+# Both counters are in-process and reset on restart; see FSD/BUDGET_ENVELOPE.md
+# "what this does NOT do".
+MAX_PROPOSALS_PER_TASK = 3
+MAX_PROPOSALS_PER_WINDOW = 20
+PROPOSAL_WINDOW_SECONDS = 3600.0
 
 
 class CoreToolService(BaseService, ToolService):
@@ -76,6 +104,11 @@ class CoreToolService(BaseService, ToolService):
         self._tickets_updated = 0
         self._tickets_retrieved = 0
         self._tickets_deferred = 0
+        self._tickets_proposed = 0
+        self._proposals_rate_limited = 0
+        # Runaway bound state (in-process; see MAX_PROPOSALS_PER_* above)
+        self._proposals_by_task: Dict[str, int] = {}
+        self._proposal_timestamps: Deque[float] = deque()
         self._metrics_tracking: Dict[str, float] = {}  # For custom metric tracking
         self._tool_executions = 0
         self._tool_failures = 0
@@ -99,7 +132,15 @@ class CoreToolService(BaseService, ToolService):
 
     def _get_actions(self) -> List[str]:
         """Get list of actions this service provides."""
-        return ["recall_secret", "update_secrets_filter", "self_help", "update_ticket", "get_ticket", "defer_ticket"]
+        return [
+            "recall_secret",
+            "update_secrets_filter",
+            "self_help",
+            "create_ticket",
+            "update_ticket",
+            "get_ticket",
+            "defer_ticket",
+        ]
 
     def _check_dependencies(self) -> bool:
         """Check if all dependencies are available."""
@@ -128,6 +169,8 @@ class CoreToolService(BaseService, ToolService):
             result = await self._update_secrets_filter(parameters)
         elif tool_name == "self_help":
             result = await self._self_help(parameters)
+        elif tool_name == "create_ticket":
+            result = await self._create_ticket(parameters)
         elif tool_name == "update_ticket":
             result = await self._update_ticket(parameters)
         elif tool_name == "get_ticket":
@@ -457,6 +500,26 @@ class CoreToolService(BaseService, ToolService):
         result_data["updates"]["metadata"] = metadata_updates
         return None
 
+    @staticmethod
+    def _reserved_keys_in(metadata_updates: Any) -> List[str]:
+        """Return any reserved authorization keys present in a metadata update.
+
+        Handles both dict and JSON-string forms, because ``_update_ticket``
+        accepts a JSON string from CLI-shaped callers and would otherwise let a
+        reserved key through as text.
+        """
+        candidate = metadata_updates
+        if isinstance(candidate, str):
+            import json as _json
+
+            try:
+                candidate = _json.loads(candidate)
+            except (ValueError, TypeError):
+                return []
+        if not isinstance(candidate, dict):
+            return []
+        return sorted(RESERVED_TICKET_METADATA_KEYS.intersection(candidate.keys()))
+
     async def _update_ticket(self, params: ToolParameters) -> ToolResult:
         """Update ticket status or metadata during task processing."""
         import time
@@ -477,6 +540,43 @@ class CoreToolService(BaseService, ToolService):
             current_ticket = get_ticket(ticket_id)
             if not current_ticket:
                 return ToolResult(success=False, error=f"Ticket {ticket_id} not found")
+
+            # --- Authorization guards (#938) -------------------------------
+            # 1. Reserved metadata keys carry the human-issued grant and the
+            #    spend ledger. update_ticket is otherwise an arbitrary metadata
+            #    write primitive, so without this the agent could mint its own
+            #    budget grant. Refuse loudly rather than silently stripping.
+            reserved = self._reserved_keys_in(params.get("metadata"))
+            if reserved:
+                logger.warning(
+                    f"[UPDATE_TICKET] REFUSED reserved-key write on {ticket_id}: {reserved}",
+                )
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"Refusing update: metadata keys {reserved} are reserved for human-issued "
+                        f"authorization and cannot be written by the agent."
+                    ),
+                )
+
+            # 2. A proposal must not promote itself into an executing ticket.
+            #    Promotion is the human's decision; the agent may only withdraw
+            #    its own proposal (cancel), which narrows and never widens.
+            new_status_raw = params.get("status")
+            if is_unapproved_proposal(current_ticket) and new_status_raw:
+                requested_status = str(new_status_raw)
+                if requested_status not in (PROPOSAL_TICKET_STATUS, "cancelled"):
+                    logger.warning(
+                        f"[UPDATE_TICKET] REFUSED self-promotion of proposal {ticket_id} "
+                        f"to status={requested_status}",
+                    )
+                    return ToolResult(
+                        success=False,
+                        error=(
+                            f"Refusing update: ticket {ticket_id} is a proposal. Only a human can move it "
+                            f"out of proposal state. You may cancel it, but you cannot approve it."
+                        ),
+                    )
 
             logger.debug(
                 f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s FETCHED current_metadata={current_ticket.get('metadata', {})}"
@@ -506,6 +606,208 @@ class CoreToolService(BaseService, ToolService):
 
         except Exception as e:
             logger.error(f"Error updating ticket: {e}")
+            return ToolResult(success=False, error=str(e))
+
+    # ------------------------------------------------------------------
+    # create_ticket — the agent's proposal channel (#938)
+    # ------------------------------------------------------------------
+
+    def _check_proposal_rate_limit(self, origin_task_id: Optional[str]) -> Optional[str]:
+        """Enforce the runaway bound. Returns an error string when over budget.
+
+        Two independent caps. The per-task cap is the one that matters in
+        practice (a task looping on propose); the window cap catches runaway
+        spread across many tasks.
+        """
+        now = self._now().timestamp()
+
+        # Evict timestamps outside the rolling window.
+        while self._proposal_timestamps and now - self._proposal_timestamps[0] > PROPOSAL_WINDOW_SECONDS:
+            self._proposal_timestamps.popleft()
+
+        if len(self._proposal_timestamps) >= MAX_PROPOSALS_PER_WINDOW:
+            self._proposals_rate_limited += 1
+            return (
+                f"Proposal rate limit reached: {MAX_PROPOSALS_PER_WINDOW} proposals in the last "
+                f"{int(PROPOSAL_WINDOW_SECONDS / 60)} minutes. Wait, or ask a human to act on the "
+                f"proposals already open."
+            )
+
+        if origin_task_id:
+            count = self._proposals_by_task.get(origin_task_id, 0)
+            if count >= MAX_PROPOSALS_PER_TASK:
+                self._proposals_rate_limited += 1
+                return (
+                    f"Proposal limit reached for this task: {MAX_PROPOSALS_PER_TASK} proposals already "
+                    f"created from task {origin_task_id}. Consolidate the work into an existing "
+                    f"proposal instead of opening another."
+                )
+        return None
+
+    def _record_proposal(self, origin_task_id: Optional[str]) -> None:
+        """Record a successful proposal against both runaway counters."""
+        self._proposal_timestamps.append(self._now().timestamp())
+        if origin_task_id:
+            self._proposals_by_task[origin_task_id] = self._proposals_by_task.get(origin_task_id, 0) + 1
+
+    @staticmethod
+    def _parse_requested_budget(params: ToolParameters) -> Tuple[Optional[RequestedBudget], Optional[str]]:
+        """Parse the optional requested budget. Returns (budget, error).
+
+        A *request* carries no authority whatsoever — see RequestedBudget's
+        docstring for why it is structurally unassignable to a GrantedBudget.
+        """
+        amount_raw = params.get("requested_budget_amount")
+        currency = params.get("requested_budget_currency")
+        purpose = params.get("requested_budget_purpose")
+
+        provided = [v for v in (amount_raw, currency, purpose) if v is not None]
+        if not provided:
+            return None, None
+        if len(provided) != 3:
+            return None, (
+                "A requested budget needs all of requested_budget_amount, "
+                "requested_budget_currency and requested_budget_purpose."
+            )
+
+        try:
+            amount = Decimal(str(amount_raw))
+        except (InvalidOperation, ValueError, TypeError):
+            return None, f"requested_budget_amount is not a number: {amount_raw!r}"
+
+        try:
+            justification = params.get("requested_budget_justification")
+            budget = RequestedBudget(
+                requested_amount=amount,
+                requested_currency=str(currency),
+                purpose=str(purpose),
+                justification=str(justification) if justification is not None else None,
+            )
+        except Exception as e:
+            return None, f"Invalid requested budget: {e}"
+        return budget, None
+
+    async def _create_ticket(self, params: ToolParameters) -> ToolResult:
+        """Propose a new ticket. Creates it in PROPOSAL state — never executing.
+
+        The proposal is written with status ``proposed``, which is not one of the
+        statuses WorkProcessor discovers, so no Task is generated from it. A
+        human must move it to ``pending`` (and, for spend, issue a budget grant)
+        before any work happens.
+        """
+        try:
+            from ciris_engine.logic.persistence.models.tickets import create_ticket
+
+            goal_description = params.get("goal_description")
+            if not goal_description or not isinstance(goal_description, str):
+                return ToolResult(success=False, error="goal_description (str) is required")
+
+            # Provenance. task_id is injected by ToolHandler._build_tool_params;
+            # it is advisory-only here (it labels the proposal, it does not
+            # authorize anything) so a model-authored value cannot escalate.
+            origin_task_id = params.get("task_id")
+            origin_task_id = str(origin_task_id) if origin_task_id else None
+            origin_thought_id = params.get("thought_id")
+            origin_thought_id = str(origin_thought_id) if origin_thought_id else None
+
+            # Runaway bound
+            rate_error = self._check_proposal_rate_limit(origin_task_id)
+            if rate_error:
+                logger.warning(f"[CREATE_TICKET] Rate limited: {rate_error}")
+                return ToolResult(success=False, error=rate_error)
+
+            # Requested budget (optional). Requesting is not granting.
+            requested_budget, budget_error = self._parse_requested_budget(params)
+            if budget_error:
+                return ToolResult(success=False, error=budget_error)
+
+            # The agent may not write reserved metadata keys — those carry the
+            # grant and the spend ledger. Refuse loudly rather than stripping.
+            supplied_metadata = params.get("metadata")
+            metadata: Dict[str, Any] = {}
+            if isinstance(supplied_metadata, dict):
+                reserved = RESERVED_TICKET_METADATA_KEYS.intersection(supplied_metadata.keys())
+                if reserved:
+                    return ToolResult(
+                        success=False,
+                        error=(
+                            f"Refusing to create ticket: metadata keys {sorted(reserved)} are reserved for "
+                            f"human-issued authorization and cannot be set by the agent."
+                        ),
+                    )
+                metadata = dict(supplied_metadata)
+
+            now = self._now()
+            ticket_id = f"PROP-{uuid.uuid4().hex[:12].upper()}"
+
+            proposal = TicketProposal(
+                origin_task_id=origin_task_id,
+                origin_thought_id=origin_thought_id,
+                proposed_at=now,
+                proposed_by="agent",
+                goal_description=goal_description,
+            )
+            metadata[PROPOSAL_METADATA_KEY] = proposal.model_dump(mode="json")
+            if requested_budget is not None:
+                metadata[REQUESTED_BUDGET_METADATA_KEY] = requested_budget.model_dump(mode="json")
+
+            priority_raw = params.get("priority", 5)
+            try:
+                priority = int(priority_raw)  # type: ignore[arg-type]
+            except (ValueError, TypeError):
+                priority = 5
+            priority = max(1, min(10, priority))
+
+            sop = params.get("sop") or DEFAULT_PROPOSAL_SOP
+            ticket_type = params.get("ticket_type") or DEFAULT_PROPOSAL_TICKET_TYPE
+            contact_email = params.get("contact_email") or DEFAULT_PROPOSAL_EMAIL
+            notes = params.get("notes")
+
+            created = create_ticket(
+                ticket_id=ticket_id,
+                sop=str(sop),
+                ticket_type=str(ticket_type),
+                email=str(contact_email),
+                status=PROPOSAL_TICKET_STATUS,
+                priority=priority,
+                submitted_at=now,
+                metadata=metadata,
+                notes=str(notes) if notes else None,
+                automated=True,
+                correlation_id=origin_task_id,
+            )
+            if not created:
+                return ToolResult(success=False, error="Failed to create proposal ticket")
+
+            self._record_proposal(origin_task_id)
+            self._tickets_proposed += 1
+
+            result_data: Dict[str, Any] = {
+                "ticket_id": ticket_id,
+                "status": PROPOSAL_TICKET_STATUS,
+                "is_proposal": True,
+                "will_execute": False,
+                "goal_description": goal_description,
+                "origin_task_id": origin_task_id,
+                "requested_budget": (metadata.get(REQUESTED_BUDGET_METADATA_KEY) if requested_budget else None),
+                "next_step": (
+                    "This is a PROPOSAL and will not run. A human must approve it. "
+                    + (
+                        "The requested budget is a request, not an authorization — no spend is "
+                        "possible until a Wise Authority grants a budget on this ticket."
+                        if requested_budget
+                        else "A human must move it to 'pending' for work to begin."
+                    )
+                ),
+            }
+            logger.info(
+                f"[CREATE_TICKET] Proposal {ticket_id} created (origin_task={origin_task_id}, "
+                f"requested_budget={'yes' if requested_budget else 'no'})"
+            )
+            return ToolResult(success=True, data=result_data)
+
+        except Exception as e:
+            logger.error(f"Error creating proposal ticket: {e}")
             return ToolResult(success=False, error=str(e))
 
     async def _get_ticket(self, params: ToolParameters) -> ToolResult:
@@ -615,9 +917,26 @@ class CoreToolService(BaseService, ToolService):
             logger.error(f"Error deferring ticket: {e}")
             return ToolResult(success=False, error=str(e))
 
+    # ONE list, so the count and the names cannot disagree. metadata.tool_count
+    # was a hand-maintained literal 6 while this returned 7 (#938 added the
+    # create_ticket proposal channel), and nothing failed — telemetry and
+    # capability negotiation simply under-counted.
+    _TOOL_NAMES: List[str] = [
+        "recall_secret",
+        "update_secrets_filter",
+        "self_help",
+        "create_ticket",
+        "update_ticket",
+        "get_ticket",
+        "defer_ticket",
+    ]
+
+    def _tool_names(self) -> List[str]:
+        return list(self._TOOL_NAMES)
+
     async def get_available_tools(self) -> List[str]:
         """Get list of available tool names."""
-        return ["recall_secret", "update_secrets_filter", "self_help", "update_ticket", "get_ticket", "defer_ticket"]
+        return self._tool_names()
 
     async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
         """Get detailed information about a specific tool."""
@@ -669,6 +988,168 @@ class CoreToolService(BaseService, ToolService):
                 parameters=ToolParameterSchema(type="object", properties={}, required=[]),
                 category="knowledge",
                 when_to_use="When you need guidance on your capabilities or best practices",
+            )
+        elif tool_name == "create_ticket":
+            return ToolInfo(
+                name="create_ticket",
+                description=(
+                    "Propose a new ticket for work you cannot do now. Creates it in PROPOSAL state — "
+                    "it will NOT run until a human approves it."
+                ),
+                parameters=ToolParameterSchema(
+                    type="object",
+                    properties={
+                        "goal_description": {
+                            "type": "string",
+                            "description": "What the work is and why it is needed",
+                        },
+                        "sop": {
+                            "type": "string",
+                            "description": f"SOP identifier (default '{DEFAULT_PROPOSAL_SOP}')",
+                        },
+                        "ticket_type": {
+                            "type": "string",
+                            "description": f"Ticket type (default '{DEFAULT_PROPOSAL_TICKET_TYPE}')",
+                        },
+                        "priority": {
+                            "type": "integer",
+                            "description": "Priority 1-10 (default 5)",
+                        },
+                        "contact_email": {
+                            "type": "string",
+                            "description": "Contact email for the proposal, if a human should be reached",
+                        },
+                        "notes": {"type": "string", "description": "Optional notes for the reviewing human"},
+                        "metadata": {
+                            "type": "object",
+                            "description": "Additional metadata. Reserved authorization keys are refused.",
+                        },
+                        "requested_budget_amount": {
+                            "type": "number",
+                            "description": "Spend amount you are REQUESTING (not granting). Requires currency+purpose.",
+                        },
+                        "requested_budget_currency": {
+                            "type": "string",
+                            "description": "Currency of the requested budget, e.g. USDC",
+                        },
+                        "requested_budget_purpose": {
+                            "type": "string",
+                            "description": "What the requested budget would be spent on",
+                        },
+                        "requested_budget_justification": {
+                            "type": "string",
+                            "description": "Why this spend is warranted",
+                        },
+                    },
+                    required=["goal_description"],
+                ),
+                category="workflow",
+                when_to_use=(
+                    "When work needs to happen that you cannot or should not do in this task — "
+                    "especially when it needs money. Proposing is how you ask; it is not how you act."
+                ),
+                documentation=ToolDocumentation(
+                    quick_start=(
+                        "create_ticket opens a PROPOSAL. It does not start work and does not spend "
+                        "anything. A human reviews it and decides."
+                    ),
+                    detailed_instructions="""
+## What this tool does and does not do
+
+`create_ticket` writes a ticket with status `proposed`. The work processor only
+picks up tickets in `pending`, `assigned` or `in_progress`, so **a proposal never
+becomes a running task by itself**. A human must move it forward.
+
+## Requesting a budget
+
+If the work needs money, include `requested_budget_amount`,
+`requested_budget_currency` and `requested_budget_purpose`.
+
+**Requesting is not granting.** The amount you name is recorded as a request and
+carries no authority. Spend tools stay closed until a Wise Authority issues a
+*granted* budget on the ticket, which happens outside your reasoning entirely.
+You cannot approve your own proposal, and there is no parameter, metadata key or
+tool sequence that lets you try.
+
+When a budget is granted, spend on that ticket is bounded by whichever is
+tighter: what was granted, or the deployment's own spending envelope.
+
+## Limits
+
+You may open at most 3 proposals from one task, and 20 per hour overall. Past
+that the tool fails with an explicit message. If you hit it, consolidate into a
+proposal you already opened rather than opening another.
+""",
+                    examples=[
+                        UsageExample(
+                            title="Propose follow-up work",
+                            description="Work that belongs in its own task",
+                            code='{"goal_description": "Migrate the archived DSAR exports to cold storage", "priority": 4}',
+                        ),
+                        UsageExample(
+                            title="Propose work that needs money",
+                            description="Request a budget; a human decides whether to grant it",
+                            code=(
+                                '{"goal_description": "Pay the data-broker opt-out fee for this DSAR", '
+                                '"requested_budget_amount": 25, "requested_budget_currency": "USDC", '
+                                '"requested_budget_purpose": "Opt-out processing fee", '
+                                '"requested_budget_justification": "Required to complete the erasure request"}'
+                            ),
+                        ),
+                    ],
+                    gotchas=[
+                        ToolGotcha(
+                            title="A proposal does not run",
+                            description=(
+                                "Creating a ticket does not start the work. Do not assume the task is "
+                                "underway, and do not tell a user it is."
+                            ),
+                            severity="warning",
+                        ),
+                        ToolGotcha(
+                            title="A requested budget is not money you have",
+                            description=(
+                                "Naming an amount does not authorize it. Spend remains denied until a "
+                                "human grants a budget on this ticket."
+                            ),
+                            severity="error",
+                        ),
+                        ToolGotcha(
+                            title="Reserved metadata keys are refused",
+                            description=(
+                                "Metadata keys carrying authorization (the granted budget and the spend "
+                                "ledger) cannot be written by you. Attempting it fails the call."
+                            ),
+                            severity="error",
+                        ),
+                    ],
+                ),
+                dma_guidance=ToolDMAGuidance(
+                    when_not_to_use=(
+                        "Don't propose work you can simply do now, and don't open a second proposal for "
+                        "something you already proposed. Don't use a proposal to imply work has started."
+                    ),
+                    ethical_considerations=(
+                        "A proposal asks a human to spend attention, and a budget request asks them to "
+                        "spend money. Be honest and specific about what is needed and why, state the "
+                        "smallest amount that actually suffices, and be clear with the user that the "
+                        "work is proposed rather than underway."
+                    ),
+                    prerequisite_actions=[
+                        "Check whether the work can be completed in the current task",
+                        "get_ticket / review open proposals before opening another",
+                    ],
+                    followup_actions=[
+                        "Tell the user the work is proposed and awaiting human approval",
+                    ],
+                    min_confidence=0.7,
+                    # Deliberately False. A proposal has no external effect: it writes a row no
+                    # processor picks up and notifies no one. Gating the request behind approval
+                    # would be circular — the proposal exists in order to ask — and would turn
+                    # every ask into a human interrupt. The human decision point is the budget
+                    # grant, which is enforced deterministically at the spend path.
+                    requires_approval=False,
+                ),
             )
         elif tool_name == "update_ticket":
             return ToolInfo(
@@ -899,6 +1380,8 @@ humans understand why the ticket was deferred.
             return True
         elif tool_name == "self_help":
             return True  # No parameters required
+        elif tool_name == "create_ticket":
+            return "goal_description" in parameters
         elif tool_name == "update_ticket":
             return "ticket_id" in parameters
         elif tool_name == "get_ticket":
@@ -930,8 +1413,14 @@ humans understand why the ticket was deferred.
 
         # Add custom metadata using model_copy
         if capabilities.metadata:
+            # DERIVED, not hardcoded. This was literal 6 while the service
+            # actually exposed 7 — #938 added the create_ticket proposal channel
+            # and the constant was never updated, so anything reading
+            # metadata.tool_count (telemetry, capability negotiation) under-counted
+            # by one and nothing failed. A count that is maintained by hand
+            # against a list that grows is a stale value waiting to happen.
             capabilities.metadata = capabilities.metadata.model_copy(
-                update={"adapter": self.adapter_name, "tool_count": 6}
+                update={"adapter": self.adapter_name, "tool_count": len(self._tool_names())}
             )
 
         return capabilities

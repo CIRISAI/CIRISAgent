@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
+from ciris_engine.logic.services.governance.budget_envelope import authorize_spend, record_spend
 from ciris_engine.schemas.adapters.tools import (
     ToolDMAGuidance,
     ToolDocumentation,
@@ -27,6 +28,7 @@ from ciris_engine.schemas.adapters.tools import (
     ToolParameterSchema,
     UsageExample,
 )
+from ciris_engine.schemas.services.budget_envelope import TrustEnvelope
 
 from .config import WalletAdapterConfig
 from .providers.base import WalletProvider
@@ -113,11 +115,26 @@ Send money to any recipient using the appropriate payment provider.
 4. Transaction is signed and submitted
 5. Result includes transaction_id and confirmation
 
+## You need an approved budget before you can send anything
+
+Spend is **denied by default**. Having this tool does not mean you have money.
+
+To spend, the task you are working on must be processing a ticket that carries a
+budget a human explicitly granted. If it does not, every send is refused with
+"no human-approved budget" — that is the system working, not a bug, and retrying
+will not change it.
+
+If you need to spend and have no approved budget, use `create_ticket` to
+**propose** the work with a requested budget, then tell the user it is awaiting
+approval. You cannot approve it yourself, and no sequence of tool calls will.
+
 ## Spending Limits
-- Per-transaction: $100 (configurable)
-- Daily: $1000 (configurable)
-- Session: $500 (configurable)
-- Attestation level affects limits (x402 only)
+Every send is bounded by whichever is tighter:
+- the remaining amount on the **approved budget** for this ticket, and
+- the deployment's own **spending envelope** (per-transaction and daily).
+
+The denial message tells you which one bound. Attestation level tightens the
+envelope further on x402.
 """,
                 examples=[
                     UsageExample(
@@ -152,14 +169,34 @@ Send money to any recipient using the appropriate payment provider.
                         description="x402 provider requires minimum attestation level. Degraded attestation reduces limits.",
                         severity="info",
                     ),
+                    ToolGotcha(
+                        title="No approved budget means no spend",
+                        description=(
+                            "Absence of a human-granted budget on the ticket is a denial, not permission. "
+                            "Propose the work with create_ticket and wait for a human to grant a budget."
+                        ),
+                        severity="error",
+                    ),
                 ],
             ),
             dma_guidance=ToolDMAGuidance(
                 requires_approval=True,
                 min_confidence=0.95,
-                when_not_to_use="When recipient has not been explicitly confirmed by the user. When amount seems unusual or unexpected.",
-                ethical_considerations="Verify recipient identity before sending. Confirm amount with user. Check for duplicate transactions.",
-                prerequisite_actions=["Confirm recipient address/phone with user", "Verify amount"],
+                when_not_to_use=(
+                    "When recipient has not been explicitly confirmed by the user. When amount seems "
+                    "unusual or unexpected. When no human has granted a budget for this work — propose "
+                    "it with create_ticket instead of attempting the send."
+                ),
+                ethical_considerations=(
+                    "Verify recipient identity before sending. Confirm amount with user. Check for "
+                    "duplicate transactions. Spend only what an approved budget covers, and spend the "
+                    "least that accomplishes the purpose it was granted for."
+                ),
+                prerequisite_actions=[
+                    "Confirm recipient address/phone with user",
+                    "Verify amount",
+                    "Confirm this ticket carries a human-approved budget covering the amount",
+                ],
                 followup_actions=["Provide transaction ID to user", "Log transaction for audit"],
             ),
         ),
@@ -384,6 +421,7 @@ Only request details when needed.
         self,
         config: WalletAdapterConfig,
         providers: Optional[Dict[str, WalletProvider]] = None,
+        auth_service: Optional[Any] = None,
     ) -> None:
         """
         Initialize the wallet tool service.
@@ -391,9 +429,13 @@ Only request details when needed.
         Args:
             config: Wallet adapter configuration
             providers: Dict mapping provider_id to WalletProvider instance
+            auth_service: Authentication service used to verify budget-grant
+                signatures. When None, an unsigned grant is still honored but a
+                *signed* grant that cannot be verified is denied (fail closed).
         """
         self.config = config
         self._providers: Dict[str, WalletProvider] = providers or {}
+        self._auth_service = auth_service
         self._started = False
         logger.info(f"WalletToolService initialized with providers: {list(self._providers.keys())}")
 
@@ -401,6 +443,71 @@ Only request details when needed.
         """Register a wallet provider."""
         self._providers[provider.provider_id] = provider
         logger.info(f"Registered wallet provider: {provider.provider_id}")
+
+    def _resolve_trust_envelope(self, currency: str, provider: Optional[WalletProvider]) -> Optional["TrustEnvelope"]:
+        """Resolve the deployment-scoped (trust-driven) outer envelope for a spend.
+
+        This is the bound a human-approved task budget nests *inside*. It is
+        built from ``WalletAdapterConfig.spending_limits`` — which until now had
+        zero readers (#939) and is made load-bearing here — tightened by the
+        provider's live spending tracker when the provider exposes one.
+
+        Naming (#939): ``SpendingLimits`` (this), ``SpendingAuthority``
+        (x402 attestation-level limits, still enforced inside
+        ``X402Provider.send``) and ``GasSponsorshipPolicyConfig.monthly_budget_usd``
+        (gas sponsorship) are three distinct objects and are not folded together.
+        """
+        limits = self.config.spending_limits
+
+        # CURRENCY MUST MATCH (#946). These ceilings are denominated in
+        # limits.currency; the tracker below accumulates per currency. Comparing
+        # across the two is not a weaker bound, it is a meaningless one — 100
+        # USDC and 100 KES differ by about three orders of magnitude.
+        applies = limits.applies_to(currency)
+        if applies is False:
+            # Returns None rather than a zeroed envelope: TrustEnvelope pins
+            # max_transaction to gt=0, so "an envelope permitting nothing" is
+            # not expressible — by design, since an envelope is a permission and
+            # a permission of zero is just absence. The caller denies.
+            logger.error(
+                f"[WALLET TOOL] spending_limits are denominated in {limits.currency} but this "
+                f"transaction is in {currency.upper()} — refusing. Declare limits for {currency.upper()} "
+                f"or route this currency through a provider that has its own."
+            )
+            return None
+        if applies is None:
+            # Legacy config that never declared a denomination. Apply as before
+            # rather than inventing one, but say so — a silent assumption is
+            # what #946 is about.
+            logger.warning(
+                f"[WALLET TOOL] spending_limits declare no currency; applying them to {currency.upper()} "
+                f"as pre-#946 behaviour. Set spending_limits.currency to make this a real bound."
+            )
+
+        max_transaction = limits.max_transaction
+        daily_remaining = limits.daily_limit
+
+        # Tighten with the provider's live tracker where one exists (x402 only
+        # today). Providers without a tracker fall back to the configured
+        # ceiling; see FSD/BUDGET_ENVELOPE.md "what this does NOT do" for the
+        # cross-restart / cross-occurrence residual on the OUTER envelope.
+        validator = getattr(provider, "_validator", None)
+        tracker = getattr(validator, "spending_tracker", None)
+        if tracker is not None:
+            try:
+                daily_remaining = min(daily_remaining, tracker.get_remaining_daily(currency))
+            except Exception as e:  # pragma: no cover - defensive
+                logger.warning(f"[WALLET TOOL] Could not read provider spending tracker: {e}")
+        if validator is not None:
+            provider_max = getattr(validator, "max_transaction", None)
+            if provider_max is not None:
+                max_transaction = min(max_transaction, provider_max)
+
+        return TrustEnvelope(
+            max_transaction=max_transaction,
+            daily_remaining=max(Decimal("0"), daily_remaining),
+            currency=currency.upper(),
+        )
 
     def _get_provider_for_currency(self, currency: str) -> Optional[WalletProvider]:
         """
@@ -649,6 +756,70 @@ Only request details when needed.
                 correlation_id=correlation_id,
             )
 
+        # ------------------------------------------------------------------
+        # BUDGET ENVELOPE GATE (#938)
+        #
+        # Placed here, in the tool service, deliberately: this is the only
+        # point every rail converges through on the agent path. Provider-level
+        # checks are opt-in by construction and six of seven providers never
+        # opted in (#939), so enforcing "where the limits live" would enforce
+        # for USDC and silently skip every fiat rail.
+        #
+        # Fails closed: no approved task budget => denied. Never "unbounded".
+        # ------------------------------------------------------------------
+        task_id = params.get("task_id")
+        trust_envelope = self._resolve_trust_envelope(currency, provider)
+        if trust_envelope is None:
+            # No envelope could be resolved for this currency (#946): the
+            # configured ceilings are denominated in a different one. Deny
+            # rather than compare across currencies, which would be a
+            # meaningless bound dressed as an enforced one.
+            return ToolExecutionResult(
+                tool_name="send_money",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data={
+                    "denied_by": "spending_limits_currency_mismatch",
+                    "configured_currency": self.config.spending_limits.currency,
+                    "requested_currency": currency.upper(),
+                },
+                error=(
+                    f"Spend denied: spending_limits are denominated in "
+                    f"{self.config.spending_limits.currency}, but this transaction is in "
+                    f"{currency.upper()}. A ceiling in one currency is not a bound on another."
+                ),
+                correlation_id=correlation_id,
+            )
+        decision = await authorize_spend(
+            task_id=str(task_id) if task_id else None,
+            amount=amount,
+            currency=currency.upper(),
+            trust_envelope=trust_envelope,
+            auth_service=self._auth_service,
+        )
+        if not decision.allowed:
+            logger.warning(
+                f"[WALLET TOOL] send_money DENIED by budget envelope: "
+                f"reason={decision.reason.value if decision.reason else 'unknown'} {decision.message}"
+            )
+            return ToolExecutionResult(
+                tool_name="send_money",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data={
+                    "denied_by": "budget_envelope",
+                    "reason": decision.reason.value if decision.reason else None,
+                    "ticket_id": decision.ticket_id,
+                    "granted_remaining": str(decision.granted_remaining)
+                    if decision.granted_remaining is not None
+                    else None,
+                    "trust_remaining": str(decision.trust_remaining) if decision.trust_remaining is not None else None,
+                    "binding_constraint": decision.binding_constraint,
+                },
+                error=decision.message,
+                correlation_id=correlation_id,
+            )
+
         # Execute send
         try:
             result = await provider.send(
@@ -657,6 +828,18 @@ Only request details when needed.
                 currency=currency.upper(),
                 memo=memo,
             )
+
+            # Charge the inner (task-granted) envelope only on a successful
+            # send. The outer trust envelope is debited independently by the
+            # provider's own SpendingTracker inside validate_send.
+            if result.success and decision.ticket_id:
+                record_spend(
+                    ticket_id=decision.ticket_id,
+                    amount=amount,
+                    currency=currency.upper(),
+                    task_id=str(task_id) if task_id else None,
+                    correlation_id=correlation_id,
+                )
 
             return ToolExecutionResult(
                 tool_name="send_money",

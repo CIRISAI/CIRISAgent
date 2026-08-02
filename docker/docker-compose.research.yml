@@ -1,0 +1,47 @@
+# Isolated trace-capture for the research team.
+#
+#   cd docker
+#   API_KEY=sk-... docker compose -f docker-compose.research.yml run --rm capture
+#
+# Why compose rather than a bare `docker run`: the isolation is the point, and
+# it is easy to lose by hand. This pins the container's own database, log dir
+# and port so a research run cannot collide with development on the same box —
+# no shared ~/ciris/data, no contest for :8080, no shared site-packages.
+#
+# The ONLY shared surface is ./research-traces on the host, mounted read-write.
+services:
+  capture:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.research
+      # Build on the host network: the default buildkit network's resolver
+      # (10.19.16.1) times out against registry-1.docker.io on some hosts while
+      # the host itself resolves fine. Harmless when the default already works.
+      network: host
+    environment:
+      # --- the four knobs that matter -----------------------------------
+      PROVIDER: "${PROVIDER:-openrouter}"     # openrouter|together|groq|openai|deepinfra
+      # NOT ${API_KEY:?...}: compose interpolates at BUILD time too, so the
+      # required-variable form made `docker compose build` fail without a key.
+      # capture_traces.sh already refuses with exit 2 and a clear message.
+      API_KEY: "${API_KEY:-}"
+      API_KEY_FILE: "${API_KEY_FILE:-}"
+      MODEL: "${MODEL:-meta-llama/llama-4-scout}"
+      LANGUAGES: "${LANGUAGES:-en}"
+      # --- optional -----------------------------------------------------
+      QUESTIONS_FILE: "${QUESTIONS_FILE:-}"   # container path, e.g. /questions/mine.json
+      CONCURRENCY: "${CONCURRENCY:-1}"
+      BASE_URL: "${BASE_URL:-}"               # override the provider default
+      OUT_DIR: /out
+      # Container-local state — never the host's.
+      CIRIS_HOME: /work/ciris
+      CIRIS_DATA_DIR: /work/ciris/data
+      CIRIS_LOG_DIR: /work/ciris/logs
+    volumes:
+      - ./research-traces:/out
+      # Drop a corpus in ./research-questions and set
+      # QUESTIONS_FILE=/questions/<name>.json
+      - ./research-questions:/questions:ro
+    # No ports published: the agent's API is reachable only inside the
+    # container, so concurrent runs on one box cannot fight over a port.
+    network_mode: bridge

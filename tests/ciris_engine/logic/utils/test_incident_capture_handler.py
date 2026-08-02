@@ -227,12 +227,17 @@ class TestHelperFunctions:
 
     @pytest.mark.xdist_group(name="incident_handler_injection")
     def test_add_incident_capture_handler_to_specific_logger(self, specific_logger, log_dir, mock_time_service):
-        assert len(specific_logger.handlers) == 0
+        # Assert the *delta* (exactly one handler added), not an absolute count.
+        # "test_specific_logger" is a process-global logger; under pytest-xdist a
+        # prior test on the same worker can leak handlers onto it (the teardown
+        # strip in conftest is best-effort), so a brittle ``== 0`` precondition
+        # flakes. This mirrors the already-robust sibling test_add..._to_root.
+        num_initial_handlers = len(specific_logger.handlers)
         handler = add_incident_capture_handler(
             logger_instance=specific_logger, log_dir=str(log_dir), time_service=mock_time_service
         )
 
-        assert len(specific_logger.handlers) == 1
+        assert len(specific_logger.handlers) == num_initial_handlers + 1
         assert handler in specific_logger.handlers
 
     @pytest.mark.xdist_group(name="incident_handler_injection")
@@ -385,9 +390,11 @@ class TestIncidentCaptureHandlerRotation:
         assert hasattr(handler, "_rotating_handler")
         assert isinstance(handler._rotating_handler, RotatingFileHandler)
 
-        # Verify rotation settings (2MB max, 2 backups)
+        # Verify rotation settings (2MB max, 20 backups — #935 raised
+        # retention so multi-week soaks keep a reviewable incident trail)
         assert handler._rotating_handler.maxBytes == 2 * 1024 * 1024
-        assert handler._rotating_handler.backupCount == 2
+        assert handler._rotating_handler.backupCount == IncidentCaptureHandler.INCIDENT_BACKUP_COUNT
+        assert handler._rotating_handler.backupCount == 20
 
     def test_emit_uses_rotating_handler(self, log_dir, mock_time_service):
         """Test that emit delegates to the rotating handler."""
@@ -407,11 +414,15 @@ class TestIncidentCaptureHandlerRotation:
         log_dir = tmp_path / "logs"
         log_dir.mkdir()
 
-        # Create 5 old incident log files
-        for i in range(5):
+        # Create more old incident log files than the startup sweep keeps
+        # (INCIDENT_BACKUP_COUNT + 5 — must exceed the rotating set so a
+        # restart does not delete the rotated trail, #935)
+        keep_count = IncidentCaptureHandler.INCIDENT_BACKUP_COUNT + 5
+        n_files = keep_count + 5
+        for i in range(n_files):
             log_file = log_dir / f"incidents_{i:02d}.log"
             log_file.write_text(f"old content {i}")
-            mtime = time.time() - (5 - i) * 1000
+            mtime = time.time() - (n_files - i) * 1000
             os.utime(log_file, (mtime, mtime))
 
         # Create handler - should trigger cleanup
@@ -421,5 +432,6 @@ class TestIncidentCaptureHandlerRotation:
         all_incident_logs = list(log_dir.glob("incidents_*.log"))
         old_files = [f for f in all_incident_logs if f != handler.log_file and not f.is_symlink()]
 
-        # Cleanup keeps 3, so we should have at most 3 old files remaining
-        assert len(old_files) <= 3
+        # Cleanup keeps at most keep_count files; the newest survivors remain
+        assert len(old_files) <= keep_count
+        assert len(old_files) < n_files

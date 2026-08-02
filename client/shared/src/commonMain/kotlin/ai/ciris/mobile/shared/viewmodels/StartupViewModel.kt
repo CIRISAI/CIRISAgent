@@ -36,6 +36,13 @@ class StartupViewModel(
     private val _totalServices = MutableStateFlow(22)
     val totalServices: StateFlow<Int> = _totalServices.asStateFlow()
 
+    // The ONE node-vs-agent gate (set once from the /v1/health probe). NODE has
+    // no cognitive brain → no 22 service lights; AGENT keeps the 22-light grid.
+    // null until probed (treated as agent so existing behavior is unchanged).
+    private val _clientMode =
+        MutableStateFlow<ai.ciris.mobile.shared.models.ClientMode?>(null)
+    val clientMode: StateFlow<ai.ciris.mobile.shared.models.ClientMode?> = _clientMode.asStateFlow()
+
     private val _statusMessage = MutableStateFlow("Initializing...")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
@@ -444,6 +451,22 @@ class StartupViewModel(
         delay(1200) // Brief pause to show ready state BEFORE transitioning
         _phase.value = StartupPhase.READY
         PlatformLogger.i(TAG, "[STARTUP][READY][${ts}ms + 1200] Phase set to READY")
+    }
+
+    /**
+     * Set the node-vs-agent gate (derived once from the /v1/health probe).
+     * In NODE mode there is no cognitive brain, so the 22 agent service lights
+     * do not apply — zero the service count so the startup screen omits that
+     * row. AGENT mode keeps the current 22-light behavior untouched.
+     */
+    fun setClientMode(mode: ai.ciris.mobile.shared.models.ClientMode) {
+        _clientMode.value = mode
+        if (mode.isNode) {
+            PlatformLogger.i(TAG, "[GATE] NODE mode — hiding cognitive service lights")
+            _servicesOnline.value = 0
+            _startedServiceSlots.value = emptySet()
+            _totalServices.value = 0
+        }
     }
 
     /**

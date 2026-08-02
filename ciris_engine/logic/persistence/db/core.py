@@ -1,807 +1,268 @@
 import logging
-import sqlite3
 import sys
 import threading
-import time
-import types
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, Tuple, TypedDict, Union, cast
+from typing import Any, Callable, Optional, Tuple, cast
 
-from ciris_engine.logic.config.db_paths import (
-    get_audit_db_full_path,
-    get_sqlite_db_full_path,
-)
-
-# iOS-specific: Global lock for SQLite operations to avoid iOS's SQLiteDatabaseTracking assertions
-# iOS's debug SQLite has stricter thread checking that triggers assertions with check_same_thread=False
-_ios_sqlite_lock: Optional[threading.RLock] = None
-_is_ios_platform: Optional[bool] = None
-
-# iOS thread-local connection cache: Apple's SQLiteDatabaseTracking (iOS 26+) asserts if a
-# sqlite3* handle is used from a different thread than the one that called sqlite3_open().
-# Python-level locks don't help — the check is in Apple's C interposer. The fix: reuse
-# the same connection per (thread, db_path) pair so the opening thread always matches.
-_ios_thread_local = threading.local()
-
-
-def _check_ios_platform() -> bool:
-    """Check if running on iOS."""
-    global _is_ios_platform
-    if _is_ios_platform is None:
-        _is_ios_platform = sys.platform == "ios" or (
-            sys.platform == "darwin"
-            and hasattr(sys, "implementation")
-            and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
-        )
-    return _is_ios_platform
-
-
-def _get_ios_lock() -> threading.RLock:
-    """Get the iOS SQLite lock (created lazily)."""
-    global _ios_sqlite_lock
-    if _ios_sqlite_lock is None:
-        _ios_sqlite_lock = threading.RLock()
-    return _ios_sqlite_lock
-
-
-from .dialect import init_dialect
-from .retry import (
-    DEFAULT_BASE_DELAY,
-    DEFAULT_MAX_DELAY,
-    DEFAULT_MAX_RETRIES,
-    is_retryable_error,
-)
+from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 
 logger = logging.getLogger(__name__)
 
 
-# Test database path override - set by test fixtures
+# Test database path override — retained as a fixture seam only. The legacy
+# SQLite connection layer that consumed this (get_db_connection and friends)
+# was deleted in 2.9.7 (#896): all reads + writes route through ciris-persist's
+# Engine, wired per-test via `set_persist_engine()`. A handful of older test
+# fixtures still save/restore this attribute; it is otherwise inert.
 _test_db_path: Optional[str] = None
 
 
-# Custom datetime adapter and converter for SQLite
-def adapt_datetime(ts: datetime) -> str:
-    """Convert datetime to ISO 8601 string."""
-    return ts.isoformat()
+# ─────────────────────────────────────────────────────────────────────
+# #937 — bounded, loud database init.
+#
+# The failure this guards: agent boot calls `initialize_database`
+# synchronously from `LocalGraphMemoryService.__init__`
+# (services/graph/memory_service.py:67), which blocks the asyncio event
+# loop inside persist's `Engine(...)` constructor. That constructor does
+# `connect + run_migrations` under a Postgres session-scoped
+# `pg_advisory_lock` (CIRISPersist src/store/postgres.rs:1153), and every
+# wait in that path is UNBOUNDED. On a shared `ciris_db` another tenant's
+# long-running statement holding a conflicting table lock stalls the
+# migration DDL for as long as it runs — 15 minutes in the #937 report —
+# with zero agent-side log output, because persist logs through Rust
+# `tracing` which the agent never initializes.
+#
+# Three bounds, all named + env-overridable:
+#
+#   1. `CIRIS_DB_INIT_TIMEOUT_SECONDS` — wall-clock ceiling on the whole
+#      Engine bootstrap. Exceeding it raises `DatabaseInitializationTimeout`
+#      (a TimeoutError) which propagates through `initialize_database` to
+#      the initialization service, failing the DATABASE phase loudly
+#      instead of pretending to boot.
+#   2. `CIRIS_DB_INIT_LOCK_TIMEOUT` — Postgres session `lock_timeout` on
+#      the startup connection, delivered as a libpq `options` DSN
+#      parameter. Bounds any single lock acquisition in the migration
+#      path (both the DDL locks and the `pg_advisory_lock` wait).
+#   3. `CIRIS_DB_INIT_STATEMENT_TIMEOUT` — Postgres session
+#      `statement_timeout`, default `0` (disabled).
+#
+# ── Why these defaults, and the multi-occurrence constraint ──
+#
+# CIRIS supports N occurrences sharing one database. They all boot
+# through this path, and persist serializes them on ONE global advisory
+# lock: the leader runs migrations, every follower BLOCKS inside
+# `pg_advisory_lock` until the leader's session closes. `lock_timeout`
+# applies to advisory locks, so a too-aggressive value would kill
+# followers during a legitimate cold-start migration. The defaults are
+# therefore deliberately generous — they exist to convert a 15-minute
+# silent hang into a bounded loud failure, NOT to police normal
+# contention. In steady state (schema at head) the leader's work is
+# sub-second and followers wait about as long.
+#
+# `statement_timeout` defaults to disabled because aborting a legitimate
+# long migration or backfill mid-flight is a worse failure than the hang
+# it would prevent; the wall-clock bound already covers that case.
+# Operators with a known-fast migration set can opt in.
+# NOTE — every default below is JUDGEMENT, not measurement. Nobody has yet
+# timed a cold migration against a production-sized shared database; these
+# were chosen to survive N-occurrence cold-start serialization with room to
+# spare, not fitted to observed data. Do not cite them as empirical. If you
+# measure a real cold-migration wall time, set them from it and delete this
+# note.
+DB_INIT_TIMEOUT_ENV = "CIRIS_DB_INIT_TIMEOUT_SECONDS"
+DB_INIT_TIMEOUT_SECONDS_DEFAULT = 300.0
+
+DB_INIT_PROGRESS_INTERVAL_SECONDS = 15.0
+
+DB_INIT_LOCK_TIMEOUT_ENV = "CIRIS_DB_INIT_LOCK_TIMEOUT"
+DB_INIT_LOCK_TIMEOUT_DEFAULT = "120s"
+
+DB_INIT_STATEMENT_TIMEOUT_ENV = "CIRIS_DB_INIT_STATEMENT_TIMEOUT"
+DB_INIT_STATEMENT_TIMEOUT_DEFAULT = "0"  # 0 = disabled
+
+# Paste-ready operator diagnostic, embedded verbatim in the timeout error.
+# psycopg2 is dev-only (requirements-dev.txt) so production cannot run this
+# itself; naming the query is the honest, dependency-free alternative.
+PG_BLOCKER_DIAGNOSTIC_SQL = (
+    "SELECT a.pid, a.state, age(clock_timestamp(), a.query_start) AS age, "
+    "pg_blocking_pids(a.pid) AS blocked_by, a.query "
+    "FROM pg_stat_activity a WHERE a.datname = current_database() "
+    "AND a.state <> 'idle' ORDER BY a.query_start;"
+)
 
 
-def convert_datetime(val: bytes) -> datetime:
-    """Convert ISO 8601 string back to datetime."""
-    return datetime.fromisoformat(val.decode())
+class DatabaseInitializationTimeout(TimeoutError):
+    """The persist Engine bootstrap exceeded its wall-clock budget.
 
-
-# Track if adapters have been registered
-_adapters_registered = False
-
-
-def _ensure_adapters_registered() -> None:
-    """Register SQLite adapters if not already done."""
-    global _adapters_registered
-    if not _adapters_registered:
-        sqlite3.register_adapter(datetime, adapt_datetime)
-        sqlite3.register_converter("timestamp", convert_datetime)
-        _adapters_registered = True
-
-
-class IOSDictRow(dict[str, Any]):
-    """A dict subclass that supports both string key and integer index access.
-
-    This mimics sqlite3.Row behavior for iOS compatibility:
-    - row["column_name"] works (string key access)
-    - row[0], row[1] works (integer index access)
-    - dict(row) and **row only yield string keys (for Pydantic model unpacking)
-
-    The integer index access is provided via __getitem__ override, but integers
-    are NOT stored as dict keys. This ensures Task(**row) works correctly.
+    Raised out of `initialize_database` so the DATABASE initialization
+    phase fails visibly. A bounded loud failure beats an unbounded
+    silent hang (#937).
     """
 
-    def __init__(self, string_dict: dict[str, Any], column_order: list[str]):
-        """Initialize with string-keyed dict and column order for integer access.
 
-        Args:
-            string_dict: Dict with string keys only
-            column_order: List of column names in order, for integer indexing
-        """
-        super().__init__(string_dict)
-        self._column_order = column_order
+def _redact_dsn(dsn: str) -> str:
+    """Strip credentials from a DSN so it is safe to log.
 
-    def __getitem__(self, key: str | int) -> Any:
-        """Support both string and integer key access."""
-        if isinstance(key, int):
-            # Integer access - look up column name by index
-            if 0 <= key < len(self._column_order):
-                col_name = self._column_order[key]
-                return super().__getitem__(col_name)
-            raise IndexError(
-                f"Index {key} out of range (columns: {len(self._column_order)})"
-            )
-        # String access - normal dict behavior
-        return super().__getitem__(key)
-
-    def get(self, key: str | int, default: Any = None) -> Any:
-        """Support both string and integer key access with default."""
-        try:
-            return self.__getitem__(key)
-        except (KeyError, IndexError):
-            return default
-
-
-class IOSSerializedCursor:
-    """Cursor wrapper that serializes all access for iOS compatibility.
-
-    This ensures cursor.execute() and other cursor methods go through the global lock.
-    On iOS, cursors are closed after fetch to prevent SQLiteDatabaseTracking assertions,
-    and automatically recreated on the next execute().
+    `postgresql://user:s3cret@host:5432/db?x=y` -> `postgresql://user:***@host:5432/db`
+    SQLite DSNs have no credentials and pass through unchanged apart from
+    their query string.
     """
+    if "://" not in dsn:
+        return dsn
+    scheme, _, rest = dsn.partition("://")
+    rest = rest.split("?", 1)[0]
+    if "@" in rest:
+        userinfo, _, hostpart = rest.rpartition("@")
+        user = userinfo.split(":", 1)[0]
+        rest = f"{user}:***@{hostpart}"
+    return f"{scheme}://{rest}"
 
-    def __init__(
-        self, cursor: sqlite3.Cursor, lock: threading.RLock, conn: sqlite3.Connection
-    ):
-        self._cursor = cursor
-        self._lock = lock
-        self._conn = conn  # Keep reference to recreate cursor if needed
-        self._closed = False
-        logger.debug(f"[iOS_CURSOR] Created wrapper for {cursor}")
 
-    def _ensure_cursor(self) -> None:
-        """Recreate cursor if it was closed (iOS pattern)."""
-        if self._closed and _check_ios_platform():
-            with self._lock:
-                self._cursor = self._conn.cursor()
-                self._closed = False
-                logger.debug("[iOS_CURSOR] Recreated cursor after close")
+def _is_postgres_dsn(dsn: str) -> bool:
+    return dsn.startswith(("postgres://", "postgresql://"))
 
-    def execute(self, sql: str, parameters: Any = None) -> "IOSSerializedCursor":
-        self._ensure_cursor()  # Recreate if needed on iOS
-        logger.debug(f"[iOS_CURSOR] execute: {sql[:80]}...")
-        with self._lock:
-            try:
-                if parameters is not None:
-                    self._cursor.execute(sql, parameters)
-                else:
-                    self._cursor.execute(sql)
-                logger.debug("[iOS_CURSOR] execute succeeded")
-                return self
-            except Exception as e:
-                logger.error(f"[iOS_CURSOR] execute FAILED: {e}")
-                raise
 
-    def executemany(self, sql: str, seq_of_parameters: Any) -> "IOSSerializedCursor":
-        logger.debug(f"[iOS_CURSOR] executemany: {sql[:80]}...")
-        with self._lock:
-            self._cursor.executemany(sql, seq_of_parameters)
-            return self
+def _db_init_timeout_seconds() -> float:
+    """Wall-clock ceiling for the Engine bootstrap, in seconds.
 
-    def _row_to_dict(self, row: Any) -> dict[str, Any] | None:
-        """Convert sqlite3.Row to IOSDictRow for iOS compatibility.
+    A non-positive value disables the bound (escape hatch for an operator
+    running a genuinely multi-hour first migration).
+    """
+    import os
 
-        Returns an IOSDictRow that:
-        - Supports string key access: row["column_name"]
-        - Supports integer index access: row[0], row[1]
-        - Only yields string keys for dict() and ** unpacking
-
-        This ensures both `row[0]` and `Task(**row)` work correctly.
-        """
-        if row is None:
-            return None
-        # Get column names from cursor description
-        if self._cursor.description:
-            columns = [col[0] for col in self._cursor.description]
-            string_dict = {}
-            for col_name, value in zip(columns, row):
-                string_dict[col_name] = value
-            # Return IOSDictRow that supports both string and integer access
-            return IOSDictRow(string_dict, columns)
-        # Fallback: try to get keys from the row itself if it's dict-like
-        if hasattr(row, "keys"):
-            return dict(row)
-        # Last resort: log warning and return empty dict
+    raw = os.environ.get(DB_INIT_TIMEOUT_ENV, "")
+    if not raw:
+        return DB_INIT_TIMEOUT_SECONDS_DEFAULT
+    try:
+        return float(raw)
+    except ValueError:
         logger.warning(
-            "[iOS_CURSOR] _row_to_dict: no description and row has no keys()"
+            "%s=%r is not a number — falling back to %.0fs",
+            DB_INIT_TIMEOUT_ENV,
+            raw,
+            DB_INIT_TIMEOUT_SECONDS_DEFAULT,
         )
-        return {}
-
-    def fetchone(self) -> Any:
-        if self._closed:
-            logger.warning(
-                "[iOS_CURSOR] fetchone() called on closed cursor, returning None"
-            )
-            return None
-        logger.debug("[iOS_CURSOR] fetchone() called...")
-        with self._lock:
-            try:
-                result = self._cursor.fetchone()
-                # On iOS, convert Row to dict and close cursor immediately
-                if _check_ios_platform():
-                    if result is not None:
-                        result = self._row_to_dict(result)
-                    # Close cursor immediately to prevent iOS tracking assertions
-                    self._cursor.close()
-                    self._closed = True
-                    logger.debug(
-                        f"[iOS_CURSOR] fetchone() result={result}, cursor closed"
-                    )
-                else:
-                    logger.debug(f"[iOS_CURSOR] fetchone() succeeded: {result}")
-                return result
-            except Exception as e:
-                logger.error(f"[iOS_CURSOR] fetchone() FAILED: {e}")
-                raise
-
-    def fetchall(self) -> Any:
-        if self._closed:
-            logger.warning(
-                "[iOS_CURSOR] fetchall() called on closed cursor, returning []"
-            )
-            return []
-        logger.debug("[iOS_CURSOR] fetchall() called...")
-        with self._lock:
-            try:
-                result = self._cursor.fetchall()
-                # On iOS, convert Rows to dicts and close cursor immediately
-                if _check_ios_platform():
-                    if result:
-                        result = [self._row_to_dict(row) for row in result]
-                    # Close cursor immediately to prevent iOS tracking assertions
-                    self._cursor.close()
-                    self._closed = True
-                    logger.debug(
-                        f"[iOS_CURSOR] fetchall() rows={len(result) if result else 0}, cursor closed"
-                    )
-                else:
-                    logger.debug(
-                        f"[iOS_CURSOR] fetchall() succeeded: {len(result) if result else 0} rows"
-                    )
-                return result
-            except Exception as e:
-                logger.error(f"[iOS_CURSOR] fetchall() FAILED: {e}")
-                raise
-
-    def fetchmany(self, size: Optional[int] = None) -> Any:
-        with self._lock:
-            if size is None:
-                return self._cursor.fetchmany()
-            return self._cursor.fetchmany(size)
-
-    def close(self) -> None:
-        with self._lock:
-            self._cursor.close()
-
-    @property
-    def rowcount(self) -> int:
-        return self._cursor.rowcount
-
-    @property
-    def lastrowid(self) -> Optional[int]:
-        return self._cursor.lastrowid
-
-    @property
-    def description(self) -> Any:
-        return self._cursor.description
-
-    def __iter__(self) -> Any:
-        return iter(self._cursor)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._cursor, name)
+        return DB_INIT_TIMEOUT_SECONDS_DEFAULT
 
 
-class IOSSerializedConnection:
-    """SQLite connection wrapper that serializes all access for iOS compatibility.
+def _startup_lock_options() -> str:
+    """Build the libpq `options` value carrying the startup session GUCs.
 
-    iOS's debug SQLite has strict thread checking that causes assertion failures
-    when connections are used from multiple threads, even with check_same_thread=False.
-    This wrapper uses a global lock to serialize all database access.
-
-    CRITICAL: cursor() returns a wrapped cursor so cursor.execute() also goes through lock.
+    Returns an empty string when both knobs are disabled.
     """
+    import os
 
-    def __init__(self, conn: sqlite3.Connection):
-        self._conn = conn
-        self._lock = _get_ios_lock()
-        logger.debug("[iOS_CONN] IOSSerializedConnection created")
+    lock_timeout = os.environ.get(
+        DB_INIT_LOCK_TIMEOUT_ENV, DB_INIT_LOCK_TIMEOUT_DEFAULT
+    ).strip()
+    statement_timeout = os.environ.get(
+        DB_INIT_STATEMENT_TIMEOUT_ENV, DB_INIT_STATEMENT_TIMEOUT_DEFAULT
+    ).strip()
 
-    def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
-        sql = args[0] if args else "unknown"
-        logger.debug(f"[iOS_CONN] execute: {sql[:100]}...")
-        with self._lock:
-            try:
-                result = self._conn.execute(*args, **kwargs)
-                logger.debug("[iOS_CONN] execute succeeded")
-                return result
-            except Exception as e:
-                logger.error(f"[iOS_CONN] execute FAILED: {e}")
-                raise
+    parts = []
+    if lock_timeout and lock_timeout != "0":
+        parts.append(f"-c lock_timeout={lock_timeout}")
+    if statement_timeout and statement_timeout != "0":
+        parts.append(f"-c statement_timeout={statement_timeout}")
+    return " ".join(parts)
 
-    def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
-        sql = args[0] if args else "unknown"
-        logger.debug(f"[iOS_CONN] executemany: {sql[:100]}...")
-        with self._lock:
-            return self._conn.executemany(*args, **kwargs)
 
-    def executescript(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
-        logger.debug("[iOS_CONN] executescript called")
-        with self._lock:
-            return self._conn.executescript(*args, **kwargs)
+def _with_startup_timeouts(dsn: str) -> str:
+    """Attach `lock_timeout` / `statement_timeout` to a Postgres startup DSN.
 
-    def cursor(self) -> IOSSerializedCursor:
-        """Return a WRAPPED cursor that serializes all operations."""
-        logger.debug("[iOS_CONN] cursor() called - creating wrapped cursor...")
-        with self._lock:
-            try:
-                raw_cursor = self._conn.cursor()
-                # Pass connection reference so cursor can be recreated on iOS
-                wrapped = IOSSerializedCursor(raw_cursor, self._lock, self._conn)
-                logger.debug("[iOS_CONN] cursor() succeeded, returning wrapped cursor")
-                return wrapped
-            except Exception as e:
-                logger.error(f"[iOS_CONN] cursor() FAILED: {e}")
-                raise
+    Postgres only — a SQLite DSN is returned untouched (SQLite has no
+    session GUCs and persist's SQLite backend would reject the parameter).
 
-    def commit(self) -> None:
-        logger.debug("[iOS_CONN] commit() called")
-        with self._lock:
-            self._conn.commit()
+    Why the DSN is the lever: persist owns both connections it opens, and
+    the agent never sees either. But
+    `PostgresBackend::dedicated_connect` — the connection that holds the
+    migration advisory lock and runs every DDL statement — passes the
+    DSN string through verbatim to `tokio_postgres::connect`
+    (CIRISPersist src/store/postgres.rs:306 stores it, :613/:650 use it),
+    and tokio-postgres honours the libpq `options` keyword. So the DSN
+    IS the agent-side seam into persist's startup session.
 
-    def rollback(self) -> None:
-        logger.debug("[iOS_CONN] rollback() called")
-        with self._lock:
-            self._conn.rollback()
+    Scope is exactly right: the pooled runtime connections are built from
+    a deadpool `Config` that copies only host/port/user/password/dbname
+    (postgres.rs:249-264), so `options` is dropped there. These GUCs
+    apply to the migration phase and nothing else.
 
-    def close(self) -> None:
-        logger.debug("[iOS_CONN] close() called")
-        with self._lock:
-            self._conn.close()
+    An operator-supplied `options` in the DSN always wins — we never
+    override an explicit choice.
+    """
+    if not _is_postgres_dsn(dsn):
+        return dsn
 
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._conn, name)
+    from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
-    def __enter__(self) -> "IOSSerializedConnection":
-        logger.debug("[iOS_CONN] __enter__ called")
-        self._lock.acquire()
-        self._conn.__enter__()
-        return self
+    parts = urlsplit(dsn)
+    if any(key == "options" for key, _ in parse_qsl(parts.query, keep_blank_values=True)):
+        logger.debug("DSN already carries libpq `options` — leaving it untouched")
+        return dsn
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Any:
-        logger.debug(f"[iOS_CONN] __exit__ called, exc_type={exc_type}")
+    options = _startup_lock_options()
+    if not options:
+        return dsn
+
+    # Percent-encode, never form-encode. tokio-postgres decodes URL query
+    # values with `percent_decode` only (config.rs:1162) — a `+` stays a
+    # literal `+` and would corrupt the options string into
+    # `-c+lock_timeout=120s`, which Postgres rejects. libpq behaves the
+    # same way. So: `%20` for the separator, `%3D` for the `=`.
+    encoded = quote(options, safe="")
+    # Append to the raw query rather than round-tripping the existing
+    # params through parse_qsl/urlencode — re-encoding an operator's DSN
+    # (e.g. a password-bearing `sslmode`/`options` sibling) risks changing
+    # bytes we were not asked to touch.
+    query = f"{parts.query}&options={encoded}" if parts.query else f"options={encoded}"
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+
+
+def _blocker_hint(dsn: str) -> str:
+    """Best-effort explanation of what is holding the startup lock.
+
+    Production does not ship a Postgres driver (psycopg2 is dev-only, see
+    requirements-dev.txt), so this degrades to naming the exact query an
+    operator should run. When psycopg2 IS importable (dev, QA, tooling)
+    the probe runs and the blocking pid/query lands in the error itself.
+    """
+    if not _is_postgres_dsn(dsn):
+        return ""
+
+    try:
+        # Imported dynamically on purpose: psycopg2 is dev-only, so a static
+        # import would need a `type: ignore` that is "unused" in every
+        # environment that DOES have the stubs and required in every one that
+        # does not. importlib is correct in both, and `ModuleNotFoundError`
+        # is an `ImportError` so the except below still catches its absence.
+        import importlib
+
+        psycopg2: Any = importlib.import_module("psycopg2")
+
+        # Independent connection with its own hard timeouts — the
+        # diagnostic must never become a second hang.
+        conn = psycopg2.connect(dsn, connect_timeout=5)
         try:
-            return self._conn.__exit__(exc_type, exc_val, exc_tb)
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                cur.execute("SET statement_timeout = '5s'")
+                cur.execute(PG_BLOCKER_DIAGNOSTIC_SQL)
+                rows = cur.fetchall()
         finally:
-            self._lock.release()
-
-
-class RetryConnection:
-    """SQLite connection wrapper with automatic retry on write operations."""
-
-    # SQL commands that modify data
-    WRITE_COMMANDS = {
-        "INSERT",
-        "UPDATE",
-        "DELETE",
-        "CREATE",
-        "DROP",
-        "ALTER",
-        "REPLACE",
-    }
-
-    def __init__(
-        self,
-        conn: sqlite3.Connection,
-        max_retries: int = DEFAULT_MAX_RETRIES,
-        base_delay: float = DEFAULT_BASE_DELAY,
-        max_delay: float = DEFAULT_MAX_DELAY,
-        enable_retry: bool = True,
-    ):
-        self._conn = conn
-        self._max_retries = max_retries
-        self._base_delay = base_delay
-        self._max_delay = max_delay
-        self._enable_retry = enable_retry
-
-    def _is_write_operation(self, sql: str) -> bool:
-        """Check if SQL command is a write operation."""
-        if not sql:
-            return False
-        # Get first word of SQL command
-        first_word = sql.strip().split()[0].upper()
-        return first_word in self.WRITE_COMMANDS
-
-    def _retry_execute(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
-        """Execute with retry logic for write operations."""
-        # Check if this is a write operation
-        sql = args[0] if args else kwargs.get("sql", "")
-        is_write = self._is_write_operation(sql)
-
-        # If retry is disabled or this is not a write operation, execute directly
-        if not self._enable_retry or not is_write:
-            method = getattr(self._conn, method_name)
-            return method(*args, **kwargs)
-
-        # Retry logic for write operations
-        last_error = None
-        for attempt in range(self._max_retries + 1):
-            try:
-                method = getattr(self._conn, method_name)
-                return method(*args, **kwargs)
-            except Exception as e:
-                if not is_retryable_error(e) or attempt == self._max_retries:
-                    raise
-
-                last_error = e
-                delay = min(self._base_delay * (2**attempt), self._max_delay)
-
-                logger.debug(
-                    f"Database busy on write operation (attempt {attempt + 1}/{self._max_retries + 1}), "
-                    f"retrying in {delay:.2f}s: {e}"
-                )
-
-                time.sleep(delay)
-
-        # Should not reach here
-        raise last_error if last_error else RuntimeError("Unexpected retry loop exit")
-
-    def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
-        """Execute SQL with retry for write operations."""
-        return self._retry_execute("execute", *args, **kwargs)  # type: ignore[no-any-return]
-
-    def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
-        """Execute many SQL statements with retry for write operations."""
-        return self._retry_execute("executemany", *args, **kwargs)  # type: ignore[no-any-return]
-
-    def executescript(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
-        """Execute SQL script with retry."""
-        # Scripts may contain multiple operations, so always retry
-        if not self._enable_retry:
-            return self._conn.executescript(*args, **kwargs)
-        return self._retry_execute("executescript", *args, **kwargs)  # type: ignore[no-any-return]
-
-    def __getattr__(self, name: str) -> Any:
-        """Delegate all other attributes to the underlying connection."""
-        return getattr(self._conn, name)
-
-    def __enter__(self) -> "RetryConnection":
-        """Context manager entry."""
-        self._conn.__enter__()
-        return self
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Any:
-        """Context manager exit."""
-        return self._conn.__exit__(exc_type, exc_val, exc_tb)
-
-
-def _resolve_db_path(db_path: Optional[str]) -> str:
-    """Resolve the database path, checking test overrides and defaults."""
-    if db_path is not None:
-        return db_path
-
-    logger.debug("[DB_CONNECT] db_path is None, resolving...")
-    if _test_db_path is not None:
-        logger.debug(f"[DB_CONNECT] Using test override path: {_test_db_path}")
-        return _test_db_path
-
-    logger.debug("[DB_CONNECT] Calling get_sqlite_db_full_path()...")
-    resolved = get_sqlite_db_full_path()
-    logger.debug(f"[DB_CONNECT] Resolved path: {resolved}")
-    return resolved
-
-
-class _IOSCursorProxy:
-    """Proxy that prevents sqlite3_finalize() from running on the wrong thread.
-
-    When Python GCs a sqlite3.Cursor, it calls sqlite3_finalize() which triggers
-    Apple's libRPAC isBulkReadStatement assertion if the GC thread differs from
-    the thread that called sqlite3_prepare(). This proxy suppresses __del__() and
-    close() — the cursor's prepared statements get cleaned up when the connection
-    itself is finalized (which only happens on the owning thread via thread-local).
-    """
-
-    __slots__ = ("_cursor",)
-
-    def __init__(self, cursor: sqlite3.Cursor):
-        object.__setattr__(self, "_cursor", cursor)
-
-    def close(self) -> None:
-        pass  # Suppress — let connection cleanup handle it
-
-    def __del__(self) -> None:
-        pass  # Suppress — prevents cross-thread sqlite3_finalize
-
-    def __iter__(self) -> Any:
-        return iter(object.__getattribute__(self, "_cursor"))
-
-    def __next__(self) -> Any:
-        return next(object.__getattribute__(self, "_cursor"))
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(object.__getattribute__(self, "_cursor"), name)
-
-    def execute(self, *args: Any, **kwargs: Any) -> "_IOSCursorProxy":
-        object.__getattribute__(self, "_cursor").execute(*args, **kwargs)
-        return self
-
-    def executemany(self, *args: Any, **kwargs: Any) -> "_IOSCursorProxy":
-        object.__getattribute__(self, "_cursor").executemany(*args, **kwargs)
-        return self
-
-    def fetchone(self) -> Any:
-        return object.__getattribute__(self, "_cursor").fetchone()
-
-    def fetchall(self) -> list[Any]:
-        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, "_cursor"))
-        return cursor.fetchall()
-
-    def fetchmany(self, size: int = -1) -> list[Any]:
-        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, "_cursor"))
-        return cursor.fetchmany(size)
-
-    @property
-    def description(self) -> Any:
-        return object.__getattribute__(self, "_cursor").description
-
-    @property
-    def rowcount(self) -> int:
-        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, "_cursor"))
-        return cursor.rowcount
-
-    @property
-    def lastrowid(self) -> Any:
-        return object.__getattribute__(self, "_cursor").lastrowid
-
-
-class _IOSConnectionProxy:
-    """Proxy that prevents callers from closing/finalizing connections AND cursors.
-
-    Apple's libRPAC.dylib (SQLiteDatabaseTracking) asserts if sqlite3_finalize()
-    is called from a different thread than sqlite3_open()/sqlite3_prepare().
-    Python's GC can finalize Connection and Cursor objects on any thread.
-
-    This proxy:
-    - Suppresses Connection.close() and __del__()
-    - Wraps all returned cursors in _IOSCursorProxy (suppresses Cursor.__del__())
-    - Real objects live in thread-local storage, finalized only on owning thread
-    """
-
-    def __init__(self, conn: sqlite3.Connection):
-        object.__setattr__(self, "_conn", conn)
-
-    def close(self) -> None:
-        pass
-
-    def __del__(self) -> None:
-        pass
-
-    def __enter__(self) -> "_IOSConnectionProxy":
-        return self
-
-    def __exit__(self, *args: Any) -> None:
-        pass
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(object.__getattribute__(self, "_conn"), name)
-
-    def execute(self, *args: Any, **kwargs: Any) -> _IOSCursorProxy:
-        conn = cast(sqlite3.Connection, object.__getattribute__(self, "_conn"))
-        return _IOSCursorProxy(conn.execute(*args, **kwargs))
-
-    def executemany(self, *args: Any, **kwargs: Any) -> _IOSCursorProxy:
-        conn = cast(sqlite3.Connection, object.__getattribute__(self, "_conn"))
-        return _IOSCursorProxy(conn.executemany(*args, **kwargs))
-
-    def executescript(self, *args: Any, **kwargs: Any) -> _IOSCursorProxy:
-        conn = cast(sqlite3.Connection, object.__getattribute__(self, "_conn"))
-        return _IOSCursorProxy(conn.executescript(*args, **kwargs))
-
-    def cursor(self) -> _IOSCursorProxy:
-        conn = cast(sqlite3.Connection, object.__getattribute__(self, "_conn"))
-        return _IOSCursorProxy(conn.cursor())
-
-    def commit(self) -> None:
-        object.__getattribute__(self, "_conn").commit()
-
-    def rollback(self) -> None:
-        object.__getattribute__(self, "_conn").rollback()
-
-    @property
-    def row_factory(self) -> Any:
-        return object.__getattribute__(self, "_conn").row_factory
-
-    @row_factory.setter
-    def row_factory(self, value: Any) -> None:
-        object.__getattribute__(self, "_conn").row_factory = value
-
-
-def _create_sqlite_connection_ios(db_path: str) -> "_IOSConnectionProxy":
-    """Create or reuse SQLite connection with iOS-specific settings.
-
-    Returns a proxy that prevents callers from closing/finalizing the connection.
-    The real connection lives in thread-local storage, ensuring sqlite3_finalize()
-    only ever runs on the thread that called sqlite3_open() — satisfying Apple's
-    libRPAC.dylib SQLiteDatabaseTracking assertions.
-    """
-    cache_attr = f"_sqlite_conn_{hash(db_path)}"
-    cached: sqlite3.Connection | None = getattr(_ios_thread_local, cache_attr, None)
-
-    if cached is not None:
-        try:
-            cached.execute("SELECT 1")
-            logger.debug(
-                f"[DB_CONNECT] iOS: reusing thread-local connection for {db_path}"
+            conn.close()
+        if rows:
+            rendered = "; ".join(
+                f"pid={r[0]} state={r[1]} age={r[2]} blocked_by={r[3]} query={str(r[4])[:200]}"
+                for r in rows
             )
-            return _IOSConnectionProxy(cached)
-        except Exception:
-            logger.debug(
-                "[DB_CONNECT] iOS: cached connection invalid, creating new one"
-            )
-            # Don't close here — let it die with the thread
+            return f" Active backends: {rendered}."
+    except Exception as probe_err:  # noqa: BLE001 - diagnostics are best-effort
+        logger.debug("pg_stat_activity blocker probe unavailable: %s", probe_err)
 
-    logger.debug(
-        f"[DB_CONNECT] iOS: creating new thread-local connection for {db_path}"
+    return (
+        " To identify the blocker, run against the same database: "
+        f"{PG_BLOCKER_DIAGNOSTIC_SQL}"
     )
-    try:
-        conn = sqlite3.connect(
-            db_path,
-            check_same_thread=False,
-            detect_types=sqlite3.PARSE_DECLTYPES,
-            isolation_level=None,
-            timeout=30.0,
-        )
-        setattr(_ios_thread_local, cache_attr, conn)
-        logger.debug(f"[DB_CONNECT] iOS: thread-local connection created and cached")
-        return _IOSConnectionProxy(conn)
-    except Exception as e:
-        logger.error(f"[DB_CONNECT] sqlite3.connect FAILED: {e}")
-        raise
-
-
-def _get_pragma_statements(is_ios: bool, busy_timeout: Optional[int]) -> list[str]:
-    """Get the appropriate PRAGMA statements for the platform."""
-    if is_ios:
-        return [
-            "PRAGMA foreign_keys = ON;",
-            "PRAGMA journal_mode=WAL;",
-            f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 30000};",
-            "PRAGMA synchronous=NORMAL;",
-        ]
-    return [
-        "PRAGMA foreign_keys = ON;",
-        "PRAGMA journal_mode=WAL;",
-        f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 5000};",
-    ]
-
-
-def _execute_pragmas(conn: Any, adapter: Any, pragma_statements: list[str]) -> None:
-    """Execute PRAGMA statements on the connection."""
-    logger.debug(
-        f"[DB_CONNECT] Executing {len(pragma_statements)} PRAGMA statements..."
-    )
-    for pragma in pragma_statements:
-        result = adapter.pragma(pragma)
-        if result:
-            logger.debug(f"[DB_CONNECT] Executing: {result}")
-            try:
-                conn.execute(result)
-                logger.debug(f"[DB_CONNECT] PRAGMA succeeded: {result}")
-            except Exception as e:
-                logger.error(f"[DB_CONNECT] PRAGMA FAILED: {result} - {e}")
-                raise
-
-
-def get_db_connection(
-    db_path: Optional[str] = None,
-    busy_timeout: Optional[int] = None,
-    enable_retry: bool = True,
-) -> Union[sqlite3.Connection, RetryConnection, Any]:
-    """Open a stdlib sqlite3 connection for the bootstrap-layer schema init.
-
-    Post-2.9.0 absorption: this function is consumed only by the bootstrap
-    layer (initialize_database, run_migrations, retry.get_db_connection_with_retry,
-    db.operations). PostgreSQL deployments route schema management through
-    persist's Engine — this function rejects postgres:// DSNs.
-    """
-    db_path = _resolve_db_path(db_path)
-    adapter = init_dialect(db_path)
-
-    # PostgreSQL no longer wires through psycopg2 — persist's sqlx backend
-    # owns the connection pool. The bootstrap layer's legacy schema is a
-    # SQLite-only concern (a 2.8.x upgrade-path concept); fresh Postgres
-    # deployments skip legacy CREATE TABLE entirely (see initialize_database).
-    if adapter.is_postgresql():
-        raise RuntimeError(
-            "get_db_connection() does not support PostgreSQL after 2.9.0. "
-            "Route through persist's Engine substrate instead."
-        )
-
-    _ensure_adapters_registered()
-    is_ios = _check_ios_platform()
-    conn: Union[_IOSConnectionProxy, sqlite3.Connection]
-    if is_ios:
-        conn = _create_sqlite_connection_ios(db_path)
-    else:
-        conn = sqlite3.connect(
-            db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES
-        )
-
-    conn.row_factory = sqlite3.Row
-
-    pragma_statements = _get_pragma_statements(is_ios, busy_timeout)
-    _execute_pragmas(conn, adapter, pragma_statements)
-
-    if enable_retry and not is_ios:
-        return RetryConnection(cast(sqlite3.Connection, conn))
-    return conn
-
-
-class ConnectionDiagnostics(TypedDict, total=False):
-    """Typed structure for database connection diagnostic information."""
-
-    dialect: str
-    connection_string: str
-    is_postgresql: bool
-    is_sqlite: bool
-    active_connections: int  # PostgreSQL only
-    connection_error: str  # If connection diagnostics failed
-    connectivity: str  # "OK" or "FAILED: {error}"
-
-
-def get_connection_diagnostics(db_path: Optional[str] = None) -> ConnectionDiagnostics:
-    """Get diagnostic information about database connections.
-
-    Useful for debugging connection issues in production, especially PostgreSQL.
-
-    Args:
-        db_path: Optional database connection string
-
-    Returns:
-        Dictionary with connection diagnostic information
-    """
-    if db_path is None:
-        db_path = get_sqlite_db_full_path()
-
-    adapter = init_dialect(db_path)
-    diagnostics: ConnectionDiagnostics = {
-        "dialect": adapter.dialect.value,
-        "connection_string": (
-            adapter.db_url if adapter.is_postgresql() else adapter.db_path
-        ),
-        "is_postgresql": adapter.is_postgresql(),
-        "is_sqlite": adapter.is_sqlite(),
-    }
-
-    # Try to get active connection count for PostgreSQL
-    if adapter.is_postgresql():
-        try:
-            with get_db_connection(db_path=db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT count(*) as connection_count
-                    FROM pg_stat_activity
-                    WHERE datname = current_database()
-                    """)
-                result = cursor.fetchone()
-                if result:
-                    diagnostics["active_connections"] = (
-                        result[0]
-                        if isinstance(result, tuple)
-                        else result["connection_count"]
-                    )
-                cursor.close()
-        except Exception as e:
-            diagnostics["connection_error"] = str(e)
-            logger.warning(f"Failed to get PostgreSQL connection diagnostics: {e}")
-
-    # Test basic connectivity
-    try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
-            cursor.close()
-            diagnostics["connectivity"] = "OK"
-    except Exception as e:
-        diagnostics["connectivity"] = f"FAILED: {e}"
-        logger.error(f"Database connectivity test failed for {db_path}: {e}")
-
-    return diagnostics
 
 
 def initialize_database(db_path: Optional[str] = None) -> None:
@@ -816,18 +277,35 @@ def initialize_database(db_path: Optional[str] = None) -> None:
     legacy 2.8.x `graph_nodes` / `graph_edges` over its own connection,
     and no-ops gracefully when those tables are absent (fresh install).
     """
+    import time
     import traceback
 
     caller_info = "".join(traceback.format_stack()[-4:-1])
     logger.info(f"[DB_INIT] initialize_database called from:\n{caller_info}")
 
+    started = time.monotonic()
     try:
         if db_path is None:
             db_path = get_sqlite_db_full_path()
-        logger.info(f"Initializing database via persist Engine: {db_path}")
+        # #937 — never log a raw DSN: it carries the Postgres password.
+        logger.info(
+            "[DB_INIT] phase=bootstrap begin target=%s timeout=%.0fs",
+            _redact_dsn(db_path),
+            _db_init_timeout_seconds(),
+        )
         _bootstrap_persist_engine(db_path)
+        logger.info(
+            "[DB_INIT] phase=bootstrap complete target=%s elapsed=%.1fs",
+            _redact_dsn(db_path),
+            time.monotonic() - started,
+        )
     except Exception as e:
-        logger.exception(f"Database error during initialization: {e}")
+        logger.exception(
+            "[DB_INIT] phase=bootstrap FAILED target=%s elapsed=%.1fs: %s",
+            _redact_dsn(db_path) if db_path else "<unresolved>",
+            time.monotonic() - started,
+            e,
+        )
         raise
 
 
@@ -838,18 +316,27 @@ def _persist_dsn_and_sentinel(db_path: str) -> Tuple[str, Optional[Path]]:
     through Path().resolve(): that mangles the URL into a bogus filesystem
     path and silently bootstraps persist against the wrong (empty) database.
 
-      - Postgres URL            -> used verbatim; sentinels in the data dir
+      - Postgres URL            -> startup lock/statement timeouts attached
+                                   (#937); sentinels in the data dir
       - SQLite URL (sqlite://)  -> used verbatim — the config schema
                                    documents sqlite://... as a valid
                                    database_url; sentinels anchored next to
                                    the db file
       - bare filesystem path    -> wrapped as sqlite:///<abs>; sentinels
                                    anchored beside the file
+
+    #937 — the Postgres `options` decoration MUST happen here, in the one
+    canonical resolver, not at the call site. `_bootstrap_persist_engine`
+    compares the resolved DSN against `graph_persistence._engine_dsn` for
+    its idempotent-skip, and persist fingerprints the DSN for its
+    process-singleton guard. Decorating in only one of those places would
+    make the second `initialize_database()` call of a process see a
+    "different" DSN and trip persist's `EngineConfigMismatch`.
     """
     if db_path.startswith(("postgres://", "postgresql://")):
         from ciris_engine.logic.utils.path_resolution import get_data_dir
 
-        return db_path, Path(get_data_dir())
+        return _with_startup_timeouts(db_path), Path(get_data_dir())
     if db_path.startswith("sqlite:"):
         # SQLAlchemy form: sqlite:///rel/path (3 slashes -> relative) or
         # sqlite:////abs/path (4 slashes -> absolute). Splitting on
@@ -867,6 +354,98 @@ def _persist_dsn_and_sentinel(db_path: str) -> Tuple[str, Optional[Path]]:
     # `sqlite:///{abs_path}` where abs_path begins with '/' yields
     # 'sqlite:////absolute/path' — 4 slashes, absolute as required.
     return f"sqlite:///{abs_path}", abs_path.parent
+
+
+def _construct_engine_bounded(
+    construct: Callable[[], Any], dsn: str, bump_stack: bool = False
+) -> Any:
+    """Run persist's blocking Engine constructor under a wall-clock bound.
+
+    Three properties #937 needs and the previous inline call lacked:
+
+    * **Bounded.** The main thread joins with a deadline. On expiry we
+      raise `DatabaseInitializationTimeout` rather than blocking the
+      asyncio event loop forever.
+    * **Loud.** Every `DB_INIT_PROGRESS_INTERVAL_SECONDS` a WARNING lands
+      naming the phase, the redacted target and the elapsed time, so
+      "the log did not advance by a single line for 15 minutes" cannot
+      happen again. persist's own `tracing::info!("migration phase
+      begin")` is invisible to us — the agent never calls `init_tracing()`
+      — so this is the only progress signal that exists.
+    * **Diagnostic.** The timeout message carries the blocking pid/query
+      when a driver is available, and otherwise the exact query to run.
+
+    `bump_stack` raises the worker's stack to 8 MB — iOS's default 512 KB
+    is too small for persist's tokio runtime init (see caller).
+
+    The worker is a daemon: a wedged FFI call cannot be cancelled from
+    Python, so on timeout we abandon it rather than block process exit.
+    """
+    import time
+
+    result: dict[str, object] = {}
+
+    def _worker() -> None:
+        # Narrow to Exception so KeyboardInterrupt / SystemExit propagate
+        # up the worker thread naturally instead of being silently
+        # transported back to main via `result["error"]`. Exception
+        # subclasses (the only thing the persist Engine constructor
+        # realistically raises — sqlx errors, FFI marshalling errors,
+        # OSError on lock) are still captured for re-raise on the main
+        # thread.
+        try:
+            result["engine"] = construct()
+        except Exception as we:
+            result["error"] = we
+
+    budget = _db_init_timeout_seconds()
+    redacted = _redact_dsn(dsn)
+    started = time.monotonic()
+
+    prev_stack = threading.stack_size()
+    try:
+        if bump_stack:
+            threading.stack_size(8 * 1024 * 1024)
+        worker = threading.Thread(
+            target=_worker, name="persist-engine-init", daemon=True
+        )
+        worker.start()
+    finally:
+        threading.stack_size(prev_stack)
+
+    while True:
+        worker.join(DB_INIT_PROGRESS_INTERVAL_SECONDS)
+        elapsed = time.monotonic() - started
+        if not worker.is_alive():
+            break
+        logger.warning(
+            "[DB_INIT] phase=engine-construct still running after %.0fs "
+            "(target=%s, budget=%s). persist is inside connect + migrations; "
+            "on a shared database this is either another tenant holding a "
+            "conflicting table lock or another occurrence holding persist's "
+            "migration advisory lock.",
+            elapsed,
+            redacted,
+            f"{budget:.0f}s" if budget > 0 else "unbounded",
+        )
+        if budget > 0 and elapsed >= budget:
+            raise DatabaseInitializationTimeout(
+                f"persist Engine construction exceeded {budget:.0f}s "
+                f"(elapsed {elapsed:.0f}s) for target={redacted}. The agent is "
+                f"blocked in persist's connect + migration phase and will not "
+                f"finish booting.{_blocker_hint(dsn)} "
+                f"Raise {DB_INIT_TIMEOUT_ENV} if this database legitimately "
+                f"needs longer to migrate."
+            )
+
+    if "error" in result:
+        raise cast(BaseException, result["error"])
+    # cast through Any: ciris-persist's Engine has no Python type stubs (the
+    # `from ciris_persist import Engine` is `type: ignore[import-untyped]`),
+    # so mypy infers `result["engine"]` as `object` from the `dict[str,
+    # object]` declaration above and we lose attribute resolution downstream
+    # (e.g. `engine.run_legacy_graph_migration`).
+    return cast(Any, result["engine"])
 
 
 def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
@@ -927,8 +506,16 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
 
     signing_key_id = os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
 
+    # #937 — safety net. `setup_basic_logging` normally installs this, but
+    # not every entry point (tests, tooling, embedded hosts) goes through it,
+    # and the migration-phase logs we most need are emitted by the very next
+    # call. Idempotent, so the usual double-call costs nothing.
+    from ciris_engine.logic.utils.substrate_logging import install_substrate_tracing
+
+    install_substrate_tracing()
+
     try:
-        from ciris_persist import Engine  # type: ignore[import-untyped]
+        from ciris_engine.logic.persistence._substrate import Engine  # one-wheel seam (#896)
     except ImportError:
         logger.warning(
             "ciris-persist not importable; 2.9.0 absorption disabled. Pin ciris-persist>=1.6.4 in requirements.txt."
@@ -1000,7 +587,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     # fire untouched.
     if os.environ.get("PYTEST_CURRENT_TEST"):
         try:
-            from ciris_persist import reset_engine
+            from ciris_engine.logic.persistence._substrate import reset_engine  # one-wheel seam (#896)
 
             reset_engine()
         except Exception:  # noqa: BLE001 - best-effort test teardown
@@ -1034,40 +621,21 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         )
 
     try:
-        if _is_ios:
-            _result: dict[str, object] = {}
-
-            def _ios_worker() -> None:
-                # Narrow to Exception so KeyboardInterrupt / SystemExit
-                # propagate up the worker thread naturally instead of being
-                # silently transported back to main via `_result["error"]`.
-                # Exception subclasses (the only thing the persist Engine
-                # constructor realistically raises — sqlx errors, FFI
-                # marshalling errors, OSError on lock) are still captured
-                # for re-raise on the main thread.
-                try:
-                    _result["engine"] = _construct_engine()
-                except Exception as we:
-                    _result["error"] = we
-
-            _prev_stack = threading.stack_size()
-            try:
-                threading.stack_size(8 * 1024 * 1024)
-                _t = threading.Thread(target=_ios_worker, name="persist-engine-init")
-                _t.start()
-                _t.join()
-            finally:
-                threading.stack_size(_prev_stack)
-            if "error" in _result:
-                raise _result["error"]  # type: ignore[misc]
-            # cast through Any: ciris-persist's Engine has no Python type stubs
-            # (the `from ciris_persist import Engine` is `type: ignore[import-untyped]`),
-            # so mypy infers `_result["engine"]` as `object` from the
-            # `dict[str, object]` declaration above and we lose attribute-resolution
-            # downstream (e.g. `engine.run_legacy_graph_migration` at line ~1046).
-            engine = cast(Any, _result["engine"])
-        else:
-            engine = _construct_engine()
+        # #937 — ALWAYS construct on a worker thread, not just on iOS.
+        # The thread was originally an iOS stack-size workaround; it is now
+        # also the only way to bound a blocking FFI call from Python. The
+        # main thread joins with a deadline, logs progress while it waits,
+        # and raises DatabaseInitializationTimeout if the budget is spent.
+        engine = cast(
+            Any, _construct_engine_bounded(_construct_engine, dsn, bump_stack=_is_ios)
+        )
+    except DatabaseInitializationTimeout:
+        # #937 — MUST precede the stale-lock heuristic below. That heuristic
+        # is a substring match on "lock", and the timeout message says
+        # "blocked"/"pg_blocking_pids" — both of which contain "lock". A
+        # timeout is never a stale-lockfile condition, and retrying a
+        # bootstrap that just burned its whole budget doubles the outage.
+        raise
     except Exception as e:
         # iOS: flock() returns EPERM in the sandbox. Single-process mobile app
         # has no multi-agent risk. Delete any stale lock file and retry once.
@@ -1098,19 +666,27 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
                             )
                 # Retry with fresh state
                 try:
-                    from ciris_persist import reset_engine
+                    from ciris_engine.logic.persistence._substrate import reset_engine  # one-wheel seam (#896)
 
                     reset_engine()
                 except Exception as reset_err:
                     logger.debug(
                         "reset_engine() before retry failed (non-fatal): %s", reset_err
                     )
-                engine = Engine(dsn, signing_key_id)
+                # Bounded on the retry too — a wedged retry is the same
+                # unbounded hang wearing a different hat (#937).
+                engine = cast(
+                    Any,
+                    _construct_engine_bounded(
+                        lambda: Engine(dsn, signing_key_id), dsn, bump_stack=True
+                    ),
+                )
             else:
                 raise
         else:
             raise
-    logger.info("ciris-persist Engine constructed (dsn=%s)", dsn)
+    # #937 — redacted: the raw DSN carries the Postgres password.
+    logger.info("ciris-persist Engine constructed (dsn=%s)", _redact_dsn(dsn))
 
     # A0a graph migration + A0b audit bridge. Both run once, sentinel-gated.
     if sentinel_dir is not None:
@@ -1156,53 +732,10 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             except Exception:
                 logger.exception("A0a migration failed; persist engine wired anyway")
 
-        # 2.9.0 A0b: bridge the legacy audit chain into persist's
-        # cirislens_audit_log. Sentinel-gated like A0a; runs once on
-        # first 2.9.0 boot. Tolerant: if CIRISVerify isn't ready yet
-        # (early-boot ordering) or if the legacy audit DB is absent
-        # (fresh deployment with no legacy chain), log + skip.
-        audit_sentinel = sentinel_dir / ".audit_bridged"
-        # Resolve the legacy audit DB from config (database.audit_db) so a
-        # deployment that customised audit_db still bridges its chain —
-        # don't assume the default sentinel_dir/ciris_audit.db location.
-        try:
-            legacy_audit_db = Path(get_audit_db_full_path())
-        except Exception:  # pragma: no cover - defensive
-            legacy_audit_db = sentinel_dir / "ciris_audit.db"
-        if not audit_sentinel.exists() and legacy_audit_db.exists():
-            try:
-                # Bundled under ciris_engine/ so the in-place upgrade path is
-                # reachable from Chaquopy on Android too — tools/ isn't in
-                # the mobile extractPackages list (CIRISAgent#780).
-                from ciris_engine.logic.audit.chain_bridge import run as run_bridge
-
-                logger.info("A0b audit-bridge sentinel absent — running chain bridge")
-                result = run_bridge(
-                    engine_db=Path(db_path),
-                    audit_db=legacy_audit_db,
-                    dry_run=False,
-                    engine=engine,
-                )
-                audit_sentinel.write_text(
-                    f'{{"bridge_id":"{result.bridge_id}",'
-                    f'"legacy_terminal_seq":{result.legacy_terminal_seq},'
-                    f'"legacy_db_sha256":"{result.legacy_db_sha256}"}}'
-                )
-                logger.info(
-                    "A0b audit bridge complete: legacy_seq=%d bridge_id=%s",
-                    result.legacy_terminal_seq,
-                    result.bridge_id,
-                )
-            except Exception:
-                # CIRISVerify availability + signing-key access are
-                # ordering-sensitive at boot; we don't block startup on
-                # bridge failure. Next boot retries (sentinel absent).
-                logger.exception("A0b audit bridge failed; persist engine wired anyway")
-        elif not legacy_audit_db.exists():
-            logger.debug(
-                "no legacy audit DB at %s — fresh deployment, no chain to bridge",
-                legacy_audit_db,
-            )
+        # 2.9.7 (second-signer removal): the A0b legacy audit-chain bridge is
+        # GONE. It signed its genesis entry with the deleted CIRISVerify
+        # "agent-{sha12}" identity; pre-2.9.0 installs must upgrade through
+        # a 2.9.x release that still ships the bridge before landing here.
 
     # Wire the engine into persistence.models.graph.
     from ciris_engine.logic.persistence.models import graph as graph_persistence

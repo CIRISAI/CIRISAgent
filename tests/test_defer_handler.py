@@ -142,6 +142,13 @@ class TestDeferHandler:
         mock.update_thought_status = Mock()
         mock.update_task_status = Mock()
         mock.get_task_by_id = Mock(return_value=create_test_task())
+        # Since #934 the handler resolves the owning occurrence via
+        # get_task_by_id_any_occurrence(...).agent_occurrence_id — a deferral is
+        # scoped to the occurrence that owns the task, so another occurrence
+        # cannot re-activate a thought it never deferred. Without this the mock
+        # returns a Mock attribute and the occurrence silently becomes a Mock
+        # object rather than an id.
+        mock.get_task_by_id_any_occurrence = Mock(return_value=create_test_task())
         monkeypatch.setattr("ciris_engine.logic.handlers.control.defer_handler.persistence", mock)
         return mock
 
@@ -240,8 +247,15 @@ class TestDeferHandler:
         )  # Default value since DispatchContext doesn't have this field
 
         # Verify thought status updated
+        # occurrence_id is passed since #934 (deferred-wakeup re-activation): a
+        # deferral must be scoped to the occurrence that owns it, or another
+        # occurrence re-activates a thought it never deferred. The expectation
+        # predates that and was asserting the old signature.
         mock_persistence.update_thought_status.assert_called_once_with(
-            thought_id=thought.thought_id, status=ThoughtStatus.DEFERRED, final_action=result
+            thought_id=thought.thought_id,
+            status=ThoughtStatus.DEFERRED,
+            occurrence_id="default",
+            final_action=result,
         )
 
         # Verify task status updated (update_task_status no longer takes
@@ -370,8 +384,15 @@ class TestDeferHandler:
         mock_wise_bus.send_deferral.assert_called_once()
 
         # Thought and task status should still be updated
+        # occurrence_id is passed since #934 (deferred-wakeup re-activation): a
+        # deferral must be scoped to the occurrence that owns it, or another
+        # occurrence re-activates a thought it never deferred. The expectation
+        # predates that and was asserting the old signature.
         mock_persistence.update_thought_status.assert_called_once_with(
-            thought_id=thought.thought_id, status=ThoughtStatus.DEFERRED, final_action=result
+            thought_id=thought.thought_id,
+            status=ThoughtStatus.DEFERRED,
+            occurrence_id="default",
+            final_action=result,
         )
         mock_persistence.update_task_status.assert_called_once()
 

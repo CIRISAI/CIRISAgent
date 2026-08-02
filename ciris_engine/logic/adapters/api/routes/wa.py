@@ -175,13 +175,80 @@ async def resolve_deferral(
     wa_service = get_wa_service(request)
 
     try:
+        # SIGN THE DECISION (#944). This used to be
+        # f"api_{auth.user_id}_{timestamp}" — an identifier and a clock reading,
+        # forgeable by anything able to write the row, on the record that governs
+        # the agent's most consequential actions. Under #938 it is the
+        # budget-issuance event, so it has to be attributable to the authority
+        # who made it rather than merely asserted to be.
+        #
+        # The signature is hybrid (Ed25519 + ML-DSA-65) by the node's persist
+        # key, and carries the owner's CEG federation identity that delegated to
+        # that key — so an approval chains to the same root of authority that
+        # permits the agent to operate at all.
+        #
+        # Fails closed: if the resolution cannot be signed we refuse the
+        # resolution rather than record an unverifiable one. An approval nobody
+        # can verify is the exact artifact this issue is about.
+        #
+        # TODO(CIRISServer#342): sign with the RESOLVING USER'S CEG fedID, not
+        # the node's delegate key.
+        #
+        # Today the node's persist key signs and the record names the owner
+        # (`owner_key_id`, re-resolved from the federation directory at verify
+        # time, never trusted from the record). That is a real delegation chain
+        # — the node key is the one the owner's fedID delegates to in order to
+        # let the agent operate at all — but it is one hop short of what this
+        # artifact should carry. For a control whose entire purpose is "a human
+        # authorized this consequential action", the difference between *signed
+        # by the delegate, naming the human* and *signed by the human* is
+        # exactly what an external auditor will ask about.
+        #
+        # Blocked on CIRISServer#342: the owner's private key is not reachable
+        # from Python by design (it sits behind `resolve_user_signer`, released
+        # only under a verified owner session, with no PyO3 export). The ask is
+        # an owner-scoped signing capsule, NOT a key export — the session gate
+        # is correct and must survive.
+        #
+        # PRECONDITION BEFORE FLIPPING THIS — do not skip it. Every path that
+        # can mint a resolving user must first guarantee that user HAS a fedID,
+        # or this becomes fail-closed for real people:
+        #   - OAuth-minted AUTHORITY users (the common case in production)
+        #   - password/local users created by the setup wizard
+        #   - service tokens acting on a human's behalf
+        #   - MULTI-USER deployments, where several distinct humans resolve
+        #     deferrals against one node — each needs their own fedID, and the
+        #     node cannot mint one on their behalf without defeating the point
+        #   - multi-occurrence, where the resolving occurrence may not be the
+        #     one holding that user's key (see `register_self_federation_key`,
+        #     which has no caller today, so cross-occurrence verify already
+        #     fails closed)
+        # This ordering is not pedantry: `sign_as_wa` was removed from this very
+        # path because it raised for every user not in CIRISVerify or the System
+        # WA file, which would have made approval impossible for exactly the
+        # OAuth users who need it. Requiring a fedID before one is guaranteed to
+        # exist would reintroduce that failure with a different key.
+        signed_at = datetime.now(timezone.utc).isoformat()
         deferral_response = DeferralResponse(
             approved=(resolve_request.resolution == "approve"),
             reason=resolve_request.guidance or f"Resolved by {auth.user_id}",
             modified_time=None,
             wa_id=auth.user_id,
-            signature=f"api_{auth.user_id}_{datetime.now(timezone.utc).isoformat()}",
+            signature="",
         )
+        auth_service = getattr(request.app.state, "authentication_service", None)
+        if auth_service is None:
+            raise_wa_error(
+                "Cannot resolve deferral: authentication service unavailable, so the decision could not be signed",
+                status_code=503,
+            )
+        try:
+            deferral_response = await auth_service.sign_deferral_resolution(
+                deferral_id, deferral_response, signed_at
+            )
+        except Exception as exc:
+            logger.error(f"Refusing to record an unsigned deferral resolution for {sanitize_for_log(deferral_id)}")
+            raise_wa_error(f"Cannot resolve deferral: signing failed ({type(exc).__name__})", status_code=503)
 
         success = await wa_service.resolve_deferral(deferral_id, deferral_response)
 

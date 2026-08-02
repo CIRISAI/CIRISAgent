@@ -10,6 +10,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.BufferedReader
 
 /**
@@ -29,6 +32,18 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     private var _initialized = false
     private var _serverStarted = false
     private var _outputLineCallback: ((String) -> Unit)? = null
+
+    // ── First-run ownership claim PIN / NodeCode, captured from node stdout ──
+    // The local node prints an "OWNERSHIP UNCLAIMED" banner on a fresh,
+    // unclaimed boot. The banner carries the PUBLIC NodeCode and the one-time
+    // CLAIM PIN. The PIN is CONSOLE-ONLY (never served over HTTP), so the only
+    // client-side way to obtain it is to scrape the stdout of the process we
+    // ourselves launched. The setup flow reads these to self-claim ownership of
+    // this local node on COMPLETE.
+    private val _localClaimPin = MutableStateFlow<String?>(null)
+    private val _localNodeCode = MutableStateFlow<String?>(null)
+    override val localClaimPin: StateFlow<String?> get() = _localClaimPin.asStateFlow()
+    override val localNodeCode: StateFlow<String?> get() = _localNodeCode.asStateFlow()
 
     // Server process we launched (null if server was already running)
     private var _serverProcess: Process? = null
@@ -85,11 +100,63 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
             if (health.getOrNull() == true) {
                 println("[PythonRuntime.desktop] Server is healthy!")
                 _serverStarted = true
+                // The one-time CLAIM PIN is console-only (never over HTTP). We capture
+                // it from the node's stdout banner WHEN WE LAUNCH the node — but if the
+                // node was already running (we didn't own its stdout), fall back to its
+                // durable `<home>/claim_pin` file (0600). Local-FS access to the node's
+                // home IS first-run operator-level access, so this is a legitimate
+                // capture of the same secret — NOT a weakening (setup/root still
+                // verifies the PIN). Only fills if the stdout capture missed it.
+                readClaimPinFromFileIfMissing()
                 return@runCatching _serverUrl
             }
             delay(1000)
         }
         throw RuntimeException("Cannot connect to CIRIS server at $_serverUrl. Please ensure the server is running.")
+    }
+
+    /**
+     * Fallback CLAIM-PIN capture: read the local node's durable `<home>/claim_pin`
+     * file when the stdout banner capture missed it (e.g. the node was already
+     * running, so we never owned its stdout). Console-only-over-HTTP is preserved —
+     * this is a same-machine file read (first-run op-level access). No-op if the PIN
+     * is already captured or the file is absent/empty.
+     */
+    private fun readClaimPinFromFileIfMissing() {
+        if (_localClaimPin.value != null) return
+        runCatching {
+            val pinFile = java.io.File(nodeHomeDir(), "claim_pin")
+            if (pinFile.canRead()) {
+                val pin = pinFile.readText().trim()
+                if (pin.isNotEmpty()) {
+                    _localClaimPin.value = pin
+                    println("[PythonRuntime.desktop] Captured CLAIM PIN from ${pinFile.path} (file fallback).")
+                }
+            }
+        }.onFailure {
+            println("[PythonRuntime.desktop] claim_pin file fallback failed: ${it.message}")
+        }
+    }
+
+    /**
+     * Per-user data directory for the local node's substrate/keyring. Mirrors
+     * `ciris_engine.logic.utils.path_resolution.get_ciris_home()` so the agent
+     * backend and this fallback resolve the SAME home:
+     *   1. `/app` when CIRIS-Manager-managed,
+     *   2. `$CIRIS_HOME` when set (explicit override),
+     *   3. `~/ciris` otherwise (installed mode).
+     */
+    private fun nodeHomeDir(): java.io.File {
+        val managed = java.io.File("/app/agent").isDirectory ||
+            java.io.File("/app/.ciris_manager").isDirectory
+        return when {
+            managed -> java.io.File("/app")
+            else -> {
+                val env = System.getenv("CIRIS_HOME")
+                if (!env.isNullOrBlank()) java.io.File(env)
+                else java.io.File(System.getProperty("user.home", "."), "ciris")
+            }
+        }
     }
 
     /**
@@ -240,6 +307,10 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
                     val l = line ?: continue
                     // Always print to console for debugging
                     println("[CIRIS] $l")
+                    // Capture the first-run ownership claim PIN / NodeCode from the
+                    // node's "OWNERSHIP UNCLAIMED" banner so the setup flow can
+                    // self-claim this local node on COMPLETE.
+                    parseOwnershipBanner(l)
                     // Forward to callback for UI processing
                     _outputLineCallback?.invoke(l)
                 }
@@ -247,6 +318,49 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
                 println("[PythonRuntime.desktop] Stdout reader stopped: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Parse one stdout line from the node's "OWNERSHIP UNCLAIMED" banner and, when
+     * found, latch the one-time CLAIM PIN and/or the NodeCode into the StateFlows
+     * the setup flow reads.
+     *
+     * Matches the banner form (one token per line, inside a box):
+     *
+     *     ║    NodeCode : CIRIS-V1-AAAA-BBBB-CCCC-...
+     *     ║    CLAIM PIN: 7F3K-Q9MZ   (one-time; console-only — NEVER over HTTP)
+     *
+     * The PIN is 8 Crockford-base32 chars (alphabet 0-9 A-Z minus I/L/O/U)
+     * rendered XXXX-XXXX. The NodeCode is a `CIRIS-V1-...` string. Both are
+     * captured leniently (the surrounding box-drawing chars / trailing notes are
+     * ignored). Idempotent: only the first match per token is latched.
+     */
+    private fun parseOwnershipBanner(line: String) {
+        if (_localClaimPin.value == null && line.contains("CLAIM PIN", ignoreCase = true)) {
+            // Take the text after the "CLAIM PIN:" label, then the first
+            // XXXX-XXXX Crockford-base32 token on it.
+            val after = line.substringAfter(":", "").substringAfter("CLAIM PIN", "")
+            val pin = CLAIM_PIN_REGEX.find(after.ifBlank { line })?.value
+            if (pin != null) {
+                println("[PythonRuntime.desktop] Captured one-time CLAIM PIN from node banner (console-only).")
+                _localClaimPin.value = pin
+            }
+        }
+        if (_localNodeCode.value == null && line.contains("NodeCode", ignoreCase = true)) {
+            val code = NODE_CODE_REGEX.find(line)?.value
+            if (code != null) {
+                println("[PythonRuntime.desktop] Captured NodeCode from node banner: ${code.take(24)}…")
+                _localNodeCode.value = code
+            }
+        }
+    }
+
+    private companion object {
+        /** One-time claim PIN: two dash-separated groups of 4 Crockford-base32
+         *  chars (alphabet 0-9 A-Z minus I, L, O, U), as rendered by the node. */
+        val CLAIM_PIN_REGEX = Regex("[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}")
+        /** NodeCode handle the node prints: `CIRIS-V1-...` (dashes/alnum). */
+        val NODE_CODE_REGEX = Regex("CIRIS-V1-[0-9A-Za-z\\-]+")
     }
 
     private fun findExecutable(name: String): String? {

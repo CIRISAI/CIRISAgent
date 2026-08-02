@@ -1014,7 +1014,43 @@ class APIServerManager:
         # or during live model eval where we want a full multilingual research export.
         accord_metrics_requested = any(m == QAModule.ACCORD_METRICS for m in self.modules)
         model_eval_requested = any(m == QAModule.MODEL_EVAL for m in self.modules)
-        accord_metrics_enabled = accord_metrics_requested or model_eval_requested or self.config.live_lens
+        safety_battery_requested = any(m == QAModule.SAFETY_BATTERY for m in self.modules)
+        # --federation-delivery implies the accord adapter: the federation block
+        # below explicitly depends on it ("Needs consent-sealed traces (the
+        # accord block above sets CONSENT=true)") and prints trace_level/env
+        # keys this block binds. Without this, `qa_runner <module>
+        # --federation-delivery` crashed UnboundLocalError at server start.
+        # DERIVED FROM WHAT THE MODULES DECLARE, not from an allowlist here.
+        #
+        # This was a hand-maintained list of module flags, and safety_battery was
+        # missing from it — used a few lines below to pick the trace level, but
+        # never to enable the adapter. So a mental-health battery captured traces
+        # (it registers accord_detailed/accord_full itself post-auth) while never
+        # receiving CIRIS_ACCORD_METRICS_CONSENT.
+        #
+        # That env var is the OWNER'S CONSENT, and the fold now gates authoring on
+        # it — correctly, since booting a node is not consenting to replicate your
+        # reasoning off it. Without it no CEG grant covers `trace:`, so
+        # promote_consented_backlog never lifts the rows and the entire live
+        # corpus stays at (cohort_scope=self, tier=local).
+        #
+        # _module_metadata exists so modules "declare their CI requirements as
+        # class attributes ... without per-module special-casing". A module that
+        # captures traces now says so once, and every live-capture flow — research
+        # or mental-health — gets the same consent, adapter and tee wiring.
+        from tools.qa_runner.modules._module_metadata import get_metadata
+
+        modules_capture_traces = any(get_metadata(m).captures_traces for m in self.modules)
+        accord_metrics_enabled = (
+            modules_capture_traces
+            # accord_metrics itself is not in the metadata _REGISTRY, so
+            # get_metadata returns defaults for it. Kept explicitly rather than
+            # assumed — dropping it would silently disable the adapter for the
+            # very module named after it.
+            or accord_metrics_requested
+            or self.config.live_lens
+            or self.config.federation_delivery
+        )
         if accord_metrics_enabled:
             # Load base accord_metrics adapter alongside the main adapter
             if "ciris_accord_metrics" not in env.get("CIRIS_ADAPTER", ""):
@@ -1025,11 +1061,53 @@ class APIServerManager:
             env["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
             # Use short flush interval for QA (5 seconds instead of 60)
             env["CIRIS_ACCORD_METRICS_FLUSH_INTERVAL"] = "5"
-            # Keep the startup adapter at generic so model-eval can explicitly register
-            # the detailed and full_traces adapters after auth. That yields exactly three
-            # active accord_metrics instances: generic, detailed, full_traces.
-            trace_level = "generic" if model_eval_requested else "detailed"
+            # Keep the startup adapter at generic so model-eval AND safety-battery
+            # can explicitly register the detailed + full_traces adapters after auth.
+            # That yields three accord_metrics instances: generic (lens shipper),
+            # detailed, and full_traces — the last carrying raw prompts+completions
+            # for the Coherence Ratchet / fine-tuning corpus. Registering the extra
+            # adapters (not overriding to a single 'detailed' level) is the design;
+            # safety_battery previously got the single-level override, so its capture
+            # bundles only ever held hashed traces (no full text).
+            trace_level = "generic" if (model_eval_requested or safety_battery_requested) else "detailed"
             env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = trace_level
+            # Point the substrate's local-tee stream at qa_reports/<backend>/ for
+            # ANY accord_metrics-enabled run — not only federation-delivery ones.
+            # accord_metrics_tests.py reads <instance>/lens-batch-<seq>.json from
+            # exactly this dir (see AccordMetricsTests.qa_reports_dir, wired from
+            # server_manager.qa_reports_dir). Before this, the tee dir was set
+            # only inside the federation_delivery block below, so a plain
+            # `accord_metrics` run received reasoning events but never flushed
+            # them to disk — Export Real Trace / Verb Second Pass / Generic Trace
+            # Field all failed with "No traces found in qa_reports/". The
+            # live-lens path in the federation block intentionally redirects the
+            # tee to a per-run /tmp dir, so leave the key unset when live_lens is
+            # on and let that block own it.
+            # ALWAYS set a tee dir. The previous form skipped it when
+            # --live-lens was on, delegating to the federation block below — but
+            # that block only runs when federation delivery is enabled, so
+            # `--live-lens` WITHOUT it left the tee unset and the run wrote zero
+            # trace files while reporting 100% pass. A flag about where traces
+            # are SHIPPED must never decide whether they are SAVED.
+            if "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" not in env:
+                self.qa_reports_dir.mkdir(parents=True, exist_ok=True)
+                env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] = str(self.qa_reports_dir)
+
+        # Federation delivery (Reticulum trace-flow to canonical-server-1).
+        # Distinct from the HTTP lens shipping above: this drives the embedded
+        # edge's start_federation_delivery controller. Needs consent-sealed
+        # traces (the accord block above sets CONSENT=true), an ACTIVE transport
+        # (CIRIS_FEDERATION_DELIVERY=true → enable_transport at edge init), and a
+        # dial target. edge #296 auto-seeds the canonical dial from persist's
+        # baked hint; we also pass the correct canonical peer explicitly so a
+        # stale baked :4243 (pre persist#404 re-bake) is unioned past.
+        if self.config.federation_delivery:
+            env["CIRIS_FEDERATION_DELIVERY"] = "true"
+            env["CIRIS_EDGE_BOOTSTRAP_PEERS"] = self.config.canonical_peer
+            self.console.print(
+                f"[cyan]🛰️  Federation delivery ON → dialing canonical peer {self.config.canonical_peer} "
+                f"(will verify trace flow to canonical-server-1 after run)[/cyan]"
+            )
             # Set live lens endpoint explicitly
             if self.config.live_lens:
                 env["CIRIS_ACCORD_METRICS_ENDPOINT"] = "https://lens.ciris-services-1.ai/lens-api/api/v1"

@@ -46,7 +46,13 @@ on:
         default: ''
         type: string
       overrides_manifest:
-        description: 'Research-bound prompt overrides as INLINE JSON. Applied through the audited facility, so the run records having been manipulated. Blank = none.'
+        # residue_digest is named HERE because it is the one required field a
+        # researcher cannot derive: it is a hash over THIS tree's uncovered
+        # inline surface, and omitting it used to be discoverable only by
+        # failing a full run ten minutes in (#962). The run's own digest is
+        # printed by the "Record the instrument" step below, and a bad manifest
+        # is now rejected at staging with the value to paste.
+        description: 'Research-bound prompt overrides as INLINE JSON. Applied through the audited facility, so the run records having been manipulated. REQUIRED fields: manifest_version, experiment_id, condition, mode, residue_digest (see the Instrument summary, or `python3 -m ciris_engine.logic.utils.research_overrides digest`). Generate a complete strict manifest with `... research_overrides skeleton`. Blank = none.'
         default: ''
         type: string
 
@@ -81,6 +87,7 @@ jobs:
       - name: Check for the provider secret
         id: secrets_check
         env:
+          PROVIDER: ${{ inputs.provider }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -89,7 +96,7 @@ jobs:
         run: |
           # Secrets are not exposed to fork PRs. Skip loudly with the remedy
           # named rather than failing with an opaque auth error 40 minutes in.
-          case "${{ inputs.provider }}" in
+          case "$PROVIDER" in
             openrouter) KEY="$OPENROUTER_API_KEY" ;;
             together)   KEY="$TOGETHER_API_KEY" ;;
             groq)       KEY="$GROQ_API_KEY" ;;
@@ -98,11 +105,11 @@ jobs:
           esac
           if [ -z "$KEY" ]; then
             echo "have_secret=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No API key secret in scope for provider '${{ inputs.provider }}' (commonly a fork PR). A maintainer can re-run on a trusted branch."
+            echo "::notice::No API key secret in scope for provider '$PROVIDER' (commonly a fork PR). A maintainer can re-run on a trusted branch."
             {
               echo "### Skipped"
               echo ""
-              echo "This run has no \`${{ inputs.provider }}\` API key in scope."
+              echo "This run has no \`$PROVIDER\` API key in scope."
               echo "Set the matching repository secret, or pick a provider whose secret exists."
             } >> "$GITHUB_STEP_SUMMARY"
           else
@@ -112,6 +119,7 @@ jobs:
       - name: Write provider API key
         if: steps.secrets_check.outputs.have_secret == 'true'
         env:
+          PROVIDER: ${{ inputs.provider }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -119,7 +127,7 @@ jobs:
           DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
         run: |
           umask 077
-          case "${{ inputs.provider }}" in
+          case "$PROVIDER" in
             openrouter) printf '%s' "$OPENROUTER_API_KEY" > "$HOME/.openrouter_key" ;;
             together)   printf '%s' "$TOGETHER_API_KEY"   > "$HOME/.together_key" ;;
             groq)       printf '%s' "$GROQ_API_KEY"       > "$HOME/.groq_key" ;;
@@ -130,11 +138,31 @@ jobs:
       - name: Record the instrument
         id: instrument
         if: steps.secrets_check.outputs.have_secret == 'true'
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          MODEL: ${{ inputs.model }}
+          LANGUAGES: ${{ inputs.languages }}
         run: |
           # Written BEFORE the run so it survives a failure. A campaign must be
           # able to tell which artifact produced which number.
           SERVER=$(python3 -c 'import importlib.metadata as m;print(m.version("ciris-server"))')
           echo "server=$SERVER" >> "$GITHUB_OUTPUT"
+
+          # The residue digest is part of the instrument, not a detail of the
+          # manifest: it pins the inline English action doctrine that overrides
+          # do NOT cover, which every arm shares. Recording it unconditionally
+          # means a cohort captured WITHOUT overrides can still be compared
+          # against one captured with them — and it is the value a researcher
+          # writing a manifest needs, for this exact commit, without having to
+          # own a container (#962).
+          #
+          # NON-FATAL on purpose. compute_residue_digest() raises if one of the
+          # pinned symbols moved, which is a real thing to hit mid-refactor —
+          # and a capture with NO overrides has no business dying over it. The
+          # staging step below is the authority for a run that HAS a manifest,
+          # and it reports the real error there.
+          RESIDUE=$(python3 -m ciris_engine.logic.utils.research_overrides digest 2>/dev/null || echo "unavailable — run 'research_overrides digest' to see why")
+          echo "residue=$RESIDUE" >> "$GITHUB_OUTPUT"
           {
             echo "### Instrument"
             echo ""
@@ -142,18 +170,74 @@ jobs:
             echo "|---|---|"
             echo "| commit | \`${{ github.sha }}\` |"
             echo "| ciris-server | \`$SERVER\` |"
-            echo "| provider / model | \`${{ inputs.provider }}\` / \`${{ inputs.model }}\` |"
-            echo "| languages | \`${{ inputs.languages }}\` |"
+            echo "| provider / model | \`$PROVIDER\` / \`$MODEL\` |"
+            echo "| languages | \`$LANGUAGES\` |"
+            echo "| residue_digest | \`$RESIDUE\` |"
+            echo ""
+            echo "A strict \`overrides_manifest\` for this commit must pin:"
+            echo '```json'
+            echo "  \"residue_digest\": \"$RESIDUE\","
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stage the override manifest
         id: manifest
         if: steps.secrets_check.outputs.have_secret == 'true' && inputs.overrides_manifest != ''
+        env:
+          # VIA env:, NEVER interpolated into the script body.
+          #
+          # This was `printf '%s' '${{ inputs.overrides_manifest }}'`. A manifest
+          # is free prose describing an experiment, so an apostrophe is close to
+          # inevitable — "the run's signed manifest" closed the quote early and
+          # the rest of the line was parsed as shell. The researcher saw
+          # `syntax error near unexpected token 'open'` and would reasonably
+          # conclude their JSON was malformed. It was valid.
+          #
+          # It was also a script-injection surface: a manifest containing
+          # '; curl ... | sh; ' would have executed on the runner with the
+          # provider secret in scope. Passing untrusted input through env: and
+          # quoting the reference fixes the parsing and closes the injection in
+          # one move, which is GitHub's own guidance.
+          OVERRIDES_MANIFEST: ${{ inputs.overrides_manifest }}
+          #: Same discipline for a step output — nothing reaches the script body
+          #: through ${{ }}, so the rule stays one rule with no exceptions.
+          RESIDUE: ${{ steps.instrument.outputs.residue }}
         run: |
           mkdir -p /tmp/research
-          printf '%s' '${{ inputs.overrides_manifest }}' > /tmp/research/manifest.json
-          python3 -c "import json;json.load(open('/tmp/research/manifest.json'))" \
+          printf '%s' "$OVERRIDES_MANIFEST" > /tmp/research/manifest.json
+          python3 -c "import json,sys;json.load(open('/tmp/research/manifest.json'))" \
             || { echo '::error::overrides_manifest is not valid JSON'; exit 1; }
+
+          # VALIDATE HERE, NOT TEN MINUTES FROM NOW.
+          #
+          # The agent refuses a bad manifest at startup and that refusal is
+          # CORRECT — a strict manifest that quietly degraded to "no overrides
+          # applied" would produce a clean-looking, unmanipulated cohort and
+          # nothing in the output would say so. Nothing below softens it.
+          #
+          # What was wrong is WHEN and WITH WHAT. The verdict is computable in
+          # seconds from the manifest and this tree, but arrived after install,
+          # preflight and boot, phrased as "❌ Server failed to start" with the
+          # real cause buried in a console tail (#962, #963). This runs the SAME
+          # loader the agent runs, so the verdict is identical, and prints the
+          # residue digest / skeleton command that the raw error omits.
+          if ! python3 -m ciris_engine.logic.utils.research_overrides validate \
+              /tmp/research/manifest.json > /tmp/research/validate.txt 2>&1; then
+            cat /tmp/research/validate.txt
+            echo "::error::overrides_manifest rejected — the agent would refuse to start on it. Cause and remedy are printed above; residue_digest for this commit is $RESIDUE"
+            {
+              echo "### Manifest rejected"
+              echo ""
+              echo "The agent would have refused this manifest at startup. Rejected here instead,"
+              echo "before the run, with the same loader and the same verdict."
+              echo ""
+              echo '```'
+              cat /tmp/research/validate.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          cat /tmp/research/validate.txt
           echo "OVERRIDES=/tmp/research/manifest.json" >> "$GITHUB_ENV"
 
       - name: Capture
@@ -174,20 +258,77 @@ jobs:
             openai)     export API_KEY_FILE="$HOME/.openai_key" ;;
             deepinfra)  export API_KEY_FILE="$HOME/.deepinfra_key" ;;
           esac
+          set +e
           ./tools/research/capture_traces.sh 2>&1 | tee "$GITHUB_WORKSPACE/capture.log"
-          exit "${PIPESTATUS[0]}"
+          RC=${PIPESTATUS[0]}
+          set -e
+          echo "capture_rc=$RC" >> "$GITHUB_OUTPUT"
+
+          # THE TRACES ARE THE PRODUCT. qa_runner exits non-zero when ANY
+          # incident is logged, even with every test passing — a real run did
+          # exactly that: 3/3 passed, 14 signed traces captured, exit 1 from two
+          # unrelated incidents. Failing the step there skipped attestation and
+          # very nearly binned a valid cohort.
+          #
+          # So: a non-zero rc WITH traces is reported loudly and the artifact is
+          # still attested and uploaded. A non-zero rc with NO traces is a real
+          # failure — capture_traces.sh already exits 4 for the empty-cohort case.
+          N=$(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null | wc -l)
+          if [ "$RC" -ne 0 ] && [ "$N" -gt 0 ]; then
+            echo "::warning::qa_runner exited $RC but $N traces were captured — cohort preserved. Check the incidents log before scoring."
+            exit 0
+          fi
+
+          # NAME THE CAUSE IN THE ANNOTATION, not just in the log body.
+          #
+          # "❌ Server failed to start" is indistinguishable from a config
+          # error, an auth failure or a port conflict, and the line that
+          # actually explains it sits in a 20-line console tail below several
+          # LOUDER but harmless degraded-mode warnings from the Rust verifier
+          # (#963 was filed against those warnings; the real cause that run was
+          # a refused override manifest, four lines further up). So: lift the
+          # first ERROR/CRITICAL out of the log and put it in the annotation.
+          if [ "$RC" -ne 0 ]; then
+            # -A2 because the logger wraps: the level/module land on the first
+            # line and the message that names the fault on the next. tr because
+            # an annotation cannot carry newlines.
+            CAUSE=$(grep -m1 -A2 -E " - (ERROR|CRITICAL) +- " "$GITHUB_WORKSPACE/capture.log" 2>/dev/null \
+                    | tr '\n' ' ' | tr -s ' ' || true)
+            if [ -n "$CAUSE" ]; then
+              echo "::error::capture failed (rc=$RC), 0 traces. First ERROR/CRITICAL: ${CAUSE:0:400}"
+            else
+              echo "::error::capture failed (rc=$RC), 0 traces, and no ERROR/CRITICAL line was logged. See capture.log in the artifact."
+            fi
+          fi
+          exit "$RC"
 
       - name: Summarise the cohort
         if: always() && steps.secrets_check.outputs.have_secret == 'true'
         run: |
           python3 tools/research/summarise_cohort.py "$GITHUB_WORKSPACE/research-traces" \
             >> "$GITHUB_STEP_SUMMARY" || true
+          # qa_runner FAILS a run on incidents, so the incident text has to be
+          # visible in the run itself — otherwise the only signal is a count and
+          # the evidence lives on a runner that is about to be destroyed.
+          {
+            echo ""
+            echo "### Incidents"
+            echo ""
+            F=$(ls -t logs/**/incidents_*.log 2>/dev/null | head -1)
+            if [ -z "$F" ]; then
+              echo "_none recorded_"
+            else
+              echo '```'
+              grep -E " - (ERROR|CRITICAL) " "$F" | tail -20 || echo "(no ERROR/CRITICAL lines)"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Attest capture bundle
         # Sigstore provenance over the traces themselves. Without this the
         # artifact is just a zip someone uploaded; with it, a campaign can prove
         # which run and which commit produced the cohort it scored.
-        if: steps.secrets_check.outputs.have_secret == 'true'
+        if: always() && steps.secrets_check.outputs.have_secret == 'true' && hashFiles('research-traces/**/ceg-seal-*.json') != ''
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: 'research-traces/**/ceg-seal-*.json'
@@ -199,6 +340,8 @@ jobs:
           path: |
             research-traces/
             capture.log
+            logs/**/incidents_*.log
+            logs/**/latest.log
           retention-days: 90
           overwrite: true
           if-no-files-found: error

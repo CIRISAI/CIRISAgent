@@ -53,7 +53,6 @@ class QAModule(Enum):
     HOMEASSISTANT_AGENTIC = "homeassistant_agentic"  # Live Home Assistant + Music Assistant integration testing
     DEFERRAL_TAXONOMY = "deferral_taxonomy"  # DSASPDMA rights/needs taxonomy coverage and routing tests
     HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
-    CIRISNODE = "cirisnode"  # CIRISNode integration testing (deferral routing, trace forwarding)
     LICENSED_AGENT = "licensed_agent"  # Licensed agent device auth (RFC 8628) flow testing
     WALLET = "wallet"  # Wallet adapter testing (x402, validation, spending limits)
     DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
@@ -63,6 +62,7 @@ class QAModule(Enum):
     SAFETY_INTERPRET = "safety_interpret"  # Apply a rubric's criteria.json to a capture bundle; emit signed verdicts (CIRISNodeCore FSD/JUDGE_MODEL.md)
     SECRETS_ENCRYPTION = "secrets_encryption"  # Secrets encryption testing (CIRISVerify v1.6.0+)
     MEMORY_BENCHMARK = "memory_benchmark"  # Memory usage benchmark under message load
+    MESH_REPRO = "mesh_repro"  # CIRISServer traceflow harness as an agent QA gate + prod-wheel test-anchor guard (#924)
 
     # Cognitive state live testing modules
     SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing
@@ -281,9 +281,18 @@ class QAConfig:
     # When True, uses https://lens.ciris-services-1.ai/lens-api/api/v1 instead of mock logshipper
     live_lens: bool = False
 
-    # Live CIRISNode configuration (--live-node flag for cirisnode tests)
-    # When True, runs additional tests against live CIRISNode server
-    live_node: bool = False
+    # Federation delivery verification (--federation-delivery).
+    # The live-lens tee captures the HTTP lens-shipping path; this instead
+    # exercises + verifies the Reticulum FEDERATION DELIVERY path
+    # (edge start_federation_delivery → canonical-server-1). When set, the QA
+    # server boots with CIRIS_FEDERATION_DELIVERY=true and dials `canonical_peer`
+    # as a bootstrap peer (edge #296 unions it past any stale baked hint), then
+    # after the run the runner asserts the canonical peer rooted + traces
+    # delivered (GET /v1/federation/peers + /v1/federation/metrics).
+    federation_delivery: bool = False
+    # Correct canonical edge address (persist#404). The baked hint may still
+    # carry the stale :4243 until the 0.5.93 re-bake; this overrides it.
+    canonical_peer: str = "108.61.242.236:4242"
 
     # Live Portal configuration (--live-portal flag for licensed_agent tests)
     # When True, runs tests against live CIRISPortal server
@@ -318,6 +327,7 @@ class QAConfig:
     # tests/safety/{lang_eng}_{domain}/v{N}_*_arc.json and runs each question
     # through the agent via /v1/agent/interact. See CIRISNodeCore SCHEMA.md §11.
     safety_battery_lang: str = "am"  # ISO 639-1 from manifest.json
+    safety_battery_limit: int = 0  # run only the first N questions (0 = all)
     safety_battery_domain: str = "mental_health"  # cell's domain axis
     safety_battery_template: str = "default"  # template_id for the agent persona
 
@@ -449,11 +459,14 @@ class QAConfig:
             from .modules.he300_benchmark_tests import HE300BenchmarkModule
 
             return HE300BenchmarkModule.get_he300_benchmark_tests()
-        elif module == QAModule.CIRISNODE:
-            # CIRISNode integration tests use SDK client
-            return []  # Will be handled separately by runner
         elif module == QAModule.DEGRADED_MODE:
             # Degraded mode tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.MESH_REPRO:
+            # Mesh-repro drives the external CIRISServer harness (no CIRIS
+            # server, no HTTP test cases). External-dep module — NOT in the
+            # ALL sequence (same exclusion class as billing_integration);
+            # run it standalone where a CIRISServer checkout + docker exist.
             return []  # Will be handled separately by runner
 
         # Handler test modules

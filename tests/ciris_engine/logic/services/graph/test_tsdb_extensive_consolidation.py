@@ -10,8 +10,10 @@ responsibility.
 
 The legacy test suite (memorize-call assertions on
 `tsdb_summary_daily_*` nodes) is incompatible with the new orchestration
-shape. Tests below verify the new orchestration plumbing:
-1. lock acquisition flow
+shape. Locking is substrate-internal (persist consolidators take
+`locked_by` and manage stale locks themselves — the agent-side lock
+wrappers were deleted in the 2.9.7 DRY purge). Tests below verify:
+1. `locked_by` flows to the substrate in each request
 2. persist substrate method invocation
 3. graceful handling when persist raises
 """
@@ -54,26 +56,30 @@ class TestExtensiveConsolidation:
     """Test cases for extensive consolidation orchestration via persist."""
 
     @pytest.mark.asyncio
-    async def test_extensive_consolidation_acquires_week_lock(self, tsdb_service, persist_engine, monkeypatch):
-        """The extensive consolidation flow must acquire a 'extensive' week lock
-        before invoking persist consolidator methods."""
-        captured: list[str] = []
+    async def test_extensive_consolidation_passes_locked_by(self, tsdb_service, persist_engine, monkeypatch):
+        """Every substrate request carries `locked_by` — persist owns the
+        consolidation lock internally (broke_stale_lock semantics)."""
+        captured_requests: list[dict] = []
 
-        original_acquire = tsdb_service._query_manager.acquire_consolidation_lock
+        class _CapturingEngine:
+            def __getattr__(self, name):
+                if name.startswith("tsdb_consolidate_") or name == "telemetry_consolidate_period":
+                    def _capture(req_json):
+                        captured_requests.append(json.loads(req_json))
+                        return json.dumps({"ok": True})
 
-        def capture_acquire(consolidation_type, period_identifier):
-            captured.append(consolidation_type)
-            return original_acquire(consolidation_type, period_identifier)
+                    return _capture
+                return getattr(persist_engine, name)
 
-        monkeypatch.setattr(
-            tsdb_service._query_manager, "acquire_consolidation_lock", capture_acquire
-        )
+        import ciris_engine.logic.persistence.models.graph as graph_mod
+
+        monkeypatch.setattr(graph_mod, "_engine", _CapturingEngine())
 
         await tsdb_service._run_extensive_consolidation()
 
-        # The lock acquisition path is hit, even if the persist lock layer
-        # currently fails (production bug — see test_tsdb_lock_acquisition).
-        assert "extensive" in captured
+        assert len(captured_requests) == 5
+        for req in captured_requests:
+            assert req.get("locked_by", "").startswith("ciris-agent-")
 
     @pytest.mark.asyncio
     async def test_extensive_consolidation_empty_corpus_smoke(self, tsdb_service, persist_engine):

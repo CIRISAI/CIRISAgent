@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 
+from ciris_engine.schemas.adapters.tools import ToolDisclosureReport
 from ciris_engine.schemas.api.responses import SuccessResponse
 
 from .dependencies import SetupOnlyDep
@@ -53,6 +54,30 @@ async def list_adapters() -> SuccessResponse[List[AdapterConfig]]:
     """
     adapters = _get_available_adapters()
     return SuccessResponse(data=adapters)
+
+
+@router.get("/tool-disclosure", dependencies=[SetupOnlyDep])
+async def list_tool_disclosure(include_discovered: bool = True) -> SuccessResponse[ToolDisclosureReport]:
+    """Disclose every tool each setup choice grants, generated from the live tool services.
+
+    The wizard's optional-features step defaults to enabled and discloses at
+    adapter granularity. Informed consent needs the rest: what each adapter
+    actually grants the agent, including the tools that no choice controls and
+    that therefore cannot be declined.
+
+    Nothing here restricts anything -- wide tool access is intended. This is
+    disclosure only. The list is read from each tool service's own
+    ``get_all_tool_info()`` so it cannot drift from the implementation.
+    This endpoint is always accessible without authentication during setup.
+    """
+    from ciris_engine.logic.services.tool.tool_disclosure import build_tool_disclosure
+
+    try:
+        report = await build_tool_disclosure(include_discovered=include_discovered)
+        return SuccessResponse(data=report)
+    except Exception as e:
+        logger.error(f"Error building tool disclosure: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(

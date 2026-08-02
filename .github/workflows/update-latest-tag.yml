@@ -26,10 +26,32 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update latest tag
+        env:
+          # NOTHING REACHES THE SCRIPT BODY THROUGH ${{ }}. See CIRISAgent#964
+          # (and #961, where the same class was fixed in research-capture).
+          #
+          # `${{ inputs.version }}` expanded into the run: body BEFORE bash saw
+          # it, so a dispatch value of `x"; curl … | sh; echo "` executed on the
+          # runner — and this job holds `packages: write` with a GHCR login
+          # already performed, so that code could push whatever it liked to
+          # ghcr.io/cirisai/ciris-agent. Passing through env: and quoting the
+          # reference fixes it, which is GitHub's own guidance.
+          #
+          # workflow_dispatch is restricted to people with write access, so this
+          # is a privilege-escalation / audit-trail hole rather than an anonymous
+          # RCE — an input box is still not a place to accept shell.
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ github.event.inputs.version }}"
+          VERSION="$INPUT_VERSION"
           REGISTRY="ghcr.io"
           IMAGE="cirisai/ciris-agent"
+
+          # A tag is a docker reference, not free text. Refuse anything that is
+          # not one before it reaches a docker command or the step summary.
+          if ! printf '%s' "$VERSION" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'; then
+            echo "::error::Refusing version '$VERSION' — not a valid docker tag ([A-Za-z0-9][A-Za-z0-9._-]{0,127})."
+            exit 1
+          fi
 
           echo "🔄 Updating 'latest' tag to point to version: $VERSION"
 
@@ -60,10 +82,13 @@ jobs:
           echo "Latest tag now points to digest: $LATEST_DIGEST"
 
       - name: Create summary
+        env:
+          #: Same discipline for the second interpolation — one rule, no exceptions.
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           echo "## Latest Tag Updated" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Successfully updated \`latest\` tag to point to version \`${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully updated \`latest\` tag to point to version \`$INPUT_VERSION\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
           echo "- Deployments will now pull the correct version when using \`latest\`" >> $GITHUB_STEP_SUMMARY

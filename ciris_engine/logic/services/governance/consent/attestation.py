@@ -22,9 +22,17 @@ persist except ``dimension`` (the upsert key). See the round-trip test in
 ``tests/.../consent/test_consent_attestation.py``.
 
 Default ON as of 2.9.6 (the LensCore fold, CIRISAgent#866): the CEG
-attestation IS the consent wire artifact — lens-core's per-seal consent gate
-reads `consent:community_trust:v1` by the agent's federation key, so opt-in
-(grant) and revocation (withdraws/recants) only function if these emits run.
+attestation IS the consent wire artifact. In the SOVEREIGN LensClient path
+(``engine=None``) lens-core's per-seal consent gate reads
+`consent:community_trust:v1` by the agent's federation key directly. In the
+agent's actual runtime — the COHABITATION path (``engine=`` passed
+explicitly, see ciris_accord_metrics/services.py) — lens-core does NOT read
+the CEG row (``consent_attesting_key_id`` has no effect there; the cross-wheel
+directory accessor is the unwired CIRISEdge#85 follow-up). There the grant
+gates INDIRECTLY: the accord adapter reads it at boot via
+``current_community_grant_id()`` and derives ``_consent_given``, which feeds
+the config-fallback consent the seal gate consults. Either way opt-in (grant)
+and revocation (withdraws/recants) only function if these emits run.
 ``CIRIS_CONSENT_CEG_ATTESTATIONS=false`` remains as an emergency kill-switch.
 """
 
@@ -71,11 +79,14 @@ def consent_ceg_attestations_enabled() -> bool:
     """True unless explicitly disabled (default ON as of 2.9.6).
 
     The consent→CEG write is no longer a dual-write experiment: the CEG
-    attestation IS the consent artifact — lens-core's per-seal gate reads
-    the `consent:community_trust:v1` dimension to decide emission
-    (CIRISAgent#866 fold; opt-in = grant, revoke = withdraws/recants).
-    The flag remains only as an emergency kill-switch
-    (CIRIS_CONSENT_CEG_ATTESTATIONS=false).
+    attestation IS the consent artifact. It drives emission either directly
+    (sovereign LensClient path, ``engine=None`` — lens-core reads the
+    `consent:community_trust:v1` dimension at seal) or indirectly (the agent's
+    cohabitation path, ``engine=`` passed — the adapter reads the grant at boot
+    and derives the config-fallback consent the seal gate consults; the direct
+    CEG-read gate in cohabitation is the unwired CIRISEdge#85 follow-up).
+    CIRISAgent#866 fold; opt-in = grant, revoke = withdraws/recants. The flag
+    remains only as an emergency kill-switch (CIRIS_CONSENT_CEG_ATTESTATIONS=false).
     """
     return os.environ.get(_FEATURE_FLAG_ENV, "").strip().lower() not in ("0", "false", "no", "off")
 
@@ -251,7 +262,7 @@ def emit_consent_revocation(user_id: str, reason: Optional[str] = None, promote:
         return None
     if promote:
         try:
-            engine.attestation_promote(attestation_id)  # type: ignore[attr-defined]
+            engine.attestation_promote(attestation_id, "federation")  # type: ignore[attr-defined]
             logger.info("consent-CEG: promoted revocation %s to federation tier", attestation_id)
         except Exception as exc:
             # Expected in CLIENT mode (no PQC signer); the local row is enough.
@@ -322,6 +333,23 @@ def canonical_community_key_id() -> Optional[str]:
                 return str(key)
     except Exception:  # pragma: no cover - defensive
         pass
+    # Substrate fallback: persist v13.4.0+ genesis-bakes the canonical server
+    # (ciris-canonical-1) into the CEG on node boot; when this engine carries
+    # that row (post node-fold, or a seeded install), read it directly — the
+    # fabric produced the record, the agent just consumes it. Bare agent
+    # engines (no node boot) return [] here and we stay unpublished.
+    try:
+        import json as _json
+
+        engine = _resolve_engine()
+        if engine is not None:
+            rows = _json.loads(engine.list_canonical_servers() or "[]")  # type: ignore[attr-defined]
+            for row in rows:
+                key = row.get("key_id") if isinstance(row, dict) else None
+                if key:
+                    return str(key)
+    except Exception:  # pragma: no cover - defensive (engine absent / pre-v13 substrate)
+        pass
     return None
 
 
@@ -348,13 +376,21 @@ class StructuralAttestationInput(BaseModel):
     attestation_envelope: StructuralAttestationEnvelope = Field(..., description="Structural envelope")
 
 
-def build_community_consent_grant(attesting_key_id: str, community_key_id: str) -> LocalAttestationInput:
-    """Build the directed traces-consent grant (scores, subject = community)."""
+def build_community_consent_grant(
+    attesting_key_id: str, community_key_id: str, granted_at: Optional[str] = None
+) -> LocalAttestationInput:
+    """Build the directed traces-consent grant (scores, subject = community).
+
+    ``granted_at`` carries the ORIGINAL consent time when migrating a legacy
+    consent artifact (.env / adapter-config) — the CEG object must preserve
+    when the human actually consented, not when the migration ran.
+    """
     claim = ConsentClaim(
         user_id=community_key_id,  # the directed counterparty (the canonical community)
         stream="community_trust",
         categories=["accord_traces"],
         state="active",
+        granted_at=granted_at,
     )
     envelope = ConsentAttestationEnvelope(
         dimension=_COMMUNITY_TRUST_DIMENSION,
@@ -395,8 +431,51 @@ def current_community_grant_id() -> Optional[str]:
     """attestation_id of the current community-trust grant, or None.
 
     The structural primitives (withdraws/recants/supersedes) reference this as
-    their ``target``. Reads back via ``list_attestations`` and picks the latest
-    ``scores`` row on the community-trust dimension.
+    their ``target``. Reads via ``list_attestations`` (dimension_exact-scoped)
+    and picks the latest ``scores`` row on the community-trust dimension.
+
+    Stays on ``list_attestations`` — NOT the ``list_scores`` seek that
+    ``_newest_community_trust_row`` adopted in 2.9.7 — because this lookup must
+    find the INTERIM grant (unpromoted, written while the canonical community
+    key is unpublished) so a user's withdrawal can target it. ``list_scores``
+    seeks the V106 ``subject_key_ids`` projection, and the interim grant is
+    emitted UNDIRECTED (``subject_key_ids=[]`` so it can never federate) → it
+    projects zero V106 rows → invisible to ``list_scores`` at EVERY tier
+    (CIRISPersist#461: tier was a red herring, subject-presence is the axis).
+    ``list_attestations`` sees all tiers AND subjectless rows, so it stays.
+
+    CIRISPersist#461 seal-gate confirmation (empirically resolved 2026-07,
+    ciris-server 0.5.118 / persist v17.5.2 wheel):
+
+      * The subjectless interim grant is INVISIBLE to ``list_scores`` at every
+        tier (Local/Any/Federation → 0 rows); ``list_attestations`` sees it
+        (1 row, tier=local). Confirmed by a live throwaway-engine probe.
+      * lens-core's per-seal consent gate does NOT read this CEG row in the
+        agent's runtime path. The agent constructs ``LensClient`` with an
+        explicit ``engine=`` (the COHABITATION path, services.py); the wheel's
+        own ``LensClient`` docstring states ``consent_attesting_key_id`` "has
+        no effect when ``engine=`` is provided" — cohabitation uses the
+        CONFIG-FALLBACK consent path only. The CEG engine-read gate needs a
+        cross-wheel ``federation_directory`` accessor that is NOT yet wired:
+        upstream follow-up CIRISEdge#85.
+      * So the interim grant DOES gate local emission today, but INDIRECTLY:
+        the accord adapter reads it at boot via THIS function (list_attestations
+        → ``_consent_given=True``), which then feeds the config-fallback
+        ``consent_timestamp`` the seal gate actually consults. Migrating this
+        lookup to ``list_scores`` would return None for the subjectless interim
+        grant → ``_consent_given`` stays False → every seal resolves NoConsent
+        → all traces blocked. list_attestations is therefore load-bearing here
+        for BOTH revocation targeting AND boot consent-derivation.
+
+    Deferred self-subject migration (only when CIRISEdge#85 lands the
+    cohabitation CEG-read gate, OR the agent adopts the sovereign engine=None
+    LensClient path): give the interim grant ``subject_key_ids=[self]`` (still
+    ``attestation_upsert_local`` → tier=local, so no-federate is preserved by
+    TIER per persist#461) and migrate this lookup to ``list_scores(tier="Any")``
+    — the live probe confirms a self-subject local row IS visible there while
+    staying invisible to Federation tier and to default-tier list_scores. Until
+    then the emit stays subjectless and this dimension_exact-scoped
+    list_attestations read is the correct one.
     """
     engine = _resolve_engine()
     key_id = _resolve_attesting_key_id()
@@ -405,20 +484,57 @@ def current_community_grant_id() -> Optional[str]:
     try:
         import json as _json
 
-        page = _json.loads(engine.list_attestations("{}", None, 100, key_id))  # type: ignore[attr-defined]
+        # dimension_exact is honored at the substrate as of persist v17.5.2
+        # (CIRISPersist#461 — it was a silent no-op before), so the query is
+        # dimension-scoped and the community-trust row can't fall off page 1 as
+        # per-user consent rows accumulate. list_attestations (not list_scores)
+        # is still required: it sees ALL tiers AND subjectless rows, so the
+        # UNDIRECTED interim grant remains findable for revocation targeting.
+        page = _json.loads(
+            engine.list_attestations(_json.dumps({"dimension_exact": _COMMUNITY_TRUST_DIMENSION}), None, 100, key_id)  # type: ignore[attr-defined]
+        )
         rows = page.get("items", [])
-        grants = [
-            r
-            for r in rows
-            if r.get("attestation_type") == "scores"
-            and (r.get("attestation_envelope") or {}).get("dimension") == _COMMUNITY_TRUST_DIMENSION
-        ]
+        grants = [r for r in rows if r.get("attestation_type") == "scores"]
         if not grants:
             return None
         grants.sort(key=lambda r: r.get("asserted_at", ""), reverse=True)
         return str(grants[0].get("attestation_id"))
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("consent-CEG: grant lookup failed: %s", exc)
+        return None
+
+
+def current_community_grant_asserted_at() -> Optional[str]:
+    """``asserted_at`` of the current community-trust grant, or None.
+
+    Companion to :func:`current_community_grant_id`. The accord service derives
+    its config-fallback consent from the CEG grant (the source of truth in the
+    cohabitation seal path — see that adapter's boot/self-heal derivation), and
+    needs the grant's timestamp so the fallback ``consent_timestamp`` is STABLE
+    across restarts rather than stamping a fresh ``now()`` each boot (the
+    warning at services.py where consent is set without a timestamp). Uses the
+    SAME ``list_attestations`` read + newest-``scores`` selection as the id
+    lookup so the two stay consistent (they resolve the same row).
+    """
+    engine = _resolve_engine()
+    key_id = _resolve_attesting_key_id()
+    if engine is None or not key_id:
+        return None
+    try:
+        import json as _json
+
+        page = _json.loads(
+            engine.list_attestations(_json.dumps({"dimension_exact": _COMMUNITY_TRUST_DIMENSION}), None, 100, key_id)  # type: ignore[attr-defined]
+        )
+        rows = page.get("items", [])
+        grants = [r for r in rows if r.get("attestation_type") == "scores"]
+        if not grants:
+            return None
+        grants.sort(key=lambda r: r.get("asserted_at", ""), reverse=True)
+        asserted_at = grants[0].get("asserted_at")
+        return str(asserted_at) if asserted_at else None
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("consent-CEG: grant timestamp lookup failed: %s", exc)
         return None
 
 
@@ -432,18 +548,26 @@ def current_community_grant_id() -> Optional[str]:
 _PENDING_COMMUNITY_SENTINEL = "ciris:canonical-community:pending"
 
 
-def emit_community_consent_grant() -> Optional[str]:
+def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[str]:
     """Best-effort emit the traces-consent grant. Returns attestation_id.
 
-    This is THE consent wire artifact (2.9.6 #866): lens-core's consent gate
-    resolves the newest row on ``consent:community_trust:v1`` by the agent's
-    federation key at every trace seal. Two shapes:
+    This is THE consent wire artifact (2.9.6 #866). In the sovereign LensClient
+    path lens-core's consent gate resolves the newest row on
+    ``consent:community_trust:v1`` by the agent's federation key at every trace
+    seal; in the agent's cohabitation path the grant instead drives the
+    config-fallback consent the seal gate reads, via the adapter's boot-time
+    ``current_community_grant_id()`` derivation (see that function's docstring
+    for the confirmed CIRISPersist#461 seal-gate finding). Two shapes:
 
     - Canonical community key published → the DIRECTED grant
       (subject_key_ids=[community]) — the CEG promotion event self→community.
     - Key unpublished (interim) → an UNDIRECTED LOCAL-TIER grant that gates
       local emission but cannot federate (never promoted, no subjects), so
-      nothing undirected ever leaves the occurrence.
+      nothing undirected ever leaves the occurrence. NOTE: the interim grant is
+      emitted subjectless deliberately — it is found by ``list_attestations``
+      (which sees subjectless local rows), NOT ``list_scores`` (V106 subject
+      seek, blind to it). See current_community_grant_id for why that read
+      split must be preserved.
 
     No-op (None) when the kill-switch is set or engine/key are unavailable.
     """
@@ -456,12 +580,22 @@ def emit_community_consent_grant() -> Optional[str]:
         return None
     community = canonical_community_key_id()
     try:
-        grant = build_community_consent_grant(key_id, community or _PENDING_COMMUNITY_SENTINEL)
+        grant = build_community_consent_grant(key_id, community or _PENDING_COMMUNITY_SENTINEL, granted_at=granted_at)
         if community:
             attestation_id = engine.attestation_upsert_local(_directed_payload(grant, community))  # type: ignore[attr-defined]
             logger.info(
                 "consent-CEG: emitted directed traces-consent grant %s → community %s", attestation_id, community
             )
+            # The directed grant IS the CEG promotion event self→community —
+            # promote it to federation tier so the counterparty can actually
+            # receive it (a local-tier row never leaves the occurrence).
+            # Best-effort, mirroring the revocation path: deferred in CLIENT
+            # mode (no PQC signer); the local row still gates the seal.
+            try:
+                engine.attestation_promote(attestation_id, "federation")  # type: ignore[attr-defined]
+                logger.info("consent-CEG: promoted directed grant %s to federation tier", attestation_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.info("consent-CEG: directed grant promote deferred (non-fatal): %s", exc)
         else:
             attestation_id = engine.attestation_upsert_local(grant.model_dump_json())  # type: ignore[attr-defined]
             logger.info(
@@ -513,7 +647,107 @@ def emit_community_consent_revocation(
         return None
     if community:
         try:
-            engine.attestation_promote(attestation_id)  # type: ignore[attr-defined]
+            engine.attestation_promote(attestation_id, "federation")  # type: ignore[attr-defined]
         except Exception as exc:
             logger.debug("consent-CEG: structural promote deferred (non-fatal): %s", exc)
     return str(attestation_id)
+
+
+def federation_consent_status() -> "dict[str, object]":
+    """CONSENT DRY (all four opt-in paths): resolve the FULL trace-sharing
+    consent set through the engine's OWN readers — never row-existence.
+
+    v22 (ciris-server 0.5.139+) needs THREE aligned artifacts for a sealed
+    trace to be captured, shipped, and scorable:
+
+    1. ``consent:community_trust:v1`` — capture/seal gate (this module owns it)
+    2. ``consent:replication:v1`` naming the canonical — ship gate; resolved
+       via ``list_consent_peers`` (the projection edge actually reads — a row
+       can exist while being invisible to edge, per the 0.5.139 consent DX)
+    3. ``consent:state:granted:v1`` scope=analyze naming the canonical's
+       DERIVED key — CC#46 score gate (resolver not yet py-exposed; reported
+       "unknown" until it is — never guessed from rows)
+
+    The four opt-in paths (wizard, data card, legacy-convert, env var) all
+    reduce to: paths WITH an owner session author via the owner-gated
+    ``POST /v1/federation/consent`` (the Kotlin client's
+    ``authorFederationConsent``); paths WITHOUT one (boot/env) must never
+    silently author an owner-tier grant — they call THIS to detect drift and
+    surface "confirmation needed" on the Manage Consent card instead. That is
+    the same explicit-consent principle that removed server auto-consent.
+
+    Returns a dict: ``capture`` / ``replication`` / ``analyze`` each
+    ``True``/``False``/``None`` (None = resolver unavailable), ``canonical``
+    (the peer checked), and ``aligned`` (True only when every resolvable gate
+    is green). Never raises.
+    """
+    status: "dict[str, object]" = {
+        "capture": None,
+        "replication": None,
+        "analyze": None,
+        "canonical": None,
+        "aligned": False,
+    }
+    try:
+        status["capture"] = current_community_grant_id() is not None
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("consent-DRY: capture resolution failed: %s", exc)
+    engine = _resolve_engine()
+    key_id = _resolve_attesting_key_id()
+    if engine is None or not key_id:
+        return status
+    try:
+        import json as _json
+
+        canon = _json.loads(engine.list_canonical_servers() or "[]")  # type: ignore[attr-defined]
+        canonical = canon[0].get("key_id") if canon else None
+        status["canonical"] = canonical
+        if canonical:
+            peers = engine.list_consent_peers(key_id)  # type: ignore[attr-defined]
+            peer_ids = peers if isinstance(peers, list) else _json.loads(peers or "[]")
+            status["replication"] = any(canonical in str(p) for p in peer_ids)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("consent-DRY: replication resolution failed: %s", exc)
+    # CC#46 analyze: resolve through the engine's scoped-consent resolver the
+    # moment it is py-exposed (assert-the-resolved-stance; a row that folds to
+    # Unspecified is the silent false the DX doc warns about).
+    resolver = getattr(engine, "resolve_scoped_consent", None)
+    if resolver is not None and status["canonical"]:
+        try:
+            stance = resolver(str(status["canonical"]), "analyze")
+            status["analyze"] = "granted" in str(stance).lower()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("consent-DRY: analyze resolution failed: %s", exc)
+    resolvable = [v for v in (status["capture"], status["replication"], status["analyze"]) if v is not None]
+    status["aligned"] = bool(resolvable) and all(resolvable)
+    return status
+
+
+def log_federation_consent_drift(reason: str) -> None:
+    """Boot/env-path detector (opt-in paths 3+4): when capture consent says
+    YES but the federation grants are missing, say so LOUDLY with the exact
+    remedy — never silently author an owner-tier grant from a session-less
+    path. The Manage Consent card completes it with one owner-session call
+    (``authorFederationConsent``)."""
+    try:
+        st = federation_consent_status()
+        if st["capture"] and st["replication"] is False:
+            logger.warning(
+                "[CONSENT-DRY] capture consent is ON (%s) but consent:replication for "
+                "canonical %s is NOT resolved via list_consent_peers — sealed traces "
+                "will NOT replicate. Remedy: confirm sharing on the Manage Consent "
+                "card (owner session -> POST /v1/federation/consent).",
+                reason,
+                st["canonical"],
+            )
+        elif st["capture"] and st["analyze"] is False:
+            logger.warning(
+                "[CONSENT-DRY] capture+replication consents resolved but the CC#46 "
+                "analyze grant for %s is NOT — traces will ship but never be scored. "
+                "Remedy: re-confirm sharing on the Manage Consent card.",
+                st["canonical"],
+            )
+        else:
+            logger.info("[CONSENT-DRY] consent status (%s): %s", reason, st)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[CONSENT-DRY] drift check failed (non-fatal): %s", exc)

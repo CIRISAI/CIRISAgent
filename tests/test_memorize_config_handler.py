@@ -304,8 +304,6 @@ class TestSecretsSnapshotFix:
 
         # Mock secrets service
         mock_secrets_service = MagicMock()
-        mock_store = AsyncMock()
-        mock_filter = MagicMock()
 
         # Create mock SecretReference objects
         mock_secrets = [
@@ -329,19 +327,37 @@ class TestSecretsSnapshotFix:
             ),
         ]
 
-        mock_store.list_all_secrets.return_value = mock_secrets
-        mock_filter.get_filter_config.return_value = MagicMock(version=1)
-
-        mock_secrets_service.store = mock_store
-        mock_secrets_service.filter = mock_filter
+        # build_secrets_snapshot awaits list_all_secrets() and get_filter_config()
+        # DIRECTLY on the secrets service (#896 substrate refactor), not via
+        # .store/.filter — wire them as async on the service itself.
+        mock_secrets_service.list_all_secrets = AsyncMock(return_value=mock_secrets)
+        mock_secrets_service.get_filter_config = AsyncMock(return_value={"version": 1})
 
         # Build snapshot
         snapshot = await build_secrets_snapshot(mock_secrets_service)
 
-        # Verify detected_secrets contains strings, not SecretReference objects
+        # Type contract (the original point of this test): List[str], never
+        # List[SecretReference].
         assert isinstance(snapshot["detected_secrets"], list)
         assert all(isinstance(s, str) for s in snapshot["detected_secrets"])
-        assert set(snapshot["detected_secrets"]) == {"uuid-1", "uuid-2"}
+
+        # SECURITY CONTRACT: no secret UUIDs reach the snapshot at all.
+        #
+        # This assertion used to be `== {"uuid-1", "uuid-2"}` — it locked in
+        # the population of the 10 most recent secret UUIDs across EVERY task.
+        # `recall_secret` decrypts any UUID handed to it with no ownership
+        # check, so that made one task's secrets addressable from another
+        # task's reasoning. The snapshot was the only source of cross-task
+        # references (there is no enumerate-secrets tool), so emptying it is
+        # sufficient, not merely a mitigation.
+        #
+        # The legitimate path is unaffected and is NOT exercised here: the
+        # observer substitutes `{SECRET:<uuid>:<description>}` into the message
+        # being processed, so a secret the agent actually needs arrives with
+        # the content it belongs to.
+        assert snapshot["detected_secrets"] == [], "no cross-task secret UUIDs may enter the prompt"
+
+        # The COUNT is retained — situational awareness that addresses nothing.
         assert snapshot["total_secrets_stored"] == 2
 
 

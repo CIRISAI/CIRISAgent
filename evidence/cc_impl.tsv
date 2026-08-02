@@ -1,0 +1,115 @@
+# CIRISAgent evidence registry — impl: tier (CIRISConstitution#17 / CIRISAgent#911)
+# The sibling spec-map manifest CIRISConstitution's check_claims.py resolves
+# cross-repo `impl:CIRISAgent#911` pointers against (see CIRISConstitution
+# constitution/EVIDENCE.md). Validated in CI by tools/check_evidence.py: every
+# CIRISAgent `path#symbol` MUST AST-resolve at this repo ref — a moved/renamed/
+# deleted symbol is a build failure (a spec-regression test), so a Constitution
+# `impl:` pointer can never silently rot.
+#
+# Columns: decimal_id  claim_id  repo  path#symbol  status
+#   status = impl      : the agent implements it; symbol resolves here.
+#            staged    : spec-ahead / pending merge (e.g. #910 until it lands).
+#            substrate : owned by the fabric node (ciris-server / persist / lens),
+#                        NOT the agent — the Constitution should retag off
+#                        impl:CIRISAgent. Row carries no agent symbol (repo=—).
+#            normative : spec-only, no code implementation (repo=—).
+#            open      : acknowledged, tracked gap. Pointer is REPO#issue, not
+#                        path#symbol; shape-checked, not AST-resolved.
+# Rows with repo=— (substrate/normative) are informational — not resolved.
+#
+# WHY `open` ROWS EXIST. This manifest is read by people deciding whether to
+# trust the agent. Absence of a row is indistinguishable from coverage, so a
+# control we know is NOT enforced must be stated, not omitted. Every `open` row
+# below names a real, tracked issue. Deleting one to make the file look better
+# would be the exact failure this registry was built to catch.
+decimal_id	claim_id	repo	path#symbol	status
+1.3	CLM-pdma-ordermax	CIRISAgent	ciris_engine/logic/conscience/core.py#OptimizationVetoConscience.check	impl
+1.3	CLM-pdma-ordermax	CIRISAgent	ciris_engine/logic/conscience/thought_depth_guardrail.py#ThoughtDepthGuardrail.check	impl
+1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/handlers/control/defer_handler.py#DeferHandler.handle	impl
+8.8.9	CLM-discrimination-gate	CIRISAgent	ciris_engine/logic/buses/wise_bus.py#WiseBus._validate_capability	impl
+# 8.8.9 second pointer flipped staged->impl 2026-07-30: #910 landed via PR #912 —
+# get_prohibition_guidance generates the round-1 DMA prohibition block from
+# PROHIBITED_CAPABILITIES at assembly time; injected by
+# formatters/prompt_blocks.py#append_round1_accord_blocks (PDMA/CSDMA/DSDMA only).
+8.8.9	CLM-discrimination-gate	CIRISAgent	ciris_engine/logic/utils/localization.py#get_prohibition_guidance	impl
+# CLM-h3ere-steppoints has NO matching row in CIRISConstitution claims.tsv (0 of
+# 147) and no decimal_id — the pointer is real, the claim is not. Filed upstream
+# to mint it; the evidence is ready and locked by
+# tests/ciris_engine/schemas/services/test_step_point_evidence.py, which asserts
+# every StepPoint member has a live @streaming_step site and that no prose count
+# is restated (that comment had drifted from the enum). Kept as a row, not
+# deleted, so the orphan stays visible until the claim exists.
+—	CLM-h3ere-steppoints	CIRISAgent	ciris_engine/schemas/services/runtime_control.py#StepPoint	impl
+6.2.3.1	CLM-sigma-attest	—	—	substrate
+1.2	CLM-admission	—	—	substrate
+1.13.3	CLM-adversary	—	—	normative
+1.13.3.3	CLM-adversary-classes	—	—	normative
+# Consumer-tier claims retagged off impl:CIRISServer per the 2026-07-04 sweep
+# (surfaced by CIRISServer#155's evidence map — they live in the consumer):
+#
+# 4.4.1 Frickerian discipline (identity-prejudice-resistant weighting: no
+# testimonial_witness downweighting for low-density cohorts, no non_maleficence
+# downweighting on long partner track records, lexical-vulnerability-priority
+# tie-breaks). NO agent code implements this yet — the agent is not yet a CEG
+# verdict-composing consumer (typed-envelope emission is itself staged,
+# CIRISAgent#803). Honest status: staged, no symbol — do not overclaim.
+4.4.1	CLM-frickerian	—	—	staged
+# 4.5.8.3 CLM-settled is "Settled in CIRISAgent, carried as-is" — staged against
+# CIRISServer#155 upstream, with no agent symbol of its own. It previously
+# carried the capacity pointer below, which was a misfile: the code is real but
+# it substantiates a DIFFERENT claim. Left symbol-less to match the Constitution
+# rather than borrowing another claim's evidence.
+4.5.8.3	CLM-settled	—	—	staged
+# 3.4.5 CLM-capacity-score "Capacity-Score self-emission rejection" is the exact
+# claim the agent code substantiates: the agent NEVER reads or scores its own
+# capacity:*; the lens-scored value is user-facing only, held in a route-local
+# cache that is structurally not registered as context enrichment, so it cannot
+# reach the agent's reasoning context. Upstream currently tags this
+# impl:CIRISServer#155; the agent-side half is the anti-Goodhart gate here.
+3.4.5	CLM-capacity-score	CIRISAgent	ciris_engine/logic/adapters/api/routes/my_data.py#get_capacity	impl
+#
+# ─── DECLARED GAPS ─────────────────────────────────────────────────────────────
+# Controls named in this release that are NOT enforced. Stated so that silence
+# cannot be read as coverage. Each points at a tracked issue.
+8.8.9	CLM-discrimination-gate	CIRISAgent	CIRISAgent#905	open
+1.9	CLM-wbd	CIRISAgent	CIRISAgent#967	open
+1.3	CLM-pdma-ordermax	CIRISAgent	CIRISAgent#909	open
+#
+# ─── 1.9 CLM-wbd, ENFORCEMENT ADDED IN 2.9.7 ───────────────────────────────────
+# #942 closed the gap that was declared `open` here until this release:
+# `requires_approval` was prompt text with no enforcement, while the first-run
+# consent wizard rendered it to operators as a wise-authority guarantee. It is
+# now a control — a declaring tool cannot execute until a human approves and the
+# resulting task carries a WISE_AUTHORITY-issued envelope granting it.
+#
+# The gate keys on issuer kind AND tool name, not on `granted_tools` membership:
+# the deployment envelope already enumerates every enabled tool BY NAME, so a
+# permits_tool-only check would never have fired. Enumerated is not approved.
+1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/infrastructure/authorization/tool_approval.py#envelope_approves_tool	impl
+# Deferral resolutions are signed hybrid (Ed25519 + ML-DSA-65), persisted with
+# their signature material, and verified BEFORE any state change — on failure
+# the task is not completed, no guidance task is created, no budget issued
+# (#944). The signing identity is the node's delegate key, with the owner's CEG
+# fedID recorded and re-resolved from the federation directory at verify time
+# rather than trusted from the record. True owner-key signing is blocked on
+# CIRISServer#342; the precondition (every login path must mint a fedID,
+# including multi-user) is documented at the signing site in routes/wa.py.
+1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/services/governance/wise_authority/service.py#WiseAuthorityService._verify_resolution	impl
+#
+# ─── VERIFIED POINTERS AWAITING A CLAIM ID ─────────────────────────────────────
+# Controls that shipped in 2.9.7 with real, fail-closed enforcement and a
+# production call site, for which CIRISConstitution defines NO claim (checked
+# against all 147 rows of claims.tsv). They are listed as comments, not rows,
+# because inventing a claim_id to make them resolvable is precisely the
+# overclaim this registry guards against. Filed upstream; flip each to a live
+# row the moment an id exists — the pointers below are pre-verified.
+#
+#   spend authorization  ciris_engine/logic/services/governance/budget_envelope.py#authorize_spend
+#                        fails closed at :279-299; caller ciris_adapters/wallet/tool_service.py:793
+#   health reporting     ciris_engine/logic/adapters/api/routes/system/helpers.py#determine_overall_status
+#                        empty registry -> critical at :279-283; caller system/health.py:188
+#   platform capability  ciris_engine/logic/utils/platform_detection.py#detect_platform_capabilities
+#                        callers routes/tools.py:454, _adapter_discovery.py:44
+#   SSRF egress guard    ciris_engine/logic/utils/url_guard.py#validate_url_for_ssrf
+#                        callers document_parser.py:205, base_vision.py:110,160, api_tools.py:136
+#   localization integrity  tools/dev/check_localization_integrity.py  (CI-gated, build.yml:50)

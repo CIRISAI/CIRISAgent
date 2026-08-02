@@ -32,7 +32,6 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
-from ciris_engine.logic.audit.verifier import AuditVerifier
 from ciris_engine.logic.config import get_sqlite_db_full_path
 
 
@@ -451,22 +450,50 @@ class DBStatusTool:
         return status
 
     def verify_audit_integrity(self, sample_size: Optional[int] = None):
-        """Run comprehensive audit verification."""
-        # Create a simple time service
-        from datetime import datetime, timezone
+        """Run comprehensive audit verification via persist's substrate.
 
-        class SimpleTimeService:
-            def now(self):
-                return datetime.now(timezone.utc)
+        Persist owns the audit chain (`cirislens_audit_log` in the main DB);
+        `audit_verify_all_chains` walks every tenant's chain with hash +
+        signature verification combined under one outcome per tenant.
+        `sample_size` is accepted for CLI compatibility but ignored — persist
+        only verifies end-to-end. Shapes the outcome into the existing
+        CompleteVerificationResult schema.
+        """
+        import json
+        import time
 
-        verifier = AuditVerifier(db_path=str(self.audit_db_path), time_service=SimpleTimeService())
+        from ciris_engine.logic.persistence._substrate import Engine
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.schemas.audit.verification import CompleteVerificationResult
 
         if sample_size:
-            # Verify a sample - verify the first N entries
-            return verifier.verify_range(1, sample_size)
-        else:
-            # Full verification
-            return verifier.verify_complete_chain()
+            print(f"NOTE: sampled verification (n={sample_size}) is no longer supported; running full chain walk.")
+
+        started = time.monotonic()
+        engine = get_persist_engine()
+        if engine is None:
+            # Standalone tool run — build a process-local engine over the main DB.
+            engine = Engine(f"sqlite:///{self.db_path}", "db_status_tool")
+
+        raw = engine.audit_verify_all_chains()
+        payload = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+
+        all_ok = bool(payload.get("all_ok", False))
+        walked = int(payload.get("total_entries_walked", 0))
+        tenants = int(payload.get("tenants_checked", 0))
+        breaks = payload.get("breaks") or []
+        errors = [b if isinstance(b, str) else json.dumps(b) for b in breaks]
+
+        return CompleteVerificationResult(
+            valid=all_ok,
+            entries_verified=walked,
+            hash_chain_valid=all_ok,
+            signatures_valid=all_ok,
+            verification_time_ms=elapsed_ms,
+            hash_chain_errors=errors,
+            summary=f"{tenants} tenant(s) checked, {walked} entries walked",
+        )
 
     def get_consolidated_state_analysis(self) -> Dict[str, Any]:
         """Analyze the current consolidated state of the database."""
@@ -1132,45 +1159,27 @@ class DBStatusTool:
         """Run and print comprehensive verification."""
         self.print_section("COMPREHENSIVE AUDIT VERIFICATION")
 
-        if sample_size:
-            print(f"Running verification on sample of {sample_size} entries...")
-        else:
-            print("Running FULL chain verification (this may take a while)...")
-
+        print("Running FULL chain verification (this may take a while)...")
         print()
 
         try:
             report = self.verify_audit_integrity(sample_size)
 
-            # Print results based on report type
-            if hasattr(report, "valid"):  # Both CompleteVerificationResult and RangeVerificationResult have 'valid'
-                print(f"Verification {'PASSED ✓' if report.valid else 'FAILED ✗'}")
-            else:
-                print(f"Verification {'PASSED ✓' if report.is_valid else 'FAILED ✗'}")
-
+            print(f"Verification {'PASSED ✓' if report.valid else 'FAILED ✗'}")
             print(f"Entries Verified: {report.entries_verified:,}")
+            print(f"Time Taken: {report.verification_time_ms / 1000:.2f} seconds")
+            if report.summary:
+                print(f"Summary: {report.summary}")
 
-            if hasattr(report, "verification_time"):
-                print(f"Time Taken: {report.verification_time:.2f} seconds")
-
-            if hasattr(report, "errors") and report.errors:
+            errors = report.hash_chain_errors + report.signature_errors
+            if report.error:
+                errors.append(report.error)
+            if errors:
                 self.print_subsection("Errors Found")
-                for error in report.errors[:10]:  # Show first 10 errors
+                for error in errors[:10]:  # Show first 10 errors
                     print(f"  - {error}")
-                if len(report.errors) > 10:
-                    print(f"  ... and {len(report.errors) - 10} more errors")
-
-            if hasattr(report, "warnings") and report.warnings:
-                self.print_subsection("Warnings")
-                for warning in report.warnings[:5]:
-                    print(f"  - {warning}")
-                if len(report.warnings) > 5:
-                    print(f"  ... and {len(report.warnings) - 5} more warnings")
-
-            if hasattr(report, "metadata") and report.metadata:
-                self.print_subsection("Verification Details")
-                for key, value in report.metadata.items():
-                    print(f"  {key}: {value}")
+                if len(errors) > 10:
+                    print(f"  ... and {len(errors) - 10} more errors")
 
         except Exception as e:
             print(f"ERROR: Verification failed - {e}")

@@ -7,15 +7,6 @@ from .correlations import (
     update_correlation,
 )
 from .deferral import get_deferral_report_context, save_deferral_report_mapping
-
-# Backwards compatibility - DSAR functions now use universal tickets table
-from .dsar import (
-    create_dsar_ticket,
-    get_dsar_ticket,
-    list_dsar_tickets_by_email,
-    list_dsar_tickets_by_status,
-    update_dsar_ticket_status,
-)
 from .graph import (
     add_graph_edge,
     add_graph_node,
@@ -133,12 +124,6 @@ __all__ = [
     "list_tickets",
     "delete_ticket",
     "get_tickets_by_correlation_id",
-    # DSAR backwards compatibility (deprecated - use tickets)
-    "create_dsar_ticket",
-    "get_dsar_ticket",
-    "update_dsar_ticket_status",
-    "list_dsar_tickets_by_status",
-    "list_dsar_tickets_by_email",
     # 2.9.0: persist Engine accessor (CIRISAgent#763 Lane A wiring)
     "get_persist_engine",
 ]

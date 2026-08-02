@@ -2,7 +2,18 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.DeferralData
 import ai.ciris.mobile.shared.api.WAStatusData
+import ai.ciris.mobile.shared.approvals.ApprovalKind
+import ai.ciris.mobile.shared.approvals.BudgetCapability
+import ai.ciris.mobile.shared.approvals.PendingApproval
+import ai.ciris.mobile.shared.approvals.TicketBudgetState
+import ai.ciris.mobile.shared.approvals.TOOL_APPROVAL_RENDERED_KEYS
+import ai.ciris.mobile.shared.approvals.ToolApprovalDetail
+import ai.ciris.mobile.shared.approvals.parseToolApprovalDetail
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.models.ToolCapabilityFlags
+import ai.ciris.mobile.shared.ui.components.LabelledLine
+import ai.ciris.mobile.shared.ui.components.PendingApprovalsCard
+import ai.ciris.mobile.shared.ui.components.ProposalApprovalDialog
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.background
@@ -38,13 +49,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
- * Wise Authority screen for managing deferrals and viewing WA status
+ * Wise Authority screen — the human-in-the-loop approval surface.
  *
  * Features:
+ * - "The agent is blocked waiting on you" card, top of the screen, listing
+ *   every pending human decision from both sources (deferrals + agent ticket
+ *   proposals) with the requested amount surfaced for budget approvals
  * - WA service status overview
  * - Pending deferrals list
  * - Deferral details and resolution
- * - Auto-refresh every 10 seconds
+ * - Budget issuance (#938/#939) for proposals that ask for money
+ * - Auto-refresh every 10 seconds while visible; a slower session-wide watch in
+ *   the ViewModel keeps the nav badge and notifications live off-screen
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,10 +72,37 @@ fun WiseAuthorityScreen(
     onResolveDeferral: (deferralId: String, resolution: String, guidance: String) -> Unit,
     onRefresh: () -> Unit,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Unified pending approvals: deferrals + unapproved agent proposals. */
+    approvals: List<PendingApproval> = emptyList(),
+    /** Whether this server exposes budget issuance. Degrades the dialog when not. */
+    budgetCapability: BudgetCapability = BudgetCapability.UNKNOWN,
+    /**
+     * Freshly-read budget state for the approval currently open — grant, spend
+     * ledger and remaining trust envelope. Loaded on open via [onApprovalOpened].
+     */
+    selectedBudgetState: TicketBudgetState? = null,
+    /** Fired when a proposal dialog opens, so headroom can be fetched for it. */
+    onApprovalOpened: (approvalId: String) -> Unit = {},
+    /** Fired when the proposal dialog closes, so loaded state can be dropped. */
+    onApprovalClosed: () -> Unit = {},
+    onGrantBudget: (
+        approvalId: String,
+        amount: String,
+        currency: String,
+        expiryHours: Int,
+        reason: String,
+        promote: Boolean,
+        overGrantConfirmed: Boolean,
+    ) -> Unit = { _, _, _, _, _, _, _ -> },
+    onPromoteProposal: (approvalId: String, note: String) -> Unit = { _, _ -> },
+    onRejectProposal: (approvalId: String, reason: String) -> Unit = { _, _ -> },
+    /** "Not now" — record why, issue nothing, leave the agent fail-closed. */
+    onDeferProposal: (approvalId: String, note: String) -> Unit = { _, _ -> },
 ) {
     var selectedDeferral by remember { mutableStateOf<DeferralData?>(null) }
     var showResolveDialog by remember { mutableStateOf(false) }
+    var selectedProposal by remember { mutableStateOf<PendingApproval?>(null) }
 
     Scaffold(
         topBar = {
@@ -114,6 +157,29 @@ fun WiseAuthorityScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // "The agent is blocked waiting on you" — first thing on the screen,
+            // above service status, because a stuck agent is more urgent than a
+            // health readout. Renders nothing when nothing is pending.
+            item {
+                PendingApprovalsCard(
+                    approvals = approvals,
+                    onApprovalClick = { approval ->
+                        when (approval.kind) {
+                            ApprovalKind.TICKET_PROPOSAL -> {
+                                selectedProposal = approval
+                                onApprovalOpened(approval.id)
+                            }
+                            ApprovalKind.DEFERRAL -> {
+                                deferrals.firstOrNull { it.deferralId == approval.id }?.let {
+                                    selectedDeferral = it
+                                    showResolveDialog = true
+                                }
+                            }
+                        }
+                    },
+                )
+            }
+
             // WA Status Overview
             item {
                 WAStatusCard(waStatus = waStatus)
@@ -191,6 +257,49 @@ fun WiseAuthorityScreen(
                 showResolveDialog = false
                 selectedDeferral = null
             }
+        )
+    }
+
+    // Proposal / budget-issuance dialog. This is the #938/#939 path: the
+    // human's approval is the issuance event for the budget envelope.
+    selectedProposal?.let { proposal ->
+        val close = {
+            selectedProposal = null
+            onApprovalClosed()
+        }
+        ProposalApprovalDialog(
+            approval = proposal,
+            capability = budgetCapability,
+            isSubmitting = isResolving,
+            budgetState = selectedBudgetState?.takeIf { it.ticketId == proposal.id },
+            onDismiss = close,
+            onApprove = { amount, expiryHours, reason, promote, overGrantConfirmed ->
+                if (amount != null && proposal.requestedBudget != null) {
+                    onGrantBudget(
+                        proposal.id,
+                        amount,
+                        proposal.requestedBudget.requestedCurrency,
+                        expiryHours,
+                        reason,
+                        promote,
+                        overGrantConfirmed,
+                    )
+                } else {
+                    onPromoteProposal(proposal.id, reason)
+                }
+                close()
+            },
+            onReject = { reason ->
+                onRejectProposal(proposal.id, reason)
+                close()
+            },
+            onDefer = { reason ->
+                // "Not now" leaves the ticket blocked and records why. Nothing
+                // is issued and the work does not start — the agent stays
+                // fail-closed, which is the correct default.
+                onDeferProposal(proposal.id, reason)
+                close()
+            },
         )
     }
 }
@@ -473,9 +582,24 @@ private fun ResolveDeferralDialog(
                     fontWeight = FontWeight.Medium
                 )
 
+                // What is actually being approved, when this deferral is a
+                // tool-approval request (CIRISAgent#942). Rendered above the
+                // generic context dump because it is the decision.
+                val toolApproval = remember(deferral.context) {
+                    parseToolApprovalDetail(deferral.context)
+                }
+                toolApproval?.let { ToolApprovalCard(it) }
+
                 // Context if available
                 deferral.context?.let { context ->
-                    if (context.isNotEmpty()) {
+                    // Keys the tool-approval card already rendered are not
+                    // repeated as raw key/value lines below it.
+                    val remaining = if (toolApproval != null) {
+                        context.filterKeys { it !in TOOL_APPROVAL_RENDERED_KEYS }
+                    } else {
+                        context
+                    }
+                    if (remaining.isNotEmpty()) {
                         Card(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -489,7 +613,7 @@ private fun ResolveDeferralDialog(
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold
                                 )
-                                context.forEach { (key, value) ->
+                                remaining.forEach { (key, value) ->
                                     Text(
                                         text = "$key: $value",
                                         style = MaterialTheme.typography.bodySmall
@@ -624,6 +748,110 @@ private fun ResolveDeferralDialog(
 }
 
 // Helper function to format timestamp
+/**
+ * What the human is approving, when a deferral is a tool-approval request
+ * (CIRISAgent#942).
+ *
+ * Follows the budget-approval card in [ProposalApprovalDialog]: a
+ * `surfaceVariant` Surface block, a section title, the subject rendered
+ * prominently, then structured [LabelledLine] rows — rather than a second,
+ * differently-shaped approval idiom.
+ *
+ * Capability flags reuse `ToolCapabilityFlags.localizationKey`, the same
+ * mapping the first-run consent wizard uses, so a tool is described to the
+ * operator in the identical words they consented in. An unknown flag from a
+ * newer server renders its raw key instead of being dropped.
+ */
+@Composable
+private fun ToolApprovalCard(detail: ToolApprovalDetail) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth().testable("card_tool_approval"),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = localizedString("approval_tool_title"),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = detail.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = SemanticColors.Default.warning,
+                modifier = Modifier.testable("txt_tool_approval_name"),
+            )
+
+            detail.tool?.description?.takeIf { it.isNotBlank() }?.let { description ->
+                Text(text = description, style = MaterialTheme.typography.bodySmall)
+            }
+
+            val flags = detail.orderedCapabilityFlags
+            if (flags.isNotEmpty()) {
+                Text(
+                    text = localizedString("approval_tool_capabilities"),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                flags.forEach { flag ->
+                    Row(modifier = Modifier.testable("row_tool_cap_$flag")) {
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SemanticColors.Default.warning,
+                            modifier = Modifier.padding(end = 6.dp),
+                        )
+                        Text(
+                            text = localizedString(ToolCapabilityFlags.localizationKey(flag)),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+
+            if (detail.parameters.isNotEmpty()) {
+                HorizontalDivider()
+                Text(
+                    text = localizedString("approval_tool_arguments"),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Column(
+                    modifier = Modifier.testable("list_tool_approval_arguments"),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    detail.parameters.forEach { (name, value) ->
+                        LabelledLine(name, value)
+                    }
+                }
+            } else if (detail.argumentsWereOmitted) {
+                Text(
+                    text = localizedString("approval_tool_arguments_omitted"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testable("txt_tool_approval_args_omitted"),
+                )
+            }
+
+            // The honest bound. Approving grants the TOOL for the follow-up
+            // task; the agent re-reasons and may pass different values. Saying
+            // so here stops the argument list above from reading as a contract.
+            Text(
+                text = localizedString("approval_tool_scope_note"),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testable("txt_tool_approval_scope_note"),
+            )
+        }
+    }
+}
+
 private fun formatTimestamp(timestamp: String): String {
     // Simple formatting - in production you'd use kotlinx-datetime
     return try {

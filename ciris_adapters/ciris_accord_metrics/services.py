@@ -49,9 +49,11 @@ GRATITUDE_SIGNALED / CREDIT_GENERATED).
 """
 
 import asyncio
+import base64
 import hashlib
 import logging
 import os
+import json
 import re
 import time
 from dataclasses import dataclass, field
@@ -122,6 +124,87 @@ def _get_metrics_env(name: str, default: str = "") -> str:
 # state/country) and numeric fields must match resolution. Single source
 # of truth so future call sites can't accidentally skip the rounding.
 _PII_LOCATION_FUZZ_DECIMALS = 1
+
+
+# --- #933 repeated-failure log hygiene --------------------------------------
+# The 2.7.x-era HTTP flush hot loop (fixed-cadence 401 retries, one full
+# traceback per attempt, ~3/min forever) was structurally removed by the
+# 2.9.6 LensCore fold (#857 "no second shipping mechanism"): there is no
+# agent-side HTTP shipping path left to retry. Two repeated-failure surfaces
+# remain that could reproduce the same log-spam pattern under a persistent
+# substrate fault:
+#   * the per-event capture path (`LensClient.capture_event` — a
+#     persistently failing seal, e.g. `verify_unknown_key` while the lens/
+#     persist backend does not know the signer key, would otherwise log one
+#     ERROR per event), and
+#   * the periodic sweep loop (`_periodic_sweep` — a persistent
+#     orphan_sweep/persist failure would otherwise log a full traceback per
+#     interval, forever).
+# Policy (#933): log the FIRST failure of a streak and state transitions
+# only; steady-state failures go to counters (exposed via get_metrics), and
+# the one timer-driven loop backs off exponentially while failing.
+SWEEP_BACKOFF_MULTIPLIER = 2.0
+# Cap for the backed-off sweep cadence — the slow re-probe interval #933
+# asks for: frequent enough to recover promptly once the substrate heals,
+# slow enough to be quiet in the meantime. Never drops below the configured
+# sweep interval.
+SWEEP_BACKOFF_MAX_SECONDS = 900.0
+
+# Bounded event buffer (#933 buffer policy): the ONLY agent-side buffering
+# post-fold is the reasoning-stream subscription queue created in start().
+# It is hard-capped at this size; when full, the PUBLISHER drops the new
+# update with a WARNING (step_streaming.py: asyncio.QueueFull →
+# "Subscriber queue is full, dropping reasoning event") — drop-newest,
+# never unbounded growth. A failed capture is dropped, never re-queued, so
+# a persistent substrate fault cannot become a retry hot loop: capture
+# attempts are paced by the reasoning stream itself, not a timer.
+REASONING_QUEUE_MAXSIZE = 1000
+
+# Marker persist's trace verifier uses when rejecting a seal signed by a
+# key it does not know (`Engine.receive_and_persist` → ValueError
+# "verify_unknown_key"). This is the post-fold manifestation of the
+# 2.7.x-era HTTP 401 {"error":"verify_unknown_key"}: an auth/registration
+# failure that retrying cannot fix — only registering the signer key with
+# the verifying backend can.
+_AUTH_FAILURE_MARKER = "verify_unknown_key"
+
+
+class CaptureHealthState(str, Enum):
+    """Health of a repeated-failure domain (#933 log hygiene).
+
+    HEALTHY: normal operation — the streak tracker logs nothing.
+    DEGRADED: consecutive failures of a presumed-transient class
+        (substrate/db errors, timeouts) — first failure logged with
+        traceback, the rest counted.
+    DEGRADED_AUTH: the signer key is not registered with the verifying
+        backend (verify_unknown_key) — non-retryable by waiting; the named
+        remedy is logged ONCE, no traceback, and recovery is automatic at
+        the next capture once the key is accepted (the lens collector
+        migration window makes keys valid without an agent restart).
+    """
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    DEGRADED_AUTH = "degraded_auth"
+
+
+@dataclass
+class FailureStreak:
+    """Per-domain repeated-failure bookkeeping (#933).
+
+    A gauge, not a log stream: the service logs the streak's FIRST failure
+    (= the state transition, including a change of failure class) and the
+    recovery transition; everything in between increments counters that
+    get_metrics() surfaces.
+    """
+
+    domain: str
+    state: CaptureHealthState = CaptureHealthState.HEALTHY
+    consecutive_failures: int = 0
+    suppressed_log_count: int = 0
+    total_failures: int = 0
+    last_error_class: str = ""
+    last_error_message: str = ""
 
 
 class TraceDetailLevel(str, Enum):
@@ -259,7 +342,14 @@ class AccordMetricsService:
         # so two instances (e.g. the QA multi-level generic/detailed/
         # full_traces trio) sharing one dir silently overwrite each
         # other's lens-batch-00000000.json.
-        env_local_copy_dir = _get_metrics_env("LOCAL_COPY_DIR") or None
+        # Per-adapter CONFIG takes precedence over env, matching trace_level's
+        # resolution one block below. Without this, an adapter registered at
+        # RUNTIME over the API (the QA runner's accord_detailed / accord_full —
+        # the two that carry the actual detailed + full-text traces) had no way
+        # to be told where to tee: its registration payload carries trace_level
+        # and consent, and local_copy_dir was env-only.
+        config_local_copy_dir = str(self._config.get("local_copy_dir", "") or "") or None
+        env_local_copy_dir = config_local_copy_dir or _get_metrics_env("LOCAL_COPY_DIR") or None
         self._local_copy_dir: Optional[Path] = None
         if env_local_copy_dir:
             try:
@@ -280,6 +370,40 @@ class AccordMetricsService:
                     f"is not writable ({e}); proceeding without local copies."
                 )
                 self._local_copy_dir = None
+        else:
+            # A run that captures reasoning events, seals traces, and writes
+            # NOTHING to disk is indistinguishable from a healthy run unless it
+            # says so. Observed exactly that: 28 events received, traces sealed,
+            # zero lens-batch files, "Success Rate 100.0%". Anything downstream
+            # that reads the tee dir then computes on an empty set and reports a
+            # clean result.
+            logger.warning(
+                f"📂 [{self._adapter_instance_id}] Local-copy OFF (trace_level={self._config.get('trace_level') or _get_metrics_env('TRACE_LEVEL') or 'generic'}) "
+                f"— sealed batches are NOT written to disk. Set local_copy_dir in the adapter "
+                f"config or CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR in the env. Any harness reading "
+                f"a tee dir will find zero traces and may report that as a clean run."
+            )
+
+        # CEG seal-tee: separate opt-in, and deliberately NOT folded into
+        # local_copy_dir. That var means "tee the sealed batches lens-core
+        # hands us" — a pure write, which the QA runner turns on for every
+        # run because accord_metrics_tests reads those lens-batch files. The
+        # CEG carrier dump is a different act: it READS the live persist DB
+        # through a second SQLite library in this process (see
+        # _tee_ceg_on_seal), which is what killed the staged-QA sqlite leg.
+        # Overloading one var made the dangerous read default-on everywhere
+        # the safe write was. Only tools/research/capture_traces.sh sets this.
+        config_ceg_seal_tee = self._config.get("ceg_seal_tee")
+        if config_ceg_seal_tee is None:
+            ceg_seal_tee_raw = _get_metrics_env("CEG_SEAL_TEE", "")
+        else:
+            ceg_seal_tee_raw = str(config_ceg_seal_tee)
+        self._ceg_seal_tee_enabled: bool = ceg_seal_tee_raw.strip().lower() in ("1", "true", "yes", "on")
+        if self._ceg_seal_tee_enabled:
+            logger.info(
+                f"🔬 [{self._adapter_instance_id}] CEG seal-tee ENABLED — sealed carriers will be read "
+                f"from the persist DB and written as signed envelopes. Research capture only."
+            )
 
         # Sweep cadence — reuses the historical FLUSH_INTERVAL knob so QA
         # configs keep working; post-fold it paces orphan_sweep + the
@@ -374,6 +498,23 @@ class AccordMetricsService:
         self._traces_consent_blocked = 0
         self._last_send_time: Optional[datetime] = None
 
+        # 933 log hygiene: per-domain failure streaks + the sweep loop's
+        # current (possibly backed-off) cadence. While healthy,
+        # _sweep_interval_current == _sweep_interval and nothing here has
+        # any observable effect — the happy path is unchanged.
+        self._capture_streak = FailureStreak("capture")
+        self._sweep_streak = FailureStreak("sweep")
+        self._sweep_interval_current: float = self._sweep_interval
+
+        # Runtime self-heal: while consent is OFF, the event path re-checks the
+        # CEG grant (throttled) so a grant written AFTER the service started
+        # (the mobile first-run wizard case — Chaquopy keeps ONE Python process
+        # across the Android UI "restart", so the boot-time derivation never
+        # re-runs) arms the seal without a process restart. Monotonic seconds of
+        # the last re-check; 0.0 = never checked.
+        self._last_consent_recheck: float = 0.0
+        self._consent_recheck_interval: float = 10.0
+
         # In-flight thought_ids → monotonic open time (from capture_event
         # outcomes; the authoritative partial-trace store lives in lens-core).
         # Timestamps let _periodic_sweep age out entries whose traces the
@@ -441,33 +582,36 @@ class AccordMetricsService:
         }
 
     def _compute_instance_hash(self, fallback_id: Optional[str] = None) -> str:
-        """Compute unique instance hash from the unified signing key.
+        """Compute unique instance hash from the persist Engine's local signer.
 
-        Uses the CIRISVerify-backed unified key's public bytes so the hash is
-        unique per agent INSTANCE, not per template name — and stable across
-        the LensCore fold (the same derivation the pre-fold Python signer
-        used, preserving DSAR/lens-identifier continuity even though trace
-        SIGNATURES now come from the persist federation key via
-        `engine.signer()`).
+        2.9.7 (second-signer removal): derived from the engine's federation
+        signing pubkey (`engine.local_public_key_b64()`) — the SAME identity
+        that signs traces + audit entries. This CHANGES the instance hash /
+        DSAR-lens identifier from the pre-2.9.7 CIRISVerify-key derivation;
+        accepted breakage, one signer identity.
+
+        Must stay in sync with
+        ciris_engine/logic/adapters/api/routes/my_data.py.
 
         Args:
-            fallback_id: If signing key unavailable, hash this ID instead (for tests)
+            fallback_id: If the engine is unavailable, hash this ID instead (for tests)
 
         Returns:
-            SHA-256 hash of signing key's public key (first 16 chars),
-            or hash of fallback_id if provided and no signing key,
+            SHA-256 hash of the signer's raw public key bytes (first 16 chars),
+            or hash of fallback_id if provided and no engine,
             or "unknown" if neither available.
         """
         try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-            unified_key = get_unified_signing_key()
-            pubkey_bytes = unified_key.public_key_bytes
-            return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
+            engine = get_persist_engine()
+            if engine is not None:
+                pubkey_bytes = base64.b64decode(engine.local_public_key_b64())
+                return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
         except Exception as e:
-            logger.debug(f"Could not compute instance hash from signing key: {e}")
+            logger.debug(f"Could not compute instance hash from engine signer: {e}")
 
-        # Fallback for tests/environments without signing key
+        # Fallback for tests/environments without a wired engine
         if fallback_id:
             return hashlib.sha256(fallback_id.encode()).hexdigest()[:16]
 
@@ -570,23 +714,40 @@ class AccordMetricsService:
         wheels.)
         """
         try:
-            # import-untyped: the lens-core wheel ships no py.typed marker
-            # yet (1.1 docs ask alongside the capture_event concurrency
-            # contract) — same treatment as the other substrate imports.
-            from ciris_lens_core import LensClient  # type: ignore[import-untyped]
+            # One wheel (#896): LensClient re-hosts from ciris_server so the
+            # trace pipeline shares the SAME persist Engine the agent runs on.
+            # Pulling it from standalone ciris_lens_core (which Requires
+            # ciris-persist) reinstalls a second persist wheel alongside the
+            # one wheel — a dual-registry cohabitation that makes the seal's
+            # signer key invisible to the agent's Engine.receive_and_persist
+            # (verify_unknown_key). Fall back to standalone for partial dev envs.
+            try:
+                from ciris_server import LensClient  # type: ignore[import-not-found, import-untyped, unused-ignore]
+            except ImportError:
+                from ciris_lens_core import LensClient  # type: ignore[import-not-found, import-untyped, unused-ignore]
         except ImportError as e:
             raise RuntimeError(
-                "ciris-lens-core is REQUIRED in 2.9.6+ (the observability "
-                "orchestrator — CIRISAgent#866). pip install "
-                "'ciris-lens-core>=1.0.0,<2.0.0'. Import failed: " + str(e)
+                "LensClient is REQUIRED in 2.9.6+ (the observability "
+                "orchestrator — CIRISAgent#866). It re-hosts from the "
+                "ciris-server one wheel (#896); install ciris-server, or "
+                "ciris-lens-core for partial dev envs. Import failed: " + str(e)
             ) from e
 
-        # The consent wire artifact: lens-core's gate resolves the newest
-        # consent:community_trust:v1 row BY this key at every seal — the
-        # grant our consent attestation module writes on opt-in, the
-        # withdraws/recants it writes on revocation (a recant is a hard
-        # stop). The config-fallback timestamp below only matters while no
-        # CEG row exists (e.g. QA-runner env override).
+        # The consent wire artifact: consent:community_trust:v1, written by our
+        # consent attestation module on opt-in (grant) and revocation
+        # (withdraws/recants — a recant is a hard stop).
+        #
+        # CIRISPersist#461 confirmation (0.5.118 wheel): this key_id is passed
+        # as `consent_attesting_key_id`, but in the COHABITATION path (the one
+        # we take — `engine=` is passed below) the wheel's LensClient IGNORES
+        # it and gates on the CONFIG-FALLBACK consent (`consent_timestamp` +
+        # `_consent_given`) only. The direct per-seal CEG read is the sovereign
+        # (`engine=None`) path; wiring it in cohabitation is upstream
+        # CIRISEdge#85. So the CEG grant reaches the seal INDIRECTLY: the
+        # adapter reads it at boot (current_community_grant_id → _consent_given)
+        # and that populates the config-fallback timestamp handed to LensClient.
+        # We still resolve + pass the key_id so the sovereign path works
+        # unchanged once/if the agent uses it.
         try:
             from ciris_engine.logic.runtime.edge_runtime import get_federation_address
 
@@ -609,6 +770,30 @@ class AccordMetricsService:
                 "LensClient construction requires the persist Engine singleton — "
                 "initialize_database() must run before the accord_metrics adapter starts."
             )
+
+        # KEY DIAGNOSTICS (#896): lens traces are Ed25519-signed via the Engine
+        # and v10's receive_and_persist verifies the signer key_id against the
+        # registered federation keys, rejecting an unknown signer with
+        # `verify_unknown_key`. 2.9.7: there is ONE signer identity — the
+        # engine's local signer; the derived id is the federation-registered
+        # form the substrate verifies against.
+        try:
+            _engine_local_kid = engine.local_key_id()
+        except Exception as _e:  # noqa: BLE001
+            _engine_local_kid = f"<err: {_e}>"
+        try:
+            _engine_derived_kid = engine.local_derived_key_id()
+        except Exception as _e:  # noqa: BLE001
+            _engine_derived_kid = f"<err: {_e}>"
+        logger.info(
+            "[LENS_KEY_DIAG] constructing LensClient: engine.local_key_id=%s | "
+            "engine.local_derived_key_id=%s | "
+            "consent_attesting_key_id(get_federation_address)=%s | trace_level=%s",
+            _engine_local_kid,
+            _engine_derived_kid,
+            consent_key_id,
+            self._trace_level.value,
+        )
 
         try:
             return LensClient(
@@ -653,9 +838,28 @@ class AccordMetricsService:
             self.set_agent_id(self._initial_agent_id)
             logger.info(f"   Agent ID set from constructor: {self._initial_agent_id}")
 
+        # Consent is a CEG artifact (2.9.6 fold): the config-fallback consent
+        # the cohabitation seal gate reads must be DERIVED FROM THE GRANT, which
+        # is the source of truth. If config/env didn't already arm consent,
+        # resolve it from the standing community-trust grant BEFORE building the
+        # LensClient, so a clean restart (or any boot where the grant already
+        # exists) seals from the very first thought. Without this the service
+        # only ever saw config/env — which the wizard stopped writing at boot —
+        # so every seal resolved NoConsent even with a happy grant on disk.
+        consent_source = "config/env" if self._consent_given else None
+        if not self._consent_given:
+            grant_id = self._derive_consent_from_ceg()
+            if grant_id:
+                consent_source = f"ceg:grant {grant_id}"
+
         # REQUIRED substrate leg — raises if unavailable (see docstring)
         self._lens = self._build_lens_client()
         logger.info("   ✅ LensClient constructed (capture→seal→sign→persist owned by substrate)")
+
+        # ONE authoritative, greppable consent one-liner (rides logcat →
+        # mobile pull-logs). This is check (a) of the trace-consent validation
+        # recipe (FSD/TRACE_CONSENT.md).
+        self._log_consent_resolution(consent_source)
         logger.info("=" * 70)
 
         # Subscribe to reasoning_event_stream for trace capture.
@@ -665,21 +869,15 @@ class AccordMetricsService:
         try:
             from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
 
-            self._reasoning_queue = asyncio.Queue(maxsize=1000)
+            self._reasoning_queue = asyncio.Queue(maxsize=REASONING_QUEUE_MAXSIZE)
             reasoning_event_stream.subscribe(self._reasoning_queue)
             self._reasoning_task = asyncio.create_task(self._process_reasoning_events())
-            logger.info("✅ SUBSCRIBED to reasoning_event_stream (queue maxsize=1000)")
+            logger.info(f"✅ SUBSCRIBED to reasoning_event_stream (queue maxsize={REASONING_QUEUE_MAXSIZE})")
         except Exception as e:
             logger.error(f"❌ FAILED to subscribe to reasoning_event_stream: {e}")
             logger.error("   Traces will NOT be captured!")
 
         self._sweep_task = asyncio.create_task(self._periodic_sweep())
-
-        if not self._consent_given:
-            logger.warning(
-                "⚠️  CONSENT NOT GIVEN — events are captured but every seal "
-                "resolves consent_blocked at the substrate (nothing persists)"
-            )
 
     async def stop(self) -> None:
         """Stop the service: final sweep + stats."""
@@ -722,6 +920,88 @@ class AccordMetricsService:
         logger.info(f"   Events received: {self._events_received}")
         logger.info("=" * 70)
 
+    @staticmethod
+    def _classify_failure(exc: BaseException) -> CaptureHealthState:
+        """Map an exception to the degraded state class it drives (#933).
+
+        ``verify_unknown_key`` (persist's unknown-signer rejection at
+        ``Engine.receive_and_persist``) is the post-fold analog of the
+        2.7.x HTTP 401: an auth/registration failure retrying cannot fix.
+        Everything else is presumed transient/retryable.
+        """
+        if _AUTH_FAILURE_MARKER in str(exc):
+            return CaptureHealthState.DEGRADED_AUTH
+        return CaptureHealthState.DEGRADED
+
+    def _record_failure(self, streak: FailureStreak, exc: BaseException, context: str) -> None:
+        """Count a failure; log ONLY on a state transition (#933).
+
+        The first failure of a streak (or a change of failure class
+        mid-streak) logs one ERROR naming the remedy. Steady-state failures
+        increment counters (surfaced by get_metrics) and emit a DEBUG
+        one-liner instead of an ERROR+traceback per attempt.
+        """
+        streak.consecutive_failures += 1
+        streak.total_failures += 1
+        streak.last_error_class = type(exc).__name__
+        streak.last_error_message = str(exc)[:300]
+        new_state = self._classify_failure(exc)
+        if streak.state is not new_state:
+            streak.state = new_state
+            if new_state is CaptureHealthState.DEGRADED_AUTH:
+                # ONE stable ERROR line, no traceback: the cause is known
+                # and the remedy is named — a traceback per attempt is the
+                # exact #933 anti-pattern.
+                logger.error(
+                    "[ACCORD_HEALTH] %s DEGRADED (auth) — %s: %s: %s. The engine signer key is "
+                    "not registered with the trace verifier (verify_unknown_key). Remedy: register "
+                    "the federation signing key with the lens/persist backend (lens collector "
+                    "migration or node re-key). Capture keeps running and the service recovers "
+                    "automatically once the key is accepted — no restart needed. Further failures "
+                    "are counted, not logged (see get_metrics).",
+                    streak.domain,
+                    context,
+                    type(exc).__name__,
+                    exc,
+                )
+            else:
+                logger.error(
+                    "[ACCORD_HEALTH] %s DEGRADED — %s: %s: %s. First failure of this streak; "
+                    "further failures are counted, not logged (see get_metrics).",
+                    streak.domain,
+                    context,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
+        else:
+            streak.suppressed_log_count += 1
+            logger.debug(
+                "[ACCORD_HEALTH] %s still %s (streak=%d): %s: %s",
+                streak.domain,
+                streak.state.value,
+                streak.consecutive_failures,
+                type(exc).__name__,
+                exc,
+            )
+
+    def _record_success(self, streak: FailureStreak) -> None:
+        """Close a failure streak; log the recovery transition once (#933)."""
+        if streak.state is CaptureHealthState.HEALTHY:
+            return
+        logger.info(
+            "[ACCORD_HEALTH] %s RECOVERED after %d consecutive failure(s) "
+            "(%d repeat log line(s) suppressed; last error: %s: %s)",
+            streak.domain,
+            streak.consecutive_failures,
+            streak.suppressed_log_count,
+            streak.last_error_class,
+            streak.last_error_message,
+        )
+        streak.state = CaptureHealthState.HEALTHY
+        streak.consecutive_failures = 0
+        streak.suppressed_log_count = 0
+
     async def _periodic_sweep(self) -> None:
         """Pace the substrate orphan sweep + events-total persistence.
 
@@ -729,11 +1009,18 @@ class AccordMetricsService:
         design — no action means it never happened; the substrate purges
         them after `_orphan_trace_max_age` rather than force-emitting
         partial traces.
+
+        Failure hygiene (#933): this is the only timer-driven loop left in
+        the service. While failing it backs off exponentially (base = the
+        configured sweep interval, ×SWEEP_BACKOFF_MULTIPLIER per
+        consecutive failure, capped at SWEEP_BACKOFF_MAX_SECONDS) and logs
+        only the streak's first failure; a clean pass logs recovery once
+        and resets the cadence.
         """
         try:
             while True:
                 try:
-                    await asyncio.sleep(self._sweep_interval)
+                    await asyncio.sleep(self._sweep_interval_current)
                     if self._lens is not None:
                         purged = await asyncio.to_thread(self._lens.orphan_sweep, int(self._orphan_trace_max_age))
                         if purged:
@@ -750,12 +1037,24 @@ class AccordMetricsService:
                         for tid in stale:
                             self._open_thoughts.pop(tid, None)
                     self._persist_events_total()
+                    # 933: a clean pass closes any failure streak and resets
+                    # the backed-off cadence (no-op while healthy).
+                    self._record_success(self._sweep_streak)
+                    self._sweep_interval_current = self._sweep_interval
                 except Exception as e:
                     if isinstance(e, asyncio.CancelledError):
                         raise  # Re-raise to exit cleanly
-                    logger.error(
-                        f"Error in periodic sweep: {type(e).__name__}: {e!r}",
-                        exc_info=True,
+                    # 933: transition-logged, steady-state-counted — no
+                    # fixed-cadence traceback spam while the substrate is
+                    # down. Back off up to the cap; never below the
+                    # configured interval.
+                    self._record_failure(self._sweep_streak, e, "periodic sweep")
+                    self._sweep_interval_current = max(
+                        self._sweep_interval,
+                        min(
+                            self._sweep_interval_current * SWEEP_BACKOFF_MULTIPLIER,
+                            SWEEP_BACKOFF_MAX_SECONDS,
+                        ),
                     )
         except asyncio.CancelledError:
             pass  # Clean exit on cancellation
@@ -809,9 +1108,18 @@ class AccordMetricsService:
                 await self._process_single_event(event)
             except Exception as e:
                 self._events_failed += 1
-                logger.error(
+                # 933: transition-logged, steady-state-counted. The failed
+                # event is DROPPED, never re-queued — capture attempts are
+                # paced by the reasoning stream itself (no timer), so a
+                # persistent substrate fault (e.g. verify_unknown_key while
+                # the backend does not know the signer key) cannot become a
+                # fixed-cadence retry hot loop; the next reasoning event is
+                # the re-probe, and recovery is automatic.
+                self._record_failure(
+                    self._capture_streak,
+                    e,
                     f"capture failed for event {event.get('event_type', '?')} "
-                    f"(thought {event.get('thought_id', '?')}): {type(e).__name__}: {e!r}"
+                    f"(thought {event.get('thought_id', '?')})",
                 )
 
     async def _process_single_event(self, event: Dict[str, Any]) -> None:
@@ -840,6 +1148,11 @@ class AccordMetricsService:
 
         self._events_received += 1
 
+        # Runtime self-heal (throttled, no-op once armed): if a CEG grant landed
+        # after boot (mobile first-run wizard — single Chaquopy process), arm the
+        # seal here so this event captures into the rebuilt, consent-on client.
+        self._maybe_self_heal_consent()
+
         if self._lens is None:
             # start() raises when the substrate is unavailable, so this only
             # happens if events arrive before start() — drop with a debug.
@@ -862,6 +1175,9 @@ class AccordMetricsService:
         # and seal ordering depend on it.
         async with self._capture_lock:
             outcome = await asyncio.to_thread(self._lens.capture_event, component)
+        # 933: a successful substrate round-trip closes any failure streak
+        # (logs the recovery transition once; no-op while healthy).
+        self._record_success(self._capture_streak)
         kind = outcome.get("outcome", "")
 
         if kind == "opened":
@@ -875,17 +1191,235 @@ class AccordMetricsService:
             self._events_sent += inserted
             self._last_send_time = datetime.now(timezone.utc)
             logger.info(
-                f"✅ TRACE SEALED #{self._traces_completed}: {outcome.get('trace_id')} "
+                f"[SEAL] sealed thought={thought_id} trace_id={outcome.get('trace_id')} "
+                f"✅ TRACE SEALED #{self._traces_completed} "
                 f"({inserted} trace_events, {outcome.get('signatures_verified', 0)} signature(s) verified)"
+            )
+            # Tee the CEG carriers on SEAL — never gated on delivery.
+            self._tee_ceg_on_seal(
+                thought_id,
+                outcome.get("trace_id"),
+                observed_skipped=outcome.get("ethical_faculties_skipped"),
             )
         elif kind == "consent_blocked":
             self._open_thoughts.pop(thought_id, None)
             self._traces_consent_blocked += 1
-            logger.debug(f"⏭️  Trace for {thought_id} consent_blocked at seal (reason={outcome.get('reason')})")
+            # WARNING (not debug): a skipped seal is the exact silent failure the
+            # RCA chased — no trace_events row, no error. Greppable in pull-logs
+            # as `[SEAL] SKIPPED`. Self-heal (above) normally arms before this;
+            # if it still fires, the CEG grant is genuinely absent.
+            logger.warning(
+                f"[SEAL] SKIPPED thought={thought_id} reason=no-consent "
+                f"(substrate reason={outcome.get('reason')}) — opt in via wizard or "
+                f"Data & Privacy → Send traces"
+            )
         elif kind == "rejected":
             self._events_rejected += 1
             logger.warning(f"🚫 Substrate rejected unknown event_type {outcome.get('raw')!r} (thought {thought_id})")
         # "appended" needs no bookkeeping
+
+
+
+    def _declared_condition(self) -> Optional[str]:
+        """The research condition the operator DECLARED, if any.
+
+        Read from the research-override manifest, which is gated on
+        CIRIS_RESEARCH_PROMPT_OVERRIDES + CIRIS_TESTING_MODE. Absent outside a
+        research run, which is the normal case.
+        """
+        try:
+            import json as _json
+            import os as _os
+
+            path = _os.environ.get("CIRIS_RESEARCH_PROMPT_OVERRIDES")
+            if not path or _os.environ.get("CIRIS_TESTING_MODE", "").lower() != "true":
+                return None
+            with open(path) as fh:
+                declared = _json.load(fh).get("condition")
+            return str(declared) if declared is not None else None
+        except Exception:  # noqa: BLE001 — a manifest problem must not break the seal
+            return None
+
+    def _condition_attestation(self, observed_skipped: Optional[bool]) -> Optional[Dict[str, Any]]:
+        """Bind the DECLARED research condition to the OBSERVED runtime state.
+
+        WHY THIS IS IN THE SEAL AND NOT A CHECK.
+
+        A research arm's condition is currently an unverified self-report: a run
+        labelled (c) with the faculties disabled by hand satisfies every rule and
+        produces fabricated-looking scalars under a clean manifest. Deriving the
+        condition post-hoc catches it — but a post-hoc gate fires AFTER the
+        compute is spent, which creates pressure to reclassify the run rather
+        than discard it. A gate someone can talk past is weaker than evidence
+        they would have to talk over.
+
+        So the contradiction is recorded HERE, inside the PQC-signed carrier,
+        at the moment of sealing. Overriding the classification later is still
+        possible — it is just no longer invisible, because the signed artifact
+        says what the runtime actually did. Tampering with that is detectable by
+        construction.
+
+        `ethical_faculties_skipped` is the observable: it now reflects whether
+        anything was actually measured (it was hardcoded False until this
+        release, so it could never report the thing it names).
+        """
+        declared = self._declared_condition()
+        if declared is None and observed_skipped is None:
+            return None
+        # (b) = design declared, pipeline off. (c) = declared and running.
+        implied = None
+        if observed_skipped is True:
+            implied = "b"
+        elif observed_skipped is False:
+            implied = "c"
+        contradicts = bool(declared and implied and declared != implied)
+        return {
+            "declared_condition": declared,
+            "observed_ethical_faculties_skipped": observed_skipped,
+            "implied_condition": implied,
+            "contradicts_declaration": contradicts,
+            "note": (
+                "declared is operator self-report; implied is derived from runtime state. "
+                "A true contradicts_declaration means the cohort must not be scored under "
+                "the declared arm."
+            ),
+        }
+
+    def _tee_ceg_on_seal(
+        self, thought_id: str, trace_id: Optional[str], observed_skipped: Optional[bool] = None
+    ) -> None:
+        """Write the sealed CEG carriers to disk as SIGNED, WIRE-READY envelopes.
+
+        Two properties, both load-bearing:
+
+        1. WRITTEN ON SEAL, NEVER ON SHIP. The substrate's own local-copy tees a
+           batch only when that batch ships, so an unreachable canonical yielded
+           zero local trace files while the rows sat sealed in persist. Local
+           capture must not depend on remote reachability — offline is exactly
+           when the corpus matters most.
+
+        2. FULL PQC WIRE FORM. Every column is captured, including
+           scrub_signature_classical / scrub_signature_pqc / scrub_key_id /
+           scrub_timestamp / original_content_hash / persist_row_hash. An
+           envelope without its signatures is not importable into the mesh; it
+           is a transcript. What lands here is what a peer would receive and
+           can verify.
+
+        Bytes are hex-encoded so the JSON round-trips losslessly.
+
+        OPT-IN ONLY (CIRIS_ACCORD_METRICS_CEG_SEAL_TEE). Reading the carriers
+        means opening a SECOND SQLite connection — Python's sqlite3 — against
+        the very database the Rust persist engine holds open for writing, from
+        inside the same process. Those are two independently-linked copies of
+        the SQLite library, and WAL's shared-memory index assumes exactly one
+        per process; the pair is unsupported and takes the process down hard
+        (no traceback, mid-log-line). Staged QA hit it reproducibly on the
+        sqlite leg, dying inside the 7th tee while the postgres leg — where
+        the connect fails fast because there is no SQLite file — ran clean.
+        So this stays off unless a research capture asks for it, and the
+        normal QA/production path never opens the second handle.
+        """
+        if not self._ceg_seal_tee_enabled:
+            logger.debug(
+                "CEG seal tee disabled (set CIRIS_ACCORD_METRICS_CEG_SEAL_TEE=true to enable); thought=%s",
+                thought_id,
+            )
+            return
+        if not self._local_copy_dir:
+            logger.warning(
+                f"⚠️ [{self._adapter_instance_id}] CEG seal NOT teed (no local_copy_dir) "
+                f"thought={thought_id} — set local_copy_dir in adapter config or "
+                f"CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"
+            )
+            return
+        if not trace_id:
+            logger.warning(
+                f"⚠️ [{self._adapter_instance_id}] CEG seal NOT teed (seal returned no trace_id) "
+                f"thought={thought_id}"
+            )
+            return
+        try:
+            # The persist Engine is a Rust PyO3 object with no Python DBAPI
+            # handle, so read the SQLite file directly, READ-ONLY. The runtime
+            # holds it in WAL mode; a read-only URI connection is safe alongside
+            # the writer and cannot disturb it.
+            import sqlite3
+
+            from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
+
+            db_path = get_sqlite_db_full_path()
+            like = f"%{trace_id}%"
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5.0)
+            try:
+                cur = conn.execute(
+                    "SELECT * FROM federation_attestations "
+                    "WHERE CAST(attestation_envelope AS TEXT) LIKE ?",
+                    (like,),
+                )
+                cols = [d[0] for d in cur.description]
+                rows = cur.fetchall()
+            finally:
+                conn.close()
+            if not rows:
+                logger.warning(
+                    f"⚠️ [{self._adapter_instance_id}] CEG seal teed NOTHING: no federation_attestations "
+                    f"row matches trace_id={trace_id}. The seal reported success but no carrier row "
+                    f"exists — that is a source-side defect, not a capture one."
+                )
+                return
+
+            def _enc(v: object) -> object:
+                if isinstance(v, (bytes, bytearray)):
+                    return {"__hex__": bytes(v).hex()}
+                return v
+
+            ceg_rows = []
+            for r in rows:
+                d = {c: _enc(v) for c, v in zip(cols, r)}
+                env = d.get("attestation_envelope")
+                if isinstance(env, (str, bytes, bytearray)):
+                    try:
+                        d["attestation_envelope"] = json.loads(
+                            env.decode() if isinstance(env, (bytes, bytearray)) else env
+                        )
+                    except Exception:  # noqa: BLE001 — keep the raw form if it is not JSON
+                        pass
+                ceg_rows.append(d)
+
+            signed = sum(
+                1
+                for d in ceg_rows
+                if d.get("scrub_signature_classical") or d.get("scrub_signature_pqc")
+            )
+            payload = {
+                "thought_id": thought_id,
+                "trace_id": trace_id,
+                "adapter_instance": self._adapter_instance_id,
+                "trace_level": self._trace_level.value,
+                "wire_form": "federation_attestations row, all columns, bytes hex-encoded as {__hex__: ...}",
+                "signed_rows": signed,
+                "condition_attestation": self._condition_attestation(observed_skipped),
+                "ceg_rows": ceg_rows,
+            }
+            safe = re.sub(r"[^A-Za-z0-9._-]", "_", str(trace_id))[:120]
+            out = self._local_copy_dir / f"ceg-seal-{safe}.json"
+            out.write_text(json.dumps(payload, indent=1, ensure_ascii=False, default=str))
+            if signed == 0:
+                logger.warning(
+                    f"⚠️ [{self._adapter_instance_id}] CEG seal teed {out.name} but {len(ceg_rows)} row(s) "
+                    f"carry NO scrub signature — not mesh-importable as-is (PQC scrub may still be pending)"
+                )
+            else:
+                logger.info(
+                    f"📂 [{self._adapter_instance_id}] CEG seal teed: {out.name} — "
+                    f"{len(ceg_rows)} carrier row(s), {signed} signed, full wire envelope "
+                    f"(written on SEAL, independent of delivery)"
+                )
+        except Exception as exc:  # noqa: BLE001 — capture must never break the seal
+            logger.warning(
+                f"⚠️ [{self._adapter_instance_id}] CEG seal tee FAILED trace_id={trace_id}: "
+                f"{type(exc).__name__}: {exc}"
+            )
 
     def _extract_component_data(self, event_type: str, event: Dict[str, Any]) -> Dict[str, Any]:
         """Extract reasoning data from event based on configured trace detail level.
@@ -932,10 +1466,16 @@ class AccordMetricsService:
                 "task_priority": event.get("task_priority"),
                 "updated_info_available": event.get("updated_info_available"),
                 "requires_human_input": event.get("requires_human_input"),
+                # FLAT summary alias (CIRISServer#315 seam sweep): persist's
+                # trace-summary projection reads '$.thought_type' off
+                # THOUGHT_START at every level — an ENUM (seed/followup/…),
+                # zero content, safe at GENERIC. (persist also reads
+                # '$.task_description' — that one is TEXT and stays FULL-tier
+                # by design; flagged upstream as a wrong-tier read.)
+                "thought_type": event.get("thought_type"),
             }
             # DETAILED: Add type identifiers
             if is_detailed:
-                data["thought_type"] = event.get("thought_type")
                 data["thought_status"] = event.get("thought_status")
                 data["parent_thought_id"] = event.get("parent_thought_id")
                 data["channel_id"] = event.get("channel_id")
@@ -1197,6 +1737,16 @@ class AccordMetricsService:
                 "dsdma": dsdma_data,
                 "pdma": pdma_data if pdma_data else None,
                 "idma": idma_data,
+                # FLAT summary aliases (CIRISServer#315 root cause): persist's
+                # trace-summary projection extracts these exact top-level paths
+                # (json_extract '$.csdma_plausibility_score' etc., see
+                # SQLITE_TRACE_SUMMARY_SELECT). Without them every summary row
+                # carries NULL essentials → the capacity scorer's feature
+                # matrix drops all rows → emitted=0 → NO trace ever ships.
+                # Additive alongside the nested shape the lens reads.
+                "csdma_plausibility_score": csdma_data.get("plausibility_score"),
+                "dsdma_domain_alignment": dsdma_data.get("domain_alignment"),
+                "dsdma_domain": dsdma.get("domain") if isinstance(dsdma, dict) else None,
             }
             if is_full:
                 data["combined_analysis"] = event.get("combined_analysis")
@@ -1214,6 +1764,15 @@ class AccordMetricsService:
                 "reasoning_state": event.get("reasoning_state"),
                 "fragility_flag": event.get("fragility_flag"),
                 "reasoning_is_fragile": event.get("reasoning_is_fragile"),
+                # FLAT summary aliases (CIRISServer#315 root cause): persist's
+                # trace-summary projection reads '$.idma_k_eff' etc. off the
+                # IDMA_RESULT payload — idma_k_eff is one of the TWO essential
+                # feature dims (with csdma_plausibility_score) whose absence
+                # empties the capacity scorer's feature matrix. Additive.
+                "idma_k_eff": event.get("k_eff"),
+                "idma_correlation_risk": event.get("correlation_risk"),
+                "idma_fragility_flag": event.get("fragility_flag"),
+                "idma_phase": event.get("phase"),
             }
             # DETAILED: Add identified sources and correlation factors
             if is_detailed:
@@ -1416,10 +1975,18 @@ class AccordMetricsService:
                 "has_positive_moment": positive_moment_text is not None and len(positive_moment_text) > 0,
                 # Execution error indicator (privacy-preserving boolean)
                 "has_execution_error": event.get("error") is not None,
+                # FLAT summary aliases (CIRISServer#315 seam sweep): persist's
+                # trace-summary projection reads '$.success' (→ action_success)
+                # and '$.action_executed' (→ selected_action) off ACTION_RESULT
+                # at EVERY trace level. `success` is a bool alias of
+                # execution_success; `action_executed` is the handler-action
+                # ENUM (speak/ponder/defer/…) — zero content, safe at GENERIC,
+                # and without it the summary's selected_action column is dead.
+                "success": event.get("execution_success"),
+                "action_executed": event.get("action_executed"),
             }
-            # DETAILED: Add action type, follow-up, error details, and audit signature
+            # DETAILED: Add follow-up, error details, and audit signature
             if is_detailed:
-                data["action_executed"] = event.get("action_executed")
                 data["follow_up_thought_id"] = event.get("follow_up_thought_id")
                 data["audit_entry_id"] = event.get("audit_entry_id")
                 data["models_used"] = event.get("models_used", [])
@@ -1550,12 +2117,20 @@ class AccordMetricsService:
         try:
             async with self._capture_lock:
                 outcome = await asyncio.to_thread(self._lens.capture_event, component)
+            # 933: same capture domain — success closes any streak.
+            self._record_success(self._capture_streak)
             self._events_received += 1
             if outcome.get("outcome") == "opened":
                 self._open_thoughts[request.thought_id] = time.monotonic()
             logger.info(f"🧭 WBD deferral captured for thought {request.thought_id} (outcome={outcome.get('outcome')})")
-        except Exception:
-            logger.exception("Failed to capture WBD deferral")
+        except Exception as e:
+            # 933: transition-logged, steady-state-counted (was a full
+            # traceback per failed deferral capture).
+            self._record_failure(
+                self._capture_streak,
+                e,
+                f"WBD deferral capture (thought {request.thought_id})",
+            )
 
         return deferral_id
 
@@ -1594,6 +2169,125 @@ class AccordMetricsService:
     # =========================================================================
     # Consent Management
     # =========================================================================
+
+    def _derive_consent_from_ceg(self) -> Optional[str]:
+        """Resolve consent from the CEG community-trust grant (source of truth).
+
+        The 2.9.6 fold made the ``consent:community_trust:v1`` grant THE consent
+        artifact. In the cohabitation seal path lens-core gates on the
+        config-fallback consent, so the service must TRANSLATE the grant into
+        that fallback. Reads ``current_community_grant_id`` (+ its ``asserted_at``
+        for a restart-stable timestamp). On a hit, sets ``_consent_given`` /
+        ``_consent_timestamp`` (never clobbering an already-set timestamp) and
+        returns the grant id; else returns None. Never raises — a broken read
+        leaves consent untouched (capture keeps running; seals stay blocked).
+        """
+        try:
+            from ciris_engine.logic.services.governance.consent.attestation import (
+                current_community_grant_asserted_at,
+                current_community_grant_id,
+            )
+
+            grant_id = current_community_grant_id()
+            if not grant_id:
+                return None
+            self._consent_given = True
+            if not self._consent_timestamp:
+                self._consent_timestamp = (
+                    current_community_grant_asserted_at() or datetime.now(timezone.utc).isoformat()
+                )
+            return grant_id
+        except Exception as exc:  # noqa: BLE001 — best-effort, never break capture
+            logger.debug("consent-CEG: service consent derivation skipped (%s): %s", type(exc).__name__, exc)
+            return None
+
+    def _log_consent_resolution(self, source: Optional[str]) -> None:
+        """Emit the single authoritative ``[CONSENT]`` boot one-liner.
+
+        ARMED when consent resolved (source = ``config/env`` or ``ceg:grant <id>``),
+        ABSENT otherwise — with the exact signals checked, so troubleshooting is
+        a one-line grep (``grep '\\[CONSENT\\]'`` in mobile pull-logs).
+        """
+        # CONSENT DRY (opt-in paths 3+4: env var / legacy-convert): capture
+        # consent resolving TRUE here does NOT imply the v22 federation grants
+        # (consent:replication + CC#46 analyze) exist — those are owner acts.
+        # Detect drift via the engine's own resolvers and surface the remedy;
+        # never silently author owner-tier grants from a session-less path.
+        if self._consent_given:
+            try:
+                from ciris_engine.logic.services.governance.consent.attestation import (
+                    log_federation_consent_drift,
+                )
+
+                log_federation_consent_drift(source or "boot")
+            except Exception:  # noqa: BLE001 — advisory only
+                pass
+        if self._consent_given:
+            logger.info(
+                "[CONSENT] trace consent ARMED — source=%s role=community_trust "
+                "target=canonical-community ts=%s → traces WILL seal",
+                source or "unknown",
+                self._consent_timestamp or "now",
+            )
+        else:
+            config_consent = bool(self._config.get("consent_given", False))
+            env_consent = _get_metrics_env("CONSENT", "").lower() == "true"
+            # On a first run this fires BEFORE the setup wizard can possibly have
+            # granted consent — it describes the expected pre-wizard state, not a
+            # fault. Logged as a WARNING saying "traces will NOT seal", it reads
+            # as the cause of any later trace problem and gets blamed for
+            # failures it precedes by a minute. Say which state this is, and only
+            # raise the volume once the wizard has had its chance.
+            pre_wizard = not bool(self._config.get("setup_complete", False))
+            logger.log(
+                logging.INFO if pre_wizard else logging.WARNING,
+                "[CONSENT] trace consent %s — traces will not seal yet "
+                "(checked: ceg=none config=%s env=%s). %s",
+                "not yet granted (pre-wizard, expected)" if pre_wizard else "ABSENT",
+                config_consent,
+                env_consent,
+                (
+                    "The setup wizard has not run; it grants consent at the FED-ID step."
+                    if pre_wizard
+                    else "Opt in via the setup wizard or Data & Privacy → Send traces; the "
+                    "service SELF-ARMS at the next reasoning event once the grant lands "
+                    "(no restart needed)."
+                ),
+            )
+
+    def _maybe_self_heal_consent(self) -> None:
+        """Throttled runtime re-arm from the CEG grant while consent is OFF.
+
+        Called at the TOP of the event path (before capture), so when a grant
+        lands after boot the LensClient is rebuilt BEFORE the first event of the
+        next thought opens — that whole thought then captures in the armed
+        client and its ACTION_RESULT seals cleanly. No-ops once consent is on.
+        """
+        if self._consent_given:
+            return
+        now = time.monotonic()
+        # First re-check (sentinel 0.0) is always allowed — don't let a small
+        # monotonic epoch right after boot throttle the very first opportunity
+        # to arm. Subsequent re-checks are interval-throttled.
+        if self._last_consent_recheck != 0.0 and now - self._last_consent_recheck < self._consent_recheck_interval:
+            return
+        self._last_consent_recheck = now
+        grant_id = self._derive_consent_from_ceg()
+        if grant_id:
+            logger.info(
+                "[CONSENT] trace consent SELF-ARMED at runtime — source=ceg:grant %s "
+                "ts=%s (grant landed after boot; rebuilding LensClient)",
+                grant_id,
+                self._consent_timestamp or "now",
+            )
+            # Rebuild the substrate client so its config-fallback consent picks
+            # up the now-armed state (set_consent freezes it at construction).
+            if self._lens is not None:
+                try:
+                    self._lens = self._build_lens_client()
+                    logger.info("   [CONSENT] LensClient rebuilt — seals now persist")
+                except RuntimeError:
+                    logger.exception("   [CONSENT] LensClient rebuild failed after self-arm")
 
     def set_consent(self, consent_given: bool, timestamp: Optional[str] = None) -> None:
         """Update consent state and rebuild the substrate client.
@@ -1662,9 +2356,10 @@ class AccordMetricsService:
             Dictionary of service metrics
         """
         try:
-            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-            signer_key_id: Optional[str] = get_unified_signing_key().key_id
+            _engine = get_persist_engine()
+            signer_key_id: Optional[str] = _engine.local_derived_key_id() if _engine is not None else None
         except Exception:
             signer_key_id = None
 
@@ -1688,6 +2383,18 @@ class AccordMetricsService:
             "has_signing_key": signer_key_id is not None,
             "agent_id_hash": self._agent_id_hash,
             "substrate": "ciris-lens-core",
+            # 933 failure-hygiene surface: the degraded condition is adapter
+            # STATE, not a log stream — a steady-state failure is a gauge.
+            "capture_state": self._capture_streak.state.value,
+            "capture_consecutive_failures": self._capture_streak.consecutive_failures,
+            "capture_failures_total": self._capture_streak.total_failures,
+            "capture_last_error_class": self._capture_streak.last_error_class or None,
+            "sweep_state": self._sweep_streak.state.value,
+            "sweep_consecutive_failures": self._sweep_streak.consecutive_failures,
+            "sweep_interval_current_seconds": self._sweep_interval_current,
+            "failure_logs_suppressed": (
+                self._capture_streak.suppressed_log_count + self._sweep_streak.suppressed_log_count
+            ),
         }
 
     def queue_lens_deletion_on_revoke(self) -> None:

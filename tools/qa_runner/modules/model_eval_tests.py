@@ -22,6 +22,19 @@ from rich.text import Text
 
 from .memory_benchmark_tests import find_server_pid, format_size, get_children_memory
 
+def _accord_tee_dir() -> str:
+    """Where runtime-registered accord adapters tee sealed batches.
+
+    Registration payloads previously carried trace_level but not this, and
+    the adapter read the dir from ENV only — so accord_detailed/accord_full,
+    the two instances holding the detailed and full-text traces, could not
+    be told where to write. A run then sealed traces and produced zero files
+    while reporting 100% pass.
+    """
+    import os
+    return os.environ.get("CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR", "") or ""
+
+
 
 # Per-locale display names. Each (locale, name) pair gets its own user
 # account at the start of the run — channels submit under that user's
@@ -94,6 +107,7 @@ def _strip_question_wrapper(text: str) -> str:
 
 @dataclass(frozen=True)
 class EvalQuestion:
+
     category: str
     question: str  # English baseline, used when no translation exists for a target language
     evaluates: str
@@ -255,6 +269,10 @@ def load_questions_from_file(path: str) -> List[EvalQuestion]:
 
 class ModelEvalTests:
     """Run multilingual live model eval with per-language channel isolation."""
+
+    # Produces CEG reasoning traces: the runner loads accord_metrics, sets the
+    # owner-consent env var, and points the local tee at qa_reports/.
+    CAPTURES_TRACES = True
 
     # Live-LLM and server-env contract read by tools/qa_runner/modules/_module_metadata.py.
     # Same rationale as the original hardcoded conditional in server.py:889 —
@@ -636,6 +654,7 @@ class ModelEvalTests:
                     "config": {
                         "adapter_id": adapter_id,
                         "trace_level": trace_level,
+                        "local_copy_dir": _accord_tee_dir(),
                         "consent_given": True,
                         "consent_timestamp": "2025-01-01T00:00:00Z",
                         "flush_interval_seconds": 5,

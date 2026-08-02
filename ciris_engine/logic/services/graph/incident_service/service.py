@@ -150,7 +150,7 @@ class IncidentManagementService(BaseGraphService):
         downstream pattern-detection code (_detect_patterns, _identify_problems)
         keeps working unchanged.
         """
-        from ciris_engine.logic.audit.persist_signing import resolve_tenant_id
+        from ciris_engine.logic.audit import resolve_tenant_id
         from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
         engine = get_persist_engine()

@@ -214,9 +214,32 @@ def get_string(
         >>> get_string("xx", "nonexistent.key", default="Fallback text")
         "Fallback text"
     """
+    # Research-bound override (FSD/RESEARCH_PROMPT_OVERRIDES.md §3.1, `string`
+    # namespace). Unreachable unless BOTH CIRIS_RESEARCH_PROMPT_OVERRIDES and
+    # CIRIS_TESTING_MODE are set; the accessor returns None with zero state
+    # otherwise. Checked before resolution so the override is what reaches the
+    # prompt, not a locale-fallback of it.
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+    _manifest = get_active_overrides()
+    if _manifest is not None:
+        _override = _manifest.overrides.string.get(key)
+        if _override is not None:
+            return _interpolate(_override, **params) if params else _override
+
     # Try requested language first
     lang_data = _get_language_data(lang_code)
     result = _resolve_key(lang_data, key)
+
+    # R4 — no [EN] laundering. Under an active manifest an override that IS
+    # present must never be silently replaced by English.
+    if _manifest is not None and result is not None and result.startswith("[EN]"):
+        raise RuntimeError(
+            f"research overrides active: key {key!r} resolves to an [EN]-prefixed "
+            f"placeholder in locale {lang_code!r}, which get_string treats as absent and "
+            f"silently replaces with English. A supposedly non-CIRIS arm would contain "
+            f"CIRIS English. Override the key in the manifest or fix the bundle."
+        )
 
     # Check for [EN] placeholder marker (indicates untranslated)
     if result is not None and result.startswith("[EN]"):
@@ -229,6 +252,11 @@ def get_string(
         result = _resolve_key(en_data, key)
         if result is not None:
             logger.info(f"[LOCALIZATION] Fallback to English for key '{key}' (requested lang={lang_code})")
+        elif default is not None:
+            # Caller supplied an explicit default → absence is expected and handled
+            # (e.g. optional prompts.prohibitions.* keys that fill in per-language
+            # as the localization pass lands). Don't spam WARNING on every call.
+            logger.debug(f"[LOCALIZATION] Key '{key}' not localized ({lang_code}/en); using caller default")
         else:
             logger.warning(f"[LOCALIZATION] Key '{key}' not found in {lang_code} or English")
 
@@ -240,6 +268,16 @@ def get_string(
             )
             result = default
         else:
+            # R4 — no raw-key leakage. Returning the key as content injects
+            # e.g. the literal `prompts.dma.pdma_headr` into the prompt, which
+            # under an experiment is a silently contaminated sample rather than
+            # a cosmetic defect.
+            if _manifest is not None:
+                raise RuntimeError(
+                    f"research overrides active: key {key!r} is missing from both "
+                    f"{lang_code!r} and English, and get_string would return the raw key "
+                    f"string as prompt content. Add the key to the manifest or the bundle."
+                )
             logger.warning(f"[LOCALIZATION] MISSING key: {key} (lang={lang_code}) - returning raw key")
             result = key
     else:
@@ -367,6 +405,111 @@ def get_language_guidance(lang_code: str) -> str:
     """
     raw = get_string(lang_code, "prompts.language_guidance", default="")
     return raw.strip()
+
+
+def get_prohibition_guidance(lang_code: str) -> str:
+    """Return the round-1 DMA prohibition-context block for LLM prompts (#910).
+
+    The category list + severity tier are read from ``PROHIBITED_CAPABILITIES``
+    at call time (single source of truth — this can never drift from the WiseBus
+    gate). Each category's short what/why is localized: ``prompts.prohibitions.
+    <CATEGORY>`` in ``{lang}.json`` when present. The English base prompt falls
+    back to ``CATEGORY_GUIDANCE`` (and English framing) for anything un-localized,
+    so on English no prohibition ever silently drops out of the reasoning context.
+    For every OTHER language an un-localized category/framing string is omitted,
+    not emitted in English — a localized DMA prompt must stay pure (the streaming
+    localization gate enforces this). Enforcement is unaffected either way: the
+    WiseBus gate blocks every prohibited capability regardless; this block is
+    reasoning-context priming that fills in per language as ``prompts.prohibitions.*``
+    is translated.
+
+    Injected into PDMA/CSDMA/DSDMA only (NOT ASPDMA/recursive passes): a
+    prohibited trajectory named in round-1 output flows forward into ASPDMA and
+    conscience via the existing output path, rather than being restated at every
+    step. Callers append the result as a system message only when non-empty.
+    """
+    from ciris_engine.logic.buses.prohibitions import (
+        CATEGORY_GUIDANCE,
+        PROHIBITED_CAPABILITIES,
+        PROHIBITION_HEADER_EN,
+        PROHIBITION_TIER_MODULE_EN,
+        PROHIBITION_TIER_NEVER_EN,
+        ProhibitionSeverity,
+        get_prohibition_severity,
+    )
+
+    # English fallback is used ONLY for the English base prompt. For any other
+    # language, an un-localized category/framing string is OMITTED rather than
+    # emitted in English — a localized DMA prompt must never be polluted with
+    # English (the streaming localization gate enforces this, and it is the
+    # house localization discipline). Enforcement is unaffected: the WiseBus
+    # gate blocks every prohibited capability regardless of this block, which is
+    # reasoning-context priming only. Each prohibition surfaces in a non-English
+    # prompt as soon as prompts.prohibitions.* is translated for that language
+    # (tracked for the localization pass).
+    is_english = lang_code == "en"
+
+    # Look up in THIS language only — no cross-language English fallback. get_string
+    # would fall back requested-lang -> English -> default, which (now that en.json
+    # carries prompts.prohibitions.*) would serve English into every non-English
+    # prompt and pollute it. We want localized-or-omitted, so resolve directly
+    # against the language's own bundle.
+    lang_data = _get_language_data(lang_code)
+
+    # This function deliberately bypasses get_string's English-fallback chain,
+    # so it must consult the override registry itself — otherwise the whole
+    # prohibition block (22 of the 44 reachable prompt keys) would be the one
+    # part of the `string` namespace that silently kept its CIRIS text.
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+    _manifest = get_active_overrides()
+    _string_overrides = _manifest.overrides.string if _manifest is not None else {}
+
+    def _local(key: str) -> str:
+        override = _string_overrides.get(key)
+        if override is not None:
+            return override.strip()
+        value = _resolve_key(lang_data, key)
+        return value.strip() if isinstance(value, str) else ""
+
+    never: list[str] = []
+    module: list[str] = []
+    for category in PROHIBITED_CAPABILITIES:
+        desc = _local(f"prompts.prohibitions.{category}")
+        if not desc:
+            if not is_english:
+                continue
+            # en.json is the English source; the constant is a last-ditch guard
+            # if a category were somehow absent from the bundle.
+            desc = CATEGORY_GUIDANCE.get(category, "Outside this agent's scope.")
+        line = f"- {desc}"
+        if get_prohibition_severity(category) == ProhibitionSeverity.NEVER_ALLOWED:
+            never.append(line)
+        else:
+            module.append(line)
+
+    # Nothing localized for this (non-English) language yet → no block at all.
+    if not never and not module:
+        return ""
+
+    def _framing(key: str, en_default: str) -> str:
+        localized = _local(key)
+        if localized:
+            return localized
+        return en_default if is_english else ""
+
+    header = _framing("prompts.prohibitions._header", PROHIBITION_HEADER_EN)
+    tier_never = _framing("prompts.prohibitions._tier_never", PROHIBITION_TIER_NEVER_EN)
+    tier_module = _framing("prompts.prohibitions._tier_module", PROHIBITION_TIER_MODULE_EN)
+
+    blocks: list[str] = []
+    if header:
+        blocks.append(header)
+    if never:
+        blocks.append((tier_never + "\n" if tier_never else "") + "\n".join(never))
+    if module:
+        blocks.append((tier_module + "\n" if tier_module else "") + "\n".join(module))
+    return "\n\n".join(blocks)
 
 
 def get_preferred_language() -> str:

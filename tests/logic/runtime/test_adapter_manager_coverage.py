@@ -184,6 +184,33 @@ class TestRuntimeAdapterManager:
             assert result.error == "Load failed"
 
     @pytest.mark.asyncio
+    def test_unload_absent_adapter_is_marked_not_loaded_not_a_hard_error(self, adapter_manager):
+        """Unloading an already-absent adapter must be distinguishable from a real failure.
+
+        Unload converges to absent, so "it was already gone" satisfies the
+        caller's intent — DELETE semantics. It happens routinely: a retry, a
+        double-unload during teardown, two callers racing one id.
+
+        It used to log WARNING here and ERROR again at the API route, so ordinary
+        teardown emitted incidents. On 2026-08-02 a Staged QA run with a **100%
+        pass rate** failed anyway because the incident gate counted them — and
+        the postgres leg passed the same code, which is what exposed it as a
+        race rather than a defect.
+
+        `details["reason"] == "not_loaded"` is the load-bearing part: it is what
+        lets the route keep ERROR for genuine unload failures while staying quiet
+        about this one. Assert it explicitly, or the two halves drift apart and
+        the incidents come back.
+        """
+        result = adapter_manager._validate_adapter_unload_eligibility("never_loaded")
+
+        assert result is not None, "an absent adapter must not be treated as eligible"
+        assert result.success is False
+        assert (result.details or {}).get("reason") == "not_loaded", (
+            "the route keys on details['reason'] to decide INFO vs ERROR; without "
+            "it, routine teardown logs ERROR and trips the incident gate again"
+        )
+
     async def test_unload_adapter_success(self, adapter_manager, mock_time_service):
         """Test successful adapter unloading."""
         # Setup - add an adapter

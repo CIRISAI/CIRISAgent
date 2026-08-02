@@ -1,14 +1,19 @@
 """Coverage tests for ``tree_verify`` (Algorithm A wrapper).
 
-The actual ``verify_tree()`` call goes out to the registry, so each test
-mocks at the import boundary or at ``ciris_verify.verify_tree`` to keep
-the suite hermetic and fast.
+The actual verifier lives in the ciris-server wheel's C-ABI
+(``ciris_verify_tree``) and goes out to the registry, so each test mocks at
+the FFI seam (``tree_verify._ffi_verify_tree`` for the mapping layer,
+``tree_verify._load_verify_ffi_lib`` / a fake CDLL for the ctypes layer) to
+keep the suite hermetic and fast.
 """
 from __future__ import annotations
 
+import ctypes
+import json
 import os
 import sys
 from types import SimpleNamespace
+from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
 from ciris_engine.logic.services.infrastructure.authentication.attestation import tree_verify
@@ -72,6 +77,7 @@ def test_resolve_install_root_package_relative_fallback(monkeypatch):
     assert root is not None
     # Should point at the parent of ciris_engine (i.e., the install root).
     import ciris_engine
+
     expected_root = os.path.dirname(os.path.dirname(os.path.abspath(ciris_engine.__file__)))
     assert root == expected_root
 
@@ -107,19 +113,125 @@ def test_canonical_tree_walk_rules_shape():
 
 
 # ---------------------------------------------------------------------------
-# run_tree_verify
+# _load_verify_ffi_lib / _ffi_verify_tree (the ctypes layer)
 
 
-def test_run_tree_verify_returns_none_when_ciris_verify_unavailable(monkeypatch):
-    # Force the import inside run_tree_verify to fail.
+class _FakeVerifyLib:
+    """Stand-in for the wheel's CDLL: scripted rc + result JSON."""
+
+    def __init__(self, rc: int = 0, result_json: Optional[str] = None):
+        self._rc = rc
+        self._result_json = result_json
+        self.freed: List[Any] = []
+        self.calls: List[Dict[str, Any]] = []
+        # MagicMock wrappers so the loader's argtypes/restype assignments
+        # (plain attribute writes on a real CDLL function) don't raise.
+        self.ciris_verify_tree = MagicMock(side_effect=self._tree)
+        self.ciris_verify_free_string = MagicMock(side_effect=self._free)
+
+    def _tree(self, request_json: bytes, registry_url: bytes, result_out: Any) -> int:
+        self.calls.append(
+            {
+                "request": json.loads(request_json.decode("utf-8")),
+                "registry_url": registry_url.decode("utf-8"),
+            }
+        )
+        if self._result_json is not None:
+            # ctypes.byref(c_char_p) → _obj is the c_char_p to populate.
+            result_out._obj.value = self._result_json.encode("utf-8")
+        return self._rc
+
+    def _free(self, ptr: Any) -> None:
+        self.freed.append(ptr)
+
+
+def _patch_lib(lib: Optional[_FakeVerifyLib]):
+    return patch.object(tree_verify, "_load_verify_ffi_lib", return_value=lib)
+
+
+def test_ffi_verify_tree_returns_none_when_lib_unavailable():
+    with _patch_lib(None):
+        assert tree_verify._ffi_verify_tree({"root": "/tmp"}) is None
+
+
+def test_ffi_verify_tree_returns_none_on_nonzero_rc():
+    lib = _FakeVerifyLib(rc=3)
+    with _patch_lib(lib):
+        assert tree_verify._ffi_verify_tree({"root": "/tmp"}) is None
+
+
+def test_ffi_verify_tree_returns_none_on_empty_result():
+    lib = _FakeVerifyLib(rc=0, result_json=None)
+    with _patch_lib(lib):
+        assert tree_verify._ffi_verify_tree({"root": "/tmp"}) is None
+    assert lib.freed == []  # nothing to free on an empty result
+
+
+def test_ffi_verify_tree_returns_none_on_unparseable_result():
+    lib = _FakeVerifyLib(rc=0, result_json="not-json{")
+    with _patch_lib(lib):
+        assert tree_verify._ffi_verify_tree({"root": "/tmp"}) is None
+    assert len(lib.freed) == 1  # the C string still gets freed
+
+
+def test_ffi_verify_tree_returns_none_on_non_object_result():
+    lib = _FakeVerifyLib(rc=0, result_json="[1, 2]")
+    with _patch_lib(lib):
+        assert tree_verify._ffi_verify_tree({"root": "/tmp"}) is None
+
+
+def test_ffi_verify_tree_round_trips_request_and_result():
+    payload = {"valid": True, "files_checked": 3}
+    lib = _FakeVerifyLib(rc=0, result_json=json.dumps(payload))
+    with _patch_lib(lib):
+        result = tree_verify._ffi_verify_tree({"root": "/tmp", "project": "ciris-agent"})
+    assert result == payload
+    assert lib.calls[0]["request"] == {"root": "/tmp", "project": "ciris-agent"}
+    assert lib.calls[0]["registry_url"] == tree_verify.DEFAULT_REGISTRY_URL
+    assert len(lib.freed) == 1
+
+
+def test_load_verify_ffi_lib_returns_none_when_ciris_server_missing(monkeypatch):
+    monkeypatch.setattr(tree_verify, "_VERIFY_FFI_LIB", None)
     real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
 
     def fake_import(name, *args, **kwargs):
-        if name == "ciris_verify":
-            raise ImportError("simulated v1.13 missing")
+        if name == "ciris_server":
+            raise ImportError("simulated: wheel missing")
         return real_import(name, *args, **kwargs)
 
     with patch("builtins.__import__", side_effect=fake_import):
+        assert tree_verify._load_verify_ffi_lib() is None
+
+
+def test_load_verify_ffi_lib_returns_none_when_symbol_missing(monkeypatch):
+    monkeypatch.setattr(tree_verify, "_VERIFY_FFI_LIB", None)
+    bare_lib = SimpleNamespace()  # no ciris_verify_tree attribute
+    fake_server = SimpleNamespace(verify_ffi_path=lambda: "/fake/path.so")
+    with patch.dict(sys.modules, {"ciris_server": fake_server}):
+        with patch.object(ctypes, "CDLL", return_value=bare_lib):
+            assert tree_verify._load_verify_ffi_lib() is None
+
+
+def test_load_verify_ffi_lib_binds_and_caches(monkeypatch):
+    monkeypatch.setattr(tree_verify, "_VERIFY_FFI_LIB", None)
+    lib = _FakeVerifyLib()
+    fake_server = SimpleNamespace(verify_ffi_path=lambda: "/fake/path.so")
+    with patch.dict(sys.modules, {"ciris_server": fake_server}):
+        with patch.object(ctypes, "CDLL", return_value=lib) as mock_cdll:
+            assert tree_verify._load_verify_ffi_lib() is lib
+            # Second call served from the cache — no second CDLL load.
+            assert tree_verify._load_verify_ffi_lib() is lib
+            assert mock_cdll.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# run_tree_verify
+
+
+def test_run_tree_verify_returns_none_when_ffi_unavailable():
+    # The wheel/symbol being absent surfaces as _ffi_verify_tree → None.
+    with patch.object(tree_verify, "_ffi_verify_tree", return_value=None):
         assert tree_verify.run_tree_verify(agent_version="2.8.6", agent_root="/tmp") is None
 
 
@@ -132,14 +244,14 @@ def test_run_tree_verify_returns_none_when_inputs_missing(monkeypatch):
             assert tree_verify.run_tree_verify() is None
 
 
-def _stub_verify_tree_result(**overrides):
-    """Build a SimpleNamespace mimicking ciris_verify.TreeVerifyResult.
+def _stub_verify_tree_result(**overrides) -> Dict[str, Any]:
+    """Build a dict mimicking the JSON-decoded TreeVerifyResult.
 
-    `missing_files` is the v1.14.0+ field for files in the manifest but not
-    on disk. Defaults empty; tests that exercise the platform-asymmetric
-    case override.
+    ``missing_files`` carries files in the manifest but not on disk.
+    Defaults empty; tests that exercise the platform-asymmetric case
+    override.
     """
-    defaults = dict(
+    defaults: Dict[str, Any] = dict(
         valid=True,
         files_checked=120,
         files_passed=120,
@@ -153,15 +265,13 @@ def _stub_verify_tree_result(**overrides):
         project="ciris-agent",
     )
     defaults.update(overrides)
-    return SimpleNamespace(**defaults)
+    return defaults
 
 
 def test_run_tree_verify_happy_path(tmp_path):
-    fake_verify_tree = MagicMock(return_value=_stub_verify_tree_result())
-    fake_request_cls = MagicMock(side_effect=SimpleNamespace)
-    fake_module = SimpleNamespace(verify_tree=fake_verify_tree, TreeVerifyRequest=fake_request_cls)
+    fake_ffi = MagicMock(return_value=_stub_verify_tree_result())
 
-    with patch.dict(sys.modules, {"ciris_verify": fake_module}):
+    with patch.object(tree_verify, "_ffi_verify_tree", fake_ffi):
         result = tree_verify.run_tree_verify(agent_version="2.8.7", agent_root=str(tmp_path))
 
     assert result is not None
@@ -182,53 +292,46 @@ def test_run_tree_verify_happy_path(tmp_path):
     assert result["expected_total_hash"] == "sha256:abc"
     assert result["total_hash_valid"] is True
 
-    # TreeVerifyRequest got the canonical rules.
-    call_kwargs = fake_request_cls.call_args.kwargs
-    assert call_kwargs["project"] == "ciris-agent"
-    assert call_kwargs["binary_version"] == "2.8.7"
-    assert "ciris_engine" in call_kwargs["include_roots"]
-    assert "__pycache__" in call_kwargs["exempt_dirs"]
-    assert "pyc" in call_kwargs["exempt_extensions"]
+    # The FFI request got the canonical rules.
+    request = fake_ffi.call_args.args[0]
+    assert request["project"] == "ciris-agent"
+    assert request["binary_version"] == "2.8.7"
+    assert request["root"] == str(tmp_path)
+    assert "ciris_engine" in request["include_roots"]
+    assert "__pycache__" in request["exempt_dirs"]
+    assert "pyc" in request["exempt_extensions"]
 
 
 def test_run_tree_verify_project_is_parameterizable(tmp_path):
     """#754: a sibling substrate can verify its own registered manifest by
-    passing project=... — verify_tree() is project-agnostic."""
-    fake_verify_tree = MagicMock(return_value=_stub_verify_tree_result(project="ciris-lens-core"))
-    fake_request_cls = MagicMock(side_effect=SimpleNamespace)
-    fake_module = SimpleNamespace(verify_tree=fake_verify_tree, TreeVerifyRequest=fake_request_cls)
+    passing project=... — the tree verifier is project-agnostic."""
+    fake_ffi = MagicMock(return_value=_stub_verify_tree_result(project="ciris-lens-core"))
 
-    with patch.dict(sys.modules, {"ciris_verify": fake_module}):
+    with patch.object(tree_verify, "_ffi_verify_tree", fake_ffi):
         result = tree_verify.run_tree_verify(
             agent_version="0.4.1", agent_root=str(tmp_path), project="ciris-lens-core"
         )
 
     assert result is not None
-    # The override flows straight into the TreeVerifyRequest...
-    assert fake_request_cls.call_args.kwargs["project"] == "ciris-lens-core"
+    # The override flows straight into the FFI request...
+    assert fake_ffi.call_args.args[0]["project"] == "ciris-lens-core"
     # ...and the result echoes the verified project.
     assert result["project"] == "ciris-lens-core"
 
 
 def test_run_tree_verify_failed_files_captured(tmp_path):
-    # FailedFileKind is an enum at runtime (with .value); accept str too for test stubs.
-    failed_one = SimpleNamespace(path="ciris_engine/foo.py", kind="hash_mismatch")
-    failed_two = SimpleNamespace(path="ciris_adapters/bar.py", kind="missing")
-    # Reusing the str kind values directly — production sees enum members whose
-    # .value attribute the wrapper unwraps; either path produces the same dict.
     fake_result = _stub_verify_tree_result(
         valid=False,
         files_passed=118,
-        failed_files=[failed_one, failed_two],
+        failed_files=[
+            {"path": "ciris_engine/foo.py", "kind": "hash_mismatch"},
+            {"path": "ciris_adapters/bar.py", "kind": "missing"},
+        ],
         registry_match=False,
         registry_error="hash_mismatch",
     )
-    fake_module = SimpleNamespace(
-        verify_tree=MagicMock(return_value=fake_result),
-        TreeVerifyRequest=MagicMock(side_effect=SimpleNamespace),
-    )
 
-    with patch.dict(sys.modules, {"ciris_verify": fake_module}):
+    with patch.object(tree_verify, "_ffi_verify_tree", MagicMock(return_value=fake_result)):
         result = tree_verify.run_tree_verify(agent_version="2.8.6", agent_root=str(tmp_path))
 
     assert result is not None
@@ -247,26 +350,19 @@ def test_run_tree_verify_failed_files_captured(tmp_path):
 
 
 def test_run_tree_verify_missing_files_separate_from_failed(tmp_path):
-    """v1.14.0+ TreeVerifyResult.missing_files lands in `missing_modules`,
-    not `failed_modules`. The platform-asymmetric build artifact case
+    """TreeVerifyResult.missing_files lands in `missing_modules`, not
+    `failed_modules`. The platform-asymmetric build artifact case
     (e.g., `_build_secrets.py` shipped only by mobile bundles) reports here
     as soft / informational rather than as a hard L4-gating failure.
     CIRISVerify#15 → CIRISAgent#742.
     """
-    missing_one = SimpleNamespace(
-        path="ciris_adapters/wallet/providers/_build_secrets.py", kind="missing"
-    )
     fake_result = _stub_verify_tree_result(
         valid=True,
         files_passed=119,
         failed_files=[],
-        missing_files=[missing_one],
+        missing_files=[{"path": "ciris_adapters/wallet/providers/_build_secrets.py", "kind": "missing"}],
     )
-    fake_module = SimpleNamespace(
-        verify_tree=MagicMock(return_value=fake_result),
-        TreeVerifyRequest=MagicMock(side_effect=SimpleNamespace),
-    )
-    with patch.dict(sys.modules, {"ciris_verify": fake_module}):
+    with patch.object(tree_verify, "_ffi_verify_tree", MagicMock(return_value=fake_result)):
         result = tree_verify.run_tree_verify(agent_version="2.8.7", agent_root=str(tmp_path))
 
     assert result is not None
@@ -275,36 +371,28 @@ def test_run_tree_verify_missing_files_separate_from_failed(tmp_path):
     assert result["failed_modules"] == {}
     # Missing landed in the soft bucket.
     assert result["modules_missing"] == 1
-    assert result["missing_modules"] == {
-        "ciris_adapters/wallet/providers/_build_secrets.py": "missing"
-    }
+    assert result["missing_modules"] == {"ciris_adapters/wallet/providers/_build_secrets.py": "missing"}
 
 
-def test_run_tree_verify_handles_v1_13_compat(tmp_path):
-    """If running against a transitional ciris-verify <1.14.0 (no
-    `missing_files` attr), the wrapper must not raise — `missing_modules`
-    stays empty. Caught by getattr(result, 'missing_files', None) or [].
+def test_run_tree_verify_tolerates_absent_file_buckets(tmp_path):
+    """A result JSON without failed_files/missing_files keys (defensive
+    against older verify builds serializing defaults away) must not raise —
+    both buckets stay empty.
     """
-    legacy_result = _stub_verify_tree_result(missing_files=None)
-    # Simulate older API: drop the attr entirely.
-    delattr(legacy_result, "missing_files")
-    fake_module = SimpleNamespace(
-        verify_tree=MagicMock(return_value=legacy_result),
-        TreeVerifyRequest=MagicMock(side_effect=SimpleNamespace),
-    )
-    with patch.dict(sys.modules, {"ciris_verify": fake_module}):
+    legacy_result = _stub_verify_tree_result()
+    del legacy_result["failed_files"]
+    del legacy_result["missing_files"]
+    with patch.object(tree_verify, "_ffi_verify_tree", MagicMock(return_value=legacy_result)):
         result = tree_verify.run_tree_verify(agent_version="2.8.7", agent_root=str(tmp_path))
 
     assert result is not None
+    assert result["modules_failed"] == 0
     assert result["modules_missing"] == 0
+    assert result["failed_modules"] == {}
     assert result["missing_modules"] == {}
 
 
-def test_run_tree_verify_handles_verify_exception(tmp_path):
-    fake_module = SimpleNamespace(
-        verify_tree=MagicMock(side_effect=RuntimeError("registry 5xx")),
-        TreeVerifyRequest=MagicMock(side_effect=SimpleNamespace),
-    )
-    with patch.dict(sys.modules, {"ciris_verify": fake_module}):
+def test_run_tree_verify_handles_ffi_exception(tmp_path):
+    with patch.object(tree_verify, "_ffi_verify_tree", MagicMock(side_effect=RuntimeError("registry 5xx"))):
         result = tree_verify.run_tree_verify(agent_version="2.8.6", agent_root=str(tmp_path))
     assert result is None

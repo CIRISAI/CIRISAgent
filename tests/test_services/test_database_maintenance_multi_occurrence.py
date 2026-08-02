@@ -218,21 +218,13 @@ class TestMultiOccurrenceThoughtCleanup:
         # Run startup cleanup
         await database_maintenance_service.perform_startup_cleanup()
 
-        # Post-2.9.0 absorption (CIRISAgent#763 / CIRISPersist#60): persist
-        # has no `thought_delete` API. `delete_tasks_by_ids` now soft-cancels
-        # (parent task → 'failed') when child thoughts block FK cascade.
-        # Tasks marked for cleanup are still loadable but with status FAILED;
-        # child thoughts stay put. When CIRISPersist#60 lands the assertions
-        # flip back to expect physical deletion.
+        # Stale tasks are physically deleted; persist's `task_delete`
+        # cascades their child thoughts via migration V035 (CIRISPersist#60,
+        # landed 2026-05 — `thought_delete` is on the wheel).
         for task_id in scenario["expected_cleaned_tasks"]:
             task_data = next(t for t in scenario["tasks"] if t["task_id"] == task_id)
             retrieved = persistence.get_task_by_id(task_id, task_data["agent_occurrence_id"])
-            # Row remains; soft-cancelled to FAILED status (or already gone if
-            # it had no child thoughts and persist.task_delete succeeded).
-            if retrieved is not None:
-                assert retrieved.status in (TaskStatus.FAILED, TaskStatus.COMPLETED), (
-                    f"Expected {task_id} to be cleaned (deleted or soft-cancelled); got {retrieved.status}"
-                )
+            assert retrieved is None, f"Expected {task_id} to be deleted; got {retrieved}"
 
         # Verify expected tasks were preserved (these never reach the
         # cleanup pass, so they remain active/unchanged).
@@ -241,9 +233,13 @@ class TestMultiOccurrenceThoughtCleanup:
             retrieved = persistence.get_task_by_id(task_id, task_data["agent_occurrence_id"])
             assert retrieved is not None, f"Expected {task_id} to be preserved"
 
-        # Thought rows: soft-cancel of parent task does NOT physically remove
-        # child thoughts. They all stay (a regression vs legacy until
-        # CIRISPersist#60 lands).
+        # Child thoughts of cleaned tasks are physically removed (cascade);
+        # thoughts of preserved tasks stay.
+        for thought_id in scenario["expected_cleaned_thoughts"]:
+            thought_data = next(t for t in scenario["thoughts"] if t["thought_id"] == thought_id)
+            retrieved = persistence.get_thought_by_id(thought_id, thought_data["agent_occurrence_id"])
+            assert retrieved is None, f"Expected {thought_id} to be deleted"
+
         for thought_id in scenario["expected_preserved_thoughts"]:
             thought_data = next(t for t in scenario["thoughts"] if t["thought_id"] == thought_id)
             retrieved = persistence.get_thought_by_id(thought_id, thought_data["agent_occurrence_id"])
@@ -286,8 +282,9 @@ class TestMultiOccurrenceOldActiveTaskCleanup:
         await database_maintenance_service.perform_startup_cleanup()
 
         # Verify task was marked with a terminal status under its
-        # correct occurrence_id (COMPLETED via update_task_status, or
-        # FAILED via the soft-cancel fallback path).
+        # correct occurrence_id. An old active user task is marked
+        # COMPLETED via update_task_status (it is preserved for history,
+        # not deleted).
         retrieved = persistence.get_task_by_id("old_user_task_123", "occurrence_1")
         assert retrieved is not None
         assert retrieved.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
@@ -476,10 +473,11 @@ class TestInsertRawThoughtHelper:
 class TestInvalidThoughtCleanup:
     """Test cleanup of thoughts with invalid or malformed context.
 
-    Post-2.9.0 absorption (CIRISAgent#763): `_cleanup_invalid_thoughts` is
-    a soft no-op pending CIRISPersist#60 (`thought_delete` API). These
-    tests now assert the no-op behaviour rather than hard deletion; they
-    will be flipped back when persist exposes `thought_delete`.
+    `_cleanup_invalid_thoughts` hard-deletes rows whose context can't be
+    materialized (empty/NULL context, or missing task_id/correlation_id)
+    via persist's `thought_delete` (v1.5.20+, CIRISPersist#60 — landed
+    2026-05). A thought is "invalid" exactly when the migrated reader
+    yields `context is None`.
     """
 
     async def test_cleanup_invalid_thoughts_with_empty_context(
@@ -487,60 +485,60 @@ class TestInvalidThoughtCleanup:
         clean_db,
         database_maintenance_service,
     ):
-        """Soft no-op: invalid thought row remains after cleanup."""
+        """Empty-context thought is deleted."""
         insert_raw_thought(clean_db, "invalid_001", "{}")
 
-        # Run cleanup (now a no-op)
         await database_maintenance_service._cleanup_invalid_thoughts()
 
-        # Verify thought was NOT deleted (soft no-op pending CIRISPersist#60).
-        # Note: the row may still be invisible to migrated readers because
-        # it was inserted via raw SQL into legacy `thoughts`, not
-        # `cirislens_thoughts`. We don't assert via the migrated reader
-        # here; just verify cleanup didn't crash.
+        assert persistence.get_thought_by_id("invalid_001", "default") is None
 
     async def test_cleanup_invalid_thoughts_missing_task_id(
         self,
         clean_db,
         database_maintenance_service,
     ):
-        """Soft no-op: invalid thought row missing task_id remains."""
+        """Thought missing task_id is deleted."""
         insert_raw_thought(clean_db, "invalid_002", '{"correlation_id": "corr_123"}')
         await database_maintenance_service._cleanup_invalid_thoughts()
+
+        assert persistence.get_thought_by_id("invalid_002", "default") is None
 
     async def test_cleanup_invalid_thoughts_missing_correlation_id(
         self,
         clean_db,
         database_maintenance_service,
     ):
-        """Soft no-op: invalid thought row missing correlation_id remains."""
+        """Thought missing correlation_id is deleted."""
         insert_raw_thought(clean_db, "invalid_003", '{"task_id": "task_123"}')
         await database_maintenance_service._cleanup_invalid_thoughts()
+
+        assert persistence.get_thought_by_id("invalid_003", "default") is None
 
     async def test_cleanup_invalid_thoughts_preserves_valid(
         self,
         clean_db,
         database_maintenance_service,
     ):
-        """Soft no-op: valid thoughts always preserved."""
+        """Valid thoughts survive; invalid ones are removed."""
         insert_raw_thought(clean_db, "valid_001", '{"task_id": "task_123", "correlation_id": "corr_123"}')
         insert_raw_thought(clean_db, "invalid_004", "{}")
 
         await database_maintenance_service._cleanup_invalid_thoughts()
 
-        # Both rows remain in the legacy `thoughts` table; cleanup is a
-        # no-op pending CIRISPersist#60. We just verify it didn't crash.
+        assert persistence.get_thought_by_id("valid_001", "default") is not None
+        assert persistence.get_thought_by_id("invalid_004", "default") is None
 
     async def test_cleanup_invalid_thoughts_handles_no_invalid(
         self,
         clean_db,
         database_maintenance_service,
     ):
-        """Soft no-op: also a no-op when no invalid thoughts exist."""
+        """No invalid thoughts: valid rows are untouched."""
         insert_raw_thought(clean_db, "valid_002", '{"task_id": "task_123", "correlation_id": "corr_123"}')
 
-        # Run cleanup - should complete without errors (soft no-op).
         await database_maintenance_service._cleanup_invalid_thoughts()
+
+        assert persistence.get_thought_by_id("valid_002", "default") is not None
 
     async def test_cleanup_invalid_thoughts_handles_exception(
         self,
@@ -668,8 +666,8 @@ class TestMultiOccurrenceRaceConditionProtection:
             "The orphan-by-dangling-pointer scenario was a quirk of the "
             "legacy schema that didn't enforce that FK — it's no longer "
             "reachable. To exercise this code path under the new substrate, "
-            "seed with a parent task that is then deleted (which is itself "
-            "blocked by FK pending CIRISPersist#60)."
+            "seed with a parent task that is then deleted (task_delete "
+            "cascades its child thoughts via migration V035)."
         ),
         strict=False,
     )
@@ -719,10 +717,9 @@ class TestMultiOccurrenceRaceConditionProtection:
         await database_maintenance_service.perform_startup_cleanup()
 
         # Verify old orphaned task was marked with a terminal status.
-        # Pre-2.9.0: _cleanup_old_active_tasks → COMPLETED.
-        # Post-2.9.0 (CIRISAgent#763 / CIRISPersist#60): the soft-cancel
-        # fallback in `delete_tasks_by_ids` may also flip it to FAILED if
-        # cleanup tried task_delete first and hit the FK constraint.
+        # _cleanup_old_active_tasks marks it COMPLETED (preserved for
+        # history). (This test is xfail — add_task rejects the dangling
+        # parent FK before cleanup runs.)
         retrieved = persistence.get_task_by_id(orphaned_task.task_id, "default")
         assert retrieved is not None, "Task should still exist (marked terminal, not deleted)"
         assert retrieved.status in (TaskStatus.COMPLETED, TaskStatus.FAILED), (

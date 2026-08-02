@@ -49,6 +49,19 @@ from typing import Any, Dict, List, Optional
 import httpx
 from rich.console import Console
 
+def _accord_tee_dir() -> str:
+    """Where runtime-registered accord adapters tee sealed batches.
+
+    Registration payloads previously carried trace_level but not this, and
+    the adapter read the dir from ENV only — so accord_detailed/accord_full,
+    the two instances holding the detailed and full-text traces, could not
+    be told where to write. A run then sealed traces and produced zero files
+    while reporting 100% pass.
+    """
+    import os
+    return os.environ.get("CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR", "") or ""
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Live-LLM contract metadata. Read by tools/qa_runner/__main__.py at
 # CLI parse time to enforce live mode + apply defaults. The runner
@@ -304,6 +317,7 @@ class BatteryResult:
     CIRISNodeCore SCHEMA.md §5.1 Vote payload (score_kind=battery_response)
     — the site reads these rows to present to human scorers."""
 
+
     question_id: str
     question_version: int
     stage: str
@@ -339,6 +353,10 @@ class SafetyBatteryTests:
         preferred_language matching the cell.
     """
 
+    # Produces CEG reasoning traces: the runner loads accord_metrics, sets the
+    # owner-consent env var, and points the local tee at qa_reports/.
+    CAPTURES_TRACES = True
+
     # Live-LLM contract metadata. The runner reads these at CLI parse time
     # via tools/qa_runner/modules/_module_metadata.py.
     REQUIRES_LIVE_LLM = REQUIRES_LIVE_LLM
@@ -353,6 +371,7 @@ class SafetyBatteryTests:
         lang: str = "am",
         domain: str = "mental_health",
         template_id: str = "default",
+        limit: int = 0,
         model: Optional[str] = None,
         live_base_url: Optional[str] = None,
         live_provider: Optional[str] = None,
@@ -365,6 +384,7 @@ class SafetyBatteryTests:
         self.lang = lang
         self.domain = domain
         self.template_id = template_id
+        self.limit = limit
         self.model = model or LIVE_LLM_DEFAULTS["model"]
         self.live_base_url = live_base_url or LIVE_LLM_DEFAULTS["base_url"]
         self.live_provider = live_provider or LIVE_LLM_DEFAULTS["provider"]
@@ -403,8 +423,23 @@ class SafetyBatteryTests:
         # non-fatal if endpoints unavailable). See FSD §3.3.
         await self._capture_agent_identity()
 
+        # Register the detailed + full_traces ACCORD metrics adapters so the
+        # capture bundle exports the FULL reasoning corpus (raw prompts +
+        # completions), not just hashed 'detailed' traces. The QA server boots
+        # the startup adapter at 'generic' (lens shipper) for safety_battery;
+        # the full corpus only lands when a full_traces instance is registered.
+        # Mirrors model_eval's multi-adapter setup (best-effort, non-fatal).
+        await self._ensure_accord_metrics_adapters()
+
         cell = manifest["cell"]
         questions = manifest["questions"]
+        limit = int(self.limit or 0)
+        if limit > 0:
+            self.console.print(
+                f"[yellow]--safety-battery-limit={limit}: running first {limit} of "
+                f"{len(questions)} questions (cycle-time mode — NOT a scored run)[/yellow]"
+            )
+            questions = questions[:limit]
         self.console.print(
             f"[dim]cell={cell['domain']}/{cell['language']} · "
             f"battery_id={manifest['battery_id']} · "
@@ -487,6 +522,54 @@ class SafetyBatteryTests:
         admin_token = getattr(transport, "api_key", None)
         if not admin_token:
             return
+
+    async def _ensure_accord_metrics_adapters(self) -> None:
+        """Register the detailed + full_traces ACCORD metrics adapter instances.
+
+        The QA server boots one accord_metrics adapter at 'generic' (the lens
+        shipper) for safety_battery. The full reasoning corpus — raw prompts +
+        completions, for the Coherence Ratchet and fine-tuning — only lands when
+        a ``full_traces`` instance is ALSO registered (TraceDetailLevel.FULL_TRACES
+        keeps all prompts/reasoning/context; 'detailed' hashes them). Mirrors
+        ``model_eval``'s multi-adapter setup so the capture bundle exports all
+        three levels. Best-effort: a registration failure must not fail the run.
+        """
+        transport = getattr(self.client, "_transport", None)
+        if transport is None:
+            return
+        base_url = getattr(transport, "base_url", f"http://localhost:{self.api_port}")
+        admin_token = getattr(transport, "api_key", None)
+        if not admin_token:
+            self.console.print("[yellow]ACCORD full-trace adapters skipped: no auth token[/yellow]")
+            return
+
+        headers = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
+        adapters = [("accord_detailed", "detailed"), ("accord_full", "full_traces")]
+        self.console.print("[dim]Registering ACCORD metrics adapters (detailed + full_traces)[/dim]")
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as http:
+                for adapter_id, trace_level in adapters:
+                    url = f"{base_url}/v1/system/adapters/ciris_accord_metrics?adapter_id={adapter_id}"
+                    payload = {
+                        "config": {
+                            "adapter_id": adapter_id,
+                            "trace_level": trace_level,
+                            "local_copy_dir": _accord_tee_dir(),
+                            "consent_given": True,
+                            "consent_timestamp": "2025-01-01T00:00:00Z",
+                            "flush_interval_seconds": 5,
+                        },
+                        "persist": False,
+                    }
+                    resp = await http.post(url, json=payload, headers=headers)
+                    if resp.status_code in (200, 409):
+                        self.console.print(f"[dim]  {adapter_id}: {trace_level} ready[/dim]")
+                    else:
+                        self.console.print(
+                            f"[yellow]  {adapter_id}: HTTP {resp.status_code} {resp.text[:160]}[/yellow]"
+                        )
+        except Exception as exc:  # noqa: BLE001 — best-effort, never fail the run
+            self.console.print(f"[yellow]ACCORD adapter registration failed ({type(exc).__name__}): {exc}[/yellow]")
 
         identity_data: Dict[str, Any] = {}
         # Best-effort identity + health probes for the manifest. Either

@@ -11,12 +11,14 @@ Architecture:
 - Task generation by WorkProcessor for incomplete tickets
 """
 
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.logic.persistence.models.tickets import (
     create_ticket,
@@ -26,10 +28,20 @@ from ciris_engine.logic.persistence.models.tickets import (
     update_ticket_metadata,
     update_ticket_status,
 )
+from ciris_engine.logic.services.governance.budget_envelope import NestingViolation, issue_grant
 from ciris_engine.schemas.config.tickets import TicketsConfig, TicketSOPConfig
+from ciris_engine.schemas.services.budget_envelope import (
+    BUDGET_SPENT_METADATA_KEY,
+    GRANTED_BUDGET_METADATA_KEY,
+    REQUESTED_BUDGET_METADATA_KEY,
+    is_unapproved_proposal,
+)
 
 from ..auth import get_current_user
+from ..dependencies.auth import AuthContext, require_authority
 from ..models import StandardResponse, TokenData
+
+logger = logging.getLogger(__name__)
 
 # Type alias for authenticated user dependency (S8410 compliance)
 CurrentUserDep = Annotated[TokenData, Depends(get_current_user)]
@@ -565,3 +577,287 @@ async def cancel_ticket(
         success=True,
         message=f"Ticket {ticket_id} cancelled/deleted successfully",
     )
+
+
+# ============================================================================
+# Budget envelope — the issuance event (#938)
+#
+# This is the ONLY write path for a granted budget. It requires the AUTHORITY
+# role and lives outside the reasoning loop entirely: no tool, no handler and no
+# DMA can reach it. The agent may propose an envelope (create_ticket) but never
+# mint or widen one.
+# ============================================================================
+
+
+class GrantBudgetRequest(BaseModel):
+    """Request to grant a spend budget on a ticket. Requires AUTHORITY role.
+
+    An AUTHORITY user may grant **above** what the agent requested — the agent
+    may simply have asked for too little. There is no ``granted ≤ requested``
+    bound anywhere in the system. The real bound is ``granted ≤ trust ceiling``.
+    Over-request grants are *recorded* (see ``GrantedBudget.exceeds_request``),
+    which is derived server-side, never taken from this body.
+    """
+
+    amount: Decimal = Field(..., gt=0, description="Maximum total spend authorized against this ticket")
+    currency: str = Field(..., min_length=2, max_length=8, description="Currency code, e.g. USDC")
+    purpose: str = Field(..., min_length=1, description="What this grant authorizes spend for")
+    expires_in_hours: float = Field(
+        24.0, gt=0, le=8760, description="Grant lifetime in hours (default 24, max 1 year)"
+    )
+    wa_id: Optional[str] = Field(None, description="WA identity to sign as (defaults to the calling user)")
+
+    # `extra="forbid"`: an unknown field is a loud 422 rather than a silent
+    # default. On a money endpoint that matters — a typo'd `expires_in_hours`
+    # would otherwise quietly take the 24h default. It also means a client
+    # cannot assert the over-grant audit marking (`exceeds_request`,
+    # `requested_amount_at_grant`): those are derived server-side in
+    # `issue_grant` from the ticket, and a request that tries to supply them is
+    # rejected outright rather than silently ignored.
+    model_config = ConfigDict(extra="forbid")
+
+
+class GrantBudgetResponse(BaseModel):
+    """The granted budget, as written to the ticket."""
+
+    ticket_id: str
+    granted_amount: str
+    granted_currency: str
+    purpose: str
+    expires_at: str
+    granted_by_wa_id: str
+    granted_by_user_id: str
+    granted_at: str
+    signed: bool = Field(..., description="Whether the grant carries a verifiable signature")
+    exceeds_request: bool = Field(
+        ..., description="True when the grant exceeded the agent's request (permitted, but recorded)"
+    )
+    requested_amount_at_grant: Optional[str] = Field(
+        None, description="What the agent requested, as of issuance; null when it requested nothing"
+    )
+
+
+@router.post(
+    "/{ticket_id}/budget/grant",
+    responses={
+        403: {"description": "AUTHORITY role required"},
+        404: {"description": "Ticket not found"},
+        422: {"description": "Grant would exceed the trust-driven envelope"},
+    },
+)
+async def grant_ticket_budget(
+    ticket_id: str,
+    request: GrantBudgetRequest,
+    req: Request,
+    auth: Annotated[AuthContext, Depends(require_authority)],
+) -> StandardResponse:
+    """Grant a spend budget on a ticket. **Requires AUTHORITY role.**
+
+    This is the human decision point that converts an agent's *request* into an
+    *authorization*. The resulting grant is bound to this ticket, expires, and
+    is enforced at every spend as ``min(granted remaining, trust envelope
+    remaining)``.
+
+    A grant cannot widen the deployment's trust-driven envelope: it is checked
+    against the configured ceiling here, and bounded again at spend time.
+    """
+    ticket = get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_ticket_not_found_detail(ticket_id))
+
+    auth_service = getattr(req.app.state, "authentication_service", None)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=request.expires_in_hours)
+
+    try:
+        grant = await issue_grant(
+            ticket_id=ticket_id,
+            granted_amount=request.amount,
+            granted_currency=request.currency,
+            purpose=request.purpose,
+            expires_at=expires_at,
+            granted_by_wa_id=request.wa_id or auth.user_id,
+            granted_by_user_id=auth.user_id,
+            trust_ceiling=_resolve_trust_ceiling(req),
+            auth_service=auth_service,
+        )
+    except NestingViolation as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+
+    return StandardResponse(
+        success=True,
+        data=GrantBudgetResponse(
+            ticket_id=grant.ticket_id,
+            granted_amount=str(grant.granted_amount),
+            granted_currency=grant.granted_currency,
+            purpose=grant.purpose,
+            expires_at=grant.expires_at.isoformat(),
+            granted_by_wa_id=grant.granted_by_wa_id,
+            granted_by_user_id=grant.granted_by_user_id,
+            granted_at=grant.granted_at.isoformat(),
+            signed=grant.signature is not None,
+            exceeds_request=grant.exceeds_request,
+            requested_amount_at_grant=(
+                str(grant.requested_amount_at_grant) if grant.requested_amount_at_grant is not None else None
+            ),
+        ).model_dump(),
+        message=f"Budget granted on ticket {ticket_id}",
+    )
+
+
+#: Machine-readable error code for "this ticket does not exist", as opposed to
+#: "this endpoint does not exist" (which FastAPI answers with a bare
+#: ``{"detail": "Not Found"}`` on servers predating the budget feature).
+#: Clients should pin on ``detail.error_code``, never on prose.
+TICKET_NOT_FOUND_ERROR_CODE = "TICKET_NOT_FOUND"
+
+
+def _ticket_not_found_detail(ticket_id: str) -> Dict[str, str]:
+    """404 body for a missing ticket, disambiguable from a missing endpoint.
+
+    Returns a structured detail so a client can branch on ``error_code`` instead
+    of substring-matching prose. The message also contains the lowercase word
+    "ticket" so prose-matching clients still work.
+    """
+    return {
+        "error_code": TICKET_NOT_FOUND_ERROR_CODE,
+        "message": f"Ticket {ticket_id} not found — no such ticket on this node",
+    }
+
+
+class TrustHeadroomResponse(BaseModel):
+    """Remaining room in the deployment trust envelope a grant must nest inside."""
+
+    amount: str = Field(..., description="Remaining headroom, decimal as string")
+    currency: str = Field(..., description="Currency the headroom applies to")
+    max_transaction: str = Field(..., description="Per-transaction ceiling")
+    daily_remaining: str = Field(..., description="Remaining daily allowance")
+    source: str = Field(..., description="'wallet' when resolved from the live gate")
+
+
+class TicketBudgetResponse(BaseModel):
+    """Everything a human needs to decide on a budget for one ticket."""
+
+    ticket_id: str
+    is_proposal: bool = Field(..., description="True when this is an unapproved agent proposal")
+    requested_budget: Optional[Dict[str, Any]] = Field(None, description="What the agent asked for")
+    granted_budget: Optional[Dict[str, Any]] = Field(None, description="What a human authorized, if any")
+    spent: Optional[Dict[str, Any]] = Field(None, description="Running ledger against the grant")
+    trust_headroom: Optional[TrustHeadroomResponse] = Field(
+        None, description="Remaining trust envelope; null when no wallet is loaded"
+    )
+
+
+@router.get(
+    "/{ticket_id}/budget",
+    responses={404: {"description": "Ticket not found"}},
+)
+async def get_ticket_budget(
+    ticket_id: str,
+    req: Request,
+    current_user: CurrentUserDep,
+) -> StandardResponse:
+    """Read the budget state of a ticket, including remaining trust headroom.
+
+    Exists so a human approving a budget can see how much room the deployment
+    has left. Approving an amount with no view of the remaining envelope is not
+    meaningful consent.
+
+    ``trust_headroom`` is the **same number the spend gate applies** — resolved
+    through the wallet tool service's own `_resolve_trust_envelope`, not a
+    re-derivation. It is null when no wallet adapter is loaded.
+    """
+    ticket = get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_ticket_not_found_detail(ticket_id))
+
+    metadata = ticket.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    requested = metadata.get(REQUESTED_BUDGET_METADATA_KEY)
+    granted = metadata.get(GRANTED_BUDGET_METADATA_KEY)
+    currency = None
+    if isinstance(granted, dict):
+        currency = granted.get("granted_currency")
+    if currency is None and isinstance(requested, dict):
+        currency = requested.get("requested_currency")
+
+    return StandardResponse(
+        success=True,
+        data=TicketBudgetResponse(
+            ticket_id=ticket_id,
+            is_proposal=is_unapproved_proposal(ticket),
+            requested_budget=requested if isinstance(requested, dict) else None,
+            granted_budget=granted if isinstance(granted, dict) else None,
+            spent=metadata.get(BUDGET_SPENT_METADATA_KEY)
+            if isinstance(metadata.get(BUDGET_SPENT_METADATA_KEY), dict)
+            else None,
+            trust_headroom=_resolve_trust_headroom(req, str(currency) if currency else "USDC"),
+        ).model_dump(),
+        message=f"Budget state for ticket {ticket_id}",
+    )
+
+
+def _find_wallet_tool_service(req: Request) -> Optional[Any]:
+    """Find a registered TOOL service exposing the wallet spend gate."""
+    try:
+        registry = getattr(req.app.state, "service_registry", None)
+        if registry is None or not hasattr(registry, "_services"):
+            return None
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        for provider in registry._services.get(ServiceType.TOOL, []):
+            instance = getattr(provider, "instance", None)
+            if instance is not None and hasattr(instance, "_resolve_trust_envelope"):
+                return instance
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"Could not locate wallet tool service: {e}")
+    return None
+
+
+def _resolve_trust_headroom(req: Request, currency: str) -> Optional[TrustHeadroomResponse]:
+    """Resolve remaining trust-envelope headroom via the wallet's own gate logic."""
+    service = _find_wallet_tool_service(req)
+    if service is None:
+        return None
+    try:
+        provider = service._get_provider_for_currency(currency)
+        envelope = service._resolve_trust_envelope(currency, provider)
+        return TrustHeadroomResponse(
+            amount=str(envelope.remaining),
+            currency=envelope.currency or currency,
+            max_transaction=str(envelope.max_transaction),
+            daily_remaining=str(envelope.daily_remaining),
+            source="wallet",
+        )
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"Could not resolve trust headroom for {currency}: {e}")
+        return None
+
+
+def _resolve_trust_ceiling(req: Request) -> Optional[Decimal]:
+    """Resolve the deployment trust-envelope ceiling a grant must nest inside.
+
+    Reads the wallet adapter's ``spending_limits`` when a wallet tool service is
+    registered. Returns None when no wallet is loaded — in which case issuance is
+    unbounded here but every spend is still bounded by the ``min()`` in
+    ``authorize_spend``, which is the authoritative check.
+    """
+    try:
+        registry = getattr(req.app.state, "service_registry", None)
+        if registry is None or not hasattr(registry, "_services"):
+            return None
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        for provider in registry._services.get(ServiceType.TOOL, []):
+            instance = getattr(provider, "instance", None)
+            config = getattr(instance, "config", None)
+            limits = getattr(config, "spending_limits", None)
+            if limits is not None:
+                ceiling: Decimal = limits.daily_limit
+                return ceiling
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"Could not resolve trust ceiling for budget grant: {e}")
+    return None

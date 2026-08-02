@@ -143,7 +143,9 @@ class ADBHelper:
             args.append("-r")
         args.append(apk_path)
 
-        result = self._run_adb(args, timeout=120)
+        # 250MB+ debug APKs regularly exceed 120s on cold emulators — a timeout
+        # here surfaced as a bare "APK installation failed" with no cause.
+        result = self._run_adb(args, timeout=600)
         return "Success" in result.stdout
 
     def uninstall_app(self, package: str) -> bool:
@@ -305,6 +307,18 @@ class ADBHelper:
         """Check if run-as works for this package (debug build)."""
         result = self._run_adb(["shell", "run-as", package, "ls"])
         return result.returncode == 0
+
+    def shell(self, command: str, timeout: int = 30) -> str:
+        """Run a shell command on the device; return stdout ('' on failure).
+
+        Returns empty string rather than raising, because callers use this to
+        READ device state (config files, properties) where "absent" and
+        "unreadable" warrant the same handling. Callers that need to distinguish
+        a genuine empty value from a failed command must check for the value
+        they expect rather than treating '' as authoritative.
+        """
+        result = self._run_adb(["shell", command], timeout=timeout)
+        return result.stdout if result.returncode == 0 else ""
 
     def _pull_logs_via_backup(self, output_path: Path, package: str, verbose: bool = True) -> List[str]:
         """Pull logs via adb backup when run-as is unavailable.
@@ -596,7 +610,16 @@ class ADBHelper:
             logs_path = output_path / "logs"
             logs_path.mkdir(exist_ok=True)
 
-            for log_file in ["latest.log", "incidents_latest.log", "ciris.log"]:
+            # Include the RUST tracing logs (ciris-server.log*) — the compose /
+            # keyring / edge diagnostics live there, and their absence from
+            # pulls is how the 2.9.7 compose-hang stayed dark. Glob on-device
+            # since the dated filename changes daily.
+            rust_ls = self._run_adb(
+                ["shell", "run-as", package, "sh", "-c", f"ls {logs_dir}/ciris-server.log* 2>/dev/null"]
+            )
+            rust_logs = [line.strip().split("/")[-1] for line in (rust_ls.stdout or "").splitlines() if line.strip()]
+
+            for log_file in ["latest.log", "incidents_latest.log", "ciris.log", *rust_logs]:
                 result = self._run_adb(["shell", "run-as", package, "cat", f"{logs_dir}/{log_file}"])
                 if result.returncode == 0 and result.stdout.strip():
                     file_path = logs_path / log_file

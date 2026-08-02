@@ -70,17 +70,19 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             "Call ciris_engine.logic.persistence.initialize_database() first."
         )
 
-    try:
-        # `import-not-found` covers the wheel-absent case (CI without the
-        # ciris-edge wheel installed); `import-untyped` covers the case
-        # where it IS installed but ships no py.typed marker (current
-        # 1.0.x state); `unused-ignore` keeps both contexts green —
-        # whichever of the first two doesn't apply in a given environment.
-        import ciris_edge  # type: ignore[import-not-found, import-untyped, unused-ignore]
-    except ImportError as e:
+    # One-wheel seam (#896): the edge runtime constructor re-hosts from the
+    # consolidated ``ciris_server`` wheel (falling back to the standalone
+    # ``ciris_edge`` wheel). Sourcing it from the SAME wheel as the persist
+    # Engine gives one PyO3 type registry, so the Engine passed below is the
+    # same registered Rust type Edge expects — no ``'Engine' object is not an
+    # instance of 'Engine'`` cohabitation refusal (CIRISEdge#22).
+    from ciris_engine.logic.persistence._substrate import init_edge_runtime
+
+    if init_edge_runtime is None:
         raise RuntimeError(
-            "ciris-edge not importable but is REQUIRED for 2.9.4+. Pin ciris-edge>=2.0.2,<3.0.0 in requirements.txt."
-        ) from e
+            "edge runtime constructor not importable but is REQUIRED for 2.9.4+. "
+            "Install ciris-server (one wheel) or pin ciris-edge>=2.0.2,<3.0.0 in requirements.txt."
+        )
 
     identity_dir.mkdir(parents=True, exist_ok=True)
     identity_path = identity_dir / "edge_identity.rid"
@@ -93,13 +95,82 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
 
     agent_mode_value = get_agent_mode_broker().current_mode().value
 
+    # Federation delivery (CIRISAgent#915). The embedded edge must carry an
+    # ACTIVE Reticulum transport for CEG traces to reach the canonical mesh;
+    # the wheel defaults enable_transport OFF. Turn it on when delivery is
+    # enabled (default), matching compose's transport node. On ciris-server
+    # >=0.5.92 (CIRISEdge#296 / CIRISPersist#402) init_edge_runtime then
+    # AUTO-SEEDS the canonical TCP dial from persist's baked
+    # canonical_bootstrap_hints() — zero caller glue, exactly like
+    # compose::serve — so the agent edge dials + roots ciris-canonical-1 at
+    # boot. Opt out with CIRIS_FEDERATION_DELIVERY=false.
+    _delivery_on = os.environ.get("CIRIS_FEDERATION_DELIVERY", "true").strip().lower() not in ("0", "false", "no", "off")
+
+    # Rust-side tracing (CIRISAgent#919/#920, ciris-server >=0.5.114): without
+    # this a Python-embedded agent has ZERO rust logs — every delivery/rooting
+    # diagnostic is invisible (how the trace-flow saga stayed dark). On 0.5.116+
+    # init_tracing(log_dir=, filter=) writes a rust log FILE next to the agent's
+    # logs — env-whitelist-proof, so RUST_LOG need not survive the mobile env
+    # scrub (CIRISServer#264 sub-item). Idempotent.
     try:
-        edge = ciris_edge.ciris_edge.init_edge_runtime(
+        import ciris_server as _cs  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        _init_tracing = getattr(_cs, "init_tracing", None)
+        if _init_tracing is not None:
+            _trace_dir = os.environ.get("CIRIS_HOME") or os.environ.get("CIRIS_DATA_DIR")
+            if not _trace_dir:
+                # Belt: env can be scrubbed/late on mobile — resolve the real home.
+                try:
+                    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+                    _trace_dir = str(get_ciris_home())
+                except Exception:  # noqa: BLE001
+                    _trace_dir = None
+            _log_dir = os.path.join(_trace_dir, "logs") if _trace_dir else None
+            # TEST MODE gets the full-fat filter: compose hangs / keyring stalls /
+            # verify paths have all gone dark behind the default filter before
+            # (the 2.9.7 compose-hang debug needed exactly these targets). Also
+            # force RUST_BACKTRACE so any surfaced panic carries frames.
+            _test_mode = os.environ.get("CIRIS_TEST_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+            if _test_mode:
+                _filter = os.environ.get("RUST_LOG") or (
+                    "debug,ciris_server=debug,ciris_edge=debug,ciris_persist=debug,"
+                    "ciris_keyring=debug,ciris_verify=debug,ciris_lens_core=debug"
+                )
+                os.environ.setdefault("RUST_BACKTRACE", "full")
+            else:
+                _filter = os.environ.get("RUST_LOG") or "info,ciris_server=debug,ciris_edge=debug,ciris_persist=info"
+            try:
+                _sink_verdict = _init_tracing(log_dir=_log_dir, filter=_filter)
+            except TypeError:  # pre-0.5.116 bare signature
+                _sink_verdict = _init_tracing()
+            logger.info(
+                "Rust tracing initialized: log_dir=%s filter=%s test_mode=%s (rust logs → ciris-server.log*)",
+                _log_dir,
+                _filter,
+                _test_mode,
+            )
+            # 0.5.120 (CIRISServer#279 ask 1): init_tracing returns the sink
+            # verdict {fresh_subscriber, file_layer_attached, first_write_ok,
+            # log_path} — first-write-verified at t=0. Log it loudly either way
+            # so every pull carries it (the t+60s [RUST-SINK] sentinel stays as
+            # the belt for older wheels / late failures).
+            if isinstance(_sink_verdict, dict):
+                if _sink_verdict.get("first_write_ok"):
+                    logger.info("[RUST-SINK] t=0 verdict: %s", _sink_verdict)
+                else:
+                    logger.warning("[RUST-SINK] t=0 DARK — file layer not writing: %s", _sink_verdict)
+    except Exception as _trace_exc:  # noqa: BLE001 — observability must never block boot
+        logger.debug("ciris_server.init_tracing unavailable/failed (non-fatal): %s", _trace_exc)
+
+    try:
+        edge = init_edge_runtime(
             engine,
             str(identity_path),
             listen_addr=listen_addr,
             bootstrap_peers=bootstrap_peers,
             agent_mode=agent_mode_value,
+            enable_transport=_delivery_on,
         )
     except TypeError as e:
         # PyO3 cross-crate PyClass identity failure — Edge v0.9.1's bundled
@@ -145,8 +216,17 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         # rejects unregistered attesting keys with federation_invalid_argument.
         # Re-registration of the same key raises federation_conflict — benign.
         try:
-            engine.register_federation_key("agent", key_id)
-            logger.info("Federation signer key registered with persist: %s", key_id)
+            # v10 self-key registration (CIRISConformance conftest pattern):
+            # register_self_federation_key registers the engine's OWN signer
+            # under the #247-derived federation key_id `<label>-<fp>` — the same
+            # id edge.signer_key_id() stamps (CIRISEdge#203, edge 7.0.6+) and
+            # the id v10's receive_and_persist verifies trace signatures against.
+            # The old 2-arg register_federation_key took (type, key_id); v10's
+            # takes a SignedKeyRecord JSON, so that call silently no-op'd and
+            # left the signer unregistered → lens receive_and_persist rejected
+            # every trace with `verify_unknown_key`.
+            derived_kid = engine.register_self_federation_key("agent", key_id, None, None, None)
+            logger.info("Federation self key registered with persist: %s (derived %s)", key_id, derived_kid)
         except Exception as reg_exc:
             if "conflict" in str(reg_exc).lower():
                 logger.debug("Federation signer key already registered: %s", key_id)
@@ -174,6 +254,354 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         register_organic_announce_subscriber(seeder=None)
     except Exception as exc:
         logger.warning("Organic-announce subscriber registration failed (non-fatal): %s", exc)
+
+    # Federation delivery controller (CIRISServer#205 / CIRISAgent#915).
+    # With transport enabled above, ciris-server >=0.5.92 auto-seeds + roots the
+    # canonical dial at init (CIRISEdge#296); this ONE call then starts the
+    # ReplicationRuntime + reconcile loop + announce logger that actually ships
+    # the agent's sealed CEG traces to the rooted canonical peer. Without it the
+    # trace chain seals locally but nothing reaches the mesh. Default ON (consent
+    # still gates what ships at the seal); opt out with CIRIS_FEDERATION_DELIVERY=false.
+    if _delivery_on:
+        try:
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            start_fd = getattr(ciris_server, "start_federation_delivery", None)
+            if start_fd is None:
+                logger.info(
+                    "Federation delivery controller unavailable in this ciris_server build "
+                    "(need >=0.5.92); CEG traces seal locally but are not shipped to the canonical mesh."
+                )
+            else:
+                _n_targets = start_fd(cadence_seconds=15, announce_logger=True)
+                logger.info(
+                    "Federation delivery controller started (canonical CEG replication + announce rooting); "
+                    "admitted canonical targets=%s",
+                    _n_targets,
+                )
+                _spawn_delivery_rooting_probe(engine, edge)
+        except Exception as exc:  # noqa: BLE001 — best-effort, never block boot
+            logger.warning(
+                "Federation delivery controller start failed (non-fatal): %s: %s",
+                type(exc).__name__,
+                str(exc)[:200],
+            )
+
+
+def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
+    """One-shot background observability for the trace-delivery last mile.
+
+    Rooting (Reticulum reachability) and envelope shipping are two layers: a peer
+    can be transport-rooted (knows_peer / peer_reachability_ratio>0) yet ship 0
+    envelopes if its KEM/KEX pubkeys (x25519 + ML-KEM-768) are not in persist's
+    federation directory — resolve_peer_kex_pubkeys() returns None, so the
+    replication runtime cannot seal an envelope for it. The connect handshake is
+    meant to fetch the peer's encryption_pubkeys block from the peer and store it;
+    this probe records, once the canonical roots, whether that block is resolvable
+    — turning "reachable but 0 envelopes" from a mystery into a logged fact.
+    Best-effort, daemon, non-fatal; only runs when delivery is enabled.
+    """
+    import threading
+
+    def _log_delivery_status(phase: str) -> None:
+        """Surface ciris_server.delivery_status() (>=0.5.125, CIRISServer#294) as a
+        loggable [DELIVERY-STATUS] line so the QA runner / on-device log tail can
+        read the structured delivery state without test mode — the accessor is
+        in-process to the server, so it MUST be logged here, not called from the
+        runner's own process. Getattr-guarded: older wheels log 'unavailable'.
+        Same in-process-accessor → logged-surface pattern as first_run_claim_pin
+        and compose_status. Purely diagnostic; never disturbs the probe."""
+        try:
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            ds = getattr(ciris_server, "delivery_status", None)
+            if ds is None:
+                logger.info("[DELIVERY-STATUS] phase=%s unavailable (ciris_server <0.5.125 — no delivery_status accessor)", phase)
+                return
+            logger.info("[DELIVERY-STATUS] phase=%s %s", phase, ds())
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[DELIVERY-STATUS] phase=%s accessor error (non-fatal): %s", phase, exc)
+
+    def _user_opted_into_traces() -> bool:
+        """Did the OWNER opt in to trace replication? Consent is theirs to give.
+
+        Returns False when the signal cannot be read, so the failure mode is
+        "no consent authored" rather than "consented on the user's behalf".
+        """
+        try:
+            from ciris_engine.logic.config.env_utils import get_env_var  # noqa: PLC0415
+
+            if str(get_env_var("CIRIS_ACCORD_METRICS_CONSENT", "")).lower() == "true":
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+        import os
+
+        return os.environ.get("CIRIS_ACCORD_METRICS_CONSENT", "").lower() == "true"
+
+    def _try_author_consent(peer_key_id: str) -> bool:
+        """Author the owner's replication consent; True once it lands.
+
+        Refuses until the node is claimed, which is expected for the whole
+        pre-claim part of the window — logged at debug so the retry loop does
+        not shout every 15s, then once at info when it succeeds.
+        """
+        try:
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            author = getattr(ciris_server, "author_federation_consent", None)
+            defaults = getattr(ciris_server, "default_attestation_prefixes", None)
+            if author is None or defaults is None:
+                return False
+            # prefixes=None: the build supplies its own default. Restating the
+            # list is what hid a dead trace plane for eight releases — a harness
+            # passed ["capacity:"] explicitly and never exercised the default,
+            # while its log printed a hardcoded "trace:,capacity:".
+            #
+            # analyze=True (0.5.151) is not optional decoration: without it the
+            # grant is incomplete. It is the consent to BE SCORED, and a peer
+            # that skips it builds no reputation and may be refused outright.
+            author(peer_key_id, None, True)
+
+            # ASSERT THE STANCE, NOT THE CALL. A consent row can EXIST and still
+            # fold to `unspecified` — which reads as consented to anything
+            # counting rows, while the serve gate goes on refusing. That is the
+            # state ~240 nodes are already in, and it is invisible from the
+            # authoring side. Returning True here on a successful call alone
+            # would reproduce exactly that.
+            stance = None
+            probe = getattr(ciris_server, "analyze_consent_stance", None)
+            if probe is not None:
+                try:
+                    stance = probe(peer_key_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("[DELIVERY-PROBE] consent stance unreadable for %s: %s", peer_key_id, exc)
+            if stance is not None and stance != "granted":
+                logger.warning(
+                    "[DELIVERY-PROBE] consent authored for %s but stance is %r, not 'granted' — "
+                    "the row exists and the gate will still refuse; traces will not promote",
+                    peer_key_id,
+                    stance,
+                )
+                return False
+            logger.info(
+                "[DELIVERY-PROBE] owner consent AUTHORED for %s (analyze=True, build-default prefixes), "
+                "stance=%s — sealed traces can now promote",
+                peer_key_id,
+                stance or "unverified(pre-0.5.151)",
+            )
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[DELIVERY-PROBE] consent not yet authorable for %s: %s", peer_key_id, exc)
+            return False
+
+    def _envelopes_sent_total() -> Optional[int]:
+        """Read round_diagnostics.envelopes_sent_total from delivery_status()
+        (>=0.5.125). The tighter-pants terminal signal: delivery is CONFIRMED
+        only when envelopes actually left, never on TX-side optimism. Returns
+        None when the accessor is unavailable (older wheel) or unparsable —
+        callers treat None as 'cannot confirm', not as zero."""
+        try:
+            import json as _json
+
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            ds = getattr(ciris_server, "delivery_status", None)
+            if ds is None:
+                return None
+            raw = ds()
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+            sent = (data or {}).get("round_diagnostics", {}).get("envelopes_sent_total")
+            return int(sent) if sent is not None else None
+        except Exception:  # noqa: BLE001 — diagnostics only
+            return None
+
+    def _probe() -> None:
+        import time as _t
+
+        try:
+            import json as _json
+
+            canon = _json.loads(engine.list_canonical_servers() or "[]")
+            if not canon:
+                return
+            ckey = canon[0].get("key_id")
+            if not ckey:
+                return
+            # Rooting is announce-driven and observed at ~130s on the canonical
+            # (the agent cold-start-roots the peer off its RNS announce, not off a
+            # reply), so a 120s window expired ~10s BEFORE rooting and reported a
+            # false "did not root". Give rooting 240s.
+            root_deadline = 240
+            waited = 0
+            rooted = False
+            while waited < root_deadline:
+                _t.sleep(10)
+                waited += 10
+                try:
+                    rooted = bool(edge.knows_peer(ckey))
+                except Exception:  # noqa: BLE001
+                    rooted = False
+                if rooted:
+                    logger.info("[DELIVERY-PROBE] canonical %s ROOTED after ~%ss", ckey, waited)
+                    break
+            if not rooted:
+                logger.info("[DELIVERY-PROBE] canonical %s did not root within %ss", ckey, root_deadline)
+                _log_delivery_status("did-not-root")
+                return
+
+            # KEX does NOT appear at rooting — it lands only once an inbound
+            # IdentityOccurrence anti-entropy round from the peer completes (which
+            # needs the peer to REPLY over a rooted return path). The 0.5.131 run
+            # proved a one-shot 180s window is too eager: it declared "peer not
+            # replying / responder unwired, NOT the agent" 80s BEFORE the dial-cache
+            # warm-up self-healed (CIRISEdge#336 residual — both sides may dial a
+            # stale cached dest for minutes before flipping to the routable one).
+            # So: belt, suspenders, AND tighter pants —
+            #   belt      — reprime on KEX stall (idempotent, CIRISServer#288) so the
+            #               peer keeps getting fresh prime/KEX chances to heal its
+            #               own dial cache the way we healed ours;
+            #   suspenders — keep [DELIVERY-STATUS] LIVE through the whole delivery
+            #               window instead of freezing at a give-up snapshot;
+            #   tighter pants — the terminal verdict is envelopes_sent-based
+            #               (ship-confirmed vs ship-unconfirmed), never TX-side
+            #               optimism and never premature peer-blame.
+            window_deadline = 900  # full delivery window (s) — mobile test-mode keeps the app alive this long
+            status_cadence = 60  # live [DELIVERY-STATUS] emit cadence (s)
+            reprime_cadence = 180  # KEX-stall reprime cadence (s)
+            waited = 0
+            kex_seen_at: Optional[int] = None
+            last_status = 0
+            last_reprime = 0
+            _consent_authored = False
+            while waited < window_deadline:
+                _t.sleep(15)
+                waited += 15
+                if kex_seen_at is None:
+                    try:
+                        kex = edge.resolve_peer_kex_pubkeys(ckey)
+                    except Exception as kex_exc:  # noqa: BLE001
+                        kex = f"<error: {kex_exc}>"
+                    if isinstance(kex, dict):
+                        kex_seen_at = waited
+                        logger.info(
+                            "[DELIVERY-PROBE] canonical %s KEX PRESENT after ~%ss post-root — "
+                            "IdentityOccurrence round synced; replication can now seal envelopes",
+                            ckey,
+                            waited,
+                        )
+                        _log_delivery_status("kex-present")
+                    elif waited - last_reprime >= reprime_cadence:
+                        # KEX stall — reprime rather than give up. Warm-up dial-cache
+                        # lag (CIRISEdge#336) means the peer may be dialing our stale
+                        # dest for minutes; every reprime re-roots the canonical
+                        # against current handles and gives its next round a fresh
+                        # chance to route (mirror of the flip that healed OUR dials).
+                        last_reprime = waited
+                        try:
+                            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+                            rp = getattr(ciris_server, "reprime_federation_delivery", None)
+                            if rp is not None:
+                                n = rp()
+                                logger.info(
+                                    "[DELIVERY-PROBE] canonical %s KEX still None at %ss post-root — repriming "
+                                    "(likely dial-cache warm-up on one side, CIRISEdge#336; %s target(s) re-seeded)",
+                                    ckey,
+                                    waited,
+                                    n,
+                                )
+                        except Exception as rp_exc:  # noqa: BLE001
+                            logger.debug("[DELIVERY-PROBE] reprime attempt failed (non-fatal): %s", rp_exc)
+                # The owner's consent grant is a PRECONDITION for any envelope
+                # to exist: promote_consented_backlog only lifts a sealed trace
+                # out of (cohort_scope=self, tier=local) when a live grant covers
+                # its dimension. Since 0.5.146 the substrate correctly refuses to
+                # author that grant on the owner's behalf, and 0.5.147's
+                # in-process entry point refuses on an UNCLAIMED node — which the
+                # node always is at bind time, because the claim happens later in
+                # the wizard.
+                #
+                # So retry it on this loop instead of at a fixed point in boot:
+                # the fold cannot know when the claim lands, and a one-shot
+                # attempt at the only moment it is guaranteed to fail is worse
+                # than none. Idempotent, and stops as soon as it takes.
+                # GATED ON THE USER'S OPT-IN. The substrate stopped
+                # boot-authoring consent in 0.5.146 precisely because consent is
+                # the owner's act, not the fabric's — and this loop would have
+                # quietly reintroduced that: it fires whenever the node is
+                # CLAIMED, and claiming a node is not consenting to replicate
+                # your reasoning traces off it.
+                #
+                # The wizard's own HTTP call cannot carry the intent (POST
+                # /v1/federation/consent 404s in the fold by construction), so
+                # the opt-in is read from the accord-metrics adapter, which is
+                # where the wizard's "Send traces" choice lands.
+                if not _consent_authored and _user_opted_into_traces():
+                    _consent_authored = _try_author_consent(ckey)
+
+                # tighter pants: terminal condition is envelopes actually SENT
+                sent = _envelopes_sent_total()
+                if sent and sent > 0:
+                    logger.info(
+                        "[DELIVERY-PROBE] canonical %s SHIP CONFIRMED — envelopes_sent_total=%s at ~%ss post-root",
+                        ckey,
+                        sent,
+                        waited,
+                    )
+                    _log_delivery_status("ship-confirmed")
+                    return
+                if waited - last_status >= status_cadence:
+                    last_status = waited
+                    _log_delivery_status("kex-present-await-ship" if kex_seen_at is not None else "kex-none-repriming")
+            logger.info(
+                "[DELIVERY-PROBE] canonical %s window closed after %ss post-root with SHIP UNCONFIRMED "
+                "(kex=%s, envelopes_sent=0). Do not assume a peer fault: the CIRISEdge#336 dial-cache "
+                "residual is symmetric — the peer may have been dialing our stale dest all window "
+                "(explicit-hash dests cannot announce by design, so its cache heals only via our "
+                "prime/replication contact). See CIRISAgent#927 for the reverse-path ledger.",
+                ckey,
+                window_deadline,
+                "present" if kex_seen_at is not None else "none",
+            )
+            _log_delivery_status("window-closed-unconfirmed")
+        except Exception as exc:  # noqa: BLE001 — pure diagnostics, never disturb boot
+            logger.debug("[DELIVERY-PROBE] probe error (non-fatal): %s", exc)
+
+    def _sink_health() -> None:
+        """RUST-SINK HEALTH SENTINEL (own thread; never delays the probe).
+
+        Judge the rust tracing file ~60s into the boot. A 0-byte
+        ciris-server.log at that point means every compose/keyring/edge
+        diagnostic is going nowhere — the exact condition that kept the 2.9.7
+        Android compose-hang dark — so say it LOUDLY in the python log, where
+        every future pull-logs will carry the verdict.
+        """
+        try:
+            import glob as _glob
+            import time as _t2
+
+            _t2.sleep(60)
+            _home = os.environ.get("CIRIS_HOME") or os.environ.get("CIRIS_DATA_DIR")
+            if not _home:
+                return
+            _rust_logs = sorted(_glob.glob(os.path.join(_home, "logs", "ciris-server.log*")))
+            _sizes = {os.path.basename(p): os.path.getsize(p) for p in _rust_logs}
+            _dated = {n: s for n, s in _sizes.items() if not n.endswith(".boot")}
+            if _dated and all(s == 0 for s in _dated.values()):
+                logger.warning(
+                    "[RUST-SINK] DARK — rust tracing files exist but carry 0 bytes at t+60s (%s). "
+                    "Compose/keyring/edge diagnostics are being LOST (init_tracing sink not receiving "
+                    "writes on this platform). Debug via the python-side probes only.",
+                    _sizes,
+                )
+            elif _rust_logs:
+                logger.info("[RUST-SINK] healthy at t+60s: %s", _sizes)
+        except Exception as _sink_exc:  # noqa: BLE001
+            logger.debug("[RUST-SINK] health check failed (non-fatal): %s", _sink_exc)
+
+    threading.Thread(target=_probe, name="delivery-rooting-probe", daemon=True).start()
+    threading.Thread(target=_sink_health, name="rust-sink-health", daemon=True).start()
 
 
 def _seed_bootstrap_peers_into_edge(seeder: Optional[Any], edge: Any) -> None:

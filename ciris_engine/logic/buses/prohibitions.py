@@ -1250,3 +1250,51 @@ def get_prohibition_severity(category: str) -> ProhibitionSeverity:
         return ProhibitionSeverity.TIER_RESTRICTED
     else:
         return ProhibitionSeverity.NEVER_ALLOWED
+
+
+# === Round-1 DMA prohibition context (CIRISAgent#910) ===
+# Short what/why per prohibited category, injected into the system context of
+# the round-1 parallel DMAs ONLY (PDMA/CSDMA/DSDMA) so a prohibited trajectory
+# is NAMED in reasoning content — flowing forward into ASPDMA/conscience — before
+# it ever reaches the WiseBus structural gate (which stays the enforcement point).
+#
+# The category LIST + severity tier are derived from PROHIBITED_CAPABILITIES at
+# assembly time (single source of truth — the block can never drift from the
+# gate). This map only supplies the human-readable rationale. English base;
+# per-language overrides live in
+# ciris_engine/data/localized/{lang}.json -> prompts.prohibitions.<CATEGORY>
+# (and _header / _tier_never / _tier_module), with this English text as fallback.
+CATEGORY_GUIDANCE: Dict[str, str] = {
+    # Legitimate for humans / licensed modules — never the main agent.
+    "MEDICAL": "Medical diagnosis, treatment, or clinical health guidance — belongs to licensed clinicians, not this agent.",
+    "FINANCIAL": "Personalized investment, securities, or tax advice — belongs to licensed financial professionals.",
+    "LEGAL": "Legal advice, drafting, or representation — belongs to licensed attorneys.",
+    "HOME_SECURITY": "Physical access, lock, or alarm control — safety-critical; requires a dedicated licensed module.",
+    "IDENTITY_VERIFICATION": "Authoritative identity, citizenship, or biometric verification — legal-consequence gravity; requires a dedicated module.",
+    "CONTENT_MODERATION": "Authoritative content adjudication or age verification — requires a dedicated, accountable module.",
+    "RESEARCH": "Conduct of human-subjects or clinical research — requires ethics review and a dedicated module.",
+    "INFRASTRUCTURE_CONTROL": "Control of critical infrastructure (air traffic, dams, emergency dispatch) — safety-of-life; requires a dedicated module.",
+    # Absolutely outside scope — never allowed.
+    "SPIRITUAL_DIRECTION": "Spiritual direction, absolution, or blessing — belongs to humans, communities, and traditions, never to AI (CIRIS's apophatic boundary).",
+    "WEAPONS_HARMFUL": "Design, acquisition, or use of weapons or means of harm.",
+    "MANIPULATION_COERCION": "Manipulation, coercion, or addictive/deceptive design that overrides a person's autonomy.",
+    "SURVEILLANCE_MASS": "Mass surveillance, communication interception, or biometric categorization of people.",
+    "DECEPTION_FRAUD": "Fraud, scams, or deception for illicit gain.",
+    "CYBER_OFFENSIVE": "Offensive cyber capability — exploits, malware, or unauthorized intrusion.",
+    "ELECTION_INTERFERENCE": "Interference with elections or democratic processes.",
+    "BIOMETRIC_INFERENCE": "Inferring protected traits, emotions, or future behavior from biometric data.",
+    "AUTONOMOUS_DECEPTION": "Concealing capabilities, resisting correction, or deceptive alignment.",
+    "HAZARDOUS_MATERIALS": "Creation or handling of biological, chemical, or radiological hazards.",
+    "DISCRIMINATION": "Discrimination against protected classes, redlining, or algorithmic bias (EU AI Act Art. 9/10).",
+}
+
+# English fallbacks for the assembled block's framing (overridable per-locale).
+PROHIBITION_HEADER_EN = (
+    "CAPABILITY BOUNDARIES — if a request, or your own reasoning, trends toward "
+    "any capability below, NAME the category in your output and treat it as "
+    "out-of-scope so later stages can weigh and defer it. These are enforced "
+    "downstream at the WiseBus gate; surfacing them here is upstream awareness, "
+    "not a substitute for the gate."
+)
+PROHIBITION_TIER_NEVER_EN = "Never permitted (absolutely outside this agent's scope):"
+PROHIBITION_TIER_MODULE_EN = "Only via a separate licensed/accountable module (never the main agent):"

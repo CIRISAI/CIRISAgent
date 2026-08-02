@@ -493,7 +493,10 @@ class TestDeferHandler:
 
                 # The handler will still mark as DEFERRED even if validation fails
                 mock_persistence.update_thought_status.assert_called_with(
-                    thought_id="thought_123", status=ThoughtStatus.DEFERRED, final_action=result
+                    thought_id="thought_123",
+                    status=ThoughtStatus.DEFERRED,
+                    occurrence_id=test_thought.agent_occurrence_id,
+                    final_action=result,
                 )
 
                 # Verify no follow-up was created
@@ -662,7 +665,7 @@ class TestDeferNotificationLocalization:
             lambda *args, **kwargs: None,
         )
         monkeypatch.setattr(
-            "ciris_engine.logic.handlers.control.defer_handler.persistence.get_task_by_id",
+            "ciris_engine.logic.handlers.control.defer_handler.persistence.get_task_by_id_any_occurrence",
             lambda task_id: amharic_task,
         )
 
@@ -708,7 +711,7 @@ class TestDeferNotificationLocalization:
             lambda *args, **kwargs: None,
         )
         monkeypatch.setattr(
-            "ciris_engine.logic.handlers.control.defer_handler.persistence.get_task_by_id",
+            "ciris_engine.logic.handlers.control.defer_handler.persistence.get_task_by_id_any_occurrence",
             lambda task_id: test_task,
         )
 

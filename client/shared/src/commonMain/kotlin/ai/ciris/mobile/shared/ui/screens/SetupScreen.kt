@@ -1,11 +1,18 @@
 package ai.ciris.mobile.shared.ui.screens
 
+import ai.ciris.mobile.shared.CIRISBuild
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
 import androidx.compose.foundation.layout.imePadding
 import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
+import ai.ciris.mobile.shared.models.safety.AgeBand
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
+import ai.ciris.mobile.shared.models.forAdapter
+import ai.ciris.mobile.shared.ui.components.setup.AdapterToolDisclosure
+import ai.ciris.mobile.shared.ui.components.setup.ALWAYS_ON_DISCLOSURE_ID
+import ai.ciris.mobile.shared.ui.components.setup.AlwaysOnToolDisclosure
+import ai.ciris.mobile.shared.platform.DirectoryPickerDialog
 import ai.ciris.mobile.shared.platform.LocalInferenceCapability
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
@@ -21,9 +28,11 @@ import ai.ciris.mobile.shared.models.ConfigStepResultData
 import ai.ciris.mobile.shared.models.DiscoveredItemData
 import ai.ciris.mobile.shared.models.LoadableAdaptersData
 import ai.ciris.mobile.shared.ui.components.AdapterWizardDialog
+import ai.ciris.mobile.shared.ui.components.AnnounceDecisionCard
 import ai.ciris.mobile.shared.ui.components.LocalLlmServerDiscovery
 import ai.ciris.mobile.shared.ui.components.rememberLocalLlmDiscoveryState
 import ai.ciris.mobile.shared.viewmodels.DeviceAuthStatus
+import ai.ciris.mobile.shared.viewmodels.FederationIdentitySetupState
 import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
 import ai.ciris.mobile.shared.viewmodels.ModelInfo
 import ai.ciris.mobile.shared.viewmodels.SetupStep
@@ -34,6 +43,7 @@ import ai.ciris.mobile.shared.viewmodels.LocationGranularity
 import androidx.compose.animation.AnimatedVisibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
@@ -72,6 +82,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
 import ai.ciris.mobile.shared.platform.openUrlInBrowser
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -126,6 +137,12 @@ private object SetupColors {
     val ErrorDark = semantic.onError
     val ErrorText = semantic.error
 
+    // Warning (amber) - derived from SemanticColors light mode. Used by the
+    // under-18 stewardship panel (protective, attention-drawing, but kind).
+    val WarningLight = semantic.surfaceWarning
+    val WarningDark = semantic.onWarning
+    val WarningText = semantic.warning
+
     // Gray for cards
     val GrayLight = Color(0xFFF3F4F6)
 
@@ -151,6 +168,15 @@ fun SetupScreen(
     apiClient: CIRISApiClient,
     onSetupComplete: () -> Unit,
     onBackToLogin: (() -> Unit)? = null,  // Optional callback to return to login screen
+    // The one-time ownership CLAIM PIN / NodeCode captured from the LOCAL node's
+    // boot banner (PythonRuntime.localClaimPin / .localNodeCode). Used on setup
+    // COMPLETE to self-claim ownership of the local node for the just-created user.
+    // SUSPEND providers so the consumer can AWAIT the PIN (the banner can land
+    // just after COMPLETE fires) instead of snapshotting a possibly-null value.
+    // Default null providers → claim is skipped with an honest error (no local
+    // node launched on this platform, so nothing to capture).
+    claimPinProvider: suspend () -> String? = { null },
+    nodeCodeProvider: suspend () -> String? = { null },
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
@@ -185,6 +211,33 @@ fun SetupScreen(
                         viewModel.setUserPassword(request.text)
                     } else {
                         viewModel.setUserPassword(state.userPassword + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+                "input_password_confirm" -> {
+                    if (request.clearFirst) {
+                        viewModel.setUserPasswordConfirm(request.text)
+                    } else {
+                        viewModel.setUserPasswordConfirm(state.userPasswordConfirm + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+                // REQUIRED federation-identity name (FEDERATION_IDENTITY_SETUP).
+                "input_fedid_label" -> {
+                    if (request.clearFirst) {
+                        viewModel.setFederationLabel(request.text)
+                    } else {
+                        viewModel.setFederationLabel(state.federationIdentity.label + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+                // OPTIONAL friendly per-device name (e.g. "Mac mini") — distinct
+                // from the fed-ID label. Empty is allowed.
+                "input_device_name" -> {
+                    if (request.clearFirst) {
+                        viewModel.setDeviceName(request.text)
+                    } else {
+                        viewModel.setDeviceName(state.deviceName + request.text)
                     }
                     TestAutomation.clearTextInputRequest()
                 }
@@ -269,6 +322,13 @@ fun SetupScreen(
             if (state.availableTemplates.isEmpty()) {
                 viewModel.loadAvailableTemplates {
                     apiClient.getSetupTemplates()
+                }
+            }
+            // Load the generated tool disclosure (#941) so the operator can see
+            // exactly what each of these enabled-by-default choices grants.
+            if (state.toolDisclosure == null && !state.toolDisclosureLoading) {
+                viewModel.loadToolDisclosure {
+                    apiClient.getSetupToolDisclosure()
                 }
             }
         }
@@ -359,9 +419,11 @@ fun SetupScreen(
                     SetupStep.PREFERENCES -> PreferencesStep(viewModel, state)
                     SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state, apiClient)
                     SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
+                    SetupStep.FEDERATION_IDENTITY_SETUP -> FederationIdentityStep(viewModel, state)
+                    SetupStep.AGE_RANGE -> AgeRangeStep(viewModel, state)
                     SetupStep.ACCOUNT_AND_CONFIRMATION -> AccountConfirmationStep(viewModel, state)
                     SetupStep.VERIFY_SETUP -> OptionalFeaturesStep(viewModel, state) // Legacy - redirects to OPTIONAL_FEATURES
-                    SetupStep.COMPLETE -> CompleteStep(onSetupComplete)
+                    SetupStep.COMPLETE -> CompleteStep(onSetupComplete, state.ownershipClaim)
                 }
             }
 
@@ -455,50 +517,110 @@ fun SetupScreen(
                 isNodeFlow = state.isNodeFlow,
                 onNext = {
                     PlatformLogger.i(TAG, " onNext clicked, currentStep=${state.currentStep}, canProceed=${state.canProceedFromCurrentStep()}, isNodeFlow=${state.isNodeFlow}")
-                    // Determine if this is the final step before COMPLETE
-                    // - Normal flow: ACCOUNT_AND_CONFIRMATION is the final step
-                    // - Node flow: OPTIONAL_FEATURES is the final step (skips ACCOUNT_AND_CONFIRMATION)
-                    // - Unified quick setup, OAuth/HA users: QUICK_SETUP is the final step
-                    // - Unified quick setup, BYOK / local-on-device WITHOUT OAuth:
-                    //   QUICK_SETUP is NOT final — `next` advances into
-                    //   ACCOUNT_AND_CONFIRMATION so the user creates their
-                    //   admin account before /v1/setup/complete fires. Without
-                    //   this branch, /v1/setup/complete receives an empty
-                    //   admin_password and the desktop login is broken.
-                    //   (2.7.5 desktop install incident.)
-                    val isFinalStep = state.currentStep == SetupStep.ACCOUNT_AND_CONFIRMATION ||
+                    // Determine if this is the final step before COMPLETE.
+                    // NODE-CLIENT first-run flow (account-first): the order is now
+                    //   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP
+                    //   → AGE_RANGE → COMPLETE
+                    // so AGE_RANGE is the final step (account creation now happens
+                    // EARLIER, ahead of the fed-ID, so it is no longer the final
+                    // step). On COMPLETE we ALSO self-claim ownership of the local
+                    // node for the just-created user.
+                    // Legacy/non-node branches retained for the other flows.
+                    val isFinalStep = state.currentStep == SetupStep.AGE_RANGE ||
                         (state.isNodeFlow && state.currentStep == SetupStep.OPTIONAL_FEATURES) ||
                         (state.currentStep == SetupStep.QUICK_SETUP && !state.needsLocalAccountStep())
 
-                    if (isFinalStep) {
-                        // On final step, submit setup to API then advance
-                        PlatformLogger.i(TAG, " Final step - launching coroutine to submit setup")
+                    if (isFinalStep && !CIRISBuild.HAS_AGENT) {
+                        // NODE CLIENT final step: there is NO agent /v1/setup/complete
+                        // on ciris-server. The fed-ID was already minted (fed-ID step,
+                        // first-run); the automated LAST step is the ownership
+                        // self-claim. Then advance to COMPLETE, which renders the claim
+                        // result (in-progress / owned / retry). Non-blocking — a
+                        // missing PIN or failed claim surfaces in the UI, never traps.
+                        PlatformLogger.i(TAG, " Final step (node client) - self-claiming local node ownership")
+                        viewModel.claimLocalNodeOwnership(
+                            claimPinProvider = claimPinProvider,
+                            nodeCodeProvider = nodeCodeProvider,
+                        )
+                        viewModel.nextStep()
+                    } else if (isFinalStep) {
+                        // AGENT BUILD: CLAIM THEN COMPLETE. The self-claim
+                        // (POST /v1/setup/claim-remote) needs a LIVE :4243 bearer
+                        // session, and completeSetup restarts the runtime — which
+                        // INVALIDATES that session. So we must claim FIRST (while
+                        // the setup session is still valid) and only THEN write the
+                        // config + reload. Doing complete-first left the claim to
+                        // hit a dead session → 401 → node stays unclaimed → the
+                        // first-run nav loop.
+                        PlatformLogger.i(TAG, " Final step - CLAIM then COMPLETE")
                         coroutineScope.launch {
-                            PlatformLogger.i(TAG, " Coroutine started - calling viewModel.completeSetup")
                             try {
-                                // Run API call on IO dispatcher to avoid blocking main thread
-                                // Setup can take 20+ seconds as Python initializes services
+                                // 1) Self-claim ownership on the still-valid session.
+                                PlatformLogger.i(TAG, " Self-claiming local node ownership (pre-complete)")
+                                viewModel.claimLocalNodeOwnership(
+                                    claimPinProvider = claimPinProvider,
+                                    nodeCodeProvider = nodeCodeProvider,
+                                )
+                                // Await the claim SETTLING (E9). Since the settle fix,
+                                // inProgress stays true through the ENTIRE post-claim
+                                // block (owner login → setAgeSelf → announce), so this
+                                // await is the real E9 ≺ E10 gate: completeSetup's
+                                // runtime restart cannot race those :4243 calls.
+                                // Bounded so a stuck claim never traps the wizard.
+                                val settled = kotlinx.coroutines.withTimeoutOrNull(90_000) {
+                                    viewModel.state.first { !it.ownershipClaim.inProgress }
+                                }
+                                if (settled == null) {
+                                    PlatformLogger.w(TAG, "[ORDER] settle_await TIMEOUT (90s) — proceeding; conformance will flag")
+                                }
+                                val claimed = viewModel.state.value.ownershipClaim.claimed
+                                PlatformLogger.i(TAG, "[ORDER] settle_await released claimed=$claimed — advancing then completing")
+
+                                // 2) Advance to COMPLETE NOW — the node is owned,
+                                // so leave the Setup screen immediately (good UX,
+                                // and keeps the wizard under the harness's
+                                // COMPLETE-wait). completeSetup's config-write +
+                                // runtime reload then runs while COMPLETE renders;
+                                // the reload bounces to login, where — now that
+                                // the node is CLAIMED — first-run is false and the
+                                // owner signs in normally (no more nav loop).
+                                viewModel.nextStep()
+
+                                // 3) Complete setup (writes .env + reloads). Runs
+                                // AFTER the claim (session was valid for the claim)
+                                // and after advancing (so it never gates leaving
+                                // Setup). Best-effort — the COMPLETE screen surfaces
+                                // any error.
+                                PlatformLogger.i(TAG, "[ORDER] complete_setup begin (post-settle)")
                                 val result = withContext(Dispatchers.Default) {
                                     viewModel.completeSetup { request ->
-                                        // Make API call to /v1/setup/complete
                                         PlatformLogger.i(TAG, " Calling apiClient.completeSetup with provider=${request.llm_provider}")
                                         apiClient.completeSetup(request)
                                     }
                                 }
                                 PlatformLogger.i(TAG, " completeSetup returned: success=${result.success}, error=${result.error}")
-                                if (result.success) {
-                                    PlatformLogger.i(TAG, " Setup successful - advancing to next step")
-                                    viewModel.nextStep()
-                                } else {
-                                    PlatformLogger.i(TAG, " ERROR: Setup failed: ${result.error}")
-                                    // Error is now shown in UI via state.submissionError
-                                }
                             } catch (e: Exception) {
-                                PlatformLogger.i(TAG, " EXCEPTION in completeSetup: ${e.message}")
+                                PlatformLogger.i(TAG, " EXCEPTION in claim/completeSetup: ${e.message}")
                                 e.printStackTrace()
                             }
                         }
                     } else {
+                        // AUTO-MINT ON NEXT: leaving the fed-ID step without an
+                        // identity? The proceed-gate allows advancing on a valid
+                        // *typed* label alone (so "Create fed-ID" is optional to
+                        // tap), but the later self-claim REQUIRES a minted fed-ID.
+                        // So if the user typed a name and didn't tap Create, mint it
+                        // now from that name as they advance. The mint runs async and
+                        // surfaces on this step; the claim also mints-if-absent as a
+                        // backstop. An association-in-progress is left alone.
+                        val fed = state.federationIdentity
+                        if (state.currentStep == SetupStep.FEDERATION_IDENTITY_SETUP &&
+                            !fed.minted && !fed.admitted && !fed.inProgress &&
+                            fed.isLabelValid()
+                        ) {
+                            PlatformLogger.i(TAG, " fed-ID not minted but name is set — auto-minting on Next")
+                            viewModel.runFederationIdentitySetup()
+                        }
                         PlatformLogger.i(TAG, " Not final step - calling viewModel.nextStep()")
                         viewModel.nextStep()
                     }
@@ -534,21 +656,33 @@ private fun StepIndicators(
     isNodeFlow: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    // Node flow has 4 steps, unified quick setup flow has 2 steps
-    val steps = if (isNodeFlow) {
+    // Node-client first-run flow (both branches): account-first 4-step path
+    //   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP →
+    //   AGE_RANGE  (→ COMPLETE)
+    // Agent build (CIRISBuild.HAS_AGENT): LLM_CONFIGURATION is inserted after
+    // the fed-ID (5-step path). NOTE: the visual order here does NOT match the
+    // SetupStep enum's ordinal order (LLM_CONFIGURATION is declared before
+    // ACCOUNT_AND_CONFIRMATION), so active/complete state is computed from the
+    // POSITION in this list when the current step is one of the listed steps;
+    // ordinal comparison is kept as the fallback for off-path steps (COMPLETE,
+    // legacy NODE_AUTH/QUICK_SETUP flows).
+    val steps = if (CIRISBuild.HAS_AGENT) {
         listOf(
             SetupStep.WELCOME to "1",
-            SetupStep.NODE_AUTH to "2",
-            SetupStep.LLM_CONFIGURATION to "3",
-            SetupStep.OPTIONAL_FEATURES to "4"
+            SetupStep.ACCOUNT_AND_CONFIRMATION to "2",
+            SetupStep.FEDERATION_IDENTITY_SETUP to "3",
+            SetupStep.LLM_CONFIGURATION to "4",
+            SetupStep.AGE_RANGE to "5"
         )
     } else {
-        // Unified flow: WELCOME → QUICK_SETUP
         listOf(
             SetupStep.WELCOME to "1",
-            SetupStep.QUICK_SETUP to "2"
+            SetupStep.ACCOUNT_AND_CONFIRMATION to "2",
+            SetupStep.FEDERATION_IDENTITY_SETUP to "3",
+            SetupStep.AGE_RANGE to "4"
         )
     }
+    val currentFlowIndex = steps.indexOfFirst { it.first == currentStep }
 
     Row(
         modifier = modifier.testable("setup_step_indicators"),
@@ -556,8 +690,8 @@ private fun StepIndicators(
         verticalAlignment = Alignment.CenterVertically
     ) {
         steps.forEachIndexed { index, (step, number) ->
-            val isActive = currentStep >= step
-            val isComplete = currentStep > step
+            val isActive = if (currentFlowIndex >= 0) currentFlowIndex >= index else currentStep >= step
+            val isComplete = if (currentFlowIndex >= 0) currentFlowIndex > index else currentStep > step
             val stepName = step.name.lowercase()
 
             Box(
@@ -584,7 +718,7 @@ private fun StepIndicators(
                         .width(48.dp)
                         .height(2.dp)
                         .background(
-                            color = if (currentStep > step) SetupColors.Primary else SetupColors.GrayLight
+                            color = if (isComplete) SetupColors.Primary else SetupColors.GrayLight
                         )
                 )
             }
@@ -638,9 +772,11 @@ private fun WelcomeStep(
             )
         }
 
-        // Main description
+        // Main description — the node client is AI-free; only the agent build
+        // (CIRISBuild.HAS_AGENT) describes CIRIS as an AI assistant.
         Text(
-            text = localizedString("setup.welcome_desc"),
+            text = if (CIRISBuild.HAS_AGENT) localizedString("setup.welcome_desc")
+                   else localizedString("mobile.setup_welcome_desc_node"),
             color = SetupColors.TextSecondary,
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
@@ -648,7 +784,9 @@ private fun WelcomeStep(
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        // Status card based on setup mode (CIRIS_PROXY vs BYOK)
+        // Status card based on setup mode (CIRIS_PROXY vs BYOK) — agent-only.
+        // The node client has no LLM, so the AI/key-config card is hidden.
+        if (CIRISBuild.HAS_AGENT) {
         if (isCirisMode) {
             // CIRIS Mode - Google/Apple OAuth signed in
             Surface(
@@ -720,6 +858,7 @@ private fun WelcomeStep(
                 }
             }
         }
+        } // end CIRISBuild.HAS_AGENT (AI/key-config status card)
 
         // What is CIRIS?
         Surface(
@@ -747,7 +886,8 @@ private fun WelcomeStep(
                     )
                 }
                 Text(
-                    text = localizedString("mobile.setup_what_ciris_desc"),
+                    text = if (CIRISBuild.HAS_AGENT) localizedString("mobile.setup_what_ciris_desc")
+                           else localizedString("mobile.setup_what_ciris_desc_node"),
                     color = SetupColors.TextSecondary,
                     fontSize = 13.sp,
                     lineHeight = 18.sp
@@ -1891,25 +2031,45 @@ private fun OptionalFeaturesStep(
                     DataPointRow("Performance metrics", SetupColors.InfoText)
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.testableClickable("item_accord_metrics_consent") {
-                        viewModel.setAccordMetricsConsent(!state.accordMetricsConsent)
-                    }
-                ) {
-                    Checkbox(
-                        checked = state.accordMetricsConsent,
-                        onCheckedChange = { viewModel.setAccordMetricsConsent(it) },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = SetupColors.Primary,
-                            uncheckedColor = SetupColors.TextSecondary
+                // Trace opt-in is GATED on announcing: un-announced nodes are
+                // self-scoped and never federate their traces, so the opt-in is only
+                // meaningful once the owner has announced (set on the fed-ID step).
+                if (state.announceOwnership) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.testableClickable("item_accord_metrics_consent") {
+                            viewModel.setAccordMetricsConsent(!state.accordMetricsConsent)
+                        }
+                    ) {
+                        Checkbox(
+                            checked = state.accordMetricsConsent,
+                            onCheckedChange = { viewModel.setAccordMetricsConsent(it) },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = SetupColors.Primary,
+                                uncheckedColor = SetupColors.TextSecondary
+                            )
                         )
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = localizedString("mobile.setup_alignment_agree"),
+                            color = SetupColors.InfoDark,
+                            fontSize = 14.sp
+                        )
+                    }
+                } else {
                     Text(
-                        text = localizedString("mobile.setup_alignment_agree"),
-                        color = SetupColors.InfoDark,
-                        fontSize = 14.sp
+                        // New key (not yet in en.json): localizedString returns the
+                        // key itself when absent, so guard on "blank or == key".
+                        text = localizedString("mobile.announce_decision_trace_locked").let {
+                            if (it.isBlank() || it == "mobile.announce_decision_trace_locked") {
+                                "Turn on announcing above to enable sending reasoning traces and " +
+                                    "joining communities."
+                            } else {
+                                it
+                            }
+                        },
+                        color = SetupColors.TextSecondary,
+                        fontSize = 13.sp,
                     )
                 }
 
@@ -2088,6 +2248,15 @@ private fun OptionalFeaturesStep(
                 onToggle = {},
                 onConfigure = null
             )
+            // The api adapter is on regardless, so disclose what it grants even
+            // when the adapter list itself could not be fetched.
+            AdapterToolDisclosure(
+                adapterId = "api",
+                disclosure = state.toolDisclosure?.forAdapter("api"),
+                expanded = "api" in state.expandedToolDisclosureIds,
+                onToggle = { viewModel.toggleToolDisclosureExpanded("api") },
+                loading = state.toolDisclosureLoading
+            )
         } else {
             state.availableAdapters.forEach { adapter ->
                 val isEnabled = state.enabledAdapterIds.contains(adapter.id)
@@ -2118,9 +2287,29 @@ private fun OptionalFeaturesStep(
                     }
                 )
 
+                // #941: what this choice actually grants the agent. Disclosure
+                // only -- expanding it changes nothing, and the toggle above
+                // keeps whatever default it had.
+                AdapterToolDisclosure(
+                    adapterId = adapter.id,
+                    disclosure = state.toolDisclosure?.forAdapter(adapter.id),
+                    expanded = adapter.id in state.expandedToolDisclosureIds,
+                    onToggle = { viewModel.toggleToolDisclosureExpanded(adapter.id) },
+                    loading = state.toolDisclosureLoading
+                )
+
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+
+        // #941: tools registered regardless of every choice above. They appear in
+        // no other list in this wizard and cannot be declined, so say so.
+        Spacer(modifier = Modifier.height(12.dp))
+        AlwaysOnToolDisclosure(
+            groups = state.toolDisclosure?.always_on ?: emptyList(),
+            expanded = ALWAYS_ON_DISCLOSURE_ID in state.expandedToolDisclosureIds,
+            onToggle = { viewModel.toggleToolDisclosureExpanded(ALWAYS_ON_DISCLOSURE_ID) }
+        )
 
         // Section 3: Advanced Settings (collapsible)
         Spacer(modifier = Modifier.height(16.dp))
@@ -2232,6 +2421,787 @@ private fun OptionalFeaturesStep(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ========== Federation Identity Step (Create your federation ID) ==========
+//
+// MINTS the founder's hardware-rooted USER federation identity by DRIVING this
+// device's local ciris-server: POST /v1/self/identity. The local node does ALL
+// the crypto (keygen + sealing + genesis-object signing) in its substrate,
+// custodied by a YubiKey / TPM·SE / software seed; the app holds NO keys and
+// signs nothing — it only POSTs the mint and surfaces the public result (the
+// CIRIS-V2-… fedcode + key_id + hardware tier).
+@Composable
+private fun FederationIdentityStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    modifier: Modifier = Modifier
+) {
+    val fed = state.federationIdentity
+    val clipboardManager = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+
+    // Probe the local node first: if it already holds an identity we don't offer
+    // to mint a duplicate, we just report it. The app holds NO keys.
+    LaunchedEffect(Unit) {
+        viewModel.probeFederationIdentity()
+    }
+
+    // Reset the "Copied" pill shortly after a copy.
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1800)
+            copied = false
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text(
+            text = localizedString("mobile.federation_create_title"),
+            color = SetupColors.TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Text(
+            text = localizedString("mobile.federation_create_explainer"),
+            color = SetupColors.TextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        // Plain-language explanation of the whole identity flow (middle-school
+        // English): what a federation ID is, why the name must be unique, that
+        // it's created once + can be restored elsewhere as the same you, and that
+        // the app holds no keys.
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.GrayLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                listOf(
+                    "mobile.setup_fedid_explain_what",
+                    "mobile.setup_fedid_explain_name",
+                    "mobile.setup_fedid_explain_once",
+                    "mobile.setup_fedid_explain_keys",
+                ).forEachIndexed { index, key ->
+                    Text(
+                        text = "• ${localizedString(key)}",
+                        color = SetupColors.TextSecondary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.padding(top = if (index == 0) 0.dp else 8.dp)
+                    )
+                }
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.InfoLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(text = "🔑", fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp))
+                    Text(
+                        text = localizedString("mobile.federation_create_card_title"),
+                        color = SetupColors.InfoDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                when {
+                    // Show the result ONLY after a real USER fed-ID was minted or
+                    // associated THIS session. (Do NOT treat "node reachable + HW
+                    // available" as "you already have a fed-ID" — that conflated the
+                    // node's steward key with the user's identity and skipped the mint.)
+                    fed.minted || fed.admitted -> {
+                        Text(
+                            text = if (fed.minted) {
+                                localizedString("mobile.federation_create_minted")
+                            } else {
+                                localizedString("mobile.federation_create_exists")
+                            },
+                            color = SetupColors.InfoDark,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 10.dp),
+                        )
+
+                        // The shareable fedcode — prominent, monospace, copyable.
+                        fed.fedcode?.let { code ->
+                            Text(
+                                text = localizedString("mobile.federation_create_fedcode_label"),
+                                color = SetupColors.InfoText,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.White.copy(alpha = 0.6f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp, bottom = 8.dp)
+                            ) {
+                                Text(
+                                    text = code,
+                                    color = SetupColors.InfoDark,
+                                    fontSize = 13.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(10.dp),
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(code))
+                                    copied = true
+                                },
+                                modifier = Modifier.testableClickable("btn_federation_copy_fedcode") {
+                                    clipboardManager.setText(AnnotatedString(code))
+                                    copied = true
+                                }
+                            ) {
+                                Text(
+                                    if (copied) {
+                                        localizedString("mobile.federation_create_copied")
+                                    } else {
+                                        localizedString("mobile.federation_create_copy")
+                                    }
+                                )
+                            }
+                        }
+
+                        fed.identityKeyId?.let {
+                            Text(
+                                text = localizedString("mobile.federation_create_keyid", "key_id", it),
+                                color = SetupColors.InfoText,
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                        fed.hardwareLabel?.let {
+                            Text(
+                                text = localizedString("mobile.federation_create_hardware", "hardware", it),
+                                color = SetupColors.InfoText,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+
+                    // Not minted yet → the mint UX: optional label + backend choice
+                    // + the "Create my federation ID" button.
+                    else -> {
+                        Text(
+                            text = localizedString("mobile.federation_create_prompt"),
+                            color = SetupColors.InfoText,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+
+                        // REQUIRED federation-identity name. This names + keys the
+                        // ONE canonical "you" (via the node's derive_key_id) — so it
+                        // must be present and must not be a generic default. The
+                        // field is invalid (and Next is blocked) until the user
+                        // enters a real, unique name like `firstname-lastname-v1`.
+                        val labelTrimmed = fed.label.trim()
+                        val labelIsGeneric = labelTrimmed.lowercase() in
+                            FederationIdentitySetupState.REJECTED_GENERIC_LABELS
+                        val labelHasError = labelTrimmed.isEmpty() || labelIsGeneric
+                        OutlinedTextField(
+                            value = fed.label,
+                            onValueChange = { viewModel.setFederationLabel(it) },
+                            label = { Text(localizedString("mobile.setup_fedid_label")) },
+                            placeholder = { Text(localizedString("mobile.setup_fedid_label_hint")) },
+                            singleLine = true,
+                            isError = labelHasError,
+                            enabled = !fed.inProgress,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testable("input_fedid_label"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = SetupColors.TextPrimary,
+                                unfocusedTextColor = SetupColors.TextPrimary,
+                                focusedBorderColor = SetupColors.Primary,
+                                unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                                cursorColor = SetupColors.Primary,
+                                errorBorderColor = SetupColors.ErrorText
+                            )
+                        )
+                        // Inline requirement / rejection hint under the field.
+                        Text(
+                            text = when {
+                                labelTrimmed.isEmpty() ->
+                                    localizedString("mobile.setup_fedid_label_required")
+                                labelIsGeneric ->
+                                    localizedString("mobile.setup_fedid_label_generic")
+                                else -> localizedString("mobile.setup_fedid_label_ok")
+                            },
+                            color = if (labelHasError) SetupColors.ErrorText else SetupColors.SuccessText,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                        )
+
+                        // OPTIONAL friendly per-device name (e.g. "Mac mini") —
+                        // distinct from the fed-ID name above. Empty is allowed; it
+                        // labels THIS device in the UI and is stored client-side
+                        // (no server field on the wizard's mint/claim yet).
+                        OutlinedTextField(
+                            value = state.deviceName,
+                            onValueChange = { viewModel.setDeviceName(it) },
+                            label = {
+                                Text(
+                                    localizedString("mobile.setup_device_name_label")
+                                        .ifEmpty { "Name this device (optional)" }
+                                )
+                            },
+                            placeholder = {
+                                Text(
+                                    localizedString("mobile.setup_device_name_hint")
+                                        .ifEmpty { "e.g. Mac mini" }
+                                )
+                            },
+                            singleLine = true,
+                            enabled = !fed.inProgress,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testable("input_device_name"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = SetupColors.TextPrimary,
+                                unfocusedTextColor = SetupColors.TextPrimary,
+                                focusedBorderColor = SetupColors.Primary,
+                                unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                                cursorColor = SetupColors.Primary,
+                            )
+                        )
+                        Text(
+                            text = localizedString("mobile.setup_device_name_helper")
+                                .ifEmpty { "A friendly name for this device. You can leave this blank." },
+                            color = SetupColors.TextSecondary,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                        )
+
+                        // No custody choice: the only option is the SECURE one.
+                        // `backend = null` lets the substrate auto-pick the most
+                        // secure custody available (YubiKey → TPM/Secure-Enclave →
+                        // software), so the user never has to choose. Keep it easy.
+                        Text(
+                            text = localizedString("mobile.federation_create_secure_note"),
+                            color = SetupColors.InfoText,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+
+                        // Secure with 2FA belongs to the FEDERATION IDENTITY (the
+                        // hardware factor IS the fed-ID's custody), not the local
+                        // login — so the toggle lives here.
+                        SecureWith2FACard(state = state, viewModel = viewModel)
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Federation opt-in — now a FIRST-CLASS decision: announcing
+                        // is upstream of everything the community touches (traces +
+                        // joining communities). Privacy-first, default OFF. The trace
+                        // opt-in (accordMetricsConsent) is GATED inside this card — it
+                        // can only be enabled once the user announces (un-announced
+                        // nodes never federate their traces). Turning announce OFF also
+                        // clears the trace opt-in so state stays consistent.
+                        AnnounceDecisionCard(
+                            announce = state.announceOwnership,
+                            onAnnounceChange = { on ->
+                                viewModel.setAnnounceOwnership(on)
+                                if (!on) viewModel.setAccordMetricsConsent(false)
+                            },
+                            traceOptIn = state.accordMetricsConsent,
+                            onTraceOptInChange = { viewModel.setAccordMetricsConsent(it) },
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            // Block minting until the name is valid: minting with a
+                            // blank/generic name is exactly what produced the
+                            // colliding `ciris-client-user` identity.
+                            onClick = { viewModel.runFederationIdentitySetup() },
+                            enabled = !fed.inProgress && !labelHasError,
+                            modifier = Modifier.testableClickable("btn_federation_identity") {
+                                if (!labelHasError) viewModel.runFederationIdentitySetup()
+                            }
+                        ) {
+                            if (fed.inProgress) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(
+                                if (fed.inProgress) {
+                                    localizedString("mobile.federation_create_minting")
+                                } else {
+                                    localizedString("mobile.federation_create_button")
+                                }
+                            )
+                        }
+
+                        // ASSOCIATE an EXISTING Fed ID instead of minting a new one
+                        // (adopt prior crypto materials — same user, same auth). The
+                        // choice is always offered; tapping reveals the key_id input.
+                        Spacer(modifier = Modifier.height(10.dp))
+                        TextButton(
+                            onClick = { viewModel.toggleAssociateExisting() },
+                            enabled = !fed.inProgress,
+                            modifier = Modifier.testableClickable("btn_federation_associate_existing") {
+                                viewModel.toggleAssociateExisting()
+                            }
+                        ) {
+                            Text(localizedString("mobile.federation_create_associate"))
+                        }
+                        if (fed.associateExisting) {
+                            OutlinedTextField(
+                                value = fed.associateKeyId,
+                                onValueChange = { viewModel.setAssociateKeyId(it) },
+                                label = { Text(localizedString("mobile.federation_create_associate_hint")) },
+                                singleLine = true,
+                                enabled = !fed.inProgress,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp)
+                                    .testable("input_federation_associate_keyid")
+                            )
+                            Button(
+                                onClick = { viewModel.associateExistingFederationId() },
+                                enabled = !fed.inProgress && fed.associateKeyId.isNotBlank(),
+                                modifier = Modifier
+                                    .padding(top = 8.dp)
+                                    .testableClickable("btn_federation_associate_submit") {
+                                        viewModel.associateExistingFederationId()
+                                    }
+                            ) {
+                                Text(localizedString("mobile.federation_create_associate_button"))
+                            }
+                        }
+
+                        // IMPORT an existing fed-ID from a USB / folder keyset — the
+                        // "same person, new device" path. The node REPLACES this
+                        // device's identity with the imported one and the self-claim
+                        // re-owns the node under it (works at first-run). One device =
+                        // one person; import replaces, it does not coexist.
+                        Spacer(modifier = Modifier.height(6.dp))
+                        var showImportPicker by remember { mutableStateOf(false) }
+                        TextButton(
+                            onClick = { showImportPicker = true },
+                            enabled = !fed.inProgress,
+                            modifier = Modifier.testableClickable("btn_federation_import_usb") {
+                                showImportPicker = true
+                            }
+                        ) {
+                            Text(localizedString("mobile.federation_import_usb"))
+                        }
+                        DirectoryPickerDialog(
+                            show = showImportPicker,
+                            onDirectoryPicked = { dir ->
+                                showImportPicker = false
+                                if (dir.isNotBlank()) viewModel.importPortableFromUsb(dir)
+                            },
+                            onDismiss = { showImportPicker = false },
+                        )
+                    }
+                }
+
+                fed.error?.let { err ->
+                    Text(
+                        text = err,
+                        color = SetupColors.ErrorText,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = localizedString("mobile.setup_fedid_required_note"),
+            color = SetupColors.TextSecondary,
+            fontSize = 12.sp,
+        )
+    }
+}
+
+/**
+ * **AGE_RANGE step — the foundational protective gate.** You have a federation
+ * ID; now STATE YOUR AGE RANGE, then you're on the fabric. Safety is built in
+ * FIRST, ahead of content.
+ *
+ * A clear age-range selector (Under 18 / 18+ — matching `age.rs::AgeBand`'s
+ * `minor` / `adult`) with a child-safe explainer. On select, the local node
+ * records the subject-signed self-declared assurance
+ * (`POST /v1/safety/age-assurance`). The app does NO crypto. Declining/erroring
+ * never traps the user — the protective default is `minor`.
+ */
+@Composable
+private fun AgeRangeStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    modifier: Modifier = Modifier
+) {
+    val age = state.ageRange
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text(
+            text = localizedString("mobile.age_range_title"),
+            color = SetupColors.TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Text(
+            text = localizedString("mobile.age_range_explainer"),
+            color = SetupColors.TextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 20.dp)
+        )
+
+        // The two protective bands. The server models exactly two: minor / adult
+        // (age.rs::AgeBand). "Under 18" maps to `minor`; "18 or older" to `adult`.
+        val options = listOf(
+            AgeBand.MINOR to ("minor" to localizedString("mobile.age_range_minor")),
+            AgeBand.ADULT to ("adult" to localizedString("mobile.age_range_adult")),
+        )
+        Column(modifier = Modifier.padding(bottom = 16.dp)) {
+            options.forEach { (band, meta) ->
+                val (token, label) = meta
+                val selected = age.selectedBandToken == token
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (selected) SetupColors.Primary.copy(alpha = 0.18f) else SetupColors.InfoLight,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .testableClickable("age_band_$token") {
+                            if (!age.inProgress) viewModel.setAgeRange(band)
+                        }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp)
+                    ) {
+                        RadioButton(
+                            selected = selected,
+                            onClick = { if (!age.inProgress) viewModel.setAgeRange(band) },
+                            enabled = !age.inProgress,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = label,
+                            color = SetupColors.InfoDark,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+        }
+
+        // UNDER-18 STEWARDSHIP (CC 0.5.1 §2580). When the founder self-declares
+        // the `minor` band they cannot self-claim ownership; a kind, plain-English
+        // panel explains that an adult must accept responsibility (stewardship),
+        // and lets the minor generate a stewardship request to hand over.
+        if (age.selectedBandToken == "minor") {
+            MinorStewardshipCard(viewModel, state)
+        }
+
+        // Child-safe explainer card — honest framing kept TRUE (matches the
+        // age.rs honesty discipline: protective default; self-declared; the
+        // subject controls their own band; misdeclaration is never punitive).
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.InfoLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(text = "🛡️", fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp))
+                    Text(
+                        text = localizedString("mobile.age_range_card_title"),
+                        color = SetupColors.InfoDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    text = localizedString("mobile.age_range_card_body"),
+                    color = SetupColors.InfoText,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                )
+
+                when {
+                    age.inProgress -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 12.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = SetupColors.Primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = localizedString("mobile.age_range_saving"),
+                                color = SetupColors.InfoText,
+                                fontSize = 12.sp,
+                            )
+                        }
+                    }
+                    age.recorded -> {
+                        Text(
+                            text = localizedString("mobile.age_range_saved"),
+                            color = SetupColors.InfoDark,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                }
+
+                age.error?.let { err ->
+                    Text(
+                        text = err,
+                        color = SetupColors.ErrorText,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = localizedString("mobile.age_range_footnote"),
+            color = SetupColors.TextSecondary,
+            fontSize = 12.sp,
+        )
+    }
+}
+
+/**
+ * UNDER-18 STEWARDSHIP panel (CIRIS Constitution 0.5.1 §2580 — minor-stewardship
+ * rule). Shown inside [AgeRangeStep] when the founder selects the `minor` band.
+ *
+ * A minor MUST NOT self-claim ownership; instead an over-18 adult must accept
+ * responsibility (stewardship) by signing a live `delegates_to(adult → minor)`.
+ * This panel (a) explains that kindly and plainly, (b) lets the minor generate a
+ * stewardship request — a code/URL + PIN they hand to their adult — and (c) makes
+ * the fail-secure posture explicit: the account cannot operate until a live adult
+ * steward accepts, and pauses again if the steward is ever removed.
+ */
+@Composable
+private fun MinorStewardshipCard(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+) {
+    val steward = state.minorStewardship
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = SetupColors.WarningLight,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp)
+            .testable("minor_stewardship_card")
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                Text(text = "🧡", fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp))
+                Text(
+                    text = localizedString("mobile.setup_minor_title"),
+                    color = SetupColors.WarningDark,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Kind, plain-English explanation of WHY and WHAT stewardship is.
+            Text(
+                text = localizedString("mobile.setup_minor_explainer"),
+                color = SetupColors.WarningText,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(bottom = 10.dp)
+            )
+
+            // Fail-secure note — the account cannot operate until an adult accepts.
+            Text(
+                text = localizedString("mobile.setup_minor_failsecure"),
+                color = SetupColors.WarningText,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 14.dp)
+            )
+
+            when {
+                // A request was generated — show the hand-off code/URL + PIN.
+                steward.requested -> {
+                    Text(
+                        text = localizedString("mobile.setup_minor_handoff_title"),
+                        color = SetupColors.WarningDark,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    Text(
+                        text = localizedString("mobile.setup_minor_handoff_body"),
+                        color = SetupColors.WarningText,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
+                    // The PIN the adult enters to accept stewardship.
+                    steward.requestPin?.let { pin ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = SetupColors.InfoLight,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = localizedString("mobile.setup_minor_pin_label"),
+                                    color = SetupColors.TextSecondary,
+                                    fontSize = 11.sp,
+                                )
+                                Text(
+                                    text = pin,
+                                    color = SetupColors.InfoDark,
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier
+                                        .padding(top = 2.dp)
+                                        .testable("minor_steward_pin", pin)
+                                )
+                            }
+                        }
+                    }
+                    // The claim URL the adult opens on their own device to accept.
+                    steward.requestUrl?.let { url ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = SetupColors.InfoLight,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = localizedString("mobile.setup_minor_url_label"),
+                                    color = SetupColors.TextSecondary,
+                                    fontSize = 11.sp,
+                                )
+                                Text(
+                                    text = url,
+                                    color = SetupColors.InfoDark,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier
+                                        .padding(top = 2.dp)
+                                        .testable("minor_steward_url", url)
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = localizedString("mobile.setup_minor_pending"),
+                        color = SetupColors.WarningDark,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+
+                // In flight.
+                steward.inProgress -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = SetupColors.Primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = localizedString("mobile.setup_minor_requesting"),
+                            color = SetupColors.WarningText,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+
+                // Initial state — offer the "ask an adult" button.
+                else -> {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = SetupColors.Primary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testableClickable("btn_request_steward") {
+                                viewModel.requestMinorSteward()
+                            }
+                    ) {
+                        Text(
+                            text = localizedString("mobile.setup_minor_request_btn"),
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 14.dp)
+                        )
+                    }
+                }
+            }
+
+            steward.error?.let { err ->
+                Text(
+                    text = err,
+                    color = SetupColors.ErrorText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 10.dp)
+                )
             }
         }
     }
@@ -2454,30 +3424,35 @@ private fun AccountConfirmationStep(
             }
         }
 
-        // Setup Summary
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = SetupColors.GrayLight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = localizedString("mobile.setup_summary"),
-                    color = SetupColors.TextPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
+        // Setup Summary — the AI/assistant rows are agent-only (node client is AI-free).
+        // Gated on CIRISBuild.HAS_AGENT so the agent team surfaces it with one flag flip.
+        if (CIRISBuild.HAS_AGENT || state.isGoogleAuth) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = SetupColors.GrayLight,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = localizedString("mobile.setup_summary"),
+                        color = SetupColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
 
-                SummaryRow(
-                    label = "AI",
-                    value = if (state.useCirisProxy()) "Free AI Access (via ${getOAuthProviderName()})" else state.llmProvider
-                )
-                SummaryRow(label = "Assistant", value = viewModel.getSelectedTemplateName())
-                if (state.isGoogleAuth) {
-                    SummaryRow(label = "Sign-in", value = "${getOAuthProviderName()} Account")
+                    if (CIRISBuild.HAS_AGENT) {
+                        SummaryRow(
+                            label = "AI",
+                            value = if (state.useCirisProxy()) "Free AI Access (via ${getOAuthProviderName()})" else state.llmProvider
+                        )
+                        SummaryRow(label = "Assistant", value = viewModel.getSelectedTemplateName())
+                    }
+                    if (state.isGoogleAuth) {
+                        SummaryRow(label = "Sign-in", value = "${getOAuthProviderName()} Account")
+                    }
                 }
             }
         }
@@ -2554,6 +3529,137 @@ private fun AccountConfirmationStep(
                     modifier = Modifier.padding(start = 4.dp, top = 4.dp)
                 )
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = state.userPasswordConfirm,
+                onValueChange = { viewModel.setUserPasswordConfirm(it) },
+                modifier = Modifier.fillMaxWidth().testable("input_password_confirm"),
+                label = { Text(localizedString("mobile.setup_password_confirm_label"), color = SetupColors.TextSecondary) },
+                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = SetupColors.TextPrimary,
+                    unfocusedTextColor = SetupColors.TextPrimary,
+                    focusedBorderColor = SetupColors.Primary,
+                    unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                    focusedLabelColor = SetupColors.Primary,
+                    unfocusedLabelColor = SetupColors.TextSecondary,
+                    cursorColor = SetupColors.Primary
+                ),
+                singleLine = true
+            )
+
+            if (state.userPasswordConfirm.isNotEmpty() && state.userPassword != state.userPasswordConfirm) {
+                Text(
+                    text = localizedString("mobile.setup_password_mismatch_hint"),
+                    color = SetupColors.ErrorText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The "Secure with 2FA" affordance — rendered on the FEDERATION-IDENTITY step
+ * (the 2nd factor belongs to the federation identity, not the local login). The
+ * factor is provided NATIVELY by CIRISVerify (the device's hardware authenticator:
+ * YubiKey → TPM / Secure-Enclave) and enrolled as the `hardware_attestation` on
+ * the self-login occurrence when the fed-ID is minted.
+ */
+@Composable
+private fun SecureWith2FACard(
+    state: SetupFormState,
+    viewModel: SetupViewModel,
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = SetupColors.GrayLight,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = localizedString("mobile.setup_2fa_title"),
+                    color = SetupColors.TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = localizedString("mobile.setup_2fa_desc"),
+                    color = SetupColors.TextSecondary,
+                    fontSize = 13.sp
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Switch(
+                checked = state.secureWith2FA,
+                onCheckedChange = { viewModel.setSecureWith2FA(it) },
+                modifier = Modifier.testableClickable("toggle_secure_2fa") {
+                    viewModel.setSecureWith2FA(!state.secureWith2FA)
+                }
+            )
+        }
+    }
+}
+
+/**
+ * The "Announce yourself to the federation" opt-in — rendered on the
+ * FEDERATION-IDENTITY step alongside the other fed-ID custody choices. Default
+ * OFF (privacy-first): ownership is SELF-SCOPED (private) — full personal use, the
+ * owner's nodes sync across their own devices but are invisible to the federation.
+ * Turning it ON, after a successful claim, promotes the owner-binding
+ * self→FEDERATION and enables the node's identity announce so the community can
+ * find and federate with this node. Takes effect on the node's next launch.
+ */
+@Composable
+private fun AnnounceOwnershipCard(
+    state: SetupFormState,
+    viewModel: SetupViewModel,
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = SetupColors.GrayLight,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = localizedString("mobile.setup_announce_title"),
+                    color = SetupColors.TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    // Make the tradeoff clear: distinct copy for OFF (private,
+                    // recommended) vs ON (join the community, effective next launch).
+                    text = if (state.announceOwnership) {
+                        localizedString("mobile.setup_announce_desc_on")
+                    } else {
+                        localizedString("mobile.setup_announce_desc_off")
+                    },
+                    color = SetupColors.TextSecondary,
+                    fontSize = 13.sp
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Switch(
+                checked = state.announceOwnership,
+                onCheckedChange = { viewModel.setAnnounceOwnership(it) },
+                modifier = Modifier.testableClickable("toggle_announce_ownership") {
+                    viewModel.setAnnounceOwnership(!state.announceOwnership)
+                }
+            )
         }
     }
 }
@@ -2943,26 +4049,45 @@ private fun QuickSetupStep(
                     )
                 }
 
-                // Accord metrics consent checkbox
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.testableClickable("item_accord_metrics_consent_quick") {
-                        viewModel.setAccordMetricsConsent(!state.accordMetricsConsent)
-                    }
-                ) {
-                    Checkbox(
-                        checked = state.accordMetricsConsent,
-                        onCheckedChange = { viewModel.setAccordMetricsConsent(it) },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = SetupColors.Primary,
-                            uncheckedColor = SetupColors.TextSecondary
+                // Accord metrics consent checkbox — GATED on announcing (un-announced
+                // nodes never federate their traces, so the opt-in is only meaningful
+                // once the owner has announced).
+                if (state.announceOwnership) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.testableClickable("item_accord_metrics_consent_quick") {
+                            viewModel.setAccordMetricsConsent(!state.accordMetricsConsent)
+                        }
+                    ) {
+                        Checkbox(
+                            checked = state.accordMetricsConsent,
+                            onCheckedChange = { viewModel.setAccordMetricsConsent(it) },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = SetupColors.Primary,
+                                uncheckedColor = SetupColors.TextSecondary
+                            )
                         )
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = localizedString("mobile.setup_alignment_agree"),
+                            color = SetupColors.InfoDark,
+                            fontSize = 14.sp
+                        )
+                    }
+                } else {
                     Text(
-                        text = localizedString("mobile.setup_alignment_agree"),
-                        color = SetupColors.InfoDark,
-                        fontSize = 14.sp
+                        // New key (not yet in en.json): localizedString returns the
+                        // key itself when absent, so guard on "blank or == key".
+                        text = localizedString("mobile.announce_decision_trace_locked").let {
+                            if (it.isBlank() || it == "mobile.announce_decision_trace_locked") {
+                                "Turn on announcing above to enable sending reasoning traces and " +
+                                    "joining communities."
+                            } else {
+                                it
+                            }
+                        },
+                        color = SetupColors.TextSecondary,
+                        fontSize = 13.sp,
                     )
                 }
 
@@ -3468,11 +4593,17 @@ private fun formatNumber(num: Int): String {
 @Composable
 private fun CompleteStep(
     onSetupComplete: () -> Unit,
+    ownershipClaim: ai.ciris.mobile.shared.viewmodels.NodeOwnershipClaimState =
+        ai.ciris.mobile.shared.viewmodels.NodeOwnershipClaimState(),
     modifier: Modifier = Modifier
 ) {
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(2000)
-        onSetupComplete()
+    // Hold here until the LOCAL-node ownership self-claim settles (success or
+    // error), then auto-complete. Bounded so a hung claim never traps the user.
+    LaunchedEffect(ownershipClaim.inProgress) {
+        if (!ownershipClaim.inProgress) {
+            kotlinx.coroutines.delay(2000)
+            onSetupComplete()
+        }
     }
 
     Column(
@@ -3506,6 +4637,43 @@ private fun CompleteStep(
             fontSize = 16.sp,
             textAlign = TextAlign.Center
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // LOCAL-node ownership self-claim status. Success → this node is now
+        // OWNED by the just-created user. Failure → honest reason (e.g. the
+        // console-only claim PIN was not captured); the node can still be claimed
+        // later from the Network surface.
+        when {
+            ownershipClaim.inProgress -> {
+                Text(
+                    text = "Claiming ownership of this node…",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.testable("setup_ownership_claiming"),
+                )
+            }
+            ownershipClaim.claimed -> {
+                Text(
+                    text = "You now own this node (${ownershipClaim.role ?: "owner"}).",
+                    color = SetupColors.SuccessDark,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.testable("setup_ownership_claimed"),
+                )
+            }
+            ownershipClaim.error != null -> {
+                Text(
+                    text = "Couldn't claim this node yet: ${ownershipClaim.error}",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.testable("setup_ownership_error"),
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -3549,19 +4717,9 @@ private fun NavigationButtons(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Back button - on WELCOME step, go back to Login if callback provided
-            if (currentStep == SetupStep.WELCOME && onBackToLogin != null) {
-                OutlinedButton(
-                    onClick = onBackToLogin,
-                    enabled = !isSubmitting,
-                    modifier = Modifier.weight(1f).testableClickable("btn_back_to_login") { onBackToLogin() },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = SetupColors.TextSecondary
-                    )
-                ) {
-                    Text(localizedString("mobile.setup_back_login"))
-                }
-            } else if (currentStep != SetupStep.WELCOME && currentStep != SetupStep.COMPLETE) {
+            // No back button on WELCOME: this is first-run, there is no prior
+            // login/account to return to (the account is created in the next step).
+            if (currentStep != SetupStep.WELCOME && currentStep != SetupStep.COMPLETE) {
                 OutlinedButton(
                     onClick = onBack,
                     enabled = !isSubmitting,
@@ -3581,7 +4739,7 @@ private fun NavigationButtons(
                     enabled = canProceed && !isSubmitting,
                     // Use equal weights if back button is visible, otherwise double width on WELCOME
                     modifier = Modifier
-                        .weight(if (currentStep == SetupStep.WELCOME && onBackToLogin == null) 2f else 1f)
+                        .weight(if (currentStep == SetupStep.WELCOME) 2f else 1f)
                         .testableClickable("btn_next") { onNext() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SetupColors.Primary,
@@ -3595,8 +4753,9 @@ private fun NavigationButtons(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        // Determine button text based on step and flow type
-                        val isFinalStep = currentStep == SetupStep.ACCOUNT_AND_CONFIRMATION ||
+                        // Determine button text based on step and flow type.
+                        // Account-first node flow: AGE_RANGE is the final step.
+                        val isFinalStep = currentStep == SetupStep.AGE_RANGE ||
                             (isNodeFlow && currentStep == SetupStep.OPTIONAL_FEATURES)
                         Text(
                             when {

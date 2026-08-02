@@ -34,6 +34,19 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import aiohttp
 
+def _accord_tee_dir() -> str:
+    """Where runtime-registered accord adapters tee sealed batches.
+
+    Registration payloads previously carried trace_level but not this, and
+    the adapter read the dir from ENV only — so accord_detailed/accord_full,
+    the two instances holding the detailed and full-text traces, could not
+    be told where to write. A run then sealed traces and produced zero files
+    while reporting 100% pass.
+    """
+    import os
+    return os.environ.get("CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR", "") or ""
+
+
 logger = logging.getLogger(__name__)
 
 # Live Lens server URL
@@ -45,6 +58,10 @@ class AccordMetricsTests:
 
     Follows the SDK test module interface pattern used by the QA runner.
     """
+
+    # Produces CEG reasoning traces: the runner loads accord_metrics,
+    # sets the owner-consent env var, and points the local tee at qa_reports/.
+    CAPTURES_TRACES = True
 
     # Expected trace components (mapped from event types)
     EXPECTED_COMPONENTS = [
@@ -1243,6 +1260,7 @@ class AccordMetricsTests:
                         "config": {
                             "adapter_id": adapter_id,  # For logging which instance sends which level
                             "trace_level": trace_level,
+                            "local_copy_dir": _accord_tee_dir(),
                             "consent_given": True,
                             "consent_timestamp": "2025-01-01T00:00:00Z",
                             "flush_interval_seconds": 5,

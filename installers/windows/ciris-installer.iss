@@ -55,12 +55,30 @@ DisableProgramGroupPage=yes
 DisableDirPage=auto
 LicenseFile=
 OutputDir=..\..\dist
-OutputBaseFilename=CIRIS-Setup-{#CirisVersion}-x64
+; OutputSuffix lets a variant build (e.g. the experimental Win7 lane,
+; windows7-installer.yml) produce a distinctly-named artifact via
+; /DOutputSuffix=-win7. Defaults to empty for the mainline installer.
+#ifndef OutputSuffix
+#define OutputSuffix ""
+#endif
+OutputBaseFilename=CIRIS-Setup-{#CirisVersion}{#OutputSuffix}-x64
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+; Two-installer model (CIRISAgent#875):
+;   * MAINLINE installer = official CPython → Windows 8.1 (6.3) floor.
+;     Refusing below 8.1 is correct: the official-CPython payload would
+;     install then fail to launch on Win7 (Win8.1+ api-set imports).
+;   * WIN7 VARIANT (built with /DWin7Tier by windows7-installer.yml, with a
+;     Win7-capable patched CPython) lowers the floor to Win7 SP1 (6.1sp1).
+;     Win7 is UNSUPPORTED/last-resort — the variant warns up front.
+#ifdef Win7Tier
+MinVersion=6.1sp1
+#else
+MinVersion=6.3
+#endif
 UninstallDisplayName={#MyAppName} {#CirisVersion}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Code signing: until an Authenticode cert is provisioned, ship unsigned
@@ -107,6 +125,14 @@ Source: "..\..\dist\ciris-agent\_internal\ciris_verify\*.dll"; \
     DestDir: "{app}\_internal\ciris_verify"; \
     Flags: ignoreversion skipifsourcedoesntexist
 
+; Universal CRT redistributable (KB2999226) — only Windows 7 needs it; on
+; Win8.1+ the UCRT is in-box. Bundled best-effort (CI fetches into
+; installers\windows\redist\); skipifsourcedoesntexist so a missing
+; redist never breaks the build. Installed conditionally by [Run] below.
+Source: "redist\Windows6.1-KB2999226-x64.msu"; DestDir: "{tmp}"; \
+    Flags: deleteafterinstall skipifsourcedoesntexist; \
+    Check: NeedsUcrtRedist
+
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
     WorkingDir: "{app}"; Comment: "Launch CIRIS"
@@ -115,6 +141,14 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; \
     WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
+; Windows 7: install the Universal CRT (KB2999226) via wusa before first
+; launch. Guarded by NeedsUcrtRedist so it never runs on Win8.1+ or when
+; the redist wasn't bundled. wusa is the canonical Win7 .msu installer.
+Filename: "wusa.exe"; \
+    Parameters: """{tmp}\Windows6.1-KB2999226-x64.msu"" /quiet /norestart"; \
+    StatusMsg: "Installing Universal C Runtime (Windows 7 prerequisite)..."; \
+    Flags: waituntilterminated; Check: NeedsUcrtRedist
+
 ; Optional post-install launch. NoUiCheck so silent installs don't pop a
 ; window the user didn't ask for.
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; \
@@ -130,3 +164,62 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; \
 ; Only delete files we created in the install dir.
 Type: filesandordirs; Name: "{app}\runtime"
 Type: filesandordirs; Name: "{app}\_internal"
+
+[Code]
+#ifdef Win7Tier
+function InitializeSetup(): Boolean;
+begin
+  // The Win7 variant is an explicit last resort. Make the user acknowledge
+  // it's unsupported and prefer the standard installer where possible —
+  // "we provide it, but only for use if Windows 8.1+ is unavailable."
+  Result := True;
+  if not WizardSilent() then
+    Result := (MsgBox(
+      'This is the UNSUPPORTED Windows 7 build of CIRIS.' #13#10 #13#10 +
+      'It is provided as a last resort for machines that cannot run a ' +
+      'newer Windows. If this PC can run Windows 8.1 or later, please ' +
+      'install the standard CIRIS installer instead — it is the supported ' +
+      'build.' #13#10 #13#10 +
+      'Windows 7 is past end-of-life and receives no security updates; ' +
+      'CIRIS runs here at the software-key attestation tier (no TPM 2.0). ' +
+      'Continue with the Windows 7 build?',
+      mbConfirmation, MB_YESNO) = IDYES);
+end;
+#endif
+
+function IsWindows7(): Boolean;
+var
+  V: TWindowsVersion;
+begin
+  GetWindowsVersionEx(V);
+  Result := (V.Major = 6) and (V.Minor = 1);
+end;
+
+function UcrtPresent(): Boolean;
+begin
+  // ucrtbase.dll in System32 means the Universal CRT is already installed
+  // (in-box on Win8.1+, or KB2999226 already applied on Win7).
+  Result := FileExists(ExpandConstant('{sys}\ucrtbase.dll'));
+end;
+
+function NeedsUcrtRedist(): Boolean;
+begin
+  Result := IsWindows7() and (not UcrtPresent());
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  // One-time honesty note on Win7: CIRISVerify attestation runs at the
+  // software-key tier (Windows 7 predates TPM 2.0 TBS). Everything else —
+  // engine, lens fold, federation, desktop GUI — functions normally. The
+  // Trust page surfaces the degraded tier in-app; this just sets expectation
+  // at install time so it isn't read as a failure.
+  if (CurStep = ssPostInstall) and IsWindows7() and (not WizardSilent()) then
+    MsgBox(
+      'CIRIS is installed.' #13#10 #13#10 +
+      'Note for Windows 7: hardware attestation requires TPM 2.0, which ' +
+      'Windows 7 predates. CIRIS runs normally here at the software-key ' +
+      'attestation tier — the Trust page shows this status in-app. No ' +
+      'action needed.',
+      mbInformation, MB_OK);
+end;

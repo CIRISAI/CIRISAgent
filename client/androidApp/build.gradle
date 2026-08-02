@@ -6,21 +6,32 @@ plugins {
     id "org.jetbrains.compose"
 }
 
+// yubikit-android 3.1.0 transitively requests kotlin-stdlib 2.2.10 (metadata 2.2.0),
+// unreadable by the project's Kotlin 2.0.21 compiler. Pin stdlib to the compiler's
+// own version (same fix as shared/build.gradle.kts).
+configurations.all {
+    resolutionStrategy {
+        force "org.jetbrains.kotlin:kotlin-stdlib:2.0.21",
+              "org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21",
+              "org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.0.21"
+    }
+}
+
 android {
     namespace "ai.ciris.mobile"
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 143
-        versionName "2.9.6"
+        versionCode 144
+        versionName "2.9.7"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
             // Release builds use App Bundle which splits by ABI automatically
-            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"  // all 3 ABIs permanent (CIRISServer#264 must-keep); x86_64 = android_24_x86_64 emulator-native wheel (no translation)
         }
 
         // Chaquopy Python configuration
@@ -31,7 +42,7 @@ android {
             // ciris_engine MUST be included for startup hash verification to work!
             // ciris_edge added in 2.9.4 — Edge is the third leg of the
             // substrate triple and must be import-able from Python at boot.
-            extractPackages "pydantic_core", "ciris_persist", "ciris_edge", "ciris_lens_core", "ciris_engine", "ciris_adapters"
+            extractPackages "pydantic_core", "ciris_server", "ciris_engine", "ciris_adapters"
 
             pip {
                 options "--find-links", "wheels"  // Local wheels directory
@@ -48,16 +59,14 @@ android {
                 // installs the Android-bundled Python raises ModuleNotFound
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
-                install "ciris-persist==5.5.5"
-                install "ciris-edge==2.2.1"
-                // ciris-lens-core is REQUIRED by the accord_metrics adapter
+                install "ciris-server==0.5.151"  // ONE substrate wheel (edge v13.7.0) — CIRISAgent#927 THE INITIATOR-FIRST RECEIVE CUT: NAT-carrier mobile is reachable only over links IT initiates, so the Initiator round now proactively Delivers the self-publish key/attestation set alongside the Summary (no wait for the return-path Diff). Agent-side unchanged. Android wheels sha256-verified in client/androidApp/wheels/.
+                                // ciris-lens-core is REQUIRED by the accord_metrics adapter
                 // in 2.9.6+ (CIRISAgent#866 LensCore fold) — the fourth
                 // substrate leg. Android wheels ship in the lens-core release
                 // artifacts as of v1.0.1 (CIRISLensCore#43.3); refreshed by
                 // the substrate updater (`tools/update_substrate_libs.py
                 // --platform android --lib lens V`).
-                install "ciris-lens-core==1.3.0"
-
+                
                 // Core dependencies (same as original android/app/build.gradle)
                 install "pydantic-core==2.23.4"
                 install "pydantic==2.9.2"
@@ -330,21 +339,40 @@ task syncPythonSources(type: Exec) {
 
     workingDir "../.."
     commandLine "python3", "-m", "tools.dev.stage_runtime", "${buildDir}/python-src", "--quiet"
-}
 
-// Copy backend localization JSON files to ciris_engine/data/localized/
-// This ensures the Python backend has access to localized strings
-task syncBackendLocalization(type: Copy) {
-    description = "Copy localization JSON files to Python package data"
-
-    from("../../localization") {
-        include "*.json"
+    // Strip host-platform binaries from the staged tree. The canonical
+    // stage_runtime tree carries macOS/Linux FFI binaries for desktop
+    // (e.g. ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dylib,
+    // 7.7 MB) — on Android the natives ride jniLibs/pip wheels, so anything
+    // binary inside python-src is dead weight shipped to every device.
+    // L4 parity is unaffected: the python-file manifest hashes .py only.
+    doLast {
+        delete fileTree("${buildDir}/python-src") {
+            include "**/*.dylib"
+            include "**/*.dll"
+            include "**/*.so"
+        }
     }
-    into "${buildDir}/python-src/ciris_engine/data/localized"
 }
 
-// Make syncBackendLocalization run after syncPythonSources
-syncBackendLocalization.dependsOn syncPythonSources
+// Copy backend localization JSON files to ciris_engine/data/localized/.
+// NOTE: this MUST NOT be a `type: Copy` task with `into data/localized` — Gradle
+// treats that dir as the task's output and CLEANS stale files it didn't produce,
+// which wipes stage_runtime's checked-in polyglot/ACCORD/guide *.txt (105 files)
+// and leaves the on-device PDMA unable to resolve {{POLYGLOT_PDMA_FRAMING}}
+// (data/localized ends up JSON-only while the un-owned dma/prompts/localized
+// survives — the exact asymmetry that caused this). A plain `copy {}` inside a
+// doLast merges the JSON WITHOUT owning/cleaning the shared dir.
+task syncBackendLocalization {
+    description = "Merge localization JSON into the staged Python package data (non-destructive)"
+    dependsOn syncPythonSources
+    doLast {
+        copy {
+            from("../../localization") { include "*.json" }
+            into "${buildDir}/python-src/ciris_engine/data/localized"
+        }
+    }
+}
 
 // Chaquopy's extractPackages only extracts directories that contain __init__.py.
 // Resource-only dirs (localized accord/guide .txt, polyglot block .txt, per-language

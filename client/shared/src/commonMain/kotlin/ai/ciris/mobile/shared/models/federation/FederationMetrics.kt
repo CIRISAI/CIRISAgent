@@ -42,8 +42,8 @@ data class FederationMetricsResponse(
     val transportBytesOutTotal: Map<String, Long> = emptyMap(),
     @SerialName("peer_reachability_ratio")
     val peerReachabilityRatio: Map<String, Double> = emptyMap(),
-    @SerialName("inline_text_subscriber_count")
-    val inlineTextSubscriberCount: Long = 0L,
+    @SerialName("verified_feed_subscriber_count")  // renamed server-side (CIRISServer#261/#920): was inline_text_subscriber_count
+    val verifiedFeedSubscriberCount: Long = 0L,
 ) {
 
     /** Total envelopes sent across all envelope kinds. */

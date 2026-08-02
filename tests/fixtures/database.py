@@ -25,12 +25,12 @@ def _release_persist_engine() -> None:
     import gc
     import time
 
-    import ciris_persist
+    from ciris_engine.logic.persistence._substrate import reset_engine as _reset_engine
 
     from ciris_engine.logic.persistence.models import graph as graph_persistence
 
     try:
-        ciris_persist.reset_engine()
+        _reset_engine()
     except Exception:
         pass
     graph_persistence._engine = None

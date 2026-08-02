@@ -36,6 +36,19 @@ jobs:
       - name: Localization guard (reference coverage + mirror parity)
         run: python tools/dev/check_localization_sync.py
 
+      # Value-integrity ratchet. check_localization_integrity has existed since
+      # #952 but nothing ever invoked it, which is how 1116 errors sat in the
+      # corpus through green run after green run — the tool was treated as the
+      # fix. Running it bare would fail on all of that pre-existing debt and
+      # teach everyone to skip the step, so it gates ONLY on classes already
+      # repaired to zero: reintroducing one is a regression a reviewer can act
+      # on, while the standing debt stays visible without blocking.
+      #
+      # Add a check name here as its class reaches zero. Removing one is a
+      # decision to let that defect back in, and should be argued for.
+      - name: Localization value-integrity ratchet (repaired classes stay repaired)
+        run: python tools/dev/check_localization_integrity.py --fail-on placeholder-corrupt
+
       # D27: runtime code must not depend on its own .md (outside L4 attestation
       # tree). Stdlib-only AST gate, no deps. CIRISAgent#807.
       - name: D27 runtime .md-reference gate
@@ -136,13 +149,47 @@ jobs:
           # --reruns=2: Rerun failed/crashed tests up to 2 times
           # -n 4: 4 parallel workers within each shard
           # --dist=loadgroup: Respect xdist_group markers (keep grouped tests on same worker)
-          # timeout 1800: Force-kill after 30 minutes (tests ~10min + buffer for slow CI)
-          timeout --signal=SIGTERM --kill-after=30 1800 \
+          # timeout 1500 (25 min) MUST stay meaningfully below the job's
+          # timeout-minutes: 30. It was 1800 — exactly equal — and since the job
+          # clock starts at checkout while this one starts here (~2 min later),
+          # the job timeout ALWAYS won. The SIGTERM never arrived, so the #956
+          # sessionfinish guard and SIGTERM faulthandler could never dump the
+          # stacks they exist to dump: a self-reporting diagnostic that was
+          # structurally unable to report.
+          #
+          # Observed 2026-08-02 on shard 3 (run 30730155206): every test passed
+          # at 99% and 03:27:44, then 13 minutes of silence, then GitHub killed
+          # the job at 03:40 with orphan pytest/python processes still alive.
+          # No stack dump, because the internal timeout would not have fired
+          # until 03:42.
+          #
+          # THREE NESTED BOUNDS, innermost first. Each must stay strictly below
+          # the next or the inner one can never fire:
+          #
+          #   --session-timeout=1320 (22m)  pytest gives up and REPORTS
+          #   timeout ... 1500       (25m)  SIGTERM if pytest itself is wedged
+          #   timeout-minutes: 30           GitHub's backstop
+          #
+          # The session bound is the one that actually fixes the 2026-08-02
+          # shard-3 hang. Root cause, from the first stacks this hang has ever
+          # produced: a worker (gw2) died without reporting — it appears zero
+          # times in the log and produced no dump — and the controller sat in
+          # `xdist/dsession.py:154 loop_once` waiting for results that could
+          # never arrive. The likely death is the SIGBUS race that
+          # `_release_persist_engine` already documents for this same shard.
+          # `--max-worker-restart=4` did not catch it, so the controller waited
+          # forever. `--session-timeout` bounds the loop itself.
+          #
+          # It exits 1, verified — a truncated session FAILS rather than
+          # silently reporting green, which would be worse than the hang.
+          # Healthy shards finish in ~15-16 min, so 22 min leaves real headroom.
+          timeout --signal=SIGTERM --kill-after=30 1500 \
             pytest tests/ -n 4 --dist=loadgroup \
             --splits 8 --group ${{ matrix.shard }} \
             --splitting-algorithm=least_duration \
             --store-durations --durations-path=test_durations_shard_${{ matrix.shard }} \
             --reruns=2 --reruns-delay=1 --max-worker-restart=4 \
+            --session-timeout=1320 \
             --cov=./ --cov-report=xml:coverage-shard-${{ matrix.shard }}.xml
 
       - name: Upload coverage artifact
@@ -158,6 +205,24 @@ jobs:
         with:
           name: durations-shard-${{ matrix.shard }}
           path: test_durations_shard_${{ matrix.shard }}
+          retention-days: 7
+
+      # Exit-hang stacks (#956). Written by tests/conftest.py to a FILE rather
+      # than stderr on purpose: pytest installs fd-level capture before conftest
+      # is imported, so a hung or killed process never flushes anything written
+      # to stderr — which is why the 2026-08-02 shard-3 hang produced no
+      # diagnostics at all despite a watchdog being armed for exactly it.
+      #
+      # if: always() because the interesting case is precisely the failed or
+      # cancelled run. Absent on a healthy shard, so an empty upload here is the
+      # expected outcome and `if-no-files-found: ignore` keeps it quiet.
+      - name: Upload exit-hang stacks
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: hang-stacks-shard-${{ matrix.shard }}
+          path: hang-stacks-*.txt
+          if-no-files-found: ignore
           retention-days: 7
 
   # Postgres backend verification — Phase 1 of 2.9.0 waterfall.
@@ -226,7 +291,11 @@ jobs:
           # Phase 1 scope: persist-substrate roundtrip tests + the
           # tests that drive ciris-persist directly. Excludes legacy
           # raw-SQL tests pending Phase 2-4 migration.
-          timeout --signal=SIGTERM --kill-after=30 1200 \
+          # 900s (15 min) against this job's timeout-minutes: 20 — same
+          # inversion as the shard job above, where 1200 exactly equalled the
+          # job budget and the job always won first. Keep a real gap so a hang
+          # here self-reports instead of being killed silently.
+          timeout --signal=SIGTERM --kill-after=30 900 \
             pytest \
               tests/ciris_engine/logic/persistence/ \
               tests/test_persistence/ \
@@ -358,12 +427,34 @@ jobs:
           # step above; staged_env.prepare is idempotent and reuses it).
           # --no-mock-llm not set → uses mock LLM (no API keys needed in CI).
           #
-          # --database-backends sqlite postgres --parallel-backends: exercises
-          # the full QA suite against BOTH persistence backends simultaneously.
-          # qa_runner self-provisions the postgres backend via a docker
-          # container (ubuntu-latest ships Docker); no GH service block needed.
+          # --database-backends sqlite postgres: exercises the full QA suite
+          # against BOTH persistence backends SEQUENTIALLY. qa_runner
+          # self-provisions the postgres backend via a docker container
+          # (ubuntu-latest ships Docker); no GH service block needed.
+          #
+          # NOT --parallel-backends (2026-07-20 all_1 RCA, 5 consecutive
+          # failures): the node-folded substrate binds fixed host-wide ports
+          # (:4242 reticulum transport, :4243 node read-API) and both legs
+          # share CIRIS_HOME (one data/edge/edge_identity.rid). Two
+          # simultaneous legs therefore cross-contaminate: the loser of the
+          # :4242 bind race gets "Address already in use", its node_fold then
+          # finds the WINNER's :4243 node and reuses it — a foreign node with
+          # a diverged signing key (each leg's startup wipe re-mints the
+          # shared identity) — and every accord-metrics capture fails
+          # `receive_and_persist: ValueError: verify_unknown_key` (×244 →
+          # incidents gate → exit 1). Sequential legs each get the host to
+          # themselves. Restore --parallel-backends only after the substrate
+          # exposes per-instance node/edge listen addrs (CIRISServer ask
+          # filed; agent guard: node_fold identity-verified reuse).
+          # ORDER MATTERS: postgres FIRST, sqlite LAST. Sequential legs each
+          # wipe $GITHUB_WORKSPACE/data at start, and the postgres leg's
+          # engine state lives in the docker postgres (no ciris_engine.db on
+          # disk) — so if postgres ran last, the fixture-capture step below
+          # would find the data dir wiped of the sqlite leg's DB (run
+          # 29850066267). With sqlite last, its ciris_engine.db is the final
+          # on-disk state, exactly what capture-upgrade-fixture snapshots.
           python3 -m tools.qa_runner ${{ matrix.subset }} --from-staged \
-            --database-backends sqlite postgres --parallel-backends
+            --database-backends postgres sqlite
 
       - name: Capture upgrade-compat fixture (qa-full)
         # Snapshot the post-QA-sweep agent state as a "full-coverage"
@@ -714,9 +805,13 @@ jobs:
           python-version: '3.12'
 
       - name: Set up Java 17 (for jlink + desktop JAR build)
+        # CIRISAgent#875 — Liberica, NOT Temurin: the jlink runtime trimmed
+        # here ships inside the Windows installer, and Temurin 17 dropped
+        # Windows 7 support. BellSoft Liberica JDK 17 officially supports
+        # Win7 SP1, so the bundled runtime launches on the supported floor.
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: 'liberica'
           java-version: '17'
 
       - name: Set up Gradle (with distribution + dependency cache)
@@ -782,6 +877,25 @@ jobs:
           $jar = Get-ChildItem -Path 'client\desktopApp\build\compose\jars' -Filter 'CIRIS-windows-*.jar' | Select-Object -First 1
           if (-not $jar) { Write-Error "No CIRIS-windows-*.jar found"; exit 1 }
           .\installers\windows\bundle-jre.ps1 -JarPath $jar.FullName -OutputDir dist\runtime
+        shell: pwsh
+
+      - name: Fetch Universal CRT redist (Windows 7 prerequisite, best-effort)
+        # CIRISAgent#875 — Win7 needs KB2999226 for the api-ms-win-crt-*
+        # import-sets the bundled Rust/Python binaries carry. Best-effort:
+        # the .iss bundles it with skipifsourcedoesntexist, so a failed/rot
+        # download never breaks the build (Win8.1+ ignores it; Win7 users
+        # can hand-provision per installers/windows/README.md).
+        continue-on-error: true
+        run: |
+          $dst = "installers/windows/redist"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          $url = "https://download.microsoft.com/download/5/B/C/5BC5DBB3-652D-4DCE-B14A-475AB85EEF6E/Windows6.1-KB2999226-x64.msu"
+          try {
+            Invoke-WebRequest -Uri $url -OutFile "$dst/Windows6.1-KB2999226-x64.msu" -UseBasicParsing -TimeoutSec 120
+            Write-Host "UCRT redist fetched."
+          } catch {
+            Write-Warning "UCRT redist fetch failed ($_); installer will build without it (Win7 users hand-provision)."
+          }
         shell: pwsh
 
       - name: Install Inno Setup
@@ -1011,7 +1125,33 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
+      # Research trace-capture harness — published alongside the agent image so
+      # the research team can pull a pinned, reproducible capture environment
+      # instead of building from a working tree. Isolated by construction:
+      # container-local DB, logs and port, so a capture run on a shared box
+      # cannot collide with development or with another run.
+      - name: Extract metadata (research capture)
+        id: meta_research
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/cirisai/ciris-research-capture
+          tags: |
+            type=ref,event=branch
+            type=sha
+            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
+            type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Build and push research capture image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.research
+          push: ${{ github.repository == 'CIRISAI/CIRISAgent' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+          tags: ${{ steps.meta_research.outputs.tags }}
+          labels: ${{ steps.meta_research.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
       - name: Build Summary
         if: always()

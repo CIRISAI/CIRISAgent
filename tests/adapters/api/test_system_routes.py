@@ -20,7 +20,14 @@ class TestSystemRoutes:
 
         health_data = data["data"]
         assert "status" in health_data
-        assert health_data["status"] in ["healthy", "degraded", "unhealthy", "critical"]
+        # "initializing" is a real status the endpoint returns, and it is the
+        # CORRECT one for this fixture: the test app carries no
+        # initialization_service on app.state, so after #943 (fail closed —
+        # absence of the authority that would answer is not a "yes")
+        # determine_overall_status reports "initializing" rather than pretending
+        # a system it never inspected is healthy. The prior set omitted it, so
+        # this check silently passed only while the endpoint failed open.
+        assert health_data["status"] in ["initializing", "healthy", "degraded", "unhealthy", "critical"]
 
     def test_resources_endpoint_requires_auth(self, client):
         """Test that resources endpoint requires auth."""

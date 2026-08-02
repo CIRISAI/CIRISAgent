@@ -3,12 +3,33 @@
 # Install with: pip install -r requirements.txt -r requirements-dev.txt
 
 # Testing Framework
-pytest>=9.0.3,<10.0.0  # 9.0.3 fixes tmpdir vulnerability (CVE-2026-XXXX)
+#
+# THE TEST HARNESS IS PINNED EXACTLY. These five decide whether a green run
+# means anything, and they were floating.
+#
+# 2026-08-02: chasing the intermittent shard hang, local reproduction was run
+# against pytest 7.4.4 while CI had resolved to 9.1.1 — two major versions
+# apart, across precisely the subsystems involved (capture, faulthandler, hook
+# ordering) — and pytest-rerunfailures had floated 16.1 -> 16.4 under a
+# `>=16.1,<17` range. Hours of "cannot reproduce" were an artifact of testing
+# different software than CI ran.
+#
+# That is the same defect that fired the shard-4 mint tripwire hours earlier,
+# where ciris-server floated 0.5.151 -> 0.5.152 mid-run. A floating harness
+# means a green run is not reproducible and carries no information about the
+# next one — which matters more than any single flake.
+#
+# Bump these deliberately, together, and re-run the suite. Never widen one to
+# make a red shard green.
+pytest==9.1.1
 pytest-asyncio>=1.0.0,<2.0.0  # 1.x required for pytest 9.x compatibility
 pytest-cov>=4.1.0,<5.0.0
-pytest-timeout>=2.2.0,<3.0.0
-pytest-xdist>=3.3.0,<4.0.0  # For parallel test execution
-pytest-rerunfailures>=16.1,<17.0.0  # For flaky test retries (16.1 fixes serialization bugs)
+pytest-timeout==2.4.0
+pytest-xdist==3.8.0
+pytest-rerunfailures==16.4
+execnet==2.1.2  # xdist's transport — pinned for the same reason; the shard
+# hang is a controller/worker handshake deadlock inside this library, so its
+# version must not drift silently while we are still characterising it.
 pytest-mock>=3.12.0,<4.0.0  # For mocker fixture
 hypothesis>=6.0.0,<7.0.0
 

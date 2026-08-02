@@ -188,13 +188,22 @@
       "status": "passing",
       "duration_seconds": 2.81,
       "context": null
+    },
+    "safety_battery": {
+      "last_run": "2026-07-12T16:06:57.367110+00:00",
+      "passed": 7,
+      "failed": 2,
+      "total": 9,
+      "status": "failing",
+      "duration_seconds": 402.94,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 21,
+    "total_modules": 22,
     "passing": 19,
-    "failing": 2,
+    "failing": 3,
     "not_run": 0
   },
-  "last_updated": "2026-06-12T23:45:38.231371+00:00"
+  "last_updated": "2026-07-12T16:06:57.367154+00:00"
 }

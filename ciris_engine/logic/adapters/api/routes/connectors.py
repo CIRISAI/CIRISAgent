@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_system_component_envelope
+from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.task_envelope import (
     RequesterAuthorization,
@@ -61,13 +62,14 @@ def _connector_subject(connector_id: str, current_user: Optional[TokenData] = No
             requester=requester,
         )
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("Could not issue connector-setup envelope for %s: %s", connector_id, exc)
+        logger.warning("Could not issue connector-setup envelope for %s: %s", sanitize_for_log(connector_id), exc)
         envelope = None
     return ToolInvocationSubject.for_component(
         origin=ToolCallOrigin.ADAPTER_LIFECYCLE,
         component=_CONNECTOR_COMPONENT,
         envelope=envelope,
     )
+
 
 router = APIRouter(prefix="/connectors", tags=["Connectors"])
 

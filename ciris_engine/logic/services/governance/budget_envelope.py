@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Optional, Tuple
 
+from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
 from ciris_engine.schemas.services.budget_envelope import (
     BUDGET_SPENT_METADATA_KEY,
     GRANTED_BUDGET_METADATA_KEY,
@@ -525,13 +526,16 @@ async def issue_grant(
     if not update_ticket_metadata(ticket_id, metadata):
         raise ValueError(f"Failed to write budget grant to ticket {ticket_id}")
 
+    # Sanitized because this is the audit record of a spend authorization: a
+    # forged newline here could fabricate a second "grant issued" line, which is
+    # the one log entry that must not be attacker-shapeable.
     logger.info(
         "[BUDGET] Grant issued on ticket %s: %s %s by WA %s (user %s), expires %s",
-        ticket_id,
+        sanitize_for_log(ticket_id),
         granted_amount,
         granted_currency,
-        granted_by_wa_id,
-        granted_by_user_id,
+        sanitize_for_log(granted_by_wa_id),
+        sanitize_for_log(granted_by_user_id),
         expires_at.isoformat(),
     )
     return grant

@@ -17,6 +17,8 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+
 from ..models import StandardResponse
 
 logger = logging.getLogger(__name__)
@@ -149,7 +151,7 @@ def _verify_proof(proof: DeletionProof) -> SignatureVerificationResult:
         valid = True
         message = "Deletion proof verified - signature valid"
     except ValueError as e:
-        logger.warning(f"Signature verification failed for {proof.deletion_id}: {e}")
+        logger.warning("Signature verification failed for %s: %s", sanitize_for_log(proof.deletion_id), e)
         valid = False
         message = "Invalid signature - deletion proof cannot be verified"
 
@@ -191,7 +193,9 @@ async def verify_deletion_proof(
     verification_result = _verify_proof(request.deletion_proof)
 
     logger.info(
-        f"Deletion verification request: {request.deletion_proof.deletion_id} - Valid: {verification_result.valid}"
+        "Deletion verification request: %s - Valid: %s",
+        sanitize_for_log(request.deletion_proof.deletion_id),
+        verification_result.valid,
     )
 
     return StandardResponse(

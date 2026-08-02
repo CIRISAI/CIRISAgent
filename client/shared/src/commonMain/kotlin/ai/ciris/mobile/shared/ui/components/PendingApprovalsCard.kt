@@ -745,8 +745,13 @@ fun ProposalApprovalDialog(
     )
 }
 
+/**
+ * A structured label/value row. `internal` rather than `private` so the
+ * tool-approval card on the deferral screen (CIRISAgent#942) renders its rows
+ * with the same code as the budget approval, instead of a second look-alike.
+ */
 @Composable
-private fun LabelledLine(label: String, value: String) {
+internal fun LabelledLine(label: String, value: String) {
     Column {
         Text(
             text = label,

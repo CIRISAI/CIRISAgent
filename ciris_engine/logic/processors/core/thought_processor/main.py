@@ -10,7 +10,13 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
+from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
 from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
+from ciris_engine.logic.infrastructure.authorization.tool_approval import (
+    build_approval_deferral,
+    envelope_approves_tool,
+    tool_requires_approval,
+)
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
@@ -239,6 +245,16 @@ class ThoughtProcessor(
             conscience_result_raw if isinstance(conscience_result_raw, ConscienceApplicationResult) else None
         )
         action_from_conscience = self._handle_special_cases(conscience_result)
+
+        # Phase 4.9: approval gate (CIRISAgent#942). Deliberately the LAST thing
+        # before finalization rather than the seam right after action selection:
+        # every route that can produce a final action — plain selection, TSASPDMA,
+        # the conscience-override retry, the benchmark-mode retry recursion —
+        # converges here, so there is exactly one place to audit and no route that
+        # can quietly grow around it. It also means a conscience cannot override
+        # an authorization denial, which would be a bypass.
+        action_from_conscience = await self._enforce_tool_approval(thought, action_from_conscience)
+
         final_result = await self._finalize_action_step(thought_item, action_from_conscience)
 
         # _finalize_action_step returns ConscienceApplicationResult based on conscience_result input
@@ -276,6 +292,104 @@ class ThoughtProcessor(
         self._log_final_action_results(action_result, conscience_result, thought)
 
         return {"action_result": action_result, "conscience_result": conscience_result}
+
+    async def _enforce_tool_approval(
+        self,
+        thought: Thought,
+        conscience_result: Optional[ConscienceApplicationResult],
+    ) -> Optional[ConscienceApplicationResult]:
+        """Deny an approval-requiring tool that this task holds no approval for (CIRISAgent#942).
+
+        The single production enforcement point for
+        ``ToolDMAGuidance.requires_approval``. Before this existed the flag was
+        rendered into a prompt and a consent label and read by nothing else — a
+        model that selected ``send_money`` executed ``send_money``.
+
+        On denial the final action is rewritten to ``DEFER`` on the existing
+        Wisdom-Based Deferral rail, carrying the tool name and a structured
+        description of the tool so that the human sees what they are approving,
+        and so ``WiseAuthorityService.resolve_deferral`` can mint a
+        ``WISE_AUTHORITY``-issued envelope naming that tool for the ``[WA GUIDANCE]``
+        follow-up task. That follow-up re-runs this pipeline, reaches this method
+        again, and passes.
+
+        **The grant is per-tool, per-task, not per-invocation.** The follow-up task
+        re-reasons from scratch and may call the approved tool with different
+        arguments than the ones that triggered the deferral. This mirrors the
+        budget envelope — a ceiling, not a transaction. Do not read it as
+        human review of a specific call.
+
+        Everything that is not a ``TOOL`` action, and every tool that does not
+        declare ``requires_approval``, returns unchanged: this is the #942 approval
+        control, not #938 Phase 2 blanket enforcement at the bus.
+        """
+        if conscience_result is None:
+            return None
+
+        final_action = conscience_result.final_action
+        if final_action is None or final_action.selected_action != HandlerActionType.TOOL:
+            return conscience_result
+
+        tool_params = final_action.action_parameters
+        if not isinstance(tool_params, ToolParams):
+            # Malformed TOOL params never reach a tool; leave the existing
+            # handling to report it rather than masking it as an approval denial.
+            return conscience_result
+        tool_name = tool_params.name
+
+        tool_info: Optional[ToolInfo] = None
+        try:
+            tool_info = await self.dependencies.bus_manager.tool.get_tool_info(tool_name)
+        except Exception as e:
+            logger.warning("APPROVAL-GATE: could not fetch tool info for '%s': %s", tool_name, e)
+            return conscience_result
+
+        if not tool_requires_approval(tool_info):
+            return conscience_result
+
+        envelope = resolve_envelope_for_task_id(thought.source_task_id, thought.agent_occurrence_id)
+        if envelope_approves_tool(envelope, tool_name):
+            logger.info(
+                "APPROVAL-GATE: '%s' authorized for task %s by %s envelope %s (issuer %s)",
+                tool_name,
+                thought.source_task_id,
+                envelope.issuer.kind.value if envelope else "no",
+                envelope.envelope_id if envelope else "-",
+                envelope.issuer.issuer_id if envelope else "-",
+            )
+            return conscience_result
+
+        logger.warning(
+            "APPROVAL-GATE: DENIED '%s' for task %s — tool declares requires_approval=True and the "
+            "task envelope (%s) does not grant it. Deferring to Wise Authority.",
+            tool_name,
+            thought.source_task_id,
+            (
+                f"issuer={envelope.issuer.kind.value} id={envelope.envelope_id}"
+                if envelope is not None
+                else "absent — absence of an envelope is denial"
+            ),
+        )
+
+        defer_action = build_approval_deferral(
+            tool_name=tool_name,
+            original_action=final_action,
+            # What the human is being asked to approve: the tool as the consent
+            # wizard describes it, plus the arguments the agent intends to pass.
+            tool_info=tool_info,
+            intended_parameters=tool_params.parameters,
+            channel_id=getattr(tool_params, "channel_id", None),
+        )
+        return conscience_result.model_copy(
+            update={
+                "final_action": defer_action,
+                "overridden": True,
+                "override_reason": (
+                    f"Tool '{tool_name}' requires wise-authority approval (CIRISAgent#942); "
+                    f"this task's envelope does not grant it."
+                ),
+            }
+        )
 
     def _log_action_selection_result(self, action_result: Any, thought: Thought) -> None:
         """Log action selection results."""

@@ -2397,7 +2397,7 @@
     "tool_cap_file_write": "Creates and overwrites files on this device.",
     "tool_cap_secret_plaintext": "Can return a stored secret in plain text.",
     "tool_cap_affects_other_people": "Acts on someone by their account ID — this can affect a person other than you.",
-    "tool_cap_requires_approval": "Marked as needing wise-authority approval before it is used."
+    "tool_cap_requires_approval": "Cannot run until a wise authority approves it for the task that asks for it."
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",
@@ -3081,6 +3081,11 @@
     "title": "Transport",
     "unavailable": "Transport facts unavailable (node degraded?)."
   },
+  "approval_tool_title": "Tool the agent needs your approval for",
+  "approval_tool_capabilities": "What this tool can do",
+  "approval_tool_arguments": "Values the agent intends to pass",
+  "approval_tool_arguments_omitted": "The agent's arguments were too large to show here.",
+  "approval_tool_scope_note": "Approving authorises this tool for the follow-up task, not for this exact call. The agent reconsiders the task from the start and may use different values.",
   "approval_blocked_on_you": "The agent is blocked waiting on you",
   "approval_summary": "Review these to unblock the agent.",
   "approval_summary_with_budget": "{count} of these need a budget decision before the agent can act.",

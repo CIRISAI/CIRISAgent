@@ -1,0 +1,152 @@
+name: Compose Gate (Phase 1)
+
+# #973 — the ablation gate gating itself (FSD/RESEARCH_PROMPT_OVERRIDES.md §12/§14).
+#
+# Four checks, all static, no LLM call, no secrets:
+#   1. the compose dump (locales en + am, all 8 steps) is DETERMINISTIC —
+#      two runs produce byte-identical JSONL;
+#   2. a dump gated against itself under the null self-check regime PASSES
+#      every Phase-1 hold;
+#   3. a deliberately mutated copy FAILS, naming the mutated block —
+#      the gate still detects a flipped held block;
+#   4. a regime that varies `axiotic` while its mixed blocks are unresolved
+#      REFUSES, naming `language_guidance` — §10.2.1 refusal-by-default is live.
+#
+# If 2 ever fails, composition drifted or the gate broke; if 3 or 4 ever
+# PASSES, the gate has stopped gating. Either way this workflow goes red.
+#
+# Honest scope: a self-check cannot catch weakening the scanner and the gate
+# in the same commit that runs them (shared-code mutation) — that is what
+# review of compose_dump.py is for. It DOES catch: composition
+# nondeterminism, RESIDUE_SITES drift vs the recorded digest, fragment
+# inventory shrink, block-space drift, and any hold/refusal regression.
+
+on:
+  pull_request:
+    paths:
+      - 'ciris_engine/logic/dma/**'
+      - 'ciris_engine/logic/formatters/**'
+      - 'ciris_engine/logic/utils/constants.py'
+      - 'ciris_engine/logic/utils/localization.py'
+      - 'ciris_engine/logic/utils/research_overrides.py'
+      - 'ciris_engine/logic/utils/compose_dump.py'
+      - 'ciris_engine/schemas/dma/compose.py'
+      - 'ciris_engine/data/**'
+      - 'localization/**'
+      - 'tests/ciris_engine/logic/dma/compose_golden.py'
+      - 'tools/research/regimes/**'
+      - '.github/workflows/compose-gate.yml'
+  push:
+    branches: [main, 'release/**']
+    paths:
+      - 'ciris_engine/logic/dma/**'
+      - 'ciris_engine/logic/formatters/**'
+      - 'ciris_engine/logic/utils/constants.py'
+      - 'ciris_engine/logic/utils/localization.py'
+      - 'ciris_engine/logic/utils/research_overrides.py'
+      - 'ciris_engine/logic/utils/compose_dump.py'
+      - 'ciris_engine/schemas/dma/compose.py'
+      - 'ciris_engine/data/**'
+      - 'localization/**'
+      - 'tests/ciris_engine/logic/dma/compose_golden.py'
+      - 'tools/research/regimes/**'
+      - '.github/workflows/compose-gate.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Dump twice — determinism is part of the instrument
+        run: |
+          python3 -m ciris_engine.logic.utils.compose_dump dump \
+            --arm h3ere-ciris --locales en,am --out /tmp/dump-a.jsonl
+          python3 -m ciris_engine.logic.utils.compose_dump dump \
+            --arm h3ere-ciris --locales en,am --out /tmp/dump-b.jsonl
+          cmp /tmp/dump-a.jsonl /tmp/dump-b.jsonl \
+            || { echo '::error::compose dump is NOT deterministic — hold: byte-identity is meaningless'; exit 1; }
+
+      - name: Gate self-check must PASS
+        run: |
+          python3 -m ciris_engine.logic.utils.compose_dump gate \
+            --dump-a /tmp/dump-a.jsonl --dump-b /tmp/dump-b.jsonl \
+            --regime tools/research/regimes/phase1_selfcheck_null.yaml
+
+      - name: Mutated copy must FAIL, naming the block
+        run: |
+          python3 - <<'EOF'
+          import json
+          rows = [json.loads(l) for l in open('/tmp/dump-b.jsonl', encoding='utf-8')]
+          for row in rows:
+              if row.get('block_id') == 'pdma.prohibition' and row.get('locale') == 'en':
+                  row['sha256'] = '0' * 64
+          with open('/tmp/dump-b-mutated.jsonl', 'w', encoding='utf-8') as f:
+              f.write('\n'.join(json.dumps(r, ensure_ascii=False) for r in rows) + '\n')
+          EOF
+          set +e
+          python3 -m ciris_engine.logic.utils.compose_dump gate \
+            --dump-a /tmp/dump-a.jsonl --dump-b /tmp/dump-b-mutated.jsonl \
+            --regime tools/research/regimes/phase1_selfcheck_null.yaml | tee /tmp/gate-mutated.out
+          RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$RC" -eq 0 ]; then
+            echo '::error::the gate PASSED a mutated held block — the gate has stopped gating'
+            exit 1
+          fi
+          grep -q 'en:pdma.prohibition' /tmp/gate-mutated.out \
+            || { echo '::error::gate failed but did not NAME the mutated block'; exit 1; }
+
+      - name: Mixed block in a varied class must REFUSE, naming it
+        run: |
+          set +e
+          python3 -m ciris_engine.logic.utils.compose_dump gate \
+            --dump-a /tmp/dump-a.jsonl --dump-b /tmp/dump-b.jsonl \
+            --regime tools/research/regimes/phase1_selfcheck_varied.yaml | tee /tmp/gate-varied.out
+          RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$RC" -eq 0 ]; then
+            echo '::error::the gate PASSED a regime whose varied class contaminates unresolved mixed blocks'
+            exit 1
+          fi
+          grep -q 'language_guidance' /tmp/gate-varied.out \
+            || { echo '::error::refusal did not name language_guidance'; exit 1; }
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from collections import Counter
+          lines = open('/tmp/dump-a.jsonl', encoding='utf-8').read().splitlines()
+          rows = [json.loads(l) for l in lines[1:]]
+          classes = Counter(r['class'] for r in rows)
+          print('### Compose dump coverage (the honest number, FSD §1.4)')
+          print()
+          print('| class | blocks |')
+          print('|---|---|')
+          for name, count in sorted(classes.items()):
+              print(f'| {name} | {count} |')
+          routed = sum(1 for r in rows if r['source'] != 'inline')
+          print()
+          print(f'{len(rows)} blocks total; {routed} routed-source, {len(rows) - routed} inline.')
+          print('`mixed` shrinks as #974 routes the residue (§11).')
+          EOF

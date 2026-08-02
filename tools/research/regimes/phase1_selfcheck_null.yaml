@@ -1,0 +1,30 @@
+# Phase-1 gate SELF-CHECK regime (#973) — varies NOTHING.
+#
+# Purpose: CI runs the compose dump twice and gates the two dumps against
+# each other under this regime. Every class is held, so a deterministic
+# composition must PASS every Phase-1 assertion; a mutated copy must FAIL.
+# This is the gate gating itself — not a campaign regime, and never a
+# template for one (a campaign regime pins a concrete residue_digest and
+# does NOT blanket-hold its mixed blocks without reading §10.2.1).
+#
+# `pins.residue_digest: "live"` is the self-check-only sentinel: the gate
+# resolves it to the digest of the tree it runs in. A campaign regime MUST
+# pin the concrete sha256 value (see research_overrides digest).
+schema: ciris.ai/experimental_regime/v2-phase1
+regime_id: phase1-selfcheck-null
+arms:
+  a: {harness: h3ere}
+  b: {harness: h3ere}
+blocks:
+  # Every mixed block needs an explicit disposition (§10.2.1 refusal by
+  # default). Nothing is varied here, so holding them accepts no confound.
+  language_guidance:
+    disposition: hold
+    contaminant: [axiotic, deontic, empirical]
+  aspdma.accord:
+    disposition: hold
+    contaminant: [axiotic, contingent]
+  system: {disposition: hold}
+  user: {disposition: hold}
+pins:
+  residue_digest: "live"

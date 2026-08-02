@@ -221,7 +221,9 @@ jobs:
         if: always()
         with:
           name: hang-stacks-shard-${{ matrix.shard }}
-          path: hang-stacks-*.txt
+          path: |
+            hang-stacks-*.txt
+            crash-*.txt
           if-no-files-found: ignore
           retention-days: 7
 

@@ -34,7 +34,7 @@ import json
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Tuple
 from unittest.mock import AsyncMock, Mock, patch
 
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
@@ -56,6 +56,12 @@ from ciris_engine.schemas.types import JSONDict
 GOLDEN_DIR = Path(__file__).parent / "golden"
 
 DMA_NAMES = ("pdma", "csdma", "idma", "dsdma", "aspdma", "dsaspdma")
+
+#: Every composition step the fixtures can drive. The #972 golden snapshots
+#: cover ``DMA_NAMES`` (the six extraction sites); TSASPDMA already had seams
+#: pre-#972 so it has no pre/post golden pair, but the #973 compose dump
+#: iterates the full step set.
+STEP_NAMES = DMA_NAMES + ("tsaspdma", "tsaspdma_correction")
 
 _FIXED_TS = "2026-01-01T00:00:00+00:00"
 _THOUGHT_TEXT = "Should the agent reply with a summary of the weather report?"
@@ -83,34 +89,63 @@ def _sentinel_prohibition_guidance(lang_code: str) -> str:
 
 
 @contextmanager
-def deterministic_prompt_environment() -> Iterator[None]:
+def prompt_content_environment(
+    *,
+    language: str = "en",
+    accord: Callable[..., str],
+    localized_accord: Callable[..., str],
+    language_guidance: Callable[[str], str],
+    prohibition_guidance: Callable[[str], str],
+) -> Iterator[None]:
     """Pin language + prompt-content loaders for byte-reproducible composition.
+
+    Parameterized (#973) so the same patch set serves two callers:
+    - the #972 golden harness passes short sentinel callables
+      (:func:`deterministic_prompt_environment`), and
+    - the #973 compose dump passes recording PASS-THROUGH wrappers around the
+      real loaders, so block identification never guesses at positions.
 
     Patch targets cover every import style used by the DMAs:
     - lazy in-function imports resolve from the defining module at call time;
     - module-top ``from x import y`` imports need the per-module name patched.
     """
     with ExitStack() as stack:
-        stack.enter_context(patch.dict("os.environ", {"CIRIS_PREFERRED_LANGUAGE": "en"}))
+        stack.enter_context(patch.dict("os.environ", {"CIRIS_PREFERRED_LANGUAGE": language}))
         # Source modules (covers all lazy in-function imports).
-        stack.enter_context(patch("ciris_engine.logic.utils.constants.get_accord_text", _sentinel_accord))
+        stack.enter_context(patch("ciris_engine.logic.utils.constants.get_accord_text", accord))
         stack.enter_context(
-            patch("ciris_engine.logic.utils.constants.get_localized_accord_text", _sentinel_localized_accord)
+            patch("ciris_engine.logic.utils.constants.get_localized_accord_text", localized_accord)
         )
         stack.enter_context(
-            patch("ciris_engine.logic.utils.localization.get_language_guidance", _sentinel_language_guidance)
+            patch("ciris_engine.logic.utils.localization.get_language_guidance", language_guidance)
         )
         stack.enter_context(
-            patch("ciris_engine.logic.utils.localization.get_prohibition_guidance", _sentinel_prohibition_guidance)
+            patch("ciris_engine.logic.utils.localization.get_prohibition_guidance", prohibition_guidance)
         )
         # Module-top imported names.
-        stack.enter_context(patch("ciris_engine.logic.dma.idma.get_accord_text", _sentinel_accord))
+        stack.enter_context(patch("ciris_engine.logic.dma.idma.get_accord_text", accord))
         stack.enter_context(
-            patch("ciris_engine.logic.dma.action_selection_pdma.get_localized_accord_text", _sentinel_localized_accord)
+            patch("ciris_engine.logic.dma.action_selection_pdma.get_localized_accord_text", localized_accord)
         )
         stack.enter_context(
-            patch("ciris_engine.logic.dma.dsaspdma.get_localized_accord_text", _sentinel_localized_accord)
+            patch("ciris_engine.logic.dma.dsaspdma.get_localized_accord_text", localized_accord)
         )
+        stack.enter_context(
+            patch("ciris_engine.logic.dma.tsaspdma.get_localized_accord_text", localized_accord)
+        )
+        yield
+
+
+@contextmanager
+def deterministic_prompt_environment() -> Iterator[None]:
+    """The #972 golden environment: language pinned to en, loaders to sentinels."""
+    with prompt_content_environment(
+        language="en",
+        accord=_sentinel_accord,
+        localized_accord=_sentinel_localized_accord,
+        language_guidance=_sentinel_language_guidance,
+        prohibition_guidance=_sentinel_prohibition_guidance,
+    ):
         yield
 
 
@@ -355,6 +390,70 @@ async def capture_dsaspdma() -> List[JSONDict]:
     return captured["messages"]  # type: ignore[no-any-return]
 
 
+def make_tool_info() -> Any:
+    """Deterministic ToolInfo fixture for the TSASPDMA steps (#973)."""
+    from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+
+    return ToolInfo(
+        name="golden_tool",
+        description="Deterministic golden fixture tool",
+        parameters=ToolParameterSchema(
+            type="object",
+            properties={"target": {"type": "string", "description": "Golden target"}},
+            required=["target"],
+        ),
+        when_to_use="Golden fixture only",
+    )
+
+
+async def capture_tsaspdma() -> List[JSONDict]:
+    """Drive TSASPDMA's pre-existing seam (`_create_tsaspdma_messages`) via evaluate_tool_action."""
+    from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator, TSASPDMALLMResult
+
+    dma = TSASPDMAEvaluator(service_registry=Mock())
+    captured: Dict[str, Any] = {}
+    dma.call_llm_structured = _recording_llm(  # type: ignore[method-assign]
+        captured,
+        TSASPDMALLMResult(
+            selected_action=HandlerActionType.PONDER,
+            reasoning="Golden fixture: reconsider.",
+            ponder_questions=["Golden fixture question?"],
+        ),
+    )
+    await dma.evaluate_tool_action(
+        tool_name="golden_tool",
+        tool_info=make_tool_info(),
+        aspdma_reasoning="Golden fixture: tool selected.",
+        original_thought=make_queue_item(),
+        context=None,
+    )
+    return captured["messages"]  # type: ignore[no-any-return]
+
+
+async def capture_tsaspdma_correction() -> List[JSONDict]:
+    """Drive TSASPDMA's correction-mode seam (`_create_correction_mode_messages`)."""
+    from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator, TSASPDMALLMResult
+
+    dma = TSASPDMAEvaluator(service_registry=Mock())
+    captured: Dict[str, Any] = {}
+    dma.call_llm_structured = _recording_llm(  # type: ignore[method-assign]
+        captured,
+        TSASPDMALLMResult(
+            selected_action=HandlerActionType.PONDER,
+            reasoning="Golden fixture: reconsider.",
+            ponder_questions=["Golden fixture question?"],
+        ),
+    )
+    await dma.evaluate_tool_correction(
+        requested_tool_name="missing_tool",
+        available_tools=[make_tool_info()],
+        aspdma_reasoning="Golden fixture: tool selected.",
+        original_thought=make_queue_item(),
+        context=None,
+    )
+    return captured["messages"]  # type: ignore[no-any-return]
+
+
 _CAPTURE_FNS = {
     "pdma": capture_pdma,
     "csdma": capture_csdma,
@@ -362,7 +461,19 @@ _CAPTURE_FNS = {
     "dsdma": capture_dsdma,
     "aspdma": capture_aspdma,
     "dsaspdma": capture_dsaspdma,
+    "tsaspdma": capture_tsaspdma,
+    "tsaspdma_correction": capture_tsaspdma_correction,
 }
+
+
+async def capture_step(name: str) -> List[JSONDict]:
+    """Run the named step's evaluate path under the CALLER'S environment (#973).
+
+    Unlike :func:`capture_via_evaluate`, no prompt environment is applied here —
+    the compose dump wraps this in :func:`prompt_content_environment` with real
+    pass-through loaders and a per-locale language pin.
+    """
+    return await _CAPTURE_FNS[name]()
 
 
 async def capture_via_evaluate(name: str) -> List[JSONDict]:

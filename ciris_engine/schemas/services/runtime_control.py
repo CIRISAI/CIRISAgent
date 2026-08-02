@@ -100,9 +100,25 @@ class PropagatedCoherenceEntropyMixin(BaseModel):
 
 
 class StepPoint(str, Enum):
-    """Points where single-stepping can pause in the H3ERE pipeline."""
+    """Points where single-stepping can pause in the H3ERE pipeline.
 
-    # H3ERE Pipeline - 10 step points (0 setup + 7 core + 2 optional recursive)
+    **This enum is the source of truth for the observable step points.** Every
+    member below has a live ``@streaming_step`` decorator site in production, so
+    the set is what the pipeline actually emits rather than what a document says
+    it emits. Anything citing this — an evidence-registry row, a Constitution
+    claim, a client that renders the pipeline — should point at the enum rather
+    than restate a count, because a hardcoded number is exactly what rotted here:
+    the comment here used to restate a total that had already drifted from the
+    members below, and the inline stage labels skip values, so anyone counting
+    them reached a different answer again — none of which failed, because
+    nothing asserted it.
+
+    Locked by ``tests/ciris_engine/schemas/services/test_step_point_evidence.py``.
+    """
+
+    # Setup, core, optional recursive re-entry, and completion. The trailing
+    # numbers are historical pipeline stage labels: deliberately non-contiguous,
+    # not an ordering, and not a total. Count the members, never these.
     START_ROUND = "start_round"  # 0) Setup: Tasks → Thoughts → Round Queue → Ready for context
     GATHER_CONTEXT = "gather_context"  # 1) Build context for DMA processing
     PERFORM_DMAS = "perform_dmas"  # 2) Execute multi-perspective DMAs

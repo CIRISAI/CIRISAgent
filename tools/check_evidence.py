@@ -26,12 +26,24 @@ from __future__ import annotations
 
 import ast
 import csv
+import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "evidence" / "cc_impl.tsv"
 COLUMNS = ["decimal_id", "claim_id", "repo", "path#symbol", "status"]
+
+# The status vocabulary defined by CIRISConstitution constitution/EVIDENCE.md.
+# Validated here because an unrecognised status previously passed silently, which
+# meant a typo ("impl " / "implemented") degraded a row to un-checked without
+# failing anything — the same class of rot this gate exists to prevent.
+KNOWN_STATUSES = {"impl", "staged", "substrate", "normative", "open"}
+
+# `open` rows are acknowledged, tracked gaps. EVIDENCE.md gives them a `REPO#issue`
+# pointer rather than a `path#symbol`, so they are shape-checked, not AST-resolved.
+# Declaring a gap is the point: silence in this manifest reads as coverage.
+_ISSUE_REF = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*#\d+$")
 
 
 def _module_symbols(tree: ast.Module) -> tuple[set[str], dict[str, set[str]]]:
@@ -85,7 +97,7 @@ def main() -> int:
         print(f"FAIL: manifest missing: {MANIFEST}", file=sys.stderr)
         return 1
     errors: list[str] = []
-    resolved = skipped = 0
+    resolved = skipped = declared_open = 0
     with MANIFEST.open() as f:
         reader = csv.reader((ln for ln in f if not ln.startswith("#")), delimiter="\t")
         header = next(reader, None)
@@ -98,7 +110,25 @@ def main() -> int:
             if len(row) != len(COLUMNS):
                 errors.append(f"L{ln}: expected {len(COLUMNS)} columns, got {len(row)}")
                 continue
-            _decimal, claim, repo, pointer, _status = (c.strip() for c in row)
+            _decimal, claim, repo, pointer, status = (c.strip() for c in row)
+
+            if status not in KNOWN_STATUSES:
+                errors.append(f"L{ln} [{claim}]: unknown status {status!r}; expected one of {sorted(KNOWN_STATUSES)}")
+                continue
+
+            # An `open` row declares a tracked gap and points at an issue, not a
+            # symbol. Shape-check it so a gap cannot be "declared" against a
+            # reference nobody can follow.
+            if status == "open":
+                if not _ISSUE_REF.match(pointer):
+                    errors.append(
+                        f"L{ln} [{claim}]: status=open needs a REPO#issue pointer "
+                        f"(e.g. CIRISAgent#942), got {pointer!r}"
+                    )
+                else:
+                    declared_open += 1
+                continue
+
             if repo != "CIRISAgent" or pointer in ("", "—"):
                 skipped += 1
                 continue
@@ -110,7 +140,10 @@ def main() -> int:
 
     for e in errors:
         print(f"FAIL: {e}", file=sys.stderr)
-    print(f"cc_impl.tsv: {resolved} in-repo pointers resolved, {skipped} skipped, {len(errors)} failed")
+    print(
+        f"cc_impl.tsv: {resolved} in-repo pointers resolved, {declared_open} declared gaps, "
+        f"{skipped} skipped, {len(errors)} failed"
+    )
     return 1 if errors else 0
 
 

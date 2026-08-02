@@ -16,6 +16,7 @@ from ciris_engine.protocols.dma.base import DSDMAProtocol
 from ciris_engine.schemas.dma.core import DMAInputData
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import DSDMAResult
+from ciris_engine.schemas.runtime.models import ImageContent
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.types import JSONDict
 
@@ -332,6 +333,86 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 # No profiles → reset language so previous thought doesn't bleed.
                 self._sync_language_from_context(None)
 
+        # Get images from thought item for multimodal
+        thought_images = getattr(thought_item, "images", []) or []
+
+        # Compose messages via the extracted seam (#972)
+        messages = self.compose_messages(
+            thought_content_str,
+            thought_item.thought_id,
+            task_context_block,
+            identity_block,
+            system_snapshot_block,
+            user_profiles_block,
+            context_str,
+            rules_summary_str,
+            images=thought_images,
+        )
+
+        try:
+            # The dsdma_base.yml output contract asks the LLM for the 4
+            # DSDMAResult fields directly (domain, domain_alignment, flags,
+            # reasoning) — no intermediate shim. Using DSDMAResult as the
+            # instructor response_model means Pydantic validates against the
+            # exact shape we asked the LLM to produce; the legacy
+            # `score`-based LLMOutputForDSDMA shim was a 2.7.4 regression
+            # source (the prompt asked for domain_alignment, the response
+            # model demanded score → InstructorRetryException → circuit
+            # breaker → "All LLM services failed").
+            llm_eval_data, _ = await self.call_llm_structured(
+                messages=messages,
+                response_model=DSDMAResult,
+                max_tokens=8192,
+                temperature=0.0,
+                thought_id=thought_item.thought_id,
+                task_id=thought_item.source_task_id,
+            )
+
+            # The LLM picks its own domain string — use that. Clamp the
+            # alignment to [0, 1] defensively in case the model exceeded
+            # the schema's bounds (instructor usually catches this, but
+            # paranoia is cheap).
+            result = DSDMAResult(
+                domain=llm_eval_data.domain or self.domain_name,
+                domain_alignment=min(max(llm_eval_data.domain_alignment, 0.0), 1.0),
+                flags=llm_eval_data.flags,
+                reasoning=llm_eval_data.reasoning,
+            )
+            logger.info(
+                f"DSDMA '{self.domain_name}' (instructor) evaluation successful for thought ID {thought_item.thought_id}: "
+                f"Domain Alignment: {result.domain_alignment}"
+            )
+            return result
+        except Exception as e:
+            logger.error(
+                f"DSDMA {self.domain_name} evaluation failed for thought ID {thought_item.thought_id}: {e}",
+                exc_info=True,
+            )
+            return DSDMAResult(
+                domain=self.domain_name,
+                domain_alignment=0.0,
+                flags=["LLM_Error_Instructor"],
+                reasoning=f"Failed DSDMA evaluation via instructor: {str(e)}",
+            )
+
+    def compose_messages(
+        self,
+        thought_content_str: str,
+        thought_id: str,
+        task_context_block: str,
+        identity_block: str,
+        system_snapshot_block: str,
+        user_profiles_block: str,
+        context_str: str,
+        rules_summary_str: str,
+        images: Optional[List[ImageContent]] = None,
+    ) -> List[JSONDict]:
+        """Compose the full DSDMA prompt message list from gathered inputs (#972).
+
+        Pure prompt composition - no LLM call, no data fetching. All awaited
+        data gathering (task fetch, snapshot/identity extraction, language
+        sync) happens in ``evaluate_thought()`` before this is called.
+        """
         escalation_guidance_block = get_escalation_guidance(0)
 
         # Import crisis resources formatter
@@ -401,7 +482,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         self.last_user_prompt = user_message_content
 
         logger.debug(
-            f"DSDMA '{self.domain_name}' input to LLM for thought {thought_item.thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
+            f"DSDMA '{self.domain_name}' input to LLM for thought {thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
         )
 
         # CRITICAL: Identity block must ALWAYS be first in system message after accord
@@ -409,8 +490,8 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         if identity_block and "CORE IDENTITY" not in system_message_content:
             system_message_content = identity_block + "\n\n" + system_message_content
 
-        # Get images from thought item for multimodal
-        thought_images = getattr(thought_item, "images", []) or []
+        # Build multimodal content if images are present
+        thought_images = images or []
         if thought_images:
             logger.info(
                 f"[VISION] DSDMA '{self.domain_name}' building multimodal content with {len(thought_images)} images"
@@ -428,51 +509,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         messages.append({"role": "system", "content": system_message_content})
         messages.append({"role": "user", "content": user_content})
 
-        try:
-            # The dsdma_base.yml output contract asks the LLM for the 4
-            # DSDMAResult fields directly (domain, domain_alignment, flags,
-            # reasoning) — no intermediate shim. Using DSDMAResult as the
-            # instructor response_model means Pydantic validates against the
-            # exact shape we asked the LLM to produce; the legacy
-            # `score`-based LLMOutputForDSDMA shim was a 2.7.4 regression
-            # source (the prompt asked for domain_alignment, the response
-            # model demanded score → InstructorRetryException → circuit
-            # breaker → "All LLM services failed").
-            llm_eval_data, _ = await self.call_llm_structured(
-                messages=messages,
-                response_model=DSDMAResult,
-                max_tokens=8192,
-                temperature=0.0,
-                thought_id=thought_item.thought_id,
-                task_id=thought_item.source_task_id,
-            )
-
-            # The LLM picks its own domain string — use that. Clamp the
-            # alignment to [0, 1] defensively in case the model exceeded
-            # the schema's bounds (instructor usually catches this, but
-            # paranoia is cheap).
-            result = DSDMAResult(
-                domain=llm_eval_data.domain or self.domain_name,
-                domain_alignment=min(max(llm_eval_data.domain_alignment, 0.0), 1.0),
-                flags=llm_eval_data.flags,
-                reasoning=llm_eval_data.reasoning,
-            )
-            logger.info(
-                f"DSDMA '{self.domain_name}' (instructor) evaluation successful for thought ID {thought_item.thought_id}: "
-                f"Domain Alignment: {result.domain_alignment}"
-            )
-            return result
-        except Exception as e:
-            logger.error(
-                f"DSDMA {self.domain_name} evaluation failed for thought ID {thought_item.thought_id}: {e}",
-                exc_info=True,
-            )
-            return DSDMAResult(
-                domain=self.domain_name,
-                domain_alignment=0.0,
-                flags=["LLM_Error_Instructor"],
-                reasoning=f"Failed DSDMA evaluation via instructor: {str(e)}",
-            )
+        return messages
 
     async def evaluate_alias(self, input_data: ProcessingQueueItem, **kwargs: Any) -> DSDMAResult:
         """Alias for evaluate_thought to satisfy BaseDMA."""

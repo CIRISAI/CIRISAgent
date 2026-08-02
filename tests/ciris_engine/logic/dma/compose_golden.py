@@ -279,7 +279,7 @@ async def capture_idma() -> List[JSONDict]:
     dma = IDMAEvaluator(service_registry=Mock())
     dma.fetch_original_task = AsyncMock(return_value=make_task())  # type: ignore[method-assign]
     captured: Dict[str, Any] = {}
-    dma.call_llm_structured = _recording_llm(
+    dma.call_llm_structured = _recording_llm(  # type: ignore[method-assign]
         captured,
         IDMAResult(
             k_eff=3.0,
@@ -288,7 +288,7 @@ async def capture_idma() -> List[JSONDict]:
             fragility_flag=False,
             reasoning="Golden fixture: diverse sources.",
         ),
-    )  # type: ignore[method-assign]
+    )
     await dma.evaluate(
         make_queue_item(),
         make_context(),
@@ -325,14 +325,14 @@ async def capture_aspdma() -> List[JSONDict]:
     dma = ActionSelectionPDMAEvaluator(service_registry=registry)
     pin_aspdma_context_builder(dma)
     captured: Dict[str, Any] = {}
-    dma.call_llm_structured = _recording_llm(
+    dma.call_llm_structured = _recording_llm(  # type: ignore[method-assign]
         captured,
         ASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
             reasoning="Golden fixture: speak.",
             speak_content="Golden fixture response.",
         ),
-    )  # type: ignore[method-assign]
+    )
     await dma.evaluate(make_enhanced_inputs())
     return captured["messages"]  # type: ignore[no-any-return]
 
@@ -343,14 +343,14 @@ async def capture_dsaspdma() -> List[JSONDict]:
 
     dma = DSASPDMAEvaluator(service_registry=Mock())
     captured: Dict[str, Any] = {}
-    dma.call_llm_structured = _recording_llm(
+    dma.call_llm_structured = _recording_llm(  # type: ignore[method-assign]
         captured,
         DSASPDMALLMResult(
             reason_summary="Golden fixture deferral",
             operational_reason=list(DeferralOperationalReason)[0],
             primary_need_category=list(DeferralNeedCategory)[0],
         ),
-    )  # type: ignore[method-assign]
+    )
     await dma.evaluate(make_defer_aspdma_result(), make_queue_item(), context=None)
     return captured["messages"]  # type: ignore[no-any-return]
 

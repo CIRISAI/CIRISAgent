@@ -14,6 +14,7 @@ from ciris_engine.logic.processors.support.processing_queue import ProcessingQue
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.dma.base import PDMAProtocol
 from ciris_engine.schemas.dma.results import EthicalDMAResult
+from ciris_engine.schemas.runtime.models import ImageContent
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
@@ -163,6 +164,46 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             full_context_str=full_context_str,
         )
 
+    def compose_messages(
+        self,
+        original_thought_content: str,
+        full_context_str: str,
+        images: Optional[List[ImageContent]] = None,
+    ) -> List[JSONDict]:
+        """Compose the full PDMA prompt message list from gathered inputs (#972).
+
+        Pure prompt composition - no LLM call, no data fetching. All awaited
+        data gathering (task fetch, context strings) happens in ``evaluate()``
+        before this is called.
+        """
+        messages: List[JSONDict] = []
+
+        # Round-1 DMA system blocks — ACCORD + per-language guidance +
+        # prohibition context (#910) — via the shared helper (NOT ASPDMA).
+        append_round1_accord_blocks(
+            messages,
+            language=self.prompt_loader.language,
+            accord_mode=self.prompt_loader.get_accord_mode(self.prompt_template_data),
+        )
+
+        system_message = self._build_system_message_text(original_thought_content, full_context_str)
+        messages.append({"role": "system", "content": system_message})
+
+        user_message_text = self._build_user_message_text(original_thought_content, full_context_str)
+        # Build multimodal content if images are present
+        input_images = images or []
+        if input_images:
+            logger.info(f"[VISION] EthicalPDMA building multimodal content with {len(input_images)} images")
+        user_content = self.build_multimodal_content(user_message_text, input_images)
+        messages.append({"role": "user", "content": user_content})
+
+        # Store prompts for streaming/debugging
+        system_messages = [m for m in messages if m.get("role") == "system"]
+        self.last_system_prompt = "\n\n".join(str(m.get("content", "")) for m in system_messages)
+        self.last_user_prompt = user_message_text
+
+        return messages
+
     async def evaluate(self, *args: Any, **kwargs: Any) -> EthicalDMAResult:  # type: ignore[override]
         import time
 
@@ -194,33 +235,10 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             f"[PDMA-TIMING] {input_data.thought_id} build_context took {(time.time()-context_start)*1000:.0f}ms"
         )
 
-        # Build messages
+        # Compose messages via the extracted seam (#972)
         prompt_start = time.time()
-        messages: List[JSONDict] = []
-
-        # Round-1 DMA system blocks — ACCORD + per-language guidance +
-        # prohibition context (#910) — via the shared helper (NOT ASPDMA).
-        append_round1_accord_blocks(
-            messages,
-            language=self.prompt_loader.language,
-            accord_mode=self.prompt_loader.get_accord_mode(self.prompt_template_data),
-        )
-
-        system_message = self._build_system_message_text(original_thought_content, full_context_str)
-        messages.append({"role": "system", "content": system_message})
-
-        user_message_text = self._build_user_message_text(original_thought_content, full_context_str)
-        # Build multimodal content if images are present
         input_images = getattr(input_data, "images", []) or []
-        if input_images:
-            logger.info(f"[VISION] EthicalPDMA building multimodal content with {len(input_images)} images")
-        user_content = self.build_multimodal_content(user_message_text, input_images)
-        messages.append({"role": "user", "content": user_content})
-
-        # Store prompts for streaming/debugging
-        system_messages = [m for m in messages if m.get("role") == "system"]
-        self.last_system_prompt = "\n\n".join(str(m.get("content", "")) for m in system_messages)
-        self.last_user_prompt = user_message_text
+        messages = self.compose_messages(original_thought_content, full_context_str, input_images)
 
         # Calculate total prompt size
         total_chars = sum(len(str(m.get("content", ""))) for m in messages)

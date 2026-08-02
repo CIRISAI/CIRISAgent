@@ -174,6 +174,34 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
         return messages
 
+    def compose_messages(
+        self,
+        thought_content: str,
+        context_summary: str,
+        task_context_str: str,
+        system_snapshot_str: str,
+        user_profiles_str: str,
+        images: Optional[List[ImageContent]] = None,
+    ) -> List[JSONDict]:
+        """Compose the full CSDMA prompt message list from gathered inputs (#972).
+
+        Pure prompt composition - no LLM call, no data fetching. All awaited
+        data gathering (task fetch, context extraction) happens in
+        ``evaluate_thought()`` before this is called.
+        """
+        # Prepend task context to system snapshot
+        task_context_block = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n"
+        combined_snapshot_block = task_context_block + system_snapshot_str + user_profiles_str
+
+        return self._create_csdma_messages_for_instructor(
+            thought_content,
+            context_summary,
+            identity_context_block="",
+            system_snapshot_block=combined_snapshot_block,
+            user_profiles_block="",
+            images=images,
+        )
+
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
         """Sync prompt language using the full localization priority chain.
 
@@ -253,19 +281,16 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         # Extract context data from context object
         system_snapshot_str, user_profiles_str, context_summary = self._extract_context_data(context)
 
-        # Prepend task context to system snapshot
-        task_context_block = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n"
-        combined_snapshot_block = task_context_block + system_snapshot_str + user_profiles_str
-
         # Get images from thought item for multimodal
         thought_images = getattr(thought_item, "images", []) or []
 
-        messages = self._create_csdma_messages_for_instructor(
+        # Compose messages via the extracted seam (#972)
+        messages = self.compose_messages(
             thought_content_str,
             context_summary,
-            identity_context_block="",
-            system_snapshot_block=combined_snapshot_block,
-            user_profiles_block="",
+            task_context_str,
+            system_snapshot_str,
+            user_profiles_str,
             images=thought_images,
         )
 

@@ -120,9 +120,13 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     "dsdma.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
     # ASPDMA system: identity block (ontological) + selection framing.
     "aspdma.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
-    # ASPDMA user message: the ~90-line action doctrine incl. the DEFER
-    # policy — axiotic content in a structural site [M-4] — plus deontic
-    # "Requires wise authority approval" lines and task context (contingent).
+    # ASPDMA user message: the ~90-line action doctrine — axiotic content in
+    # a structural site [M-4] — plus deontic "Requires wise authority
+    # approval" lines and task context (contingent). The DEFER policy (the
+    # axiotic core) is ROUTED since #974 step 0
+    # (action_selection_pdma.action_params_defer_guidance) but still rides
+    # interpolated inside this one message, so the block stays mixed with an
+    # axiotic contaminant until the surrounding doctrine routes too (§11.1).
     "aspdma.user": BlockAnnotation(_C.MIXED, (_C.PROCEDURAL, _C.AXIOTIC, _C.DEONTIC, _C.CONTINGENT)),
     # DSASPDMA system: dma_prompt-routed guidance keys joined inline into one
     # message (procedural stage directives).

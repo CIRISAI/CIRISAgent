@@ -313,8 +313,11 @@ class TestGateOnApplies:
         a design document nobody re-reads at analysis time."""
         _activate(monkeypatch, _valid_manifest(tmp_path))
         report = ro.describe_coverage()
-        for expected in ("NOT COVERED", "ASPDMA user message", "DEFER policy", "formatters", "in English"):
+        for expected in ("NOT COVERED", "ASPDMA user message", "formatters", "in English"):
             assert expected in report
+        # #974 step 0: the DEFER policy routed out of the residue and IS
+        # covered now — the report must say so rather than still list it.
+        assert "DEFER policy routed out" in report
 
 
 # ---------------------------------------------------------------------------
@@ -666,7 +669,13 @@ class TestDriftGuard:
 
     def test_residue_digest_covers_the_aspdma_user_message_and_defer_policy(self):
         """The two things FSD §6.1/§7.2 identify as most able to invert a
-        conclusion. If either stops being hashed, the pin is decorative."""
+        conclusion. If either stops being hashed, the pin is decorative.
+
+        Post-#974 step 0 the DEFER policy TEXT lives in
+        prompts/action_selection_pdma.yml (covered, overridable); the two
+        generator symbols stay pinned because they still carry the inline
+        schema/guidance doctrine for every OTHER verb, and because a change to
+        the routing dispatch itself must move the digest."""
         sites = {(rel, qual) for rel, qual in ro.RESIDUE_SITES}
         assert (
             "logic/dma/action_selection/context_builder.py",
@@ -709,7 +718,9 @@ class TestDriftGuard:
         manifest = ro.get_active_overrides()
         assert manifest is not None
         assert manifest.mode == "strict"
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 97
+        # 98 = the pre-#974 key space (97) + action_selection_pdma.action_params_defer_guidance
+        # (the DEFER policy, routed into the dma_prompt namespace by #974 step 0).
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 98
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

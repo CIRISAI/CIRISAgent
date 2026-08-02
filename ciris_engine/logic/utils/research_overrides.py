@@ -20,15 +20,17 @@ Three things live here:
    first LLM call, and collects into one error. A campaign that discovers a bad
    key on thought #400 has already burned 399 contaminated samples.
 
-**What this does NOT cover, stated here and not only in the FSD**: roughly
-75–80% of *operative* instruction text — the words that steer verb choice — is
+**What this does NOT cover, stated here and not only in the FSD**: a large
+share of *operative* instruction text — the words that steer verb choice — is
 compiled-in English Python literals with no loader to intercept. The entire
-ASPDMA user message, the DEFER policy (twice), the DSDMA user message, the
-identity blocks, the formatters. There is deliberately no ``inline`` namespace,
-because offering one would imply that surface is addressable. It is not. It is
-instead *pinned*: :func:`compute_residue_digest` hashes the source of every
-uncovered site and the manifest must declare the digest, so the residue cannot
-drift mid-campaign without stopping the run.
+ASPDMA user message, the DSDMA user message, the identity blocks, the
+formatters. (#974 is routing that residue out in order; the DEFER policy —
+step 0 — now lives in ``prompts/action_selection_pdma.yml`` and IS covered, as
+``action_selection_pdma.action_params_defer_guidance``.) There is deliberately
+no ``inline`` namespace, because offering one would imply that surface is
+addressable. It is not. It is instead *pinned*: :func:`compute_residue_digest`
+hashes the source of every uncovered site and the manifest must declare the
+digest, so the residue cannot drift mid-campaign without stopping the run.
 """
 
 from __future__ import annotations
@@ -123,6 +125,9 @@ _DMA_PROMPT_TEXT_FIELDS: FrozenSet[str] = frozenset(
         "action_params_speak_csdma_guidance",
         "action_params_ponder_guidance",
         "action_params_observe_guidance",
+        # The DEFER policy, routed out of the inline Python literal by #974
+        # step 0 (§11). Keyed action_selection_pdma.action_params_defer_guidance.
+        "action_params_defer_guidance",
         "reasoning_csdma_guidance",
         "final_ponder_advisory",
         "closing_reminder",
@@ -331,7 +336,12 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
         "logic/dma/action_selection/context_builder.py",
         "ActionSelectionContextBuilder._get_dynamic_action_schemas",
     ),
-    # The DEFER policy, and its second copy.
+    # Action-schema and guidance scaffolding. The DEFER policy itself routed
+    # OUT of these symbols in #974 step 0 (it now lives in
+    # prompts/action_selection_pdma.yml, covered by the dma_prompt namespace);
+    # what remains inline is the per-action schema text for the OTHER verbs
+    # (SPEAK/PONDER/MEMORIZE/RECALL/FORGET/REJECT/TOOL/OBSERVE/TASK_COMPLETE)
+    # and the non-DEFER guidance_map entries — still uncovered, still pinned.
     (
         "logic/dma/action_selection/action_instruction_generator.py",
         "ActionInstructionGenerator.generate_action_instructions",
@@ -694,9 +704,9 @@ def _validate_manifest(manifest: ResearchOverrideManifest) -> None:
         problems.append(
             f"residue digest mismatch: manifest pins {manifest.residue_digest}, "
             f"source is {actual_residue}. The uncovered inline action doctrine "
-            f"(ASPDMA user message, DEFER policy, DSDMA user message, identity blocks, "
-            f"formatters) changed. Every arm shares that text; a mid-campaign change to it "
-            f"is a confound. Re-pin deliberately, do not paper over."
+            f"(ASPDMA user message, action-schema scaffolding, DSDMA user message, "
+            f"identity blocks, formatters) changed. Every arm shares that text; a "
+            f"mid-campaign change to it is a confound. Re-pin deliberately, do not paper over."
         )
 
     # --- condition (b) prerequisite -------------------------------------
@@ -940,11 +950,12 @@ def describe_coverage(manifest: Optional[ResearchOverrideManifest] = None) -> st
     )
     return (
         f"{counts}. NOT COVERED (inline English, present in EVERY arm, pinned at "
-        f"{m.residue_digest}): the ASPDMA user message, the DEFER policy and its "
-        f"duplicate, the DSDMA user message, the CORE IDENTITY blocks, the six "
-        f"formatters, and the conscience override reasons. Any paper using this "
-        f"facility must report that the non-CIRIS arm was reasoning under CIRIS's "
-        f"action doctrine, in English"
+        f"{m.residue_digest}): the ASPDMA user message, the non-DEFER action "
+        f"schema/guidance scaffolding, the DSDMA user message, the CORE IDENTITY "
+        f"blocks, the six formatters, and the conscience override reasons. (The "
+        f"DEFER policy routed out of this residue in #974 step 0 and IS covered.) "
+        f"Any paper using this facility must report that the non-CIRIS arm was "
+        f"reasoning under CIRIS's action doctrine, in English"
     )
 
 

@@ -84,13 +84,18 @@ def test_every_mixed_block_carries_populated_contaminants(en_dump: Dump) -> None
             assert row.disposition is BlockDisposition.REFUSE  # refusal by default
 
 
-def test_residue_scan_finds_the_defer_policy_in_aspdma_user(en_dump: Dump) -> None:
-    """Assertion 4's instrument: the DEFER policy (M-4) must be visible as
-    residue inside the ASPDMA user message — the FSD's own named largest
-    contamination source cannot be invisible to the scan."""
+def test_residue_scan_finds_inline_action_scaffolding_in_aspdma_user(en_dump: Dump) -> None:
+    """Assertion 4's instrument: the inline action-schema scaffolding must be
+    visible as residue inside the ASPDMA user message. (Pre-#974 this test
+    watched the DEFER policy; step 0 routed that text into
+    action_selection_pdma.yml, so it is covered now and correctly ABSENT from
+    the residue scan — the remaining generator literals still hit.)"""
     _, rows = en_dump
     aspdma_user = next(r for r in rows if r.block_id == "aspdma.user")
     assert any("action_instruction_generator" in hit for hit in aspdma_user.residue_hits)
+    # And the routed DEFER policy no longer registers as an uncovered fragment:
+    # its prose left the pinned Python symbols, so the scan must not carry it.
+    assert not any("DEFER is ONLY" in text for _, text in residue_fragments())
 
 
 def test_dump_rows_are_deterministic(en_dump: Dump) -> None:

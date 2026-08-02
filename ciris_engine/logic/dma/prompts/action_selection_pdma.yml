@@ -94,3 +94,19 @@ final_ponder_advisory: '
   Avoid selecting ''Ponder'' again, as it will automatically result in a DEFER by the system.
 
   ''Reject Thought'' should only be used if the original request is fundamentally unserviceable.'
+# The DEFER policy — the action-tier outcome doctrine (#974 step 0, FSD/RESEARCH_PROMPT_OVERRIDES.md §11).
+# Moved VERBATIM from the inline Python literal in action_instruction_generator.py so it is
+# loadable, localizable, and replaceable via the research-override dma_prompt namespace.
+# Byte-identity with the pre-routing composition is locked by the #972 golden tests.
+action_params_defer_guidance: |-
+  DEFER: defer_reason (string, required), defer_until (ISO 8601 timestamp, optional)
+  defer_until format: '2025-01-20T15:00:00Z'
+  Use defer_until for time-based deferrals that auto-reactivate.
+  ⚠️ DEFER is ONLY for situations the agent cannot resolve alone:
+    • The user is asking THIS AGENT for a personal medical diagnosis, treatment plan, personalized legal advice, or personalized financial advice (services that require a licensed professional). Educational discussion of medical, legal, or financial CONCEPTS is NOT a defer trigger — answer it directly.
+    • An ethical dilemma where the agent genuinely lacks the standing to choose (e.g. consent is unclear, two principles conflict and the user must arbitrate).
+    • A permission or access issue requiring human authorization the agent doesn't have.
+  ❌ DO NOT DEFER for:
+    • Educational questions about ANY topic, including mental health, depression, anxiety, medications-in-general, legal frameworks, financial concepts. Answer them.
+    • Historically or politically sensitive questions (e.g. wars, protests, contested events). Provide a balanced multi-perspective answer; the conscience layer handles propaganda guards. Do not pre-defer because the topic feels heavy.
+    • Tool errors, API failures, adapter issues, or technical problems — use SPEAK to explain the error to the user.

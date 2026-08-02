@@ -5,6 +5,50 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.7] - 2026-08-01
+
+**The delivery cut, and a pass on control honesty.** The substrate floor advances to the ciris-server one-wheel at **0.5.151** — the release where owner-consent authoring and self-verification are fully in-process — closing the trace-delivery saga end to end. Alongside it, the human-approved **budget envelope** becomes the first *deterministic, fail-closed* control on a consequential path, and a deliberate audit corrected several fields that were named for controls but enforced nothing. Where a control is not yet real, this release says so rather than implying otherwise.
+
+### Substrate
+
+- **Floor: ciris-server `>=0.5.151,<0.6.0`** — single source of truth in `requirements.txt`; supersedes the 0.5.119→0.5.150 delivery-cut progression (initiator-first receive, reverse-path/frame-drop, restart/EADDRINUSE, in-process consent). `ciris-lens-core` is dropped as a standalone dep — re-hosted in the one wheel (#896), so no dual-registry cohabitation. `ciris-verify>=10.3.0` retained deliberately (Python-API imports not yet rewired to the server wheel; tracked #917).
+- **DRY consolidation complete** — the `dry297/*` series (secrets, signing, routes, sqlite, audit/DSAR, federation routes, tsdb, cirisnode, dead code, verify) landed; the second federation signer identity is removed (one signer via persist `Engine.local_sign`).
+
+### Added
+
+- **Human-approved budget envelope (#938, #939)** — `create_ticket` proposes work with a requested budget; `authorize_spend` **fails closed** (no task → no ticket → no granted budget → malformed grant all deny) and is enforced at the one point every wallet rail converges. This is the release's one deterministic gate on spend. HITL approval surface, over-request grants (ratio-named confirmation), and real trust-envelope headroom on the budget API.
+- **TaskEnvelope + bus-side task identity (#938)** — the subject a future tool gate will authorize. **Record-only in this release**: nothing denies on it yet; enforcement is Phase 2. Stated plainly so "task-scoped authorization" is not read as shipping.
+- **CLIToolService on desktop installs (#941)** — shell + file tools for coding use, gated on a positively-identified desktop platform.
+- **Generated first-run tool disclosure (#941)** — the wizard discloses each adapter's actual tools from live services; adapters whose tools can't be enumerated now say *why* (#945) instead of reading as "grants nothing".
+- **Research trace capture** — isolated, signed CEG trace capture with a one-var entry point and a gated, total-or-refuse prompt-override facility; CI capture workflow.
+- **Localization value-integrity lint (#952)** — `check_localization_integrity.py`, including a `foreign-alphabet` check that catches same-script language substitution (Russian in `uk.json`); the `placeholder-corrupt` class is ratcheted in CI so it cannot regress.
+
+### Security
+
+- **Budget envelope** — see Added; the one control that is deterministic and fail-closed.
+- **SSRF guard wired into every unchosen-URL fetch (#941)** — the in-repo guard had one caller; lifted to `logic/utils/url_guard.py` and applied to the inbound-attachment observation paths (`document_parser`, `base_vision`) and the model-driven `curl`/`http_get`/`http_post`. `curl`'s model-authored `headers` remain a credential-presentation surface (item 3, open).
+- **Health endpoint fails closed (#943)** — a missing init service now reports `initializing`, an unaskable provider is not counted healthy, and an empty registry is `critical` — previously all three read as `healthy`.
+- **Platform capabilities fail closed (#948)** — an unidentified host gets no capabilities; `DESKTOP_CLI` is no longer granted by falling through to desktop.
+- **WA deferral resolutions are signed (#944)** — Ed25519 by the resolving authority over a canonical payload; verification fails closed; legacy placeholder values stay distinguishable as *unverified* (not forged). Verify-before-acting has no consumer yet (Phase 2).
+- **Workflow-input injection closed (#964)** — `update-latest-tag` (GHCR push token in scope) and `windows7-installer` no longer interpolate dispatch inputs into `run:` bodies.
+- **Honest about what is NOT enforced** — `requires_approval` is prompt guidance only (#942); `sandbox_mode`/`requires_confirmation` are unread (#909); the LLM tool-path delegation gate (#905) and the secret-scope gaps (#940, #954) remain open. See `FSD/THREAT_MODEL_2.9.7.md`.
+
+### Fixed
+
+- Startup DB init no longer hangs unbounded — `lock_timeout` on the shared-DB DDL (#937).
+- Scheduler dead-letters an orphaned task after 3 consecutive FK failures instead of retrying forever (#934).
+- accord_metrics telemetry stops retrying a non-retryable 401 in a hot loop; classified + backed off (#933).
+- Incident log is incident-only again — `AUTH_STEP_INFO` demoted, the `events_total` legacy-config `ConfigNode` round-trip fixed at the cause, retention raised (#935).
+- pytest `-n` no longer deletes live workers' TMPDIR (#947). The full-suite exit-hang (#956) is **root-caused and fixed**: three CIRISVerify FFI calls in `setup/attestation.py` ran on non-daemon threads joined with a timeout, so when the FFI blocked the test passed but the abandoned thread wedged interpreter shutdown until the 30-min job timeout. Daemonized (matching the sibling FFI sites); an AST lint now forbids any non-daemon `Thread()` in production, and the sessionfinish guard + a SIGTERM faulthandler make any residual leak self-report with full stacks instead of dying silently.
+- 78 mechanical localization placeholder breaks repaired across 11 locales (#952); `yo.json` iOS mirror re-synced.
+- Parallel epistemic consciences (#889); first-run provisioning-saga race; substrate tracing bridge installed at boot so persist/edge logs stop vanishing (#937).
+
+### Known gaps (tracked)
+
+- **Localization corpus**: `uk.json` is ~53% Russian (#949), `pt.json` holds Italian and `pa.json` Bengali (#950); `yo`/`my` withheld on translator assessment. Ship decisions per-language are a release call, not a code gap.
+- **Controls not yet enforced**: #938 Phase 2, #905, #909, #940, #942, #954 — and the residuals #967 (wise_bus placeholder signature), #968 (per-currency spend map).
+- **CI reliability**: the pytest-xdist exit-hang (#956) is root-caused and fixed (see Fixed). Residual risk is a different mechanism — a leaked child process holding the execnet fd — which is not known to occur and now self-reports via the SIGTERM faulthandler if it ever does.
+
 ## [2.9.6] - 2026-06-12
 
 **The LensCore fold.** The agent's reasoning-trace pipeline moves into the Rust substrate: `ciris-lens-core` becomes the fourth required substrate leg and the observability orchestrator — capture → seal → Ed25519-sign → `receive_and_persist` is owned by `LensClient`; the agent keeps only the semantic event mapping. Traces are the first CEG-native transport; consent becomes a CEG wire artifact; the JCS canonicalization cutover completes at every layer; and the lingering erroneous-1.0 capacity scores die on both the occurrence and cohort sides.

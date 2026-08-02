@@ -21,6 +21,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# MODULE NOTE — why every CIRISVerify FFI thread here is daemon=True (#956).
+#
+# Each handler runs its FFI call on an 8MB-stack thread and joins it with a
+# timeout, then reads `result` and returns whether or not the thread finished —
+# i.e. the thread is explicitly ABANDONED on timeout. In CI there is no
+# attestation hardware, so the FFI can block indefinitely. A non-daemon
+# abandoned thread still alive in the Rust FFI blocks interpreter exit (Python
+# waits for non-daemon threads at shutdown, where no per-test timeout applies),
+# which wedged pytest-xdist shards until the 30-min CI job timeout. daemon=True
+# makes the abandonment safe. The sibling FFI sites (verifier_singleton.py,
+# play_integrity.py) already do this; these were the outliers.
+
 
 # ============================================================================
 # Request/Response Models
@@ -401,7 +413,9 @@ async def get_app_attest_nonce(request: Request) -> SuccessResponse[Dict[str, An
 
         # Run on 8MB stack thread (CIRISVerify Rust runtime compatibility)
         threading.stack_size(8 * 1024 * 1024)
-        t = threading.Thread(target=_inner)
+        # daemon=True: abandoned-on-timeout FFI thread must never block
+        # interpreter exit (#956; see module note below).
+        t = threading.Thread(target=_inner, daemon=True)
         t.start()
         t.join(timeout=15)
         threading.stack_size(0)
@@ -485,7 +499,9 @@ async def verify_app_attest(
                 result["error"] = str(e)
 
         threading.stack_size(8 * 1024 * 1024)
-        t = threading.Thread(target=_inner)
+        # daemon=True: abandoned-on-timeout FFI thread must never block
+        # interpreter exit (#956; see module note below).
+        t = threading.Thread(target=_inner, daemon=True)
         t.start()
         t.join(timeout=30)
         threading.stack_size(0)
@@ -570,7 +586,9 @@ async def get_play_integrity_nonce(request: Request) -> SuccessResponse[Dict[str
                 result["error"] = str(e)
 
         threading.stack_size(8 * 1024 * 1024)
-        t = threading.Thread(target=_inner)
+        # daemon=True: abandoned-on-timeout FFI thread must never block
+        # interpreter exit (#956; see module note below).
+        t = threading.Thread(target=_inner, daemon=True)
         t.start()
         t.join(timeout=15)
         threading.stack_size(0)

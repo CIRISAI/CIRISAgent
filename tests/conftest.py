@@ -36,36 +36,6 @@ if hasattr(faulthandler, "register") and hasattr(signal, "SIGTERM"):
         # at import). Diagnostics are best-effort; never break collection.
         pass
 
-# CRASH FILE — the missing half of the #956 RCA.
-#
-# `faulthandler.enable()` above installs SIGSEGV/SIGBUS/SIGFPE/SIGABRT handlers,
-# but writes to stderr — and pytest captures stderr at the fd level, so a worker
-# that dies on a signal writes its traceback into a capture buffer nobody ever
-# flushes. That is exactly how gw2 disappeared on 2026-08-02: zero lines in the
-# run log, no dump, and an xdist controller waiting forever for a worker that
-# had already died.
-#
-# `_release_persist_engine` documents the suspected mechanism against this same
-# shard ("prevents SIGBUS when pending async I/O races the teardown — CI shard
-# 3/8 Bus error") and mitigates it with gc.collect() + a 200ms sleep. A sleep is
-# a race workaround, not a fix, and it demonstrably still loses.
-#
-# Holding this file object open for the process lifetime and pointing
-# faulthandler at it means the NEXT crash writes a native traceback that
-# survives the process — naming the faulting frame instead of leaving silence.
-_CRASH_FH = None
-try:
-    _crash_dir = os.environ.get("CIRIS_TEST_HANG_DUMP_DIR", ".")
-    os.makedirs(_crash_dir, exist_ok=True)
-    _CRASH_FH = open(  # noqa: SIM115 — must stay open for the process lifetime
-        os.path.join(_crash_dir, f"crash-{os.environ.get('PYTEST_XDIST_WORKER', 'controller')}.txt"),
-        "w",
-        encoding="utf-8",
-    )
-    faulthandler.enable(file=_CRASH_FH, all_threads=True)
-except Exception:  # noqa: BLE001 — diagnostics must never break collection
-    _CRASH_FH = None
-
 # WATCHDOG DUMP — the SIGTERM handler above proved insufficient: when CI's
 # job-level timeout-minutes fires, GitHub tears the process down fast enough
 # that a signal-driven dump does not reach the captured log. This is
@@ -568,26 +538,6 @@ except ImportError:
     wa_test_keys = None
 
 
-def pytest_sessionstart(session):  # noqa: ARG001
-    """Re-point faulthandler at the crash file, after every configure hook.
-
-    pytest's own faulthandler plugin registers `pytest_configure` with
-    `trylast=True` and calls `faulthandler.enable(file=<dup of stderr>)`, which
-    undoes the module-level enable(). Two `trylast` hooks have no defined order
-    between them, so re-asserting in configure is a coin flip. sessionstart runs
-    strictly after all of configure, making this deterministic.
-
-    Without it a worker that dies on SIGSEGV/SIGBUS writes its traceback into
-    pytest's fd-level capture buffer, which dies with the process — leaving the
-    silent worker death seen on 2026-08-02 (#956).
-    """
-    if _CRASH_FH is not None:
-        try:
-            faulthandler.enable(file=_CRASH_FH, all_threads=True)
-        except Exception:  # noqa: BLE001 — never break startup over diagnostics
-            pass
-
-
 # Skip Discord tests if no token is set
 def pytest_configure(config):
     config.addinivalue_line("markers", "requires_discord_token: mark test as requiring Discord token")
@@ -597,10 +547,6 @@ def pytest_configure(config):
         "real_attestation: opt out of the autouse stub that no-ops "
         "AuthenticationService.run_startup_attestation / _attestation_refresh_loop",
     )
-
-    # (faulthandler is re-pointed at the crash file in pytest_sessionstart —
-    # pytest's own plugin registers its configure hook `trylast`, so doing it
-    # here would be overridden.)
 
 
 # =============================================================================

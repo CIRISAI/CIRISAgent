@@ -966,9 +966,16 @@ async def unload_adapter(
             adapter_id=adapter_id, force=False  # Never force, respect safety checks
         )
 
-        # Log failures explicitly
+        # Log failures explicitly — except "it was already gone", which is the
+        # intended end state of an unload, not a failure of one. Logging that at
+        # ERROR turned routine teardown into incidents and failed a Staged QA run
+        # that had a 100% pass rate. Genuine unload failures still log ERROR.
         if not result.success:
-            logger.error(f"Adapter unload failed: {result.error}")
+            details = result.details or {}
+            if details.get("reason") == "not_loaded":
+                logger.info("Adapter unload skipped: %s", result.error)
+            else:
+                logger.error(f"Adapter unload failed: {result.error}")
         else:
             # Persist the adapter disable to .env so it doesn't reload on restart
             adapter_type_or_id = result.adapter_type or adapter_id

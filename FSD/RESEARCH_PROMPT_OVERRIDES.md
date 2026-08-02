@@ -905,7 +905,7 @@ Nothing in steps 3–5 may land without step 1.
 
 ---
 
-## 10. Experimental regimes (2.9.8) — replacement, not ablation  [v2]
+## 10. Experimental regimes (2.9.9) — replacement, not ablation  [v2]
 
 *v1 of §10–§14 was reviewed adversarially by three independent skeptics
 (methodology, taxonomy, implementation) before anything was built on it. Both
@@ -1323,7 +1323,7 @@ All CEG-signed hybrid on the 2.9.7 path. Full prompts stay in the debug tee
 (`traces/accord_full/lens-batch-*.json`), never in the CEG carrier — provenance,
 not debugging.
 
-## 14. Implementation order (2.9.8)
+## 14. Implementation order (2.9.9)
 
 0. **File the CIRISPersist `regime:*` registry ask — this week** [I-3]. Cross-repo,
    gates §13 federation entirely, nothing in 2.9.8 can force it. Everything else

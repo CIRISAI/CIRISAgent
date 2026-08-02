@@ -35,6 +35,55 @@ if hasattr(faulthandler, "register") and hasattr(signal, "SIGTERM"):
         # at import). Diagnostics are best-effort; never break collection.
         pass
 
+# WATCHDOG DUMP — the SIGTERM handler above proved insufficient: when CI's
+# job-level timeout-minutes fires, GitHub tears the process down fast enough
+# that a signal-driven dump does not reach the captured log. This is
+# signal-independent: a dedicated timer thread dumps EVERY thread's stack after
+# a fixed wall-clock interval, straight to fd 2, so a hung shard self-reports
+# INTO THE LIVE LOG well before it is killed.
+#
+# 1440s (24 min): healthy test shards finish in ~17-19 min and exit — the timer
+# dies with the process, no dump. A hung shard (killed at the 30-min job
+# timeout) gets its stacks dumped at 24 min, 6 min before death, while the step
+# log is still being tailed. Chosen to sit ABOVE the slowest healthy shard and
+# BELOW the kill. repeat=True in case the first dump races teardown.
+#
+# This is how we find the residual leak the attestation daemonization did NOT
+# fix (a non-thread mechanism — leaked child process holding the execnet fd, or
+# a C-extension thread) — it will name the exact blocked frame next hang.
+_HANG_WATCHDOG_SECONDS = int(os.environ.get("CIRIS_TEST_HANG_WATCHDOG_SECONDS", "1440"))
+if _HANG_WATCHDOG_SECONDS > 0:
+    try:
+        faulthandler.dump_traceback_later(_HANG_WATCHDOG_SECONDS, repeat=True)
+    except (ValueError, RuntimeError):
+        pass
+
+# BELT for the residual #956 leak: the CIRISVerify ThreadPoolExecutor.
+#
+# concurrent.futures registers `_python_exit` via atexit to JOIN every executor
+# worker thread at interpreter shutdown (executor workers are non-daemon since
+# 3.9). ciris_verify/ffi_bindings/client.py holds a ThreadPoolExecutor and
+# submits CIRISVerify FFI calls to it. In CI there is no attestation hardware,
+# so an FFI task can block indefinitely — and `shutdown(wait=False)` in the
+# client's __del__ cannot cancel a task already running in a worker. That leaves
+# a non-daemon worker stuck in the FFI, and `_python_exit` blocks joining it
+# FOREVER at shutdown. It is invisible to the threading.Thread AST lint (the
+# threads are stdlib-created) and it runs in the atexit phase, AFTER the
+# sessionfinish guard, which is why the guard did not catch it.
+#
+# The test process does not need in-flight executor results at exit, so drop the
+# join. The sessionfinish guard still force-exits on any lingering non-daemon
+# thread; this removes the one blocking phase that runs past it. Belt only — the
+# watchdog above still fires if a DIFFERENT residual mechanism remains, so this
+# cannot mask a further leak.
+try:
+    import atexit as _atexit
+    import concurrent.futures.thread as _cf_thread
+
+    _atexit.unregister(_cf_thread._python_exit)
+except Exception:  # noqa: BLE001 — best-effort; never break collection
+    pass
+
 os.environ["CIRIS_IMPORT_MODE"] = "true"
 os.environ["CIRIS_MOCK_LLM"] = "true"
 os.environ["CIRIS_TESTING_MODE"] = "true"  # Enable fallback admin credentials for tests

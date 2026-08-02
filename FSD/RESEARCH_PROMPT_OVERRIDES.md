@@ -1055,6 +1055,14 @@ dv:                              # [M-2] — the DV must exist in the arms it is
   # in ar and register_break_to in fa [T-N3]. Scoring is per (locale, U-row);
   # cross-locale pooling of a U-code is forbidden absent a declared construct
   # map in the manifest.
+  # POWER FOLLOWS [M-N5]: per-(locale,U-row) scoring multiplies the corrected
+  # family — 4 locales x per-locale rows x contrasts is 50-60+ Holm-corrected
+  # tests at conversations_per_cell: 20. The manifest must therefore
+  # PRE-REGISTER the text-tier rows it will test as a named subset, with a
+  # power statement at the declared n; a family whose corrected MDE exceeds
+  # the declared MDE is refused. Validity (T-N3) and power (this) move
+  # together or the tier is underpowered by construction.
+  text_tier_rows: {am: [U4, U6, U10], ar: [U4, U6, U10], fa: [U4, U6, U10], en: [U4, U6]}
   # A claim citing action_tier may reference h3ere arms ONLY: a direct-provider
   # call has no handler enum, so DEFER-vs-SPEAK is undefined there.
 
@@ -1114,12 +1122,18 @@ blocks:                          # per-block dispositions for every `mixed` bloc
   # contaminant: is MANDATORY on mixed blocks [T-N1]. hold + contaminant
   # intersecting a varied class refuses unless confound_accepted names it.
   language_guidance:
-    disposition: hold
+    disposition: refuse          # [M-N6] YES, THIS REFUSES THE REGIME AS
+                                 # WRITTEN — deliberately. This block carries
+                                 # axiotic contaminant and this regime varies
+                                 # axiotic; the correct path is §11 step 6
+                                 # (split it in the corpus), after which its
+                                 # pragmatic fragment is held cleanly. Writing
+                                 # `hold` + `confound_accepted: axiotic` here
+                                 # instead would bias values_effect toward
+                                 # zero with the gate green — an example
+                                 # manifest is a template people copy, and it
+                                 # must not teach the opt-out as the default.
     contaminant: [axiotic, deontic, empirical]
-    confound_accepted: axiotic   # this regime varies axiotic; holding this
-                                 # block keeps ~200B of CIRIS-axiotic register
-                                 # text in the alt arm — accepted and REPORTED,
-                                 # or split it via §11 step 6 first.
   pdma_worked_examples:
     disposition: hold
     contaminant: [axiotic, pragmatic]
@@ -1151,7 +1165,10 @@ last step.
 - An `h3ere` arm labelled `bare` or presented as §0's condition (a) — **refuse**.
   *Code gap, ships with this:* `research_overrides.py:568` currently accepts
   `condition: "a"`; only `"b"` is refused (`:673`) [M-8]. R6: refuse `"a"`.
-- A pinned decoding key the runtime does not transmit — **refuse** [M-6].
+- A pinned decoding key the runtime does not transmit — **refuse** [M-6]. The
+  same rule covers `repeats.seeds`: seeds declared while seed is untransmitted,
+  with no other live `variance_source`, is a repeat structure with no variance
+  — **refuse** [M-N1].
 - A varied class whose kill instrument is absent in any declared locale —
   **refuse** [T-4].
 - `deontic` in `replace:` without `safety_review` — **refuse** (v1 rule, kept).
@@ -1312,8 +1329,9 @@ not debugging.
    gates §13 federation entirely, nothing in 2.9.8 can force it. Everything else
    proceeds against the local-tier descope meanwhile.
 1. **Crisis resources into the corpus** — user-facing, independent of regimes.
-2. **Composition seam extraction** [I-1]: `compose_messages()` out of all eight
-   inline sites, its own PR, golden-bytes tests proving pre/post equality.
+2. **Composition seam extraction** [I-1, I-V2]: `compose_messages()` at six
+   sites covering the eight composition points (TSASPDMA already has seams),
+   its own PR, golden-bytes tests proving pre/post equality.
 3. `compose --dump` against the named compose fixture [I-2], emitting the
    `(block_id, class, disposition)` table — unrouted regions emit `mixed`,
    which the gate refuses inside any varied class. Red until §11 lands is

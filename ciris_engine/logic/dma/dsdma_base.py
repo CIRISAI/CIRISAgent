@@ -418,7 +418,13 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         # Import crisis resources formatter
         from ciris_engine.logic.formatters import format_crisis_resources_block
 
-        crisis_resources_block = format_crisis_resources_block(include_full_disclaimer=False)
+        # Locale-aware since CIRISAgent#971: the thread's active language selects
+        # the corpus registry (crisis_resources_{lang}.json); en/unknown locales
+        # resolve to the byte-frozen en base block.
+        crisis_resources_block = format_crisis_resources_block(
+            include_full_disclaimer=False,
+            language=self.prompt_loader.language,
+        )
 
         task_history_block = ""
 

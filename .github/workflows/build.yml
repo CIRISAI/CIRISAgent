@@ -163,14 +163,33 @@ jobs:
           # No stack dump, because the internal timeout would not have fired
           # until 03:42.
           #
-          # The 5-minute gap is the budget for the handler to run and for
-          # artifacts to upload. Raise BOTH numbers together, never just one.
+          # THREE NESTED BOUNDS, innermost first. Each must stay strictly below
+          # the next or the inner one can never fire:
+          #
+          #   --session-timeout=1320 (22m)  pytest gives up and REPORTS
+          #   timeout ... 1500       (25m)  SIGTERM if pytest itself is wedged
+          #   timeout-minutes: 30           GitHub's backstop
+          #
+          # The session bound is the one that actually fixes the 2026-08-02
+          # shard-3 hang. Root cause, from the first stacks this hang has ever
+          # produced: a worker (gw2) died without reporting — it appears zero
+          # times in the log and produced no dump — and the controller sat in
+          # `xdist/dsession.py:154 loop_once` waiting for results that could
+          # never arrive. The likely death is the SIGBUS race that
+          # `_release_persist_engine` already documents for this same shard.
+          # `--max-worker-restart=4` did not catch it, so the controller waited
+          # forever. `--session-timeout` bounds the loop itself.
+          #
+          # It exits 1, verified — a truncated session FAILS rather than
+          # silently reporting green, which would be worse than the hang.
+          # Healthy shards finish in ~15-16 min, so 22 min leaves real headroom.
           timeout --signal=SIGTERM --kill-after=30 1500 \
             pytest tests/ -n 4 --dist=loadgroup \
             --splits 8 --group ${{ matrix.shard }} \
             --splitting-algorithm=least_duration \
             --store-durations --durations-path=test_durations_shard_${{ matrix.shard }} \
             --reruns=2 --reruns-delay=1 --max-worker-restart=4 \
+            --session-timeout=1320 \
             --cov=./ --cov-report=xml:coverage-shard-${{ matrix.shard }}.xml
 
       - name: Upload coverage artifact
@@ -186,6 +205,24 @@ jobs:
         with:
           name: durations-shard-${{ matrix.shard }}
           path: test_durations_shard_${{ matrix.shard }}
+          retention-days: 7
+
+      # Exit-hang stacks (#956). Written by tests/conftest.py to a FILE rather
+      # than stderr on purpose: pytest installs fd-level capture before conftest
+      # is imported, so a hung or killed process never flushes anything written
+      # to stderr — which is why the 2026-08-02 shard-3 hang produced no
+      # diagnostics at all despite a watchdog being armed for exactly it.
+      #
+      # if: always() because the interesting case is precisely the failed or
+      # cancelled run. Absent on a healthy shard, so an empty upload here is the
+      # expected outcome and `if-no-files-found: ignore` keeps it quiet.
+      - name: Upload exit-hang stacks
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: hang-stacks-shard-${{ matrix.shard }}
+          path: hang-stacks-*.txt
+          if-no-files-found: ignore
           retention-days: 7
 
   # Postgres backend verification — Phase 1 of 2.9.0 waterfall.

@@ -10,6 +10,7 @@ import os
 import signal
 import sys
 import tempfile
+import threading
 import time
 
 # #956 DIAGNOSTIC — make a hang self-report instead of dying silently.
@@ -51,11 +52,81 @@ if hasattr(faulthandler, "register") and hasattr(signal, "SIGTERM"):
 # This is how we find the residual leak the attestation daemonization did NOT
 # fix (a non-thread mechanism — leaked child process holding the execnet fd, or
 # a C-extension thread) — it will name the exact blocked frame next hang.
+#
+# MEASURED 2026-08-02: `faulthandler.dump_traceback_later()` DOES NOT SURVIVE A
+# PYTEST RUN. Set the interval to 3s and run a 9s suite and you get zero dumps —
+# pytest's own faulthandler plugin calls `faulthandler.enable(file=<dup'd fd>)`
+# at configure time and the pending timer is lost. So this watchdog never fired,
+# which is why the 2026-08-02 shard-3 hang produced no stacks at all despite
+# being armed for exactly that.
+#
+# Replaced with a plain daemon timer thread calling `dump_traceback()` directly.
+# It is ours, nothing else touches it, and it is a daemon so it cannot itself
+# hold the process open.
+# A dup of the REAL stderr, taken at import before pytest installs capture.
+# `sys.stderr` is a capture buffer for most of a run, so anything a watchdog
+# writes there lands in a buffer that a hung or killed process never flushes —
+# which is the second reason the previous watchdog produced nothing. pytest's
+# own faulthandler plugin dups the fd for exactly this reason.
+try:
+    _REAL_STDERR_FD = os.dup(2)
+except OSError:  # pragma: no cover
+    _REAL_STDERR_FD = 2
+
+
+def _emit_stacks(header: str, tag: str = "hang") -> None:
+    """Write a header + every thread's stack to a FILE, and try stderr too.
+
+    THE FILE IS THE RELIABLE CHANNEL, and that is not a preference — pytest
+    installs fd-level capture (``--capture=fd`` is the default) BEFORE conftest
+    is imported, so even a dup of fd 2 taken here is a dup of pytest's capture
+    pipe rather than the terminal. Anything written there lands in a buffer that
+    a hung or SIGKILLed process never flushes. Measured: a 3s watchdog on a 9s
+    suite produced no visible output through any stderr route.
+
+    So write a file first and unconditionally. CI uploads it as an artifact,
+    which also survives the step log being truncated at the tail — exactly what
+    happened to the 2026-08-02 shard-3 hang, where nothing at all was captured.
+    The stderr attempt is kept as a bonus for `-s` / local runs.
+    """
+    path = os.environ.get("CIRIS_TEST_HANG_DUMP_DIR", ".")
+    role = os.environ.get("PYTEST_XDIST_WORKER", "controller")
+    try:
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, f"{tag}-stacks-{role}.txt"), "a", encoding="utf-8") as fh:
+            fh.write(header)
+            fh.write(f"# live_threads={threading.active_count()}\n")
+            for t in threading.enumerate():
+                fh.write(f"#   {t.name} daemon={t.daemon} type={type(t).__name__}\n")
+            fh.flush()
+            faulthandler.dump_traceback(file=fh, all_threads=True)
+            fh.flush()
+            os.fsync(fh.fileno())
+    except Exception:  # noqa: BLE001 — diagnostics must never break the run
+        pass
+    try:
+        os.write(_REAL_STDERR_FD, header.encode("utf-8", "replace"))
+        with os.fdopen(os.dup(_REAL_STDERR_FD), "w", closefd=True) as fh:
+            faulthandler.dump_traceback(file=fh, all_threads=True)
+            fh.flush()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 _HANG_WATCHDOG_SECONDS = int(os.environ.get("CIRIS_TEST_HANG_WATCHDOG_SECONDS", "1440"))
 if _HANG_WATCHDOG_SECONDS > 0:
+
+    def _hang_watchdog() -> None:
+        while True:
+            time.sleep(_HANG_WATCHDOG_SECONDS)
+            _emit_stacks(
+                f"\n[conftest #956] WATCHDOG: still running after "
+                f"{_HANG_WATCHDOG_SECONDS}s — every thread's stack follows.\n"
+            )
+
     try:
-        faulthandler.dump_traceback_later(_HANG_WATCHDOG_SECONDS, repeat=True)
-    except (ValueError, RuntimeError):
+        threading.Thread(target=_hang_watchdog, name="ciris-hang-watchdog", daemon=True).start()
+    except Exception:  # noqa: BLE001
         pass
 
 # BELT for the residual #956 leak: the CIRISVerify ThreadPoolExecutor.
@@ -691,6 +762,53 @@ def api_required():
         pytest.skip("Cannot check API availability")
 
 
+_EXIT_DEADLINE_SECONDS = int(os.environ.get("CIRIS_TEST_EXIT_DEADLINE_SECONDS", "90"))
+
+
+def _arm_exit_deadline(exitstatus: int) -> None:
+    """Force the process out if finalization is still running N seconds from now.
+
+    Armed at sessionfinish, after the terminal summary and after xdist has
+    shipped this worker's results, so nothing the run produced is discarded.
+
+    Daemon thread on purpose: it must never be the reason a process stays up.
+    A healthy run exits during normal finalization and this never fires, so
+    coverage writing and other atexit work are untouched.
+
+    Writes stacks to a FILE as well as stderr. When CI kills the job, the tail
+    of the step log is the first thing lost, and stderr from an xdist worker may
+    never be relayed at all — a file survives as an uploadable artifact and is
+    the only reliable way to see what the next hang was parked on.
+    """
+    if _EXIT_DEADLINE_SECONDS <= 0:
+        return
+
+    def _bail() -> None:
+        time.sleep(_EXIT_DEADLINE_SECONDS)
+        role = _role()
+        path = os.environ.get("CIRIS_TEST_HANG_DUMP_DIR", ".")
+        try:
+            os.makedirs(path, exist_ok=True)
+            with open(os.path.join(path, f"hang-stacks-{role}.txt"), "w", encoding="utf-8") as fh:
+                fh.write(f"# finalization still running {_EXIT_DEADLINE_SECONDS}s after sessionfinish\n")
+                fh.write(f"# role={role} exitstatus={exitstatus} live_threads={threading.active_count()}\n")
+                for t in threading.enumerate():
+                    fh.write(f"#   {t.name} daemon={t.daemon} type={type(t).__name__}\n")
+                fh.flush()
+                faulthandler.dump_traceback(file=fh, all_threads=True)
+        except Exception:  # noqa: BLE001 — diagnostics must never mask the exit
+            pass
+        _emit_stacks(
+            f"\n[conftest #956] {role}: interpreter still finalizing "
+            f"{_EXIT_DEADLINE_SECONDS}s after sessionfinish — forcing exit({exitstatus}).\n"
+            f"[conftest #956] {threading.active_count()} live threads; "
+            f"stacks also in hang-stacks-{role}.txt\n"
+        )
+        os._exit(exitstatus)
+
+    threading.Thread(target=_bail, name="ciris-exit-deadline", daemon=True).start()
+
+
 def _role() -> str:
     """Which process this is, for the #956 guard's diagnostics.
 
@@ -746,13 +864,38 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: D401
     # results back to the controller — has already run. Forcing the exit after
     # that discards no test outcome.
 
+    # DEADLINE FIRST — armed unconditionally, before the non-daemon check below.
+    #
+    # That check is necessary but NOT sufficient, and shard 3 proved it on
+    # 2026-08-02: the run reached 99% PASSED, then hung 13 minutes until CI
+    # killed it. Measured at the hang, the workers held 98-131 live threads and
+    # EVERY leaked one was a `threading._DummyThread` — the placeholder Python
+    # fabricates when a thread it did not create calls in, i.e. an alien OS
+    # thread from a native extension. `_DummyThread.daemon` is True by
+    # definition, so `not t.daemon` filtered out precisely the threads that
+    # were present, `lingering` came back empty, and this hook returned and let
+    # the interpreter hang.
+    #
+    # Daemon does not mean harmless here. Python can kill a *Python* daemon
+    # thread when it next takes the GIL; it cannot do anything about an alien
+    # thread parked in native code, which can wedge finalization regardless of
+    # what the placeholder object claims.
+    #
+    # So: arm a deadline instead of trying to classify threads. It is a daemon
+    # thread, so it never blocks exit itself. A healthy run finishes
+    # finalization in well under a second and the process is gone long before
+    # it fires — which keeps pytest-cov's XML write and every other atexit hook
+    # on the normal path. Only a genuinely wedged finalization reaches it, and
+    # that one gets stacks plus the real exit status instead of a silent kill.
+    _arm_exit_deadline(exitstatus)
+
     lingering = [
         t
         for t in threading.enumerate()
         if t is not threading.current_thread() and t.is_alive() and not t.daemon
     ]
     if not lingering:
-        return  # clean exit; let Python do it normally
+        return  # nothing obviously leaked; the deadline above covers the rest
 
     sys.stderr.write(
         f"\n[conftest #956] {_role()}: {len(lingering)} non-daemon thread(s) still alive after "

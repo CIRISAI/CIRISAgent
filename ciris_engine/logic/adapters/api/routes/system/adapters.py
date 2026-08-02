@@ -971,9 +971,14 @@ async def unload_adapter(
         # ERROR turned routine teardown into incidents and failed a Staged QA run
         # that had a 100% pass rate. Genuine unload failures still log ERROR.
         if not result.success:
-            details = result.details or {}
-            if details.get("reason") == "not_loaded":
-                logger.info("Adapter unload skipped: %s", result.error)
+            # Key on `status`, not on a `details` dict: this route receives an
+            # AdapterOperationResponse, which HAS NO `details` field — reading it
+            # here raised AttributeError on every unload and broke the path
+            # outright. `status` is the typed signal that actually crosses the
+            # schema boundary; STOPPED means the adapter is absent, which is what
+            # unload wanted.
+            if result.status == AdapterStatus.STOPPED:
+                logger.info("Adapter unload skipped, already absent: %s", result.error)
             else:
                 logger.error(f"Adapter unload failed: {result.error}")
         else:

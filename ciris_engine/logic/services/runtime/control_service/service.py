@@ -866,12 +866,20 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         assert self.adapter_manager is not None  # Guaranteed by _ensure_adapter_manager
         result = await self.adapter_manager.unload_adapter(adapter_id)
 
+        # An adapter that was never loaded is STOPPED, not ERROR. That is the
+        # honest status — "absent" is the state unload converges to — and it is
+        # the only part of the manager's richer result that survives into
+        # AdapterOperationResponse, which has no `details` field. Callers key on
+        # `status` to tell a real unload failure from a benign no-op; the marker
+        # has to be translated HERE because this is where the two schemas meet.
+        already_absent = (result.details or {}).get("reason") == "not_loaded"
+
         return AdapterOperationResponse(
             success=result.success,
             adapter_id=result.adapter_id,
             adapter_type=result.adapter_type or "unknown",
             timestamp=self._now(),
-            status=AdapterStatus.STOPPED if result.success else AdapterStatus.ERROR,
+            status=AdapterStatus.STOPPED if (result.success or already_absent) else AdapterStatus.ERROR,
             error=result.error,
         )
 

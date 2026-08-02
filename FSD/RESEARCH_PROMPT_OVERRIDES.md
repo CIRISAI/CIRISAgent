@@ -1061,22 +1061,46 @@ dv:                              # [M-2] — the DV must exist in the arms it is
 repeats:                         # [M-7] — the arc shares one channel_id; the
   unit: conversation             # conversation is the independent unit, so
   conversations_per_cell: 20     # n = conversations, NOT questions (9×3 ≠ 27)
-  seeds: [20260802, 20260803, ...]
+  # VARIANCE SOURCE MUST BE DECLARED AND REAL [M-N1]. temperature 0.0 with seed
+  # unplumbed = 20 identical inputs measuring provider batching noise; `seeds:`
+  # would be inert. Until §14 step 6 plumbs seed, the only honest repeat policy
+  # is temperature > 0 with the value pinned; after plumbing, temperature 0
+  # with enumerated seeds. A manifest whose repeat structure has no live
+  # variance source is refused.
+  variance_source: temperature   # or "seeds" once plumbed — never "none" with n>1
+  seeds: [20260802, 20260803, ...]   # inert until seed is transmitted; see holds
   comparison_policy: holm-bonferroni
+  mde: {pipeline_effect: 0.15, values_effect: 0.15}  # required for MAIN
+  # contrasts, not only kills — a contrast without a declared MDE cannot carry
+  # a null result.
 
 holds:
   model: Qwen/Qwen3.6-35B-A3B
   decoding: {temperature: 0.0, top_p: 1.0, max_tokens: 4096,
              extra_body: {chat_template_kwargs: {enable_thinking: false}}}
-  # ENFORCED-OR-REFUSED [M-6]: every decoding key is cross-checked against what
-  # the runtime actually transmits. Pinning a parameter the call path does not
-  # send ("pinned but not plumbed") is a refusal, not a comment. As of 2.9.7,
-  # `seed` is NOT transmitted on the OpenAI-compatible path
-  # (llm_service/service.py:1376) — plumbing it is §14 work; a v2 manifest
-  # pinning seed before that lands is refused with exactly this sentence.
+  base_url: https://api.deepinfra.com/v1/openai   # [M-N3] extra_body is a
+  # FUNCTION of base_url (service.py:1549-1570) — the DeepInfra branch also
+  # transmits reasoning.enabled — so an unpinned endpoint changes the
+  # transmitted parameter set under an identical manifest.
+  # ENFORCED-OR-REFUSED [M-6], with SET-EQUALITY semantics [M-N3]: the check is
+  # pinned == transmitted, both directions. A pinned key the call path does not
+  # send ("pinned but not plumbed") refuses; a TRANSMITTED key the manifest
+  # does not pin ("sent but undeclared") also refuses — v2's own first example
+  # pinned a strict subset of what the DeepInfra branch sends, and a subset
+  # semantics would have passed it. As of 2.9.7, `seed` is NOT transmitted on
+  # the OpenAI-compatible path (service.py:1376) — plumbing is §14 step 6; a
+  # manifest pinning seed before that lands is refused with exactly this
+  # sentence.
   corpus: v1_sensitive.json
-  locales: [am, ar, fa]          # every declared locale must carry the kill
-                                 # instruments for every varied class (§10.2)
+  locales: [en, am, ar, fa]      # every declared locale must carry the kill
+                                 # instruments for every varied class (§10.2).
+                                 # `en` is MANDATORY as the fidelity control
+                                 # [M-N2]: in low-resource locales, a values
+                                 # effect cannot be separated from alt-corpus
+                                 # translation quality (§6.4, and this repo has
+                                 # shipped word-salad through structural
+                                 # validation before). en is where corpus
+                                 # fidelity is natively checkable.
   adapter_set: [api]
 
 pins:
@@ -1232,8 +1256,12 @@ English doctrine — a differential confound no static diff can see. Therefore:
   English dict — identical across arms, which makes it *residue*, not noise. It
   is added to `RESIDUE_SITES` (it is absent today), and until the per-attempt
   capture lands the gate asserts injection is **bounded and arm-invariant**
-  rather than absent, and the campaign reports retry counts per arm × locale
-  from the existing LLM_CALL `retry_count` field.
+  rather than absent, and the campaign reports remediation counts per arm ×
+  locale from the SERVICE-level counter — `RetryState.count`
+  (`service.py:125-139`), exposed per-call — NOT the bus-level LLM_CALL
+  `retry_count`, which is "0 = first attempt at the bus level"
+  (`runtime_control.py:1558`) and reports 0 for exactly the remediated calls
+  this covariate exists to count [M-V5].
 - A post-run verifier diffs on-wire against composed, attributes every
   divergence (remediation / reask / retry / contingent), and reports **injected
   bytes and injection count per arm × locale** as a covariate in the results,
@@ -1307,6 +1335,11 @@ not debugging.
 9. Regime manifest v2 schema + refusals.
 10. Phase-2 on-wire verifier (per-attempt capture row at `service.py:1990`
     and/or instructor hooks); signed outputs incl. `regime:onwire:v1`.
-11. **Direct-provider harness** — required for every cross-harness contrast and
-    for text-tier DV parity; built against the same battery scorer. Not
-    optional, not last-if-time.
+11. **Direct-provider harness** — pulled FORWARD in practice [M-N4]: gate
+    assertion 3's direct-provider half (step 4) may not ship unexercised
+    against 2 of 5 arms, so a minimal compose-side stub of this harness lands
+    WITH step 4, and the full runner before any campaign. The runner must
+    reproduce the 9-turn arc **with conversational continuity** (the battery
+    threads one channel_id through the arc — `safety_battery.py:90-93`); a
+    stateless per-question runner changes the arc's meaning and is not the
+    same instrument [M-V2]. Built against the same battery scorer.

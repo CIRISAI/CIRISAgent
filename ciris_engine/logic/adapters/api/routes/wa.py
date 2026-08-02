@@ -190,6 +190,44 @@ async def resolve_deferral(
         # Fails closed: if the resolution cannot be signed we refuse the
         # resolution rather than record an unverifiable one. An approval nobody
         # can verify is the exact artifact this issue is about.
+        #
+        # TODO(CIRISServer#342): sign with the RESOLVING USER'S CEG fedID, not
+        # the node's delegate key.
+        #
+        # Today the node's persist key signs and the record names the owner
+        # (`owner_key_id`, re-resolved from the federation directory at verify
+        # time, never trusted from the record). That is a real delegation chain
+        # — the node key is the one the owner's fedID delegates to in order to
+        # let the agent operate at all — but it is one hop short of what this
+        # artifact should carry. For a control whose entire purpose is "a human
+        # authorized this consequential action", the difference between *signed
+        # by the delegate, naming the human* and *signed by the human* is
+        # exactly what an external auditor will ask about.
+        #
+        # Blocked on CIRISServer#342: the owner's private key is not reachable
+        # from Python by design (it sits behind `resolve_user_signer`, released
+        # only under a verified owner session, with no PyO3 export). The ask is
+        # an owner-scoped signing capsule, NOT a key export — the session gate
+        # is correct and must survive.
+        #
+        # PRECONDITION BEFORE FLIPPING THIS — do not skip it. Every path that
+        # can mint a resolving user must first guarantee that user HAS a fedID,
+        # or this becomes fail-closed for real people:
+        #   - OAuth-minted AUTHORITY users (the common case in production)
+        #   - password/local users created by the setup wizard
+        #   - service tokens acting on a human's behalf
+        #   - MULTI-USER deployments, where several distinct humans resolve
+        #     deferrals against one node — each needs their own fedID, and the
+        #     node cannot mint one on their behalf without defeating the point
+        #   - multi-occurrence, where the resolving occurrence may not be the
+        #     one holding that user's key (see `register_self_federation_key`,
+        #     which has no caller today, so cross-occurrence verify already
+        #     fails closed)
+        # This ordering is not pedantry: `sign_as_wa` was removed from this very
+        # path because it raised for every user not in CIRISVerify or the System
+        # WA file, which would have made approval impossible for exactly the
+        # OAuth users who need it. Requiring a fedID before one is guaranteed to
+        # exist would reintroduce that failure with a different key.
         signed_at = datetime.now(timezone.utc).isoformat()
         deferral_response = DeferralResponse(
             approved=(resolve_request.resolution == "approve"),

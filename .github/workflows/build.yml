@@ -149,8 +149,23 @@ jobs:
           # --reruns=2: Rerun failed/crashed tests up to 2 times
           # -n 4: 4 parallel workers within each shard
           # --dist=loadgroup: Respect xdist_group markers (keep grouped tests on same worker)
-          # timeout 1800: Force-kill after 30 minutes (tests ~10min + buffer for slow CI)
-          timeout --signal=SIGTERM --kill-after=30 1800 \
+          # timeout 1500 (25 min) MUST stay meaningfully below the job's
+          # timeout-minutes: 30. It was 1800 — exactly equal — and since the job
+          # clock starts at checkout while this one starts here (~2 min later),
+          # the job timeout ALWAYS won. The SIGTERM never arrived, so the #956
+          # sessionfinish guard and SIGTERM faulthandler could never dump the
+          # stacks they exist to dump: a self-reporting diagnostic that was
+          # structurally unable to report.
+          #
+          # Observed 2026-08-02 on shard 3 (run 30730155206): every test passed
+          # at 99% and 03:27:44, then 13 minutes of silence, then GitHub killed
+          # the job at 03:40 with orphan pytest/python processes still alive.
+          # No stack dump, because the internal timeout would not have fired
+          # until 03:42.
+          #
+          # The 5-minute gap is the budget for the handler to run and for
+          # artifacts to upload. Raise BOTH numbers together, never just one.
+          timeout --signal=SIGTERM --kill-after=30 1500 \
             pytest tests/ -n 4 --dist=loadgroup \
             --splits 8 --group ${{ matrix.shard }} \
             --splitting-algorithm=least_duration \
@@ -239,7 +254,11 @@ jobs:
           # Phase 1 scope: persist-substrate roundtrip tests + the
           # tests that drive ciris-persist directly. Excludes legacy
           # raw-SQL tests pending Phase 2-4 migration.
-          timeout --signal=SIGTERM --kill-after=30 1200 \
+          # 900s (15 min) against this job's timeout-minutes: 20 — same
+          # inversion as the shard job above, where 1200 exactly equalled the
+          # job budget and the job always won first. Keep a real gap so a hang
+          # here self-reports instead of being killed silently.
+          timeout --signal=SIGTERM --kill-after=30 900 \
             pytest \
               tests/ciris_engine/logic/persistence/ \
               tests/test_persistence/ \

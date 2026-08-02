@@ -264,13 +264,47 @@ class TestHybridDowngrade:
 
 
 class TestCanonicalPayload:
-    def test_signer_and_verifier_share_one_definition(self) -> None:
-        """sign_task and verify_task_signature each build their dict inline and
-        can drift apart silently. This must not."""
-        resp = _response()
-        assert deferral_resolution_payload(DEFERRAL_ID, resp, SIGNED_AT) == deferral_resolution_payload(
-            DEFERRAL_ID, resp, SIGNED_AT
-        )
+    @pytest.mark.asyncio
+    async def test_signer_and_verifier_share_one_definition(
+        self, auth: AuthenticationService, engine: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Neither path may build its canonical bytes inline.
+
+        This assertion used to read
+        ``payload(id, resp, at) == payload(id, resp, at)`` — the same call
+        twice. That is a tautology over a deterministic function: it holds no
+        matter how the signer and verifier are written, so it could not fail
+        and proved nothing. (SonarCloud python:S5863 flagged it, correctly.)
+
+        The property that actually matters is the one the docstring always
+        claimed: ``sign_task``/``verify_task_signature`` each build their dict
+        inline and drifted apart silently, and this pair must not.
+
+        So perturb the single shared definition. If BOTH paths route through
+        it, they move together and a sign -> verify round-trip still succeeds.
+        If either path built its own bytes, they diverge and verification
+        fails. The second assertion proves the perturbation was load-bearing
+        rather than a no-op — without it, a patch that silently failed to
+        apply would still let the first assertion pass.
+        """
+        original = AuthenticationService._deferral_canonical_bytes
+
+        def perturbed(deferral_id: str, response: DeferralResponse, signed_at: str) -> bytes:
+            return b"PERTURBED::" + original(deferral_id, response, signed_at)
+
+        with monkeypatch.context() as mp:
+            mp.setattr(AuthenticationService, "_deferral_canonical_bytes", staticmethod(perturbed))
+            signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+            assert (
+                await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is True
+            ), "signer and verifier disagreed under a shared perturbation — one of them builds its own bytes"
+
+        # Outside the context the real definition is restored. The perturbation
+        # must have reached the bytes that were signed: a signature produced
+        # under it cannot verify against the real definition.
+        assert (
+            await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
+        ), "the perturbation was a no-op, so the assertion above was vacuous"
 
     def test_payload_commits_to_every_decision_bearing_field(self) -> None:
         payload = deferral_resolution_payload(DEFERRAL_ID, _response(), SIGNED_AT)

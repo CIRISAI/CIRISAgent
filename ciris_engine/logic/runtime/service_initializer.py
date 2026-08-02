@@ -477,12 +477,20 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.error("Memory service not initialized")
             return False
 
+        # Checked here rather than asserted inside the try below: the except
+        # catches Exception, which includes AssertionError, so a missing
+        # time_service was reported as "Memory service verification error" —
+        # naming the wrong service. Asserts are also stripped under `python -O`,
+        # so the guard would vanish entirely in an optimized run.
+        if not self.time_service:
+            logger.error("Time service not initialized")
+            return False
+
         # Test basic operations
         try:
             from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
             # Use a different node type for test - don't pollute CONFIG namespace
-            assert self.time_service is not None
             now = self.time_service.now()
             test_node = GraphNode(
                 id="_verification_test",

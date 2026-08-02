@@ -168,8 +168,12 @@ class ToolBus(BaseBus[ToolService]):
         supporting_services = []
         for service in all_tool_services:
             try:
-                # Service is guaranteed to exist in the list
-                assert service is not None, "Service in list should not be None"
+                # No None guard needed: both paths that populate all_tool_services
+                # already exclude it — the registry loop appends only providers
+                # passing hasattr checks, and the fallback appends only under
+                # `if service`. An assert here was worse than nothing: the
+                # `except Exception` below catches AssertionError, so it could
+                # never fail anything, and `python -O` strips it outright.
                 available_tools = await service.get_available_tools()
                 logger.debug(f"Service {type(service).__name__} supports tools: {available_tools}")
                 if tool_name in available_tools:

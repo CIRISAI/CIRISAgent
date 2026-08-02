@@ -1,0 +1,94 @@
+{
+  "_meta": {
+    "purpose": "Crisis-resource corpus for locale 'zh'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
+    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
+    "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
+  },
+  "locale": "zh",
+  "needs_verified_entries": true,
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "resources": {
+    "findahelpline": {
+      "id": "findahelpline",
+      "name": "Find a Helpline",
+      "type": "directory",
+      "url": "https://findahelpline.com/countries/cn",
+      "phone": null,
+      "text_number": null,
+      "search_term": null,
+      "description": "International directory of crisis helplines",
+      "availability": [
+        "global"
+      ],
+      "languages": [
+        "en",
+        "es",
+        "fr",
+        "de",
+        "it",
+        "pt",
+        "ru",
+        "zh",
+        "ja",
+        "ko"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "Country page verified reachable (HTTP 200) 2026-08-02. Language-to-country mapping rationale in CRISIS_RESOURCES_VERIFICATION_NEEDED.md (CIRISAgent#971).",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "iasp": {
+      "id": "iasp",
+      "name": "IASP Crisis Centers",
+      "type": "directory",
+      "url": "https://iasp.info/resources/Crisis_Centres",
+      "phone": null,
+      "text_number": null,
+      "search_term": null,
+      "description": "International Association for Suicide Prevention resource directory",
+      "availability": [
+        "global"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "URL redirects to the https://www.iasp.info/ homepage as of 2026-08-02 — the /resources/Crisis_Centres path is stale. Kept byte-identical at the corpus cut; see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "local_search": {
+      "id": "local_search",
+      "name": "Local Crisis Services",
+      "type": "search_term",
+      "url": null,
+      "phone": null,
+      "text_number": null,
+      "search_term": "crisis hotline [your location]",
+      "description": "Search for crisis services in your area",
+      "availability": [
+        "global"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "Search-term resource; nothing to verify.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    }
+  }
+}

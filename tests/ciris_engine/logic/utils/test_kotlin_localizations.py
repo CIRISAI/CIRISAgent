@@ -27,6 +27,20 @@ IGNORED_KEY_PATTERNS = [
 ]
 
 
+def _is_ui_locale_bundle(name: str) -> bool:
+    """True only for ``{lang}.json`` UI bundles (2-letter code per the manifest).
+
+    ``data/localized/`` also holds prompt-corpus JSON that is deliberately NOT
+    mirrored to clients — ``crisis_resources_{lang}.json`` (#971) has exactly
+    one source of truth because it carries crisis phone numbers, and the
+    glob-everything discovery here failed the suite the moment those landed.
+    Match the shape, not a denylist, so the next corpus family (#974's
+    language_guidance split is already planned) does not repeat this.
+    """
+    stem = name.removesuffix(".json")
+    return len(stem) == 2 and stem.isalpha() and stem.islower()
+
+
 def get_project_root() -> Path:
     """Get the project root directory."""
     # tests/ciris_engine/logic/utils/test_kotlin_localizations.py -> 5 levels up
@@ -145,7 +159,14 @@ class TestKotlinLocalizations:
             project_root / "client" / "shared" / "src" / "desktopMain" / "resources" / "localization",
         ]
 
-        source_files = {f.name for f in source_dir.glob("*.json") if f.name != "manifest.json"}
+        # UI locale bundles only — {lang}.json per the manifest. Glob-everything
+        # broke when #971 added crisis_resources_{lang}.json corpus files to the
+        # same directory: those are prompt DATA with one source of truth by
+        # design (mirroring phone numbers into 6 client bundles is exactly what
+        # that change exists to prevent), so they must not be sync-checked here.
+        # They have their own stronger gate (tests/test_crisis_resources_corpus.py,
+        # full Pydantic validation per file).
+        source_files = {f.name for f in source_dir.glob("*.json") if _is_ui_locale_bundle(f.name)}
         errors = []
 
         for copy_dir in copy_dirs:
@@ -208,8 +229,9 @@ class TestKotlinLocalizations:
             pytest.skip("localization directory not found")
 
         for json_file in localization_dir.glob("*.json"):
-            # Skip non-language files
-            if json_file.name in ("manifest.json", "schema.json"):
+            # UI locale bundles only — see _is_ui_locale_bundle for why the
+            # crisis_resources_* corpus files are excluded here.
+            if not _is_ui_locale_bundle(json_file.name):
                 continue
             with open(json_file) as f:
                 data = json.load(f)

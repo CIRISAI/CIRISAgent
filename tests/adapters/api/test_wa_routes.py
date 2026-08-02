@@ -55,8 +55,24 @@ def wa_client():
     # it cannot, so a signing authority is part of the working configuration
     # rather than optional scaffolding. Before #944 these tests passed with the
     # signature field holding an f-string, which is what the issue was about.
+    # The signer returns the response with its signing fields filled — the
+    # signature, the signed_at it commits to, the key that signed, and the
+    # owner's CEG federation identity that key chains to. Storing all of that
+    # is what makes verification possible later (#944).
     mock_auth = AsyncMock()
-    mock_auth.sign_deferral_resolution = AsyncMock(return_value="c2lnbmF0dXJlLWJ5dGVz")
+
+    async def _sign(deferral_id, response, signed_at):
+        return response.model_copy(
+            update={
+                "signature": "c2lnbmF0dXJlLWJ5dGVz",
+                "signature_pqc": "cHFjLXNpZ25hdHVyZQ==",
+                "signed_at": signed_at,
+                "signing_key_id": "agent-testkey01",
+                "owner_key_id": "owner-testkey01",
+            }
+        )
+
+    mock_auth.sign_deferral_resolution = AsyncMock(side_effect=_sign)
     app.state.authentication_service = mock_auth
 
     client = TestClient(app)
@@ -223,6 +239,12 @@ class TestResolveDeferralEndpoint:
         assert recorded.signature == "c2lnbmF0dXJlLWJ5dGVz"
         # The pre-#944 forms must not survive anywhere on this path.
         assert not recorded.signature.startswith("api_")
+        # And the signed resolution reaches the WA service intact — dropping any
+        # of this is what made after-the-fact verification impossible.
+        assert recorded.signed_at
+        assert recorded.signature_pqc == "cHFjLXNpZ25hdHVyZQ=="
+        assert recorded.signing_key_id == "agent-testkey01"
+        assert recorded.owner_key_id == "owner-testkey01"
 
     def test_refuses_to_record_an_unsigned_resolution(self):
         """Fails closed when nothing can sign.

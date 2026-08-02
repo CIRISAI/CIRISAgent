@@ -28,10 +28,13 @@ from ciris_engine.schemas.services.authority_core import (
     DeferralApprovalContext,
     DeferralRequest,
     DeferralResponse,
+    DeferralVerification,
     GuidanceRequest,
     GuidanceResponse,
     WAPermission,
     WARole,
+    deferral_resolution_record,
+    is_unverifiable_legacy_signature,
 )
 from ciris_engine.schemas.services.context import GuidanceContext
 from ciris_engine.schemas.services.core import ServiceStatus
@@ -527,20 +530,73 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
         return result
 
+    async def _verify_resolution(self, deferral_id: str, response: DeferralResponse) -> DeferralVerification:
+        """Classify a resolution's signature before anything acts on it (#944).
+
+        Three outcomes, because two would force a lie about one of them:
+
+        - ``VERIFIED``  — signature checks out against the signing key, and the
+          owner binding agrees with the federation directory.
+        - ``UNSIGNED``  — no signature, or one of the pre-#944 placeholder forms
+          (``""`` / ``api_{user}_{ts}``). Deployed rows look like this. They are
+          recorded as unverified and allowed through, because refusing them
+          would break resolution of every deferral written before signing
+          existed. They are never recorded as verified.
+        - ``FAILED``    — a signature is present and does not check out, or
+          cannot be checked. The caller refuses.
+
+        The gap this leaves is worth stating plainly: an attacker who can write
+        the row can also clear the signature and land in ``UNSIGNED``. Closing
+        that means refusing unsigned resolutions outright, which is a data
+        migration, not a code change. What is closed here is the weaker but
+        real hole — a *forged* or *altered* signed resolution now cannot be
+        acted on, and the record says which of the three it was.
+        """
+        if not response.signature or is_unverifiable_legacy_signature(response.signature):
+            logger.warning(
+                "Deferral %s carries no verifiable signature — recording as unverified (pre-#944 record)",
+                deferral_id,
+            )
+            return DeferralVerification.UNSIGNED
+
+        if not response.signed_at:
+            # The canonical payload commits to signed_at; without it there is
+            # nothing to rebuild the signature against.
+            logger.error("Deferral %s has a signature but no signed_at — cannot verify", deferral_id)
+            return DeferralVerification.FAILED
+
+        try:
+            ok = await self.auth_service.verify_deferral_resolution(deferral_id, response, response.signed_at)
+        except Exception:
+            logger.exception("Verification of deferral %s raised — refusing", deferral_id)
+            return DeferralVerification.FAILED
+
+        return DeferralVerification.VERIFIED if ok else DeferralVerification.FAILED
+
     async def resolve_deferral(self, deferral_id: str, response: DeferralResponse) -> bool:
         """Resolve a deferral by creating a new guidance task.
 
         When a deferral is resolved:
-        1. Original deferred task is marked COMPLETED with outcome
-        2. New guidance TASK is created (not just a thought) to ensure proper billing
-        3. New task copies context from original and includes WA guidance
-        4. New task is PENDING and ready for normal processing
+        1. Signature is verified — a signed-but-invalid resolution is refused
+        2. Original deferred task is marked COMPLETED with outcome
+        3. New guidance TASK is created (not just a thought) to ensure proper billing
+        4. New task copies context from original and includes WA guidance
+        5. New task is PENDING and ready for normal processing
 
         This ensures:
         - New billing cycle starts (new task = new credit charge)
         - Original task/thought history preserved
         - Proper task resumption flow
         """
+        # Fail closed BEFORE any mutation (#944). A resolution that presents a
+        # signature which does not verify must not complete the task, must not
+        # create the guidance task, and must not spend the budget that #938
+        # attaches to it.
+        verification = await self._verify_resolution(deferral_id, response)
+        if verification is DeferralVerification.FAILED:
+            logger.error("Refusing deferral %s: signature present but did not verify", deferral_id)
+            return False
+
         try:
             from ciris_engine.logic.utils.task_thought_factory import create_task
 
@@ -631,15 +687,16 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 except json.JSONDecodeError:
                     pass
 
-            # Add resolution to deferral info in the original task
+            # Add resolution to deferral info in the original task. This now
+            # carries the signature and the `signed_at` it commits to (#944):
+            # without them stored, verifying an approval after the fact was not
+            # merely unwired but impossible, because the material to check
+            # against was discarded at write time.
             deferral_info = context.get("deferral")
             if isinstance(deferral_info, dict):
-                deferral_info["resolution"] = {
-                    "approved": response.approved,
-                    "reason": response.reason,
-                    "resolved_by": response.wa_id,
-                    "resolved_at": self._now().isoformat(),
-                }
+                deferral_info["resolution"] = deferral_resolution_record(
+                    response, self._now().isoformat(), verification
+                )
 
             # Mark original deferred task as COMPLETED with outcome
             # Use TaskOutcome schema: status, summary, actions_taken, memories_created, errors

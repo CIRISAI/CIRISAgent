@@ -6,25 +6,39 @@ carried no key material, proved possession of nothing, and was forgeable by
 anything able to write the row. Two sibling sites recorded the empty string
 under the comment "Would be signed by the WA".
 
+Worse, the signature and the ``signed_at`` it commits to were never written
+down at all: ``resolve_deferral`` stored four fields and dropped the rest, so
+after-the-fact verification was not merely unwired but impossible.
+
 That record is the human-authority decision governing the agent's most
 consequential actions, and under #938 it is the budget-issuance event. So these
 tests assert the properties an approval has to have to be evidence rather than
 a claim: it verifies, it cannot be lifted onto another deferral or another
-verdict, and anything unverifiable is refused rather than assumed good.
+verdict, the post-quantum half is real rather than decorative, the owner
+binding cannot be asserted at will, and anything unverifiable is refused rather
+than assumed good.
+
+These run against the **real** persist substrate — a real Engine with real
+Ed25519 and real ML-DSA-65 seeds — not a crypto double. A test that stubs the
+signature check cannot tell you the control works.
 """
 
 from __future__ import annotations
 
 import base64
 import json
-from typing import Any
+import os
+from pathlib import Path
+from typing import Any, Iterator
 
 import pytest
-from cryptography.hazmat.primitives.asymmetric import ed25519
 
+from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 from ciris_engine.schemas.services.authority_core import (
     DeferralResponse,
+    DeferralVerification,
     deferral_resolution_payload,
+    deferral_resolution_record,
     is_unverifiable_legacy_signature,
 )
 
@@ -39,54 +53,43 @@ def _response(**over: Any) -> DeferralResponse:
     return DeferralResponse(**base)  # type: ignore[arg-type]
 
 
-def _canonical(deferral_id: str, resp: DeferralResponse, signed_at: str) -> bytes:
-    payload = deferral_resolution_payload(deferral_id, resp, signed_at)
-    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+@pytest.fixture
+def engine(tmp_path: Path) -> Iterator[Any]:
+    """A real persist Engine with both signing seeds, wired as the process engine.
 
-
-class _StubAuth:
-    """Exercises the real sign/verify bodies against a real Ed25519 keypair.
-
-    Only get_wa and the key plumbing are stubbed; the canonicalization and the
-    signature check under test are the service's own.
+    Mirrors the agent's own bootstrap (`persistence/db/core.py`): 32 raw bytes
+    per seed is the whole of persist's LocalSigner interface.
     """
+    import ciris_engine.logic.persistence.models.graph as graph_mod
+    from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
+    from ciris_engine.logic.persistence.models.graph import set_persist_engine
 
-    def __init__(self) -> None:
-        self._priv = ed25519.Ed25519PrivateKey.generate()
-        pub = self._priv.public_key().public_bytes_raw()
-        self.pubkey = base64.urlsafe_b64encode(pub).decode().rstrip("=")
+    (tmp_path / "local_signing.seed").write_bytes(os.urandom(32))
+    (tmp_path / "local_pqc_signing.seed").write_bytes(os.urandom(32))
 
-    async def get_wa(self, wa_id: str) -> Any:
-        if wa_id != WA_ID:
-            return None
-        return type("WA", (), {"pubkey": self.pubkey})()
-
-    async def sign_as_wa(self, wa_id: str, data: bytes) -> str:
-        return base64.b64encode(self._priv.sign(data)).decode()
-
-    def _decode_public_key(self, pubkey: str) -> bytes:
-        return base64.urlsafe_b64decode(pubkey + "=" * (-len(pubkey) % 4))
-
-    def _verify_signature(self, data: bytes, signature: str, public_key: str) -> bool:
-        try:
-            vk = ed25519.Ed25519PublicKey.from_public_bytes(self._decode_public_key(public_key))
-            vk.verify(base64.b64decode(signature), data)
-            return True
-        except Exception:
-            return False
-
-    # The two methods under test, bound from the real class.
-    from ciris_engine.logic.services.infrastructure.authentication.service import (  # noqa: E402
-        AuthenticationService as _Real,
+    prior_engine, prior_dsn = graph_mod._engine, graph_mod._engine_dsn
+    reset_engine()  # persist pins a process singleton; un-pin any prior fixture's
+    dsn = f"sqlite:///{tmp_path}/t.db"
+    real = Engine(
+        dsn,
+        "test-key",
+        local_key_id="test-key",
+        local_key_path=str(tmp_path / "local_signing.seed"),
+        local_pqc_key_id="test-key",
+        local_pqc_key_path=str(tmp_path / "local_pqc_signing.seed"),
     )
-
-    sign_deferral_resolution = _Real.sign_deferral_resolution
-    verify_deferral_resolution = _Real.verify_deferral_resolution
+    set_persist_engine(real, dsn=dsn)
+    try:
+        yield real
+    finally:
+        graph_mod._engine, graph_mod._engine_dsn = prior_engine, prior_dsn
 
 
 @pytest.fixture
-def auth() -> _StubAuth:
-    return _StubAuth()
+def auth() -> AuthenticationService:
+    """The real service methods. The deferral path uses no service state — it
+    goes to the persist engine — so no start()/db is needed to exercise it."""
+    return object.__new__(AuthenticationService)
 
 
 class TestLegacyPlaceholders:
@@ -108,75 +111,156 @@ class TestLegacyPlaceholders:
 
 class TestSignAndVerify:
     @pytest.mark.asyncio
-    async def test_a_signed_resolution_verifies(self, auth: _StubAuth) -> None:
-        resp = _response()
-        resp.signature = await auth.sign_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT)
-        assert await auth.verify_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT) is True
+    async def test_a_signed_resolution_verifies(self, auth: AuthenticationService, engine: Any) -> None:
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is True
 
     @pytest.mark.asyncio
-    async def test_signature_is_not_a_rendering_of_the_inputs(self, auth: _StubAuth) -> None:
+    async def test_signing_records_everything_verification_needs(
+        self, auth: AuthenticationService, engine: Any
+    ) -> None:
+        """The #944 defect was that this material existed and was then dropped."""
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        assert signed.signed_at == SIGNED_AT
+        assert signed.signing_key_id == engine.local_derived_key_id()
+        assert signed.signature and signed.signature_pqc
+
+    @pytest.mark.asyncio
+    async def test_the_post_quantum_half_is_real(self, auth: AuthenticationService, engine: Any) -> None:
+        """ML-DSA-65 is 3309 bytes (FIPS 204 final). A placeholder would not be.
+
+        The maintainer's requirement is a post-quantum signing chain; this is
+        the assertion that would fail if the PQC half were decorative.
+        """
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        assert signed.signature_pqc is not None
+        assert len(base64.b64decode(signed.signature_pqc)) == 3309
+        assert len(base64.b64decode(signed.signature)) == 64  # Ed25519
+
+    @pytest.mark.asyncio
+    async def test_signature_is_not_a_rendering_of_the_inputs(self, auth: AuthenticationService, engine: Any) -> None:
         """The old value contained the user id and timestamp verbatim."""
-        resp = _response()
-        sig = await auth.sign_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT)
-        assert WA_ID not in sig
-        assert SIGNED_AT not in sig
-        assert not sig.startswith("api_")
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        assert WA_ID not in signed.signature
+        assert SIGNED_AT not in signed.signature
+        assert not signed.signature.startswith("api_")
 
     @pytest.mark.asyncio
-    async def test_flipping_the_verdict_invalidates(self, auth: _StubAuth) -> None:
+    async def test_flipping_the_verdict_invalidates(self, auth: AuthenticationService, engine: Any) -> None:
         """The signature commits to the decision, not merely to its existence."""
-        resp = _response(approved=True)
-        resp.signature = await auth.sign_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT)
-        resp.approved = False
-        assert await auth.verify_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT) is False
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(approved=True), SIGNED_AT)
+        signed.approved = False
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
 
     @pytest.mark.asyncio
-    async def test_editing_the_guidance_invalidates(self, auth: _StubAuth) -> None:
-        resp = _response(reason="approved for $5")
-        resp.signature = await auth.sign_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT)
-        resp.reason = "approved for $5000"
-        assert await auth.verify_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT) is False
+    async def test_editing_the_guidance_invalidates(self, auth: AuthenticationService, engine: Any) -> None:
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(reason="approved for $5"), SIGNED_AT)
+        signed.reason = "approved for $5000"
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
 
     @pytest.mark.asyncio
-    async def test_cannot_be_replayed_onto_another_deferral(self, auth: _StubAuth) -> None:
+    async def test_reassigning_the_deciding_authority_invalidates(
+        self, auth: AuthenticationService, engine: Any
+    ) -> None:
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        signed.wa_id = "wa-2026-08-01-SOMEONE"
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
+
+    @pytest.mark.asyncio
+    async def test_cannot_be_replayed_onto_another_deferral(self, auth: AuthenticationService, engine: Any) -> None:
         """Why deferral_id is inside the payload."""
-        resp = _response()
-        resp.signature = await auth.sign_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT)
-        assert await auth.verify_deferral_resolution("defer_other", resp, SIGNED_AT) is False
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        assert await auth.verify_deferral_resolution("defer_other", signed, SIGNED_AT) is False
 
     @pytest.mark.asyncio
-    async def test_cannot_be_lifted_onto_another_moment(self, auth: _StubAuth) -> None:
+    async def test_cannot_be_lifted_onto_another_moment(self, auth: AuthenticationService, engine: Any) -> None:
         """Why signed_at is inside the payload."""
-        resp = _response()
-        resp.signature = await auth.sign_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT)
-        assert await auth.verify_deferral_resolution(DEFERRAL_ID, resp, "2027-01-01T00:00:00+00:00") is False
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, "2027-01-01T00:00:00+00:00") is False
 
 
 class TestVerificationFailsClosed:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("sig", ["", "api_admin_2026-07-31T02:32:57+00:00"])
-    async def test_legacy_records_are_refused_not_accepted(self, auth: _StubAuth, sig: str) -> None:
+    async def test_legacy_records_are_refused_not_accepted(
+        self, auth: AuthenticationService, engine: Any, sig: str
+    ) -> None:
         """Readable and clearly unverified — never silently treated as signed."""
         assert await auth.verify_deferral_resolution(DEFERRAL_ID, _response(signature=sig), SIGNED_AT) is False
 
     @pytest.mark.asyncio
-    async def test_forged_signature_is_refused(self, auth: _StubAuth) -> None:
-        forged = base64.b64encode(b"\x00" * 64).decode()
-        assert await auth.verify_deferral_resolution(DEFERRAL_ID, _response(signature=forged), SIGNED_AT) is False
+    async def test_forged_signature_is_refused(self, auth: AuthenticationService, engine: Any) -> None:
+        forged = _response(signature=base64.b64encode(b"\x00" * 64).decode())
+        forged.signing_key_id = engine.local_derived_key_id()
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, forged, SIGNED_AT) is False
 
     @pytest.mark.asyncio
-    async def test_signature_from_a_different_key_is_refused(self, auth: _StubAuth) -> None:
-        """An attacker who can write the row still cannot mint an approval."""
-        attacker = ed25519.Ed25519PrivateKey.generate()
-        resp = _response()
-        resp.signature = base64.b64encode(attacker.sign(_canonical(DEFERRAL_ID, resp, SIGNED_AT))).decode()
-        assert await auth.verify_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT) is False
+    async def test_signature_without_an_attributable_key_is_refused(
+        self, auth: AuthenticationService, engine: Any
+    ) -> None:
+        """A signature nobody can attribute to a key is not evidence."""
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        signed.signing_key_id = None
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
 
     @pytest.mark.asyncio
-    async def test_unknown_wa_is_refused(self, auth: _StubAuth) -> None:
-        resp = _response(wa_id="wa-does-not-exist")
-        resp.signature = base64.b64encode(b"\x01" * 64).decode()
-        assert await auth.verify_deferral_resolution(DEFERRAL_ID, resp, SIGNED_AT) is False
+    async def test_unknown_signing_key_is_refused(self, auth: AuthenticationService, engine: Any) -> None:
+        """Neither the local signer nor anything in the federation directory."""
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        signed.signing_key_id = "agent-nosuchkey"
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
+
+    @pytest.mark.asyncio
+    async def test_verification_is_refused_when_the_substrate_is_absent(
+        self, auth: AuthenticationService, engine: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No substrate means no check — which must read as refusal, not as pass."""
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        import ciris_engine.logic.persistence.models.graph as graph_mod
+
+        monkeypatch.setattr(graph_mod, "_engine", None)
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
+
+
+class TestOwnerBinding:
+    """The owner's CEG federation identity is the root of authority — what signs
+    the delegation letting the agent operate at all. The resolution names it so
+    an approval chains there rather than standing on a second, ad-hoc key."""
+
+    @pytest.mark.asyncio
+    async def test_owner_is_resolved_from_the_directory_not_asserted(
+        self, auth: AuthenticationService, engine: Any
+    ) -> None:
+        """An unprovisioned node honestly records no owner rather than inventing one."""
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        assert signed.owner_key_id == json.loads(engine.owner_of_json(engine.local_derived_key_id()))
+
+    @pytest.mark.asyncio
+    async def test_a_claimed_owner_the_directory_does_not_confirm_is_refused(
+        self, auth: AuthenticationService, engine: Any
+    ) -> None:
+        """Without this the owner field is decoration an attacker fills in."""
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is True
+        signed.owner_key_id = "owner-i-made-up"
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
+
+
+class TestHybridDowngrade:
+    @pytest.mark.asyncio
+    async def test_stripping_the_pqc_half_does_not_yield_a_forgery(
+        self, auth: AuthenticationService, engine: Any
+    ) -> None:
+        """Documents the downgrade honestly: dropping the ML-DSA-65 half falls
+        back to Ed25519, so it still requires the classical key. It buys an
+        attacker nothing today; it is the reason the PQC half is bound to the
+        classical one rather than standing alone."""
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        signed.signature_pqc = None
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is True
+
+        signed.approved = False  # still cannot alter the decision
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
 
 
 class TestCanonicalPayload:
@@ -191,3 +275,35 @@ class TestCanonicalPayload:
     def test_payload_commits_to_every_decision_bearing_field(self) -> None:
         payload = deferral_resolution_payload(DEFERRAL_ID, _response(), SIGNED_AT)
         assert set(payload) == {"deferral_id", "approved", "reason", "wa_id", "signed_at"}
+
+
+class TestStoredRecord:
+    """What resolve_deferral writes onto the task context."""
+
+    def test_the_original_four_fields_are_preserved(self) -> None:
+        """There is deployed data; existing readers must keep working."""
+        record = deferral_resolution_record(_response(), "2026-08-01T13:00:00+00:00", DeferralVerification.UNSIGNED)
+        assert record["approved"] is True
+        assert record["reason"] == "looks fine"
+        assert record["resolved_by"] == WA_ID
+        assert record["resolved_at"] == "2026-08-01T13:00:00+00:00"
+
+    def test_the_verification_material_survives(self) -> None:
+        """The #944 defect exactly: these were built and then thrown away."""
+        resp = _response(signature="c2ln")
+        resp.signed_at = SIGNED_AT
+        resp.signature_pqc = "cHFj"
+        resp.signing_key_id = "agent-abc"
+        resp.owner_key_id = "owner-xyz"
+        record = deferral_resolution_record(resp, "2026-08-01T13:00:00+00:00", DeferralVerification.VERIFIED)
+        assert record["signature"] == "c2ln"
+        assert record["signed_at"] == SIGNED_AT
+        assert record["signature_pqc"] == "cHFj"
+        assert record["signing_key_id"] == "agent-abc"
+        assert record["owner_key_id"] == "owner-xyz"
+        assert record["verification"] == "verified"
+
+    def test_unsigned_and_failed_are_distinguishable(self) -> None:
+        """A migration gap and an attack must never render identically."""
+        assert DeferralVerification.UNSIGNED.value != DeferralVerification.FAILED.value
+        assert DeferralVerification.UNSIGNED.value != DeferralVerification.VERIFIED.value

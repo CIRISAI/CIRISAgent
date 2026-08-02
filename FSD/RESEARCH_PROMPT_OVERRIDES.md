@@ -986,6 +986,16 @@ Known irreducibles, named now so no manifest discovers them:
 - **`prompts.language_guidance`** (13,524 B): pragmatic + deontic + axiotic +
   empirical in one scalar; unsplittable short of rewriting it [T-1]. Until §11
   splits it in the corpus, it is `mixed` and demands explicit disposition.
+
+**Every `mixed` block MUST carry a populated `contaminant:` list — not only the
+DEFER policy — and the gate refuses any `hold` disposition whose contaminants
+intersect a varied class, unless `confound_accepted:` names that exact
+contaminant [T-N1].** Without this, holding `language_guidance` (which carries
+CIRIS axiotic content — "route serious symptoms to professional care without
+minimization") leaves CIRIS values byte-identical inside the alt-values arm:
+every Phase-1 assertion passes, and `values_effect` is biased toward zero with
+the gate green. A `hold` that smuggles the varied class is the one confound the
+block table exists to catch.
 - **Few-shot worked examples** (`pdma_ethical.yml:138-145`): verdict, register
   and schema in the same tokens — the co-occurrence *is* the demonstration
   [T-5a]. `mixed`, explicit disposition required; the honest options are
@@ -994,8 +1004,10 @@ Known irreducibles, named now so no manifest discovers them:
 #### 10.2.2 Revisability — bounded, and pre-registration-safe  [T-7]
 
 - **Merge rule (bounded):** two classes merge when no divergence has been
-  observed across ≥3 completed regimes × ≥5 locales at each regime's declared
-  power — not "never diverge", which fires never.
+  observed across ≥3 completed regimes covering **≥5 cumulative distinct
+  locales** at each regime's declared power [T-N4] — cumulative across the
+  contributing regimes, not per-regime (a 3-locale regime can contribute) —
+  and not "never diverge", which fires never.
 - **Split rule = re-registration event:** a split creates a new class-set
   version; results gathered pre-split are reported under the old version,
   never silently re-mapped; in-flight regimes complete under their registered
@@ -1005,7 +1017,11 @@ Known irreducibles, named now so no manifest discovers them:
 #### 10.2.3 Annotation reliability  [T-3]
 
 A class-set version is citable only after **two independent annotators** classify
-the full block inventory with **Cohen's κ ≥ 0.8**, disagreements adjudicated and
+the full block inventory with **Cohen's κ ≥ 0.8 overall AND per-boundary κ ≥ 0.8
+on every class pair whose default disposition differs** — `axiotic|deontic`
+(gates `safety_review`) and `axiotic|structural` (gates §11 step 0) foremost:
+an aggregate κ over eleven classes with skewed marginals can pass while exactly
+the decision-relevant boundaries fail [T-N2]. Disagreements adjudicated and
 logged. Annotator identities, κ, and the adjudication log ship inside
 `regime:composition:v1` (§13). One author annotating once — v1's implicit
 procedure — is how every probe in review produced two defensible answers.
@@ -1035,6 +1051,10 @@ contrasts:                       # every claim must name its contrast [M-1]
 dv:                              # [M-2] — the DV must exist in the arms it is claimed over
   action_tier: {measures: [selected_verb, defer_rate], arms: [h3ere-ciris, h3ere-alt, h3ere-blank]}
   text_tier:   {measures: [U_codes, refusal, resource_naming], arms: all}
+  # U-codes are PER-LANGUAGE rubric rows, not one construct: U4 is dialect_drop
+  # in ar and register_break_to in fa [T-N3]. Scoring is per (locale, U-row);
+  # cross-locale pooling of a U-code is forbidden absent a declared construct
+  # map in the manifest.
   # A claim citing action_tier may reference h3ere arms ONLY: a direct-provider
   # call has no handler enum, so DEFER-vs-SPEAK is undefined there.
 
@@ -1067,8 +1087,19 @@ pins:
   harness: {agent: "2.9.8-stable"}
 
 blocks:                          # per-block dispositions for every `mixed` block (§10.2.1)
-  language_guidance: {disposition: hold}
-  pdma_worked_examples: {disposition: hold}
+  # contaminant: is MANDATORY on mixed blocks [T-N1]. hold + contaminant
+  # intersecting a varied class refuses unless confound_accepted names it.
+  language_guidance:
+    disposition: hold
+    contaminant: [axiotic, deontic, empirical]
+    confound_accepted: axiotic   # this regime varies axiotic; holding this
+                                 # block keeps ~200B of CIRIS-axiotic register
+                                 # text in the alt arm — accepted and REPORTED,
+                                 # or split it via §11 step 6 first.
+  pdma_worked_examples:
+    disposition: hold
+    contaminant: [axiotic, pragmatic]
+    confound_accepted: axiotic
 
 gate:
   compose_dump: required
@@ -1116,7 +1147,7 @@ Then, each independently shippable, `residue_digest` re-pinned at each step:
 1. `dma/action_selection/context_builder.py:248-336` — the ASPDMA user message.
 2. `dsdma_base.py:397` — the DSDMA user message.
 3. Identity blocks — `dsdma_base.py:253,313`, `action_selection_pdma.py:353`.
-4. The five formatters (`system_snapshot`, `identity`, `user_profiles`,
+4. The six formatters (`system_snapshot`, `identity`, `user_profiles`,
    `crisis_resources`, `escalation`, `prompt_blocks`).
 5. `conscience/action_sequence_conscience.py:32-36` — override reasons that
    re-enter the retry prompt.
@@ -1137,19 +1168,23 @@ phase [I-1, I-2]:
   `evaluate()` at **eight** points (`pdma.py:203-233`, `csdma.py:110-286`,
   `idma.py:98-308`, `dsdma_base.py:420-441`, `action_selection_pdma.py:242-281`,
   `dsaspdma.py:242-326`, `tsaspdma.py:344-469` *and* `:633/:554` — a second
-  round). The seam extraction (`compose_messages()` per DMA) is its own PR,
-  landed **before** the dump, with golden-bytes tests locking pre/post equality
-  — it touches the hottest path in the engine and "no behaviour change" must be
-  proved, not asserted.
+  round, pairs 344→469 and 633→554). TSASPDMA already exposes seams
+  (`_create_tsaspdma_messages` `:327-403`, `_create_correction_mode_messages`
+  `:625`), so the extraction PR is **six sites** for eight points [I-V2]. It is
+  its own PR, landed **before** the dump, with golden-bytes tests locking
+  pre/post equality — it touches the hottest path in the engine and "no
+  behaviour change" must be proved, not asserted.
 - **"No LLM call" is not "no runtime."** Composition needs a task, prior DMA
   results, a system snapshot, and bus lookups. The dump runs against a named
   **compose fixture**: seeded SQLite task+thought, stubbed registry/ToolBus,
   synthetic SystemSnapshot, canned upstream DMA results — with every dynamic
   slot rendered as a **stable sentinel** (`{{SNAPSHOT}}`, `{{TASK_ID}}`), so
   `hold:` byte-identity is checked over template output, not over timestamps.
-- Process shape: the prompt-loader caches are process-global singletons
-  (`prompt_loader.py:475,703`), so the dump runs **subprocess-per-arm** with
-  in-process locale iteration (~3.3 s import cost per process, not per pair).
+- Process shape: the caches are process-global singletons — `_loader_cache`
+  at `prompt_loader.py:475`, the override `_loaded` singleton at
+  `research_overrides.py:703` (reset `:694`, "tests only") — so the dump runs
+  **subprocess-per-arm** with in-process locale iteration (~3.3 s import cost
+  per process, not per pair) [I-V3].
 
 `ciris-research compose --dump` emits every block as:
 
@@ -1180,7 +1215,9 @@ compose time they are trivially identical and the check would be vacuous.
 **Phase 2 — on-wire, post-run [M-5].** The static dump is necessary, not
 sufficient: the runtime mutates prompts after composition — retry remediation
 injects the English action-verb whitelist (`llm_service/service.py:1990-1996`,
-`LLM_ERROR_REMEDIATIONS` `:471-481`), instructor re-asks (`:1390`), and
+`LLM_ERROR_REMEDIATIONS` defined `:463`), instructor re-asks (mechanism inside
+the library — the only real handle is instructor's `completion:kwargs` hook;
+`:1390` is a comment describing it, not a hookable site [I-V4]), and
 conscience-override retries re-run ASPDMA with new context. Trigger rates are
 content- and locale-correlated, so non-English cells receive *more* injected
 English doctrine — a differential confound no static diff can see. Therefore:
@@ -1227,9 +1264,15 @@ walks back to the composed prompt."
 - **Upstream ask, filed now, longest lead item of the whole design:**
   CIRISPersist registry entries for `regime:{manifest,composition,gate,onwire}:v1`
   plus an explicit replication decision for the prefix.
-- **Descope until it lands:** artifacts are emitted **local-tier** (signed,
-  unfederatable) — reviewable on the producing node, honest about not being
-  mesh-visible. §13 does not block 2.9.8; federation of it may be 2.9.9.
+- **Descope until it lands [I-V1]:** there is NO signed-local attestation row —
+  `attestation_upsert_local` explicitly defers the signature, and signing
+  happens only at promote or `emit_attestation_self` (federation-tier by
+  construction). The honest descope: emit the local-tier row AND sign the
+  canonical artifact bytes with `Engine.local_sign_hybrid` (0.5.151, arbitrary
+  bytes → {classical_sig, pqc_sig}), shipping signature alongside. Label:
+  **"locally signed, not CEG-signed"** — reviewable on the producing node,
+  honest about being neither mesh-visible nor CEG-admitted. §13 does not block
+  2.9.8; federation of it may be 2.9.9.
 
 All CEG-signed hybrid on the 2.9.7 path. Full prompts stay in the debug tee
 (`traces/accord_full/lens-batch-*.json`), never in the CEG carrier — provenance,

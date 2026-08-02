@@ -178,11 +178,26 @@ jobs:
           # never arrive. The likely death is the SIGBUS race that
           # `_release_persist_engine` already documents for this same shard.
           # `--max-worker-restart=4` did not catch it, so the controller waited
-          # forever. `--session-timeout` bounds the loop itself.
+          # forever.
           #
-          # It exits 1, verified — a truncated session FAILS rather than
-          # silently reporting green, which would be worse than the hang.
-          # Healthy shards finish in ~15-16 min, so 22 min leaves real headroom.
+          # CORRECTION (2026-08-02, run 30754955268): `--session-timeout` bounds
+          # the loop ONLY WHILE WORKERS ARE STILL COMPLETING ITEMS. pytest-timeout
+          # evaluates it in its runtest_protocol hookwrapper — workers only,
+          # between items. When the last live worker wedged INSIDE a test at
+          # native level (persist/sqlx teardown race; the per-test thread-method
+          # timer never got the GIL), nothing evaluated it again and the external
+          # SIGTERM was what finally killed the run — exit 124, no stacks. The
+          # flag stays because it covers the still-cycling variant and exits 1,
+          # but it is not the controller's bound. That is
+          # CIRIS_TEST_CONTROLLER_DEADLINE_SECONDS below: an in-process
+          # wall-clock deadline armed at conftest import in the controller only,
+          # which dumps every thread's stack to the hang-stacks artifact and
+          # exits 1 BEFORE the external 1500s SIGTERM — so the bound that kills
+          # the run is the one that reports it. Opt-in via env on purpose: a
+          # healthy local full-suite run may legitimately outlive any number
+          # this job would pick, so the number lives with the job that knows
+          # its budget. Ordering: controller deadline 1380 < SIGTERM 1500 < job 30m.
+          CIRIS_TEST_CONTROLLER_DEADLINE_SECONDS=1380 \
           timeout --signal=SIGTERM --kill-after=30 1500 \
             pytest tests/ -n 4 --dist=loadgroup \
             --splits 8 --group ${{ matrix.shard }} \

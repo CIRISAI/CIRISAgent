@@ -129,6 +129,52 @@ if _HANG_WATCHDOG_SECONDS > 0:
     except Exception:  # noqa: BLE001
         pass
 
+# CONTROLLER DEADLINE — the bound the 2026-08-02 main-branch hang proved missing.
+#
+# Run 30754955268, shard 2: gw1/2/3 finished, hit the sessionfinish deadline
+# below, and self-exited — that mitigation WORKED. gw0 wedged inside a single
+# test (`test_database_maintenance_multi_occurrence.py::TestAdapterConfigHelpers::
+# test_find_adapter_ids_from_configs_ignores_non_type_keys`, [TEST_START] with no
+# result) at native level: pytest-timeout's 60s thread-method timer never got the
+# GIL, which points at the Rust persist/sqlx teardown race documented in
+# tests/fixtures/database.py:12. The controller then sat in
+# `dsession.py loop_once -> queue.get()` for 9.5 minutes until the EXTERNAL
+# `timeout` SIGTERM'd it at 1500s (exit 124, no Python stacks from the bound
+# that killed it).
+#
+# Why none of the existing bounds could fire:
+#   * `--session-timeout` is evaluated inside pytest-timeout's runtest_protocol
+#     hookwrapper — WORKERS ONLY, and only between items. Once the last live
+#     worker is wedged *inside* an item, nothing evaluates it ever again. It
+#     bounds the loop only while workers are still completing items.
+#   * `_arm_exit_deadline` (below) arms at pytest_sessionfinish — the controller
+#     never got there. Its dump showed no ciris-exit-deadline thread.
+#   * pytest-timeout's per-test timer needs the GIL; a native block starves it.
+#
+# This deadline is wall-clock, armed at import in the CONTROLLER ONLY, and
+# OPT-IN VIA ENV (default off): a healthy local full-suite run can legitimately
+# exceed any number we would pick here, so the number belongs to the CI job that
+# knows its own budget. CI sets it just below the external SIGTERM so the
+# process self-reports with stacks and a real exit code instead of dying
+# silently 2 minutes later.
+_CONTROLLER_DEADLINE_SECONDS = int(os.environ.get("CIRIS_TEST_CONTROLLER_DEADLINE_SECONDS", "0"))
+if _CONTROLLER_DEADLINE_SECONDS > 0 and "PYTEST_XDIST_WORKER" not in os.environ:
+
+    def _controller_deadline() -> None:
+        time.sleep(_CONTROLLER_DEADLINE_SECONDS)
+        _emit_stacks(
+            f"\n[conftest #956] CONTROLLER DEADLINE: session still running after "
+            f"{_CONTROLLER_DEADLINE_SECONDS}s — a worker is likely wedged in native code. "
+            f"Dumping stacks and exiting 1 so the bound that killed the run is the one "
+            f"that reported it.\n"
+        )
+        os._exit(1)
+
+    try:
+        threading.Thread(target=_controller_deadline, name="ciris-controller-deadline", daemon=True).start()
+    except Exception:  # noqa: BLE001
+        pass
+
 # BELT for the residual #956 leak: the CIRISVerify ThreadPoolExecutor.
 #
 # concurrent.futures registers `_python_exit` via atexit to JOIN every executor

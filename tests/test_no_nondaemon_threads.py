@@ -32,6 +32,22 @@ from typing import List, Tuple
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROD_ROOTS = ("ciris_engine", "ciris_adapters")
 
+
+def _is_daemon_true(call: ast.Call) -> bool:
+    """True iff this Thread(...) call passes a literal daemon=True."""
+    return any(
+        kw.arg == "daemon" and isinstance(kw.value, ast.Constant) and kw.value.value is True for kw in call.keywords
+    )
+
+
+def _is_thread_call(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+    return name == "Thread"
+
+
 # Threads that legitimately must block interpreter exit. Empty by design — add
 # an entry ("relative/path.py", lineno) ONLY with a comment justifying why the
 # process must wait for this thread rather than being able to abandon it.
@@ -47,20 +63,12 @@ def _thread_calls_missing_daemon() -> List[str]:
             except (SyntaxError, UnicodeDecodeError):
                 continue
             for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
-                    continue
-                func = node.func
-                name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
-                if name != "Thread":
+                if not _is_thread_call(node):
                     continue
                 rel = str(path.relative_to(PROJECT_ROOT))
                 if (rel, node.lineno) in ALLOWLIST:
                     continue
-                daemon_true = any(
-                    kw.arg == "daemon" and isinstance(kw.value, ast.Constant) and kw.value.value is True
-                    for kw in node.keywords
-                )
-                if not daemon_true:
+                if not _is_daemon_true(node):  # type: ignore[arg-type]
                     offenders.append(f"{rel}:{node.lineno}")
     return offenders
 
@@ -78,15 +86,9 @@ def test_no_nondaemon_production_threads() -> None:
 def test_the_attestation_threads_that_caused_956_are_daemon() -> None:
     """Anchor the specific regression, so a revert of the fix fails loudly here."""
     src = (PROJECT_ROOT / "ciris_engine/logic/adapters/api/routes/setup/attestation.py").read_text(encoding="utf-8")
-    tree = ast.parse(src)
-    thread_calls = [
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.Call)
-        and (n.func.attr if isinstance(n.func, ast.Attribute) else getattr(n.func, "id", None)) == "Thread"
-    ]
+    thread_calls = [n for n in ast.walk(ast.parse(src)) if _is_thread_call(n)]
     assert len(thread_calls) == 3, f"expected the 3 known FFI threads, found {len(thread_calls)}"
     for call in thread_calls:
-        assert any(
-            kw.arg == "daemon" and isinstance(kw.value, ast.Constant) and kw.value.value is True for kw in call.keywords
+        assert _is_daemon_true(
+            call
         ), f"attestation.py Thread at line {call.lineno} is not daemon=True — reintroduces #956"

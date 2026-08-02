@@ -691,6 +691,17 @@ def api_required():
         pytest.skip("Cannot check API availability")
 
 
+def _role() -> str:
+    """Which process this is, for the #956 guard's diagnostics.
+
+    Was referenced by the guard below but never defined — so on the very path
+    the guard exists for (lingering non-daemon threads at sessionfinish) it
+    raised NameError instead of dumping stacks and force-exiting, defeating its
+    own purpose. A test that leaves a default-executor worker alive surfaced it.
+    """
+    return os.environ.get("PYTEST_XDIST_WORKER", "controller")
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):  # noqa: D401
     """Guarantee the process exits once the run is genuinely over (#956).

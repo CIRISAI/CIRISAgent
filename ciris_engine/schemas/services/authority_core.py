@@ -250,15 +250,42 @@ class DeferralRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
+class DeferralVerification(str, Enum):
+    """Where a stored deferral resolution stands with respect to its signature.
+
+    Three states, not two, because "not verified" covers two situations that
+    must never be conflated. A record written before signing existed is a
+    migration gap; a record whose signature does not check out is an attack or
+    a corruption. Reporting the first as the second cries wolf, and reporting
+    the second as the first is the hole this whole issue is about.
+    """
+
+    VERIFIED = "verified"
+    UNSIGNED = "unsigned"
+    FAILED = "failed"
+
+
 class DeferralResponse(BaseModel):
     """WA response to deferral request.
 
-    ``signature`` must be an Ed25519 signature by ``wa_id`` over
-    :func:`deferral_resolution_payload`. It was historically an f-string
-    (``api_{user}_{timestamp}``) or the empty string (CIRISAgent#944) — forms
-    that carry no key material and prove nothing. Use
-    :func:`is_unverifiable_legacy_signature` to recognise those rather than
-    letting them be mistaken for signatures.
+    ``signature`` is the classical (Ed25519) half of a hybrid signature over
+    :func:`deferral_resolution_payload`, produced by the local node's persist
+    signing key — the delegate that the owner's CEG federation identity
+    authorized to operate. ``signature_pqc`` is the ML-DSA-65 half over
+    ``canonical || classical_sig``. ``owner_key_id`` records the CEG federation
+    identity the signing key chains to, so an approval is traceable to the same
+    root of authority that permits the agent to run at all rather than to a
+    second, ad-hoc key.
+
+    The field naming follows the CEG row convention already used across the
+    substrate (``scrub_signature_classical`` / ``scrub_signature_pqc``): the
+    classical half is required, the PQC half is ``None`` while a deployment is
+    hybrid-pending.
+
+    ``signature`` was historically an f-string (``api_{user}_{timestamp}``) or
+    the empty string (CIRISAgent#944) — forms that carry no key material and
+    prove nothing. Use :func:`is_unverifiable_legacy_signature` to recognise
+    those rather than letting them be mistaken for signatures.
     """
 
     approved: bool
@@ -266,6 +293,25 @@ class DeferralResponse(BaseModel):
     modified_time: Optional[datetime] = None
     wa_id: str
     signature: str
+
+    # Signing provenance. Optional because deployed rows predate it, and
+    # because a resolution is constructed unsigned and then signed.
+    signed_at: Optional[str] = Field(
+        default=None,
+        description="ISO-8601 instant the signature commits to. Without it the canonical payload cannot be rebuilt, so the signature cannot be checked.",
+    )
+    signature_pqc: Optional[str] = Field(
+        default=None,
+        description="Base64 ML-DSA-65 signature over (canonical || classical_sig). None while hybrid-pending.",
+    )
+    signing_key_id: Optional[str] = Field(
+        default=None,
+        description="Derived federation key_id of the key that signed (persist local_derived_key_id).",
+    )
+    owner_key_id: Optional[str] = Field(
+        default=None,
+        description="CEG federation identity (key_id) that owns the signing key. None when the node is not owner-provisioned.",
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -301,6 +347,37 @@ def is_unverifiable_legacy_signature(signature: str) -> bool:
     problem to an attacker.
     """
     return not signature.strip() or signature.startswith("api_")
+
+
+def deferral_resolution_record(
+    response: "DeferralResponse",
+    resolved_at: str,
+    verification: "DeferralVerification",
+) -> Dict[str, object]:
+    """The resolution as stored on the deferred task's context.
+
+    Before #944 this dict held only ``approved``/``reason``/``resolved_by``/
+    ``resolved_at``. The signature and the ``signed_at`` it commits to were
+    never written down, which made after-the-fact verification not merely
+    unwired but *impossible* — the material to check against was gone by the
+    time anyone could ask. Everything the verifier needs is now here.
+
+    Those original four keys keep their names and meanings; readers of existing
+    rows are unaffected.
+    """
+    return {
+        "approved": response.approved,
+        "reason": response.reason,
+        "resolved_by": response.wa_id,
+        "resolved_at": resolved_at,
+        # Verification material (#944).
+        "signature": response.signature,
+        "signed_at": response.signed_at,
+        "signature_pqc": response.signature_pqc,
+        "signing_key_id": response.signing_key_id,
+        "owner_key_id": response.owner_key_id,
+        "verification": verification.value,
+    }
 
 
 class GuidanceRequest(BaseModel):

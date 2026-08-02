@@ -182,6 +182,11 @@ async def resolve_deferral(
         # budget-issuance event, so it has to be attributable to the authority
         # who made it rather than merely asserted to be.
         #
+        # The signature is hybrid (Ed25519 + ML-DSA-65) by the node's persist
+        # key, and carries the owner's CEG federation identity that delegated to
+        # that key — so an approval chains to the same root of authority that
+        # permits the agent to operate at all.
+        #
         # Fails closed: if the resolution cannot be signed we refuse the
         # resolution rather than record an unverifiable one. An approval nobody
         # can verify is the exact artifact this issue is about.
@@ -200,7 +205,7 @@ async def resolve_deferral(
                 status_code=503,
             )
         try:
-            deferral_response.signature = await auth_service.sign_deferral_resolution(
+            deferral_response = await auth_service.sign_deferral_resolution(
                 deferral_id, deferral_response, signed_at
             )
         except Exception as exc:

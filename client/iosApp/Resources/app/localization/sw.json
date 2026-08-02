@@ -2269,7 +2269,7 @@
     "tool_cap_file_write": "Hutengeneza faili na kuandika juu ya zilizopo kwenye kifaa hiki.",
     "tool_cap_network_fetch": "Hufungua anwani yoyote ya wavuti ambayo wakala huchagua — pamoja na anwani zilizo ndani ya mtandao wa nyumbani au ofisini kwako.",
     "tool_cap_request_body": "Hutuma maudhui ambayo wakala huandika kwenda kwenye anwani hiyo.",
-    "tool_cap_requires_approval": "Imewekewa alama kuwa inahitaji idhini ya mamlaka yenye hekima (WA) kabla haijatumika.",
+    "tool_cap_requires_approval": "Haiwezi kuendeshwa hadi mamlaka yenye hekima iidhinishe kwa kazi inayoiomba.",
     "tool_cap_secret_plaintext": "Inaweza kurudisha siri iliyohifadhiwa katika maandishi wazi.",
     "tool_cap_shell_execution": "Huendesha amri kwenye kifaa hiki kwa ufikiaji ule ule ambao programu hii inao.",
     "tool_disclosure_always_on_body": "Hizi zimejengwa ndani ya wakala mwenyewe, si ndani ya chaguo lolote hapo juu, kwa hivyo hakuna njia ya kuzizima hapa.",
@@ -3115,5 +3115,10 @@
   "approval_reason": "Sababu (itahifadhiwa pamoja na uamuzi wako)",
   "approval_start_work": "Idhinisha na kuanza kazi",
   "approval_summary": "Kagua haya ili wakala aweze kuendelea.",
-  "approval_summary_with_budget": "{count} kati ya haya yanahitaji uamuzi wa bajeti kabla wakala hajaweza kutenda."
+  "approval_summary_with_budget": "{count} kati ya haya yanahitaji uamuzi wa bajeti kabla wakala hajaweza kutenda.",
+  "approval_tool_title": "Zana ambayo wakala anahitaji idhini yako",
+  "approval_tool_capabilities": "Kile ambacho zana hii inaweza kufanya",
+  "approval_tool_arguments": "Thamani ambazo wakala anakusudia kupitisha",
+  "approval_tool_arguments_omitted": "Hoja za wakala zilikuwa kubwa mno kuonyeshwa hapa.",
+  "approval_tool_scope_note": "Kuidhinisha kunaruhusu zana hii kwa kazi inayofuata, si kwa wito huu hasa. Wakala atafikiria upya kazi tangu mwanzo na anaweza kutumia thamani tofauti."
 }

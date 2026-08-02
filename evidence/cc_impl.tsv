@@ -72,9 +72,29 @@ decimal_id	claim_id	repo	path#symbol	status
 # Controls named in this release that are NOT enforced. Stated so that silence
 # cannot be read as coverage. Each points at a tracked issue.
 8.8.9	CLM-discrimination-gate	CIRISAgent	CIRISAgent#905	open
-1.9	CLM-wbd	CIRISAgent	CIRISAgent#942	open
 1.9	CLM-wbd	CIRISAgent	CIRISAgent#967	open
 1.3	CLM-pdma-ordermax	CIRISAgent	CIRISAgent#909	open
+#
+# ─── 1.9 CLM-wbd, ENFORCEMENT ADDED IN 2.9.7 ───────────────────────────────────
+# #942 closed the gap that was declared `open` here until this release:
+# `requires_approval` was prompt text with no enforcement, while the first-run
+# consent wizard rendered it to operators as a wise-authority guarantee. It is
+# now a control — a declaring tool cannot execute until a human approves and the
+# resulting task carries a WISE_AUTHORITY-issued envelope granting it.
+#
+# The gate keys on issuer kind AND tool name, not on `granted_tools` membership:
+# the deployment envelope already enumerates every enabled tool BY NAME, so a
+# permits_tool-only check would never have fired. Enumerated is not approved.
+1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/infrastructure/authorization/tool_approval.py#envelope_approves_tool	impl
+# Deferral resolutions are signed hybrid (Ed25519 + ML-DSA-65), persisted with
+# their signature material, and verified BEFORE any state change — on failure
+# the task is not completed, no guidance task is created, no budget issued
+# (#944). The signing identity is the node's delegate key, with the owner's CEG
+# fedID recorded and re-resolved from the federation directory at verify time
+# rather than trusted from the record. True owner-key signing is blocked on
+# CIRISServer#342; the precondition (every login path must mint a fedID,
+# including multi-user) is documented at the signing site in routes/wa.py.
+1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/services/governance/wise_authority/service.py#WiseAuthorityService._verify_resolution	impl
 #
 # ─── VERIFIED POINTERS AWAITING A CLAIM ID ─────────────────────────────────────
 # Controls that shipped in 2.9.7 with real, fail-closed enforcement and a

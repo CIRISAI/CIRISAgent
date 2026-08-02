@@ -2269,7 +2269,7 @@
     "tool_cap_file_write": "Cria e sobrescreve arquivos neste dispositivo.",
     "tool_cap_network_fetch": "Abre qualquer endereço web que o agente escolher — incluindo endereços dentro da sua rede doméstica ou corporativa.",
     "tool_cap_request_body": "Envia para esse endereço conteúdo escrito pelo agente.",
-    "tool_cap_requires_approval": "Marcada como exigindo aprovação da Autoridade Sábia antes de ser usada.",
+    "tool_cap_requires_approval": "Não pode ser executada até que uma autoridade sábia a aprove para a tarefa que a solicita.",
     "tool_cap_secret_plaintext": "Pode retornar um segredo armazenado em texto simples.",
     "tool_cap_shell_execution": "Executa comandos neste dispositivo com o mesmo acesso que este aplicativo tem.",
     "tool_disclosure_always_on_body": "Estas estão embutidas no próprio agente, não em nenhuma das opções acima, então não há como desligá-las aqui.",
@@ -3115,5 +3115,10 @@
   "approval_reason": "Motivo (registrado junto com sua decisão)",
   "approval_start_work": "Aprovar e iniciar o trabalho",
   "approval_summary": "Revise estes itens para desbloquear o agente.",
-  "approval_summary_with_budget": "{count} destes precisam de uma decisão de orçamento antes que o agente possa agir."
+  "approval_summary_with_budget": "{count} destes precisam de uma decisão de orçamento antes que o agente possa agir.",
+  "approval_tool_title": "Ferramenta para a qual o agente precisa da sua aprovação",
+  "approval_tool_capabilities": "O que esta ferramenta pode fazer",
+  "approval_tool_arguments": "Valores que o agente pretende passar",
+  "approval_tool_arguments_omitted": "Os argumentos do agente eram grandes demais para serem mostrados aqui.",
+  "approval_tool_scope_note": "Aprovar autoriza esta ferramenta para a tarefa seguinte, não para esta chamada exata. O agente reconsidera a tarefa desde o início e pode usar valores diferentes."
 }

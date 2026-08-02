@@ -2269,7 +2269,7 @@
     "tool_cap_file_write": "このデバイス上にファイルを作成し、上書きします。",
     "tool_cap_network_fetch": "エージェントが選んだ任意のウェブアドレスを開きます — 自宅や職場のネットワーク内のアドレスも含まれます。",
     "tool_cap_request_body": "エージェントが書いた内容をそのアドレスに送信します。",
-    "tool_cap_requires_approval": "使用前に賢明な権威の承認が必要と設定されています。",
+    "tool_cap_requires_approval": "賢明な権威がそれを要求するタスクについて承認するまで実行できません。",
     "tool_cap_secret_plaintext": "保存されたシークレットを平文で返すことができます。",
     "tool_cap_shell_execution": "このアプリと同じ権限で、このデバイス上でコマンドを実行します。",
     "tool_disclosure_always_on_body": "これらはエージェント自体に組み込まれており、上のいずれのオプションにも属さないため、ここでオフにすることはできません。",
@@ -3115,5 +3115,10 @@
   "approval_reason": "理由（あなたの決定とともに記録されます）",
   "approval_start_work": "承認して作業を開始",
   "approval_summary": "これらを確認するとエージェントが再開できます。",
-  "approval_summary_with_budget": "このうち {count} 件は、エージェントが動く前に予算の判断が必要です。"
+  "approval_summary_with_budget": "このうち {count} 件は、エージェントが動く前に予算の判断が必要です。",
+  "approval_tool_title": "エージェントがあなたの承認を必要とするツール",
+  "approval_tool_capabilities": "このツールができること",
+  "approval_tool_arguments": "エージェントが渡そうとしている値",
+  "approval_tool_arguments_omitted": "エージェントの引数が大きすぎるため、ここには表示できません。",
+  "approval_tool_scope_note": "承認すると、このツールは後続のタスクに対して許可されます。この呼び出しそのものに対してではありません。エージェントはタスクを最初から検討し直し、異なる値を使う場合があります。"
 }

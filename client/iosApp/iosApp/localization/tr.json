@@ -2269,7 +2269,7 @@
     "tool_cap_file_write": "Bu cihazda dosya oluşturur ve dosyaların üzerine yazar.",
     "tool_cap_network_fetch": "Ajanın seçtiği herhangi bir web adresini açar — ev veya ofis ağınızın içindeki adresler dahil.",
     "tool_cap_request_body": "Ajanın yazdığı içeriği o adrese gönderir.",
-    "tool_cap_requires_approval": "Kullanılmadan önce bilge otorite onayı gerektirdiği belirtilmiş.",
+    "tool_cap_requires_approval": "Bilge bir otorite, onu isteyen görev için onaylayana kadar çalıştırılamaz.",
     "tool_cap_secret_plaintext": "Saklanan bir sırrı düz metin olarak döndürebilir.",
     "tool_cap_shell_execution": "Bu cihazda, bu uygulamanın sahip olduğu erişimin aynısıyla komut çalıştırır.",
     "tool_disclosure_always_on_body": "Bunlar yukarıdaki seçeneklerin herhangi birine değil, doğrudan ajanın kendisine yerleşiktir; bu yüzden buradan kapatmanın bir yolu yoktur.",
@@ -3115,5 +3115,10 @@
   "approval_reason": "Gerekçe (kararınızla birlikte kaydedilir)",
   "approval_start_work": "Onayla ve işe başla",
   "approval_summary": "Ajanın önündeki engeli kaldırmak için bunları inceleyin.",
-  "approval_summary_with_budget": "Ajan harekete geçmeden önce bunlardan {count} tanesi bütçe kararı gerektiriyor."
+  "approval_summary_with_budget": "Ajan harekete geçmeden önce bunlardan {count} tanesi bütçe kararı gerektiriyor.",
+  "approval_tool_title": "Aracın onayınızı gerektirdiği araç",
+  "approval_tool_capabilities": "Bu araç ne yapabilir",
+  "approval_tool_arguments": "Aracın göndermeyi amaçladığı değerler",
+  "approval_tool_arguments_omitted": "Aracın bağımsız değişkenleri burada gösterilemeyecek kadar büyüktü.",
+  "approval_tool_scope_note": "Onaylamak, bu aracı sonraki görev için yetkilendirir; tam olarak bu çağrı için değil. Aracı görevi baştan yeniden değerlendirir ve farklı değerler kullanabilir."
 }

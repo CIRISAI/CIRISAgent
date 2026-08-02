@@ -2619,7 +2619,7 @@
     "tool_cap_file_write": "Tạo và ghi đè tệp trên thiết bị này.",
     "tool_cap_network_fetch": "Mở bất kỳ địa chỉ web nào tác nhân chọn — kể cả các địa chỉ bên trong mạng nhà bạn hoặc mạng văn phòng.",
     "tool_cap_request_body": "Gửi nội dung do tác nhân viết tới địa chỉ đó.",
-    "tool_cap_requires_approval": "Được đánh dấu là cần Cơ Quan Sáng Suốt phê duyệt trước khi dùng.",
+    "tool_cap_requires_approval": "Không thể chạy cho đến khi một thẩm quyền sáng suốt phê duyệt nó cho tác vụ yêu cầu.",
     "tool_cap_secret_plaintext": "Có thể trả về một bí mật đã lưu dưới dạng văn bản thuần.",
     "tool_cap_shell_execution": "Chạy lệnh trên thiết bị này với cùng quyền truy cập mà ứng dụng này có.",
     "tool_disclosure_always_on_body": "Những mục này được tích hợp sẵn trong chính tác nhân, không thuộc bất kỳ tùy chọn nào ở trên, nên không thể tắt ở đây.",
@@ -3115,5 +3115,10 @@
   "approval_reason": "Lý do (được ghi lại cùng quyết định của bạn)",
   "approval_start_work": "Phê duyệt và bắt đầu công việc",
   "approval_summary": "Xem xét những mục này để tác nhân tiếp tục được.",
-  "approval_summary_with_budget": "Trong số này có {count} mục cần quyết định về ngân sách trước khi tác nhân có thể hành động."
+  "approval_summary_with_budget": "Trong số này có {count} mục cần quyết định về ngân sách trước khi tác nhân có thể hành động.",
+  "approval_tool_title": "Công cụ mà tác nhân cần bạn phê duyệt",
+  "approval_tool_capabilities": "Công cụ này có thể làm gì",
+  "approval_tool_arguments": "Các giá trị mà tác nhân dự định truyền",
+  "approval_tool_arguments_omitted": "Các đối số của tác nhân quá lớn để hiển thị ở đây.",
+  "approval_tool_scope_note": "Phê duyệt cho phép công cụ này cho tác vụ tiếp theo, không phải cho chính lệnh gọi này. Tác nhân sẽ xem xét lại tác vụ từ đầu và có thể dùng các giá trị khác."
 }

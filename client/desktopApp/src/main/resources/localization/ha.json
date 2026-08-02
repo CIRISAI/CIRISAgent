@@ -2385,7 +2385,7 @@
     "tool_cap_file_write": "Yana ƙirƙirar fayiloli kuma yana rubutawa kan waɗanda ke akwai a wannan na'ura.",
     "tool_cap_network_fetch": "Yana buɗe duk adireshin yanar gizo da wakilin ya zaɓa — har da adiresoshin da ke cikin hanyar sadarwar gidanku ko ofishinku.",
     "tool_cap_request_body": "Yana aika abin da wakilin ya rubuta zuwa wannan adireshi.",
-    "tool_cap_requires_approval": "An yi masa alama cewa yana buƙatar amincewar hukuma mai hikima (WA) kafin a yi amfani da shi.",
+    "tool_cap_requires_approval": "Ba zai iya aiki ba sai wata hukuma mai hikima ta amince da shi don aikin da ke neman sa.",
     "tool_cap_secret_plaintext": "Zai iya mayar da sirrin da aka adana a bayyane.",
     "tool_cap_shell_execution": "Yana gudanar da umarni a wannan na'ura da irin damar da wannan manhaja take da ita.",
     "tool_disclosure_always_on_body": "An gina waɗannan a cikin wakilin da kansa, ba a cikin kowane zaɓi da ke sama ba, don haka babu yadda za a kashe su daga nan.",
@@ -3115,5 +3115,10 @@
   "approval_reason": "Dalili (za a adana shi tare da yanke shawararku)",
   "approval_start_work": "Amince a fara aiki",
   "approval_summary": "Ku duba waɗannan domin wakilin ya ci gaba.",
-  "approval_summary_with_budget": "{count} daga cikin waɗannan suna buƙatar yanke shawara kan kasafin kuɗi kafin wakilin ya iya aiki."
+  "approval_summary_with_budget": "{count} daga cikin waɗannan suna buƙatar yanke shawara kan kasafin kuɗi kafin wakilin ya iya aiki.",
+  "approval_tool_title": "Kayan aikin da wakilin ke buƙatar amincewarka",
+  "approval_tool_capabilities": "Abin da wannan kayan aikin zai iya yi",
+  "approval_tool_arguments": "Ƙimomin da wakilin ke shirin turawa",
+  "approval_tool_arguments_omitted": "Muhawwarorin wakilin sun yi girma da ba za a nuna su a nan ba.",
+  "approval_tool_scope_note": "Amincewa tana ba da izinin wannan kayan aikin don aiki na gaba, ba don wannan kiran daidai ba. Wakilin zai sake nazarin aikin daga farko kuma yana iya amfani da ƙimomi daban."
 }

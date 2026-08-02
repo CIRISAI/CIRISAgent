@@ -2269,7 +2269,7 @@
     "tool_cap_file_write": "Erstellt und überschreibt Dateien auf diesem Gerät.",
     "tool_cap_network_fetch": "Öffnet jede vom Agenten gewählte Webadresse — auch Adressen innerhalb Ihres Heim- oder Firmennetzwerks.",
     "tool_cap_request_body": "Sendet vom Agenten verfasste Inhalte an diese Adresse.",
-    "tool_cap_requires_approval": "Als genehmigungspflichtig markiert: erfordert vor der Nutzung die Genehmigung des Menschlichen Beraters (WA).",
+    "tool_cap_requires_approval": "Kann nicht ausgeführt werden, bis eine weise Instanz es für die anfragende Aufgabe genehmigt.",
     "tool_cap_secret_plaintext": "Kann ein gespeichertes Geheimnis im Klartext zurückgeben.",
     "tool_cap_shell_execution": "Führt Befehle auf diesem Gerät aus, mit denselben Zugriffsrechten wie diese App.",
     "tool_disclosure_always_on_body": "Diese sind fest im Agenten selbst eingebaut, nicht in einer der Optionen oben, und lassen sich hier deshalb nicht abschalten.",
@@ -3115,5 +3115,10 @@
   "approval_reason": "Begründung (wird mit Ihrer Entscheidung protokolliert)",
   "approval_start_work": "Genehmigen und Arbeit starten",
   "approval_summary": "Prüfen Sie diese Punkte, damit der Agent weiterarbeiten kann.",
-  "approval_summary_with_budget": "Bei {count} davon ist eine Budgetentscheidung nötig, bevor der Agent handeln kann."
+  "approval_summary_with_budget": "Bei {count} davon ist eine Budgetentscheidung nötig, bevor der Agent handeln kann.",
+  "approval_tool_title": "Werkzeug, für das der Agent Ihre Genehmigung benötigt",
+  "approval_tool_capabilities": "Was dieses Werkzeug tun kann",
+  "approval_tool_arguments": "Werte, die der Agent übergeben will",
+  "approval_tool_arguments_omitted": "Die Argumente des Agenten waren zu groß, um sie hier anzuzeigen.",
+  "approval_tool_scope_note": "Die Genehmigung autorisiert dieses Werkzeug für die Folgeaufgabe, nicht für genau diesen Aufruf. Der Agent überdenkt die Aufgabe von Anfang an und verwendet möglicherweise andere Werte."
 }

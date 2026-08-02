@@ -2269,7 +2269,7 @@
     "tool_cap_file_write": "Crea e sovrascrive file su questo dispositivo.",
     "tool_cap_network_fetch": "Apre qualsiasi indirizzo web scelto dall'agente — inclusi indirizzi interni alla tua rete domestica o aziendale.",
     "tool_cap_request_body": "Invia a quell'indirizzo contenuti scritti dall'agente.",
-    "tool_cap_requires_approval": "Contrassegnato come soggetto all'approvazione della Wise Authority prima dell'uso.",
+    "tool_cap_requires_approval": "Non può essere eseguito finché un'autorità saggia non lo approva per l'attività che lo richiede.",
     "tool_cap_secret_plaintext": "Può restituire un segreto memorizzato in chiaro.",
     "tool_cap_shell_execution": "Esegue comandi su questo dispositivo con gli stessi accessi di questa app.",
     "tool_disclosure_always_on_body": "Questi sono integrati nell'agente stesso, non in una delle opzioni qui sopra, quindi qui non c'è modo di disattivarli.",
@@ -3115,5 +3115,10 @@
   "approval_reason": "Motivazione (registrata insieme alla tua decisione)",
   "approval_start_work": "Approva e avvia il lavoro",
   "approval_summary": "Esamina questi elementi per sbloccare l'agente.",
-  "approval_summary_with_budget": "{count} di questi richiedono una decisione sul budget prima che l'agente possa agire."
+  "approval_summary_with_budget": "{count} di questi richiedono una decisione sul budget prima che l'agente possa agire.",
+  "approval_tool_title": "Strumento per cui l'agente richiede la tua approvazione",
+  "approval_tool_capabilities": "Cosa può fare questo strumento",
+  "approval_tool_arguments": "Valori che l'agente intende passare",
+  "approval_tool_arguments_omitted": "Gli argomenti dell'agente erano troppo grandi per essere mostrati qui.",
+  "approval_tool_scope_note": "L'approvazione autorizza questo strumento per l'attività successiva, non per questa specifica chiamata. L'agente riesamina l'attività da capo e potrebbe usare valori diversi."
 }

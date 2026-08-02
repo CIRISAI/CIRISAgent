@@ -2385,7 +2385,7 @@
     "tool_cap_file_write": "Membuat dan menimpa berkas di perangkat ini.",
     "tool_cap_network_fetch": "Membuka alamat web mana pun yang dipilih agen — termasuk alamat di dalam jaringan rumah atau kantor Anda.",
     "tool_cap_request_body": "Mengirim konten yang ditulis agen ke alamat tersebut.",
-    "tool_cap_requires_approval": "Ditandai memerlukan persetujuan otoritas bijak sebelum digunakan.",
+    "tool_cap_requires_approval": "Tidak dapat dijalankan sampai otoritas bijak menyetujuinya untuk tugas yang memintanya.",
     "tool_cap_secret_plaintext": "Dapat mengembalikan rahasia yang tersimpan dalam teks biasa.",
     "tool_cap_shell_execution": "Menjalankan perintah di perangkat ini dengan akses yang sama seperti aplikasi ini.",
     "tool_disclosure_always_on_body": "Ini tertanam di dalam agen itu sendiri, bukan di salah satu opsi di atas, sehingga tidak ada cara untuk mematikannya di sini.",
@@ -3115,5 +3115,10 @@
   "approval_reason": "Alasan (dicatat bersama keputusan Anda)",
   "approval_start_work": "Setujui dan mulai bekerja",
   "approval_summary": "Tinjau semua ini agar agen tidak lagi terhenti.",
-  "approval_summary_with_budget": "{count} di antaranya memerlukan keputusan anggaran sebelum agen dapat bertindak."
+  "approval_summary_with_budget": "{count} di antaranya memerlukan keputusan anggaran sebelum agen dapat bertindak.",
+  "approval_tool_title": "Alat yang memerlukan persetujuan Anda dari agen",
+  "approval_tool_capabilities": "Apa yang dapat dilakukan alat ini",
+  "approval_tool_arguments": "Nilai yang hendak dikirim agen",
+  "approval_tool_arguments_omitted": "Argumen agen terlalu besar untuk ditampilkan di sini.",
+  "approval_tool_scope_note": "Menyetujui berarti mengizinkan alat ini untuk tugas lanjutan, bukan untuk panggilan ini secara persis. Agen akan mempertimbangkan ulang tugas dari awal dan mungkin memakai nilai yang berbeda."
 }

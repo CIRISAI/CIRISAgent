@@ -2269,7 +2269,7 @@
     "tool_cap_file_write": "在本设备上创建并覆盖文件。",
     "tool_cap_network_fetch": "打开智能体选择的任何网址 — 包括您家庭或办公网络内部的地址。",
     "tool_cap_request_body": "将智能体编写的内容发送到该地址。",
-    "tool_cap_requires_approval": "已标记为使用前需要智慧权威批准。",
+    "tool_cap_requires_approval": "在明智权威针对提出请求的任务批准之前，无法运行。",
     "tool_cap_secret_plaintext": "可以以明文形式返回已存储的密钥。",
     "tool_cap_shell_execution": "以本应用相同的访问权限在本设备上执行命令。",
     "tool_disclosure_always_on_body": "这些内置于智能体本身，而不属于上面的任何选项，因此无法在此关闭。",
@@ -3115,5 +3115,10 @@
   "approval_reason": "理由（将与您的决定一并记录）",
   "approval_start_work": "批准并开始工作",
   "approval_summary": "审阅这些事项，让智能体继续运行。",
-  "approval_summary_with_budget": "其中 {count} 项需要您先做出预算决定，智能体才能行动。"
+  "approval_summary_with_budget": "其中 {count} 项需要您先做出预算决定，智能体才能行动。",
+  "approval_tool_title": "代理需要您批准才能使用的工具",
+  "approval_tool_capabilities": "此工具能做什么",
+  "approval_tool_arguments": "代理打算传递的值",
+  "approval_tool_arguments_omitted": "代理的参数过大，无法在此显示。",
+  "approval_tool_scope_note": "批准将授权此工具用于后续任务，而非仅此一次调用。代理会从头重新考虑该任务，并可能使用不同的值。"
 }

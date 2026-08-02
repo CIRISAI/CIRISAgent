@@ -2380,7 +2380,7 @@
     "source_agent_unavailable": "Àkọsílẹ̀ aṣojú kò sí ní ipò node",
     "source_node": "Node",
     "tool_cap_custom_headers": "Ó ń lo àwọn àkọlé ìbéèrè tí aṣojú náà kọ — wọ́n lè gbé àwọn ẹ̀rí ìdánimọ̀ tí ìwọ kò ní rí.",
-    "tool_cap_requires_approval": "Ó nílò ìfọwọ́sí aláṣẹ ọlọ́gbọ́n kí a tó lè lò ó.",
+    "tool_cap_requires_approval": "Kò lè ṣiṣẹ́ títí àṣẹ ọlọ́gbọ́n yóò fi fọwọ́ sí i fún iṣẹ́ tí ó ń béèrè rẹ̀.",
     "tool_cap_secret_plaintext": "Ó lè dá àṣírí tí a fi pamọ́ padà ní ọ̀rọ̀ gbangba.",
     "tool_cap_shell_execution": "Ó ń ṣe àwọn àṣẹ lórí ẹ̀rọ yìí pẹ̀lú ìwọlé kan náà tí ohun èlò yìí ní.",
     "tool_disclosure_always_on_body": "Àwọn wọ̀nyí wà nínú aṣojú náà fúnra rẹ̀, kì í ṣe nínú èyíkéyìí nínú àwọn àṣàyàn tó wà lókè, nítorí náà kò sí ọ̀nà láti pa wọ́n níbí.",
@@ -3107,5 +3107,10 @@
   "approval_reason": "Ìdí (a ó kọ sílẹ̀ pẹ̀lú ìpinnu rẹ)",
   "approval_start_work": "Fọwọ́sí, bẹ̀rẹ̀ iṣẹ́",
   "approval_summary": "Ṣàyẹ̀wò àwọn wọ̀nyí kí aṣojú náà lè tẹ̀síwájú.",
-  "approval_summary_with_budget": "{count} nínú àwọn wọ̀nyí nílò ìpinnu lórí iye owó kí aṣojú náà tó lè ṣe nǹkan."
+  "approval_summary_with_budget": "{count} nínú àwọn wọ̀nyí nílò ìpinnu lórí iye owó kí aṣojú náà tó lè ṣe nǹkan.",
+  "approval_tool_title": "Irinṣẹ́ tí aṣojú náà nílò ìfọwọ́sí rẹ fún",
+  "approval_tool_capabilities": "Ohun tí irinṣẹ́ yìí lè ṣe",
+  "approval_tool_arguments": "Àwọn iye tí aṣojú náà fẹ́ fi ránṣẹ́",
+  "approval_tool_arguments_omitted": "Àwọn àríyànjiyàn aṣojú náà tóbi jù láti fi hàn níbí.",
+  "approval_tool_scope_note": "Ìfọwọ́sí ń fún irinṣẹ́ yìí ní àṣẹ fún iṣẹ́ tó ń tẹ̀lé e, kì í ṣe fún ìpè gan-an yìí. Aṣojú náà yóò tún ronú lórí iṣẹ́ náà láti ìbẹ̀rẹ̀, ó sì lè lo àwọn iye tó yàtọ̀."
 }

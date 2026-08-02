@@ -2269,7 +2269,7 @@
     "tool_cap_file_write": "በዚህ መሳሪያ ላይ ፋይሎችን ይፈጥራል፤ ያሉትንም በአዲስ ይተካል።",
     "tool_cap_network_fetch": "ወኪሉ የመረጠውን ማንኛውንም የድር አድራሻ ይከፍታል — በቤትዎ ወይም በቢሮዎ አውታረ መረብ ውስጥ ያሉትንም ጨምሮ።",
     "tool_cap_request_body": "ወኪሉ የሚጽፈውን ይዘት ወደዚያ አድራሻ ይልካል።",
-    "tool_cap_requires_approval": "ከመሠራቱ በፊት የጠቢብ ባለሥልጣን (WA) ማጽደቅ እንደሚያስፈልገው ተለይቷል።",
+    "tool_cap_requires_approval": "የጥበብ ባለሥልጣን ለጠየቀው ተግባር እስኪያጸድቀው ድረስ ሊሠራ አይችልም።",
     "tool_cap_secret_plaintext": "የተከማቸን ሚስጥር በግልጽ ጽሑፍ መልሶ ሊሰጥ ይችላል።",
     "tool_cap_shell_execution": "ይህ መተግበሪያ ባለው ተመሳሳይ ፈቃድ በዚህ መሳሪያ ላይ ትእዛዞችን ያስፈጽማል።",
     "tool_disclosure_always_on_body": "እነዚህ በራሱ በወኪሉ ውስጥ የተገነቡ ናቸው እንጂ ከላይ ካሉት አማራጮች የመጡ አይደሉም፤ ስለዚህ ከዚህ ማጥፋት አይቻልም።",
@@ -3115,5 +3115,10 @@
   "approval_reason": "ምክንያት (ከውሳኔዎ ጋር ይመዘገባል)",
   "approval_start_work": "አጽድቅና ሥራ ጀምር",
   "approval_summary": "ወኪሉ እንዲቀጥል እነዚህን ይገምግሙ።",
-  "approval_summary_with_budget": "ወኪሉ እርምጃ ከመውሰዱ በፊት ከእነዚህ ውስጥ {count} የበጀት ውሳኔ ይፈልጋሉ።"
+  "approval_summary_with_budget": "ወኪሉ እርምጃ ከመውሰዱ በፊት ከእነዚህ ውስጥ {count} የበጀት ውሳኔ ይፈልጋሉ።",
+  "approval_tool_title": "መሣሪያው ወኪሉ የእርስዎን ፈቃድ የሚፈልግበት",
+  "approval_tool_capabilities": "ይህ መሣሪያ ምን ማድረግ ይችላል",
+  "approval_tool_arguments": "ወኪሉ ሊያስተላልፍ ያሰበው እሴቶች",
+  "approval_tool_arguments_omitted": "የወኪሉ እሴቶች እዚህ ለማሳየት በጣም ትልቅ ነበሩ።",
+  "approval_tool_scope_note": "ማጽደቅ ይህን መሣሪያ ለሚቀጥለው ተግባር ይፈቅዳል እንጂ ለዚህ ጥሪ ብቻ አይደለም። ወኪሉ ተግባሩን ከመጀመሪያው እንደገና ያስባል እና የተለያዩ እሴቶችን ሊጠቀም ይችላል።"
 }

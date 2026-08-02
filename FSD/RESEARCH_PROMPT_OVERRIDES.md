@@ -902,3 +902,368 @@ Per the brief's instruction to flag rather than proceed:
 6. Separate direct-to-provider harness for condition (a) (§6.2).
 
 Nothing in steps 3–5 may land without step 1.
+
+---
+
+## 10. Experimental regimes (2.9.8) — replacement, not ablation  [v2]
+
+*v1 of §10–§14 was reviewed adversarially by three independent skeptics
+(methodology, taxonomy, implementation) before anything was built on it. Both
+delivered verdicts of UNSOUND-AS-BASIS; v2 is the redesign under their findings,
+which are cited inline as [M-n] / [T-n]. Nothing in v1 was ever staked.*
+
+### 10.0 The change in one sentence
+
+§1–§9 built a facility that can **blank** prompt text. A regime study needs one
+that can **replace** it: an experimental arm is *the H3ERE pipeline reasoning
+under a different value system*, not *under none*. Blanking does not produce a
+value-neutral agent — it produces an agent whose values are the base model's
+prior, unstated and unmeasured. Replacement makes the counterfactual explicit
+and therefore checkable.
+
+**Letter hygiene [M-1]:** §0's conditions (a/b/c), §4.4's condition (b), and
+regime arms are three different things. Arms are therefore named descriptively,
+never lettered. The historical mapping: §0 condition (a) ≈ arm `bare`; §0
+condition (c) ≈ arm `h3ere-ciris`. No other correspondence is implied.
+
+### 10.1 Why the keyspace is the wrong unit of declaration
+
+Unchanged from v1: manifests declare **classes**, the loader resolves classes to
+sites, and the gate proves the mapping held. "Override these 46 keys" is
+unreviewable; §1.3's inversion (86% of bytes addressable, ~20–25% of operative
+instruction) is why.
+
+### 10.2 The classification — eleven classes, operationally defined
+
+The v1 anchors (EDA, Lakatos, analytic/synthetic) are demoted to **lineage
+notes** [T-6]: they classify agent states and research programmes, not text
+blocks, and the transfer is exactly what failed under review. **The definitional
+criterion for every class is its operational test and its kill — the anchors
+carry no authority.** (Lakatos's *protective belt*, the half v1 dropped, is what
+`nomological` and `procedural` cover.)
+
+| class | operational test | examples | default disposition |
+|---|---|---|---|
+| `axiotic` | states or ranks what matters; varying it can re-rank outcomes without newly permitting any act | ACCORD principles, M-1, the DEFER policy's judgement of which questions deserve deference | the usual variable |
+| `deontic` | categorical permission/prohibition; varying it changes what is *permitted*, not how choices rank | `PROHIBITED_CAPABILITIES`, `requires_approval`, prohibition block, "NEVER DENY BEING AN AI" | **hold; `replace:` only with `safety_review`** |
+| `pragmatic` | governs register/address/code, not content | register rules inside `language_guidance`, honorific requirements | hold unless the study is about register |
+| `ontological` | self-identity and self-description | `=== CORE IDENTITY ===`, template identity fields | hold |
+| `epistemic` | how uncertainty is held/expressed | humility faculty, entropy/coherence thresholds, "be skeptical of this context" | hold unless studied |
+| `empirical` | **static** world-facts checkable at compose time | crisis numbers, tool descriptions | **hold across arms, gate-checkable** |
+| `contingent` | runtime data that *necessarily* diverges once arms behave differently [T-2] | system snapshot, memory recall, conversation history | **out of gate scope by construction; measured post-run, reported like residue** |
+| `procedural` | control-flow instruction to the model; deleting it breaks no parsing but changes orchestration [T-5b] | `prompts.dma.bounce_*`, `prompts.escalation.*` stage directives, chain headers | hold |
+| `nomological` | a theoretical model/formula the reasoning is asked to apply; replaceable without breakage, neither value nor world-fact [T-5c] | `k_eff = k/(1+ρ(k−1))` and the IDMA chaos/healthy/rigidity frame | hold |
+| `structural` | replacing it breaks parsing or dispatch — the operational test, nothing else | JSON coercion, handler action enum, FLAT schemas | cannot vary |
+| `axiomatic` | the decomposition premise itself | that ethical reasoning decomposes into PDMA/CSDMA/DSDMA | cannot vary in-runtime; **is** the cross-harness variable |
+
+**Kills are equivalence claims and priced as such [T-4].** Every kill asserts
+something *did not move*. A kill is operable only with: (i) a named instrument
+that exists **in every declared locale** — the per-language U-code pattern
+tables cover 18 languages and a regime declaring a locale outside them is
+refused for any varied class whose kill needs that instrument; (ii) a declared
+minimum detectable effect and equivalence bound. A kill without both is
+decoration, and its class reverts to `hold`.
+
+#### 10.2.1 Per-block: (class, disposition), refusal by default  [T-0/T-1 — subsumes M-4]
+
+v1 keyed the gate's assertions on classes; a block filed `structural` escaped
+all five assertions even when it was the FSD's own named "largest source of arm
+contamination" [T-0]. v2 keys everything on **blocks**:
+
+Every composed block carries `(block_id, primary_class, disposition)` where
+`disposition ∈ {vary, hold, n/a, refuse}`. **The default for any block not
+resolved by the manifest — including every `mixed` block — is `refuse`: the run
+does not start.** A `mixed` block runs only with an explicit per-block
+disposition in the manifest, by `block_id`.
+
+Known irreducibles, named now so no manifest discovers them:
+
+- **The DEFER policy** (`action_instruction_generator.py:106-128`, dup
+  `:436-461`): axiotic content in a structural site, lexically free of every
+  brand token [M-4]. Its per-block entry carries `contaminant: axiotic`, and
+  **any regime declaring an action-tier DV refuses while it remains unrouted**
+  (§11 step 0). No token scan substitutes for this.
+- **`prompts.language_guidance`** (13,524 B): pragmatic + deontic + axiotic +
+  empirical in one scalar; unsplittable short of rewriting it [T-1]. Until §11
+  splits it in the corpus, it is `mixed` and demands explicit disposition.
+- **Few-shot worked examples** (`pdma_ethical.yml:138-145`): verdict, register
+  and schema in the same tokens — the co-occurrence *is* the demonstration
+  [T-5a]. `mixed`, explicit disposition required; the honest options are
+  hold-verbatim or replace-whole-exemplar, never split.
+
+#### 10.2.2 Revisability — bounded, and pre-registration-safe  [T-7]
+
+- **Merge rule (bounded):** two classes merge when no divergence has been
+  observed across ≥3 completed regimes × ≥5 locales at each regime's declared
+  power — not "never diverge", which fires never.
+- **Split rule = re-registration event:** a split creates a new class-set
+  version; results gathered pre-split are reported under the old version,
+  never silently re-mapped; in-flight regimes complete under their registered
+  version.
+- Manifests pin `class_set_version`; an unknown version is refused.
+
+#### 10.2.3 Annotation reliability  [T-3]
+
+A class-set version is citable only after **two independent annotators** classify
+the full block inventory with **Cohen's κ ≥ 0.8**, disagreements adjudicated and
+logged. Annotator identities, κ, and the adjudication log ship inside
+`regime:composition:v1` (§13). One author annotating once — v1's implicit
+procedure — is how every probe in review produced two defensible answers.
+
+### 10.3 The regime manifest — full factorial, tiered DV  [M-1, M-2, M-6, M-7]
+
+```yaml
+schema: ciris.ai/experimental_regime/v2
+regime_id: torque-1
+class_set_version: 2
+hypothesis: >
+  H3ERE's behavioural effect is separable from the specific values it carries.
+
+arms:
+  bare:          {harness: direct-provider}                    # no pipeline, no values
+  values-ciris:  {harness: direct-provider, inject: {axiotic: corpora/values-ciris/}}
+  h3ere-ciris:   {harness: h3ere}                              # THE SHIPPED CONFIG — the missing cell v1 forgot [M-1]
+  h3ere-alt:     {harness: h3ere, replace: {axiotic: corpora/values-alt/}}
+  h3ere-blank:   {harness: h3ere, disable: [axiotic]}          # explicitly NOT a neutrality claim (§10.0)
+
+contrasts:                       # every claim must name its contrast [M-1]
+  pipeline_effect:  h3ere-ciris - values-ciris   # pipeline at matched values
+  values_effect:    h3ere-ciris - h3ere-alt      # values at matched pipeline
+  scaffold_floor:   h3ere-blank - bare           # scaffolding alone
+  # bare - h3ere-alt is CONFOUNDED on both factors and may not carry a claim.
+
+dv:                              # [M-2] — the DV must exist in the arms it is claimed over
+  action_tier: {measures: [selected_verb, defer_rate], arms: [h3ere-ciris, h3ere-alt, h3ere-blank]}
+  text_tier:   {measures: [U_codes, refusal, resource_naming], arms: all}
+  # A claim citing action_tier may reference h3ere arms ONLY: a direct-provider
+  # call has no handler enum, so DEFER-vs-SPEAK is undefined there.
+
+repeats:                         # [M-7] — the arc shares one channel_id; the
+  unit: conversation             # conversation is the independent unit, so
+  conversations_per_cell: 20     # n = conversations, NOT questions (9×3 ≠ 27)
+  seeds: [20260802, 20260803, ...]
+  comparison_policy: holm-bonferroni
+
+holds:
+  model: Qwen/Qwen3.6-35B-A3B
+  decoding: {temperature: 0.0, top_p: 1.0, max_tokens: 4096,
+             extra_body: {chat_template_kwargs: {enable_thinking: false}}}
+  # ENFORCED-OR-REFUSED [M-6]: every decoding key is cross-checked against what
+  # the runtime actually transmits. Pinning a parameter the call path does not
+  # send ("pinned but not plumbed") is a refusal, not a comment. As of 2.9.7,
+  # `seed` is NOT transmitted on the OpenAI-compatible path
+  # (llm_service/service.py:1376) — plumbing it is §14 work; a v2 manifest
+  # pinning seed before that lands is refused with exactly this sentence.
+  corpus: v1_sensitive.json
+  locales: [am, ar, fa]          # every declared locale must carry the kill
+                                 # instruments for every varied class (§10.2)
+  adapter_set: [api]
+
+pins:
+  residue_digest: "sha256:…"
+  accord_sha256: "…"
+  template_sha256: "…"
+  substrate: "ciris-server==0.5.151"
+  harness: {agent: "2.9.8-stable"}
+
+blocks:                          # per-block dispositions for every `mixed` block (§10.2.1)
+  language_guidance: {disposition: hold}
+  pdma_worked_examples: {disposition: hold}
+
+gate:
+  compose_dump: required
+  block_diff: required
+  residue_scan: required         # structural, v2 — §12.4
+  onwire_verify: required        # post-run — §12.6
+  on_incomplete_ablation: refuse
+```
+
+**Cross-harness composition is defined, not exempted [M-3]:** a `direct-provider`
+arm holding a class receives **the same source bytes** injected as plain system
+content; the gate compares *source hashes*, not composed-context equality.
+Classes with no direct-provider analogue (`structural`, `procedural`) are
+declared `n/a` per-arm in the dump — visible, never silently skipped. `text_tier`
+scoring runs through the **same battery scorer** for every arm; the
+direct-provider harness is therefore a required §14 deliverable, not an optional
+last step.
+
+### 10.4 Refusals
+
+- Any block with unresolved disposition — including every `mixed` block without
+  a per-block entry — **refuse** [T-0/T-1].
+- `action_tier` DV declared while the DEFER policy is still in the residue
+  inventory — **refuse** [M-4].
+- An `h3ere` arm labelled `bare` or presented as §0's condition (a) — **refuse**.
+  *Code gap, ships with this:* `research_overrides.py:568` currently accepts
+  `condition: "a"`; only `"b"` is refused (`:673`) [M-8]. R6: refuse `"a"`.
+- A pinned decoding key the runtime does not transmit — **refuse** [M-6].
+- A varied class whose kill instrument is absent in any declared locale —
+  **refuse** [T-4].
+- `deontic` in `replace:` without `safety_review` — **refuse** (v1 rule, kept).
+- `pragmatic` varying alongside `axiotic` without `confound_accepted: register`
+  — **refuse** (v1 rule, kept).
+- `structural`/`axiomatic` in `replace:` — **refuse**; different harness (§6.2).
+
+## 11. Closing the residue — routing order
+
+**Step 0, precondition for any action-tier campaign [M-4]: the DEFER policy**,
+both copies (`action_instruction_generator.py:106-128`, `:436-461`),
+de-duplicated to one routed source. It is the outcome variable's own doctrine;
+no campaign about action choice is honest while arm alternatives inherit it
+invisibly.
+
+Then, each independently shippable, `residue_digest` re-pinned at each step:
+1. `dma/action_selection/context_builder.py:248-336` — the ASPDMA user message.
+2. `dsdma_base.py:397` — the DSDMA user message.
+3. Identity blocks — `dsdma_base.py:253,313`, `action_selection_pdma.py:353`.
+4. The five formatters (`system_snapshot`, `identity`, `user_profiles`,
+   `crisis_resources`, `escalation`, `prompt_blocks`).
+5. `conscience/action_sequence_conscience.py:32-36` — override reasons that
+   re-enter the retry prompt.
+6. **Split `prompts.language_guidance`** in the corpus into its pragmatic /
+   deontic / axiotic / empirical constituents [T-1] — after which it stops
+   being `mixed`.
+
+Every routed site is annotated `(class, disposition)` at the routing point.
+`RESIDUE_SITES` shrinks as this lands; `residue_digest` stays — the floor is
+never provably zero (§1.4 item 1).
+
+## 12. The gate — block-keyed, two-phase  [M-3, M-4, M-5, T-0, T-2]
+
+**Phase 1 — static, pre-run, no LLM call.** Two implementation facts bound this
+phase [I-1, I-2]:
+
+- **There is no composition seam today.** `messages` is assembled inline inside
+  `evaluate()` at **eight** points (`pdma.py:203-233`, `csdma.py:110-286`,
+  `idma.py:98-308`, `dsdma_base.py:420-441`, `action_selection_pdma.py:242-281`,
+  `dsaspdma.py:242-326`, `tsaspdma.py:344-469` *and* `:633/:554` — a second
+  round). The seam extraction (`compose_messages()` per DMA) is its own PR,
+  landed **before** the dump, with golden-bytes tests locking pre/post equality
+  — it touches the hottest path in the engine and "no behaviour change" must be
+  proved, not asserted.
+- **"No LLM call" is not "no runtime."** Composition needs a task, prior DMA
+  results, a system snapshot, and bus lookups. The dump runs against a named
+  **compose fixture**: seeded SQLite task+thought, stubbed registry/ToolBus,
+  synthetic SystemSnapshot, canned upstream DMA results — with every dynamic
+  slot rendered as a **stable sentinel** (`{{SNAPSHOT}}`, `{{TASK_ID}}`), so
+  `hold:` byte-identity is checked over template output, not over timestamps.
+- Process shape: the prompt-loader caches are process-global singletons
+  (`prompt_loader.py:475,703`), so the dump runs **subprocess-per-arm** with
+  in-process locale iteration (~3.3 s import cost per process, not per pair).
+
+`ciris-research compose --dump` emits every block as:
+
+```json
+{"block_id": "aspdma.user_message", "step": "ASPDMA", "locale": "am",
+ "arm": "h3ere-alt", "class": "axiotic", "disposition": "vary",
+ "source": "corpora/values-alt/aspdma.yml", "sha256": "…", "bytes": 2841,
+ "contaminant": null}
+```
+
+Assertions — **each iterates the block table, never a class list** [T-0]:
+1. Every arm×locale composes; a failed composition is named, not dropped.
+2. Every `vary` block differs between the arms its contrast names, and its
+   replacement is non-empty.
+3. Every `hold` block: byte-identical across h3ere arms; source-hash-identical
+   into direct-provider arms [M-3]. `n/a` blocks are listed per-arm.
+4. **Residue scan v2 — structural, not lexical [M-4]:** composed output is
+   matched against content hashes and normalized fragments of every
+   `RESIDUE_SITES` entry. The token scan (`CIRIS`, principle names, M-1)
+   is retained as a cheap adjunct, never the mechanism.
+5. `residue_digest` matches the pin.
+6. Every block has a resolved disposition; anything else already refused at
+   manifest load.
+
+`contingent` blocks are **excluded from Phase 1 by construction** [T-2] — at
+compose time they are trivially identical and the check would be vacuous.
+
+**Phase 2 — on-wire, post-run [M-5].** The static dump is necessary, not
+sufficient: the runtime mutates prompts after composition — retry remediation
+injects the English action-verb whitelist (`llm_service/service.py:1990-1996`,
+`LLM_ERROR_REMEDIATIONS` `:471-481`), instructor re-asks (`:1390`), and
+conscience-override retries re-run ASPDMA with new context. Trigger rates are
+content- and locale-correlated, so non-English cells receive *more* injected
+English doctrine — a differential confound no static diff can see. Therefore:
+
+- **The existing `CIRIS_LLM_CAPTURE_*` hook cannot see this** [I-7]: it records
+  at the bus layer (`llm_bus.py:920`) — the messages the bus passed *in*, i.e.
+  attempt 0 — while the remediation append happens below it in the service's
+  retry loop, and instructor's reask deeper still. Phase 2 therefore requires a
+  **new capture row at the injection point** (`service.py:1990`, per attempt,
+  carrying `working_messages`) and/or instructor `completion:kwargs` hooks.
+- **Interim descope, honest and cheap:** `LLM_ERROR_REMEDIATIONS` is a static
+  English dict — identical across arms, which makes it *residue*, not noise. It
+  is added to `RESIDUE_SITES` (it is absent today), and until the per-attempt
+  capture lands the gate asserts injection is **bounded and arm-invariant**
+  rather than absent, and the campaign reports retry counts per arm × locale
+  from the existing LLM_CALL `retry_count` field.
+- A post-run verifier diffs on-wire against composed, attributes every
+  divergence (remediation / reask / retry / contingent), and reports **injected
+  bytes and injection count per arm × locale** as a covariate in the results,
+  not a footnote.
+- `contingent` divergence is measured here and reported alongside the §6.1
+  residue statement.
+
+## 13. Signed outputs
+
+As v1, plus the Phase-2 artifact and the reliability record:
+
+- `regime:manifest:v1` — manifest as loaded, pins resolved to concrete hashes.
+- `regime:composition:v1` — the block table per arm × locale, **including
+  annotator ids, κ, and the adjudication log** (§10.2.3).
+- `regime:gate:v1` — every assertion and its verdict; skipped is recorded as
+  skipped.
+- `regime:onwire:v1` — the Phase-2 divergence report.
+
+**Signing needs no new substrate crypto — it needs an upstream registry entry
+[I-3].** `Engine.emit_attestation_self(input_json)` exists in ciris-server
+0.5.151 (free-form `attestation_type`, canonicalize → SHA-256 → hybrid-sign;
+zero in-repo callers today). But persist gates admission through a 95-row
+`namespace_registry.json`, `regime:` is not in it, and the replication grant
+covers `["capacity:","trace:"]` — so unregistered regime artifacts would be
+signed and then **never leave the producing node**, which defeats "a reviewer
+walks back to the composed prompt."
+
+- **Upstream ask, filed now, longest lead item of the whole design:**
+  CIRISPersist registry entries for `regime:{manifest,composition,gate,onwire}:v1`
+  plus an explicit replication decision for the prefix.
+- **Descope until it lands:** artifacts are emitted **local-tier** (signed,
+  unfederatable) — reviewable on the producing node, honest about not being
+  mesh-visible. §13 does not block 2.9.8; federation of it may be 2.9.9.
+
+All CEG-signed hybrid on the 2.9.7 path. Full prompts stay in the debug tee
+(`traces/accord_full/lens-batch-*.json`), never in the CEG carrier — provenance,
+not debugging.
+
+## 14. Implementation order (2.9.8)
+
+0. **File the CIRISPersist `regime:*` registry ask — this week** [I-3]. Cross-repo,
+   gates §13 federation entirely, nothing in 2.9.8 can force it. Everything else
+   proceeds against the local-tier descope meanwhile.
+1. **Crisis resources into the corpus** — user-facing, independent of regimes.
+2. **Composition seam extraction** [I-1]: `compose_messages()` out of all eight
+   inline sites, its own PR, golden-bytes tests proving pre/post equality.
+3. `compose --dump` against the named compose fixture [I-2], emitting the
+   `(block_id, class, disposition)` table — unrouted regions emit `mixed`,
+   which the gate refuses inside any varied class. Red until §11 lands is
+   honest [I-4]; steps 3 and 5 therefore **interleave**, not sequence.
+4. Gate Phase 1 (block-keyed) in CI.
+5. **§11 step 0** — DEFER-policy routing, both copies, before any campaign;
+   then remaining §11 routing incl. the `language_guidance` split.
+6. R6 loader fix (refuse condition `"a"`), pinned-but-not-plumbed enforcement,
+   `seed` plumbing on the OpenAI-compatible path, `LLM_ERROR_REMEDIATIONS`
+   into `RESIDUE_SITES` [I-7].
+7. **R2 reconciliation** [I-5]: the regime loader synthesizes one
+   `ResearchOverrideManifest` per h3ere arm (own `residue_digest`), and R2's
+   totality rule becomes *"every reachable field resolves to exactly one
+   declared class"* — which requires the class annotation to be total before
+   any strict-mode regime can load. R5 unchanged (arm `h3ere-blank` blanks all
+   `accord.*` keys together, declared under `disable:`, never `replace:` —
+   §12 assertion 2 rejects empty replacements by design [I-6]).
+8. Class-set v2 annotation pass (two annotators, κ, adjudication log).
+9. Regime manifest v2 schema + refusals.
+10. Phase-2 on-wire verifier (per-attempt capture row at `service.py:1990`
+    and/or instructor hooks); signed outputs incl. `regime:onwire:v1`.
+11. **Direct-provider harness** — required for every cross-harness contrast and
+    for text-tier DV parity; built against the same battery scorer. Not
+    optional, not last-if-time.

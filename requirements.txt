@@ -39,7 +39,30 @@ pycryptodome>=3.20.0,<4.0.0  # Keccak-256 for EVM address checksums (EIP-55)
 PyJWT[crypto]>=2.8.0,<3.0.0
 bcrypt>=4.0.0,<5.0.0
 PyNaCl>=1.5.0,<2.0.0
-ciris-server>=0.5.151,<0.6.0  # 0.5.151 floor (2026-08-01): CONSENT IS IN-PROCESS AND SELF-VERIFYING. author_federation_consent(peer, prefixes=None, analyze=True) — pass None for prefixes so the build's own default is used, never restated; analyze is the new third argument and is what makes the grant complete. Verify with analyze_consent_stance(peer) == "granted": a row that EXISTS but folds to unspecified reads as consented while the gate still refuses, which is the state ~240 nodes are already in. Also exports consent_disclosure() — the consent-screen copy as {id,text} pairs, ids wire-stable, so the client renders from the wheel instead of forking the copy. SKIP 0.5.150: missing the half that matters here. Why a floor: the fold mounts no HTTP router, so POST /v1/federation/consent 404s there BY CONSTRUCTION — a stale docstring restating that route 404'd the wizard on 0.5.149, two releases after the code was fixed. Prior 0.5.148: typed Key refusals name their branch.
+# EXACT PIN FOR THE 2.9.7 TAG (2026-08-02). Was `>=0.5.151,<0.6.0`.
+#
+# 0.5.152 published DURING the release CI run and CI floated onto it, while the
+# tree had been validated all night against 0.5.151. Two reasons that is not
+# acceptable for a tag:
+#
+#   1. A floating floor makes the tag unreproducible — the same commit would
+#      build against a different substrate tomorrow than it did at tag time.
+#   2. 0.5.152 adds `mint_location_proof` (CIRISServer#341 landed). Our
+#      `location_utils._mint_location_proof` is getattr-guarded on exactly that
+#      symbol so the path lights up with no agent release — elegant, but it
+#      means dependency resolution alone switched on location-proof MINTING in
+#      a release nobody had reviewed it for. That is the privacy-sensitive path
+#      #959 was opened about (raw coordinates at ~11cm), and the CEG 0.8 §0.8.1
+#      rough-only clamp (MAX_LOCATION_PROOF_RESOLUTION = 7) has not been
+#      verified against the new symbol.
+#
+# `test_mint_is_the_only_missing_half` is the tripwire that caught this, and it
+# did its job: it fired within hours of the upstream gap closing.
+#
+# 2.9.8 SHOULD re-float and adopt 0.5.152 deliberately — verify the H3 clamp,
+# confirm resolution is read from consent_disclosure(), then update that test.
+# Do not simply widen this pin to make a red shard green.
+ciris-server==0.5.151  # 0.5.151 floor (2026-08-01): CONSENT IS IN-PROCESS AND SELF-VERIFYING. author_federation_consent(peer, prefixes=None, analyze=True) — pass None for prefixes so the build's own default is used, never restated; analyze is the new third argument and is what makes the grant complete. Verify with analyze_consent_stance(peer) == "granted": a row that EXISTS but folds to unspecified reads as consented while the gate still refuses, which is the state ~240 nodes are already in. Also exports consent_disclosure() — the consent-screen copy as {id,text} pairs, ids wire-stable, so the client renders from the wheel instead of forking the copy. SKIP 0.5.150: missing the half that matters here. Why a floor: the fold mounts no HTTP router, so POST /v1/federation/consent 404s there BY CONSTRUCTION — a stale docstring restating that route 404'd the wizard on 0.5.149, two releases after the code was fixed. Prior 0.5.148: typed Key refusals name their branch.
 ciris-verify>=10.3.0,<11.0.0  # RESTORED 2026-07-16 (was dropped in 680c4551f "substrate owns the verifier" BEFORE its stated precondition — verify_tree in the ciris-server wheel — was met): ciris_server exposes ONLY verify_ffi_path(); the Python API (jcs_canonicalize @ api/routes/verification.py:89, verify_tree/TreeVerifyRequest @ attestation/tree_verify.py, CIRISVerify/LicenseStatus/setup_logging/AttestationInProgressError @ ciris_adapters/ciris_verify/ffi_bindings) still imports the STANDALONE package. Without the pin, fresh CI envs have no ciris_verify module → test shards fail with ModuleNotFoundError (PR #890 @ 1356beb42, shards 1/4/5/6/7/8). Pinned to the 0.5.122 substrate triple's verify (v10.3.0; all imported names verified present). The desktop FFI .so is NOT this pin's job — the loader prefers ciris_server.verify_ffi_path() (see CIRISVerify#210 for the in-wheel binary_ok self-verification skew). Drop again only when CIRISAgent#917 rewires these imports to a ciris_server-exposed surface. Python-API-only usage keeps the dual-registry seal risk (the verify_unknown_key note below) out of the runtime seal path, which rides the in-wheel engine.
 # ciris-lens-core: re-hosted in the ciris-server one wheel (#896). Dropped as a standalone dep — it Requires ciris-persist, which reinstalls a SECOND persist wheel alongside ciris-server (dual-registry cohabitation → lens seal verify_unknown_key). LensClient now imports from ciris_server.
 

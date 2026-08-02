@@ -193,13 +193,18 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             return "none"
         return params.domain_hint.value
 
-    def _create_messages(
+    def compose_messages(
         self,
         original_thought: ProcessingQueueItem,
         aspdma_result: ActionSelectionDMAResult,
         context: Optional[Any] = None,
     ) -> List[JSONDict]:
-        """Create localized messages for DSASPDMA evaluation."""
+        """Compose the full DSASPDMA prompt message list (#972).
+
+        Pure prompt composition - no LLM call, no data fetching. This was
+        already a seam (``_create_messages``); renamed to the canonical
+        ``compose_messages`` with a thin backward-compatible alias.
+        """
 
         self._sync_language_from_context(context)
 
@@ -253,6 +258,15 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": user_message})
         return messages
+
+    def _create_messages(
+        self,
+        original_thought: ProcessingQueueItem,
+        aspdma_result: ActionSelectionDMAResult,
+        context: Optional[Any] = None,
+    ) -> List[JSONDict]:
+        """Thin backward-compatible alias for :meth:`compose_messages` (#972)."""
+        return self.compose_messages(original_thought, aspdma_result, context=context)
 
     def _convert_result(
         self,
@@ -322,7 +336,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if not isinstance(current_params, DeferParams):
             raise TypeError(f"DSASPDMA expects DeferParams, got {type(current_params)}")
 
-        messages = self._create_messages(original_thought, aspdma_result, context=context)
+        messages = self.compose_messages(original_thought, aspdma_result, context=context)
         llm_result, resource_usage = await self.call_llm_structured(
             messages=messages,
             response_model=DSASPDMALLMResult,

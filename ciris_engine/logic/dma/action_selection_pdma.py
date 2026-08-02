@@ -241,40 +241,8 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # Pre-cache tools AND task context BEFORE building prompt
         await self.context_builder.pre_cache_context(original_thought)
 
-        # Build main user content
-        main_user_content = self._build_main_user_content(input_data, agent_name)
-
-        # Append faculty insights if available
-        if input_data.faculty_evaluations and self.faculty_integration:
-            faculty_insights = self.faculty_integration.build_faculty_insights_string(input_data.faculty_evaluations)
-            main_user_content += faculty_insights
-
-        # Build messages
-        system_message = self._build_system_message(input_data)
-        accord_with_metadata = self._build_accord_with_metadata(original_thought, input_data.processing_context)
-
-        if input_images:
-            logger.info(f"[VISION] ActionSelectionPDMA building multimodal content with {len(input_images)} images")
-        user_content = self.build_multimodal_content(main_user_content, input_images)
-
-        messages: List[JSONDict] = []
-        if accord_with_metadata:
-            messages.append({"role": "system", "content": accord_with_metadata})
-        # Per-language guidance — empty for most languages, populated for
-        # locales where systematic terminology gaps were observed (am as
-        # of 2.7.6). ASPDMA has no prompt_loader, so resolve language from
-        # the env var (CIRIS_PREFERRED_LANGUAGE) which is what the agent's
-        # deployment sets globally.
-        from ciris_engine.logic.utils.localization import get_language_guidance, get_preferred_language
-        _lang_guidance = get_language_guidance(get_preferred_language())
-        if _lang_guidance:
-            messages.append({"role": "system", "content": _lang_guidance})
-        messages.append({"role": "system", "content": system_message})
-        messages.append({"role": "user", "content": user_content})
-
-        # Store prompts for streaming/debugging
-        self.last_system_prompt = system_message
-        self.last_user_prompt = main_user_content
+        # Compose messages via the extracted seam (#972)
+        messages = self.compose_messages(input_data, agent_name)
 
         # Use Gemini-compatible flat schema (no Union types)
         # This enables compatibility with providers that don't support Union (Google Gemini)
@@ -310,6 +278,54 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             logger.warning(f"OBSERVE RATIONALE: {final_result.rationale}")
 
         return final_result
+
+    def compose_messages(self, input_data: EnhancedDMAInputs, agent_name: str) -> List[JSONDict]:
+        """Compose the full ASPDMA prompt message list from gathered inputs (#972).
+
+        Pure prompt composition - no LLM call, no data fetching. The awaited
+        ``context_builder.pre_cache_context()`` (tools + task cache) must run
+        in ``_perform_main_evaluation()`` before this is called.
+        """
+        # Build main user content
+        main_user_content = self._build_main_user_content(input_data, agent_name)
+
+        # Append faculty insights if available
+        if input_data.faculty_evaluations and self.faculty_integration:
+            faculty_insights = self.faculty_integration.build_faculty_insights_string(input_data.faculty_evaluations)
+            main_user_content += faculty_insights
+
+        # Build messages
+        system_message = self._build_system_message(input_data)
+        accord_with_metadata = self._build_accord_with_metadata(
+            input_data.original_thought, input_data.processing_context
+        )
+
+        input_images = getattr(input_data, "images", []) or []
+        if input_images:
+            logger.info(f"[VISION] ActionSelectionPDMA building multimodal content with {len(input_images)} images")
+        user_content = self.build_multimodal_content(main_user_content, input_images)
+
+        messages: List[JSONDict] = []
+        if accord_with_metadata:
+            messages.append({"role": "system", "content": accord_with_metadata})
+        # Per-language guidance — empty for most languages, populated for
+        # locales where systematic terminology gaps were observed (am as
+        # of 2.7.6). ASPDMA has no prompt_loader, so resolve language from
+        # the env var (CIRIS_PREFERRED_LANGUAGE) which is what the agent's
+        # deployment sets globally.
+        from ciris_engine.logic.utils.localization import get_language_guidance, get_preferred_language
+
+        _lang_guidance = get_language_guidance(get_preferred_language())
+        if _lang_guidance:
+            messages.append({"role": "system", "content": _lang_guidance})
+        messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": user_content})
+
+        # Store prompts for streaming/debugging
+        self.last_system_prompt = system_message
+        self.last_user_prompt = main_user_content
+
+        return messages
 
     def _extract_system_blocks(self, processing_context: Any) -> tuple[str, str, Any]:
         """Extract system snapshot block, user profiles block, and system snapshot object."""

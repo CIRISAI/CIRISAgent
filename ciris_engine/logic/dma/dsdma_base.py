@@ -395,6 +395,45 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 reasoning=f"Failed DSDMA evaluation via instructor: {str(e)}",
             )
 
+    def _resolve_user_template(self) -> "tuple[DMAPromptLoader, PromptCollection]":
+        """Resolve the DSDMA user-message template (#974 step 2).
+
+        ``context_integration`` existed in dsdma_base.yml before #974 but was
+        never rendered, and all 28 localized files carry translations of that
+        DEAD template. Routing must not silently activate them (that would be
+        a material non-base-locale prompt change, not a routing), so a
+        template renders only when it is one of:
+
+        - an explicit research override for ``dsdma_base.context_integration``
+          (honored verbatim — fail-loud if it names unknown slots), or
+        - a post-#974 template carrying the live structural slot
+          ``{full_snapshot_and_profile_context_str}``.
+
+        Anything else — stale localized translation, missing field — serves
+        the base-locale doctrine, exactly what the inline f-string always did.
+        """
+        from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE
+        from ciris_engine.logic.utils.research_overrides import override_dma_prompt
+
+        loader = self.prompt_loader
+        template_data = self.prompt_template_data
+        text = template_data.context_integration
+        if text:
+            if override_dma_prompt(self._prompt_template_name, "context_integration") == text:
+                return loader, template_data
+            if "{full_snapshot_and_profile_context_str}" in text:
+                return loader, template_data
+        if loader.language != DEFAULT_LANGUAGE:
+            loader = get_prompt_loader(DEFAULT_LANGUAGE)
+            template_data = loader.load_prompt_template(self._prompt_template_name)
+            if template_data.context_integration:
+                return loader, template_data
+        raise ValueError(
+            "dsdma_base.yml no longer defines a live context_integration — the DSDMA "
+            "user message has no source. #974 routed it out of Python; it must live "
+            "in the YAML with the {full_snapshot_and_profile_context_str} slot."
+        )
+
     def compose_messages(
         self,
         thought_content_str: str,
@@ -481,7 +520,23 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             )
 
         full_snapshot_and_profile_context_str = task_context_block + system_snapshot_block + user_profiles_block
-        user_message_content = f"{full_snapshot_and_profile_context_str}\nEvaluate this thought for the '{self.domain_name}' domain: \"{thought_content_str}\""
+        # Routed (#974 step 2, FSD RESEARCH_PROMPT_OVERRIDES §11.2): the DSDMA
+        # user message lives in dsdma_base.yml `context_integration`, rendered
+        # through the loader so the research-override dma_prompt namespace
+        # intercepts it (key: dsdma_base.context_integration).
+        user_loader, user_template_data = self._resolve_user_template()
+        user_message_content = user_loader.get_user_message(
+            user_template_data,
+            full_snapshot_and_profile_context_str=full_snapshot_and_profile_context_str,
+            domain_name=self.domain_name,
+            thought_content_str=thought_content_str,
+            # Slots the stale pre-#974 template shape used — supplied so an
+            # explicit research override written against the old shape still
+            # renders instead of KeyError-ing.
+            rules_summary_str=rules_summary_str,
+            context_str=context_str,
+            original_thought_content=thought_content_str,
+        )
 
         # Store prompts for streaming/debugging
         self.last_system_prompt = system_message_content

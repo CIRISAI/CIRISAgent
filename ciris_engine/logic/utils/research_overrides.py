@@ -22,13 +22,13 @@ Three things live here:
 
 **What this does NOT cover, stated here and not only in the FSD**: a share of
 *operative* instruction text — the words that steer verb choice — is still
-compiled-in English Python literals with no loader to intercept: the DSDMA
-user message, the identity blocks, the formatters, the inline helpers the
-ASPDMA template interpolates. (#974 is routing that residue out in order:
-step 0 routed the DEFER policy to
+compiled-in English Python literals with no loader to intercept: the identity
+blocks, the formatters, the inline helpers the ASPDMA template interpolates.
+(#974 is routing that residue out in order: step 0 routed the DEFER policy to
 ``action_selection_pdma.action_params_defer_guidance``; step 1 routed the
-ASPDMA user-message template to ``action_selection_pdma.context_integration``
-— both ARE covered now.) There is deliberately no ``inline`` namespace,
+ASPDMA user-message template to ``action_selection_pdma.context_integration``;
+step 2 made ``dsdma_base.context_integration`` live for the DSDMA user message
+— all three ARE covered now.) There is deliberately no ``inline`` namespace,
 because offering one would imply that surface is addressable. It is not. It is
 instead *pinned*: :func:`compute_residue_digest` hashes the source of every
 uncovered site and the manifest must declare the digest, so the residue cannot
@@ -376,9 +376,13 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
         "logic/dma/action_selection/action_instruction_generator.py",
         "ActionInstructionGenerator._generate_tool_schema",
     ),
-    # The DSDMA user message, which never calls get_user_message() at all, plus
-    # the "=== CORE IDENTITY ===" block.
+    # The DSDMA "=== CORE IDENTITY ===" blocks (both branches). The DSDMA user
+    # message routed out in #974 step 2 (dsdma_base.yml context_integration is
+    # live now); compose_messages stays pinned for its error-path fallback
+    # doctrine ("You are a domain-specific evaluator ...") and the
+    # identity-prepend logic.
     ("logic/dma/dsdma_base.py", "BaseDSDMA.evaluate_thought"),
+    ("logic/dma/dsdma_base.py", "BaseDSDMA.compose_messages"),
     ("logic/dma/action_selection_pdma.py", "ActionSelectionPDMAEvaluator._validate_and_build_identity_block"),
     # Conscience override reasons, which flow back into the retry prompt — one
     # of them instructs the agent to emit specific English words.
@@ -966,12 +970,12 @@ def describe_coverage(manifest: Optional[ResearchOverrideManifest] = None) -> st
         f"{counts}. NOT COVERED (inline English, present in EVERY arm, pinned at "
         f"{m.residue_digest}): the inline helpers interpolated into the ASPDMA "
         f"user message, the non-DEFER action schema/guidance scaffolding, the "
-        f"DSDMA user message, the CORE IDENTITY blocks, the six formatters, and "
-        f"the conscience override reasons. (#974 routed the DEFER policy — step "
-        f"0 — and the ASPDMA user-message template — step 1 — out of this "
-        f"residue; both ARE covered.) Any paper using this facility must report "
-        f"that the non-CIRIS arm was reasoning under CIRIS's action doctrine, "
-        f"in English"
+        f"CORE IDENTITY blocks, the six formatters, and the conscience override "
+        f"reasons. (#974 routed the DEFER policy — step 0 — the ASPDMA "
+        f"user-message template — step 1 — and the DSDMA user message — step 2 "
+        f"— out of this residue; all three ARE covered.) Any paper using this "
+        f"facility must report that the non-CIRIS arm was reasoning under "
+        f"CIRIS's action doctrine, in English"
     )
 
 

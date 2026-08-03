@@ -243,3 +243,93 @@ async def test_override_manifest_changes_composed_aspdma_user_template_bytes(
     assert "speak" in content
     assert "Should the agent reply with a summary of the weather report?" in content
     assert "SCHEMA REMINDER" not in content
+
+
+# ---------------------------------------------------------------------------
+# Step 2 — the DSDMA user message (dsdma_base.context_integration goes live)
+# ---------------------------------------------------------------------------
+
+DSDMA_USER_KEY = "dsdma_base.context_integration"
+_LIVE_DSDMA_SLOT = "{full_snapshot_and_profile_context_str}"
+
+
+def _make_dsdma() -> object:
+    from unittest.mock import Mock
+
+    from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
+
+    return BaseDSDMA(domain_name="golden_domain", service_registry=Mock())
+
+
+def test_dsdma_user_template_is_live_and_carries_the_slot_contract(
+    clean_overrides: pytest.MonkeyPatch,
+) -> None:
+    """The field existed pre-#974 but was DEAD (never rendered). It is live
+    now, and the base template must carry the live structural slot."""
+    assert DSDMA_USER_KEY in ro._required_dma_prompt_keys()
+    import yaml
+
+    data = yaml.safe_load((ro._DMA_PROMPTS_DIR / "dsdma_base.yml").read_text(encoding="utf-8"))
+    assert _LIVE_DSDMA_SLOT in data["context_integration"]
+    # And the inline f-string is gone from Python.
+    source = (Path(ro._ENGINE_ROOT) / "logic" / "dma" / "dsdma_base.py").read_text(encoding="utf-8")
+    assert 'f"{full_snapshot_and_profile_context_str}\\nEvaluate this thought' not in source
+
+
+def test_dsdma_stale_localized_template_falls_back_to_base_doctrine(
+    clean_overrides: pytest.MonkeyPatch,
+) -> None:
+    """All 28 localized dsdma_base.yml files carry translations of the DEAD
+    pre-#974 template (no live slot). Routing must NOT silently activate them
+    — that would be a material non-base-locale prompt change, not a routing.
+    They fall back to the base-locale doctrine, exactly what the inline
+    f-string served them."""
+    dma = _make_dsdma()
+    dma._explicit_language = "am"  # localized dsdma_base.yml exists and is stale
+    loader, template_data = dma._resolve_user_template()
+    assert loader.language == "en"
+    assert template_data.context_integration is not None
+    assert _LIVE_DSDMA_SLOT in template_data.context_integration
+
+
+@pytest.mark.asyncio
+async def test_override_manifest_changes_composed_dsdma_user_bytes(
+    clean_overrides: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Step 2's replaceability proof. An explicit research override is honored
+    verbatim even though it does not carry the live slot — the stale-template
+    guard must never eat a manifest replacement."""
+    from tests.ciris_engine.logic.dma.compose_golden import capture_via_evaluate
+
+    baseline = await capture_via_evaluate("dsdma")
+    baseline_user = str(baseline[-1]["content"])
+    assert "Evaluate this thought for the 'golden_domain' domain:" in baseline_user
+
+    manifest = {
+        "manifest_version": "1",
+        "experiment_id": "974-step2-mutation-check",
+        "condition": "c",
+        "base_locale": "en",
+        "mode": "additive",
+        "residue_digest": ro.compute_residue_digest(),
+        "overrides": {"dma_prompt": {DSDMA_USER_KEY: "RESEARCH-DSDMA-USER: {thought_content_str}"}},
+        "research_hashes": {},
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    clean_overrides.setenv(ro.ENV_MANIFEST, str(path))
+    clean_overrides.setenv(ro.ENV_ANCHOR, "true")
+    ro.reset_research_overrides()
+
+    overridden = await capture_via_evaluate("dsdma")
+    overridden_user = str(overridden[-1]["content"])
+    # thought_content_str is str(ThoughtContent) — assert the frame replaced
+    # and the slot still interpolated, without pinning the repr format.
+    assert overridden_user.startswith("RESEARCH-DSDMA-USER: ")
+    assert "Should the agent reply with a summary of the weather report?" in overridden_user
+    assert "Evaluate this thought for the" not in overridden_user
+
+    clean_overrides.delenv(ro.ENV_MANIFEST)
+    ro.reset_research_overrides()
+    restored = await capture_via_evaluate("dsdma")
+    assert restored == baseline

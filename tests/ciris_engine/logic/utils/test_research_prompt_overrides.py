@@ -315,11 +315,12 @@ class TestGateOnApplies:
         report = ro.describe_coverage()
         for expected in ("NOT COVERED", "ASPDMA user message", "formatters", "in English"):
             assert expected in report
-        # #974: the DEFER policy (step 0) and the ASPDMA user-message template
-        # (step 1) routed out of the residue and ARE covered now — the report
-        # must say so rather than still list them as uncovered.
+        # #974: the DEFER policy (step 0), the ASPDMA user-message template
+        # (step 1) and the DSDMA user message (step 2) routed out of the
+        # residue and ARE covered now — the report must say so rather than
+        # still list them as uncovered.
         assert "#974 routed the DEFER policy" in report
-        assert "both ARE covered" in report
+        assert "ARE covered" in report
 
 
 # ---------------------------------------------------------------------------

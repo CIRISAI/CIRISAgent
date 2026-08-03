@@ -117,6 +117,8 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # (procedural) + snapshot (contingent).
     "dsdma.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.EMPIRICAL, _C.PROCEDURAL, _C.CONTINGENT)),
     # DSDMA user message: task context + thought (contingent) in a frame.
+    # ROUTED since #974 step 2 (dsdma_base.context_integration went live) —
+    # keyed source, class honestly stays mixed (contingent slots in the render).
     "dsdma.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
     # ASPDMA system: identity block (ontological) + selection framing.
     "aspdma.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),

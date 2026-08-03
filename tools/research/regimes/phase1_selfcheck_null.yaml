@@ -18,21 +18,32 @@ arms:
 blocks:
   # Every mixed block needs an explicit disposition (§10.2.1 refusal by
   # default). Nothing is varied here, so holding them accepts no confound.
+  #
+  # This list is EXACTLY the #997 EXPECTED_MIXED ratchet — seven entries, down
+  # from the pre-#997 world where most of the prompt surface was mixed and the
+  # bare `system:` / `user:` suffixes swallowed it. Keys are `<component>.<field>`
+  # because a block is now a FIELD; `_regime_entry_for` resolves them by the
+  # suffix after the step, so one entry covers every step that composes it.
   language_guidance:
     disposition: hold
     contaminant: [axiotic, deontic, empirical]
-  # Every ASPDMA-family step composes its accord as one MIXED block (a runtime
-  # THOUGHT_TYPE= slot prepended to the routed accord in the same message), and
-  # #986 added four more such steps. A suffix entry covers all of them without
-  # this file needing a line per step.
-  #
-  # Safe by construction: only `mixed` blocks consult the regime at all (see
-  # run_gate — routed classes go straight to assertions 2/3), so this cannot
-  # swallow the DISCRETE routed accord blocks. Those stay byte-checked.
-  accord:
+  pdma_ethical.system_guidance_header:
     disposition: hold
-    contaminant: [axiotic, contingent]
-  system: {disposition: hold}
-  user: {disposition: hold}
+    contaminant: [procedural, axiotic, structural]
+  action_selection_pdma.system_message:
+    disposition: hold
+    contaminant: [ontological, axiotic, procedural, pragmatic, contingent]
+  action_selection_pdma.context_integration.slots:
+    disposition: hold
+    contaminant: [procedural, axiotic, deontic, contingent]
+  coherence_conscience.system_prompt:
+    disposition: hold
+    contaminant: [axiotic, deontic, epistemic, ontological, procedural]
+  epistemic_humility_conscience.system_prompt:
+    disposition: hold
+    contaminant: [axiotic, deontic, epistemic, ontological, procedural]
+  optimization_veto_conscience.system_prompt:
+    disposition: hold
+    contaminant: [axiotic, deontic, epistemic, empirical, procedural, structural]
 pins:
   residue_digest: "live"

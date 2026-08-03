@@ -83,9 +83,16 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: Keys per namespace, as the facility defines them. Checked for EQUALITY: if
 #: the reachable key space moves, the floors below are being compared against a
 #: different denominator and must be re-derived, not silently passed.
+#:
+#: ``dma_prompt`` 36 -> 40 in 2.9.10: four live YAML fields joined the key space
+#: (``tool_selection_guidance`` and ``csdma_ambiguity_alignment_example`` became
+#: composable in #993; ``taxonomy_text`` and ``tool_correction_section`` were
+#: live all along but sat outside the inventory, so R1 rejected any manifest
+#: naming them — #995 P1-6). The denominator moved, so the floor below is
+#: re-derived rather than silently passed.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
-    "dma_prompt": 36,
+    "dma_prompt": 40,
     "string": 46,
     "conscience_prompt": 12,
     "template": 3,
@@ -125,16 +132,20 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
 #:       ``_build_guidance_sections`` as ``action_alignment_csdma_guidance`` and
 #:       then never extracted; ``context_integration`` has no slot for it.
 #:     - ``dsdma_base.response_format``, ``idma.closing_reminder``,
-#:       ``tsaspdma.closing_reminder``: no composer reads them. DEADNESS IS
+#:       ``tsaspdma.closing_reminder``: no composer read them. DEADNESS IS
 #:       PER-TEMPLATE, NOT PER-FIELD — the ``dsaspdma``/``idma``/``tsaspdma``/
 #:       ``csdma_common_sense`` copies of ``response_format`` and the
 #:       ``action_selection_pdma``/``dsaspdma`` copies of ``closing_reminder``
-#:       are all read and all gated. Verified by mutating each field to a marker
-#:       and dumping ALL 29 locales over the DMA steps: the four candidates moved
-#:       0 of 1740 blocks while their live siblings moved 29-58 each.
-#:       These are latent production defects, not dead text — the remedy is to
-#:       COMPOSE them, not to delete them, and that is a separate change because
-#:       it moves what every agent says.
+#:       are all read and all gated. These were latent production defects, not
+#:       dead text; #990 composed them and they are gated now.
+#:
+#:   2.9.10 raises the floor 31 -> 39. Four keys joined the denominator (see
+#:   EXPECTED_KEY_COUNTS above) and all four are gated; #990's composed fields
+#:   and #993's appended ASPDMA guidance blocks are gated; and #997's per-field
+#:   block emission means a replacement that used to move one 23 KB `mixed`
+#:   message now moves the named field it actually reached. ONE key is still
+#:   dark: ``action_selection_pdma.final_ponder_advisory`` (a fixture gap — it
+#:   renders only on a thought's last permitted round).
 #: * ``string`` 42/46 — the four remaining ``conscience.*`` keys land on
 #:   ``ActionSelectionDMAResult.rationale`` / ``override_reason``, which no
 #:   composition renders, or on override-fold branches needing the live
@@ -144,7 +155,7 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
 #:   a ``domain``, so the field reaches no prompt at runtime.
 GATED_FLOOR: Dict[str, int] = {
     "corpus": 4,
-    "dma_prompt": 31,
+    "dma_prompt": 39,
     "string": 42,
     "conscience_prompt": 12,
     "template": 2,

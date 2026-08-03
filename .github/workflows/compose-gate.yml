@@ -165,7 +165,10 @@ jobs:
           for name, count in sorted(classes.items()):
               print(f'| {name} | {count} |')
           routed = sum(1 for r in rows if r['source'] != 'inline')
+          seps = sum(1 for r in rows if r['block_id'].rsplit('.', 1)[-1].startswith('join'))
           print()
           print(f'{len(rows)} blocks total; {routed} routed-source, {len(rows) - routed} inline.')
-          print('`mixed` shrinks as #974 routes the residue (§11).')
+          print(f'{seps} of the `structural` rows are whitespace-only field separators, not doctrine.')
+          print('Since #997 a block is a FIELD, not a message; `mixed` now means only')
+          print('"axiotic content the corpus has not been split away from" (§11).')
           EOF

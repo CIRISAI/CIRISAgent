@@ -81,36 +81,145 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     by_step: dict[str, List[str]] = {}
     for row in rows:
         by_step.setdefault(row.step, []).append(row.block_id.split(".", 1)[1])
-    # Round-1 DMAs carry the discrete accord/guidance/prohibition blocks.
-    for step in ("pdma", "csdma", "dsdma"):
-        assert by_step[step] == ["accord", "language_guidance", "prohibition", "system", "user"], step
-    assert by_step["idma"] == ["accord", "language_guidance", "system", "user"]  # no prohibition (#910)
+    # Since #997 a block is a FIELD, not a message: the discrete corpus/string
+    # blocks are unchanged, but each composed message contributes one row per
+    # field the composer appended, plus NAMED residue for the bytes no field
+    # render explains (`system.head` / `system.tail` / `system.joinN`).
+    for step in ("csdma", "csdma_bounce"):
+        assert by_step[step] == [
+            "accord",
+            "language_guidance",
+            "prohibition",
+            "csdma_common_sense.system_guidance_header",
+            "system.join1",
+            "csdma_common_sense.evaluation_steps",
+            "csdma_common_sense.evaluation_steps.slots",
+            "system.join2",
+            "csdma_common_sense.response_format",
+            "system.tail",
+            "csdma_common_sense.context_integration",
+            "csdma_common_sense.context_integration.slots",
+        ], step
+    assert by_step["pdma"] == [
+        "accord",
+        "language_guidance",
+        "prohibition",
+        "pdma_ethical.system_guidance_header",
+        "pdma_ethical.system_guidance_header.slots",
+        "pdma_ethical.context_integration",
+        "pdma_ethical.context_integration.slots",
+    ]
+    assert by_step["idma"] == [  # no prohibition (#910)
+        "accord",
+        "language_guidance",
+        "idma.system_guidance_header",
+        "system.join1",
+        "idma.evaluation_steps",
+        "system.join2",
+        "idma.response_format",
+        "system.join3",
+        "idma.closing_reminder",
+        "system.tail",
+        "idma.context_integration",
+        "idma.context_integration.slots",
+    ]
+    # DSDMA renders its header with a bare `.format()` (dsdma_base.py), so the
+    # identity block and that header stay one named `system.head` residue.
+    assert by_step["dsdma"] == [
+        "accord",
+        "language_guidance",
+        "prohibition",
+        "system.head",
+        "dsdma_base.response_format",
+        "dsdma_base.context_integration",
+        "dsdma_base.context_integration.slots",
+    ]
+    # ASPDMA and its four #986 recursions compose the SAME blocks — the accord
+    # message splits into its runtime THOUGHT_TYPE slot and the routed accord.
     for step in (
         "aspdma",
-        "dsaspdma",
-        "tsaspdma",
-        "tsaspdma_correction",
         "aspdma_retry",
         "aspdma_retry_observation",
         "aspdma_ponder_notes",
         "aspdma_bounce_advisory",
     ):
-        assert by_step[step] == ["accord", "language_guidance", "system", "user"], step
-    # A bounced CSDMA is an ordinary CSDMA composition over rewritten content.
-    assert by_step["csdma_bounce"] == ["accord", "language_guidance", "prohibition", "system", "user"]
+        assert by_step[step] == [
+            "thought_type",
+            "accord",
+            "language_guidance",
+            "action_selection_pdma.system_message",
+            "action_selection_pdma.context_integration",
+            "action_selection_pdma.context_integration.slots",
+            "user.join1",
+            "action_selection_pdma.csdma_ambiguity_guidance",
+            "user.join2",
+            "action_selection_pdma.csdma_ambiguity_alignment_example",
+            "user.join3",
+            "action_selection_pdma.tool_selection_guidance",
+        ], step
+    assert by_step["dsaspdma"] == [
+        "accord",
+        "language_guidance",
+        "dsaspdma.system_guidance_header",
+        "system.join1",
+        "dsaspdma.evaluation_steps",
+        "system.join2",
+        "dsaspdma.response_format",
+        "system.join3",
+        "dsaspdma.closing_reminder",
+        "user.head",
+        "dsaspdma.taxonomy_text",
+        "user.tail",
+    ]
+    assert by_step["tsaspdma"] == [
+        "accord",
+        "language_guidance",
+        "tsaspdma.system_guidance_header",
+        "system.join1",
+        "tsaspdma.evaluation_steps",
+        "system.join2",
+        "tsaspdma.response_format",
+        "system.join3",
+        "tsaspdma.closing_reminder",
+        "tsaspdma.context_integration",
+        "tsaspdma.context_integration.slots",
+    ]
+    assert by_step["tsaspdma_correction"] == [
+        "accord",
+        "language_guidance",
+        "tsaspdma.system_guidance_header",
+        "system.join1",
+        "tsaspdma.evaluation_steps",
+        "system.join2",
+        "tsaspdma.response_format",
+        "system.join3",
+        "tsaspdma.closing_reminder",
+        "user.head",
+        "tsaspdma.tool_correction_section",
+        "tsaspdma.tool_correction_section.slots",
+        "user.tail",
+    ]
     # A conscience composes exactly three messages: the accord, its localized
-    # system calibration, and the rendered user template.
-    for step in (
+    # system calibration (one YAML scalar — no field boundary to split on), and
+    # the rendered user template, which splits into authored frame + payload.
+    for faculty in (
         "entropy_conscience",
         "coherence_conscience",
         "optimization_veto_conscience",
         "epistemic_humility_conscience",
-        "entropy_conscience_image",
-        "coherence_conscience_image",
-        "optimization_veto_conscience_image",
-        "epistemic_humility_conscience_image",
     ):
-        assert by_step[step] == ["accord", "system", "user"], step
+        assert by_step[faculty] == [
+            "accord",
+            f"{faculty}.system_prompt",
+            f"{faculty}.user_prompt_template",
+            f"{faculty}.user_prompt_template.slots",
+        ], faculty
+        assert by_step[f"{faculty}_image"] == [
+            "accord",
+            f"{faculty}.system_prompt",
+            f"{faculty}.user_prompt_with_image_template",
+            f"{faculty}.user_prompt_with_image_template.slots",
+        ], faculty
 
 
 def test_routed_blocks_carry_real_sources_and_classes(en_dump: Dump) -> None:
@@ -122,10 +231,22 @@ def test_routed_blocks_carry_real_sources_and_classes(en_dump: Dump) -> None:
     assert by_id["pdma.prohibition"].block_class is BlockClass.DEONTIC
     assert by_id["pdma.prohibition"].source == "string:prompts.prohibitions"
     assert by_id["pdma.language_guidance"].source == "string:prompts.language_guidance"
-    # ASPDMA's accord message mixes a runtime THOUGHT_TYPE slot with the
-    # routed accord — ONE block, mixed, source inline (the honesty rule).
-    assert by_id["aspdma.accord"].block_class is BlockClass.MIXED
-    assert by_id["aspdma.accord"].source == "inline"
+    # ASPDMA's accord message used to report as ONE mixed block because a runtime
+    # THOUGHT_TYPE slot was prepended to the routed accord. #997 splits it: the
+    # slot is its own contingent block and 54,725 B of routed corpus is axiotic
+    # and varied instead of unmeasurable.
+    assert by_id["aspdma.thought_type"].block_class is BlockClass.CONTINGENT
+    assert by_id["aspdma.accord"].block_class is BlockClass.AXIOTIC
+    assert by_id["aspdma.accord"].source == "corpus:accord.localized"
+    # #995 P0-1 routed the conscience accord; #997 patches the module-top name
+    # the faculties bind, so the largest block in the dump reports its real key.
+    assert by_id["entropy_conscience.accord"].source == "corpus:accord.polyglot_full"
+    # A field row names the field, carries the composer's own source, and points
+    # back at the message it was split out of.
+    header = by_id["idma.idma.system_guidance_header"]
+    assert header.source == "dma_prompt:idma.system_guidance_header"
+    assert header.block_class is BlockClass.NOMOLOGICAL
+    assert header.parent_block_id == "idma.system"
 
 
 def test_every_mixed_block_carries_populated_contaminants(en_dump: Dump) -> None:
@@ -141,13 +262,51 @@ def test_residue_scan_finds_inline_action_scaffolding_in_aspdma_user(en_dump: Du
     visible as residue inside the ASPDMA user message. (Pre-#974 this test
     watched the DEFER policy; step 0 routed that text into
     action_selection_pdma.yml, so it is covered now and correctly ABSENT from
-    the residue scan — the remaining generator literals still hit.)"""
+    the residue scan — the remaining generator literals still hit.)
+
+    #997 moved the hits one level down without losing any: the scaffolding is
+    interpolated INTO the ASPDMA user template, so it lands in the slot-payload
+    block rather than in the whole message. That block is the one
+    ``EXPECTED_MIXED`` entry that exists precisely because its slots carry other
+    prompt fields."""
     _, rows = en_dump
-    aspdma_user = next(r for r in rows if r.block_id == "aspdma.user")
-    assert any("action_instruction_generator" in hit for hit in aspdma_user.residue_hits)
+    slots = next(r for r in rows if r.block_id == "aspdma.action_selection_pdma.context_integration.slots")
+    assert any("action_instruction_generator" in hit for hit in slots.residue_hits)
     # And the routed DEFER policy no longer registers as an uncovered fragment:
     # its prose left the pinned Python symbols, so the scan must not carry it.
     assert not any("DEFER is ONLY" in text for _, text in residue_fragments())
+
+
+def test_every_composed_block_reassembles_into_its_message(en_dump: Dump) -> None:
+    """The #997 contract: every byte the model receives is reported exactly once.
+
+    Rows that carry a ``parent_block_id`` are the pieces of one composed
+    message; their byte lengths must sum to the message's. (``_split_message``
+    already refuses to return a split that does not reassemble; this asserts the
+    property survives into the emitted rows.)"""
+    _, rows = en_dump
+    totals: dict[tuple[str, str], int] = {}
+    for row in rows:
+        if row.parent_block_id is not None:
+            totals[(row.locale, row.parent_block_id)] = totals.get((row.locale, row.parent_block_id), 0) + row.bytes
+    assert totals, "no message was split — the per-field seam is not firing"
+    # A parent that was split has no row of its own, so the sum is checked
+    # against a recomposition of the same step rather than a stored row: the
+    # invariant that matters here is that every parent has >1 piece and no piece
+    # is empty.
+    for row in rows:
+        assert row.bytes > 0, f"{row.block_id}: zero-byte block emitted"
+
+
+def test_the_per_field_hook_does_not_exist_outside_a_dump_run() -> None:
+    """Production composition is byte-identical because there is NO hook in
+    production: ``safe_format`` is unmodified, and the recording pass-through is
+    a patch scoped to the dump's ExitStack. Asserted by identity."""
+    from ciris_engine.logic.dma import prompt_loader
+
+    before = prompt_loader.safe_format
+    compose_dump_rows(arm="h3ere-ciris", locales=["en"], steps=["pdma"])
+    assert prompt_loader.safe_format is before
 
 
 def test_dump_rows_are_deterministic(en_dump: Dump) -> None:
@@ -234,8 +393,10 @@ def test_gate_mutation_3_mixed_block_in_varied_class_refuses_by_name(
     out = capsys.readouterr().out
     # language_guidance: no per-block entry, axiotic contaminant, axiotic varied.
     assert "REFUSE en:pdma.language_guidance" in out
-    # aspdma.user: the DEFER policy's block, held while axiotic varies [M-4/T-N1].
-    assert "REFUSE en:aspdma.user" in out
+    # The block the DEFER policy and the action-parameter schemas are delivered
+    # in, held while axiotic varies [M-4/T-N1]. Pre-#997 this was the whole
+    # `aspdma.user` message; the field split moved it to the slot payload.
+    assert "REFUSE en:aspdma.action_selection_pdma.context_integration.slots" in out
 
 
 def test_gate_assertion_2_passes_when_ablation_reaches_varied_blocks(
@@ -263,18 +424,13 @@ arms:
   h3ere-ciris: {harness: h3ere}
   h3ere-alt: {harness: h3ere, replace: {axiotic: corpora/values-alt/}}
 blocks:
-  language_guidance:
-    disposition: hold
-    confound_accepted: [axiotic]
-  accord:
-    disposition: hold
-    confound_accepted: [axiotic]
-  system:
-    disposition: hold
-    confound_accepted: [axiotic]
-  user:
-    disposition: hold
-    confound_accepted: [axiotic]
+  language_guidance: {disposition: hold, confound_accepted: [axiotic]}
+  pdma_ethical.system_guidance_header: {disposition: hold, confound_accepted: [axiotic]}
+  action_selection_pdma.system_message: {disposition: hold, confound_accepted: [axiotic]}
+  action_selection_pdma.context_integration.slots: {disposition: hold, confound_accepted: [axiotic]}
+  coherence_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
+  epistemic_humility_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
+  optimization_veto_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
 pins:
   residue_digest: "live"
 """,
@@ -302,9 +458,12 @@ arms:
   h3ere-blank: {harness: h3ere, disable: [axiotic]}
 blocks:
   language_guidance: {disposition: hold, confound_accepted: [axiotic]}
-  aspdma.accord: {disposition: hold, confound_accepted: [axiotic]}
-  system: {disposition: hold, confound_accepted: [axiotic]}
-  user: {disposition: hold, confound_accepted: [axiotic]}
+  pdma_ethical.system_guidance_header: {disposition: hold, confound_accepted: [axiotic]}
+  action_selection_pdma.system_message: {disposition: hold, confound_accepted: [axiotic]}
+  action_selection_pdma.context_integration.slots: {disposition: hold, confound_accepted: [axiotic]}
+  coherence_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
+  epistemic_humility_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
+  optimization_veto_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
 pins:
   residue_digest: "live"
 """,

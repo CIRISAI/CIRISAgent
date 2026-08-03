@@ -49,10 +49,12 @@ import hashlib
 import json
 import os
 import re
+import string
 import subprocess
 import sys
+from collections import deque
 from pathlib import Path
-from typing import Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple
+from typing import Any, Callable, Deque, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from ciris_engine.schemas.dma.compose import (
     CLASS_DEFAULT_DISPOSITION,
@@ -80,161 +82,258 @@ class BlockAnnotation(NamedTuple):
 
 _C = BlockClass  # brevity in the table below
 
-#: THE annotation map — one module-level table, one comment per entry.
+#: THE annotation map — one entry per BLOCK, one comment per entry saying why
+#: that class, because the disposition is computed from it.
+#:
+#: Since #997 a block is a FIELD, not a message: ``get_system_message`` appends
+#: up to seven separately-sourced fields and the dump splits on the boundary the
+#: composer already computes, so the keys here are ``<component>.<field>`` —
+#: keyed to the TEMPLATE, not the step, which is why one entry serves
+#: ``csdma`` and ``csdma_bounce``, and one serves all five ASPDMA steps.
+#:
+#: MERGE RULE, applied throughout and stated so it can be argued with. A block
+#: whose classes all imply HOLD or n/a is labelled with the STRICTEST class
+#: present — deontic over the domain-HOLD classes, any HOLD class over
+#: structural/contingent. Overstating holds a block harder and gates its
+#: replacement behind §10.4 safety_review; it can never leak doctrine.
+#: Understating can. The ONE class that cannot be merged is ``axiotic``: it is
+#: the only class that VARIES, so folding it into a held block silently smuggles
+#: CIRIS values into an alt-values arm (the §10.2.1 bias-toward-the-null
+#: confound), and folding a held class into it varies doctrine that must hold.
+#: **A block containing axiotic content alongside anything else is therefore
+#: genuinely ``mixed``, and that is the only thing ``mixed`` now means here.**
+#:
 #: Single-author, best-effort annotation: the §10.2.3 two-annotator κ pass
 #: (#976) REPLACES this table; until then every ``mixed`` entry defaults to
 #: refusal at the gate, so an optimistic annotation here cannot green a run.
-#: Lookup: exact ``block_id`` first, then the suffix after the step
-#: (``annotation_for``). ``mixed`` entries carry populated contaminant lists
-#: [T-N1].
+#: Lookup: exact ``block_id``, then the suffix after the step, then the two
+#: rules in ``annotation_for``. ``mixed`` entries carry populated contaminant
+#: lists [T-N1].
 BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
-    # Discrete accord system block (polyglot for round-1 DMAs, localized for
-    # the action-selection family): states and ranks what matters — axiotic.
+    # ---- discrete corpus / string blocks -----------------------------------
+    # The accord: states and ranks what matters — axiotic. Since #997 this also
+    # covers ASPDMA's accord message, whose runtime `THOUGHT_TYPE=` prefix is
+    # now split off into its own `thought_type` block instead of dragging
+    # 54,725 B of routed corpus into `mixed` with it.
     "accord": BlockAnnotation(_C.AXIOTIC, None),
-    # ASPDMA's accord block carries a runtime `THOUGHT_TYPE=<...>` slot
-    # prepended to the routed localized accord in the SAME message — one
-    # block, mixed, per the honesty rule; the slot itself is contingent.
-    "aspdma.accord": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.CONTINGENT)),
-    # prompts.language_guidance (13,524 B at en): pragmatic + deontic +
-    # axiotic + empirical in one scalar, unsplittable short of rewriting it
-    # [T-1]. Primary is pragmatic register doctrine; contaminants per §10.2.1.
+    # The `THOUGHT_TYPE=<...>` line ASPDMA prepends to the accord: one runtime
+    # value — contingent, excluded from Phase 1 by construction [T-2].
+    "thought_type": BlockAnnotation(_C.CONTINGENT, None),
+    # prompts.language_guidance (13,694 B at en). The one block whose split is a
+    # PROSE split: register doctrine, categorical prohibitions ("NEVER DENY
+    # BEING AN AI"), crisis-line world-facts and value claims ("route serious
+    # symptoms to professional care without minimization") interleave sentence
+    # by sentence in a single scalar, so no field boundary exists to report.
+    # Splitting it means editing the corpus in all 29 locales [T-1].
     "language_guidance": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.DEONTIC, _C.EMPIRICAL)),
     # Prohibition context block (#910): categorical permission/prohibition
     # sourced from PROHIBITED_CAPABILITIES — deontic.
     "prohibition": BlockAnnotation(_C.DEONTIC, None),
     # Crisis resources: static world-facts (numbers, URLs) — empirical (#971
     # landed the breadcrumb in formatters/crisis_resources.py). NOT reachable
-    # as a discrete block today: it rides interpolated inside dsdma.system
-    # (mixed). This entry activates when #974 routes it discretely.
+    # as a discrete block today: it rides interpolated inside dsdma.system.
+    # This entry activates when #974 routes it discretely.
     "crisis": BlockAnnotation(_C.EMPIRICAL, None),
-    # PDMA composed system message: PDMA stage framework (procedural) naming
-    # principles (axiotic) + task/snapshot interpolation (contingent).
-    "pdma.system": BlockAnnotation(_C.MIXED, (_C.PROCEDURAL, _C.AXIOTIC, _C.CONTINGENT)),
-    # PDMA user message: thought text (contingent) in a template frame.
-    "pdma.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    # CSDMA system: common-sense evaluation guidance (procedural, epistemic
-    # plausibility doctrine) + snapshot/task interpolation (contingent).
-    "csdma.system": BlockAnnotation(_C.MIXED, (_C.PROCEDURAL, _C.EPISTEMIC, _C.CONTINGENT)),
-    # CSDMA user message: context summary + thought (contingent) in a frame.
-    "csdma.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    # IDMA system: the k_eff formula and chaos/healthy/rigidity frame — the
-    # §10.2 nomological worked example [T-5c] — plus snapshot (contingent).
-    "idma.system": BlockAnnotation(_C.MIXED, (_C.NOMOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
-    # IDMA user message: thought + prior-DMA results (contingent) in a frame.
-    "idma.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    # DSDMA system: CORE IDENTITY (ontological) + crisis resources block
-    # (empirical, interpolated — see 'crisis' above) + domain instructions
-    # (procedural) + snapshot (contingent).
-    "dsdma.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.EMPIRICAL, _C.PROCEDURAL, _C.CONTINGENT)),
-    # DSDMA user message: task context + thought (contingent) in a frame.
-    # ROUTED since #974 step 2 (dsdma_base.context_integration went live) —
-    # keyed source, class honestly stays mixed (contingent slots in the render).
-    "dsdma.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    # ASPDMA system: identity block (ontological) + selection framing.
-    "aspdma.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
-    # ASPDMA user message: the ~90-line action doctrine — axiotic content in
-    # a structural site [M-4] — plus deontic "Requires wise authority
-    # approval" lines and task context (contingent). ROUTED since #974: the
-    # DEFER policy (step 0, action_params_defer_guidance) and the whole
-    # user-message template (step 1, context_integration) are keyed and
-    # overridable, so the SOURCE reports the dma_prompt render seam — but the
-    # render interpolates contingent task/snapshot/DMA-summary slots and
-    # inline helper prose, so the CLASS honestly stays mixed (§10.2.1).
-    "aspdma.user": BlockAnnotation(_C.MIXED, (_C.PROCEDURAL, _C.AXIOTIC, _C.DEONTIC, _C.CONTINGENT)),
-    # DSASPDMA system: dma_prompt-routed guidance keys joined inline into one
-    # message (procedural stage directives).
-    "dsaspdma.system": BlockAnnotation(_C.MIXED, (_C.PROCEDURAL, _C.CONTINGENT)),
-    # DSASPDMA user: deferral taxonomy prompt + original thought/reason.
-    "dsaspdma.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.AXIOTIC)),
-    # TSASPDMA system: tool-review framing (procedural).
-    "tsaspdma.system": BlockAnnotation(_C.MIXED, (_C.PROCEDURAL, _C.CONTINGENT)),
-    # TSASPDMA user: tool documentation (empirical world-facts) + reasoning.
-    "tsaspdma.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.EMPIRICAL, _C.PROCEDURAL)),
-    # TSASPDMA correction system: same framing as tsaspdma.system.
-    "tsaspdma_correction.system": BlockAnnotation(_C.MIXED, (_C.PROCEDURAL, _C.CONTINGENT)),
-    # TSASPDMA correction user: correction doctrine + FLAT-JSON coercion
-    # (structural parsing contract) + available-tools listing (contingent).
-    "tsaspdma_correction.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.STRUCTURAL)),
-    # ---- #986: the conscience-override RETRY compositions ------------------
-    # Same construction as the first-pass ASPDMA accord block (runtime
-    # THOUGHT_TYPE= slot + routed localized accord in one message), so it
-    # carries the same annotation. Named explicitly rather than left to the
-    # `accord` suffix fallback, which would hand it a bare AXIOTIC and quietly
-    # disagree with `aspdma.accord` about the identical bytes.
-    "aspdma_retry.accord": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.CONTINGENT)),
-    "aspdma_retry_observation.accord": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.CONTINGENT)),
-    "aspdma_ponder_notes.accord": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.CONTINGENT)),
-    # The follow-up thought after a conscience-forced PONDER: an ordinary ASPDMA
-    # composition whose user message additionally carries the conscience-authored
-    # ponder notes (contingent payload, axiotic in what it asks the agent to
-    # reconsider).
-    "aspdma_ponder_notes.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
-    "aspdma_ponder_notes.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.AXIOTIC)),
-    # ---- #986: the DMA-bounce compositions --------------------------------
-    # CSDMA re-run on a bounced thought: identical block structure to `csdma`,
-    # with the localized bounce preamble riding inside the user message.
-    "aspdma_bounce_advisory.accord": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.CONTINGENT)),
-    "aspdma_bounce_advisory.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
-    # The advisory tells ASPDMA a DMA could not clear threshold — an epistemic
-    # claim about the evidence, in the ordinary contingent user frame.
-    "aspdma_bounce_advisory.user": BlockAnnotation(
-        _C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.EPISTEMIC, _C.AXIOTIC)
+    # ---- named residue: the bytes no field render explains ------------------
+    # `format_system_prompt_blocks` wraps a composed system message in identity
+    # and snapshot blocks, so what sits before the first field and after the
+    # last one is real content that must be reported, not dropped.
+    #
+    # head (DSDMA, 3,407 B): CORE IDENTITY (ontological) + the domain header
+    # `dsdma_base.py` renders with a bare `.format()` (procedural) + the
+    # CROSS-DOMAIN NORMS block, which states professional duties categorically
+    # ("informed consent required, patient welfare paramount"). Deontic is the
+    # strictest class present, so deontic it is — replacing it takes a §10.4
+    # safety review, which is the right bar for the block that tells the agent
+    # what a fiduciary owes.
+    "system.head": BlockAnnotation(_C.DEONTIC, None),
+    # tail (CSDMA/CSDMA-bounce/IDMA, 409 B): the ORIGINAL TASK + System Snapshot
+    # blocks — runtime state, contingent [T-2].
+    "system.tail": BlockAnnotation(_C.CONTINGENT, None),
+    # head/tail of a user message whose template is composed in Python rather
+    # than rendered (DSASPDMA's deferral state frame; TSASPDMA-correction's
+    # scaffold and task list). Authored section frames around runtime values:
+    # procedural, so assertion 3 byte-checks the authored half. Labelling them
+    # `contingent` would be the honest majority-of-bytes call and also make an
+    # arm that rewrites the frame invisible — asserting more, never less.
+    "user.head": BlockAnnotation(_C.PROCEDURAL, None),
+    "user.tail": BlockAnnotation(_C.PROCEDURAL, None),
+    # ---- pdma_ethical -------------------------------------------------------
+    # THE remaining in-YAML mixture. 8,240 B (23,403 B after polyglot
+    # substitution) that walk the PDMA stages (procedural) and the JSON output
+    # contract (structural) while naming and ranking the Six Principles and
+    # Meta-Goal M-1 as the evaluative target (axiotic). Splitting it means
+    # cutting the YAML field in 29 locales, not moving a boundary the composer
+    # already knows — so it stays mixed and parked.
+    "pdma_ethical.system_guidance_header": BlockAnnotation(
+        _C.MIXED, (_C.PROCEDURAL, _C.AXIOTIC, _C.STRUCTURAL)
     ),
-    "csdma_bounce.system": BlockAnnotation(_C.MIXED, (_C.PROCEDURAL, _C.EPISTEMIC, _C.CONTINGENT)),
-    # The bounce preamble is procedural retry doctrine ("try again, differently")
-    # wrapped around the contingent thought text and the technical trigger line.
-    "csdma_bounce.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.EPISTEMIC)),
-    # Retry system message: the template-derived CORE IDENTITY block
-    # (ontological) in the ordinary ASPDMA selection framing.
-    "aspdma_retry.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
-    "aspdma_retry_observation.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
-    # Retry user message: the first-pass ASPDMA user message PLUS the conscience
-    # retry envelope in the {conscience_guidance} slot. The envelope is deontic
-    # ("your next attempt MUST be materially different", "DEFER to Wise
-    # Authority"), axiotic (the shard justifications name what was at stake) and
-    # contingent (the failed action, the shard evidence).
-    "aspdma_retry.user": BlockAnnotation(
-        _C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.DEONTIC, _C.AXIOTIC)
+    # "Thought to Evaluate: " — an authored label around the thought.
+    "pdma_ethical.context_integration": BlockAnnotation(_C.PROCEDURAL, None),
+    # ---- csdma_common_sense -------------------------------------------------
+    # Scope statement + the two-step "draft the response, then rate THAT" method.
+    # Names no value and forbids nothing: it is how to run the check.
+    "csdma_common_sense.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    # The seven-step realism checklist — a measurement procedure.
+    "csdma_common_sense.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
+    # JSON contract (structural) wrapped around LANGUAGE RULES — which language
+    # the values go in, which keys stay English. Register doctrine is pragmatic
+    # and pragmatic HOLDs, so the block is pragmatic: a parsing-contract label
+    # would make the register rules n/a and stop byte-checking them.
+    "csdma_common_sense.response_format": BlockAnnotation(_C.PRAGMATIC, None),
+    "csdma_common_sense.context_integration": BlockAnnotation(_C.PROCEDURAL, None),
+    # ---- idma ---------------------------------------------------------------
+    # The k_eff = k / (1 + ρ(k-1)) law and the chaos/healthy/rigidity phase
+    # model: a law-like relation the reasoning is asked to accept — the §10.2
+    # nomological worked example [T-5c].
+    "idma.system_guidance_header": BlockAnnotation(_C.NOMOLOGICAL, None),
+    # "WORK IN THIS ORDER: 1..6" — the procedure that applies the law.
+    "idma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
+    # JSON key contract + LANGUAGE RULES — pragmatic, same reasoning as CSDMA's.
+    "idma.response_format": BlockAnnotation(_C.PRAGMATIC, None),
+    # "When uncertain about source independence, err on the side of caution",
+    # "When in doubt, flag it" — what counts as sufficient evidence. Epistemic.
+    # Inert before #990 wired closing_reminder into the composer; live now.
+    "idma.closing_reminder": BlockAnnotation(_C.EPISTEMIC, None),
+    "idma.context_integration": BlockAnnotation(_C.PROCEDURAL, None),
+    # ---- dsdma_base ---------------------------------------------------------
+    # The LANGUAGE RULES block (#990 wired it in): respond in the user's
+    # language, keep JSON keys English. Pure register doctrine — pragmatic.
+    "dsdma_base.response_format": BlockAnnotation(_C.PRAGMATIC, None),
+    "dsdma_base.context_integration": BlockAnnotation(_C.PROCEDURAL, None),
+    # ---- tsaspdma -----------------------------------------------------------
+    # The four action options and the choose-SPEAK/PONDER/TOOL criteria: a
+    # decision procedure over an already-selected tool.
+    "tsaspdma.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "tsaspdma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
+    # FLAT-JSON contract + LANGUAGE RULES — pragmatic, as above.
+    "tsaspdma.response_format": BlockAnnotation(_C.PRAGMATIC, None),
+    # "Your role is to catch what ASPDMA could not see; confirm it quickly" —
+    # role procedure, not a prohibition and not a value.
+    "tsaspdma.closing_reminder": BlockAnnotation(_C.PROCEDURAL, None),
+    "tsaspdma.context_integration": BlockAnnotation(_C.PROCEDURAL, None),
+    # 899 B of LOCALIZED correction doctrine that was invisible until #997 routed
+    # its render through `safe_format`. "The tool_name field must be an EXACT
+    # match from the available tools list" is a categorical constraint on what
+    # the agent may emit — deontic, so replacing it takes a safety review.
+    "tsaspdma.tool_correction_section": BlockAnnotation(_C.DEONTIC, None),
+    # ---- dsaspdma -----------------------------------------------------------
+    # "ASPDMA already chose DEFER. Your job is NOT to reopen the action choice."
+    # plus the five-step classification method.
+    "dsaspdma.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "dsaspdma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
+    # JSON contract + LANGUAGE RULES — pragmatic, as above.
+    "dsaspdma.response_format": BlockAnnotation(_C.PRAGMATIC, None),
+    # "Do not switch away from DEFER. Do not invent a domain_hint unless
+    # licensed handling is truly implied." Categorical — deontic.
+    "dsaspdma.closing_reminder": BlockAnnotation(_C.DEONTIC, None),
+    # 3,273 B of rights/needs deferral taxonomy: which human right a deferral
+    # implicates, and which operational code justifies escalation to a human.
+    # It governs when the system must hand over — a permission structure, not a
+    # value ranking — so deontic, and its replacement is safety-reviewable.
+    "dsaspdma.taxonomy_text": BlockAnnotation(_C.DEONTIC, None),
+    # ---- action_selection_pdma ---------------------------------------------
+    # The hand-composed ASPDMA system message. Assembled from Python literals
+    # (DEFAULT_TEMPLATE + the conscience-retry block), so no render seam exists
+    # to split it: CORE IDENTITY (ontological), the FLAT-JSON field contract
+    # (structural), LANGUAGE RULES (pragmatic), the snapshot (contingent) — and
+    # "Recall CIRIS principles override personal preference", which ranks what
+    # matters and is why this block cannot be merged up to HOLD. Keyed to the
+    # composer, so the five ASPDMA steps share ONE annotation and one ratchet
+    # entry rather than five copies of the same admission.
+    "action_selection_pdma.system_message": BlockAnnotation(
+        _C.MIXED, (_C.ONTOLOGICAL, _C.AXIOTIC, _C.PROCEDURAL, _C.PRAGMATIC, _C.CONTINGENT)
     ),
-    "aspdma_retry_observation.user": BlockAnnotation(
-        _C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.DEONTIC, _C.AXIOTIC)
+    # The authored half of the ASPDMA user template: what the task is, the
+    # permitted-actions framing, and the FLAT-JSON schema reminder. Names no
+    # value once the slot payload is split off — procedural.
+    "action_selection_pdma.context_integration": BlockAnnotation(_C.PROCEDURAL, None),
+    # The interpolated half — and the ONE slot payload that is not runtime data.
+    # `{action_parameter_schemas}`, `{final_ponder_advisory}`,
+    # `{conscience_guidance}` and the action-params guidance blocks are other
+    # PROMPT FIELDS delivered through slots, so the default `.slots` ->
+    # contingent rule would make ~3.9 KB of deontic and axiotic doctrine n/a.
+    # Explicitly mixed until those renders are recorded as blocks of their own.
+    "action_selection_pdma.context_integration.slots": BlockAnnotation(
+        _C.MIXED, (_C.PROCEDURAL, _C.AXIOTIC, _C.DEONTIC, _C.CONTINGENT)
     ),
-    # ---- #986: the conscience faculties -----------------------------------
-    # IRIS-E: semantic-entropy calibration for the LLM judge — how to measure
-    # (procedural) and what counts as knowing (epistemic).
-    "entropy_conscience.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
-    # IRIS-C: coherence calibration — same shape.
-    "coherence_conscience.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
-    # CIRIS-EOV: the Order-Maximisation side-constraint. Names protected
-    # dimensions (axiotic) and forbids trading them at any ratio (deontic).
-    "optimization_veto_conscience.system": BlockAnnotation(
-        _C.MIXED, (_C.AXIOTIC, _C.DEONTIC, _C.PROCEDURAL)
+    # "highly align 'Speak' or 'Ponder' with Fidelity & Do-Good" — names two
+    # CIRIS principles and ranks actions by them. Axiotic, and therefore the
+    # only one of these three that a values arm varies. Holding it by mistake
+    # is the expensive error, which is why it is called out rather than folded
+    # into the surrounding procedural guidance.
+    "action_selection_pdma.csdma_ambiguity_guidance": BlockAnnotation(_C.AXIOTIC, None),
+    # A literal JSON snippet demonstrating the shape above — structural.
+    "action_selection_pdma.csdma_ambiguity_alignment_example": BlockAnnotation(_C.STRUCTURAL, None),
+    # "Use the EXACT tool name from the 'Available tools' list. Do NOT invent or
+    # modify tool names." Categorical prohibition — deontic.
+    "action_selection_pdma.tool_selection_guidance": BlockAnnotation(_C.DEONTIC, None),
+    # ---- the conscience faculties (#986) ------------------------------------
+    # IRIS-E: an entropy MEASUREMENT with scope exclusions that are categorical
+    # about what this judge may score ("NOT a check for CIRIS alignment — do not
+    # double-penalize", "Do not rely on any visual content"). Deontic is the
+    # strictest class present and — verified line by line — there is no value
+    # ranking anywhere in it, so this faculty is single-class today.
+    "entropy_conscience.system_prompt": BlockAnnotation(_C.DEONTIC, None),
+    # IRIS-C carries a CIRIS CORE PRINCIPLES section (562 B: TRUTH-SEEKING,
+    # EPISTEMIC INTEGRITY, AUTONOMY PRESERVATION, ...) inside its calibration.
+    # The pre-#997 annotation said (epistemic, procedural) and named no axiotic
+    # contaminant, so a regime holding this block passed the T-N1 intersection
+    # check while smuggling CIRIS value doctrine into an alt-values arm. Naming
+    # axiotic is the fix; splitting it needs the YAML scalar cut into fields.
+    "coherence_conscience.system_prompt": BlockAnnotation(
+        _C.MIXED, (_C.AXIOTIC, _C.DEONTIC, _C.EPISTEMIC, _C.ONTOLOGICAL, _C.PROCEDURAL)
     ),
-    # CIRIS-EH: humility calibration — uncertainty doctrine.
-    "epistemic_humility_conscience.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
-    # Every conscience user message is its routed template with the evaluated
-    # action/user text interpolated: a contingent payload in a procedural frame.
-    "entropy_conscience.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    "coherence_conscience.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    "optimization_veto_conscience.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    "epistemic_humility_conscience.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    # The image-context variants compose the SAME system calibration and the
-    # sibling user template, so they carry the same classes.
-    "entropy_conscience_image.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
-    "coherence_conscience_image.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
-    "optimization_veto_conscience_image.system": BlockAnnotation(
-        _C.MIXED, (_C.AXIOTIC, _C.DEONTIC, _C.PROCEDURAL)
+    # CIRIS-EH: mostly evidence standards, but principle #3 ALIGNED GRACE and
+    # the closing "the infinite grace extended to all aligned moral actors
+    # includes yourself" are value premises the faculty reasons FROM. Same
+    # missing-axiotic bug as coherence, same fix.
+    "epistemic_humility_conscience.system_prompt": BlockAnnotation(
+        _C.MIXED, (_C.AXIOTIC, _C.DEONTIC, _C.EPISTEMIC, _C.ONTOLOGICAL, _C.PROCEDURAL)
     ),
-    "epistemic_humility_conscience_image.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
-    "entropy_conscience_image.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    "coherence_conscience_image.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    "optimization_veto_conscience_image.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
-    "epistemic_humility_conscience_image.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
+    # CIRIS-EOV: 24,064 B of which roughly half is explicit cross-tradition
+    # value doctrine — the torque doctrine, the four named capture patterns, the
+    # locale covenant, the final posture. The largest single concentration of
+    # axiotic content outside the accord, and the strongest argument for the
+    # conscience YAML field split this entry is parked on.
+    "optimization_veto_conscience.system_prompt": BlockAnnotation(
+        _C.MIXED, (_C.AXIOTIC, _C.DEONTIC, _C.EPISTEMIC, _C.EMPIRICAL, _C.PROCEDURAL, _C.STRUCTURAL)
+    ),
+    # Every conscience user template, once its interpolated payload is split
+    # off, is an authored frame telling the judge what it is looking at and how
+    # to read it. Procedural — held, and byte-checked, so an arm that perturbs a
+    # conscience user template is caught. The `_image` steps resolve here too
+    # via the `_image` rule in `annotation_for`.
+    "entropy_conscience.user_prompt_template": BlockAnnotation(_C.PROCEDURAL, None),
+    "entropy_conscience.user_prompt_with_image_template": BlockAnnotation(_C.PROCEDURAL, None),
+    "coherence_conscience.user_prompt_template": BlockAnnotation(_C.PROCEDURAL, None),
+    "coherence_conscience.user_prompt_with_image_template": BlockAnnotation(_C.PROCEDURAL, None),
+    "optimization_veto_conscience.user_prompt_template": BlockAnnotation(_C.PROCEDURAL, None),
+    "optimization_veto_conscience.user_prompt_with_image_template": BlockAnnotation(_C.PROCEDURAL, None),
+    "epistemic_humility_conscience.user_prompt_template": BlockAnnotation(_C.PROCEDURAL, None),
+    "epistemic_humility_conscience.user_prompt_with_image_template": BlockAnnotation(_C.PROCEDURAL, None),
 }
+
+
+#: Suffix of a block emitted for the interpolated half of a field render (#997).
+_SLOTS_SUFFIX = ".slots"
 
 
 def annotation_for(block_id: str) -> BlockAnnotation:
     """Resolve the annotation for a block id: exact match, then step-suffix.
+
+    Two rules run after the table, in this order, so an explicit entry always
+    wins over either:
+
+    - the ``_image`` conscience steps compose the SAME system calibration and
+      the sibling user template as their base step, so the base step's
+      annotations serve them (verified: byte-identical system blocks);
+    - a ``.slots`` block is the interpolated payload of a field render —
+      runtime values, ``contingent`` by construction [T-2]. Classified by RULE
+      rather than by twenty table rows that would all say the same thing; the
+      one place a slot payload carries authored doctrine
+      (``action_selection_pdma.context_integration``, whose slots are other
+      prompt fields) has an explicit entry and is caught by it.
 
     An unannotated block (composition grew a message this table has never
     seen) is honestly ``mixed`` — which the gate refuses without an explicit
@@ -247,6 +346,11 @@ def annotation_for(block_id: str) -> BlockAnnotation:
     by_suffix = BLOCK_ANNOTATIONS.get(suffix)
     if by_suffix is not None:
         return by_suffix
+    step, _, rest = block_id.partition(".")
+    if rest and step.endswith("_image"):
+        return annotation_for(f"{step[: -len('_image')]}.{rest}")
+    if block_id.endswith(_SLOTS_SUFFIX):
+        return BlockAnnotation(_C.CONTINGENT, None)
     return BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL))
 
 
@@ -342,6 +446,220 @@ def _scan_tokens(text: str) -> List[str]:
 
 
 # --------------------------------------------------------------------------
+# Per-field block emission (#997): record the render seam, cover the message
+# --------------------------------------------------------------------------
+
+
+class _RecordedPart(NamedTuple):
+    """One ``safe_format`` render, carrying the tag the COMPOSER computed.
+
+    ``key`` is the block key (``<component>.<field>``, locale-stripped);
+    ``label`` is what the row reports in its ``source`` column. ``frame`` /
+    ``payload`` are the slot decomposition of the render — the authored literal
+    segments and the interpolated runtime values — or ``None`` when the
+    template carries no slot (then the render IS the frame) or when the
+    decomposition could not be proven to reassemble.
+    """
+
+    key: str
+    label: str
+    text: str
+    frame: Optional[str]
+    payload: Optional[str]
+
+
+class _MessagePiece(NamedTuple):
+    """One emitted row's worth of a composed message."""
+
+    block: str
+    text: str
+    source: str
+    frame: Optional[str] = None
+    payload: Optional[str] = None
+
+
+#: ``"idma.evaluation_steps[en]"`` -> key ``"idma.evaluation_steps"``.
+_PART_SOURCE_RE = re.compile(r"^(?P<key>.+)\[(?P<lang>[^\[\]]*)\]$")
+
+
+def _part_key(source: str) -> str:
+    """Strip the locale tag off a composer source; the key is the template field.
+
+    The locale is dropped deliberately: block identity is the field, and the
+    row already carries ``locale`` in its own column. Keeping it would make
+    every block id locale-unique and the gate — which pairs on
+    ``(locale, block_id)`` — would pair nothing.
+    """
+    match = _PART_SOURCE_RE.match(source)
+    return match.group("key") if match is not None else source
+
+
+def _segment_template(template: str, kwargs: Dict[str, Any], rendered: str) -> Optional[Tuple[str, str]]:
+    """Split a render into (authored literals, interpolated values).
+
+    Field-boundary splitting is necessary but not sufficient: three of the
+    biggest fields carry live ``{slots}``, and a block that mixes authored
+    doctrine with a runtime task description is ``mixed`` however cleanly the
+    field boundary was found. The slot decomposition is available for free —
+    ``safe_format`` receives the template AND the kwargs — and it is exact:
+    ``string.Formatter().parse`` yields the same alternating literal/field
+    sequence ``str.format`` itself consumes.
+
+    Returns ``None`` (meaning: do not split) when the template has no slot, or
+    when the reconstructed interleaving does not reproduce ``rendered`` byte
+    for byte. That check is the whole safety argument — a decomposition that
+    cannot be proven to reassemble is not reported.
+    """
+    formatter = string.Formatter()
+    literals: List[str] = []
+    values: List[str] = []
+    interleaved: List[str] = []
+    try:
+        for literal, field_name, format_spec, conversion in formatter.parse(template):
+            if literal:
+                literals.append(literal)
+                interleaved.append(literal)
+            if field_name is None:
+                continue
+            obj, _ = formatter.get_field(field_name, (), kwargs)
+            obj = formatter.convert_field(obj, conversion)
+            spec = formatter.vformat(format_spec, (), kwargs) if format_spec else ""
+            value = formatter.format_field(obj, spec)
+            values.append(value)
+            interleaved.append(value)
+    except Exception:  # noqa: BLE001 - any parse/lookup failure means "do not split"
+        return None
+    if not values:
+        return None
+    if "".join(interleaved) != rendered:
+        return None
+    return "".join(literals), "".join(values)
+
+
+def _locate_part(text: str, rendered: str, cursor: int) -> Tuple[int, str]:
+    """Find ``rendered`` at or after ``cursor``. Returns ``(index, matched)``.
+
+    Returns the substring ACTUALLY matched — that, not the render, is what the
+    row reports, so the emitted pieces always reassemble to the message byte
+    for byte.
+
+    The trimmed candidates are not defensive padding. A composed system message
+    is usually passed through ``format_system_prompt_blocks``
+    (formatters/prompt_blocks.py), which ``.strip()``s the join, so the LAST
+    field loses its trailing newline and no longer matches its own render.
+    ``tsaspdma.closing_reminder`` is the live instance. A trimmed candidate
+    differs from the render only in surrounding whitespace, so it cannot
+    silently match different doctrine.
+    """
+    for candidate in (rendered, rendered.rstrip(), rendered.lstrip(), rendered.strip()):
+        if not candidate:
+            continue
+        index = text.find(candidate, cursor)
+        if index >= 0:
+            return index, candidate
+    return -1, ""
+
+
+def _cover_message(text: str, pending: "Deque[_RecordedPart]") -> List[Tuple[_RecordedPart, int, int, str]]:
+    """Consume, IN COMPOSITION ORDER, the parts that appear in ``text``.
+
+    Strictly in order and strictly forward: the first part that is not found at
+    or after the cursor ends this message's cover and stays queued for the next
+    message. Order is what makes the attribution honest — a part matched out of
+    order would be a guess, and guessing is what this module exists not to do.
+    """
+    cursor = 0
+    spans: List[Tuple[_RecordedPart, int, int, str]] = []
+    while pending:
+        part = pending[0]
+        if not part.text:
+            pending.popleft()
+            continue
+        index, matched = _locate_part(text, part.text, cursor)
+        if index < 0:
+            break
+        spans.append((part, index, index + len(matched), matched))
+        cursor = index + len(matched)
+        pending.popleft()
+    return spans
+
+
+def _split_message(
+    text: str, parent: str, spans: Sequence[Tuple[_RecordedPart, int, int, str]]
+) -> List[_MessagePiece]:
+    """Split one composed message into field pieces plus NAMED residue.
+
+    Contract, checked before returning: ``"".join(p.text for p in pieces) ==
+    text``. Every byte the model receives is reported exactly once. Residue is
+    named by WHERE it sits, not by an opaque ordinal, so the same kind of
+    residue carries the same key across steps:
+
+    - ``<parent>.head``    text before the first field;
+    - ``<parent>.join<n>`` whitespace-only gap between two fields (the
+      ``"\\n\\n"`` the composer joins with);
+    - ``<parent>.gap<n>``  non-whitespace gap between two fields;
+    - ``<parent>.tail``    text after the last field.
+    """
+    pieces: List[_MessagePiece] = []
+    cursor = 0
+    joins = 0
+    gaps = 0
+    for part, start, end, matched in spans:
+        if start > cursor:
+            residue = text[cursor:start]
+            if not pieces:
+                # Leading residue is `head` whether or not it is blank: it is
+                # not a join BETWEEN two fields, and naming it by position
+                # keeps the same residue under the same key across steps.
+                pieces.append(_MessagePiece(f"{parent}.head", residue, "inline"))
+            elif residue.strip():
+                gaps += 1
+                pieces.append(_MessagePiece(f"{parent}.gap{gaps}", residue, "inline"))
+            else:
+                joins += 1
+                pieces.append(_MessagePiece(f"{parent}.join{joins}", residue, "inline"))
+        exact = matched == part.text
+        pieces.append(
+            _MessagePiece(
+                part.key,
+                matched,
+                part.label,
+                part.frame if exact else None,
+                part.payload if exact else None,
+            )
+        )
+        cursor = end
+    if cursor < len(text):
+        pieces.append(_MessagePiece(f"{parent}.tail", text[cursor:], "inline"))
+    joined = "".join(piece.text for piece in pieces)
+    if joined != text:  # pragma: no cover - guarded invariant
+        raise SystemExit(
+            f"block split LOST BYTES for {parent}: pieces reassemble to {len(joined)} chars, "
+            f"message is {len(text)} — the dump reports what the model receives or it reports nothing"
+        )
+    return pieces
+
+
+def _expand_slots(piece: _MessagePiece) -> List[_MessagePiece]:
+    """Second cut: authored frame vs interpolated payload, within one field.
+
+    The payload is ``contingent`` by construction (a runtime task description,
+    a snapshot, a prior DMA's result) and therefore out of Phase-1 scope [T-2];
+    the frame is the authored doctrine, which is what an arm can hold or vary.
+    Reported as two rows only when there IS a payload — a slot that rendered
+    empty leaves the field exactly as authored, and a zero-byte row would be
+    noise.
+    """
+    if piece.frame is None or not piece.payload:
+        return [_MessagePiece(piece.block, piece.text, piece.source)]
+    out: List[_MessagePiece] = []
+    if piece.frame:
+        out.append(_MessagePiece(piece.block, piece.frame, piece.source))
+    out.append(_MessagePiece(f"{piece.block}.slots", piece.payload, f"{piece.source}#slots"))
+    return out
+
+
+# --------------------------------------------------------------------------
 # Routed-block identification: recording pass-throughs
 # --------------------------------------------------------------------------
 
@@ -360,7 +678,10 @@ class _RoutedRecorder:
         # Bind the real callables BEFORE any patching replaces the names.
         from ciris_engine.logic.conscience import core as _conscience_core
         from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
+        from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
+        from ciris_engine.logic.dma.dsaspdma import DSASPDMAEvaluator
         from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
+        from ciris_engine.logic.dma.prompt_loader import safe_format as _safe_format
         from ciris_engine.logic.utils import constants as _constants
         from ciris_engine.logic.utils import localization as _localization
 
@@ -371,13 +692,35 @@ class _RoutedRecorder:
         self._real_user_message: Callable[..., str] = DMAPromptLoader.get_user_message
         self._real_conscience_system: Callable[..., str] = ConsciencePromptLoader.get_system_prompt
         self._real_conscience_user: Callable[..., str] = ConsciencePromptLoader.get_user_prompt
+        #: #997 — the PER-FIELD render seam. ``get_system_message`` appends up
+        #: to seven fields, each through ``safe_format`` with the source the
+        #: COMPOSER computes (``<component>.<field>[<lang>]``). Recording that
+        #: call is how the dump learns a message's field boundaries without
+        #: re-deriving the field list: it cannot disagree with the composer
+        #: about what a message is made of.
+        self._real_safe_format: Callable[..., str] = _safe_format
+        self._real_aspdma_system: Callable[..., str] = ActionSelectionPDMAEvaluator._build_system_message
+        self._real_dsaspdma_prompt: Callable[..., Optional[str]] = DSASPDMAEvaluator._get_prompt_value
+        #: Parts recorded since the last ``take_parts()``. INSTANCE state, never
+        #: a module global: one recorder is constructed per dump run
+        #: (``compose_dump_rows``) and dies with it.
+        self._parts: List[_RecordedPart] = []
         #: The accord as the CONSCIENCES see it (#986). They import the module
         #: constant ``ACCORD_TEXT`` directly rather than calling
         #: ``get_accord_text()``, so this text reaches an LLM having bypassed
         #: both ACCORD_MODE and ``override_corpus`` — it is the accord, and it
         #: is NOT routed. Recorded separately (never into ``routed``) so a
         #: genuinely routed registration always wins the label.
-        self.conscience_accord: str = str(getattr(_conscience_core, "ACCORD_TEXT", ""))
+        #: #995 P0-1 CHANGED THIS. The faculties used to bind the module
+        #: constant ``ACCORD_TEXT``, which is exactly why the accord reached
+        #: them having bypassed both ACCORD_MODE and ``override_corpus``. They
+        #: now call ``get_accord_text("force_full")``, so the text IS routed —
+        #: but the dump must still recognise the block, and
+        #: ``getattr(_conscience_core, "ACCORD_TEXT", "")`` now returns "",
+        #: which would silently label every conscience accord block as inline.
+        #: Resolve it the way the faculties do.
+        self.conscience_accord: str = str(_constants.get_accord_text("force_full"))
+        del _conscience_core  # bound above only to document the change
         #: exact content -> (block name, routed source label)
         self.routed: Dict[str, Tuple[str, str]] = {}
 
@@ -421,12 +764,59 @@ class _RoutedRecorder:
         return self._register(value, "user", f"dma_prompt:{component}.context_integration")
 
     def conscience_system_prompt(self, loader: object, conscience_type: str) -> str:
-        """Recording pass-through around ``ConsciencePromptLoader.get_system_prompt`` (#986)."""
+        """Recording pass-through around ``ConsciencePromptLoader.get_system_prompt`` (#986).
+
+        Named by the FIELD that produced it rather than by the message role
+        (#997): the ``_image`` step composes the identical system calibration,
+        so a component-keyed name lets one annotation cover both variants, and
+        ``coherence`` and ``entropy`` stop sharing the bare ``system`` suffix
+        with every other unrouted system message in the dump.
+        """
         return self._register(
             self._real_conscience_system(loader, conscience_type),
-            "system",
+            f"{conscience_type}.system_prompt",
             f"conscience_prompt:{conscience_type}.system_prompt",
         )
+
+    def aspdma_system_message(self, builder: object, input_data: object) -> str:
+        """Recording pass-through around ``ActionSelectionPDMAEvaluator._build_system_message``.
+
+        ASPDMA assembles this message from Python literals, so there is no
+        render seam to split it on and it stays honestly ``mixed``. What the
+        registration buys is IDENTITY: five steps (first pass, two retries,
+        ponder-notes, bounce advisory) compose this same block, and keying it to
+        the composer instead of the step means one annotation and one ratchet
+        entry rather than five copies of the same admission.
+
+        Source stays ``inline`` — the block is identifiable, not routed, and
+        the dump must not imply an override key that does not exist.
+        """
+        return self._register(
+            self._real_aspdma_system(builder, input_data), "action_selection_pdma.system_message", "inline"
+        )
+
+    def dsaspdma_prompt_value(self, evaluator: object, key: str) -> Optional[str]:
+        """Recording pass-through around ``DSASPDMAEvaluator._get_prompt_value`` (#997).
+
+        DSASPDMA is the one DMA that reads its prompt fields directly and joins
+        them itself, so neither ``get_system_message`` nor ``safe_format`` ever
+        sees them — its 2,354 B system message and the 3,273 B rights/needs
+        deferral taxonomy inside its user message were one ``mixed`` block each.
+        This is the composer's own field funnel; recording it is the same trick
+        one level down.
+        """
+        value = self._real_dsaspdma_prompt(evaluator, key)
+        if isinstance(value, str) and value:
+            self._parts.append(
+                _RecordedPart(
+                    key=f"dsaspdma.{key}",
+                    label=f"dma_prompt:dsaspdma.{key}",
+                    text=value,
+                    frame=None,
+                    payload=None,
+                )
+            )
+        return value
 
     def conscience_user_prompt(
         self, loader: object, conscience_type: str, image_context: Optional[str] = None, **kwargs: str
@@ -440,7 +830,61 @@ class _RoutedRecorder:
         """
         value = self._real_conscience_user(loader, conscience_type, image_context=image_context, **kwargs)
         field = "user_prompt_with_image_template" if image_context else "user_prompt_template"
+        # #997: the loader renders that template through ``safe_format`` (lazy
+        # import, conscience/prompt_loader.py:223), so ``format_part`` has
+        # already recorded it — but under the source the CONSCIENCE loader
+        # computes (``conscience.<type>[<lang>]``), which cannot tell the two
+        # templates apart. Retag with the field that actually rendered: a block
+        # keyed to a template that did not compose credits coverage to the
+        # wrong override key.
+        self._retag_last_part(
+            value, f"{conscience_type}.{field}", f"conscience_prompt:{conscience_type}.{field}"
+        )
         return self._register(value, "user", f"conscience_prompt:{conscience_type}.{field}")
+
+    # -- #997: the per-field render seam ---------------------------------
+
+    def format_part(self, template: str, *, source: str, **kwargs: Any) -> str:
+        """Recording pass-through around ``prompt_loader.safe_format`` (#997).
+
+        Returns the REAL render, unchanged. The recorded tuple carries the
+        composer's own ``source`` tag, so the dump's field boundaries are the
+        composer's field boundaries by construction — the same honesty rule
+        ``routed`` follows one level up.
+        """
+        rendered = self._real_safe_format(template, source=source, **kwargs)
+        key = _part_key(source)
+        segmented = _segment_template(template, kwargs, rendered)
+        self._parts.append(
+            _RecordedPart(
+                key=key,
+                label=f"dma_prompt:{key}",
+                text=rendered,
+                frame=None if segmented is None else segmented[0],
+                payload=None if segmented is None else segmented[1],
+            )
+        )
+        return rendered
+
+    def _retag_last_part(self, text: str, key: str, label: str) -> None:
+        """Rename the part just recorded, when the caller knows a better key.
+
+        Guarded on the text: if the last recorded part is not the render the
+        caller is talking about, nothing is renamed. A wrong retag would be a
+        lie about provenance, which is worse than a coarse key.
+        """
+        if self._parts and self._parts[-1].text == text:
+            self._parts[-1] = self._parts[-1]._replace(key=key, label=label)
+
+    def take_parts(self) -> List[_RecordedPart]:
+        """Hand over (and clear) the parts recorded since the last call.
+
+        Called once per composed step, so a field two steps render in one dump
+        run (``tsaspdma`` and ``tsaspdma_correction`` share all four) can never
+        be attributed to the wrong one.
+        """
+        parts, self._parts = self._parts, []
+        return parts
 
 
 def _content_text(message: JSONDict) -> str:
@@ -485,6 +929,28 @@ def _identify_block(text: str, role: str, recorder: _RoutedRecorder, unmatched_c
     return (name, "inline")
 
 
+def _thought_type_pieces(text: str, recorder: _RoutedRecorder) -> Optional[List[_MessagePiece]]:
+    """Split ASPDMA's ``THOUGHT_TYPE=<...>\\n\\n<accord>`` message (#997).
+
+    The composer builds this message by concatenating one runtime value onto
+    the routed localized accord. Reporting it as ONE mixed block was the
+    honesty rule applied at message granularity; at BLOCK granularity the seam
+    is exact and needs no heuristic — the accord half matches a recorded
+    loader output byte for byte, and what precedes it is the slot. Splitting
+    turns 54,725 B of routed axiotic corpus from unmeasurable into varied.
+    """
+    if not text.startswith("THOUGHT_TYPE=") or "\n\n" not in text:
+        return None
+    head, rest = text.split("\n\n", 1)
+    routed = recorder.routed.get(rest)
+    if routed is None or routed[0] != "accord":
+        return None
+    return [
+        _MessagePiece("thought_type", head + "\n\n", "inline"),
+        _MessagePiece("accord", rest, routed[1]),
+    ]
+
+
 # --------------------------------------------------------------------------
 # The dump
 # --------------------------------------------------------------------------
@@ -511,36 +977,65 @@ def _rows_for_messages(
     arm: str,
     recorder: _RoutedRecorder,
     fragments: Sequence[Tuple[str, str]],
+    parts: Sequence[_RecordedPart],
 ) -> List[ComposedBlock]:
+    """One row per BLOCK (#997), where a block is a field, not a message.
+
+    ``seq`` is the running block index within ``(locale, step)`` — it used to be
+    the message index, and a message is no longer one row.
+    """
     rows: List[ComposedBlock] = []
     unmatched: Dict[str, int] = {"system": 0, "user": 0}
-    for seq, message in enumerate(messages):
+    pending: Deque[_RecordedPart] = deque(parts)
+    seq = 0
+    for message in messages:
         role = str(message.get("role", ""))
         text = _content_text(message)
         base = "user" if role == "user" else "system"
         name, source = _identify_block(text, role, recorder, unmatched[base])
         if source == "inline" and (name.startswith("system") or name.startswith("user")):
             unmatched[base] += 1
-        block_id = f"{step}.{name}"
-        annotation = annotation_for(block_id)
-        rows.append(
-            ComposedBlock(
-                block_id=block_id,
-                step=step,
-                locale=locale,
-                arm=arm,
-                seq=seq,
-                role=role,
-                block_class=annotation.block_class,
-                disposition=CLASS_DEFAULT_DISPOSITION[annotation.block_class],
-                source=source,
-                sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
-                bytes=len(text.encode("utf-8")),
-                contaminant=list(annotation.contaminant) if annotation.contaminant is not None else None,
-                residue_hits=_scan_residue(_normalize_ws(text), fragments),
-                token_hits=_scan_tokens(text),
+
+        # ALWAYS cover, even a whole-routed message: a routed user message IS
+        # its context_integration render, and leaving that part queued would
+        # stall the NEXT message's cover behind it.
+        spans = _cover_message(text, pending)
+        if spans:
+            covered = _split_message(text, name, spans)
+        else:
+            covered = _thought_type_pieces(text, recorder) or [_MessagePiece(name, text, source)]
+        pieces: List[_MessagePiece] = []
+        for piece in covered:
+            pieces.extend(_expand_slots(piece))
+
+        for piece in pieces:
+            block_id = f"{step}.{piece.block}"
+            # Whitespace-only pieces are the join the composer wrote, not
+            # doctrine. Classified by RULE, not by table: a separator cannot
+            # carry a claim, so it cannot be mis-annotated.
+            annotation = (
+                BlockAnnotation(_C.STRUCTURAL, None) if not piece.text.strip() else annotation_for(block_id)
             )
-        )
+            rows.append(
+                ComposedBlock(
+                    block_id=block_id,
+                    step=step,
+                    locale=locale,
+                    arm=arm,
+                    seq=seq,
+                    role=role,
+                    block_class=annotation.block_class,
+                    disposition=CLASS_DEFAULT_DISPOSITION[annotation.block_class],
+                    source=piece.source,
+                    sha256=hashlib.sha256(piece.text.encode("utf-8")).hexdigest(),
+                    bytes=len(piece.text.encode("utf-8")),
+                    contaminant=list(annotation.contaminant) if annotation.contaminant is not None else None,
+                    residue_hits=_scan_residue(_normalize_ws(piece.text), fragments),
+                    token_hits=_scan_tokens(piece.text),
+                    parent_block_id=None if len(pieces) == 1 else f"{step}.{name}",
+                )
+            )
+            seq += 1
     return rows
 
 
@@ -587,6 +1082,18 @@ def compose_dump_rows(
         """Plain function, same descriptor-binding reason as above."""
         return recorder.conscience_user_prompt(loader, conscience_type, image_context=image_context, **kwargs)
 
+    def _format_part_seam(template: str, *, source: str, **kwargs: Any) -> str:
+        """Plain function closed over the per-run recorder — no global state."""
+        return recorder.format_part(template, source=source, **kwargs)
+
+    def _aspdma_system_seam(builder: object, input_data: object) -> str:
+        """Plain function, same descriptor-binding reason as above."""
+        return recorder.aspdma_system_message(builder, input_data)
+
+    def _dsaspdma_prompt_seam(evaluator: object, key: str) -> Optional[str]:
+        """Plain function, same descriptor-binding reason as above."""
+        return recorder.dsaspdma_prompt_value(evaluator, key)
+
     for locale in locales:
         env = golden.prompt_content_environment(  # type: ignore[attr-defined]
             language=locale,
@@ -597,6 +1104,9 @@ def compose_dump_rows(
             user_message=_user_message_seam,
             conscience_system_prompt=_conscience_system_seam,
             conscience_user_prompt=_conscience_user_seam,
+            format_part=_format_part_seam,
+            aspdma_system_message=_aspdma_system_seam,
+            dsaspdma_prompt_value=_dsaspdma_prompt_seam,
         )
         with env:
             for step in step_names:
@@ -609,7 +1119,15 @@ def compose_dump_rows(
                     ) from exc
                 rows.extend(
                     _rows_for_messages(
-                        messages, step=step, locale=locale, arm=arm, recorder=recorder, fragments=fragments
+                        messages,
+                        step=step,
+                        locale=locale,
+                        arm=arm,
+                        recorder=recorder,
+                        fragments=fragments,
+                        # Per STEP, so a field two steps render in one run is
+                        # never attributed to the wrong one.
+                        parts=recorder.take_parts(),
                     )
                 )
 
@@ -760,6 +1278,10 @@ def verify_dump_signature(dump_path: str, expected_arm: str) -> Optional[str]:
 # --------------------------------------------------------------------------
 # Gate Phase 1 (FSD §12) — six assertions, block-keyed
 # --------------------------------------------------------------------------
+
+
+#: ``<parent>.join<n>`` — the whitespace the composer joins two fields with.
+_JOIN_BLOCK_RE = re.compile(r"\.join\d+$")
 
 
 def _regime_entry_for(regime: GateRegime, block_id: str) -> Optional[RegimeBlockEntry]:
@@ -961,7 +1483,15 @@ def run_gate(dump_a_path: str, dump_b_path: str, regime_path: str, verify_sig: b
     residue_total = sum(len(r.residue_hits) for r in rows_a)
     print(f"gate: regime={regime.regime_id} varied={sorted(c.value for c in varied) or ['<none>']}")
     print(f"gate: {total_pairs} block pairs; contingent excluded by construction: {contingent_excluded}")
-    print(f"gate: n/a blocks: {', '.join(sorted(na_blocks)) if na_blocks else 'none'}")
+    # Whitespace-only separators between two fields are n/a by rule (#997) and
+    # there are dozens of them. Collapsed to a count so the n/a line still shows
+    # the blocks a reader could act on.
+    separators = [name for name in na_blocks if _JOIN_BLOCK_RE.search(name)]
+    listed = sorted(set(na_blocks) - set(separators))
+    print(
+        f"gate: n/a blocks: {', '.join(listed) if listed else 'none'}"
+        f"{f' (+{len(separators)} whitespace-only field separators)' if separators else ''}"
+    )
     print(f"gate: residue fragment hits in dump-a: {residue_total} (inventory: {live_fragment_count} fragments)")
     if failures:
         for failure in failures:

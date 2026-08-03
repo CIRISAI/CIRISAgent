@@ -55,6 +55,18 @@ from ciris_engine.schemas.types import JSONDict
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
 
+#: Every module through which ``prompt_loader.safe_format`` can be reached (#997).
+#: The defining module covers all LAZY importers (they resolve the name at call
+#: time); a module that binds the name at import time needs its own entry, or
+#: its fields silently escape the dump's per-field split with no error — the
+#: block just reverts to unnamed residue. ``test_taxonomy_gate_997`` asserts
+#: this list is complete against the tree.
+SAFE_FORMAT_PATCH_TARGETS = (
+    "ciris_engine.logic.dma.prompt_loader.safe_format",
+    "ciris_engine.logic.dma.dsdma_base.safe_format",
+    "ciris_engine.logic.dma.tsaspdma.safe_format",
+)
+
 DMA_NAMES = ("pdma", "csdma", "idma", "dsdma", "aspdma", "dsaspdma")
 
 #: The conscience-faculty steps (#986). Each composes the three-message list the
@@ -166,6 +178,9 @@ def prompt_content_environment(
     user_message: Callable[..., str] | None = None,
     conscience_system_prompt: Callable[..., str] | None = None,
     conscience_user_prompt: Callable[..., str] | None = None,
+    format_part: Callable[..., str] | None = None,
+    aspdma_system_message: Callable[..., str] | None = None,
+    dsaspdma_prompt_value: Callable[..., Any] | None = None,
 ) -> Iterator[None]:
     """Pin language + prompt-content loaders for byte-reproducible composition.
 
@@ -203,6 +218,12 @@ def prompt_content_environment(
         stack.enter_context(
             patch("ciris_engine.logic.dma.tsaspdma.get_localized_accord_text", localized_accord)
         )
+        # #995 P0-1 made the conscience faculties call `get_accord_text` instead
+        # of binding the module constant, but this patch set never followed them
+        # there — so the largest block in the dump (180,522 B of accord, four
+        # times per thought) reported `inline` while being routed. core.py:12 is
+        # a module-top import, so it needs its own name patched.
+        stack.enter_context(patch("ciris_engine.logic.conscience.core.get_accord_text", accord))
         # Optional (#974): a recording pass-through around the loader's
         # user-message render seam, so the #973 dump can identify user
         # messages whose bytes are wholly the render of a routed
@@ -228,6 +249,39 @@ def prompt_content_environment(
                 patch(
                     "ciris_engine.logic.conscience.prompt_loader.ConsciencePromptLoader.get_user_prompt",
                     conscience_user_prompt,
+                )
+            )
+        # Optional (#997): a recording pass-through around the loader's PER-FIELD
+        # render seam, so the #973 dump can split a composed message into the
+        # fields the composer actually appended. The #972 goldens do NOT pass
+        # this and so exercise the unpatched `safe_format` — which is the whole
+        # guarantee that per-field REPORTING never becomes per-field COMPOSING.
+        #
+        # TWO targets, one reason: `prompt_loader` is the defining module (covers
+        # get_system_message / get_user_message and the lazy importers in
+        # conscience/prompt_loader.py and action_selection/context_builder.py),
+        # and dsdma_base binds the name at module top, so its #990 append needs
+        # its own patch.
+        if format_part is not None:
+            for _target in SAFE_FORMAT_PATCH_TARGETS:
+                stack.enter_context(patch(_target, format_part))
+        # Optional (#997): the two composers that assemble a system message from
+        # Python literals rather than through a render seam. Registering the
+        # assembled block gives it a component-keyed identity, so the FIVE
+        # ASPDMA steps that compose it share one annotation instead of five.
+        if aspdma_system_message is not None:
+            stack.enter_context(
+                patch(
+                    "ciris_engine.logic.dma.action_selection_pdma."
+                    "ActionSelectionPDMAEvaluator._build_system_message",
+                    aspdma_system_message,
+                )
+            )
+        if dsaspdma_prompt_value is not None:
+            stack.enter_context(
+                patch(
+                    "ciris_engine.logic.dma.dsaspdma.DSASPDMAEvaluator._get_prompt_value",
+                    dsaspdma_prompt_value,
                 )
             )
         yield

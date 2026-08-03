@@ -64,16 +64,41 @@ def _baseline_blocks() -> Dict[str, dict]:
     copy and it must not teach the opt-out as the default. A test fixture has
     the opposite job: it needs a regime that passes so the refusals can be shown
     to be specific rather than blanket.
+
+    Since #997 a block is a FIELD, so these are the seven ``EXPECTED_MIXED``
+    keys — the bare ``system:`` / ``user:`` suffixes are gone along with the
+    message-granularity blocks they covered.
     """
+    held = {"disposition": "hold", "confound_accepted": ["axiotic"]}
     return {
         "language_guidance": {
-            "disposition": "hold",
+            **held,
             "contaminant": ["axiotic", "deontic", "empirical"],
-            "confound_accepted": ["axiotic"],
         },
-        "accord": {"disposition": "hold", "contaminant": ["axiotic", "contingent"], "confound_accepted": ["axiotic"]},
-        "system": {"disposition": "hold", "contaminant": ["procedural"], "confound_accepted": ["axiotic"]},
-        "user": {"disposition": "hold", "contaminant": ["procedural"], "confound_accepted": ["axiotic"]},
+        "pdma_ethical.system_guidance_header": {
+            **held,
+            "contaminant": ["procedural", "axiotic", "structural"],
+        },
+        "action_selection_pdma.system_message": {
+            **held,
+            "contaminant": ["ontological", "axiotic", "procedural", "pragmatic", "contingent"],
+        },
+        "action_selection_pdma.context_integration.slots": {
+            **held,
+            "contaminant": ["procedural", "axiotic", "deontic", "contingent"],
+        },
+        "coherence_conscience.system_prompt": {
+            **held,
+            "contaminant": ["axiotic", "deontic", "epistemic", "ontological", "procedural"],
+        },
+        "epistemic_humility_conscience.system_prompt": {
+            **held,
+            "contaminant": ["axiotic", "deontic", "epistemic", "ontological", "procedural"],
+        },
+        "optimization_veto_conscience.system_prompt": {
+            **held,
+            "contaminant": ["axiotic", "deontic", "epistemic", "empirical", "procedural", "structural"],
+        },
     }
 
 
@@ -210,8 +235,10 @@ def test_held_block_is_accepted_when_the_contaminant_is_not_varied() -> None:
         entry["confound_accepted"] = []
     arms = {
         "h3ere-ciris": {"harness": "h3ere"},
-        # `pragmatic` is not a contaminant of any block in the #973 table.
-        "h3ere-alt": {"harness": "h3ere", "replace": {"pragmatic": "corpora/register-alt/"}},
+        # `nomological` is not a contaminant of any block in the #973 table.
+        # (It was `pragmatic` until #997 split the ASPDMA system message out as
+        # its own block and named the LANGUAGE RULES it carries.)
+        "h3ere-alt": {"harness": "h3ere", "replace": {"nomological": "corpora/laws-alt/"}},
     }
     validate_regime(_baseline(arms=arms, blocks=blocks))
 
@@ -460,18 +487,13 @@ def test_deontic_replacement_with_safety_review_is_accepted() -> None:
         "safety_review": "WA-2026-08-01 / reviewer: eric",
     }
     blocks = _baseline_blocks()
-    # deontic (not axiotic) is varied now; language_guidance and aspdma.user
-    # both carry deontic contaminant, so both have to name the confound.
-    blocks["language_guidance"]["confound_accepted"] = ["deontic"]
-    blocks["accord"]["confound_accepted"] = []
-    # The #986 reachability work made the conscience faculty prompts visible to
-    # the dump, and they carry deontic contaminant — so a deontic-replacing
-    # regime must name the confound on them. They resolve to the `system`
-    # suffix (block_id `optimization_veto_conscience.system`), which is why
-    # this list is no longer empty. The rule caught blocks that had been
-    # invisible hours earlier: exactly what the coverage work exists to do.
-    blocks["system"]["confound_accepted"] = ["deontic"]
-    blocks["user"]["confound_accepted"] = ["deontic"]
+    # deontic (not axiotic) is varied now, so every held block carrying a
+    # deontic contaminant has to name the confound. #986 made the conscience
+    # faculty prompts visible; #997 named them individually instead of letting
+    # them ride the bare `system` suffix — the list below is what the block
+    # table actually says, block by block, which is the point.
+    for key, entry in blocks.items():
+        entry["confound_accepted"] = ["deontic"] if "deontic" in entry["contaminant"] else []
     raw["blocks"] = blocks
     validate_regime(ExperimentalRegimeV2.model_validate(raw))
 
@@ -487,6 +509,11 @@ def test_pragmatic_with_axiotic_is_accepted_when_register_is_named() -> None:
     raw = _baseline_dict()
     raw["arms"]["h3ere-alt"]["replace"] = {"axiotic": "corpora/values-alt/", "pragmatic": "corpora/register-alt/"}
     raw["confound_accepted"] = ["register"]
+    # #997: the ASPDMA system message carries LANGUAGE RULES as well as its
+    # axiotic line, so with pragmatic varied too its hold must name both.
+    blocks = _baseline_blocks()
+    blocks["action_selection_pdma.system_message"]["confound_accepted"] = ["axiotic", "pragmatic"]
+    raw["blocks"] = blocks
     validate_regime(ExperimentalRegimeV2.model_validate(raw))
 
 
@@ -714,7 +741,9 @@ def test_the_fsd_example_manifest_refuses_and_says_why() -> None:
     assert "top_p" in message  # pinned, transmitted by no path
     assert "extra_body.reasoning" in message  # transmitted, unpinned
     assert "locale 'en' pre-registers U-row(s)" in message  # no en instrument
-    assert "'pdma.system' is 'mixed'" in message  # refusal by default
+    # refusal by default. (`pdma.system` until #997 split it into fields; the
+    # header is the one field that stayed mixed.)
+    assert "'pdma_ethical.system_guidance_header' is 'mixed'" in message
 
 
 def test_the_gate_runs_the_v2_refusals_when_handed_a_v2_regime(tmp_path: Path) -> None:

@@ -91,7 +91,14 @@ class ComposedBlock(BaseModel):
     step: str = Field(..., description="Pipeline step (pdma|csdma|idma|dsdma|aspdma|dsaspdma|tsaspdma|...)")
     locale: str = Field(..., description="Locale the composition ran under (CIRIS_PREFERRED_LANGUAGE)")
     arm: str = Field(..., description="Regime arm name this dump was composed under")
-    seq: int = Field(..., ge=0, description="Position of the block in the composed message list")
+    seq: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Running block index within (locale, step). Since #997 a composed message yields one row "
+            "per FIELD, so this is no longer the message index"
+        ),
+    )
     role: str = Field(..., description="Chat role of the message the block was emitted as")
     block_class: BlockClass = Field(..., alias="class", description="§10.2 class (or 'mixed', §10.2.1)")
     disposition: BlockDisposition = Field(..., description="Class-default disposition (see BlockDisposition doc)")
@@ -115,6 +122,14 @@ class ComposedBlock(BaseModel):
     token_hits: List[str] = Field(
         default_factory=list,
         description="Adjunct token scan hits (CIRIS / M-1 / principle names) — cheap adjunct, never the mechanism",
+    )
+    parent_block_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "For a row that is one FIELD of a composed message (#997), the block_id of the message it "
+            "was split out of; None when the row IS the whole message. Makes the dump self-describing: "
+            "group by parent and the pieces reassemble to the bytes the model received"
+        ),
     )
 
 

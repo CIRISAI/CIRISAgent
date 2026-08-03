@@ -62,14 +62,8 @@ from .bootstrap_helpers import (
 )
 from .component_builder import ComponentBuilder
 from .config_migration import (
-    check_existing_cognitive_config,
-    create_legacy_cognitive_behaviors,
-    get_cognitive_behaviors_from_template,
     migrate_adapter_configs_to_graph,
-    migrate_cognitive_state_behaviors_to_graph,
     migrate_tickets_config_to_graph,
-    save_cognitive_behaviors_to_graph,
-    should_skip_cognitive_migration,
 )
 from .identity_manager import IdentityManager
 from .resume_helpers import (
@@ -992,30 +986,6 @@ class CIRISRuntime(ServicePropertyMixin):
     async def _migrate_tickets_config_to_graph(self) -> None:
         """Migrate tickets config to graph."""
         await migrate_tickets_config_to_graph(self)
-
-    def _should_skip_cognitive_migration(self, force_from_template: bool) -> bool:
-        """Check if cognitive migration should be skipped."""
-        return should_skip_cognitive_migration(force_from_template)
-
-    async def _check_existing_cognitive_config(self, config_service: Any) -> bool:
-        """Check if cognitive config already exists in graph."""
-        return await check_existing_cognitive_config(config_service)
-
-    def _get_cognitive_behaviors_from_template(self) -> Optional[Any]:
-        """Get cognitive behaviors from the agent template if available."""
-        return get_cognitive_behaviors_from_template(self)
-
-    def _create_legacy_cognitive_behaviors(self) -> Any:
-        """Create pre-1.7 compatible cognitive behaviors config."""
-        return create_legacy_cognitive_behaviors()
-
-    async def _save_cognitive_behaviors_to_graph(self, config_service: Any, cognitive_behaviors: Any) -> None:
-        """Save cognitive behaviors to the graph with IDENTITY scope."""
-        await save_cognitive_behaviors_to_graph(config_service, cognitive_behaviors)
-
-    async def _migrate_cognitive_state_behaviors_to_graph(self, force_from_template: bool = False) -> None:
-        """Migrate cognitive state behaviors to graph."""
-        await migrate_cognitive_state_behaviors_to_graph(self, force_from_template)
 
     async def _final_verification(self) -> None:
         """Perform final system verification."""

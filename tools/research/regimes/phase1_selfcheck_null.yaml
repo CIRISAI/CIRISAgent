@@ -30,6 +30,17 @@ blocks:
   # whose prose does not partition on the English boundaries. en/es/fr/it/pt
   # compose 29 `language_guidance.<part>` blocks instead, of which 24 are
   # single-class and need no entry here.
+  # #997 correction: the DSDMA identity+norms preamble. Was DEONTIC single-class
+  # on a merge-up argument that is invalid when the classes DISAGREE about
+  # disposition — it carries both "informed consent required" (deontic, hold)
+  # and "client interest over personal gain" / "patient welfare paramount"
+  # (axiotic, VARY). Held as deontic it held the INDEPENDENT VARIABLE inside a
+  # block believed to be held for safety reasons. Nothing is varied in this
+  # regime, so holding accepts no confound; a campaign varying axiotic must
+  # write `confound_accepted: axiotic` and mean it.
+  system.head:
+    disposition: hold
+    contaminant: [deontic, axiotic, ontological, procedural, empirical]
   language_guidance:
     disposition: hold
     contaminant: [axiotic, deontic, empirical]

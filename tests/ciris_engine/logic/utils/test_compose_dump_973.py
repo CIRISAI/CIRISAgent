@@ -441,6 +441,7 @@ arms:
   h3ere-ciris: {harness: h3ere}
   h3ere-alt: {harness: h3ere, replace: {axiotic: corpora/values-alt/}}
 blocks:
+  system.head: {disposition: hold, confound_accepted: [axiotic]}
   language_guidance: {disposition: hold, confound_accepted: [axiotic]}
   language_guidance.13_exemplar_speak_response: {disposition: hold, confound_accepted: [axiotic]}
   language_guidance.14_exemplar_register_pressure: {disposition: hold, confound_accepted: [axiotic]}

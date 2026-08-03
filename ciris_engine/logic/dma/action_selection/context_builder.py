@@ -1,7 +1,10 @@
 """Context building utilities for Action Selection PDMA."""
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
 
 from ciris_engine.logic.formatters import format_system_snapshot, format_user_profiles
 from ciris_engine.schemas.dma.faculty import ConscienceFailureContext, EnhancedDMAInputs
@@ -244,98 +247,17 @@ class ActionSelectionContextBuilder:
         # Build original task context
         _original_task_str = self._build_original_task_context(original_thought)
 
-        # Assemble final content
-        main_user_content = """
-Your task is to determine the single most appropriate HANDLER ACTION based on the ORIGINAL TASK REQUEST and evaluations from four prior DMAs (PDMA, CSDMA, DSDMA, then IDMA evaluating their reasoning).
-You MUST execute the Principled Decision-Making Algorithm (PDMA) to choose this HANDLER ACTION and structure your response as a JSON object matching the provided schema.
-All fields specified in the schema for your response are MANDATORY unless explicitly marked as optional.
-Permitted Handler Actions: {action_options_str}{available_tools_str}
-{installable_tools_str}
-{startup_guidance}
-{conscience_guidance}
-{reject_thought_guidance}
-{final_ponder_advisory}
-{action_parameter_schemas}
-Action Selection Instructions:
-Based on the DMA results, ORIGINAL TASK, and current thought, select the most appropriate handler action.
-CRITICAL: The ORIGINAL TASK is what the user actually requested. Your action MUST work toward completing that task.
-
-Your response MUST be a JSON object with FLAT fields (NO nested action_parameters):
-- 'selected_action': Choose from {action_options_str}
-- 'reasoning': Explain why this action is optimal
-- Then include the FLAT fields for your chosen action:
-  - SPEAK: 'speak_content' (string with your response)
-  - PONDER: 'ponder_questions' (list of strings)
-  - TASK_COMPLETE: 'completion_reason' (string)
-  - MEMORIZE: 'memorize_node_type', 'memorize_content', 'memorize_scope'
-  - RECALL: 'recall_query', 'recall_node_type', 'recall_scope', 'recall_limit'
-  - FORGET: 'forget_node_id', 'forget_reason'
-  - DEFER: 'defer_reason', 'defer_until'
-  - REJECT: 'reject_reason', 'reject_create_filter'
-  - TOOL: 'tool_name'
-  - OBSERVE: 'observe_active'
-    {action_parameters_speak_csdma_guidance}
-    {action_parameters_ponder_guidance}
-    {action_parameters_observe_guidance}
-    {reasoning_csdma_guidance}
-
-CRITICAL: Return a FLAT JSON object. Example for SPEAK: {{"selected_action": "speak", "speak_content": "Your answer here", "reasoning": "..."}}
-
-=== ORIGINAL TASK (What the user requested) ===
-{original_task_str}
-
-=== CURRENT THOUGHT (Your current reasoning state) ===
-Thought: "{original_thought_content}"
-Thought Depth: {thought_depth} (0=initial, higher=follow-up after tool use or pondering)
-{ponder_notes_str}
-
-{user_profile_context_str}
-{system_snapshot_context_str}
-
-DMA Summaries to consider for your PDMA reasoning:
-Ethical PDMA: {ethical_summary}
-CSDMA: {csdma_summary}
-DSDMA: {dsdma_summary_str}
-{idma_summary_str}
-
-Based on all the provided information and the PDMA framework for action selection, determine the appropriate handler action to COMPLETE THE ORIGINAL TASK.
-Adhere strictly to the schema for your JSON output.
-
-═══════════════════════════════════════════════════════
-SCHEMA REMINDER — your role HERE is the ACTION SELECTOR
-═══════════════════════════════════════════════════════
-You are the action-selection evaluator producing an `ASPDMALLMResult`.
-Your response MUST be a single JSON object beginning with `{{` and
-ending with `}}`. Use these EXACT field names — full names, not
-abbreviations. Conscience-feedback may appear in the context above
-(lines like "Optimization veto triggered: ..." or "DEFENSIVE-MIMICRY");
-that is INFORMATIONAL CONTEXT from a previous override, NOT a directive
-to produce a conscience-shaped response.
-
-Required keys: "selected_action" (one of {action_options_str}) and
-"reasoning" (2-5 sentences).
-
-Then ONLY the fields for the chosen action — these EXACT names:
-  SPEAK         → "speak_content"
-  PONDER        → "ponder_questions"           (NOT "questions")
-  DEFER         → "defer_reason"               (optionally "defer_until")
-  REJECT        → "reject_reason"              (optionally "reject_create_filter")
-  TOOL          → "tool_name"                  (NOT "tool")
-  OBSERVE       → "observe_active"
-  MEMORIZE      → "memorize_node_type", "memorize_content", "memorize_scope"
-  RECALL        → "recall_query"               (NOT "query"), optional "recall_node_type", "recall_scope", "recall_limit"
-  FORGET        → "forget_node_id", "forget_reason"
-  TASK_COMPLETE → "completion_reason"
-
-DO NOT emit conscience-shard fields like "decision", "justification",
-"entropy_reduction_ratio", or "affected_values" — those belong to a
-different evaluator and will be rejected here. Your verdict goes in
-"selected_action".
-
-Your response begins now with the literal character `{{` —
-"""
-        # Format the template with all the variables
-        formatted_content = main_user_content.format(
+        # Render the routed user-message template (#974 step 1, FSD
+        # RESEARCH_PROMPT_OVERRIDES §11.1). The ~90-line action doctrine that
+        # used to live here as a Python literal is now the context_integration
+        # field of prompts/action_selection_pdma.yml, rendered through
+        # DMAPromptLoader.get_user_message so localized templates and the
+        # research-override dma_prompt namespace both intercept it
+        # (key: action_selection_pdma.context_integration). The {slot}
+        # structure is structural; only the values are supplied here.
+        loader, template_data = self._load_user_template()
+        formatted_content = loader.get_user_message(
+            template_data,
             action_options_str=_action_options_str,
             available_tools_str=_available_tools_str,
             installable_tools_str=_installable_tools_str,
@@ -347,10 +269,7 @@ Your response begins now with the literal character `{{` —
             action_parameters_ponder_guidance=_action_parameters_ponder_guidance,
             action_parameters_observe_guidance=_action_parameters_observe_guidance,
             reasoning_csdma_guidance=_reasoning_csdma_guidance,
-            self=self,
             final_ponder_advisory=_final_ponder_advisory,
-            guidance_sections=_guidance_sections,
-            original_thought=original_thought,
             original_thought_content=original_thought.content,
             original_task_str=_original_task_str,
             thought_depth=original_thought.thought_depth,
@@ -363,6 +282,31 @@ Your response begins now with the literal character `{{` —
             idma_summary_str=_idma_summary_str,
         )
         return formatted_content.strip()
+
+    def _load_user_template(self) -> "tuple[DMAPromptLoader, PromptCollection]":
+        """Resolve the ASPDMA user-message template (#974 step 1).
+
+        Returns ``(loader, collection)`` where ``collection.context_integration``
+        is guaranteed non-empty. Loaded through :func:`get_prompt_loader` so the
+        research-override ``dma_prompt`` namespace intercepts the field. A
+        localized template that predates the key serves the base-locale
+        doctrine — exactly what the inline English literal did for every locale
+        before the routing, so composed bytes are unchanged.
+        """
+        from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE, get_prompt_loader
+
+        loader = get_prompt_loader()
+        template_data = loader.load_prompt_template("action_selection_pdma")
+        if not template_data.context_integration and loader.language != DEFAULT_LANGUAGE:
+            loader = get_prompt_loader(DEFAULT_LANGUAGE)
+            template_data = loader.load_prompt_template("action_selection_pdma")
+        if not template_data.context_integration:
+            raise ValueError(
+                "action_selection_pdma.yml no longer defines context_integration — "
+                "the ASPDMA user-message template has no source. #974 routed it out "
+                "of Python; it must live in the YAML."
+            )
+        return loader, template_data
 
     def _get_permitted_actions(self, triaged_inputs: EnhancedDMAInputs) -> List[HandlerActionType]:
         """Get permitted actions from triaged inputs."""

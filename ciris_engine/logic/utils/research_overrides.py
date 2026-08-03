@@ -20,17 +20,19 @@ Three things live here:
    first LLM call, and collects into one error. A campaign that discovers a bad
    key on thought #400 has already burned 399 contaminated samples.
 
-**What this does NOT cover, stated here and not only in the FSD**: a large
-share of *operative* instruction text — the words that steer verb choice — is
-compiled-in English Python literals with no loader to intercept. The entire
-ASPDMA user message, the DSDMA user message, the identity blocks, the
-formatters. (#974 is routing that residue out in order; the DEFER policy —
-step 0 — now lives in ``prompts/action_selection_pdma.yml`` and IS covered, as
-``action_selection_pdma.action_params_defer_guidance``.) There is deliberately
-no ``inline`` namespace, because offering one would imply that surface is
-addressable. It is not. It is instead *pinned*: :func:`compute_residue_digest`
-hashes the source of every uncovered site and the manifest must declare the
-digest, so the residue cannot drift mid-campaign without stopping the run.
+**What this does NOT cover, stated here and not only in the FSD**: a share of
+*operative* instruction text — the words that steer verb choice — is still
+compiled-in English Python literals with no loader to intercept: the DSDMA
+user message, the identity blocks, the formatters, the inline helpers the
+ASPDMA template interpolates. (#974 is routing that residue out in order:
+step 0 routed the DEFER policy to
+``action_selection_pdma.action_params_defer_guidance``; step 1 routed the
+ASPDMA user-message template to ``action_selection_pdma.context_integration``
+— both ARE covered now.) There is deliberately no ``inline`` namespace,
+because offering one would imply that surface is addressable. It is not. It is
+instead *pinned*: :func:`compute_residue_digest` hashes the source of every
+uncovered site and the manifest must declare the digest, so the residue cannot
+drift mid-campaign without stopping the run.
 """
 
 from __future__ import annotations
@@ -322,11 +324,23 @@ def scan_reachable_string_keys() -> FrozenSet[str]:
 #: adapter code, nor ``ToolInfo.description`` text whose volume depends on which
 #: adapters are loaded. Do not represent the digest as covering more than this.
 RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
-    # The ASPDMA user message — a ~90-line triple-quoted literal. The DMA that
-    # actually picks the action.
+    # The ASPDMA user message TEMPLATE routed out in #974 step 1 — it is now
+    # prompts/action_selection_pdma.yml `context_integration`, covered by the
+    # dma_prompt namespace, so `build_main_user_content` left this inventory.
+    # What stays pinned is the inline prose the template still interpolates:
+    # the ponder-round framing, the startup directive, the reject-thought
+    # note, and the original-task/schema helpers below.
     (
         "logic/dma/action_selection/context_builder.py",
-        "ActionSelectionContextBuilder.build_main_user_content",
+        "ActionSelectionContextBuilder._build_ponder_context",
+    ),
+    (
+        "logic/dma/action_selection/context_builder.py",
+        "ActionSelectionContextBuilder._build_startup_guidance",
+    ),
+    (
+        "logic/dma/action_selection/context_builder.py",
+        "ActionSelectionContextBuilder._get_reject_thought_guidance",
     ),
     (
         "logic/dma/action_selection/context_builder.py",
@@ -950,12 +964,14 @@ def describe_coverage(manifest: Optional[ResearchOverrideManifest] = None) -> st
     )
     return (
         f"{counts}. NOT COVERED (inline English, present in EVERY arm, pinned at "
-        f"{m.residue_digest}): the ASPDMA user message, the non-DEFER action "
-        f"schema/guidance scaffolding, the DSDMA user message, the CORE IDENTITY "
-        f"blocks, the six formatters, and the conscience override reasons. (The "
-        f"DEFER policy routed out of this residue in #974 step 0 and IS covered.) "
-        f"Any paper using this facility must report that the non-CIRIS arm was "
-        f"reasoning under CIRIS's action doctrine, in English"
+        f"{m.residue_digest}): the inline helpers interpolated into the ASPDMA "
+        f"user message, the non-DEFER action schema/guidance scaffolding, the "
+        f"DSDMA user message, the CORE IDENTITY blocks, the six formatters, and "
+        f"the conscience override reasons. (#974 routed the DEFER policy — step "
+        f"0 — and the ASPDMA user-message template — step 1 — out of this "
+        f"residue; both ARE covered.) Any paper using this facility must report "
+        f"that the non-CIRIS arm was reasoning under CIRIS's action doctrine, "
+        f"in English"
     )
 
 

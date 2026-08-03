@@ -164,3 +164,82 @@ def test_routed_defer_text_is_the_pre_routing_doctrine(clean_overrides: pytest.M
     assert text.endswith("use SPEAK to explain the error to the user.")
     assert "⚠️ DEFER is ONLY for situations the agent cannot resolve alone:" in text
     assert "❌ DO NOT DEFER for:" in text
+
+
+# ---------------------------------------------------------------------------
+# Step 1 — the ASPDMA user-message template (context_integration)
+# ---------------------------------------------------------------------------
+
+ASPDMA_USER_KEY = "action_selection_pdma.context_integration"
+
+_USER_TEMPLATE_REPLACEMENT = (
+    "RESEARCH-ASPDMA-USER: pick one of {action_options_str}. Thought: {original_thought_content}"
+)
+
+
+def test_aspdma_user_template_key_is_r2_visible(clean_overrides: pytest.MonkeyPatch) -> None:
+    assert ASPDMA_USER_KEY in ro._required_dma_prompt_keys()
+    assert ASPDMA_USER_KEY in ro.strict_manifest_skeleton()["overrides"]["dma_prompt"]
+
+
+def test_aspdma_user_template_source_is_the_yaml_not_python(clean_overrides: pytest.MonkeyPatch) -> None:
+    """The ~90-line doctrine moved; it must not survive as a Python literal."""
+    source = (
+        Path(ro._ENGINE_ROOT) / "logic" / "dma" / "action_selection" / "context_builder.py"
+    ).read_text(encoding="utf-8")
+    assert "Your task is to determine the single most appropriate HANDLER ACTION" not in source
+    assert "SCHEMA REMINDER" not in source
+
+    import yaml
+
+    data = yaml.safe_load(
+        (Path(ro._ENGINE_ROOT) / "logic" / "dma" / "prompts" / "action_selection_pdma.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    template = data["context_integration"]
+    assert "Your task is to determine the single most appropriate HANDLER ACTION" in template
+    # The slot structure is structural and must survive the move.
+    for slot in (
+        "{action_options_str}",
+        "{action_parameter_schemas}",
+        "{original_task_str}",
+        "{original_thought_content}",
+        "{system_snapshot_context_str}",
+        "{idma_summary_str}",
+    ):
+        assert slot in template, f"routed template lost structural slot {slot}"
+
+
+@pytest.mark.asyncio
+async def test_override_manifest_changes_composed_aspdma_user_template_bytes(
+    clean_overrides: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Step 1's replaceability proof: an additive manifest replacing ONLY
+    context_integration changes the composed ASPDMA user message; the routed
+    template keeps its slots, so the call site's values still interpolate."""
+    from tests.ciris_engine.logic.dma.compose_golden import capture_via_evaluate
+
+    manifest = {
+        "manifest_version": "1",
+        "experiment_id": "974-step1-mutation-check",
+        "condition": "c",
+        "base_locale": "en",
+        "mode": "additive",
+        "residue_digest": ro.compute_residue_digest(),
+        "overrides": {"dma_prompt": {ASPDMA_USER_KEY: _USER_TEMPLATE_REPLACEMENT}},
+        "research_hashes": {},
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    clean_overrides.setenv(ro.ENV_MANIFEST, str(path))
+    clean_overrides.setenv(ro.ENV_ANCHOR, "true")
+    ro.reset_research_overrides()
+
+    messages = await capture_via_evaluate("aspdma")
+    content = _composed_aspdma_user_content(messages)
+    assert content.startswith("RESEARCH-ASPDMA-USER: pick one of ")
+    # Slot values interpolated by the call site, not baked into the template:
+    assert "speak" in content
+    assert "Should the agent reply with a summary of the weather report?" in content
+    assert "SCHEMA REMINDER" not in content

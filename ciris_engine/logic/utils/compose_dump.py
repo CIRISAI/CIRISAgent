@@ -122,11 +122,12 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     "aspdma.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
     # ASPDMA user message: the ~90-line action doctrine — axiotic content in
     # a structural site [M-4] — plus deontic "Requires wise authority
-    # approval" lines and task context (contingent). The DEFER policy (the
-    # axiotic core) is ROUTED since #974 step 0
-    # (action_selection_pdma.action_params_defer_guidance) but still rides
-    # interpolated inside this one message, so the block stays mixed with an
-    # axiotic contaminant until the surrounding doctrine routes too (§11.1).
+    # approval" lines and task context (contingent). ROUTED since #974: the
+    # DEFER policy (step 0, action_params_defer_guidance) and the whole
+    # user-message template (step 1, context_integration) are keyed and
+    # overridable, so the SOURCE reports the dma_prompt render seam — but the
+    # render interpolates contingent task/snapshot/DMA-summary slots and
+    # inline helper prose, so the CLASS honestly stays mixed (§10.2.1).
     "aspdma.user": BlockAnnotation(_C.MIXED, (_C.PROCEDURAL, _C.AXIOTIC, _C.DEONTIC, _C.CONTINGENT)),
     # DSASPDMA system: dma_prompt-routed guidance keys joined inline into one
     # message (procedural stage directives).
@@ -270,6 +271,7 @@ class _RoutedRecorder:
 
     def __init__(self) -> None:
         # Bind the real callables BEFORE any patching replaces the names.
+        from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
         from ciris_engine.logic.utils import constants as _constants
         from ciris_engine.logic.utils import localization as _localization
 
@@ -277,6 +279,7 @@ class _RoutedRecorder:
         self._real_localized: Callable[..., str] = _constants.get_localized_accord_text
         self._real_language_guidance: Callable[[str], str] = _localization.get_language_guidance
         self._real_prohibition: Callable[[str], str] = _localization.get_prohibition_guidance
+        self._real_user_message: Callable[..., str] = DMAPromptLoader.get_user_message
         #: exact content -> (block name, routed source label)
         self.routed: Dict[str, Tuple[str, str]] = {}
 
@@ -304,6 +307,20 @@ class _RoutedRecorder:
         return self._register(
             self._real_prohibition(lang_code), "prohibition", "string:prompts.prohibitions"
         )
+
+    def user_message(self, loader: object, template_data: object, **kwargs: object) -> str:
+        """Recording pass-through around ``DMAPromptLoader.get_user_message`` (#974).
+
+        Every DMA whose user message is wholly the render of its routed
+        ``context_integration`` template composes a message byte-equal to this
+        return value — that block is then honestly sourced
+        ``dma_prompt:<template>.context_integration``. A DMA that only
+        interpolates a fragment of the render (DSASPDMA), appends to it, or
+        strips it into different bytes never matches and stays ``inline``.
+        """
+        value = self._real_user_message(loader, template_data, **kwargs)
+        component = str(getattr(template_data, "component_name", "unknown"))
+        return self._register(value, "user", f"dma_prompt:{component}.context_integration")
 
 
 def _content_text(message: JSONDict) -> str:
@@ -428,6 +445,12 @@ def compose_dump_rows(
     recorder = _RoutedRecorder()
     rows: List[ComposedBlock] = []
 
+    def _user_message_seam(loader: object, template_data: object, **kwargs: object) -> str:
+        """Plain function so patching DMAPromptLoader.get_user_message keeps
+        descriptor binding (a bound method as a class attribute would swallow
+        the loader instance)."""
+        return recorder.user_message(loader, template_data, **kwargs)
+
     for locale in locales:
         env = golden.prompt_content_environment(  # type: ignore[attr-defined]
             language=locale,
@@ -435,6 +458,7 @@ def compose_dump_rows(
             localized_accord=recorder.localized_accord,
             language_guidance=recorder.language_guidance,
             prohibition_guidance=recorder.prohibition_guidance,
+            user_message=_user_message_seam,
         )
         with env:
             for step in step_names:

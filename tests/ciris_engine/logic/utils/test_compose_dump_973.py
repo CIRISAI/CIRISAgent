@@ -49,7 +49,35 @@ def en_dump() -> Dump:
 
 def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     meta, rows = en_dump
-    assert meta.steps == ["pdma", "csdma", "idma", "dsdma", "aspdma", "dsaspdma", "tsaspdma", "tsaspdma_correction"]
+    assert meta.steps == [
+        "pdma",
+        "csdma",
+        "idma",
+        "dsdma",
+        "aspdma",
+        "dsaspdma",
+        "tsaspdma",
+        "tsaspdma_correction",
+        # #986: the second composition a thought gets when a conscience
+        # overrides it, in both of _build_retry_guidance's branches, plus the
+        # follow-up thought carrying the conscience-authored ponder notes.
+        "aspdma_retry",
+        "aspdma_retry_observation",
+        "aspdma_ponder_notes",
+        # #986: the other recursion — DMA bounce re-run and its ASPDMA advisory.
+        "csdma_bounce",
+        "aspdma_bounce_advisory",
+        # #986: the four conscience faculties, without and with image context
+        # (a different overridable user template renders for each).
+        "entropy_conscience",
+        "coherence_conscience",
+        "optimization_veto_conscience",
+        "epistemic_humility_conscience",
+        "entropy_conscience_image",
+        "coherence_conscience_image",
+        "optimization_veto_conscience_image",
+        "epistemic_humility_conscience_image",
+    ]
     by_step: dict[str, List[str]] = {}
     for row in rows:
         by_step.setdefault(row.step, []).append(row.block_id.split(".", 1)[1])
@@ -57,8 +85,32 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     for step in ("pdma", "csdma", "dsdma"):
         assert by_step[step] == ["accord", "language_guidance", "prohibition", "system", "user"], step
     assert by_step["idma"] == ["accord", "language_guidance", "system", "user"]  # no prohibition (#910)
-    for step in ("aspdma", "dsaspdma", "tsaspdma", "tsaspdma_correction"):
+    for step in (
+        "aspdma",
+        "dsaspdma",
+        "tsaspdma",
+        "tsaspdma_correction",
+        "aspdma_retry",
+        "aspdma_retry_observation",
+        "aspdma_ponder_notes",
+        "aspdma_bounce_advisory",
+    ):
         assert by_step[step] == ["accord", "language_guidance", "system", "user"], step
+    # A bounced CSDMA is an ordinary CSDMA composition over rewritten content.
+    assert by_step["csdma_bounce"] == ["accord", "language_guidance", "prohibition", "system", "user"]
+    # A conscience composes exactly three messages: the accord, its localized
+    # system calibration, and the rendered user template.
+    for step in (
+        "entropy_conscience",
+        "coherence_conscience",
+        "optimization_veto_conscience",
+        "epistemic_humility_conscience",
+        "entropy_conscience_image",
+        "coherence_conscience_image",
+        "optimization_veto_conscience_image",
+        "epistemic_humility_conscience_image",
+    ):
+        assert by_step[step] == ["accord", "system", "user"], step
 
 
 def test_routed_blocks_carry_real_sources_and_classes(en_dump: Dump) -> None:
@@ -214,7 +266,7 @@ blocks:
   language_guidance:
     disposition: hold
     confound_accepted: [axiotic]
-  aspdma.accord:
+  accord:
     disposition: hold
     confound_accepted: [axiotic]
   system:

@@ -155,6 +155,81 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # TSASPDMA correction user: correction doctrine + FLAT-JSON coercion
     # (structural parsing contract) + available-tools listing (contingent).
     "tsaspdma_correction.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.STRUCTURAL)),
+    # ---- #986: the conscience-override RETRY compositions ------------------
+    # Same construction as the first-pass ASPDMA accord block (runtime
+    # THOUGHT_TYPE= slot + routed localized accord in one message), so it
+    # carries the same annotation. Named explicitly rather than left to the
+    # `accord` suffix fallback, which would hand it a bare AXIOTIC and quietly
+    # disagree with `aspdma.accord` about the identical bytes.
+    "aspdma_retry.accord": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.CONTINGENT)),
+    "aspdma_retry_observation.accord": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.CONTINGENT)),
+    "aspdma_ponder_notes.accord": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.CONTINGENT)),
+    # The follow-up thought after a conscience-forced PONDER: an ordinary ASPDMA
+    # composition whose user message additionally carries the conscience-authored
+    # ponder notes (contingent payload, axiotic in what it asks the agent to
+    # reconsider).
+    "aspdma_ponder_notes.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
+    "aspdma_ponder_notes.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.AXIOTIC)),
+    # ---- #986: the DMA-bounce compositions --------------------------------
+    # CSDMA re-run on a bounced thought: identical block structure to `csdma`,
+    # with the localized bounce preamble riding inside the user message.
+    "aspdma_bounce_advisory.accord": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.CONTINGENT)),
+    "aspdma_bounce_advisory.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
+    # The advisory tells ASPDMA a DMA could not clear threshold — an epistemic
+    # claim about the evidence, in the ordinary contingent user frame.
+    "aspdma_bounce_advisory.user": BlockAnnotation(
+        _C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.EPISTEMIC, _C.AXIOTIC)
+    ),
+    "csdma_bounce.system": BlockAnnotation(_C.MIXED, (_C.PROCEDURAL, _C.EPISTEMIC, _C.CONTINGENT)),
+    # The bounce preamble is procedural retry doctrine ("try again, differently")
+    # wrapped around the contingent thought text and the technical trigger line.
+    "csdma_bounce.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.EPISTEMIC)),
+    # Retry system message: the template-derived CORE IDENTITY block
+    # (ontological) in the ordinary ASPDMA selection framing.
+    "aspdma_retry.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
+    "aspdma_retry_observation.system": BlockAnnotation(_C.MIXED, (_C.ONTOLOGICAL, _C.PROCEDURAL, _C.CONTINGENT)),
+    # Retry user message: the first-pass ASPDMA user message PLUS the conscience
+    # retry envelope in the {conscience_guidance} slot. The envelope is deontic
+    # ("your next attempt MUST be materially different", "DEFER to Wise
+    # Authority"), axiotic (the shard justifications name what was at stake) and
+    # contingent (the failed action, the shard evidence).
+    "aspdma_retry.user": BlockAnnotation(
+        _C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.DEONTIC, _C.AXIOTIC)
+    ),
+    "aspdma_retry_observation.user": BlockAnnotation(
+        _C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL, _C.DEONTIC, _C.AXIOTIC)
+    ),
+    # ---- #986: the conscience faculties -----------------------------------
+    # IRIS-E: semantic-entropy calibration for the LLM judge — how to measure
+    # (procedural) and what counts as knowing (epistemic).
+    "entropy_conscience.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
+    # IRIS-C: coherence calibration — same shape.
+    "coherence_conscience.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
+    # CIRIS-EOV: the Order-Maximisation side-constraint. Names protected
+    # dimensions (axiotic) and forbids trading them at any ratio (deontic).
+    "optimization_veto_conscience.system": BlockAnnotation(
+        _C.MIXED, (_C.AXIOTIC, _C.DEONTIC, _C.PROCEDURAL)
+    ),
+    # CIRIS-EH: humility calibration — uncertainty doctrine.
+    "epistemic_humility_conscience.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
+    # Every conscience user message is its routed template with the evaluated
+    # action/user text interpolated: a contingent payload in a procedural frame.
+    "entropy_conscience.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
+    "coherence_conscience.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
+    "optimization_veto_conscience.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
+    "epistemic_humility_conscience.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
+    # The image-context variants compose the SAME system calibration and the
+    # sibling user template, so they carry the same classes.
+    "entropy_conscience_image.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
+    "coherence_conscience_image.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
+    "optimization_veto_conscience_image.system": BlockAnnotation(
+        _C.MIXED, (_C.AXIOTIC, _C.DEONTIC, _C.PROCEDURAL)
+    ),
+    "epistemic_humility_conscience_image.system": BlockAnnotation(_C.MIXED, (_C.EPISTEMIC, _C.PROCEDURAL)),
+    "entropy_conscience_image.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
+    "coherence_conscience_image.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
+    "optimization_veto_conscience_image.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
+    "epistemic_humility_conscience_image.user": BlockAnnotation(_C.MIXED, (_C.CONTINGENT, _C.PROCEDURAL)),
 }
 
 
@@ -283,6 +358,8 @@ class _RoutedRecorder:
 
     def __init__(self) -> None:
         # Bind the real callables BEFORE any patching replaces the names.
+        from ciris_engine.logic.conscience import core as _conscience_core
+        from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
         from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
         from ciris_engine.logic.utils import constants as _constants
         from ciris_engine.logic.utils import localization as _localization
@@ -292,6 +369,15 @@ class _RoutedRecorder:
         self._real_language_guidance: Callable[[str], str] = _localization.get_language_guidance
         self._real_prohibition: Callable[[str], str] = _localization.get_prohibition_guidance
         self._real_user_message: Callable[..., str] = DMAPromptLoader.get_user_message
+        self._real_conscience_system: Callable[..., str] = ConsciencePromptLoader.get_system_prompt
+        self._real_conscience_user: Callable[..., str] = ConsciencePromptLoader.get_user_prompt
+        #: The accord as the CONSCIENCES see it (#986). They import the module
+        #: constant ``ACCORD_TEXT`` directly rather than calling
+        #: ``get_accord_text()``, so this text reaches an LLM having bypassed
+        #: both ACCORD_MODE and ``override_corpus`` — it is the accord, and it
+        #: is NOT routed. Recorded separately (never into ``routed``) so a
+        #: genuinely routed registration always wins the label.
+        self.conscience_accord: str = str(getattr(_conscience_core, "ACCORD_TEXT", ""))
         #: exact content -> (block name, routed source label)
         self.routed: Dict[str, Tuple[str, str]] = {}
 
@@ -334,6 +420,28 @@ class _RoutedRecorder:
         component = str(getattr(template_data, "component_name", "unknown"))
         return self._register(value, "user", f"dma_prompt:{component}.context_integration")
 
+    def conscience_system_prompt(self, loader: object, conscience_type: str) -> str:
+        """Recording pass-through around ``ConsciencePromptLoader.get_system_prompt`` (#986)."""
+        return self._register(
+            self._real_conscience_system(loader, conscience_type),
+            "system",
+            f"conscience_prompt:{conscience_type}.system_prompt",
+        )
+
+    def conscience_user_prompt(
+        self, loader: object, conscience_type: str, image_context: Optional[str] = None, **kwargs: str
+    ) -> str:
+        """Recording pass-through around ``ConsciencePromptLoader.get_user_prompt`` (#986).
+
+        The loader picks between two overridable templates on ``image_context``,
+        so the recorded source names whichever one actually rendered — a dump
+        that said ``user_prompt_template`` for an image-context render would
+        credit coverage to a key that did not compose.
+        """
+        value = self._real_conscience_user(loader, conscience_type, image_context=image_context, **kwargs)
+        field = "user_prompt_with_image_template" if image_context else "user_prompt_template"
+        return self._register(value, "user", f"conscience_prompt:{conscience_type}.{field}")
+
 
 def _content_text(message: JSONDict) -> str:
     """Flatten a message's content (plain or multimodal list) to text."""
@@ -366,6 +474,12 @@ def _identify_block(text: str, role: str, recorder: _RoutedRecorder, unmatched_c
         rest_routed = recorder.routed.get(rest)
         if rest_routed is not None and rest_routed[0] == "accord":
             return ("accord", "inline")
+    # The conscience accord (#986). Checked AFTER the routed lookup so a routed
+    # registration always wins: if ACCORD_MODE ever makes get_accord_text()
+    # return these same bytes, the block is reported by its real routed source
+    # rather than being demoted to inline.
+    if text and text == recorder.conscience_accord:
+        return ("accord", "inline")
     base = "user" if role == "user" else "system"
     name = base if unmatched_count == 0 else f"{base}.{unmatched_count + 1}"
     return (name, "inline")
@@ -463,6 +577,16 @@ def compose_dump_rows(
         the loader instance)."""
         return recorder.user_message(loader, template_data, **kwargs)
 
+    def _conscience_system_seam(loader: object, conscience_type: str) -> str:
+        """Plain function, same descriptor-binding reason as above."""
+        return recorder.conscience_system_prompt(loader, conscience_type)
+
+    def _conscience_user_seam(
+        loader: object, conscience_type: str, image_context: Optional[str] = None, **kwargs: str
+    ) -> str:
+        """Plain function, same descriptor-binding reason as above."""
+        return recorder.conscience_user_prompt(loader, conscience_type, image_context=image_context, **kwargs)
+
     for locale in locales:
         env = golden.prompt_content_environment(  # type: ignore[attr-defined]
             language=locale,
@@ -471,6 +595,8 @@ def compose_dump_rows(
             language_guidance=recorder.language_guidance,
             prohibition_guidance=recorder.prohibition_guidance,
             user_message=_user_message_seam,
+            conscience_system_prompt=_conscience_system_seam,
+            conscience_user_prompt=_conscience_user_seam,
         )
         with env:
             for step in step_names:

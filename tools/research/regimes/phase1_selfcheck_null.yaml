@@ -21,7 +21,15 @@ blocks:
   language_guidance:
     disposition: hold
     contaminant: [axiotic, deontic, empirical]
-  aspdma.accord:
+  # Every ASPDMA-family step composes its accord as one MIXED block (a runtime
+  # THOUGHT_TYPE= slot prepended to the routed accord in the same message), and
+  # #986 added four more such steps. A suffix entry covers all of them without
+  # this file needing a line per step.
+  #
+  # Safe by construction: only `mixed` blocks consult the regime at all (see
+  # run_gate — routed classes go straight to assertions 2/3), so this cannot
+  # swallow the DISCRETE routed accord blocks. Those stay byte-checked.
+  accord:
     disposition: hold
     contaminant: [axiotic, contingent]
   system: {disposition: hold}

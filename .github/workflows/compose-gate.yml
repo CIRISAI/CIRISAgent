@@ -35,6 +35,9 @@ on:
       - 'localization/**'
       - 'tests/ciris_engine/logic/dma/compose_golden.py'
       - 'tools/research/regimes/**'
+      - 'tools/research/probe_gate_coverage.py'
+      - 'ciris_engine/logic/conscience/**'
+      - 'ciris_engine/logic/processors/core/thought_processor/**'
       - '.github/workflows/compose-gate.yml'
   push:
     branches: [main, 'release/**']
@@ -50,6 +53,9 @@ on:
       - 'localization/**'
       - 'tests/ciris_engine/logic/dma/compose_golden.py'
       - 'tools/research/regimes/**'
+      - 'tools/research/probe_gate_coverage.py'
+      - 'ciris_engine/logic/conscience/**'
+      - 'ciris_engine/logic/processors/core/thought_processor/**'
       - '.github/workflows/compose-gate.yml'
 
 permissions:
@@ -129,6 +135,19 @@ jobs:
           fi
           grep -q 'language_guidance' /tmp/gate-varied.out \
             || { echo '::error::refusal did not name language_guidance'; exit 1; }
+
+      - name: Gate COVERAGE must not regress (#986)
+        run: |
+          # The gate's verdict only constrains a key whose replacement moves a
+          # block. This sweeps every override key — one composition per key,
+          # diffed against an un-overridden baseline — and fails if any
+          # namespace can see fewer keys than it could at #986.
+          #
+          # It lives here rather than in the unit-test shards because it spawns
+          # 100+ composition subprocesses: the sharded run has a 60s per-test
+          # timeout and four workers already competing. The floors are defined
+          # once, in the probe module, and the pytest entry point imports them.
+          python3 -m tools.research.probe_gate_coverage --locales en --jobs 4 --assert-floors
 
       - name: Coverage summary
         if: always()

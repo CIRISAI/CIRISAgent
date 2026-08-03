@@ -96,20 +96,21 @@ KNOWN_UNWIRED: Dict[str, str] = {
     ),
 }
 
-#: Locale files carrying a key with no base counterpart. Unreachable by
-#: construction (``PromptCollection`` has no such field), so the text renders
-#: for nobody. Not deleted here: the content may belong in a real field, and
-#: deciding that is a translation review, not a cleanup.
-#: All four are a LANGUAGE RULES block a translator added where the English
-#: base has none — independently, in three languages. That is not four typos;
-#: it is four translators reaching the same conclusion that the base template
-#: is missing something, and inventing a key to hold it. The key renders for
-#: nobody, so the gap they were patching is still open.
+#: EMPTY, and the four entries were RESOLVED rather than reclassified (#992).
+#:
+#: They were a LANGUAGE RULES block three translators added independently, in
+#: hi/ja/it, where the English base has none — not four typos but three people
+#: reaching the same conclusion that the template was missing something, and
+#: inventing a key to hold it. They were right, and the gap they were patching
+#: is now CLOSED from the base side: #990 wired `dsdma_base.response_format`
+#: (the real LANGUAGE RULES block, inert since v2.3.1), and
+#: `prompts.language_guidance` composes into every step.
+#:
+#: With the gap closed the orphans are redundant, and they were unreachable
+#: regardless — `PromptCollection` has no such field, so the loader dropped them
+#: at parse and they rendered for nobody in any release. Removed on that
+#: structural proof, not on "nothing references them".
 KNOWN_LOCALE_ORPHANS: Dict[str, str] = {
-    "csdma_common_sense.hi.language_rules": "CIRISAgent#992 — no base key, no schema field",
-    "tsaspdma.hi.language_rules": "CIRISAgent#992 — no base key, no schema field",
-    "tsaspdma.ja.language_rules": "CIRISAgent#992 — no base key, no schema field",
-    "action_selection_pdma.it.language_rules_guidance": "CIRISAgent#992 — no base key, no schema field",
 }
 
 #: Methods on the shared loader whose ``template_data.<field>`` reads define
@@ -281,7 +282,7 @@ def test_the_unwired_ratchet_only_turns_one_way() -> None:
     counts come down as the issues close; a rise means a key was parked here
     instead of wired in."""
     assert len(KNOWN_UNWIRED) <= 2, f"KNOWN_UNWIRED grew to {sorted(KNOWN_UNWIRED)} — wire it, don't park it"
-    assert len(KNOWN_LOCALE_ORPHANS) <= 4, f"KNOWN_LOCALE_ORPHANS grew to {sorted(KNOWN_LOCALE_ORPHANS)}"
+    assert len(KNOWN_LOCALE_ORPHANS) <= 0, f"KNOWN_LOCALE_ORPHANS grew to {sorted(KNOWN_LOCALE_ORPHANS)}"
     assert all(v.startswith("CIRISAgent#") for v in {**KNOWN_UNWIRED, **KNOWN_LOCALE_ORPHANS}.values()), (
         "every parked key needs a tracking issue — an unexplained exemption is how the original "
         "three-release defect stayed invisible"

@@ -81,15 +81,6 @@ action_params_speak_csdma_guidance: 'Se viene scelto ''Speak'', imposta ''speak_
 action_params_ponder_guidance: "Se viene scelto 'Ponder' (e non nel tentativo finale di benchmark sotto benchmark_mode, o se consentito dal consiglio), 'ponder_questions' DEVE elencare 2-3 domande distinte e NUOVE per risolvere l'ambiguità, costruendo su o differendo da eventuali ponder_notes precedenti. Ad esempio, se il pensiero originale riguardava \"murres\":\n    {{\"selected_action\": \"PONDER\", \"ponder_questions\": [\"Cosa sono i 'murres' in questo specifico contesto fittizio?\", \"I 'murres' sono animali, esseri mitologici, o qualcos'altro?\", \"Qual è l'obiettivo principale dell'utente per questa narrativa 'murres'?\"], \"reasoning\": \"...\"}}"
 reasoning_csdma_guidance: Se si affronta ambiguità segnalata da CSDMA, questo DEVE essere una parte centrale della tua motivazione.
 action_params_observe_guidance: 'Se viene scelto ''Observe'' per raccogliere più contesto (es., sul messaggio di un utente o sullo stato attuale di una discussione), imposta ''observe_active'' su true per osservare attivamente. Esempio: {{"selected_action": "OBSERVE", "observe_active": true, "reasoning": "Raccogliendo più contesto sulla discussione"}}'
-language_rules_guidance: 'REGOLE LINGUISTICHE:
-
-  - Rispondi nella lingua preferita dell''utente (controlla il profilo utente).
-
-  - TUTTI i valori dei contenuti (reasoning, speak_content, ecc.) devono essere nella lingua dell''utente.
-
-  - Le chiavi JSON DEVONO rimanere in inglese (es., "selected_action", "reasoning", "tool_parameters").
-
-  - Esempio: {{"selected_action": "SPEAK", "speak_content": "Ciao!", "reasoning": "L''utente ha salutato in italiano"}} - contenuto italiano, chiavi inglesi.'
 final_ponder_advisory: '
 
   IMPORTANTE AVVISO TENTATIVO FINALE (La Profondità del Pensiero per il PROSSIMO tentativo sarebbe {current_thought_depth_plus_1}/{max_rounds}):

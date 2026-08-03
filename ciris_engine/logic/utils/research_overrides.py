@@ -22,13 +22,14 @@ Three things live here:
 
 **What this does NOT cover, stated here and not only in the FSD**: a share of
 *operative* instruction text — the words that steer verb choice — is still
-compiled-in English Python literals with no loader to intercept: the identity
-blocks, the formatters, the inline helpers the ASPDMA template interpolates.
-(#974 is routing that residue out in order: step 0 routed the DEFER policy to
+compiled-in English Python literals with no loader to intercept: the
+formatters and the inline helpers the ASPDMA template interpolates. (#974 is
+routing that residue out in order: step 0 routed the DEFER policy to
 ``action_selection_pdma.action_params_defer_guidance``; step 1 routed the
 ASPDMA user-message template to ``action_selection_pdma.context_integration``;
-step 2 made ``dsdma_base.context_integration`` live for the DSDMA user message
-— all three ARE covered now.) There is deliberately no ``inline`` namespace,
+step 2 made ``dsdma_base.context_integration`` live for the DSDMA user
+message; step 3 routed the CORE IDENTITY blocks to ``prompts.identity_block``
+— all four ARE covered now.) There is deliberately no ``inline`` namespace,
 because offering one would imply that surface is addressable. It is not. It is
 instead *pinned*: :func:`compute_residue_digest` hashes the source of every
 uncovered site and the manifest must declare the digest, so the residue cannot
@@ -210,6 +211,7 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "conscience.ponder_bypass_failed",
         "conscience.ponder_conscience_failed",
         "conscience.ponder_forced_retry",
+        "conscience.repeated_speak_guidance",
         "conscience.retry_alternatives_header",
         "conscience.retry_general_outro",
         "conscience.retry_header",
@@ -224,6 +226,7 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.dma.bounce_instruction",
         "prompts.dma.bounce_original_marker",
         "prompts.dma.bounce_trigger_line",
+        "prompts.identity_block",
         "prompts.language_guidance",
         "prompts.prohibitions.AUTONOMOUS_DECEPTION",
         "prompts.prohibitions.BIOMETRIC_INFERENCE",
@@ -376,16 +379,20 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
         "logic/dma/action_selection/action_instruction_generator.py",
         "ActionInstructionGenerator._generate_tool_schema",
     ),
-    # The DSDMA "=== CORE IDENTITY ===" blocks (both branches). The DSDMA user
-    # message routed out in #974 step 2 (dsdma_base.yml context_integration is
-    # live now); compose_messages stays pinned for its error-path fallback
-    # doctrine ("You are a domain-specific evaluator ...") and the
-    # identity-prepend logic.
+    # DSDMA gathering + composition scaffolding. The DSDMA user message routed
+    # out in #974 step 2 (dsdma_base.yml context_integration is live) and the
+    # CORE IDENTITY blocks routed out in step 3 (prompts.identity_block, one
+    # source for all three former copies). evaluate_thought stays pinned for
+    # its remaining prompt-reaching literals (the platform-context framing);
+    # compose_messages for its error-path fallback doctrine ("You are a
+    # domain-specific evaluator ...") and the identity-prepend logic.
     ("logic/dma/dsdma_base.py", "BaseDSDMA.evaluate_thought"),
     ("logic/dma/dsdma_base.py", "BaseDSDMA.compose_messages"),
-    ("logic/dma/action_selection_pdma.py", "ActionSelectionPDMAEvaluator._validate_and_build_identity_block"),
-    # Conscience override reasons, which flow back into the retry prompt — one
-    # of them instructs the agent to emit specific English words.
+    # Conscience override reasons, which flow back into the retry prompt. The
+    # operative one — the repeated-SPEAK guidance that instructs the agent to
+    # emit specific words — routed out in #974 step 5
+    # (conscience.repeated_speak_guidance); the module stays pinned for its
+    # remaining inline reason strings.
     ("logic/conscience/action_sequence_conscience.py", "*"),
     # Formatters: zero localization imports across all five, every one emits
     # hardcoded English into a prompt.
@@ -970,11 +977,11 @@ def describe_coverage(manifest: Optional[ResearchOverrideManifest] = None) -> st
         f"{counts}. NOT COVERED (inline English, present in EVERY arm, pinned at "
         f"{m.residue_digest}): the inline helpers interpolated into the ASPDMA "
         f"user message, the non-DEFER action schema/guidance scaffolding, the "
-        f"CORE IDENTITY blocks, the six formatters, and the conscience override "
-        f"reasons. (#974 routed the DEFER policy — step 0 — the ASPDMA "
-        f"user-message template — step 1 — and the DSDMA user message — step 2 "
-        f"— out of this residue; all three ARE covered.) Any paper using this "
-        f"facility must report that the non-CIRIS arm was reasoning under "
+        f"six formatters, and the conscience override reasons. (#974 routed the "
+        f"DEFER policy — step 0 — the ASPDMA user-message template — step 1 — "
+        f"the DSDMA user message — step 2 — and the CORE IDENTITY blocks — "
+        f"step 3 — out of this residue; all four ARE covered.) Any paper using "
+        f"this facility must report that the non-CIRIS arm was reasoning under "
         f"CIRIS's action doctrine, in English"
     )
 

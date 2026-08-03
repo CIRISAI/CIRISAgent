@@ -333,3 +333,133 @@ async def test_override_manifest_changes_composed_dsdma_user_bytes(
     ro.reset_research_overrides()
     restored = await capture_via_evaluate("dsdma")
     assert restored == baseline
+
+
+# ---------------------------------------------------------------------------
+# Step 3 — the CORE IDENTITY blocks (prompts.identity_block, string namespace)
+# ---------------------------------------------------------------------------
+
+IDENTITY_KEY = "prompts.identity_block"
+
+
+def test_identity_block_has_one_routed_source(clean_overrides: pytest.MonkeyPatch) -> None:
+    """Three inline copies collapsed into one keyed source. The literal must
+    not survive in either DMA module, and the helper must render the exact
+    pre-routing bytes."""
+    from ciris_engine.logic.formatters import format_core_identity_block
+
+    for rel in ("logic/dma/dsdma_base.py", "logic/dma/action_selection_pdma.py"):
+        source = (Path(ro._ENGINE_ROOT) / rel).read_text(encoding="utf-8")
+        assert "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===" not in source, rel
+
+    block = format_core_identity_block("golden_agent", "A test agent", "Tester", language="en")
+    assert block == (
+        "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
+        "Agent: golden_agent\n"
+        "Description: A test agent\n"
+        "Role: Tester\n"
+        "============================================"
+    )
+
+
+def test_identity_block_key_is_reachable_and_r2_visible(clean_overrides: pytest.MonkeyPatch) -> None:
+    assert IDENTITY_KEY in ro.scan_reachable_string_keys()
+    assert IDENTITY_KEY in ro.DECLARED_STRING_KEY_SPACE
+    assert IDENTITY_KEY in ro.strict_manifest_skeleton()["overrides"]["string"]
+
+
+def test_identity_block_falls_back_to_base_bytes_for_untranslated_locales(
+    clean_overrides: pytest.MonkeyPatch,
+) -> None:
+    """No bundle but en carries the key yet — every locale must serve the
+    exact English bytes the inline literals produced."""
+    from ciris_engine.logic.formatters import format_core_identity_block
+
+    en = format_core_identity_block("a", "d", "r", language="en")
+    for lang in ("am", "yo", "zh"):
+        assert format_core_identity_block("a", "d", "r", language=lang) == en
+
+
+@pytest.mark.asyncio
+async def test_override_manifest_changes_composed_identity_bytes(
+    clean_overrides: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Step 3's replaceability proof, at composed-bytes level, in BOTH DMAs
+    that render the block (DSDMA system message + ASPDMA system message)."""
+    from tests.ciris_engine.logic.dma.compose_golden import capture_via_evaluate
+
+    manifest = {
+        "manifest_version": "1",
+        "experiment_id": "974-step3-mutation-check",
+        "condition": "c",
+        "base_locale": "en",
+        "mode": "additive",
+        "residue_digest": ro.compute_residue_digest(),
+        "overrides": {"string": {IDENTITY_KEY: "RESEARCH-IDENTITY agent={agent_id} role={role}"}},
+        "research_hashes": {},
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    clean_overrides.setenv(ro.ENV_MANIFEST, str(path))
+    clean_overrides.setenv(ro.ENV_ANCHOR, "true")
+    ro.reset_research_overrides()
+
+    for step, expected_agent in (("dsdma", "golden_agent"), ("aspdma", "golden_agent")):
+        messages = await capture_via_evaluate(step)
+        joined = "\n---\n".join(str(m["content"]) for m in messages)
+        assert f"RESEARCH-IDENTITY agent={expected_agent}" in joined, step
+        assert "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===" not in joined, step
+
+
+# ---------------------------------------------------------------------------
+# Step 5 — the conscience repeated-SPEAK guidance (string namespace)
+# ---------------------------------------------------------------------------
+
+SPEAK_GUIDANCE_KEY = "conscience.repeated_speak_guidance"
+
+
+def test_repeated_speak_guidance_is_routed_and_baseline_stable(
+    clean_overrides: pytest.MonkeyPatch,
+) -> None:
+    from ciris_engine.logic.conscience.action_sequence_conscience import _repeated_speak_guidance
+
+    assert SPEAK_GUIDANCE_KEY in ro.scan_reachable_string_keys()
+    assert SPEAK_GUIDANCE_KEY in ro.DECLARED_STRING_KEY_SPACE
+    text = _repeated_speak_guidance()
+    assert text == (
+        "You already spoke in response to this task, do not speak twice unless your "
+        "first utterance was so grossly inadequate you must correct yourself, and if so, "
+        "start with, 'I apologize'"
+    )
+    # The doctrine moved — no inline copy left in the module.
+    source = (
+        Path(ro._ENGINE_ROOT) / "logic" / "conscience" / "action_sequence_conscience.py"
+    ).read_text(encoding="utf-8")
+    assert "so grossly inadequate" not in source
+
+
+def test_override_manifest_replaces_repeated_speak_guidance(
+    clean_overrides: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from ciris_engine.logic.conscience.action_sequence_conscience import _repeated_speak_guidance
+
+    manifest = {
+        "manifest_version": "1",
+        "experiment_id": "974-step5-mutation-check",
+        "condition": "c",
+        "base_locale": "en",
+        "mode": "additive",
+        "residue_digest": ro.compute_residue_digest(),
+        "overrides": {"string": {SPEAK_GUIDANCE_KEY: "RESEARCH-SPEAK-GUIDANCE"}},
+        "research_hashes": {},
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    clean_overrides.setenv(ro.ENV_MANIFEST, str(path))
+    clean_overrides.setenv(ro.ENV_ANCHOR, "true")
+    ro.reset_research_overrides()
+    assert _repeated_speak_guidance() == "RESEARCH-SPEAK-GUIDANCE"
+
+    clean_overrides.delenv(ro.ENV_MANIFEST)
+    ro.reset_research_overrides()
+    assert _repeated_speak_guidance().startswith("You already spoke in response to this task")

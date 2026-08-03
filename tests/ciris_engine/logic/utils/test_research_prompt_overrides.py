@@ -728,10 +728,13 @@ class TestDriftGuard:
         manifest = ro.get_active_overrides()
         assert manifest is not None
         assert manifest.mode == "strict"
-        # 99 = the pre-#974 key space (97) + the two #974-routed keys:
+        # 101 = the pre-#974 key space (97) + the #974-routed keys:
         #   action_selection_pdma.action_params_defer_guidance (step 0, the DEFER policy)
         #   action_selection_pdma.context_integration          (step 1, the ASPDMA user template)
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 99
+        #   prompts.identity_block                             (step 3, the CORE IDENTITY doctrine)
+        #   conscience.repeated_speak_guidance                 (step 5, the repeated-SPEAK guidance)
+        # (step 2 reused the pre-existing dsdma_base.context_integration key.)
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 101
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

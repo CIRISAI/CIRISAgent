@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.logic.formatters import (
     append_round1_accord_blocks,
+    format_core_identity_block,
     format_system_prompt_blocks,
     format_system_snapshot,
     format_user_profiles,
@@ -251,11 +252,12 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             if not role:
                 raise ValueError(f"CRITICAL: role is missing from identity! This is a fatal error.")
 
-            identity_block = "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
-            identity_block += f"Agent: {agent_id}\n"
-            identity_block += f"Description: {description}\n"
-            identity_block += f"Role: {role}\n"
-            identity_block += "============================================"
+            # Routed (#974 step 3): one keyed source (prompts.identity_block)
+            # for the CORE IDENTITY doctrine, replaceable via the research
+            # `string` namespace and translatable per bundle.
+            identity_block = format_core_identity_block(
+                str(agent_id), str(description), str(role), language=self._explicit_language
+            )
         else:
             # NO FALLBACK - STRICT TYPE CHECKING ONLY
             # When no DMAInputData, we still need to get identity from ProcessingQueueItem
@@ -310,12 +312,14 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                     f"CRITICAL: role is missing from identity in DSDMA domain '{self.domain_name}'! This is a fatal error."
                 )
 
-            # Build identity block
-            identity_block = "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
-            identity_block += f"Agent: {agent_id}\n"
-            identity_block += f"Description: {description}\n"
-            identity_block += f"Role: {role}\n"
-            identity_block += "============================================"
+            # Build identity block — routed (#974 step 3), see branch above.
+            # NOTE: language sync happens a few lines below in this branch
+            # (pre-existing order); the block renders under the previously
+            # synced language, and en-fallback keeps bytes identical wherever
+            # the bundle has no translation.
+            identity_block = format_core_identity_block(
+                str(agent_id), str(description), str(role), language=self._explicit_language
+            )
 
             # Format optional blocks - type narrow for .get() access
             if isinstance(system_snapshot_raw, dict):

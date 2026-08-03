@@ -2,7 +2,7 @@
 
 from .crisis_resources import format_crisis_resources_block, get_crisis_resources_guidance
 from .escalation import get_escalation_guidance
-from .identity import format_agent_identity
+from .identity import format_agent_identity, format_core_identity_block
 from .prompt_blocks import (
     format_parent_task_chain,
     append_round1_accord_blocks,
@@ -17,6 +17,7 @@ __all__ = [
     "format_system_snapshot",
     "format_user_profiles",
     "format_agent_identity",
+    "format_core_identity_block",
     "format_parent_task_chain",
     "format_thoughts_chain",
     "append_round1_accord_blocks",

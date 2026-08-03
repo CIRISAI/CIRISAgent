@@ -100,8 +100,54 @@ def test_the_immune_inventory_is_empty() -> None:
     """The tuple stays as a live tripwire, not dead code: if a key ever becomes
     unapplicable again it is named there and R2 totality drops it
     automatically. Empty means every dma_prompt key the layer knows about can
-    actually be applied."""
+    actually be applied — including ``action_parameter_schemas``, which #990
+    made overridable at the composition boundary rather than declaring
+    unreachable (see test_generated_schemas_are_overridable_at_composition)."""
     assert OVERRIDE_IMMUNE_DMA_PROMPT_KEYS == ()
+
+
+def test_generated_schemas_are_overridable_at_composition(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A manifest must beat the RUNTIME-GENERATED action schemas (#990).
+
+    ``_get_dynamic_action_schemas`` derives the per-action FLAT field list from
+    the live action enum, so an override applied at YAML load was set on the
+    ``PromptCollection`` and then passed over — the #989 failure shape in a
+    different place. The fix applies the override after generation, so this
+    asserts the composed value, not the loaded one.
+    """
+    from ciris_engine.logic.dma.action_selection.context_builder import ActionSelectionContextBuilder
+    from ciris_engine.schemas.runtime.enums import HandlerActionType
+
+    builder = ActionSelectionContextBuilder.__new__(ActionSelectionContextBuilder)
+    actions = [HandlerActionType.SPEAK, HandlerActionType.PONDER]
+
+    _activate(tmp_path, monkeypatch, {"action_selection_pdma.action_parameter_schemas": "REPLACED-SCHEMAS"})
+    try:
+        assert builder._composed_action_parameter_schemas(actions) == "REPLACED-SCHEMAS"
+    finally:
+        ro.reset_research_overrides()
+
+
+def test_generated_schemas_are_untouched_with_the_gate_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gate closed, the composition boundary is a pass-through to the generator.
+
+    The whole safety argument for overriding a generated value at composition
+    time is that it costs production nothing. Asserted directly here; the #972
+    goldens prove the same thing end to end over composed bytes.
+    """
+    from unittest.mock import Mock
+
+    from ciris_engine.logic.dma.action_selection.context_builder import ActionSelectionContextBuilder
+    from ciris_engine.schemas.runtime.enums import HandlerActionType
+
+    monkeypatch.delenv(ro.ENV_MANIFEST, raising=False)
+    ro.reset_research_overrides()
+    builder = ActionSelectionContextBuilder.__new__(ActionSelectionContextBuilder)
+    builder._get_dynamic_action_schemas = Mock(return_value="GENERATED")  # type: ignore[method-assign]
+    try:
+        assert builder._composed_action_parameter_schemas([HandlerActionType.SPEAK]) == "GENERATED"
+    finally:
+        ro.reset_research_overrides()
 
 
 def test_base_dma_calls_the_mapping_applier() -> None:

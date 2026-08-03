@@ -311,26 +311,37 @@ def scan_reachable_string_keys() -> FrozenSet[str]:
 
 
 # --------------------------------------------------------------------------
-#: dma_prompt keys the override layer cannot apply (#989). **EMPTY — the fix
-#: landed.**
+#: dma_prompt keys whose composed value the override layer does NOT decide.
 #:
-#: The history matters because the empty tuple is a live tripwire, not dead
-#: code. ``BaseDMA._load_prompts`` reads prompt YAML with ``yaml.safe_load``
-#: and keeps a plain dict, while ``_apply_research_overrides`` ``setattr``s
+#: The #989 container mismatch is FIXED and is not what this tuple is for any
+#: more. That history still matters, because it is what the tuple exists to
+#: catch: ``BaseDMA._load_prompts`` read prompt YAML with ``yaml.safe_load``
+#: and kept a plain dict, while ``_apply_research_overrides`` ``setattr``'d
 #: onto a ``PromptCollection`` — a CONTAINER mismatch, not a policy decision.
-#: Thirteen fields (ten of them in ``action_selection_pdma``, the
-#: action-selection tier where an axiotic experiment's dependent variable is
-#: decided) were therefore never overridden, while the loader logged
-#: successful replacements for their siblings: a campaign could swap a value,
-#: read a success line, and run the original.
+#: Thirteen fields (ten in ``action_selection_pdma``, the action-selection tier
+#: where an axiotic experiment's dependent variable is decided) were never
+#: overridden while the loader logged successful replacements for their
+#: siblings: a campaign could swap a value, read a success line, and run the
+#: original. ``apply_research_overrides_to_mapping`` (prompt_loader.py) now
+#: serves the mapping path with the same manifest and the same fail-loud
+#: posture, so those keys are live.
 #:
-#: ``apply_research_overrides_to_mapping`` (prompt_loader.py) now serves the
-#: mapping path with the same manifest and the same fail-loud posture, so the
-#: override WORKS rather than being refused — refusing was the honest stopgap,
-#: not the point.
+#: The OTHER shape of the same lie is the layer applying a value that the
+#: runtime then declines to compose. #990 found one — ``action_selection_pdma.
+#: action_parameter_schemas``, whose composed value is GENERATED from the live
+#: action enum by ``_get_dynamic_action_schemas``, making the YAML field (and
+#: therefore any override of it) a fallback nothing normally reads. It was NOT
+#: parked here. Every field that enters a composed prompt is overridable, so the
+#: override is now applied at the COMPOSITION boundary
+#: (``ActionSelectionContextBuilder._composed_action_parameter_schemas``), after
+#: generation, where a manifest value actually wins. The whole facility is gated
+#: behind research mode; a replacement that no longer matches the action enum
+#: can make a response unparseable, and that is a legitimate research condition,
+#: made legible at the call site rather than prevented.
 #:
-#: Keep this tuple. If a key ever becomes unapplicable again, name it here and
-#: R2 totality drops it automatically. Re-measure with
+#: So: still empty, and it should stay that way. If some future field genuinely
+#: cannot be reached, name it here — R1 will refuse it by name and R2 totality
+#: will drop it automatically — but prefer making it reachable. Re-measure with
 #:     python3 -m tools.research.probe_gate_coverage --namespace dma_prompt
 OVERRIDE_IMMUNE_DMA_PROMPT_KEYS: Tuple[str, ...] = ()
 

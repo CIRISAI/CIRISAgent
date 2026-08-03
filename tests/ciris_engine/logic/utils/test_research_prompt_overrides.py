@@ -739,7 +739,9 @@ class TestDriftGuard:
         # number moved 101 -> 88 -> 101 across this window: the dip was the
         # honest stopgap (refuse what cannot be applied), the return is the
         # real fix (apply it). If it ever drops again, a key became
-        # unapplicable and the inventory says which.
+        # unapplicable and the inventory says which. #990 kept it at 101 on
+        # purpose: `action_parameter_schemas` was made to APPLY at the
+        # composition boundary rather than being declared unapplicable.
         assert sum(len(v) for v in skeleton["overrides"].values()) == 101
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):

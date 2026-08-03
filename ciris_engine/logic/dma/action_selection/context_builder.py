@@ -595,7 +595,18 @@ class ActionSelectionContextBuilder:
     def _build_guidance_sections(
         self, agent_name: Optional[str], permitted_actions: List[HandlerActionType]
     ) -> Dict[str, str]:
-        """Build all guidance sections."""
+        """Build all guidance sections.
+
+        NOTE (#990, unresolved): ``action_alignment_csdma_guidance`` and
+        ``action_alignment_example`` are built here and then never extracted by
+        :meth:`build_main_user_content`, which reads only the five keys that
+        have a matching ``{slot}`` in ``action_selection_pdma.yml``'s
+        ``context_integration``. So ``csdma_ambiguity_guidance`` and
+        ``csdma_ambiguity_alignment_example`` are loaded, localized, and
+        discarded. The keys are LEFT IN PLACE deliberately: wiring either into
+        the template would change what every agent composes, which is a product
+        decision, not a coverage cleanup. Reported, not fixed here.
+        """
         return {
             "action_alignment_csdma_guidance": self._get_agent_specific_prompt("csdma_ambiguity_guidance", agent_name),
             "action_alignment_example": self._get_agent_specific_prompt(
@@ -611,8 +622,47 @@ class ActionSelectionContextBuilder:
                 "action_params_observe_guidance", agent_name
             ),
             "reasoning_csdma_guidance": self._get_agent_specific_prompt("reasoning_csdma_guidance", agent_name),
-            "action_parameter_schemas": self._get_dynamic_action_schemas(permitted_actions),
+            "action_parameter_schemas": self._composed_action_parameter_schemas(permitted_actions),
         }
+
+    def _composed_action_parameter_schemas(self, permitted_actions: List[HandlerActionType]) -> str:
+        """The action schemas as COMPOSED — manifest first, generation second (#990).
+
+        This slot is the one place in the ASPDMA composer where a runtime value
+        shadows a template field: ``_get_dynamic_action_schemas`` derives the
+        per-action FLAT field list from the live permitted-action set and the
+        handler param models, so ``action_selection_pdma.action_parameter_schemas``
+        in the YAML is only ever a fallback. Applying the research override at
+        the YAML load point therefore did nothing — the manifest value was set
+        on the ``PromptCollection`` and then passed over, while the override
+        layer logged a successful replacement. That is the #989 failure shape in
+        a different place, and it made the key invisible to the ablation gate.
+
+        The override is applied HERE, at the composition boundary, so a manifest
+        value is what actually reaches the model. Gate closed (no manifest) this
+        is byte-identical to calling the generator directly — ``override_dma_prompt``
+        returns ``None`` without both ``CIRIS_RESEARCH_PROMPT_OVERRIDES`` and
+        ``CIRIS_TESTING_MODE``, which is what the #972 goldens prove.
+
+        A replacement inconsistent with the live action enum can produce output
+        the ASPDMA parser rejects. That is a legitimate research condition — a
+        campaign may want exactly that degradation — so it is permitted and made
+        LEGIBLE (the warning below names the risk and the key) rather than
+        prevented. Research mode is the correct place for it.
+        """
+        from ciris_engine.logic.utils.research_overrides import override_dma_prompt
+
+        replacement = override_dma_prompt("action_selection_pdma", "action_parameter_schemas")
+        if replacement is not None:
+            logger.warning(
+                "[RESEARCH-OVERRIDE] action_selection_pdma.action_parameter_schemas replaced at the "
+                "composition boundary: the generated per-action schemas were DISCARDED in favour of "
+                "the manifest value. If it does not match the permitted action set %s, the model's "
+                "response may not parse — that is a property of this arm, not a bug.",
+                [a.value for a in permitted_actions],
+            )
+            return replacement
+        return self._get_dynamic_action_schemas(permitted_actions)
 
     def _build_system_context(self, processing_context_data: Any) -> tuple[str, str]:
         """Build user profile and system snapshot context."""

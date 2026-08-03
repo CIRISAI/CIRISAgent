@@ -100,12 +100,41 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
 #:
 #: Where the remainder is dark, and why — each is a reported finding:
 #:
-#: * ``dma_prompt`` 23/36 — ``BaseDMA._load_prompts`` reads the prompt YAML
-#:   directly with ``yaml.safe_load``, bypassing ``DMAPromptLoader`` and hence
-#:   ``_apply_research_overrides``. Every field consumed through an evaluator's
-#:   own ``self.prompts`` is therefore immune to the ``dma_prompt`` namespace in
-#:   PRODUCTION. Making those keys visible means changing composition, not
-#:   observing it, so they stay dark and named.
+#: * ``dma_prompt`` 31/36 — 23/36 at #986 (``BaseDMA._load_prompts`` read the
+#:   prompt YAML with ``yaml.safe_load`` and kept a plain dict while the
+#:   override layer ``setattr``'d a ``PromptCollection`` — a container
+#:   mismatch), 30/36 once #989 fixed that, 31/36 at #990.
+#:
+#:   #990 gained ``action_selection_pdma.action_parameter_schemas``. Its composed
+#:   value is GENERATED from the live action enum by
+#:   ``ActionSelectionContextBuilder._get_dynamic_action_schemas``, so an
+#:   override applied at YAML load was set on the ``PromptCollection`` and then
+#:   passed over — the #989 failure shape in a different place, and invisible to
+#:   the gate for the same reason. It was NOT declared unoverridable: the
+#:   override now applies at the COMPOSITION boundary
+#:   (``_composed_action_parameter_schemas``), after generation, where a manifest
+#:   value wins. Every field that enters a composed prompt is overridable.
+#:
+#:   The five still dark are NOT probe gaps — the probe is doing its job and
+#:   naming composer defects:
+#:     - ``action_selection_pdma.final_ponder_advisory`` renders ONLY on a
+#:       thought's last permitted round (``current_thought_depth >= max_rounds
+#:       - 1``); the fixture drives depth 0-2 of 5, so no composition reaches it.
+#:       A fixture gap, closable by composing a final-attempt variant.
+#:     - ``action_selection_pdma.csdma_ambiguity_guidance`` is built into
+#:       ``_build_guidance_sections`` as ``action_alignment_csdma_guidance`` and
+#:       then never extracted; ``context_integration`` has no slot for it.
+#:     - ``dsdma_base.response_format``, ``idma.closing_reminder``,
+#:       ``tsaspdma.closing_reminder``: no composer reads them. DEADNESS IS
+#:       PER-TEMPLATE, NOT PER-FIELD — the ``dsaspdma``/``idma``/``tsaspdma``/
+#:       ``csdma_common_sense`` copies of ``response_format`` and the
+#:       ``action_selection_pdma``/``dsaspdma`` copies of ``closing_reminder``
+#:       are all read and all gated. Verified by mutating each field to a marker
+#:       and dumping ALL 29 locales over the DMA steps: the four candidates moved
+#:       0 of 1740 blocks while their live siblings moved 29-58 each.
+#:       These are latent production defects, not dead text — the remedy is to
+#:       COMPOSE them, not to delete them, and that is a separate change because
+#:       it moves what every agent says.
 #: * ``string`` 42/46 — the four remaining ``conscience.*`` keys land on
 #:   ``ActionSelectionDMAResult.rationale`` / ``override_reason``, which no
 #:   composition renders, or on override-fold branches needing the live
@@ -115,7 +144,7 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
 #:   a ``domain``, so the field reaches no prompt at runtime.
 GATED_FLOOR: Dict[str, int] = {
     "corpus": 4,
-    "dma_prompt": 23,
+    "dma_prompt": 31,
     "string": 42,
     "conscience_prompt": 12,
     "template": 2,

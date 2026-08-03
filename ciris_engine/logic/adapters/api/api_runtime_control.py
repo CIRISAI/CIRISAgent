@@ -12,7 +12,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.types import JSONDict
 
-from .constants import ERROR_ADAPTER_MANAGER_NOT_AVAILABLE, ERROR_TIME_SERVICE_NOT_AVAILABLE
+from .constants import ERROR_TIME_SERVICE_NOT_AVAILABLE
 
 logger = logging.getLogger(__name__)
 

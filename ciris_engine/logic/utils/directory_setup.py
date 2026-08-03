@@ -429,33 +429,6 @@ def _validate_directory(dir_path: Path) -> None:
         raise PermissionError(error_msg)
 
 
-def _validate_file_permissions(file_path: Path) -> None:
-    """Validate a file is writable if it exists."""
-    if not file_path.exists():
-        return  # File doesn't exist, that's OK
-
-    try:
-        with open(file_path, "a"):
-            # File is writable
-            pass
-    except (PermissionError, IOError):
-        # Get file stats for debugging
-        stat = file_path.stat()
-        owner, group = _get_file_owner_info(stat)
-
-        # getuid/getgid are Unix-only, not available on Windows
-        current_uid = getattr(os, "getuid", lambda: -1)()
-        current_gid = getattr(os, "getgid", lambda: -1)()
-
-        error_msg = f"CANNOT WRITE TO CRITICAL FILE {file_path}"
-        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-        print(f"  Owner: {owner}:{group} (uid={stat.st_uid}, gid={stat.st_gid})", file=sys.stderr)
-        print(f"  Permissions: {oct(stat.st_mode & 0o777)}", file=sys.stderr)
-        print(f"  Current user: uid={current_uid}, gid={current_gid}", file=sys.stderr)
-        print(f"  FIX: sudo chown {current_uid}:{current_gid} {file_path}", file=sys.stderr)
-        raise PermissionError(error_msg)
-
-
 def validate_directories(base_dir: Optional[Path] = None) -> bool:
     """
     Validate that all required directories exist and are writable.

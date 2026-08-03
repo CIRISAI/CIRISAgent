@@ -191,20 +191,6 @@ class ConfigListResponse(BaseModel):
     metadata: Dict[str, Union[str, int, float, bool]] = Field(..., description="Response metadata")
 
 
-def filter_config_for_role(config: ConfigDictType, role: UserRole) -> ConfigDictType:
-    """
-    Filter configuration values based on user role.
-
-    Args:
-        config: Configuration dictionary
-        role: User's role
-
-    Returns:
-        Filtered configuration with sensitive values redacted
-    """
-    return ConfigSecurity.filter_config(config, role)
-
-
 class ConfigUpdateRequest(BaseModel):
     """Request to update configuration value."""
 

@@ -123,14 +123,7 @@ async def _get_wallet_summary(service_registry: Optional[Any] = None) -> Optiona
                 break
 
         if wallet_adapter is None:
-            # Try direct import as fallback
-            try:
-                from ciris_adapters.wallet import WalletAdapter
-
-                # Check if there's a wallet instance available
-                return None  # No wallet adapter found
-            except ImportError:
-                return None
+            return None
 
         # Get wallet status
         providers = getattr(wallet_adapter, "_providers", {})

@@ -17,7 +17,6 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, 
 import instructor
 from openai import (
     APIConnectionError,
-    APIStatusError,
     AsyncOpenAI,
     AuthenticationError,
     BadRequestError,

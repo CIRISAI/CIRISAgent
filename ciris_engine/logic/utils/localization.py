@@ -219,11 +219,15 @@ def get_string(
     # CIRIS_TESTING_MODE are set; the accessor returns None with zero state
     # otherwise. Checked before resolution so the override is what reaches the
     # prompt, not a locale-fallback of it.
-    from ciris_engine.logic.utils.research_overrides import get_active_overrides
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides, override_string
 
     _manifest = get_active_overrides()
     if _manifest is not None:
-        _override = _manifest.overrides.string.get(key)
+        # Resolved WITH lang_code: these keys are localized, so a single value
+        # cannot stand for all of them. Passing the locale is what stops a
+        # baseline manifest — snapshotted at en — from serving English guidance,
+        # English prohibitions and English retry scaffolding into every locale.
+        _override = override_string(key, lang_code)
         if _override is not None:
             return _interpolate(_override, **params) if params else _override
 
@@ -460,13 +464,14 @@ def get_prohibition_guidance(lang_code: str) -> str:
     # so it must consult the override registry itself — otherwise the whole
     # prohibition block (22 of the 44 reachable prompt keys) would be the one
     # part of the `string` namespace that silently kept its CIRIS text.
-    from ciris_engine.logic.utils.research_overrides import get_active_overrides
-
-    _manifest = get_active_overrides()
-    _string_overrides = _manifest.overrides.string if _manifest is not None else {}
+    from ciris_engine.logic.utils.research_overrides import override_string
 
     def _local(key: str) -> str:
-        override = _string_overrides.get(key)
+        # Resolved WITH lang_code, for the same reason this function bypasses
+        # get_string's fallback chain: a single override value standing for every
+        # locale would serve English prohibitions into every non-English prompt —
+        # the pollution the comment above exists to prevent.
+        override = override_string(key, lang_code)
         if override is not None:
             return override.strip()
         value = _resolve_key(lang_data, key)

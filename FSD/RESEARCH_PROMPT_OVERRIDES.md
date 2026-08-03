@@ -1439,3 +1439,39 @@ provenance of its independent variable.**
   reach — a fixture gap (it renders only at
   `current_thought_depth >= max_rounds - 1`), not a composer defect. It is
   therefore unverified by the gate, and a regime must not hold it.
+
+### 15.5 The taxonomy split is a five-locale result  [#997]
+
+`prompts.language_guidance` — the largest cross-cutting contaminant, composed
+into every DMA step — is split into single-class parts in **five** locales
+(`en`, `es`, `fr`, `it`, `pt`) and left whole in the other **24**, including
+every Tier-0 locale.
+
+The five are exactly those whose line-type fingerprint matches English across
+all 123 lines. Nothing mechanical transfers to the rest: `my` carries no section
+markers, `hi` numbers 1-12, `uk` renumbers to 6a-6d, `fa`/`ur` open at section
+4, bullet counts run 5 to 50. And byte-identical reassembly — the check that
+makes the English split safe — **does not detect a cut in the wrong place**: the
+pieces rejoin perfectly while the text is silently mis-classed. Each remaining
+locale therefore needs a native-language semantic read, which is what makes
+completing all 29 prohibitive here.
+
+**This bounds a campaign; it does not block one.** In an unsplit locale the
+block stays `mixed` and therefore REFUSES, which is the correct conservative
+behaviour — the gate declines to measure what it cannot disposition. A TORQUE
+series runs. What it cannot do is carry a *measurable axiotic contrast* in an
+unsplit locale: such an arm must either run in a split locale or declare the
+confound explicitly under §10.2.1.
+
+Two consequences a paper must state rather than discover:
+
+1. **The measurable share is locale-dependent and is worst where it matters
+   most.** Tier-0 locales carry ~1.8x English's guidance bytes (`am` 25,338 B
+   vs `en` 13,694 B) and 100% of it is currently unmeasurable. Reporting an
+   `en` coverage figure as the system's coverage would overstate it for the
+   populations the mission prioritises.
+2. **Coverage went first to the locales that needed it least**, because the
+   selection criterion was structural tractability, not need. That ordering is
+   an artifact of method, not a judgement about importance, and closing the
+   Tier-0 gap is tracked as RATCHET work — per-locale, as required by a given
+   campaign, rather than as a precondition for the series.

@@ -199,9 +199,50 @@ def test_no_mixed_blocks_beyond_the_ratchet() -> None:
     )
 
 
+#: The TOTAL mixed surface, across BOTH registers. This is the number a reader
+#: should carry away, and the one an adversarial review corrected us on.
+#:
+#: "48 -> 7" was the headline first reported and it is wrong: five blocks moved
+#: into IRREDUCIBLE_EXEMPLARS rather than being split, so the live dump carries
+#: TWELVE distinct mixed keys, every one disposition=refuse. Splitting the
+#: register was right — "the FSD forbids splitting this" and "we have not split
+#: this yet" are different claims. Reporting only the smaller half was not.
+#:
+#: Bounding the SUM is what makes the split honest: a block cannot be quietly
+#: relabelled from one register to the other to make a bound look better,
+#: because moving it changes neither this number nor the disposition the gate
+#: applies.
+TOTAL_MIXED_CEILING = 12
+
+#: What the surface measured BEFORE the per-field split, recorded so the ratchet
+#: has a baseline the repository can witness.
+#:
+#: It could not, before. `git log --diff-filter=A` on this file returns exactly
+#: one commit — the change the gate scores — with the bound already set to the
+#: number that change achieved. The stated "EXPECTED_MIXED 11 -> 7" described a
+#: shrink from a state no commit contains. A ratchet whose starting notch is not
+#: in version control is an assertion, not a ratchet.
+MIXED_BEFORE_THE_SPLIT = 48
+
+
 def test_the_mixed_ratchet_only_turns_one_way() -> None:
+    """Bound the SUM, not each register — see TOTAL_MIXED_CEILING."""
+    total = len(EXPECTED_MIXED) + len(IRREDUCIBLE_EXEMPLARS)
+    assert total <= TOTAL_MIXED_CEILING, (
+        f"total mixed surface grew to {total} (EXPECTED_MIXED={len(EXPECTED_MIXED)}, "
+        f"IRREDUCIBLE_EXEMPLARS={len(IRREDUCIBLE_EXEMPLARS)}) — split it, don't move it "
+        f"between registers"
+    )
     assert len(EXPECTED_MIXED) <= 7, f"EXPECTED_MIXED grew to {len(EXPECTED_MIXED)} — split it, don't park it"
     assert all(v.startswith("CIRISAgent#") for v in EXPECTED_MIXED.values())
+
+
+def test_the_ratchet_records_where_it_started() -> None:
+    """The baseline, committed, so a future reader can check the direction of
+    travel against something other than a commit message."""
+    assert MIXED_BEFORE_THE_SPLIT == 48
+    total = len(EXPECTED_MIXED) + len(IRREDUCIBLE_EXEMPLARS)
+    assert total < MIXED_BEFORE_THE_SPLIT, "the split did not reduce the mixed surface"
 
 
 def test_the_irreducible_set_is_bounded_and_cites_the_fsd() -> None:

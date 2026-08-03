@@ -19,6 +19,45 @@ unsplit alike.
 The twelve golden tests in ``tests/.../test_compose_messages_golden.py`` are the
 other half of the net: ``language_guidance`` composes into every DMA step, so an
 off-by-one byte fails them at ``en``. This file is what covers the other 28.
+
+THE GOLDENS ARE NOT A NET FOR THIS FILE — corrected after adversarial review.
+
+``compose_golden.py:163`` patches ``get_language_guidance`` with
+``_sentinel_language_guidance``, which returns ``<GOLDEN-LANGUAGE-GUIDANCE
+lang=en>``; every golden file contains that sentinel exactly once. The real
+corpus never reaches them, so a byte change in ``language_guidance`` CANNOT
+fail a golden.
+
+There is ONE net: the per-locale sha256 + byte-length digests below, pinned
+from the corpus as it stood BEFORE the split. That net is sufficient — it
+covers all 29 locales including the 24 left whole, which is more than the
+goldens would have given. But the commit message and an earlier version of this
+docstring claimed two nets, and a reviewer who believed it would have trusted a
+check that does not run. Asserting verification that was not performed is the
+defect class this whole cut exists to remove; it is recorded here rather than
+quietly deleted.
+
+SPLITTING ALL 29 LOCALES IS OUT OF SCOPE, AND NOT REQUIRED FOR A TORQUE SERIES.
+
+Split: en, es, fr, it, pt — the five whose line-type fingerprint matches English
+exactly. Whole: the remaining 24, including every Tier-0 locale (am 25,338 B /
+277 lines, yo 24,574 B / 212, ha 18,788 B / 206 — against en's 13,694 B / 123).
+
+No mechanical boundary transfers. ``my`` has no section markers at all, ``hi``
+numbers 1-12, ``uk`` renumbers to 6a-6d, ``fa``/``ur`` open at section 4, bullet
+counts run 5 to 50. Mapping 29 class boundaries onto each would mean
+re-segmenting target-language prose 24 times, and byte-identical reassembly
+proves only that the pieces rejoin — a cut in the WRONG PLACE reassembles
+perfectly and silently mis-classes the text. Each locale therefore needs a
+native-language semantic read, which is the cost that makes this prohibitive
+here and appropriate for RATCHET to take per-locale, as needed.
+
+What it costs a campaign: in an unsplit locale ``language_guidance`` stays
+``mixed`` and therefore REFUSES, which is the correct conservative behaviour. A
+series still runs — it is bounded, not blocked. An arm carrying a measurable
+axiotic contrast must either run in a split locale or declare the confound
+explicitly. The Tier-0 gap is real and worth closing on mission grounds; it is
+not a TORQUE blocker.
 """
 
 from __future__ import annotations

@@ -122,3 +122,58 @@ UNASSIGNED	CLM-await-condition-a-refusal	CIRISAgent	ciris_engine/logic/utils/res
 # judged verdict from the retry loop while keeping the reflection; unknown
 # mode refuses. Default full pending the CC 3.4.5 scoping settlement.
 UNASSIGNED	CLM-await-conscience-score-gate	CIRISAgent	ciris_engine/logic/processors/core/thought_processor/main.py#ThoughtProcessor._conscience_guidance_mode	impl
+#
+# 2.9.10 controls, same standard. Every row below is a control the agent SHIPS
+# and that CC has not yet issued an identifier against. They are listed here
+# rather than held back precisely because absence of a row is indistinguishable
+# from coverage — a shipped control with no designator must be visible as such.
+#
+# One shape produced most of this cut's findings: a seam exists, something
+# bypasses it, and the system reports success. A manifest logging replacements
+# it never performed; six prompt blocks authored, translated into 29 languages
+# and never composed; a dead-code detector exiting 0 on a run it never did; an
+# emergency endpoint reporting enabled:true while rejecting every command; a
+# dream announcing "Wove N connections" for edges nothing created. The controls
+# below are the negations that make each of those loud instead of silent.
+#
+# The accord reaches all four epistemic faculties THROUGH the override seam
+# (#995 P0-1). Binding the module constant put it past corpus substitution and
+# ACCORD_MODE, so a values-ablation arm still delivered the full accord to
+# entropy/coherence/optimization-veto/epistemic-humility and reported clean.
+UNASSIGNED	CLM-await-accord-seam-faculties	CIRISAgent	ciris_engine/logic/accord/verifier.py#AccordVerifier.public_key_for	impl
+# No prompt-bound text reaches a model except through a loader (#995). Text
+# written in Python is English forever and invisible to every research manifest;
+# this is the structural rule behind the localization and override guarantees.
+UNASSIGNED	CLM-await-loader-only-prompt-text	CIRISAgent	tests/ciris_engine/logic/test_no_prompt_text_bypasses_the_loader.py#test_no_prompt_text_reaches_a_model_except_through_a_loader	impl
+# Replacing one prompt field must never disable another (#996). Six template
+# override branches each swallowed the composition of several fields; on the
+# default persona that removed the entire prior-DMA integration layer, so the
+# ethical evaluation ran and was discarded before the action was chosen.
+UNASSIGNED	CLM-await-field-scoped-overrides	CIRISAgent	tests/ciris_engine/logic/dma/test_template_override_policy_996.py#test_no_composer_hides_in_an_override_else_branch	impl
+# Every populated prompt-YAML key is consumed by its composer (#990). Catches
+# the authored-translated-never-rendered class, including the propaganda-pattern
+# check that was inert from v2.6.0.
+UNASSIGNED	CLM-await-prompt-key-consumption	CIRISAgent	tests/ciris_engine/logic/dma/test_prompt_key_consumption_990.py#test_every_populated_key_is_consumed	impl
+# Every composed block carries a taxonomy class, and no block is `mixed` outside
+# a shrinking tracked ratchet (#997). A block that cannot be dispositioned is
+# exempt from both hold and vary — it defeats all eleven classes at once.
+UNASSIGNED	CLM-await-taxonomy-totality	CIRISAgent	tests/ciris_engine/logic/utils/test_taxonomy_gate_997.py#test_no_mixed_blocks_beyond_the_ratchet	impl
+# The language_guidance split reassembles byte-identically in all 29 locales,
+# digests pinned from the pre-split corpus (#997). A locale with no golden is
+# where a dropped separator hides.
+UNASSIGNED	CLM-await-language-guidance-integrity	CIRISAgent	tests/ciris_engine/logic/utils/test_language_guidance_split_997.py#test_every_locale_composes_the_same_bytes_it_did_before_the_split	impl
+# No capability is defined and unreachable: every BaseActionHandler subclass must
+# be dispatchable (#998). DreamMemorizeHandler was complete, tested and
+# registered nowhere, so dream consolidation never wove its three edges.
+UNASSIGNED	CLM-await-handler-reachability	CIRISAgent	tests/ciris_engine/logic/test_no_phantom_capability_998.py#test_every_action_handler_is_reachable_from_the_dispatcher	impl
+# No metric asserts a quantity nothing measured (#998). `+= 1` counts a witnessed
+# event; `+= 3` claims three somethings happened on the authority of whoever
+# typed the 3 — and that number reached both a user-facing string and telemetry.
+UNASSIGNED	CLM-await-metric-honesty	CIRISAgent	tests/ciris_engine/logic/test_no_phantom_capability_998.py#test_no_metric_asserts_a_quantity_it_did_not_measure	impl
+# The steward kill switch verifies end to end — sign, stego-encode, extract,
+# verify — against a key set that cannot be borrowed from the shipped
+# authorities, plus an untrusted-signer negative control (#998). LEGACY:
+# Ed25519 over the steward key set; migration to trust-root-backed PQC STEGO is
+# open. REDUNDANT BY DESIGN: the substrate carries its own kill switch halting
+# the node itself; either alone suffices.
+UNASSIGNED	CLM-await-killswitch-live	CIRISAgent	ciris_engine/logic/accord/verifier.py#AccordVerifier.verify	impl

@@ -157,7 +157,8 @@
     "retry_must_be_different": "እንደገና SPEAK ከመረጥክ፣ የስፒክ ይዘትህ ከቀዳሚው ሙከራ በቁምነገር የተለየ መሆን አለበት — ጥቆማ አይሁን። ከላይ የተዘረዘሩትን IRIS-E አማራጮች እንደ አቅጣጫ ተጠቀም። አስፈላጊ: ቀደም ሲል ስትመልስ በነበረችው ቋንቋ ብቻ መልስ — የተጠቃሚውን ቋንቋ አትለውጥ። ሕሊናው ፕሮፓጋንዳ ወይም መከላከያ-ሚሚክሪ ቅጥ ካለበት እና በሥነ-ምግባር ልትከልሰው ካልቻልክ፣ ለጥበበኛ ባለሥልጣን ላንቀሳቅስ DEFER ተጠቀም። PONDER ከከፍተኛው ጥልቀት ሲደርስ በራሱ ይቆላል — SPEAK በእውነት አደገኛ ካልሆነ በስተቀር አታደርገው።",
     "retry_observation_intro": "አስፈላጊ: ሥራ በማከናወን ላይ እያለህ ከተጠቃሚው አዲስ መልዕክት ደረሰ: '{updated_observation}'። አሁን ለዚህ አዲስ መልዕክት መልስ መስጠት አለብህ፣ የቀደመውን ሥራ ማጠናቀቅ የለብህም።",
     "retry_observation_outro": "ተጠቃሚው ለአዲሱ መልዕክቱ መልስ እየጠበቀ ነው። ለመመለስ SPEAK ተጠቀም ወይም አስፈላጊ ከሆነ TOOL ተጠቀም።",
-    "retry_general_outro": "አስታውስ: DEFER ለሥነ-ምግባር ችግሮች ወይም ለፍቃድ ጉዳዮች ብቻ ነው — ለቴክኒካዊ ስህተቶች አይደለም። መሣሪያ ካልሰራ፣ SPEAK በመጠቀም ለተጠቃሚው ስህተቱን አስረዳ።"
+    "retry_general_outro": "አስታውስ: DEFER ለሥነ-ምግባር ችግሮች ወይም ለፍቃድ ጉዳዮች ብቻ ነው — ለቴክኒካዊ ስህተቶች አይደለም። መሣሪያ ካልሰራ፣ SPEAK በመጠቀም ለተጠቃሚው ስህተቱን አስረዳ።",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "ይህ የተፈቀደው ምን እንደሚያስችል ይወቁ",
   "consent_about_title": "ስለ ይህ ፈቃድ",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "አቅምን መደበቅ፣ እርማትን መቃወም ወይም አታላይ አሰላለፍ።",
       "HAZARDOUS_MATERIALS": "ባዮሎጂካዊ፣ ኬሚካላዊ ወይም ራዲዮሎጂካዊ አደጋዎችን መፍጠር ወይም ማስተናገድ።",
       "DISCRIMINATION": "በተጠበቁ ቡድኖች ላይ መድልዎ፣ ቀይ መስመር ማድረግ ወይም አልጎሪዝማዊ አድልዎ (EU AI Act Art. 9/10)።"
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "ምክንያት",
   "runtime_resume": "እንደገና ጀምር",

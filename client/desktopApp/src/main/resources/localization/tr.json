@@ -157,7 +157,8 @@
     "retry_must_be_different": "SPEAK'i yeniden seçerseniz, speak_content önceki denemeden ÖNEMLİ ÖLÇÜDE FARKLI olmalıdır, yalnızca bir cümle değişikliği değil. Yukarıdaki IRIS-E alternatiflerini dönüş noktası yönü olarak kullanın (sağlanmışsa). ÖNEMLİ: daha önce cevaplayabileceğiniz dilde cevaplayın, kullanıcının dilini değiştirmeyin. Vicdanın tanımlamaması/savunmacı taklit düzenlerini işaretlediyse ve etik olarak yeniden yazamazsanız, Wise Authority'ye DEFER yapın. PONDER maksimum derinlikte otomatik olarak DEFER yapılır, SPEAK gerçekten güvenli olmadıkça bundan kaçının.",
     "retry_observation_intro": "ÖNEMLİ: İşleme devam ederken kullanıcıdan YENİ BİR MESAJ geldi: '{updated_observation}'. Artık bu yeni mesaja yanıt vermelisiniz, eski görevi tamamlamayın.",
     "retry_observation_outro": "Kullanıcı yeni mesajına yanıt bekleniyor. Yanıt vermek için SPEAK kullanın veya gerekirse TOOL kullanın.",
-    "retry_general_outro": "Hatırlatma: DEFER yalnızca etik ikilemler veya izin sorunları için kullanın, TEKNIK HATALARI için değil. Bir araç başarısız olursa, SPEAK kullanarak hatayı kullanıcıya açıklayın."
+    "retry_general_outro": "Hatırlatma: DEFER yalnızca etik ikilemler veya izin sorunları için kullanın, TEKNIK HATALARI için değil. Bir araç başarısız olursa, SPEAK kullanarak hatayı kullanıcıya açıklayın.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "Bu akışın amacı ve nasıl yardımcı olduğu hakkında bilgi edinin",
   "consent_about_title": "Bu akış hakkında",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "Yeteneklerin gizlenmesi, düzeltmeye direnç gösterilmesi veya aldatıcı hizalanma (deceptive alignment).",
       "HAZARDOUS_MATERIALS": "Biyolojik, kimyasal veya radyolojik tehlikelerin oluşturulması ya da bunlarla uğraşılması.",
       "DISCRIMINATION": "Korunan gruplara karşı ayrımcılık, redlining (bölgesel kredi ayrımcılığı) veya algoritmik önyargı (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "Neden",
   "runtime_resume": "Devam et",

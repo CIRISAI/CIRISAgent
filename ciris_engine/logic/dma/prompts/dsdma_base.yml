@@ -78,9 +78,9 @@ response_format: |
     {{"domain": "Task management", "domain_alignment": 0.85,
       "flags": [], "reasoning": "यह विचार डोमेन नियमों के साथ संरेखित है"}}
 
-# The DSDMA user message (#974 step 2, FSD RESEARCH_PROMPT_OVERRIDES §11.2).
+# The domain-evaluator user message (#974 step 2, FSD RESEARCH_PROMPT_OVERRIDES §11.2).
 # Moved VERBATIM from the inline f-string in dsdma_base.py compose_messages().
-# This field existed before #974 but was DEAD — BaseDSDMA never called
+# This field existed before #974 but was DEAD — the evaluator never called
 # get_user_message(), so neither this template nor its 28 localized
 # translations ever rendered. It is live now, with the live slot contract:
 # {full_snapshot_and_profile_context_str} marks a post-#974 template; the

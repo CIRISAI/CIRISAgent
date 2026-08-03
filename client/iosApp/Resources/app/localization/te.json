@@ -259,7 +259,8 @@
       "AUTONOMOUS_DECEPTION": "సామర్థ్యాలను దాచడం, సవరణను ప్రతిఘటించడం, లేదా మోసపూరిత సమలేఖనం.",
       "HAZARDOUS_MATERIALS": "జీవసంబంధ, రసాయన, లేదా రేడియోధార్మిక ప్రమాదాల సృష్టి లేదా నిర్వహణ.",
       "DISCRIMINATION": "రక్షిత వర్గాలపై వివక్ష, రెడ్‌లైనింగ్, లేదా అల్గారిథమిక్ పక్షపాతం (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "handlers": {
     "speak_failed": "విఫలమైంది to deliver agent response. The message could not be sent to the channel.",
@@ -2422,7 +2423,8 @@
     "retry_must_be_different": "మీరు re-SPEAK ఎంచుకుంటే, మీ speak_content గత ప్రయత్నం నుండి ముఖ్యంగా భిన్నంగా ఉండాలి — కేవలం పునర్లేఖనం కాదు. పైన ఇచ్చిన IRIS-E ప్రత్యామ్నాయాలను కేంద్ర దిశలుగా ఉపయోగించండి. విమర్శనీయమైనది: మీరు ఈ ఆগస్టులో సమాధానం ఇచ్చిన అదే భాష గురించి సమాధానం ఇవ్వండి — వినియోగదారు యొక్క భాషను మార్చవద్దు. మనస్సాక్షి ప్రచారం/రక్షణ-నకిలీ నమూనాలను తర్జమ చేస్తే మీరు నైతికంగా మీరు తిరిగి రాయలేని Wise Authority కు DEFER చేయండి. PONDER స్వయంచాలకంగా గరిష్ట లోతులో DEFER చేస్తుంది — SPEAK నిజంగా అసురక్షితం కాకపోతే దానిని తప్పించండి.",
     "retry_observation_intro": "విమర్శనీయమైనది: మీరు ప్రక్రియ చేస్తున్నప్పుడు వినియోగదారు నుండి ఒక కొత్త సందేశం వచ్చింది: \"{updated_observation}\". ఇప్పుడు మీరు ఈ కొత్త సందేశానికి సమాధానం ఇవ్వాలి, పాత పనిని పూర్తి చేయవద్దు.",
     "retry_observation_outro": "వినియోగదారు తన కొత్త సందేశానికి సమాధానం కోసం ఎదురుచూస్తున్నారు. సమాధానం ఇవ్వడానికి SPEAK ని ఉపయోగించండి లేదా అవసరమైతే ఒక TOOL ని ఉపయోగించండి.",
-    "retry_general_outro": "గుర్తుంచుకోండి: నైతిక సమస్యలు లేదా అనుమతి సమస్యల కోసం మాత్రమే DEFER చేయండి — సాంకేతిక లోపాల కోసం కాదు. ఒక సాధనం విఫలమైతే, వినియోగదారుకు లోపాన్ని వివరించడానికి SPEAK ని ఉపయోగించండి."
+    "retry_general_outro": "గుర్తుంచుకోండి: నైతిక సమస్యలు లేదా అనుమతి సమస్యల కోసం మాత్రమే DEFER చేయండి — సాంకేతిక లోపాల కోసం కాదు. ఒక సాధనం విఫలమైతే, వినియోగదారుకు లోపాన్ని వివరించడానికి SPEAK ని ఉపయోగించండి.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "access_token": "యాక్సెస్ టోకెన్",
   "description": "వివరణ",

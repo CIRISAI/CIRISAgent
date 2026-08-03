@@ -284,8 +284,33 @@ def test_dsdma_stale_localized_template_falls_back_to_base_doctrine(
     — that would be a material non-base-locale prompt change, not a routing.
     They fall back to the base-locale doctrine, exactly what the inline
     f-string served them."""
+    # SYNTHESIZED staleness. The repo's localized dsdma_base.yml files were
+    # replaced with base-verbatim text after this test was first written
+    # (post-#974 cleanup: stale translations of the dead template no longer
+    # exist on disk). The guard protects against FUTURE stale translations,
+    # so the scenario is constructed in memory at the exact seam the guard
+    # reads — self.prompt_template_data — rather than from tree state.
+    from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
+
     dma = _make_dsdma()
-    dma._explicit_language = "am"  # localized dsdma_base.yml exists and is stale
+    dma._explicit_language = "am"
+
+    # prompt_template_data is a fresh-resolving property; the honest seam is
+    # the loader call it makes. Patch it to serve a STALE collection for the
+    # am dsdma_base template only — everything else (including the en fallback
+    # the guard must reach) goes through the real loader.
+    original_load = DMAPromptLoader.load_prompt_template
+
+    def _stale_for_am(self: DMAPromptLoader, name: str):  # type: ignore[no-untyped-def]
+        data = original_load(self, name)
+        if self.language == "am" and name == "dsdma_base":
+            return data.model_copy(
+                update={"context_integration": "Stale translated doctrine without the live slot."}
+            )
+        return data
+
+    clean_overrides.setattr(DMAPromptLoader, "load_prompt_template", _stale_for_am)
+
     loader, template_data = dma._resolve_user_template()
     assert loader.language == "en"
     assert template_data.context_integration is not None

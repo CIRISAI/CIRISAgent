@@ -259,7 +259,8 @@
       "AUTONOMOUS_DECEPTION": "Menyembunyikan kapabilitas, menolak koreksi, atau keselarasan yang menipu (deceptive alignment).",
       "HAZARDOUS_MATERIALS": "Pembuatan atau penanganan bahan berbahaya biologis, kimia, atau radiologis.",
       "DISCRIMINATION": "Diskriminasi terhadap kelompok yang dilindungi, redlining, atau bias algoritmik (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "handlers": {
     "speak_failed": "Gagal mengirimkan respons agen. Pesan tidak dapat dikirim ke saluran.",
@@ -2422,7 +2423,8 @@
     "retry_must_be_different": "Jika Anda memilih kembali SPEAK, speak_content Anda HARUS BERBEDA SECARA SUBSTANSIAL dari upaya sebelumnya — bukan hanya parafrase. Gunakan alternatif IRIS-E di atas sebagai arah pivot jika disediakan. PENTING: merespons dalam bahasa yang sama dengan yang Anda gunakan sebelumnya — jangan ubah bahasa pengguna. Jika nurani menandai pola propaganda/mimikri defensif yang tidak dapat Anda tulis ulang secara etis, DEFER ke Wise Authority. PONDER secara otomatis DEFER pada kedalaman maksimum — hindari itu kecuali SPEAK benar-benar tidak aman.",
     "retry_observation_intro": "PENTING: PESAN BARU tiba dari pengguna saat Anda sedang memproses: '{updated_observation}'. Anda harus merespons PESAN BARU ini, bukan menyelesaikan tugas lama.",
     "retry_observation_outro": "Pengguna menunggu respons untuk pesan baru mereka. Gunakan SPEAK untuk merespons atau gunakan TOOL jika diperlukan.",
-    "retry_general_outro": "Ingat: DEFER hanya untuk dilema etis atau masalah izin — BUKAN untuk kesalahan teknis. Jika alat gagal, SPEAK untuk menjelaskan kesalahan kepada pengguna."
+    "retry_general_outro": "Ingat: DEFER hanya untuk dilema etis atau masalah izin — BUKAN untuk kesalahan teknis. Jika alat gagal, SPEAK untuk menjelaskan kesalahan kepada pengguna.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "access_token": "Token Akses",
   "description": "Deskripsi",

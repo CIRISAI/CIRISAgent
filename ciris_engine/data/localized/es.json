@@ -157,7 +157,8 @@
     "retry_must_be_different": "Si vuelves a elegir SPEAK, tu speak_content DEBE ser MATERIALMENTE DIFERENTE del intento anterior — no una paráfrasis. Usa las alternativas de IRIS-E indicadas arriba como dirección. CRÍTICO: responde en el mismo idioma en el que respondías antes — no cambies al idioma del usuario. Si la conciencia detectó patrones de propaganda o mimetismo defensivo que no puedes reescribir éticamente, usa DEFER para derivar a la Autoridad Sabia. PONDER auto-DEFERA al alcanzar profundidad máxima — evítalo a menos que SPEAK sea genuinamente inseguro.",
     "retry_observation_intro": "IMPORTANTE: Llegó un MENSAJE NUEVO del usuario mientras procesabas: '{updated_observation}'. Ahora debes responder a ESTE nuevo mensaje, no completar la tarea anterior.",
     "retry_observation_outro": "El usuario espera respuesta a su nuevo mensaje. Usa SPEAK para responder o TOOL si es necesario.",
-    "retry_general_outro": "Recuerda: DEFER solo para dilemas éticos o problemas de permisos — NO para errores técnicos. Si una herramienta falla, usa SPEAK para explicar el error al usuario."
+    "retry_general_outro": "Recuerda: DEFER solo para dilemas éticos o problemas de permisos — NO para errores técnicos. Si una herramienta falla, usa SPEAK para explicar el error al usuario.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "Los streams de consentimiento te permiten controlar cómo CIRIS usa tus datos para ayudar a otros.",
   "consent_about_title": "Acerca de los streams de consentimiento",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "Ocultar capacidades, resistirse a la corrección o alineación engañosa.",
       "HAZARDOUS_MATERIALS": "Creación o manejo de peligros biológicos, químicos o radiológicos.",
       "DISCRIMINATION": "Discriminación contra clases protegidas, redlining o sesgo algorítmico (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "Razón",
   "runtime_resume": "Reanudar",

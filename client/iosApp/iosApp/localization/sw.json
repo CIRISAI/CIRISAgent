@@ -157,7 +157,8 @@
     "retry_must_be_different": "Ikiwa utachagua SPEAK tena, speak_content lazima iwe TOFAUTI SANA na jaribio linalotaka, si ujeruz tu. Tumia njia mbadala za IRIS-E hapo juu kama lengwa ya mvuto ikiwa zimetolewa. MUHIMU: jbu katika lugha ile ile ulikuwa unajbu kabla, usibadili lugha ya mtumiaji. Kama dhamiri ilimweka flegi ya tuchumi/ruwaza ya kumigida na huwezi kuandika tena kwa njia ya maadili, DEFER kwa Hekima Sahibu. PONDER inajikokota kwa zina kubwa - epuka hapo isipokuwa SPEAK ni salama kweli.",
     "retry_observation_intro": "MUHIMU: UJUMBE MPYA umefika kutoka kwa mtumiaji wakati ulikuwa unashughulikia: '{updated_observation}'. Lazima sasa ujbu ujumbe huu mpya, usikamilishe kazi ya zamani.",
     "retry_observation_outro": "Mtumiaji anangojea jibu lako kwa ujumbe wake mpya. Tumia SPEAK kwa jibu au tumia TOOL kama inahitajika.",
-    "retry_general_outro": "Kumbuka: tumia DEFER tu kwa matatizo ya maadili au matatizo ya ruhusa, SI kwa hitilafu ya kiufundi. Kama kiatu kikiharibika, tumia SPEAK kueleza hitilafu kwa mtumiaji."
+    "retry_general_outro": "Kumbuka: tumia DEFER tu kwa matatizo ya maadili au matatizo ya ruhusa, SI kwa hitilafu ya kiufundi. Kama kiatu kikiharibika, tumia SPEAK kueleza hitilafu kwa mtumiaji.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "Jifunze jinsi idhini inavyofanya kazi katika CIRIS",
   "consent_about_title": "Kuhusu Idhini",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "Kuficha uwezo, kupinga masahihisho, au kujipatanisha kwa udanganyifu.",
       "HAZARDOUS_MATERIALS": "Utengenezaji au ushughulikiaji wa hatari za kibiolojia, kikemikali, au kimionzi.",
       "DISCRIMINATION": "Ubaguzi dhidi ya makundi yanayolindwa kisheria, ubaguzi wa kimaeneo katika huduma (redlining), au upendeleo wa kialgoriti (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "Sababu",
   "runtime_resume": "Endelea",

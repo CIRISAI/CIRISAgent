@@ -259,7 +259,8 @@
       "AUTONOMOUS_DECEPTION": "Ɓoye ƙarfin iyawa, tsayayya da gyara, ko yaudarar daidaitawa (deceptive alignment).",
       "HAZARDOUS_MATERIALS": "Ƙirƙira ko sarrafa haɗarin halittu (biological), na sinadarai (chemical), ko na radiyoyi (radiological).",
       "DISCRIMINATION": "Nuna wariya ga ƙungiyoyin da doka ta kare, keɓancewa bisa yanki (redlining), ko son kai na algorithm (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "handlers": {
     "speak_failed": "An kasa isar da amsar wakili. Ba za a iya aika saƙon zuwa tashar ba.",
@@ -2422,7 +2423,8 @@
     "retry_must_be_different": "Idan ka sake zaɓi SPEAK, speak_content dole ne ya bambanta sosai daga ƙoƙarin na gida, ba sake tsokacin magana ba. Yi amfani da mababu IRIS-E a sama azaman tudu idan an samar. MAHIMMANCI: amsa a jiya harshe da ka kasua daga gida, kada ka sauya harshen mai amfani. Idan conscience ta sanar da siƙar sharewa ko abin tutawa na karɓa babu wayo, DEFER zuwa Wise Authority. PONDER yana DEFER kai tsaye a babbar zafin, guje haka sai idan SPEAK ba kusan jiya ba.",
     "retry_observation_intro": "MAHIMMANCI: SABUWAR MALAMI ta iso daga mai amfani yayinda ka ƙara aiki: '{updated_observation}'. Dole ne ka amsa wannan sabuwar malami, kada ka gama burin tsohon aiki.",
     "retry_observation_outro": "Mai amfani yana jira amsa ga sabuwar malaminsa. Yi amfani SPEAK don amsa ko yi amfani TOOL idan ana bukatar.",
-    "retry_general_outro": "Tuna: yi amfani DEFER ne kawai don mahimmancin morals ko matsalolin izin, ba don kuskuren fasaha ba. Idan kayan aiki ya mutu, yi amfani SPEAK don bayyana kuskuren zuwa mai amfani."
+    "retry_general_outro": "Tuna: yi amfani DEFER ne kawai don mahimmancin morals ko matsalolin izin, ba don kuskuren fasaha ba. Idan kayan aiki ya mutu, yi amfani SPEAK don bayyana kuskuren zuwa mai amfani.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "access_token": "Alamar Shiga",
   "description": "Bayanin",

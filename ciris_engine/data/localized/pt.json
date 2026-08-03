@@ -157,7 +157,8 @@
     "retry_must_be_different": "Se você re-selecionar FALAR, seu speak_content DEVE ser MATERIALMENTE DIFERENTE da tentativa anterior — não uma paráfrase. Use as alternativas IRIS-E acima como direções de pivô se fornecidas. CRÍTICO: responda no mesmo idioma que você estava respondendo antes — não mude o idioma do usuário. Se a consciência sinalizou padrões de propaganda/auto-defesa que você não pode reescrever eticamente, ADIE para Wise Authority. PONDE auto-ADIA na profundidade máxima — evite isso a menos que um FALAR seja genuinamente inseguro.",
     "retry_observation_intro": "IMPORTANTE: Uma NOVA MENSAGEM do usuário chegou enquanto você estava processando: '{updated_observation}'. Você deve agora responder a ESTA nova mensagem, não completar a tarefa antiga.",
     "retry_observation_outro": "O usuário está aguardando uma resposta para sua nova mensagem. Use FALAR para responder ou use uma FERRAMENTA se necessário.",
-    "retry_general_outro": "Lembre-se: ADIE apenas para dilemas éticos ou questões de permissão — NÃO para erros técnicos. Se uma ferramenta falhar, FALE para explicar o erro ao usuário."
+    "retry_general_outro": "Lembre-se: ADIE apenas para dilemas éticos ou questões de permissão — NÃO para erros técnicos. Se uma ferramenta falhar, FALE para explicar o erro ao usuário.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "Compartilhe dados agregados e anônimos para melhorar o CIRIS",
   "consent_about_title": "Sobre Compartilhamento de Consentimento",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "Ocultação de capacidades, resistência a correções ou alinhamento enganoso.",
       "HAZARDOUS_MATERIALS": "Criação ou manuseamento de riscos biológicos, químicos ou radiológicos.",
       "DISCRIMINATION": "Discriminação contra classes protegidas, redlining ou enviesamento algorítmico (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "Motivo",
   "runtime_resume": "Retomar",

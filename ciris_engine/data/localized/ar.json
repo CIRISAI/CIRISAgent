@@ -157,7 +157,8 @@
     "retry_must_be_different": "إذا أعدت اختيار SPEAK، فيجب أن يكون speak_content مختلفاً بشكل جوهري عن المحاولة السابقة، وليس مجرد إعادة صياغة. استخدم بدائل IRIS-E أعلاه كاتجاهات ارتكاز إذا توفرت. CRITICAL: رد في نفس اللغة التي كنت ترد بها من قبل، لا تغير لغة المستخدم. إذا حددت الضمير أنماط دعاية أو محاكاة دفاعية لا يمكنك إعادة كتابتها بشكل أخلاقي، DEFER للسلطة الحكيمة. يتم تأجيل PONDER تلقائياً بالعمق الأقصى، تجنب ذلك إلا إذا كان SPEAK آمناً حقاً.",
     "retry_observation_intro": "مهم: وصلت رسالة جديدة من المستخدم أثناء معالجتك: '{updated_observation}'. يجب أن تجيب على هذه الرسالة الجديدة، لا تكمل المهمة القديمة.",
     "retry_observation_outro": "المستخدم ينتظر الرد على رسالته الجديدة. استخدم SPEAK للرد أو استخدم TOOL إذا لزم الأمر.",
-    "retry_general_outro": "تذكر: استخدم DEFER فقط للمعضلات الأخلاقية أو مشاكل الإذن، وليس للأخطاء التقنية. إذا فشلت أداة، استخدم SPEAK لشرح الخطأ للمستخدم."
+    "retry_general_outro": "تذكر: استخدم DEFER فقط للمعضلات الأخلاقية أو مشاكل الإذن، وليس للأخطاء التقنية. إذا فشلت أداة، استخدم SPEAK لشرح الخطأ للمستخدم.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "تسمح تدفقات الموافقة للوكيل بتعلم مهارات جديدة من خلال تفاعلاتك",
   "consent_about_title": "حول تدفقات الموافقة",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "إخفاء القدرات، أو مقاومة التصحيح، أو المحاذاة الخادعة.",
       "HAZARDOUS_MATERIALS": "إنتاج أو التعامل مع مواد أو عوامل بيولوجية أو كيميائية أو إشعاعية خطرة.",
       "DISCRIMINATION": "التمييز ضد الفئات المحمية، أو الممارسات التمييزية الجغرافية (Redlining)، أو التحيز الخوارزمي (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "السبب",
   "runtime_resume": "استئناف",

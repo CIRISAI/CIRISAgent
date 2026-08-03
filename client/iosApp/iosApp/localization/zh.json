@@ -157,7 +157,8 @@
     "retry_must_be_different": "如果你再次选择 SPEAK，你的 speak_content 必须与上次尝试有实质性的不同——不是改述。请将上方 IRIS-E 列举的替代方案作为方向使用。关键：请使用与之前相同的语言回复——不要切换到用户的语言。如果良知标记了你无法在道德上重写的宣传/防御性模仿模式，请使用 DEFER 移交给智慧权威。PONDER 在达到最大深度时会自动转为 DEFER——除非 SPEAK 确实不安全，否则避免使用。",
     "retry_observation_intro": "重要：在你处理过程中用户发来了新消息：'{updated_observation}'。你现在必须回复这条新消息，而不是完成原任务。",
     "retry_observation_outro": "用户正在等待对新消息的回复。使用 SPEAK 回复，或在需要时使用 TOOL。",
-    "retry_general_outro": "请记住：DEFER 仅用于道德困境或权限问题——不用于技术错误。如果工具失败，使用 SPEAK 向用户解释错误。"
+    "retry_general_outro": "请记住：DEFER 仅用于道德困境或权限问题——不用于技术错误。如果工具失败，使用 SPEAK 向用户解释错误。",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "了解如何在不同信任级别之间切换以及对您的数据意味着什么",
   "consent_about_title": "关于同意流",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "隐瞒能力、抵制纠正或进行欺骗性对齐。",
       "HAZARDOUS_MATERIALS": "制造或处理生物、化学或放射性危险物质。",
       "DISCRIMINATION": "对受保护群体的歧视、划红线或算法偏见（EU AI Act Art. 9/10）。"
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "原因",
   "runtime_resume": "恢复运行",

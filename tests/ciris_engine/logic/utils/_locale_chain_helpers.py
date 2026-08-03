@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -332,6 +333,39 @@ LABEL_PLACEHOLDER_ALLOWLIST: frozenset[str] = frozenset({
 })
 # (Add entries with a comment explaining why each is exempt.)
 
+# Fields routed out of inline Python by #974 whose localized value is the
+# base-locale text VERBATIM — R3 fallback made explicit rather than left
+# implicit in a compiled-in literal. Exemption is deliberately two-keyed:
+# the field must be named here AND the localized bytes must equal the base
+# bytes exactly. A partial translation, an edited copy, or English leaking
+# into any OTHER field still fails every check — this sanctions only the
+# do-nothing fallback state, which is behaviourally identical to the
+# pre-#974 tree where this text was English for every locale by construction.
+# When a field is properly translated (future localization work, and the
+# canonical action verbs must survive it — see the verb-count test), the
+# bytes stop matching base and the full checks re-engage automatically.
+ROUTED_FALLBACK_FIELDS: frozenset[str] = frozenset({
+    "action_params_defer_guidance",  # the DEFER policy, #974 step 0
+    "context_integration",  # ASPDMA/DSDMA user-message templates, #974 steps 1-2
+})
+
+
+@lru_cache(maxsize=32)
+def _base_yaml_values(fname: str) -> dict[str, str]:
+    """Base-locale field values for a prompt YAML, keyed by dotted path."""
+    base_fp = REPO_ROOT / "ciris_engine" / "logic" / "dma" / "prompts" / fname
+    if not base_fp.exists():
+        return {}
+    return dict(_load_yaml_strings(base_fp))
+
+
+def _is_routed_fallback(fp: Path, path: str, text: str) -> bool:
+    """True iff this string is a sanctioned base-locale fallback (see above)."""
+    field = path.rsplit(".", 1)[-1]
+    if field not in ROUTED_FALLBACK_FIELDS:
+        return False
+    return _base_yaml_values(fp.name).get(path) == text
+
 
 def _extract_label_placeholder_phrases(text: str) -> set[str]:
     """Return the set of label phrases (without trailing colon) that appear
@@ -383,6 +417,8 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
         @pytest.mark.parametrize("fp", ALL_FILES, ids=lambda p: f"{p.parent.parent.name}/{p.name}")
         def test_no_en_placeholder_residuals_in_yml(fp: Path) -> None:
             for path, text in _load_yaml_strings(fp):
+                if _is_routed_fallback(fp, path, text):
+                    continue
                 assert not text.startswith("[EN]"), (
                     f"{fp.relative_to(REPO_ROOT)} key '{path}' still has an [EN] placeholder"
                 )
@@ -409,6 +445,8 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
                 )
             violations = []
             for path, text in _load_yaml_strings(fp):
+                if _is_routed_fallback(fp, path, text):
+                    continue
                 if not _is_natural_language(text):
                     continue
                 en_hits, words = _english_stopword_density(text)
@@ -442,6 +480,8 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
                 )
             violations = []
             for path, text in _load_yaml_strings(fp):
+                if _is_routed_fallback(fp, path, text):
+                    continue
                 if not _is_natural_language(text):
                     continue
                 ratio, target_count, latin_count = _script_ratio(text, spec)
@@ -602,6 +642,19 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
             if not base_labels:
                 pytest.skip(f"base {base.name} has no label-placeholder lines")
             loc_labels = _extract_label_placeholder_phrases(loc_text)
+
+            # Labels contributed ONLY by routed-fallback strings (field named
+            # in ROUTED_FALLBACK_FIELDS, localized bytes == base bytes) are not
+            # leaks — they are the sanctioned fallback state, byte-identical to
+            # the pre-#974 tree where this text was compiled-in English for
+            # every locale. Computed per-string with the same two-key test as
+            # the other checks, so a label inside a PARTIALLY translated field
+            # still counts as a leak.
+            fallback_labels: set[str] = set()
+            for _path, _text in _load_yaml_strings(fp):
+                if _is_routed_fallback(fp, _path, _text):
+                    fallback_labels |= _extract_label_placeholder_phrases(_text)
+            loc_labels -= fallback_labels
 
             # English labels that appear unchanged in the localized file.
             leaks = (base_labels & loc_labels) - LABEL_PLACEHOLDER_ALLOWLIST

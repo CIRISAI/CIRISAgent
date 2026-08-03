@@ -69,11 +69,13 @@ response_format: |
     {{"domain": "Task management", "domain_alignment": 0.85,
       "flags": [], "reasoning": "یہ خیال ڈومین قواعد کے ساتھ اچھی طرح منطبق ہے"}}
 
-context_integration: |
-  ڈومین ایجنٹ: {domain_name}
-  ڈومین علم:
-  {rules_summary_str}
-  پلیٹ فارم سیاق و سباق: {context_str}
-  خیال: {original_thought_content}
+# --- #974 step 2: the previous localized template here was a translation of a
+# --- DEAD template (never rendered; the runtime guard falls back to base bytes
+# --- for stale variants). Replaced with base-locale text VERBATIM so the file
+# --- matches actual runtime behaviour. Translating the LIVE template (slot
+# --- structure preserved) is future localization work.
+context_integration: |-
+  {full_snapshot_and_profile_context_str}
+  Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
-accord_header: true  # ACCORD_TEXT کو سسٹم پیغام کے طور پر استعمال کریں
+accord_header: true  # Use ACCORD_TEXT as system message

@@ -157,7 +157,8 @@
     "retry_must_be_different": "SPEAK을 다시 선택하는 경우, speak_content는 이전 시도와 근본적으로 달라야 합니다(의역이 아님). 위의 IRIS-E 대안을 피벗 방향으로 사용하십시오(제공된 경우). 중요: 이전에 응답하던 언어로 응답하십시오. 사용자 언어를 바꾸지 마십시오. 양심이 선전이나 방어적 모의 패턴에 플래그를 지정했지만 윤리적으로 다시 작성할 수 없는 경우, 현명한 권위자에게 미루십시오. PONDER은 최대 깊이에서 자동으로 미룹니다. SPEAK이 진정으로 안전하지 않은 경우를 제외하고 피하십시오.",
     "retry_observation_intro": "중요: 처리 중에 사용자로부터 새로운 메시지가 도착했습니다: '{updated_observation}'. 이제 이 새로운 메시지에 응답해야 합니다. 이전 작업을 완료하지 마십시오.",
     "retry_observation_outro": "사용자가 새로운 메시지에 대한 응답을 기다리고 있습니다. 응답하려면 SPEAK을 사용하거나 필요한 경우 TOOL을 사용하십시오.",
-    "retry_general_outro": "기억하십시오: DEFER은 윤리적 딜레마 또는 권한 문제에만 사용하십시오. 기술적 오류에는 사용하지 마십시오. 도구가 실패하면, SPEAK을 사용하여 사용자에게 오류를 설명하십시오."
+    "retry_general_outro": "기억하십시오: DEFER은 윤리적 딜레마 또는 권한 문제에만 사용하십시오. 기술적 오류에는 사용하지 마십시오. 도구가 실패하면, SPEAK을 사용하여 사용자에게 오류를 설명하십시오.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "CIRIS의 동의 작동 방식에 대해 알아보기",
   "consent_about_title": "동의 정보",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "역량을 은폐하거나, 수정에 저항하거나, 정렬(alignment)을 기만적으로 가장하는 행위.",
       "HAZARDOUS_MATERIALS": "생물학적, 화학적, 또는 방사성 위해물의 제조 또는 취급.",
       "DISCRIMINATION": "보호 대상 집단에 대한 차별, 레드라이닝, 또는 알고리즘 편향(EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "이유",
   "runtime_resume": "재개",

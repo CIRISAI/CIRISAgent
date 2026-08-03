@@ -2,17 +2,21 @@
 
 from typing import Any, List, Optional
 
+from ._localized import label_localizer
 
-def format_parent_task_chain(parent_tasks: List[dict[str, Any]]) -> str:
+
+def format_parent_task_chain(parent_tasks: List[dict[str, Any]], language: Optional[str] = None) -> str:
     """Formats the parent task chain, root first, for the prompt."""
+    localizer = label_localizer(language)
+    header = localizer("prompts.formatters.parent_task_chain", "Parent Task Chain")
     if not parent_tasks:
-        return "=== Parent Task Chain ===\nNone"
-    lines = ["=== Parent Task Chain ==="]
+        return f"=== {header} ===\nNone"
+    lines = [f"=== {header} ==="]
     for i, pt in enumerate(parent_tasks):
         if i == 0:
-            prefix = "Root Task"
+            prefix = localizer("prompts.formatters.root_task", "Root Task")
         elif i == len(parent_tasks) - 1:
-            prefix = "Direct Parent"
+            prefix = localizer("prompts.formatters.direct_parent", "Direct Parent")
         else:
             prefix = f"Parent {i}"
         desc = pt.get("description", "")
@@ -21,14 +25,17 @@ def format_parent_task_chain(parent_tasks: List[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def format_thoughts_chain(thoughts: List[dict[str, Any]]) -> str:
+def format_thoughts_chain(thoughts: List[dict[str, Any]], language: Optional[str] = None) -> str:
     """Formats all thoughts under consideration, active thought last."""
+    localizer = label_localizer(language)
+    header = localizer("prompts.formatters.thoughts_under_consideration", "Thoughts Under Consideration")
     if not thoughts:
-        return "=== Thoughts Under Consideration ===\nNone"
-    lines = ["=== Thoughts Under Consideration ==="]
+        return f"=== {header} ===\nNone"
+    lines = [f"=== {header} ==="]
+    active_label = localizer("prompts.formatters.active_thought", "Active Thought")
     for i, thought in enumerate(thoughts):
         is_active = i == len(thoughts) - 1
-        label = "Active Thought" if is_active else f"Thought {i+1}"
+        label = active_label if is_active else f"Thought {i+1}"
         content = str(thought.get("content", ""))
         lines.append(f"{label}: {content}")
     return "\n".join(lines)

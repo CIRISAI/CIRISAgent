@@ -5,10 +5,12 @@ Converts raw identity graph node data into human-readable text format,
 including shutdown/continuity history.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_list, get_str
 from ciris_engine.schemas.types import JSONDict
+
+from ._localized import label_localizer
 
 
 def format_core_identity_block(
@@ -40,43 +42,44 @@ def format_core_identity_block(
     )
 
 
-def _format_core_identity(agent_identity: JSONDict) -> List[str]:
+def _format_core_identity(agent_identity: JSONDict, localizer: Callable[..., str]) -> List[str]:
     """Extract and format core identity fields."""
     lines = []
     agent_id = get_str(agent_identity, "agent_id", "Unknown")
     description = get_str(agent_identity, "description", "")
     role = get_str(agent_identity, "role_description", "")
 
-    lines.append(f"Agent ID: {agent_id}")
+    lines.append(f"{localizer('prompts.formatters.identity_agent_id', 'Agent ID')}: {agent_id}")
     if description:
-        lines.append(f"Purpose: {description.strip()}")
+        lines.append(f"{localizer('prompts.formatters.identity_purpose', 'Purpose')}: {description.strip()}")
     if role:
-        lines.append(f"Role: {role.strip()}")
+        lines.append(f"{localizer('prompts.formatters.identity_role', 'Role')}: {role.strip()}")
 
     trust_level = agent_identity.get("trust_level")
     if trust_level is not None:
-        lines.append(f"Trust Level: {trust_level}")
+        lines.append(f"{localizer('prompts.formatters.identity_trust_level', 'Trust Level')}: {trust_level}")
 
     return lines
 
 
-def _format_domain_knowledge(agent_identity: JSONDict) -> List[str]:
+def _format_domain_knowledge(agent_identity: JSONDict, localizer: Callable[..., str]) -> List[str]:
     """Extract and format domain-specific knowledge."""
     lines = []
     domain_knowledge = agent_identity.get("domain_specific_knowledge")
     if domain_knowledge and isinstance(domain_knowledge, dict):
         dk_role = domain_knowledge.get("role")
         if dk_role:
-            lines.append(f"Domain Role: {dk_role}")
+            lines.append(f"{localizer('prompts.formatters.identity_domain_role', 'Domain Role')}: {dk_role}")
     return lines
 
 
-def _format_permitted_actions(agent_identity: JSONDict) -> List[str]:
+def _format_permitted_actions(agent_identity: JSONDict, localizer: Callable[..., str]) -> List[str]:
     """Extract and format permitted actions summary."""
     lines = []
     permitted_actions = agent_identity.get("permitted_actions", [])
     if permitted_actions and isinstance(permitted_actions, list):
-        lines.append(f"Permitted Actions: {', '.join(permitted_actions[:10])}")
+        label = localizer("prompts.formatters.identity_permitted_actions", "Permitted Actions")
+        lines.append(f"{label}: {', '.join(permitted_actions[:10])}")
     return lines
 
 
@@ -147,7 +150,7 @@ def _clean_timestamp(timestamp: str) -> str:
         return timestamp
 
 
-def _format_shutdown_history(shutdown_timestamps: List[str]) -> List[str]:
+def _format_shutdown_history(shutdown_timestamps: List[str], localizer: Callable[..., str]) -> List[str]:
     """Format shutdown history into readable lines."""
     lines: List[str] = []
     if not shutdown_timestamps:
@@ -157,7 +160,8 @@ def _format_shutdown_history(shutdown_timestamps: List[str]) -> List[str]:
     sorted_shutdowns = sorted(shutdown_timestamps, reverse=True)
     recent_shutdowns = sorted_shutdowns[:5]
 
-    lines.append(f"Recent Shutdowns ({len(shutdown_timestamps)} total):")
+    label = localizer("prompts.formatters.identity_recent_shutdowns", "Recent Shutdowns")
+    lines.append(f"{label} ({len(shutdown_timestamps)} total):")
     for ts in recent_shutdowns:
         clean_ts = _clean_timestamp(ts)
         lines.append(f"  - {clean_ts}")
@@ -168,20 +172,24 @@ def _format_shutdown_history(shutdown_timestamps: List[str]) -> List[str]:
     return lines
 
 
-def _format_continuity_history(first_event_timestamp: Optional[str], shutdown_timestamps: List[str]) -> List[str]:
+def _format_continuity_history(
+    first_event_timestamp: Optional[str],
+    shutdown_timestamps: List[str],
+    localizer: Callable[..., str],
+) -> List[str]:
     """Format continuity history section."""
     lines: List[str] = []
     if not first_event_timestamp and not shutdown_timestamps:
         return lines
 
     lines.append("")
-    lines.append("=== Continuity History ===")
+    lines.append(f"=== {localizer('prompts.formatters.identity_continuity_history', 'Continuity History')} ===")
 
     if first_event_timestamp:
         clean_ts = _clean_timestamp(first_event_timestamp)
-        lines.append(f"First Start: {clean_ts}")
+        lines.append(f"{localizer('prompts.formatters.identity_first_start', 'First Start')}: {clean_ts}")
 
-    lines.extend(_format_shutdown_history(shutdown_timestamps))
+    lines.extend(_format_shutdown_history(shutdown_timestamps, localizer))
 
     return lines
 
@@ -194,7 +202,7 @@ def _find_channel_assignment(agent_identity: JSONDict) -> Optional[str]:
     return None
 
 
-def format_agent_identity(agent_identity: Optional[JSONDict]) -> str:
+def format_agent_identity(agent_identity: Optional[JSONDict], language: Optional[str] = None) -> str:
     """
     Format agent identity information into readable text.
 
@@ -212,6 +220,8 @@ def format_agent_identity(agent_identity: Optional[JSONDict]) -> str:
         - domain_specific_knowledge: Domain knowledge dict
         - permitted_actions: List of allowed actions
         - And potentially many shutdown node references
+    language : str, optional
+        Locale for the field labels; defaults to ``CIRIS_PREFERRED_LANGUAGE``.
 
     Returns
     -------
@@ -229,20 +239,21 @@ def format_agent_identity(agent_identity: Optional[JSONDict]) -> str:
     if not agent_identity or not isinstance(agent_identity, dict):
         return ""
 
+    localizer = label_localizer(language)
     lines = []
 
     # Core identity information
-    lines.extend(_format_core_identity(agent_identity))
+    lines.extend(_format_core_identity(agent_identity, localizer))
 
     # Domain-specific knowledge
-    lines.extend(_format_domain_knowledge(agent_identity))
+    lines.extend(_format_domain_knowledge(agent_identity, localizer))
 
     # Permitted actions summary
-    lines.extend(_format_permitted_actions(agent_identity))
+    lines.extend(_format_permitted_actions(agent_identity, localizer))
 
     # Extract and format continuity history
     first_event_timestamp, shutdown_timestamps = _extract_event_timestamps(agent_identity)
-    lines.extend(_format_continuity_history(first_event_timestamp, shutdown_timestamps))
+    lines.extend(_format_continuity_history(first_event_timestamp, shutdown_timestamps, localizer))
 
     # Channel assignment (if present)
     channel_assignment = _find_channel_assignment(agent_identity)

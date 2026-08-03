@@ -243,6 +243,71 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.dma.bounce_instruction",
         "prompts.dma.bounce_original_marker",
         "prompts.dma.bounce_trigger_line",
+        # #991 — the formatter LABELS. Authored and translated into 29 locales
+        # (1,653 strings) with zero readers until the four prompt formatters
+        # were wired to `label_localizer`; before that every non-English agent
+        # received its system-snapshot, identity, user-context and task-chain
+        # headings in English inside an otherwise localized prompt. They are
+        # bare labels only — the `=== … ===` framing, the 🚨 banners and the
+        # value interpolation stay in Python, so an override here changes words,
+        # never block structure.
+        "prompts.formatters.active_tasks",
+        "prompts.formatters.active_thought",
+        "prompts.formatters.active_thoughts",
+        "prompts.formatters.context_enrichment_header",
+        "prompts.formatters.continuity_avg_offline",
+        "prompts.formatters.continuity_avg_online",
+        "prompts.formatters.continuity_first_startup",
+        "prompts.formatters.continuity_header",
+        "prompts.formatters.continuity_last_shutdown",
+        "prompts.formatters.continuity_last_shutdown_reason",
+        "prompts.formatters.continuity_session_duration",
+        "prompts.formatters.continuity_session_started",
+        "prompts.formatters.continuity_shutdowns",
+        "prompts.formatters.continuity_total_offline",
+        "prompts.formatters.continuity_total_online",
+        "prompts.formatters.direct_parent",
+        "prompts.formatters.error_rate",
+        "prompts.formatters.identity_agent_id",
+        "prompts.formatters.identity_continuity_history",
+        "prompts.formatters.identity_domain_role",
+        "prompts.formatters.identity_first_start",
+        "prompts.formatters.identity_permitted_actions",
+        "prompts.formatters.identity_purpose",
+        "prompts.formatters.identity_recent_shutdowns",
+        "prompts.formatters.identity_role",
+        "prompts.formatters.identity_trust_level",
+        "prompts.formatters.license_critical",
+        "prompts.formatters.license_info",
+        "prompts.formatters.license_verification",
+        "prompts.formatters.license_warning",
+        "prompts.formatters.messages_24h",
+        "prompts.formatters.messages_processed",
+        "prompts.formatters.parent_task_chain",
+        "prompts.formatters.pending_tasks",
+        "prompts.formatters.pending_thoughts",
+        "prompts.formatters.queue_depth",
+        "prompts.formatters.resource_alerts_end",
+        "prompts.formatters.resource_alerts_start",
+        "prompts.formatters.resource_usage_header",
+        "prompts.formatters.root_task",
+        "prompts.formatters.service_usage",
+        "prompts.formatters.system_snapshot_header",
+        "prompts.formatters.tasks_completed_24h",
+        "prompts.formatters.thoughts_24h",
+        "prompts.formatters.thoughts_processed",
+        "prompts.formatters.thoughts_under_consideration",
+        "prompts.formatters.time_header",
+        "prompts.formatters.tokens_last_hour",
+        "prompts.formatters.total_tasks",
+        "prompts.formatters.total_thoughts",
+        "prompts.formatters.user_channel",
+        "prompts.formatters.user_context_footer",
+        "prompts.formatters.user_context_header",
+        "prompts.formatters.user_context_intro",
+        "prompts.formatters.user_interest",
+        "prompts.formatters.user_label",
+        "prompts.formatters.user_preferred_language",
         "prompts.identity_block",
         # The parent key: a whole-block replacement, and it WINS over the parts
         # (precedence declared in `get_language_guidance`). Still reachable
@@ -507,8 +572,15 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
     # (conscience.repeated_speak_guidance); the module stays pinned for its
     # remaining inline reason strings.
     ("logic/conscience/action_sequence_conscience.py", "*"),
-    # Formatters: zero localization imports across all six, every one emits
-    # hardcoded English into a prompt. (Said "five" while listing six since the
+    # Formatters. All six stay pinned, but the reason narrowed in #991: four of
+    # them (system_snapshot, identity, user_profiles, prompt_blocks) now resolve
+    # their LABELS through `label_localizer`, so those 57 keys are in the
+    # `string` namespace above and a manifest reaches them. What is still
+    # uncovered here is the SCAFFOLDING the labels sit in — the `=== … ===`
+    # framing, the 🚨 banners, the value interpolation, and the handful of
+    # sublabels with no key at all (`Parent {i}`, `Thought {i+1}`, `UTC:`,
+    # `(Task ID: …)`, `... and N more`, `None`). crisis_resources and escalation
+    # remain wholly inline English. (Said "five" while listing six since the
     # inventory was written — #995. The count matters: `baseline_note` reports
     # "six formatters" to anyone reading a manifest, and two numbers for the
     # same uncovered surface is exactly the kind of drift the digest exists to
@@ -1201,10 +1273,11 @@ def describe_coverage(manifest: Optional[ResearchOverrideManifest] = None) -> st
         f"{counts}. NOT COVERED (inline English, present in EVERY arm, pinned at "
         f"{m.residue_digest}): the inline helpers interpolated into the ASPDMA "
         f"user message, the non-DEFER action schema/guidance scaffolding, the "
-        f"six formatters, and the conscience override reasons. (#974 routed the "
-        f"DEFER policy — step 0 — the ASPDMA user-message template — step 1 — "
-        f"the DSDMA user message — step 2 — and the CORE IDENTITY blocks — "
-        f"step 3 — out of this residue; all four ARE covered.) Any paper using "
+        f"six formatters' block scaffolding, and the conscience override "
+        f"reasons. (#974 routed the DEFER policy — step 0 — the ASPDMA "
+        f"user-message template — step 1 — the DSDMA user message — step 2 — "
+        f"and the CORE IDENTITY blocks — step 3 — out of this residue, and #991 "
+        f"routed the 57 formatter LABELS; all five ARE covered.) Any paper using "
         f"this facility must report that the non-CIRIS arm was reasoning under "
         f"CIRIS's action doctrine, in English"
     )

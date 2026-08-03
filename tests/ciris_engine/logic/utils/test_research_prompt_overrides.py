@@ -340,7 +340,13 @@ class TestFailLoudOnPartialApplication:
     @pytest.mark.parametrize(
         "dead_key",
         [
-            "prompts.formatters.system_snapshot_header",
+            # `prompts.formatters.*` used to head this list. #991 wired all 57 of
+            # them into the four prompt formatters, so the whole namespace is
+            # LIVE now and would no longer be rejected — a passing assertion
+            # here would mean the fix regressed. `prompts.escalation.*` replaces
+            # it as the representative of a namespace that is still authored,
+            # still translated into 29 locales, and still read by nobody.
+            "prompts.escalation.early",
             "prompts.dma.pdma_task",
             "prompts.crisis.header",
             "prompts.engine_overview",
@@ -752,7 +758,24 @@ class TestDriftGuard:
         # any LLM prompt", which was false (#995 P1-6). Coverage going UP is the
         # only direction this number should ever move without an inventory entry
         # explaining a drop.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 105
+        #
+        # 105 -> 191 in 2.9.10, in two independent steps, both increases:
+        #   +29  #997 split `prompts.language_guidance` into single-class parts.
+        #        The parent key stays reachable (24 unsplit locales resolve
+        #        through it), so this is 29 NEW keys, not a re-partition. This
+        #        landed without moving the number, which is why the count is
+        #        asserted at all.
+        #   +57  #991 wired the four prompt formatters to `label_localizer`.
+        #        These keys were authored and translated into 29 locales —
+        #        1,653 strings — and read by nobody: the formatters emitted
+        #        hardcoded English twins, so every non-English agent got its
+        #        system-snapshot, identity, user-context and task-chain headings
+        #        in English inside an otherwise localized prompt. They were the
+        #        largest dead namespace in the bundle and are now the largest
+        #        block of the `string` key space.
+        # 105 + 29 + 57 = 191. Both moves are coverage going UP, which the note
+        # above says is the only direction this may move unexplained.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 191
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

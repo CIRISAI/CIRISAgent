@@ -311,45 +311,28 @@ def scan_reachable_string_keys() -> FrozenSet[str]:
 
 
 # --------------------------------------------------------------------------
-#: dma_prompt keys the override layer CANNOT apply (#989), measured per-key by
-#: ``tools/research/probe_gate_coverage.py`` and committed here so the loader
-#: can refuse instead of lying.
+#: dma_prompt keys the override layer cannot apply (#989). **EMPTY — the fix
+#: landed.**
 #:
-#: WHY THEY ARE IMMUNE: ``BaseDMA._load_prompts`` (base_dma.py) opens the prompt
-#: YAML directly with ``yaml.safe_load``. ``_apply_research_overrides`` is
-#: reached only from ``DMAPromptLoader.load_prompt_template``. Any field an
-#: evaluator consumes through its own ``self.prompts`` therefore never passes
-#: the override layer — while the loader still logs ``replaced [...]`` for the
-#: template's OTHER keys, so a campaign reads a success line for a swap that
-#: did not happen.
+#: The history matters because the empty tuple is a live tripwire, not dead
+#: code. ``BaseDMA._load_prompts`` reads prompt YAML with ``yaml.safe_load``
+#: and keeps a plain dict, while ``_apply_research_overrides`` ``setattr``s
+#: onto a ``PromptCollection`` — a CONTAINER mismatch, not a policy decision.
+#: Thirteen fields (ten of them in ``action_selection_pdma``, the
+#: action-selection tier where an axiotic experiment's dependent variable is
+#: decided) were therefore never overridden, while the loader logged
+#: successful replacements for their siblings: a campaign could swap a value,
+#: read a success line, and run the original.
 #:
-#: This is the one failure mode worse than an unverified control: the others in
-#: this window UNDER-claim (a key the gate cannot see), this one OVER-claims (a
-#: replacement the log asserts and the bytes deny). Refuse rather than proceed.
+#: ``apply_research_overrides_to_mapping`` (prompt_loader.py) now serves the
+#: mapping path with the same manifest and the same fail-loud posture, so the
+#: override WORKS rather than being refused — refusing was the honest stopgap,
+#: not the point.
 #:
-#: Ten of the thirteen are in ``action_selection_pdma`` — the action-selection
-#: tier, where an axiotic experiment's dependent variable is decided.
-#:
-#: DRIFT: re-measure with
+#: Keep this tuple. If a key ever becomes unapplicable again, name it here and
+#: R2 totality drops it automatically. Re-measure with
 #:     python3 -m tools.research.probe_gate_coverage --namespace dma_prompt
-#: A key that starts moving blocks (because #989's option 1 landed) must be
-#: REMOVED from this tuple; ``test_immune_inventory_matches_measurement``
-#: fails until it is.
-OVERRIDE_IMMUNE_DMA_PROMPT_KEYS: Tuple[str, ...] = (
-    "action_selection_pdma.action_parameter_schemas",
-    "action_selection_pdma.action_params_observe_guidance",
-    "action_selection_pdma.action_params_ponder_guidance",
-    "action_selection_pdma.action_params_speak_csdma_guidance",
-    "action_selection_pdma.closing_reminder",
-    "action_selection_pdma.csdma_ambiguity_guidance",
-    "action_selection_pdma.decision_format",
-    "action_selection_pdma.final_ponder_advisory",
-    "action_selection_pdma.reasoning_csdma_guidance",
-    "action_selection_pdma.system_header",
-    "dsdma_base.response_format",
-    "idma.closing_reminder",
-    "tsaspdma.closing_reminder",
-)
+OVERRIDE_IMMUNE_DMA_PROMPT_KEYS: Tuple[str, ...] = ()
 
 
 # The uncovered inline residue (§6.1)
@@ -707,27 +690,6 @@ def _validate_manifest(manifest: ResearchOverrideManifest) -> None:
         )
     elif manifest.condition not in ("b", "c"):
         problems.append(f"condition must be 'b' or 'c', got {manifest.condition!r}")
-
-    # --- R6b: refuse a key the override layer cannot actually apply (#989) ---
-    #
-    # The alternative is what shipped before this: the manifest validates, the
-    # loader logs `replaced [...]` for the template's applicable keys, and the
-    # composed bytes for THIS key are unchanged. A campaign then believes it
-    # swapped a value, has a log line saying so, and runs the CIRIS value it
-    # meant to replace. Every other gap in this window under-claims; this one
-    # over-claims, which is the difference between a noisy wrong answer and a
-    # confident one.
-    immune_named = sorted(set(ov.dma_prompt) & set(OVERRIDE_IMMUNE_DMA_PROMPT_KEYS))
-    if immune_named:
-        problems.append(
-            f"dma_prompt override(s) {immune_named} cannot be applied: BaseDMA._load_prompts "
-            f"reads the prompt YAML directly (base_dma.py), bypassing DMAPromptLoader and "
-            f"therefore _apply_research_overrides, so these fields are consumed via the "
-            f"evaluator's own self.prompts and never see the manifest. Setting them would "
-            f"produce a run that LOGS a replacement it did not perform (#989). Remove them, "
-            f"or land #989 option 1 (route _load_prompts through the loader) and re-measure "
-            f"with tools/research/probe_gate_coverage.py."
-        )
 
     # --- R1: every key must resolve -------------------------------------
     reachable_strings = scan_reachable_string_keys()

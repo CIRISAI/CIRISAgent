@@ -77,7 +77,25 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
                 with open(prompt_file, "r") as f:
                     file_prompts = yaml.safe_load(f) or {}
 
-                # Support both dict and PromptCollection
+                # Research-override application (#989). This path reads the YAML
+                # directly and keeps a plain dict, so it never passed through
+                # DMAPromptLoader — which meant thirteen dma_prompt keys were
+                # silently unapplied while the loader logged successful
+                # replacements for their siblings. A manifest that reports a
+                # swap it did not perform is worse than one that cannot swap:
+                # the campaign reads a success line and runs the original value.
+                #
+                # No-op when the research gate is closed (the helper returns the
+                # mapping unchanged), so production composition is unaffected —
+                # the #972 golden bytes prove it.
+                from ciris_engine.logic.dma.prompt_loader import apply_research_overrides_to_mapping
+
+                template_name = Path(prompt_file).stem
+                file_prompts = apply_research_overrides_to_mapping(template_name, file_prompts)
+
+                # Support both dict and PromptCollection. Caller-supplied
+                # overrides still win over the manifest: they are explicit
+                # construction arguments, not experiment configuration.
                 if isinstance(overrides, dict):
                     self.prompts = {**file_prompts, **overrides}
                 else:

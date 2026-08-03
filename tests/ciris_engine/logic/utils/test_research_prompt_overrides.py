@@ -734,13 +734,13 @@ class TestDriftGuard:
         #   prompts.identity_block                             (step 3, the CORE IDENTITY doctrine)
         #   conscience.repeated_speak_guidance                 (step 5, the repeated-SPEAK guidance)
         # (step 2 reused the pre-existing dsdma_base.context_integration key.)
-        # 88 = that key space (101) MINUS the thirteen #989-immune
-        # dma_prompt keys: the override layer cannot apply them, so R2
-        # totality excludes them and the skeleton must not emit keys the
-        # loader would then refuse — the authoring tool and the gate have
-        # to agree. When #989 option 1 lands the inventory shrinks and this
-        # number rises on its own.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 88
+        # Back to 101: #989's fix landed, so OVERRIDE_IMMUNE_DMA_PROMPT_KEYS is
+        # empty and R2 totality requires all 36 dma_prompt keys again. The
+        # number moved 101 -> 88 -> 101 across this window: the dip was the
+        # honest stopgap (refuse what cannot be applied), the return is the
+        # real fix (apply it). If it ever drops again, a key became
+        # unapplicable and the inventory says which.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 101
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

@@ -70,7 +70,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ConfigDict, Field
@@ -368,9 +368,14 @@ async def complete_turn(
     """
     seed_param: Dict[str, int] = {} if decoding.seed is None else {"seed": decoding.seed}
     extra_param: Dict[str, JSONDict] = {} if not decoding.extra_body else {"extra_body": decoding.extra_body}
+    # cast: the OpenAI SDK types `messages` as a union of per-role TypedDicts,
+    # which a runtime-built list of dicts cannot satisfy statically. The agent's
+    # own service does the same at llm_service/service.py (`cast(Any, msg_list)`)
+    # for the identical reason. tools/ is outside the mypy scope (mypy.ini:15),
+    # so this is for the reader and for anyone who later runs mypy by hand.
     response = await client.chat.completions.create(
         model=decoding.model,
-        messages=[turn.model_dump() for turn in messages],
+        messages=cast(Any, [turn.model_dump() for turn in messages]),
         temperature=decoding.temperature,
         top_p=decoding.top_p,
         max_tokens=decoding.max_tokens,

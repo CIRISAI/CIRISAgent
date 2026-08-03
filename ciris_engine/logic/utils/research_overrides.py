@@ -45,7 +45,7 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -523,7 +523,20 @@ class OverrideSet(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    string: Dict[str, str] = Field(default_factory=dict)
+    #: ``string`` keys are LOCALIZED — the same key resolves to different text in
+    #: each locale. A value may therefore be either:
+    #:
+    #: * ``str``   — this exact text in EVERY locale. A deliberate choice, not a
+    #:   default: it puts one language's text into every language's prompt.
+    #: * ``dict``  — ``{locale: text}``, the faithful form for a localized key.
+    #:   A locale absent from the mapping REFUSES at resolution rather than
+    #:   falling back to English (that fallback is the R4 laundering this
+    #:   facility exists to prevent).
+    #:
+    #: Before this was a union, every value was a scalar snapshotted at ``en``,
+    #: so a baseline manifest silently served English guidance, English
+    #: prohibitions and English retry scaffolding in all 29 locales.
+    string: Dict[str, Union[str, Dict[str, str]]] = Field(default_factory=dict)
     dma_prompt: Dict[str, str] = Field(default_factory=dict)
     conscience_prompt: Dict[str, str] = Field(default_factory=dict)
     corpus: Dict[str, str] = Field(default_factory=dict)
@@ -884,9 +897,42 @@ def get_active_overrides() -> Optional[ResearchOverrideManifest]:
 # --------------------------------------------------------------------------
 
 
-def override_string(key: str) -> Optional[str]:
+def override_string(key: str, lang_code: Optional[str] = None) -> Optional[str]:
+    """Resolve a ``string`` override for ``key`` in ``lang_code``.
+
+    A scalar value applies to every locale. A mapping is resolved against
+    ``lang_code``; a locale the mapping does not cover REFUSES rather than
+    falling back to English, because silently serving English into a non-English
+    prompt is exactly the laundering R4 forbids — and it is what this facility
+    did for every localized key before the value type became a union.
+
+    ``lang_code=None`` is accepted only for scalar values, so callers that
+    genuinely have no locale in hand still work.
+    """
     m = get_active_overrides()
-    return m.overrides.string.get(key) if m else None
+    if m is None:
+        return None
+    value = m.overrides.string.get(key)
+    if value is None or isinstance(value, str):
+        return value
+
+    if lang_code is None:
+        raise RuntimeError(
+            f"research overrides active: key {key!r} is overridden per-locale, but the "
+            f"caller resolved it without a locale. A per-locale override cannot be "
+            f"applied to an unknown locale — pass lang_code, or make the override a "
+            f"single string if one text really is intended for every locale."
+        )
+    try:
+        return value[lang_code]
+    except KeyError:
+        raise RuntimeError(
+            f"research overrides active: key {key!r} is overridden per-locale but carries "
+            f"no entry for locale {lang_code!r} (has: {', '.join(sorted(value)) or 'none'}). "
+            f"Falling back to English would put English text in a {lang_code!r} prompt — the "
+            f"laundering R4 forbids. Add {lang_code!r} to the mapping, or use a single "
+            f"string if that text is intended for every locale."
+        ) from None
 
 
 def override_dma_prompt(template_name: str, field: str) -> Optional[str]:
@@ -1082,8 +1128,21 @@ def strict_manifest_skeleton(experiment_id: str = "CHANGE-ME", condition: str = 
     }
 
 
-def baseline_manifest() -> Dict[str, Any]:
+def baseline_manifest(locales: Optional[Sequence[str]] = None) -> Dict[str, Any]:
     """A strict manifest pre-filled with the CURRENT live values.
+
+    ``locales`` selects which locales the localized ``string`` keys are captured
+    for; it defaults to every locale in the bundle, so a locale added later is
+    picked up with no change here. Narrow it when an experiment runs a known
+    subset — a full capture of every localized key across every locale is large,
+    and a manifest carrying locales the run never composes is noise.
+
+    A ``string`` key is emitted as a ``{locale: text}`` mapping when its text
+    actually differs across the captured locales, and as a plain string when it
+    does not. That is what makes the round-trip guarantee below true: capturing
+    a localized key at ``en`` alone and pinning that one value used to serve
+    English guidance, English prohibitions and English retry scaffolding in all
+    29 locales, while reporting a clean run.
 
     `strict_manifest_skeleton()` emits `REPLACE::<key>` placeholders for all 97
     keys. That is right for a wholesale variant — a non-CIRIS arm is a complete
@@ -1101,18 +1160,35 @@ def baseline_manifest() -> Dict[str, Any]:
     """
     from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
     from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
-    from ciris_engine.logic.utils.localization import get_string
+    from ciris_engine.logic.utils.localization import get_available_languages, get_string
 
     skeleton = strict_manifest_skeleton()
     out: Dict[str, Any] = dict(skeleton)
     out["experiment_id"] = "CHANGE-ME"
-    filled: Dict[str, Dict[str, str]] = {ns: {} for ns in skeleton["overrides"]}
+    filled: Dict[str, Dict[str, Any]] = {ns: {} for ns in skeleton["overrides"]}
+
+    captured = list(locales) if locales else get_available_languages()
+    if not captured:
+        raise RuntimeError(
+            "no locales available to capture — refusing to emit a baseline that would "
+            "silently cover no locale at all"
+        )
+    base = str(out.get("base_locale") or "en")
+    if base not in captured:
+        # The base locale anchors the scalar case; without it a key that does not
+        # vary would still be captured from an arbitrary locale.
+        captured = [base, *captured]
 
     for key in skeleton["overrides"].get("string", {}):
         try:
-            filled["string"][key] = get_string("en", key)
+            per_locale = {lang: get_string(lang, key) for lang in captured}
         except Exception:  # noqa: BLE001 — an unresolvable key keeps its marker
             filled["string"][key] = skeleton["overrides"]["string"][key]
+            continue
+        # Collapse to a scalar only when the key genuinely does not vary, so the
+        # manifest stays small without ever standing one locale in for another.
+        distinct = set(per_locale.values())
+        filled["string"][key] = per_locale[base] if len(distinct) == 1 else per_locale
 
     cl = ConsciencePromptLoader()
     for key, marker in skeleton["overrides"].get("conscience_prompt", {}).items():
@@ -1138,12 +1214,26 @@ def baseline_manifest() -> Dict[str, Any]:
         filled[ns] = dict(skeleton["overrides"].get(ns, {}))
 
     out["overrides"] = filled
-    unresolved = sum(1 for ns in filled.values() for v in ns.values() if str(v).startswith("REPLACE::"))
-    out["_baseline_note"] = (
-        f"{unresolved} key(s) still carry REPLACE:: markers and MUST be filled or the run is "
-        f"not measuring what it claims. Change only the keys your experiment alters."
-    )
+    # The note goes to the CALLER, never into the manifest: `extra="forbid"`
+    # rejects unknown keys, so emitting `_baseline_note` inline made
+    # `baseline > m.json && validate m.json` fail on a key this function itself
+    # added. See baseline_unresolved().
     return out
+
+
+def baseline_unresolved(manifest: Dict[str, Any]) -> List[str]:
+    """Keys in a baseline manifest still carrying their ``REPLACE::`` marker.
+
+    These are the value-bearing keys `baseline` deliberately refuses to pre-fill:
+    leaving them unset makes an unfilled arm fail loudly instead of silently
+    re-running the CIRIS values under an experimental label.
+    """
+    return sorted(
+        f"{ns}.{key}"
+        for ns, block in manifest.get("overrides", {}).items()
+        for key, value in block.items()
+        if isinstance(value, str) and value.startswith("REPLACE::")
+    )
 
 
 def validate_manifest_file(path: str) -> Tuple[bool, str]:
@@ -1255,7 +1345,19 @@ if __name__ == "__main__":  # pragma: no cover - operator convenience
     elif command == "skeleton":
         print(json.dumps(strict_manifest_skeleton(), indent=2, ensure_ascii=False))
     elif command == "baseline":
-        print(json.dumps(baseline_manifest(), indent=2, ensure_ascii=False))
+        # Optional locale narrowing: `baseline en,es,am`. Default captures every
+        # locale in the bundle, so a locale added later needs no change here.
+        _locales = [s for s in sys.argv[2].split(",") if s.strip()] if len(sys.argv) > 2 else None
+        _manifest = baseline_manifest(_locales)
+        print(json.dumps(_manifest, indent=2, ensure_ascii=False))
+        _unresolved = baseline_unresolved(_manifest)
+        if _unresolved:
+            print(
+                f"{len(_unresolved)} key(s) still carry REPLACE:: markers and MUST be filled or "
+                f"the run is not measuring what it claims. Change only the keys your experiment "
+                f"alters.\n  " + "\n  ".join(_unresolved),
+                file=sys.stderr,
+            )
     elif command == "keyspace":
         for namespace, keys in (
             ("string", scan_reachable_string_keys()),

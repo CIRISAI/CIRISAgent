@@ -32,15 +32,38 @@ What survives is the genuinely mixed residue, and it is of exactly two kinds:
    prompts. Splitting these means cutting the corpus into fields, not moving a
    boundary the composer already knows.
 2. **prose whose classes interleave sentence by sentence** —
-   ``prompts.language_guidance`` (13,694 B at ``en``), a text split followed by
-   a re-localization pass across all 29 locales.
+   ``prompts.language_guidance``. #997 split this one IN THE CORPUS for the
+   five locales whose prose is line-for-line parallel to English (en, es, fr,
+   it, pt): 29 consecutive slices, joined with ``""`` and stripped once, so the
+   composed message is byte-identical to the pre-split scalar. At ``en`` that
+   moves 9,505 of 13,694 B (69.4%) from unmeasurable to dispositionable and
+   makes 429 B of axiotic content VARY that a values arm would previously have
+   held. The other 24 locales keep the scalar, because partitioning them would
+   mean re-segmenting the target-language prose — which is how word-salad has
+   entered this corpus before — so ``language_guidance`` stays parked, now
+   scoped to those 24.
 
 Plus two blocks composed in Python with no render seam at all
 (``action_selection_pdma.system_message`` and the ASPDMA user template's slot
 payload, whose slots are other prompt fields).
 
-``EXPECTED_MIXED`` is a ratchet. It may shrink, never grow — and growing it to
-make this file pass is the one failure mode this file exists to prevent.
+TWO REGISTERS, and the distinction is load-bearing:
+
+- ``EXPECTED_MIXED`` — blocks awaiting a split. A ratchet: it may shrink, never
+  grow, and growing it to make this file pass is the one failure mode this file
+  exists to prevent.
+- ``IRREDUCIBLE_EXEMPLARS`` — blocks the FSD itself declares unsplittable
+  (§10.2.1 [T-5a]: "verdict, register and schema in the same tokens — the
+  co-occurrence *is* the demonstration ... hold-verbatim or replace-whole-
+  exemplar, never split"). These are not parked pending work; splitting them is
+  forbidden, and the FSD sanctions ``hold`` + ``confound_accepted: axiotic`` for
+  exactly this shape (§10.3's ``pdma_worked_examples``) while explicitly
+  refusing that opt-out for ``language_guidance`` as a whole. Bounded and
+  FSD-cited so it cannot become a second parking lot.
+
+The number that cannot be argued with is bytes, not entry count:
+``test_language_guidance_split_997.py`` measures the real corpus and fails if
+the mixed share of ``language_guidance`` at ``en`` ever grows.
 """
 
 from __future__ import annotations
@@ -58,9 +81,11 @@ from ciris_engine.schemas.dma.compose import BlockClass
 #: Entries leave as composition is split; nothing may join without an issue.
 EXPECTED_MIXED: Dict[str, str] = {
     "language_guidance": (
-        "CIRISAgent#997 — 13,694 B of prose carrying register doctrine, categorical "
-        "prohibitions, crisis-line world-facts and value claims sentence by sentence; "
-        "needs a text split + re-localization across 29 locales"
+        "CIRISAgent#997 — the UNSPLIT scalar, now scoped to the 24 locales whose prose "
+        "does not partition on the English boundaries (am ar bn de fa ha hi id ja ko mr "
+        "my pa ru sw ta te th tr uk ur vi yo zh). en/es/fr/it/pt are split and never "
+        "resolve here. Retiring this entry means segmenting the remaining 24 in their "
+        "own prose — a native-language pass, not a script"
     ),
     "pdma_ethical.system_guidance_header": (
         "CIRISAgent#997 — one YAML field walking the PDMA stages while naming and "
@@ -87,6 +112,46 @@ EXPECTED_MIXED: Dict[str, str] = {
     "optimization_veto_conscience.system_prompt": (
         "CIRISAgent#997 — one YAML scalar; ~11.7 KB of cross-tradition value doctrine "
         "(torque, the four capture patterns, the locale covenant) needs cutting into fields"
+    ),
+}
+
+#: Blocks the FSD declares UNSPLITTABLE — not parked work, forbidden work.
+#:
+#: §10.2.1 [T-5a]: "Few-shot worked examples: verdict, register and schema in
+#: the same tokens — the co-occurrence *is* the demonstration. ``mixed``,
+#: explicit disposition required; the honest options are hold-verbatim or
+#: replace-whole-exemplar, never split."
+#:
+#: This is a DIFFERENT category from EXPECTED_MIXED, and the FSD draws the line
+#: itself: §10.3's example manifest gives ``pdma_worked_examples`` ``hold`` +
+#: ``confound_accepted: axiotic``, and in the same breath refuses that opt-out
+#: for ``language_guidance`` as a whole because "an example manifest is a
+#: template people copy, and it must not teach the opt-out as the default". An
+#: exemplar has a sanctioned disposition path; an undivided 13 KB scalar does
+#: not.
+#:
+#: Bounded, FSD-cited, and disjoint from EXPECTED_MIXED — three tests below —
+#: so it cannot become a second parking lot for blocks that simply were not
+#: split.
+IRREDUCIBLE_EXEMPLARS: Dict[str, str] = {
+    "language_guidance.13_exemplar_speak_response": (
+        "FSD §10.2.1 [T-5a] — the SPEAK demonstration: canonical disclaimer, crisis "
+        "numbers, warm formal register and 'those symptoms together deserve attention' "
+        "in the same tokens"
+    ),
+    "language_guidance.14_exemplar_register_pressure": (
+        "FSD §10.2.1 [T-5a] — 7a: correct and wrong responses shown verbatim; the "
+        "axiotic clause cannot be lifted out of the demonstration"
+    ),
+    "language_guidance.16_exemplar_false_reassurance": (
+        "FSD §10.2.1 [T-5a] — 7b: the refusal-to-confirm demonstrated, not described"
+    ),
+    "language_guidance.23_ratification_templates": (
+        "FSD §10.2.1 [T-5a] — two verbatim INVOCABLE TEMPLATE model outputs"
+    ),
+    "language_guidance.25_exemplar_cross_cluster": (
+        "FSD §10.2.1 [T-5a] — 7c: the cluster answer and the Q4 HARD-FAIL U6 "
+        "counter-example, both shown verbatim"
     ),
 }
 
@@ -121,9 +186,11 @@ def test_no_non_mixed_block_declares_contaminants() -> None:
 
 
 def test_no_mixed_blocks_beyond_the_ratchet() -> None:
-    """THE gate. Every `mixed` block must be a known, tracked split."""
+    """THE gate. Every `mixed` block must be a known, tracked split — or an
+    FSD-declared irreducible, which is a different claim and is registered
+    separately."""
     mixed: Set[str] = {bid for bid, ann in BLOCK_ANNOTATIONS.items() if ann.block_class == BlockClass.MIXED}
-    unexpected = sorted(mixed - set(EXPECTED_MIXED))
+    unexpected = sorted(mixed - set(EXPECTED_MIXED) - set(IRREDUCIBLE_EXEMPLARS))
     assert not unexpected, (
         f"new mixed blocks: {unexpected}. `mixed` is the absence of a class, not a class — it "
         f"defaults to refuse, so the block cannot be held or varied and the ablation cannot "
@@ -135,6 +202,31 @@ def test_no_mixed_blocks_beyond_the_ratchet() -> None:
 def test_the_mixed_ratchet_only_turns_one_way() -> None:
     assert len(EXPECTED_MIXED) <= 7, f"EXPECTED_MIXED grew to {len(EXPECTED_MIXED)} — split it, don't park it"
     assert all(v.startswith("CIRISAgent#") for v in EXPECTED_MIXED.values())
+
+
+def test_the_irreducible_set_is_bounded_and_cites_the_fsd() -> None:
+    """The escape hatch, nailed shut.
+
+    An FSD-declared irreducible is a claim about the ARTEFACT — splitting it
+    destroys the demonstration — not an admission that nobody got round to
+    splitting it. Every entry must cite the clause that says so, and the set is
+    bounded at the five worked exemplars that exist, so 'irreducible' cannot
+    become a place to file a block that is merely hard.
+    """
+    assert len(IRREDUCIBLE_EXEMPLARS) <= 5, (
+        f"IRREDUCIBLE_EXEMPLARS grew to {len(IRREDUCIBLE_EXEMPLARS)} — 'the FSD forbids "
+        f"splitting this' is a narrow claim about few-shot demonstrations, not a second "
+        f"parking lot. If a new block belongs here, argue it in the FSD first."
+    )
+    uncited = sorted(k for k, v in IRREDUCIBLE_EXEMPLARS.items() if not v.startswith("FSD §10.2.1 [T-5a]"))
+    assert not uncited, f"irreducible entries with no FSD citation: {uncited}"
+
+
+def test_the_two_registers_are_disjoint() -> None:
+    """A block is awaiting a split OR forbidden from being split. Both at once
+    is a contradiction, and it would let one entry satisfy two bounds."""
+    both = sorted(set(EXPECTED_MIXED) & set(IRREDUCIBLE_EXEMPLARS))
+    assert not both, f"blocks in BOTH registers: {both}"
 
 
 def test_only_axiotic_contamination_survives_as_mixed() -> None:
@@ -182,13 +274,13 @@ def test_the_ratchet_carries_no_stale_entries() -> None:
     hide a NEW mixed block behind a stale key."""
     stale = sorted(
         bid
-        for bid in EXPECTED_MIXED
+        for bid in (*EXPECTED_MIXED, *IRREDUCIBLE_EXEMPLARS)
         if bid in BLOCK_ANNOTATIONS and BLOCK_ANNOTATIONS[bid].block_class != BlockClass.MIXED
     )
-    assert not stale, f"no longer mixed — remove from EXPECTED_MIXED: {stale}"
+    assert not stale, f"no longer mixed — remove from EXPECTED_MIXED/IRREDUCIBLE_EXEMPLARS: {stale}"
 
 
-@pytest.mark.parametrize("block_id", sorted(EXPECTED_MIXED))
+@pytest.mark.parametrize("block_id", sorted({*EXPECTED_MIXED, *IRREDUCIBLE_EXEMPLARS}))
 def test_every_parked_block_is_actually_annotated(block_id: str) -> None:
     """The ratchet must reference real blocks, or it silently protects nothing."""
-    assert block_id in BLOCK_ANNOTATIONS, f"{block_id} is parked in EXPECTED_MIXED but has no annotation"
+    assert block_id in BLOCK_ANNOTATIONS, f"{block_id} is registered but has no annotation"

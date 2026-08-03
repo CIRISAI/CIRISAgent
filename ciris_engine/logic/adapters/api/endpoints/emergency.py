@@ -86,15 +86,47 @@ async def get_kill_switch_status(
     Returns:
         Current kill switch configuration (without sensitive keys)
     """
+    # #998 — report the REAL authority source, not a hardcoded default.
+    #
+    # This used to read `enabled` off a KillSwitchConfig constructed with
+    # `enabled=True` in the service's __init__ and never updated, alongside a
+    # `root_wa_count` taken from a list nothing populated. So it answered
+    # "enabled: true, root_wa_count: 0" while every signed shutdown command was
+    # being rejected. A status surface that cannot report its own failure is
+    # worse than no status surface.
+    #
+    # Authorities now come from the accord verifier — the same trust root the
+    # stego kill switch verifies against.
+    from ciris_engine.logic.accord.verifier import AccordVerifier
+
+    verifier = AccordVerifier()
+    authorities = verifier.list_authorities()
+
+    status: JSONDict = {
+        # Enabled means AUTHORITIES ARE LOADED, not "a flag was set to True".
+        "enabled": bool(authorities),
+        "root_wa_count": len(authorities),
+        "authorities": [a["wa_id"] for a in authorities],
+        "trust_root": "accord-verifier",
+        "signature_scheme": "ed25519",
+        # LEGACY marker on the wire, not only in the source. TODO(#998):
+        # trust-root-backed PQC STEGO once designed and shipped.
+        "legacy": True,
+        # Redundant by design: the substrate carries its own kill switch that
+        # halts the node itself. Stopping the agent and stopping the node are
+        # independent paths; either alone suffices.
+        "redundant_substrate_killswitch": True,
+    }
+
     if hasattr(runtime_service, "_kill_switch_config"):
         config = runtime_service._kill_switch_config
-        return {
-            "enabled": config.enabled,
-            "root_wa_count": len(config.root_wa_public_keys),  # ROOT WA authorities
-            "trust_tree_depth": config.trust_tree_depth,
-            "allow_relay": config.allow_relay,
-            "max_shutdown_time_ms": config.max_shutdown_time_ms,
-            "command_expiry_seconds": config.command_expiry_seconds,
-        }
+        status.update(
+            {
+                "trust_tree_depth": config.trust_tree_depth,
+                "allow_relay": config.allow_relay,
+                "max_shutdown_time_ms": config.max_shutdown_time_ms,
+                "command_expiry_seconds": config.command_expiry_seconds,
+            }
+        )
 
-    return {"enabled": False, "error": "Kill switch not configured"}
+    return status

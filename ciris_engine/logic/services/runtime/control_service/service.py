@@ -49,7 +49,6 @@ from ciris_engine.schemas.services.runtime_control import (
     ServiceProviderInfo,
     ServiceProviderUpdate,
     ServiceRegistryInfoResponse,
-    WAPublicKeyMap,
 )
 from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus, KillSwitchConfig, WASignedCommand
 from ciris_engine.schemas.types import ConfigMapping, ConfigValue
@@ -195,7 +194,29 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         self._state_transitions = 0
         self._commands_processed = 0
 
-        # Kill switch configuration
+        # Kill switch — LEGACY (#998).
+        #
+        # This service used to keep its OWN authority list: `_wa_key_map`, a
+        # WAPublicKeyMap constructed empty here whose only writer was
+        # `_configure_kill_switch`, which nothing ever called. So
+        # `_verify_wa_signature` rejected EVERY WA-signed emergency shutdown
+        # regardless of signature validity, while `GET /v1/emergency/kill-switch/status`
+        # reported `enabled: true` off a hardcoded default. A live endpoint that
+        # could never succeed, describing a control that was not the one
+        # protecting the system.
+        #
+        # Authorities now come from the accord verifier — ONE authority source,
+        # two entry surfaces (a stego-encoded AccordPayload, and the
+        # WASignedCommand this API accepts). The two wire formats differ; the
+        # trust root must not.
+        #
+        # REDUNDANT BY DESIGN: the substrate carries its own, separate kill
+        # switch that halts the node itself. These are not competing paths —
+        # this one stops the agent, the substrate's stops the node underneath
+        # it. Defence in depth: either alone is sufficient to stop the system.
+        #
+        # TODO(#998): migrate to trust-root-backed PQC STEGO once designed and
+        # shipped. Today's authority set is Ed25519 over the steward keys.
         self._kill_switch_config = KillSwitchConfig(
             enabled=True,
             trust_tree_depth=3,
@@ -206,8 +227,6 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             log_to_audit=True,
             allow_override=False,
         )
-        # Initialize WA public key map
-        self._wa_key_map = WAPublicKeyMap()
 
     def _get_config_manager(self) -> "GraphConfigService":
         """Get config manager with lazy initialization to avoid circular imports."""
@@ -665,25 +684,20 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             True if signature is valid, False otherwise
         """
         try:
-            # Check if WA is authorized
-            if not self._wa_key_map.has_key(command.wa_id):
-                logger.error(f"WA {command.wa_id} not in authorized keys")
-                return False
-
-            # Get public key PEM and convert to key object
-            key_pem = self._wa_key_map.get_key(command.wa_id)
-            if not key_pem:
-                return False
-
-            from cryptography.hazmat.primitives import serialization
+            # Authority resolved from the ACCORD VERIFIER (#998) — the same
+            # trust root the stego kill switch uses. The verifier SIGKILLs the
+            # process if it loads zero authorities, so an empty set here is not
+            # a reachable state the way the old private map's was.
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-            public_key = serialization.load_pem_public_key(key_pem.encode("utf-8"))
+            from ciris_engine.logic.accord.verifier import AccordVerifier
 
-            # Ensure it's an Ed25519 key
-            if not isinstance(public_key, Ed25519PublicKey):
-                logger.error(f"WA {command.wa_id} key is not Ed25519")
+            key_bytes = AccordVerifier().public_key_for(command.wa_id)
+            if key_bytes is None:
+                logger.error(f"WA {command.wa_id} is not a trusted accord authority")
                 return False
+
+            public_key = Ed25519PublicKey.from_public_bytes(key_bytes)
 
             # Reconstruct signed data (canonical form)
             signed_data = "|".join(
@@ -722,39 +736,6 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             # Catch-all for unexpected errors (e.g., cryptography library errors)
             logger.error(f"Signature verification failed unexpectedly: {e}")
             return False
-
-    def _configure_kill_switch(self, config: KillSwitchConfig) -> None:
-        """
-        Configure the emergency kill switch.
-
-        Args:
-            config: Kill switch configuration including root WA keys
-        """
-        self._kill_switch_config = config
-
-        # Parse and store WA public keys
-        from cryptography.hazmat.primitives import serialization
-
-        self._wa_key_map.clear()
-        for key_pem in config.root_wa_public_keys:
-            try:
-                # Validate that it's a valid Ed25519 key
-                public_key = serialization.load_pem_public_key(key_pem.encode("utf-8"))
-                # Import the actual type for isinstance check
-                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey as Ed25519PublicKeyImpl
-
-                if isinstance(public_key, Ed25519PublicKeyImpl):
-                    # Extract WA ID from comment or use hash
-                    wa_id = self._extract_wa_id_from_pem(key_pem)
-                    self._wa_key_map.add_key(wa_id, key_pem)
-            except ValueError as e:
-                # Invalid PEM format or key data
-                logger.error(f"Failed to load WA public key (invalid format): {e}")
-            except TypeError as e:
-                # Wrong key type provided
-                logger.error(f"Failed to load WA public key (wrong type): {e}")
-
-        logger.info(f"Kill switch configured with {self._wa_key_map.count()} root WA keys")
 
     def _extract_wa_id_from_pem(self, key_pem: str) -> str:
         """Extract WA ID from PEM comment or generate from hash."""

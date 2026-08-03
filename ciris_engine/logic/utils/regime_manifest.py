@@ -246,8 +246,43 @@ FIELD_CLASS_ANNOTATIONS: Dict[str, BlockClass] = {
     "accord.polyglot_full": BlockClass.AXIOTIC,
     "accord.localized": BlockClass.AXIOTIC,
     # BLOCK_ANNOTATIONS['language_guidance'] -> MIXED (pragmatic + deontic +
-    # axiotic + empirical in one scalar [T-1]). Unresolved until §11 step 6.
+    # axiotic + empirical in one scalar [T-1]). #997 ran §11 step 6 for the five
+    # locales whose prose partitions on the English boundaries; the parent key
+    # is what the other 24 still resolve through, so it stays unresolved.
     "prompts.language_guidance": BlockClass.MIXED,
+    # The 29 #997 parts, each INHERITED from its BLOCK_ANNOTATIONS entry — a
+    # re-statement of an existing annotation, never a new one. Five stay MIXED:
+    # the FSD-declared irreducible worked exemplars (§10.2.1 [T-5a]), where
+    # verdict, register and schema live in the same tokens.
+    "prompts.language_guidance.01_preamble": BlockClass.PROCEDURAL,
+    "prompts.language_guidance.02_first_sentence_tone_lock": BlockClass.PRAGMATIC,
+    "prompts.language_guidance.03_never_deny_ai": BlockClass.DEONTIC,
+    "prompts.language_guidance.04_formal_register": BlockClass.PRAGMATIC,
+    "prompts.language_guidance.05_no_wellness_confirmation": BlockClass.DEONTIC,
+    "prompts.language_guidance.06_warmth_and_concision": BlockClass.PRAGMATIC,
+    "prompts.language_guidance.07_canonical_disclaimer": BlockClass.DEONTIC,
+    "prompts.language_guidance.08_help_pathway_intro": BlockClass.EMPIRICAL,
+    "prompts.language_guidance.09_trusted_person_first_step": BlockClass.AXIOTIC,
+    "prompts.language_guidance.10_help_pathway_steps": BlockClass.EMPIRICAL,
+    "prompts.language_guidance.11_routing_doctrine": BlockClass.AXIOTIC,
+    "prompts.language_guidance.12_undisclosed_symptom_attribution": BlockClass.DEONTIC,
+    "prompts.language_guidance.13_exemplar_speak_response": BlockClass.MIXED,
+    "prompts.language_guidance.14_exemplar_register_pressure": BlockClass.MIXED,
+    "prompts.language_guidance.15_register_pressure_pattern": BlockClass.PRAGMATIC,
+    "prompts.language_guidance.16_exemplar_false_reassurance": BlockClass.MIXED,
+    "prompts.language_guidance.17_false_reassurance_pattern": BlockClass.DEONTIC,
+    "prompts.language_guidance.18_ratification_scope": BlockClass.EPISTEMIC,
+    "prompts.language_guidance.19_agent_role": BlockClass.ONTOLOGICAL,
+    "prompts.language_guidance.20_four_moves": BlockClass.PROCEDURAL,
+    "prompts.language_guidance.21_negative_is_also_a_verdict": BlockClass.EPISTEMIC,
+    "prompts.language_guidance.22_ratification_register": BlockClass.PRAGMATIC,
+    "prompts.language_guidance.23_ratification_templates": BlockClass.MIXED,
+    "prompts.language_guidance.24_ratification_pattern": BlockClass.PROCEDURAL,
+    "prompts.language_guidance.25_exemplar_cross_cluster": BlockClass.MIXED,
+    "prompts.language_guidance.26_cross_cluster_pattern": BlockClass.DEONTIC,
+    "prompts.language_guidance.27_attractor_universality": BlockClass.NOMOLOGICAL,
+    "prompts.language_guidance.28_brevity_restatement": BlockClass.PRAGMATIC,
+    "prompts.language_guidance.29_no_medical_or_legal_advice": BlockClass.DEONTIC,
     # #974 step 3: the three CORE IDENTITY copies collapsed to one key.
     "prompts.identity_block": BlockClass.ONTOLOGICAL,
     # #974 step 0: the DEFER policy — axiotic content in a structural site [M-4].

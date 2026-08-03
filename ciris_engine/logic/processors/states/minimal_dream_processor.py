@@ -79,7 +79,13 @@ class DreamSession:
     session_id: str
     start_time: datetime
     task_id: Optional[str] = None
+    #: Edges the dream ACTUALLY created, as measured. Never inferred from an
+    #: action count — see `_dispatch_action` (#998). Zero here means "nothing
+    #: measured it", which is a true statement; it is not a claim that no edges
+    #: exist. Wiring a real measurement is what makes this non-zero.
     edges_created: int = 0
+    #: MEMORIZE actions dispatched. An event count, directly observed.
+    memorize_dispatched: int = 0
     thoughts_processed: int = 0
     completed_at: Optional[datetime] = None
     exit_reason: str = ""
@@ -317,9 +323,19 @@ class MinimalDreamProcessor(BaseProcessor):
             await self.dispatch_action(result, thought, dispatch_context.model_dump())
             logger.info(f"[DREAM] Dispatched {selected_action} for thought {thought.thought_id}")
 
-            # Track edges created (for MEMORIZE actions)
+            # #998 — count the DISPATCH, which we observed. Do not infer edges.
+            #
+            # This was `edges_created += 3  # Each dream MEMORIZE creates 3 edges`.
+            # The 3 was a hardcoded guess, and the handler it described
+            # (DreamMemorizeHandler) is registered nowhere — handler_registry.py:46
+            # maps MEMORIZE to MemorizeHandler. So the number was invented twice
+            # over, then announced to the user as "Wove N connections" and
+            # published as an `edges_created` telemetry series.
+            #
+            # A metric may count an event it witnessed. It may not assert a
+            # quantity it did not measure.
             if selected_action == HandlerActionType.MEMORIZE and self.current_session:
-                self.current_session.edges_created += 3  # Each dream MEMORIZE creates 3 edges
+                self.current_session.memorize_dispatched += 1
 
         except Exception as e:
             logger.error(f"[DREAM] Error dispatching action: {e}")
@@ -361,14 +377,17 @@ class MinimalDreamProcessor(BaseProcessor):
         duration = (self.current_session.completed_at - self.current_session.start_time).total_seconds()
         logger.info(
             f"[DREAM] Session {self.current_session.session_id} complete: "
-            f"{self.current_session.edges_created} edges created, "
+            f"{self.current_session.memorize_dispatched} memorize actions dispatched, "
+            f"{self.current_session.edges_created} edges measured, "
             f"{self.current_session.thoughts_processed} thoughts processed, "
             f"{duration:.1f}s duration"
         )
 
         # Announce exit
         await self._announce(
-            f"Reflection complete. Wove {self.current_session.edges_created} connections. " "Returning to work."
+            # Reports what was dispatched, not an edge count nothing measured.
+            f"Reflection complete. Recorded {self.current_session.memorize_dispatched} "
+            f"reflections. Returning to work."
         )
 
         # Record session to memory
@@ -391,6 +410,7 @@ class MinimalDreamProcessor(BaseProcessor):
                 "content": f"Dream session on {self.current_session.start_time.isoformat()}",
                 "session_id": self.current_session.session_id,
                 "edges_created": self.current_session.edges_created,
+                "memorize_dispatched": self.current_session.memorize_dispatched,
                 "thoughts_processed": self.current_session.thoughts_processed,
                 "duration_seconds": (
                     (self.current_session.completed_at - self.current_session.start_time).total_seconds()

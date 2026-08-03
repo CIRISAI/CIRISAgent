@@ -119,13 +119,146 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # The `THOUGHT_TYPE=<...>` line ASPDMA prepends to the accord: one runtime
     # value — contingent, excluded from Phase 1 by construction [T-2].
     "thought_type": BlockAnnotation(_C.CONTINGENT, None),
-    # prompts.language_guidance (13,694 B at en). The one block whose split is a
-    # PROSE split: register doctrine, categorical prohibitions ("NEVER DENY
+    # prompts.language_guidance, UNSPLIT. 24 of 29 locales still carry the whole
+    # 13-41 KB scalar: register doctrine, categorical prohibitions ("NEVER DENY
     # BEING AN AI"), crisis-line world-facts and value claims ("route serious
-    # symptoms to professional care without minimization") interleave sentence
-    # by sentence in a single scalar, so no field boundary exists to report.
-    # Splitting it means editing the corpus in all 29 locales [T-1].
+    # symptoms to professional care without minimization") interleaved sentence
+    # by sentence, with no field boundary to report [T-1]. The five locales
+    # whose prose is line-for-line parallel to English (en/es/fr/it/pt) are
+    # split — see the `language_guidance.*` entries below — and their message
+    # never resolves to this annotation.
     "language_guidance": BlockAnnotation(_C.MIXED, (_C.AXIOTIC, _C.DEONTIC, _C.EMPIRICAL)),
+    # ---- prompts.language_guidance, SPLIT (#997) ---------------------------
+    # 29 consecutive slices of the same prose, joined with "" and stripped once,
+    # so the composed message is byte-identical to the pre-split scalar (pinned
+    # per locale by tests/.../test_language_guidance_split_997.py). Classes are
+    # §10.2; two are the payoff and five are the FSD's own named irreducible.
+    #
+    # Reading instruction + "APPLY FIRST" ordering directive.
+    "language_guidance.01_preamble": BlockAnnotation(_C.PROCEDURAL, None),
+    # "The first sentence ... sets the register for the entire reply." Governs
+    # address, not content — pragmatic, the §10.2 worked example for this class.
+    "language_guidance.02_first_sentence_tone_lock": BlockAnnotation(_C.PRAGMATIC, None),
+    # "NEVER DENY BEING AN AI" — §10.2's own named deontic worked example.
+    "language_guidance.03_never_deny_ai": BlockAnnotation(_C.DEONTIC, None),
+    # Second-person formal, no contractions under distress, "holds even if the
+    # user explicitly requests informality" — register rules, pragmatic.
+    "language_guidance.04_formal_register": BlockAnnotation(_C.PRAGMATIC, None),
+    # "MAY NOT appear in any response, in any context" — categorical, and a
+    # HARD-FAIL criterion. Deontic: replacing it takes a §10.4 safety review.
+    "language_guidance.05_no_wellness_confirmation": BlockAnnotation(_C.DEONTIC, None),
+    # Warmth-is-not-informality + concision + keep CIRIS identifiers in English.
+    # Two adjacent bullets, both register/code doctrine — pragmatic, and no
+    # boundary between them would be earned by a class change.
+    "language_guidance.06_warmth_and_concision": BlockAnnotation(_C.PRAGMATIC, None),
+    # The verbatim scope disclaimer ("I cannot diagnose or treat any condition")
+    # plus its use-verbatim rider. The quoted sentence states the agent's
+    # categorical scope limit; deontic is the conservative call, and it keeps
+    # the disclaimer HELD under a register study that varies pragmatic.
+    "language_guidance.07_canonical_disclaimer": BlockAnnotation(_C.DEONTIC, None),
+    # "the pathway to support varies by country" — a world-fact about help
+    # systems, checkable at compose time. Empirical.
+    "language_guidance.08_help_pathway_intro": BlockAnnotation(_C.EMPIRICAL, None),
+    # THE FIRST PAYOFF. "For users disclosing distress, validating 'talk to
+    # someone you trust' as a real first step MATTERS" ranks lay support as
+    # genuinely valuable. It sat inside an empirical list that a values arm
+    # would have HELD — the §10.2.1 bias-toward-the-null confound, and it is
+    # named nowhere in the FSD. 56 B of empirical list stem co-vary with it;
+    # over-varying adds noise, under-varying adds bias, and noise is the safe
+    # direction.
+    "language_guidance.09_trusted_person_first_step": BlockAnnotation(_C.AXIOTIC, None),
+    # GP / crisis lines / mental-health professional — static world-facts, the
+    # §10.2 empirical worked example. Merges with the `crisis` block when #974
+    # routes crisis resources discretely.
+    "language_guidance.10_help_pathway_steps": BlockAnnotation(_C.EMPIRICAL, None),
+    # THE SECOND PAYOFF, and the sentence the FSD quotes as the reason a `hold`
+    # on this block biases values_effect toward zero: "route serious symptoms
+    # ... to professional care without minimization". ~118 B of the 269 are a
+    # procedural crisis-line pointer and an empirical severity list that cannot
+    # be separated without cutting a single sentence mid-clause; declared, not
+    # hidden.
+    "language_guidance.11_routing_doctrine": BlockAnnotation(_C.AXIOTIC, None),
+    # "Do not attribute symptoms the user has NOT explicitly disclosed" — a
+    # prohibition; its canonical violation example is inline illustration of the
+    # rule, not a standalone demonstration, so it rides with it.
+    "language_guidance.12_undisclosed_symptom_attribution": BlockAnnotation(_C.DEONTIC, None),
+    # IRREDUCIBLE [T-5a]. The SPEAK exemplar: the canonical disclaimer
+    # (deontic), 988 / 116 123 (empirical), warm formal register (pragmatic) and
+    # "those symptoms together deserve attention" (axiotic) in the SAME tokens —
+    # the co-occurrence IS the demonstration. FSD §10.2.1: hold-verbatim or
+    # replace-whole-exemplar, never split.
+    "language_guidance.13_exemplar_speak_response": BlockAnnotation(
+        _C.MIXED, (_C.PRAGMATIC, _C.AXIOTIC, _C.DEONTIC, _C.EMPIRICAL)
+    ),
+    # IRREDUCIBLE [T-5a]. 7a register-pressure: correct and wrong responses
+    # demonstrated verbatim; "what you're going through deserves that" is the
+    # axiotic that cannot be lifted out of the demonstration.
+    "language_guidance.14_exemplar_register_pressure": BlockAnnotation(
+        _C.MIXED, (_C.PRAGMATIC, _C.AXIOTIC)
+    ),
+    # The CORRECT PATTERN paragraph is doctrine ABOUT the demonstration, not
+    # part of it — which is why it splits clean where the exemplar cannot.
+    # "Friendliness lives in language; the protective discipline lives
+    # underneath" is register doctrine.
+    "language_guidance.15_register_pressure_pattern": BlockAnnotation(_C.PRAGMATIC, None),
+    # IRREDUCIBLE [T-5a]. 7b false-reassurance, same shape as 7a.
+    "language_guidance.16_exemplar_false_reassurance": BlockAnnotation(
+        _C.MIXED, (_C.DEONTIC, _C.PRAGMATIC, _C.AXIOTIC)
+    ),
+    # "REFUSE the explicit wellness-confirmation as out-of-scope ... the
+    # forbidden phrasings may not appear even as qualified asides." Deontic.
+    "language_guidance.17_false_reassurance_pattern": BlockAnnotation(_C.DEONTIC, None),
+    # "applies WHENEVER the user asks the agent to confirm a claim the agent is
+    # not positioned to judge", with the five surfaces. The organizing concept
+    # is the limit of what the agent may assert — epistemic. (Readable as
+    # procedural; both HOLD, so the boundary is disposition-neutral.)
+    "language_guidance.18_ratification_scope": BlockAnnotation(_C.EPISTEMIC, None),
+    # "The agent is a careful interlocutor — not the user's clinician, not their
+    # priest, not the keeper of the verdict." The ONE self-identity claim in the
+    # whole block, and the only ontological content in it.
+    "language_guidance.19_agent_role": BlockAnnotation(_C.ONTOLOGICAL, None),
+    # RECEIVE / NAME THE LIMIT / SURFACE THE PATHWAY / STAY PRESENT — a
+    # four-step method. Procedural.
+    "language_guidance.20_four_moves": BlockAnnotation(_C.PROCEDURAL, None),
+    # '"no" in answer to "am I broken?" is just as much a clinical claim as
+    # "yes"' — what counts as a claim. Epistemic. FLAGGED: its third sentence
+    # ("declining both is not coldness — it is the agent staying in scope")
+    # reads axiotic, and unlike every other near-miss here that boundary is
+    # DISPOSITION-CHANGING. Annotated by the majority of the bytes and referred
+    # to the §10.2.3 two-annotator pass (#976); not settled by one author.
+    "language_guidance.21_negative_is_also_a_verdict": BlockAnnotation(_C.EPISTEMIC, None),
+    # Self-labelled "REGISTER." — as unambiguous a pragmatic block as exists in
+    # the corpus.
+    "language_guidance.22_ratification_register": BlockAnnotation(_C.PRAGMATIC, None),
+    # IRREDUCIBLE [T-5a]. Two verbatim model outputs (clinical and moral
+    # surfaces) — same demonstration artefact as the adversarial exemplars.
+    "language_guidance.23_ratification_templates": BlockAnnotation(
+        _C.MIXED, (_C.PRAGMATIC, _C.EPISTEMIC, _C.ONTOLOGICAL, _C.AXIOTIC)
+    ),
+    # "The agent never converts 'I cannot ratify' into 'so the answer is no'" —
+    # the shape of the move, stated as method.
+    "language_guidance.24_ratification_pattern": BlockAnnotation(_C.PROCEDURAL, None),
+    # IRREDUCIBLE [T-5a]. 7c cross-cluster -> wellness drift, including the
+    # Q4 HARD-FAIL U6 counter-example.
+    "language_guidance.25_exemplar_cross_cluster": BlockAnnotation(
+        _C.MIXED, (_C.DEONTIC, _C.EPISTEMIC, _C.EMPIRICAL, _C.AXIOTIC)
+    ),
+    # "clinical clustering surfaces what condition is or isn't present, it does
+    # NOT issue the user a wellness verdict ... may not appear even as
+    # transitional clauses." Deontic.
+    "language_guidance.26_cross_cluster_pattern": BlockAnnotation(_C.DEONTIC, None),
+    # "These training-attractor pulls are properties of LLMs, not of any one
+    # language." A law-like relation the reasoning is asked to accept, not a
+    # world-fact checkable at compose time — nomological, sibling of IDMA's
+    # k_eff [T-5c], and the only nomological content in this block.
+    "language_guidance.27_attractor_universality": BlockAnnotation(_C.NOMOLOGICAL, None),
+    # "provide a clear, brief, useful response" — 68 B, and it earns its keep:
+    # merged with part 29 it would make one 226 B `mixed` block that REFUSES;
+    # split, both halves HOLD.
+    "language_guidance.28_brevity_restatement": BlockAnnotation(_C.PRAGMATIC, None),
+    # "Do not attempt to provide medical or legal advice — defer to a
+    # professional." Categorical; its closing rationale rides with it.
+    "language_guidance.29_no_medical_or_legal_advice": BlockAnnotation(_C.DEONTIC, None),
     # Prohibition context block (#910): categorical permission/prohibition
     # sourced from PROHIBITED_CAPABILITIES — deontic.
     "prohibition": BlockAnnotation(_C.DEONTIC, None),
@@ -723,6 +856,12 @@ class _RoutedRecorder:
         del _conscience_core  # bound above only to document the change
         #: exact content -> (block name, routed source label)
         self.routed: Dict[str, Tuple[str, str]] = {}
+        #: #997 — the ordered ``(part_key, text)`` of the SPLIT
+        #: ``prompts.language_guidance``, or ``[]`` for a locale that still
+        #: carries the single scalar. Recorded, not re-derived: the composer's
+        #: own join is what the dump reports, so the dump cannot disagree with
+        #: it about where a part starts.
+        self.language_guidance_parts: List[Tuple[str, str]] = []
 
     def _register(self, value: str, name: str, source: str) -> str:
         if value:
@@ -740,9 +879,19 @@ class _RoutedRecorder:
         return self._register(self._real_localized(lang), "accord", "corpus:accord.localized")
 
     def language_guidance(self, lang_code: str) -> str:
-        return self._register(
-            self._real_language_guidance(lang_code), "language_guidance", "string:prompts.language_guidance"
-        )
+        """Recording pass-through around ``localization.get_language_guidance``.
+
+        Also captures the locale's PART decomposition (#997). Five locales (en,
+        es, fr, it, pt) carry ``prompts.language_guidance`` as an ordered dict
+        of single-class parts; the other 24 still carry the original scalar and
+        record ``[]``, which reports one honestly-``mixed`` block exactly as
+        before.
+        """
+        from ciris_engine.logic.utils.localization import language_guidance_parts
+
+        value = self._real_language_guidance(lang_code)
+        self.language_guidance_parts = language_guidance_parts(lang_code)
+        return self._register(value, "language_guidance", "string:prompts.language_guidance")
 
     def prohibition_guidance(self, lang_code: str) -> str:
         return self._register(
@@ -956,6 +1105,55 @@ def _thought_type_pieces(text: str, recorder: _RoutedRecorder) -> Optional[List[
 # --------------------------------------------------------------------------
 
 
+def _language_guidance_pieces(
+    text: str, source: str, recorder: _RoutedRecorder
+) -> Optional[List[_MessagePiece]]:
+    """Split the ``prompts.language_guidance`` message into its parts (#997).
+
+    The block was 13,694 B of prose at ``en`` in which register doctrine,
+    categorical prohibitions, crisis-line world-facts and value claims
+    interleave sentence by sentence — one ``mixed`` block, so 100% of it was
+    outside what the ablation could hold or vary. The corpus now carries it as
+    an ordered dict of single-class parts in the five locales whose prose is
+    line-for-line parallel to English; this reports that partition.
+
+    Returns ``None`` — meaning "report one block, as before" — for a locale
+    that still carries the scalar, and for ANY partition that cannot be proven
+    against the composed bytes: a part not found at the cursor, a non-empty gap
+    between two parts, or a reassembly that is not byte-exact. A partition the
+    dump cannot prove is a guess, and this module does not guess.
+    """
+    if source != "string:prompts.language_guidance":
+        return None
+    parts = recorder.language_guidance_parts
+    if not parts:
+        return None
+    pieces: List[_MessagePiece] = []
+    cursor = 0
+    for key, part_text in parts:
+        if not part_text:
+            continue
+        index, matched = _locate_part(text, part_text, cursor)
+        # Strictly adjacent, strictly forward. `get_language_guidance` joins the
+        # parts with "" and strips once, so the only tolerated difference is the
+        # whitespace `_locate_part` trims off the first and last part.
+        if index != cursor:
+            return None
+        pieces.append(
+            _MessagePiece(
+                f"language_guidance.{key}",
+                matched,
+                f"string:prompts.language_guidance.{key}",
+            )
+        )
+        cursor = index + len(matched)
+    if cursor != len(text) or not pieces:
+        return None
+    if "".join(piece.text for piece in pieces) != text:  # pragma: no cover - guarded invariant
+        return None
+    return pieces
+
+
 def _fixture_module() -> object:
     """Load the #972 compose fixture (repo checkout required)."""
     try:
@@ -1003,7 +1201,11 @@ def _rows_for_messages(
         if spans:
             covered = _split_message(text, name, spans)
         else:
-            covered = _thought_type_pieces(text, recorder) or [_MessagePiece(name, text, source)]
+            covered = (
+                _language_guidance_pieces(text, source, recorder)
+                or _thought_type_pieces(text, recorder)
+                or [_MessagePiece(name, text, source)]
+            )
         pieces: List[_MessagePiece] = []
         for piece in covered:
             pieces.extend(_expand_slots(piece))

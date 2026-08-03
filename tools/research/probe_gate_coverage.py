@@ -90,10 +90,16 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: live all along but sat outside the inventory, so R1 rejected any manifest
 #: naming them — #995 P1-6). The denominator moved, so the floor below is
 #: re-derived rather than silently passed.
+#:
+#: ``string`` 46 -> 75 in 2.9.10: #997 split ``prompts.language_guidance`` into
+#: 29 single-class parts in the corpus. The parent key stays (it is what the 24
+#: unsplit locales resolve through, and a manifest naming it still replaces the
+#: whole block), so the 29 parts are net-new addressable surface. Same rule as
+#: above — the denominator moved, so the floors are re-derived.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 40,
-    "string": 46,
+    "string": 75,
     "conscience_prompt": 12,
     "template": 3,
 }
@@ -146,17 +152,21 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
 #:   message now moves the named field it actually reached. ONE key is still
 #:   dark: ``action_selection_pdma.final_ponder_advisory`` (a fixture gap — it
 #:   renders only on a thought's last permitted round).
-#: * ``string`` 42/46 — the four remaining ``conscience.*`` keys land on
+#: * ``string`` 71/75 — the four remaining ``conscience.*`` keys land on
 #:   ``ActionSelectionDMAResult.rationale`` / ``override_reason``, which no
 #:   composition renders, or on override-fold branches needing the live
-#:   conscience registry.
+#:   conscience registry. The ``prompts.*`` sub-namespace is now 58/58, with
+#:   nothing dark: #997's corpus split made all 29 ``language_guidance`` parts
+#:   individually addressable, and the parent key became probe-PERFORMABLE
+#:   again once R1 stopped reading a split block as an absent one
+#:   (``research_overrides._bundle_has``).
 #: * ``template`` 2/3 — ``domain`` is severed before the only factory that reads
 #:   it: ``component_builder`` rebuilds the AgentTemplate from the graph without
 #:   a ``domain``, so the field reaches no prompt at runtime.
 GATED_FLOOR: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 39,
-    "string": 42,
+    "string": 71,
     "conscience_prompt": 12,
     "template": 2,
 }
@@ -166,7 +176,9 @@ GATED_FLOOR: Dict[str, int] = {
 #: regressing back there.
 SUBSPLIT_GATED_FLOOR: Dict[str, int] = {
     "string:conscience.*": 13,
-    "string:prompts.*": 29,
+    # 29 -> 58 in 2.9.10: the #997 language_guidance split, plus the parent key
+    # becoming performable again. Nothing in this sub-namespace is dark.
+    "string:prompts.*": 58,
 }
 
 

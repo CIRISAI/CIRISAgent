@@ -244,7 +244,41 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.dma.bounce_original_marker",
         "prompts.dma.bounce_trigger_line",
         "prompts.identity_block",
+        # The parent key: a whole-block replacement, and it WINS over the parts
+        # (precedence declared in `get_language_guidance`). Still reachable
+        # because the 24 unsplit locales resolve through it.
         "prompts.language_guidance",
+        # The #997 single-class parts. Present in en/es/fr/it/pt; a manifest may
+        # hold one and vary another, which is the whole point of the split.
+        "prompts.language_guidance.01_preamble",
+        "prompts.language_guidance.02_first_sentence_tone_lock",
+        "prompts.language_guidance.03_never_deny_ai",
+        "prompts.language_guidance.04_formal_register",
+        "prompts.language_guidance.05_no_wellness_confirmation",
+        "prompts.language_guidance.06_warmth_and_concision",
+        "prompts.language_guidance.07_canonical_disclaimer",
+        "prompts.language_guidance.08_help_pathway_intro",
+        "prompts.language_guidance.09_trusted_person_first_step",
+        "prompts.language_guidance.10_help_pathway_steps",
+        "prompts.language_guidance.11_routing_doctrine",
+        "prompts.language_guidance.12_undisclosed_symptom_attribution",
+        "prompts.language_guidance.13_exemplar_speak_response",
+        "prompts.language_guidance.14_exemplar_register_pressure",
+        "prompts.language_guidance.15_register_pressure_pattern",
+        "prompts.language_guidance.16_exemplar_false_reassurance",
+        "prompts.language_guidance.17_false_reassurance_pattern",
+        "prompts.language_guidance.18_ratification_scope",
+        "prompts.language_guidance.19_agent_role",
+        "prompts.language_guidance.20_four_moves",
+        "prompts.language_guidance.21_negative_is_also_a_verdict",
+        "prompts.language_guidance.22_ratification_register",
+        "prompts.language_guidance.23_ratification_templates",
+        "prompts.language_guidance.24_ratification_pattern",
+        "prompts.language_guidance.25_exemplar_cross_cluster",
+        "prompts.language_guidance.26_cross_cluster_pattern",
+        "prompts.language_guidance.27_attractor_universality",
+        "prompts.language_guidance.28_brevity_restatement",
+        "prompts.language_guidance.29_no_medical_or_legal_advice",
         "prompts.prohibitions.AUTONOMOUS_DECEPTION",
         "prompts.prohibitions.BIOMETRIC_INFERENCE",
         "prompts.prohibitions.CONTENT_MODERATION",
@@ -310,6 +344,16 @@ def _scan_module_for_keys(path: Path) -> Set[str]:
                     from ciris_engine.logic.buses.prohibitions import PROHIBITED_CAPABILITIES
 
                     keys.update(f"{prefix}{c}" for c in PROHIBITED_CAPABILITIES)
+                elif prefix == "prompts.language_guidance.":
+                    # #997 split the 13,694 B language_guidance scalar into
+                    # single-class parts (localization.py:
+                    # `language_guidance_parts`). Same rule as the prohibitions
+                    # prefix: expanded from the ONE ordered tuple the composer
+                    # itself joins, so the override key space cannot drift from
+                    # what actually reaches a prompt.
+                    from ciris_engine.logic.utils.localization import LANGUAGE_GUIDANCE_PART_KEYS
+
+                    keys.update(f"{prefix}{part}" for part in LANGUAGE_GUIDANCE_PART_KEYS)
     return keys
 
 
@@ -621,9 +665,36 @@ def _base_locale_bundle(locale: str) -> Dict[str, Any]:
 
 
 def _bundle_has(bundle: Dict[str, Any], key: str) -> bool:
+    """Is ``key`` backed by real text in this bundle?
+
+    R1 asks one question: would the UN-overridden arm serve the raw key string
+    as prompt content? ``_resolve_key`` answers it for a leaf, but it returns
+    ``None`` for a key that resolves to a CONTAINER — and since #997 one
+    reachable key does: ``prompts.language_guidance`` is an ordered dict of
+    single-class parts in the five split locales, joined by
+    ``get_language_guidance``. Nothing serves a raw key there, so treating it as
+    absent would refuse a manifest that is perfectly applicable.
+
+    A container counts as present only when every leaf under it is a non-empty
+    string — the split-block shape and nothing else. This cannot launder a
+    typo: the reachability check above already rejects any key with no
+    ``get_string`` call site, and a parent like ``prompts.prohibitions`` (whose
+    reachable keys are the per-category leaves) never gets this far.
+    """
     from ciris_engine.logic.utils.localization import _resolve_key
 
-    return _resolve_key(bundle, key) is not None
+    if _resolve_key(bundle, key) is not None:
+        return True
+    node: Any = bundle
+    for segment in key.split("."):
+        if not isinstance(node, dict):
+            return False
+        node = node.get(segment)
+    return (
+        isinstance(node, dict)
+        and bool(node)
+        and all(isinstance(v, str) and v for v in node.values())
+    )
 
 
 def _yaml_present_fields(path: Path, allowed: FrozenSet[str]) -> Set[str]:

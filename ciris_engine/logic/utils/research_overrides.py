@@ -135,6 +135,23 @@ _DMA_PROMPT_TEXT_FIELDS: FrozenSet[str] = frozenset(
         "final_ponder_advisory",
         "closing_reminder",
         "context_integration",
+        # #993 — composed after the ASPDMA template render (no {slot} exists for
+        # them in context_integration, and adding one would need all 29
+        # localized copies edited).
+        "tool_selection_guidance",
+        "csdma_ambiguity_alignment_example",
+        # #995 P1-6 — live YAML that was outside the key space, so R1 rejected
+        # any manifest naming it as "does not reach any LLM prompt", which was
+        # false. Both reach a model and neither is a declared PromptCollection
+        # field; they are carried in `custom_prompts`, which `get_prompt()`
+        # reads and `_apply_research_overrides` now writes.
+        #
+        # `taxonomy_text` is 3,273 B — the full rights/needs deferral taxonomy,
+        # operative doctrine steering DEFER classification. Leaving it
+        # uncoverable meant a deontic arm could not touch the text that decides
+        # deferral.
+        "taxonomy_text",
+        "tool_correction_section",
     }
 )
 

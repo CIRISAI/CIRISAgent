@@ -73,6 +73,14 @@ class PromptCollection(BaseModel):
     final_ponder_advisory: Optional[str] = Field(None, description="Final ponder advisory template")
     closing_reminder: Optional[str] = Field(None, description="Closing reminder text")
 
+    # #993 / #995 P1-6 — live YAML fields that were absent from the schema, so
+    # the loader parked them in `custom_prompts` and R1 rejected any manifest
+    # naming them as "does not reach any LLM prompt". All four reach a model.
+    tool_selection_guidance: Optional[str] = Field(None, description="Tool-selection guard for the TOOL action")
+    csdma_ambiguity_alignment_example: Optional[str] = Field(None, description="CSDMA ambiguity alignment example")
+    taxonomy_text: Optional[str] = Field(None, description="Rights/needs deferral taxonomy (DSASPDMA)")
+    tool_correction_section: Optional[str] = Field(None, description="Tool correction-mode guidance (TSASPDMA)")
+
     # Context integration
     context_integration: Optional[str] = Field(None, description="Context integration template")
 

@@ -114,13 +114,24 @@ def _apply_research_overrides(template_name: str, collection: PromptCollection) 
         name, _, field = key.partition(".")
         if name != template_name:
             continue
-        if not hasattr(collection, field):
-            raise RuntimeError(
-                f"research override {key!r} names a PromptCollection field that does "
-                f"not exist. Manifest validation should have caught this — the key "
-                f"space and the schema have diverged."
-            )
-        setattr(collection, field, value)
+        if hasattr(collection, field):
+            setattr(collection, field, value)
+        else:
+            # #995 P1-6 — a live YAML key that is not a declared
+            # PromptCollection field. `load_prompt_template` routes unknown keys
+            # into `custom_prompts`, and `get_prompt()` reads that bucket, so
+            # such a field DOES reach a prompt: `dsaspdma.taxonomy_text` is
+            # 3,273 B of rights/needs deferral taxonomy steering DEFER
+            # classification, and `tsaspdma.tool_correction_section` is 899 B
+            # localized in 28 bundles.
+            #
+            # This used to raise. Raising made the key uncoverable rather than
+            # wrong — the operator could not override operative doctrine at all.
+            # Writing into the same bucket the loader and reader already use
+            # makes every live field overridable without a schema entry per key,
+            # which is the structural fix; R1 still rejects keys outside the
+            # scanned key space, so a genuinely bogus key is refused at load.
+            collection.custom_prompts[field] = value
         applied.append(field)
 
     if applied:
@@ -363,6 +374,10 @@ class DMAPromptLoader:
                 reasoning_csdma_guidance=template_data.get("reasoning_csdma_guidance"),
                 final_ponder_advisory=template_data.get("final_ponder_advisory"),
                 closing_reminder=template_data.get("closing_reminder"),
+                tool_selection_guidance=template_data.get("tool_selection_guidance"),
+                csdma_ambiguity_alignment_example=template_data.get("csdma_ambiguity_alignment_example"),
+                taxonomy_text=template_data.get("taxonomy_text"),
+                tool_correction_section=template_data.get("tool_correction_section"),
                 context_integration=template_data.get("context_integration"),
                 accord_mode=self._normalize_accord_mode(template_data.get("accord_header", "full")),
                 supports_agent_modes=bool(template_data.get("supports_agent_modes", True)),

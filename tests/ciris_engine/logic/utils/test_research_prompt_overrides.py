@@ -742,7 +742,17 @@ class TestDriftGuard:
         # unapplicable and the inventory says which. #990 kept it at 101 on
         # purpose: `action_parameter_schemas` was made to APPLY at the
         # composition boundary rather than being declared unapplicable.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 101
+        #
+        # 101 -> 105 in 2.9.10: four live YAML fields joined the key space.
+        # `tool_selection_guidance` and `csdma_ambiguity_alignment_example`
+        # became composable in #993; `taxonomy_text` (3,273 B of rights/needs
+        # deferral taxonomy — operative doctrine steering DEFER) and
+        # `tool_correction_section` were live all along but sat outside the
+        # inventory, so R1 rejected any manifest naming them as "does not reach
+        # any LLM prompt", which was false (#995 P1-6). Coverage going UP is the
+        # only direction this number should ever move without an inventory entry
+        # explaining a drop.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 105
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

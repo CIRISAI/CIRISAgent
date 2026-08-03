@@ -1,0 +1,33 @@
+RECORD CORRECTION (added after the fact; the SHA cannot be rewritten safely
+because other agents were committing onto this branch at the time).
+
+THIS COMMIT CARRIES TWO UNRELATED CHANGES. It was created with a repo-global
+`git add -A` in a worktree with concurrent agents, and swept up an in-progress
+CIRISAgent#997 change from the working tree.
+
+  #998 (what the message describes):
+    ciris_engine/logic/accord/verifier.py
+    ciris_engine/logic/adapters/api/endpoints/emergency.py
+    ciris_engine/logic/handlers/memory/memorize_handler.py
+    ciris_engine/logic/processors/states/minimal_dream_processor.py
+    ciris_engine/logic/services/runtime/control_service/service.py
+    tests/ciris_engine/logic/test_no_phantom_capability_998.py
+
+  #997 (what the message does NOT describe) — the prompts.language_guidance
+  prose split:
+    ciris_engine/data/localized/{en,es,fr,it,pt}.json + all 5 client mirrors
+    ciris_engine/logic/utils/{compose_dump,localization,regime_manifest,
+                              research_overrides}.py
+    tools/research/probe_gate_coverage.py
+    tools/research/regimes/phase1_selfcheck_null.yaml
+    tests/ciris_engine/logic/utils/test_language_guidance_split_997.py
+    tests/ciris_engine/logic/utils/test_taxonomy_gate_997.py
+
+THE MESSAGE'S TEST CLAIM ("82 memorize/dream tests pass, mypy clean") COVERS
+ONLY THE #998 HALF. It asserts nothing about the 38 #997 files it carries. A
+commit asserting verification it did not perform is the defect class this cut
+exists to catch, so it is named here rather than left implied.
+
+The #997 half is verified in commit 9fc0c107c and in that commit's own note.
+No stashed content was committed here: this commit contains no version-constant
+and no client build-file changes.

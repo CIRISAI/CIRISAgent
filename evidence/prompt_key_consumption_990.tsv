@@ -1,0 +1,33 @@
+#	CIRISAgent#990 — prompt-YAML keys that never reached a model.
+#	Method: replace one key's value with a unique marker via the research
+#	dma_prompt override namespace, re-compose all DMA steps across 29 locales
+#	(1740 baseline blocks, 14 DMA steps), count composed blocks whose bytes moved.
+#	blocks_moved = 0 means the key is not composed by the template that owns it.
+#
+#	CONTROLS ARE LOAD-BEARING. A negative result from a marker probe is worthless
+#	on its own: "0 blocks moved" and "the harness silently did nothing" are the
+#	same observation. The control rows below are live sibling keys run through
+#	the IDENTICAL path in the SAME sweep. They move. That is what licenses reading
+#	a 0 as deadness rather than as instrument failure — and it is not hypothetical
+#	caution: an early full-locale sweep returned 0 for every key including the
+#	controls, because a research manifest makes the conscience steps refuse an
+#	English fallback for 'am'. The controls caught that. Without them the sweep
+#	would have reported every key dead.
+#
+#	verdict:  DEAD = composed nowhere | LIVE = composes as expected
+#	role:     subject = under investigation | control = known-live, proves the method
+#
+key	template	role	verdict	blocks_moved	locales	first_release	mechanism	disposition
+idma.closing_reminder	idma	subject	DEAD	0	29	v2.6.0 (2026-04-20)	IDMA composes via DMAPromptLoader.get_system_message(), whose six-field allowlist never included closing_reminder	FIXED — composed, goldens re-baselined (+1231 chars, 25 lines, 0 removed)
+tsaspdma.closing_reminder	tsaspdma	subject	DEAD	0	29	v1.9.5 (2026-01-27)	same allowlist; TSASPDMA also routes through get_system_message()	FIXED — composed by the same change
+dsdma_base.response_format	dsdma_base	subject	DEAD	0	29	v2.3.1 (2026-03-28)	BaseDSDMA never calls get_system_message at all; it renders system_guidance_header alone via the prompt_template property	FIXED — appended in compose_messages (+451 chars, 10 lines, 0 removed)
+action_selection_pdma.csdma_ambiguity_guidance	action_selection_pdma	subject	DEAD	0	29	—	built in _build_guidance_sections as action_alignment_csdma_guidance, never extracted by build_main_user_content; context_integration has no slot for it	OPEN — CIRISAgent#990 follow-up, same class one layer up
+action_selection_pdma.csdma_ambiguity_alignment_example	action_selection_pdma	subject	DEAD	0	29	—	dead by the same mechanism as csdma_ambiguity_guidance	OPEN — CIRISAgent#990 follow-up
+action_selection_pdma.tool_selection_guidance	action_selection_pdma	subject	DEAD	0	29	—	read nowhere in the repository; not a PromptCollection field, so dropped at load. This is the tool-hallucination guard ("Use the EXACT tool name … Do NOT invent or modify tool names")	OPEN — CIRISAgent#993
+tsaspdma.context_enrichment_section	tsaspdma	subject	DEAD	0	29	—	shadowed: tsaspdma.py:383-388 builds the same text as a hardcoded English f-string and passes THAT into the slot, so all 29 localized copies are unreachable	OPEN — CIRISAgent#991
+tsaspdma.tool_documentation_section	tsaspdma	subject	DEAD	0	29	—	shadowed by _format_tool_documentation() in Python instead of read from the localized template	OPEN — CIRISAgent#991
+action_selection_pdma.final_ponder_advisory	action_selection_pdma	subject	NOT DEAD	0	29	—	FIXTURE GAP, not a composer defect: renders only when current_thought_depth >= max_rounds - 1, and the dump fixture drives depth 0-2 of 5	OPEN — add an aspdma_final_attempt fixture step
+dsaspdma.closing_reminder	dsaspdma	control	LIVE	29	29	—	hand-composed via _require_prompt_value at dsaspdma.py:219	—
+dsaspdma.response_format	dsaspdma	control	LIVE	29	29	—	hand-composed via _require_prompt_value at dsaspdma.py:218	—
+idma.response_format	idma	control	LIVE	29	29	—	inside the get_system_message six-field allowlist	—
+tsaspdma.response_format	tsaspdma	control	LIVE	58	29	—	inside the allowlist; composed at two steps per locale	—

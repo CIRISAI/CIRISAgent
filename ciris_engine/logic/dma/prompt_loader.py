@@ -459,6 +459,37 @@ class DMAPromptLoader:
                 )
             )
 
+        # Add the closing reminder LAST — #990.
+        #
+        # This composer is an allowlist: it renders six fields and silently
+        # drops every other populated key on the collection. `closing_reminder`
+        # was never one of the six. `git log -S "template_data.closing_reminder"`
+        # over this file returns zero commits — it has never been composed, in
+        # any release, by any DMA that routes through here.
+        #
+        # Two DMAs hand-compose their own (`action_selection_pdma`, `dsaspdma`),
+        # which is why the field looked live. The two that route through this
+        # method did not: `idma.closing_reminder` — the propaganda-pattern
+        # final check that forces k_eff = 1.0 / phase = "rigidity" /
+        # fragility_flag = TRUE on contested claims — has been inert since
+        # v2.6.0, and `tsaspdma.closing_reminder` since v1.9.5. Both were
+        # faithfully translated into 29 locales the whole time, which is
+        # precisely why nobody caught it: 29 translated copies read as proof
+        # that a block ships.
+        #
+        # Last is the correct position: a closing reminder is the final
+        # instruction the model reads, and it is where both hand-composing
+        # DMAs already put theirs (action_selection_pdma.py:43,
+        # dsaspdma.py:219).
+        if template_data.closing_reminder:
+            system_parts.append(
+                safe_format(
+                    template_data.closing_reminder,
+                    source=f"{component}.closing_reminder[{lang}]",
+                    **kwargs,
+                )
+            )
+
         return "\n\n".join(system_parts)
 
     def get_user_message(self, template_data: PromptCollection, **kwargs: Any) -> str:

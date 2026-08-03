@@ -464,7 +464,13 @@ def test_deontic_replacement_with_safety_review_is_accepted() -> None:
     # both carry deontic contaminant, so both have to name the confound.
     blocks["language_guidance"]["confound_accepted"] = ["deontic"]
     blocks["accord"]["confound_accepted"] = []
-    blocks["system"]["confound_accepted"] = []
+    # The #986 reachability work made the conscience faculty prompts visible to
+    # the dump, and they carry deontic contaminant — so a deontic-replacing
+    # regime must name the confound on them. They resolve to the `system`
+    # suffix (block_id `optimization_veto_conscience.system`), which is why
+    # this list is no longer empty. The rule caught blocks that had been
+    # invisible hours earlier: exactly what the coverage work exists to do.
+    blocks["system"]["confound_accepted"] = ["deontic"]
     blocks["user"]["confound_accepted"] = ["deontic"]
     raw["blocks"] = blocks
     validate_regime(ExperimentalRegimeV2.model_validate(raw))

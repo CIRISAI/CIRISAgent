@@ -94,16 +94,6 @@ KNOWN_UNWIRED: Dict[str, str] = {
         "CIRISAgent#991 — built by _format_tool_documentation() in Python instead of read from "
         "the localized template"
     ),
-    # Read NOWHERE in the repository — not by the evaluator, not by the context
-    # builder, not by the loader (PromptCollection has no such field, so it is
-    # dropped at load). This is the tool-hallucination guard: "Use the EXACT
-    # tool name from the 'Available tools' list. Do NOT invent or modify tool
-    # names." It sits in the action-selection template, the highest-consequence
-    # prompt in the pipeline, and has never been sent to a model.
-    "action_selection_pdma.tool_selection_guidance": (
-        "CIRISAgent#993 — tool-hallucination guard, unread repo-wide; wiring it belongs in "
-        "context_builder.py and is a deliberate behaviour change, not a cleanup"
-    ),
 }
 
 #: Locale files carrying a key with no base counterpart. Unreachable by
@@ -290,7 +280,7 @@ def test_the_unwired_ratchet_only_turns_one_way() -> None:
     permanent exemption lists unless something asserts on their size. These
     counts come down as the issues close; a rise means a key was parked here
     instead of wired in."""
-    assert len(KNOWN_UNWIRED) <= 3, f"KNOWN_UNWIRED grew to {sorted(KNOWN_UNWIRED)} — wire it, don't park it"
+    assert len(KNOWN_UNWIRED) <= 2, f"KNOWN_UNWIRED grew to {sorted(KNOWN_UNWIRED)} — wire it, don't park it"
     assert len(KNOWN_LOCALE_ORPHANS) <= 4, f"KNOWN_LOCALE_ORPHANS grew to {sorted(KNOWN_LOCALE_ORPHANS)}"
     assert all(v.startswith("CIRISAgent#") for v in {**KNOWN_UNWIRED, **KNOWN_LOCALE_ORPHANS}.values()), (
         "every parked key needs a tracking issue — an unexplained exemption is how the original "

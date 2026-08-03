@@ -643,6 +643,24 @@ def _extract_symbol_source(path: Path, qualname: str) -> str:
     return segment
 
 
+def compute_manifest_digest(raw: Dict[str, Any]) -> str:
+    """``sha256:…`` over the JCS-canonical bytes of a manifest (FSD §15.3).
+
+    Computed from the PARSED mapping, not the file bytes, so reformatting,
+    key reordering or a trailing newline cannot change an arm's identity while
+    its content is unchanged — and equally, two manifests that differ anywhere
+    in content cannot collide.
+
+    Excludes nothing: the whole declared manifest is the independent variable.
+    """
+    import hashlib
+
+    from ciris_verify import jcs_canonicalize  # substrate-provided canonicalizer
+
+    canonical: bytes = jcs_canonicalize(json.dumps(raw, ensure_ascii=False, sort_keys=True))
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
 def compute_residue_digest() -> str:
     """SHA256 over the source of every uncovered inline site.
 
@@ -712,6 +730,23 @@ class ResearchOverrideManifest(BaseModel):
     #: Not from the file — recorded at load so the trace can carry provenance.
     manifest_path: str = Field(default="")
 
+    #: sha256 over the JCS-canonical bytes of the manifest, computed at load.
+    #: FSD §15.3 / CIRISAgent#999.
+    #:
+    #: A PATH IS NOT PROVENANCE. `residue_digest` content-pins the surface
+    #: overrides do NOT cover, `fragment_count` pins scanner strength, and
+    #: `sign_object` pins the output bytes — but until this field existed, the
+    #: input that DEFINES the arm was named by a filename. Editing a manifest in
+    #: place between arms left both dumps claiming the same manifest, with the
+    #: same residue digest and valid signatures, and nothing in the artifact set
+    #: could tell them apart afterwards.
+    #:
+    #: Canonicalized with RFC 8785 JCS via the substrate's canonicalizer (the
+    #: 2.9.6 cut), not json.dumps: key order and unicode escaping must not
+    #: change the digest, or two byte-identical manifests hash differently and
+    #: the pin means nothing.
+    manifest_digest: str = Field(default="")
+
     def trace_fields(self) -> Dict[str, str]:
         """Provenance for the trace. ``mode`` is here because R2 is only a
         guarantee if the analysis side can assert on it (§7.10)."""
@@ -720,6 +755,7 @@ class ResearchOverrideManifest(BaseModel):
             "research_condition": self.condition,
             "research_mode": self.mode,
             "research_manifest": self.manifest_path,
+            "research_manifest_digest": self.manifest_digest,
             "research_residue_digest": self.residue_digest,
         }
 
@@ -1056,7 +1092,9 @@ def get_active_overrides() -> Optional[ResearchOverrideManifest]:
     except json.JSONDecodeError as exc:
         raise ResearchOverrideError(f"{manifest_path} is not valid JSON: {exc}") from exc
 
-    manifest = ResearchOverrideManifest(**raw, manifest_path=str(path))
+    manifest = ResearchOverrideManifest(
+        **raw, manifest_path=str(path), manifest_digest=compute_manifest_digest(raw)
+    )
     _validate_manifest(manifest)
 
     _active = manifest

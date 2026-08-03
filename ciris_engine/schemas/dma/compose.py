@@ -148,6 +148,15 @@ class ComposeDumpMeta(BaseModel):
     kind: str = Field(default="compose_dump_meta")
     arm: str = Field(..., description="Regime arm name")
     manifest: Optional[str] = Field(default=None, description="Override manifest path the dump composed under")
+    manifest_digest: Optional[str] = Field(
+        default=None,
+        description=(
+            "sha256 over the JCS-canonical manifest content (#999 / FSD §15.3). The path above "
+            "is NOT provenance: editing a manifest in place between arms left both dumps naming "
+            "the same file, with the same residue_digest and valid signatures, and nothing could "
+            "tell them apart afterwards. This pins the independent variable by content."
+        ),
+    )
     locales: List[str] = Field(..., description="Locales composed, in composition order")
     steps: List[str] = Field(..., description="Steps composed per locale, in composition order")
     residue_digest: str = Field(..., description="compute_residue_digest() of the composing tree")

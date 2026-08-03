@@ -1779,6 +1779,30 @@ def _extract_user_info_from_token(token_info: Dict[str, Any]) -> Dict[str, Optio
     }
 
 
+async def _call_google_tokeninfo_api(id_token: str) -> Dict[str, Any]:
+    """Call Google's tokeninfo API and return the response JSON."""
+    import aiohttp
+
+    logger.debug("[NativeAuth] Calling Google tokeninfo API...")
+
+    client_timeout = aiohttp.ClientTimeout(total=10.0)
+    async with aiohttp.ClientSession(timeout=client_timeout) as session:
+        # Use params dict for proper URL encoding of the token
+        async with session.get("https://oauth2.googleapis.com/tokeninfo", params={"id_token": id_token}) as response:
+            logger.debug("[NativeAuth] Google tokeninfo response: %d", response.status)
+
+            if response.status != 200:
+                error_text = await response.text()
+                logger.error(f"[NativeAuth] Google API rejected token: {response.status} - {error_text}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google could not verify this ID token. It may be expired, malformed, or invalid.",
+                )
+
+            token_info: Dict[str, Any] = await response.json()
+            return token_info
+
+
 async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     """
     Verify a Google ID token and extract user info.

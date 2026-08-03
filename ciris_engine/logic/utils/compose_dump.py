@@ -1353,6 +1353,7 @@ def compose_dump_rows(
         conscience_guidance_mode=_conscience_mode_for_dump(),
         arm=arm,
         manifest=manifest,
+        manifest_digest=_manifest_digest_for(manifest),
         locales=list(locales),
         steps=list(step_names),
         residue_digest=compute_residue_digest(),
@@ -1361,6 +1362,28 @@ def compose_dump_rows(
     rows.sort(key=lambda r: (r.locale, r.step, r.seq))
     return meta, rows
 
+
+
+def _manifest_digest_for(manifest: Optional[str]) -> Optional[str]:
+    """Content digest of the manifest this dump composed under, or None (#999).
+
+    None means "no manifest" — a baseline arm — which is a different and honest
+    statement from "a manifest whose identity we did not record".
+    """
+    if not manifest:
+        return None
+    import json as _json
+
+    from ciris_engine.logic.utils.research_overrides import compute_manifest_digest
+
+    try:
+        with open(manifest, encoding="utf-8") as fh:
+            return compute_manifest_digest(_json.load(fh))
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(
+            f"could not digest the override manifest {manifest!r}: {exc}. A dump that cannot "
+            f"identify its own independent variable must not be emitted (#999)."
+        )
 
 
 def _conscience_mode_for_dump() -> str:
@@ -1556,6 +1579,25 @@ def run_gate(dump_a_path: str, dump_b_path: str, regime_path: str, verify_sig: b
 
     index_a = {block_key(r): r for r in rows_a}
     index_b = {block_key(r): r for r in rows_b}
+
+    # ---- assertion 0: the arms are distinguishable by content (#999) -----
+    #
+    # The gate compares two dumps and calls the difference an effect. That is
+    # only meaningful if the two arms actually had different independent
+    # variables. Until manifest_digest existed the artifacts could not say:
+    # editing one manifest in place between runs produced two dumps naming the
+    # same path, carrying the same residue_digest, both validly signed.
+    #
+    # None is legitimate (a baseline arm composes under no manifest) — what is
+    # refused is two arms claiming DIFFERENT names while carrying the SAME
+    # manifest content, which means one manifest produced both.
+    if meta_a.arm != meta_b.arm and meta_a.manifest_digest and meta_b.manifest_digest:
+        if meta_a.manifest_digest == meta_b.manifest_digest:
+            failures.append(
+                f"[0] arms {meta_a.arm!r} and {meta_b.arm!r} carry the SAME manifest_digest "
+                f"({meta_a.manifest_digest}) — one manifest produced both dumps, so any "
+                f"difference between them is not an effect of the declared contrast"
+            )
 
     # ---- assertion 5: residue_digest matches the pin --------------------
     live_digest = compute_residue_digest()

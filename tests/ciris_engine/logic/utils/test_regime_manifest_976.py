@@ -75,6 +75,15 @@ def _baseline_blocks() -> Dict[str, dict]:
     """
     held = {"disposition": "hold", "confound_accepted": ["axiotic"]}
     return {
+        # #997 correction: dsdma's identity+norms preamble was DEONTIC
+        # single-class on a merge-up argument that fails when the classes
+        # disagree about disposition — it carries both "informed consent
+        # required" (deontic, hold) and "client interest over personal gain"
+        # (axiotic, VARY). Now mixed, so a regime must name it.
+        "system.head": {
+            **held,
+            "contaminant": ["deontic", "axiotic", "ontological", "procedural", "empirical"],
+        },
         "language_guidance": {
             **held,
             "contaminant": ["axiotic", "deontic", "empirical"],

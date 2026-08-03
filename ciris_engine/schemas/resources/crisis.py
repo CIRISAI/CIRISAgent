@@ -7,13 +7,27 @@ This module provides structured, validated crisis resources to ensure:
 3. Legal disclaimers are properly included
 4. Resources can be tested programmatically
 5. Updates propagate to all agents automatically
+
+Since CIRISAgent#971 the resource DATA lives in the localization corpus
+(``ciris_engine/data/localized/crisis_resources_{lang}.json``) and this module
+is a typed LOADER over it: the Pydantic models stay authoritative for shape,
+the corpus is authoritative for content. The absolute rule for the corpus is
+in each file's ``_meta.rule``: crisis phone numbers are NEVER machine-guessed —
+see ``ciris_engine/data/localized/CRISIS_RESOURCES_VERIFICATION_NEEDED.md``.
 """
 
-from datetime import datetime
+import json
+import logging
+import re
+from datetime import date, datetime
 from enum import Enum
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, field_validator
+
+logger = logging.getLogger(__name__)
 
 
 class CrisisResourceType(str, Enum):
@@ -38,6 +52,23 @@ class ResourceAvailability(str, Enum):
     AUSTRALIA = "au"
     ETHIOPIA = "et"
     REGIONAL = "regional"
+
+
+class CrisisResourceSource(str, Enum):
+    """Provenance of a crisis resource entry (CIRISAgent#971).
+
+    BUILTIN — authored in-repo; carried over from the pre-corpus hardcoded registry.
+    THROUGHLINE — cut from a ThroughLine (developer.throughlinecare.com) snapshot.
+        Licensing evaluation pending; no such entries exist yet. The enum member
+        exists so a future refresh tool (pattern: ``tools/update_ciris_verify.py``)
+        can regenerate the corpus from a snapshot without a schema change.
+    NATIONAL_VERIFIED — a national entry a human verified against an authoritative
+        source (government page, national health service) cited in ``source_url``.
+    """
+
+    BUILTIN = "builtin"
+    THROUGHLINE = "throughline"
+    NATIONAL_VERIFIED = "national_verified"
 
 
 class CrisisResource(BaseModel):
@@ -69,6 +100,23 @@ class CrisisResource(BaseModel):
     # Legal/compliance
     is_endorsed: bool = Field(False, description="Whether CIRIS endorses this resource (always False for liability)")
     requires_disclaimer: bool = Field(True, description="Whether to show disclaimer when sharing")
+
+    # Provenance (CIRISAgent#971). Sourcing from ThroughLine is deferred pending
+    # licensing; these fields let a future refresh tool regenerate the corpus
+    # without schema changes.
+    source: CrisisResourceSource = Field(
+        CrisisResourceSource.BUILTIN,
+        description="Where this entry came from (builtin | throughline | national_verified)",
+    )
+    verified: bool = Field(
+        False,
+        description=(
+            "True once a human has verified this entry against its source. "
+            "NEVER machine-set to True for an entry carrying a phone/text number."
+        ),
+    )
+    snapshot_date: Optional[date] = Field(None, description="Date the entry was cut from its source dataset")
+    source_url: Optional[HttpUrl] = Field(None, description="Authoritative page this entry was sourced from")
 
     @field_validator("phone", "text_number")
     @classmethod
@@ -124,10 +172,29 @@ class CrisisResource(BaseModel):
 
 
 class CrisisResourceRegistry(BaseModel):
-    """Registry of all crisis resources available to CIRIS agents."""
+    """Registry of crisis resources for one locale, loaded from the corpus.
+
+    One registry per corpus file (``crisis_resources_{locale}.json``). The en
+    registry is the base corpus and carries the full builtin entry set; locale
+    registries are curated per-locale (national entries first, then the
+    international directories).
+    """
 
     resources: Dict[str, CrisisResource] = Field(
         default_factory=dict, description="All registered crisis resources by ID"
+    )
+
+    # Per-locale corpus metadata (CIRISAgent#971)
+    locale: str = Field("en", description="Primary language subtag this registry serves (corpus filename suffix)")
+    needs_verified_entries: bool = Field(
+        False,
+        description=(
+            "True while this locale still lacks human-verified national entries — the "
+            "signal a human verifier works from; see CRISIS_RESOURCES_VERIFICATION_NEEDED.md"
+        ),
+    )
+    verification_notes: Optional[str] = Field(
+        None, description="Human notes on this locale's verification state (sources checked, known gaps)"
     )
 
     # Legal disclaimer that MUST be included
@@ -161,6 +228,25 @@ qualified professional help.""",
         """Get all resources of a specific type."""
         return [r for r in self.resources.values() if r.type == resource_type]
 
+    def default_prompt_resources(self, limit: Optional[int] = None) -> List[CrisisResource]:
+        """The resource set surfaced when a caller asks for the default selection.
+
+        en (the base corpus) keeps the legacy selection — GLOBAL entries only,
+        optionally capped — byte-frozen by the golden test in
+        ``tests/test_crisis_resources_corpus.py``. A locale corpus file is
+        already curated for its locale (national entries first, then the
+        international directories), so its full entry set in file order IS the
+        default selection — EXCEPT entries carrying a phone/text number that no
+        human has verified yet (``verified: false``, e.g. cut from a source
+        snapshot awaiting review): those stay in the corpus but are never
+        emitted. A wrong crisis number is catastrophically worse than the
+        directory fallback.
+        """
+        if self.locale == "en":
+            selected = self.get_by_availability([ResourceAvailability.GLOBAL])
+            return selected[:limit] if limit is not None else selected
+        return [r for r in self.resources.values() if r.verified or not (r.phone or r.text_number)]
+
     def format_crisis_response(
         self, resource_ids: Optional[List[str]] = None, regions: Optional[List[ResourceAvailability]] = None
     ) -> str:
@@ -179,8 +265,9 @@ qualified professional help.""",
         elif regions:
             resources = self.get_by_availability(regions)
         else:
-            # Default to global resources
-            resources = self.get_by_availability([ResourceAvailability.GLOBAL])
+            # Default selection (en: global resources, byte-frozen; locale
+            # corpora: the curated file's full entry set).
+            resources = self.default_prompt_resources()
 
         # Add formatted resources
         for resource in resources:
@@ -206,148 +293,102 @@ qualified professional help.""",
         return results
 
 
-# Default crisis resources that MUST be available
-DEFAULT_CRISIS_RESOURCES = CrisisResourceRegistry(
-    resources={
-        "findahelpline": CrisisResource(
-            id="findahelpline",
-            name="Find a Helpline",
-            type=CrisisResourceType.DIRECTORY,
-            url="https://findahelpline.com",
-            description="International directory of crisis helplines",
-            availability=[ResourceAvailability.GLOBAL],
-            languages=["en", "es", "fr", "de", "it", "pt", "ru", "zh", "ja", "ko"],
-            last_validated=datetime.now(),
-            is_endorsed=False,
-            requires_disclaimer=True,
-        ),
-        "iasp": CrisisResource(
-            id="iasp",
-            name="IASP Crisis Centers",
-            type=CrisisResourceType.DIRECTORY,
-            url="https://iasp.info/resources/Crisis_Centres",
-            description="International Association for Suicide Prevention resource directory",
-            availability=[ResourceAvailability.GLOBAL],
-            languages=["en"],
-            last_validated=datetime.now(),
-            is_endorsed=False,
-            requires_disclaimer=True,
-        ),
-        "crisis_text_line": CrisisResource(
-            id="crisis_text_line",
-            name="Crisis Text Line",
-            type=CrisisResourceType.TEXT_LINE,
-            text_number="741741",
-            url="https://www.crisistextline.org",
-            description="24/7 text-based crisis support (US, UK, Canada)",
-            availability=[ResourceAvailability.US, ResourceAvailability.UK, ResourceAvailability.CANADA],
-            languages=["en"],
-            last_validated=datetime.now(),
-            is_endorsed=False,
-            requires_disclaimer=True,
-        ),
-        "988_lifeline": CrisisResource(
-            id="988_lifeline",
-            name="988 Suicide & Crisis Lifeline",
-            type=CrisisResourceType.HOTLINE,
-            phone="988",
-            url="https://988lifeline.org",
-            description="24/7 suicide prevention and crisis support (US)",
-            availability=[ResourceAvailability.US],
-            languages=["en", "es"],
-            last_validated=datetime.now(),
-            is_endorsed=False,
-            requires_disclaimer=True,
-        ),
-        "samaritans": CrisisResource(
-            id="samaritans",
-            name="Samaritans",
-            type=CrisisResourceType.HOTLINE,
-            phone="116 123",
-            url="https://www.samaritans.org",
-            description="24/7 emotional support (UK and Ireland)",
-            availability=[ResourceAvailability.UK],
-            languages=["en"],
-            last_validated=datetime.now(),
-            is_endorsed=False,
-            requires_disclaimer=True,
-        ),
-        "local_search": CrisisResource(
-            id="local_search",
-            name="Local Crisis Services",
-            type=CrisisResourceType.SEARCH_TERM,
-            search_term="crisis hotline [your location]",
-            description="Search for crisis services in your area",
-            availability=[ResourceAvailability.GLOBAL],
-            languages=["en"],
-            last_validated=datetime.now(),
-            is_endorsed=False,
-            requires_disclaimer=True,
-        ),
-        "emergency_services": CrisisResource(
-            id="emergency_services",
-            name="Emergency Services",
-            type=CrisisResourceType.EMERGENCY,
-            phone="911",
-            description="For immediate danger or medical emergency",
-            availability=[ResourceAvailability.US, ResourceAvailability.CANADA],
-            languages=["en"],
-            last_validated=datetime.now(),
-            is_endorsed=False,
-            requires_disclaimer=True,
-        ),
-        # Ethiopia (Addis Ababa-centric; numbers verified May 2026 against
-        # gorebet.com, addisababa.embassy.qa, en.wikipedia.org/wiki/List_of_emergency_telephone_numbers).
-        # Mental-health-specific hotline: not a single national number exists; route via ambulance + hospital + findahelpline directory.
-        "ethiopia_police": CrisisResource(
-            id="ethiopia_police",
-            name="Ethiopia Federal Police",
-            type=CrisisResourceType.EMERGENCY,
-            phone="991",
-            description="Federal Police emergency line (Ethiopia)",
-            availability=[ResourceAvailability.ETHIOPIA],
-            languages=["am", "en"],
-            last_validated=datetime.now(),
-            is_endorsed=False,
-            requires_disclaimer=True,
-        ),
-        "ethiopia_ambulance": CrisisResource(
-            id="ethiopia_ambulance",
-            name="Ethiopia Ambulance (Addis Ababa Red Cross)",
-            type=CrisisResourceType.EMERGENCY,
-            phone="907",
-            description="Ambulance service — primary route for medical/psychiatric emergencies in Addis Ababa",
-            availability=[ResourceAvailability.ETHIOPIA],
-            languages=["am", "en"],
-            last_validated=datetime.now(),
-            is_endorsed=False,
-            requires_disclaimer=True,
-        ),
-        "ethiopia_fire": CrisisResource(
-            id="ethiopia_fire",
-            name="Ethiopia Fire Brigade",
-            type=CrisisResourceType.EMERGENCY,
-            phone="939",
-            description="Fire brigade emergency line (Ethiopia; some regions also use 912)",
-            availability=[ResourceAvailability.ETHIOPIA],
-            languages=["am", "en"],
-            last_validated=datetime.now(),
-            is_endorsed=False,
-            requires_disclaimer=True,
-        ),
-        # Mental-health pathway — when no specific hotline exists, agents
-        # should surface the local-search resource (which already exists)
-        # and the findahelpline directory (also already exists) AS WELL AS
-        # the country emergency entries above. The PRIMARY routing instruction
-        # for am-locale crisis is: family/religious leader → primary health
-        # center → 907 ambulance → nearest hospital — encoded in the am-locale
-        # primer Section 6, not duplicated here.
-    }
-)
+# ---------------------------------------------------------------------------
+# Corpus loader (CIRISAgent#971)
+#
+# The data formerly hardcoded here lives in the localization corpus:
+#   ciris_engine/data/localized/crisis_resources_{lang}.json
+# One file per manifest language. en is the base corpus (full builtin set);
+# the other locales carry the international directory entries plus any
+# human-verified national entries, and a needs_verified_entries marker while
+# national entries are missing. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md
+# in that directory before touching the data — crisis numbers are NEVER
+# machine-guessed.
+# ---------------------------------------------------------------------------
+
+_CRISIS_CORPUS_PACKAGE = "ciris_engine.data.localized"
+_CRISIS_CORPUS_DIR = Path(__file__).resolve().parents[2] / "data" / "localized"
+_LANG_SUBTAG = re.compile(r"^[a-z]{2,3}$")
+
+
+def _normalize_language(language: Optional[str]) -> str:
+    """Reduce a language tag to its primary subtag; anything unusable -> 'en'.
+
+    'pt-BR' -> 'pt', 'EN' -> 'en'. The subtag regex also guards the corpus
+    filename against path-injection through a hostile language string. This is
+    a crisis surface: ANY unusable input (None, empty, non-str garbage) must
+    fail safe to en rather than raise.
+    """
+    if not isinstance(language, str) or not language:
+        return "en"
+    subtag = language.strip().lower().replace("_", "-").split("-")[0]
+    return subtag if _LANG_SUBTAG.fullmatch(subtag) else "en"
+
+
+def _read_corpus_text(filename: str) -> Optional[str]:
+    """Read a corpus file via importlib.resources, with a path fallback."""
+    try:
+        from importlib.resources import files
+
+        return files(_CRISIS_CORPUS_PACKAGE).joinpath(filename).read_text(encoding="utf-8")
+    except (ImportError, FileNotFoundError, ModuleNotFoundError):
+        path = _CRISIS_CORPUS_DIR / filename
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+        return None
+
+
+def _parse_registry(raw: str) -> CrisisResourceRegistry:
+    """Validate corpus JSON into a typed registry (``_meta`` is bookkeeping)."""
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("crisis corpus file must contain a JSON object")
+    data.pop("_meta", None)
+    return CrisisResourceRegistry.model_validate(data)
+
+
+@lru_cache(maxsize=None)
+def _load_crisis_registry_cached(lang: str) -> CrisisResourceRegistry:
+    """Load one locale's registry; unknown/broken locale files fail safe to en."""
+    if lang != "en":
+        raw = _read_corpus_text(f"crisis_resources_{lang}.json")
+        if raw is not None:
+            try:
+                return _parse_registry(raw)
+            except (ValueError, ValidationError) as exc:
+                logger.warning("Crisis corpus for locale %r invalid (%s) — falling back to en", lang, exc)
+        else:
+            logger.debug("No crisis corpus for locale %r — falling back to en", lang)
+        return _load_crisis_registry_cached("en")
+
+    raw = _read_corpus_text("crisis_resources_en.json")
+    if raw is None:
+        # The en corpus is safety-critical packaged data; a missing file is a
+        # broken install and must fail loudly at startup, not degrade to an
+        # empty crisis block.
+        raise RuntimeError("crisis_resources_en.json missing from ciris_engine/data/localized — broken install")
+    return _parse_registry(raw)
+
+
+def load_crisis_registry(language: Optional[str] = None) -> CrisisResourceRegistry:
+    """Typed loader over the crisis-resource corpus.
+
+    Fail-safe semantics: an unknown, unmapped, or corrupt locale always yields
+    the en base registry (which carries the international directories) — never
+    an empty registry, never a KeyError.
+    """
+    return _load_crisis_registry_cached(_normalize_language(language))
+
+
+# The default (en, base-corpus) registry. Import contract preserved from the
+# pre-corpus era: this name is what formatters and tests build on.
+DEFAULT_CRISIS_RESOURCES = load_crisis_registry("en")
 
 
 def get_crisis_response_text(
-    regions: Optional[List[ResourceAvailability]] = None, resource_ids: Optional[List[str]] = None
+    regions: Optional[List[ResourceAvailability]] = None,
+    resource_ids: Optional[List[str]] = None,
+    language: Optional[str] = None,
 ) -> str:
     """
     Get formatted crisis response text with appropriate resources.
@@ -355,8 +396,9 @@ def get_crisis_response_text(
     Args:
         regions: Geographic regions to filter resources by
         resource_ids: Specific resource IDs to include
+        language: Locale whose corpus registry to use (None/'en'/unknown -> en)
 
     Returns:
         Formatted crisis response text with disclaimer
     """
-    return DEFAULT_CRISIS_RESOURCES.format_crisis_response(resource_ids=resource_ids, regions=regions)
+    return load_crisis_registry(language).format_crisis_response(resource_ids=resource_ids, regions=regions)

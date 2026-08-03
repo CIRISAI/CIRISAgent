@@ -263,6 +263,58 @@ class TestHybridDowngrade:
         assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
 
 
+class TestCrossOccurrenceVerification:
+    """#944 residual: a resolution signed by a SIBLING occurrence resolves here
+    only through the federation directory (`lookup_public_key`), and the
+    directory holds the signer's key only because edge-init calls
+    ``engine.register_self_federation_key(...)`` (edge_runtime.py). Without
+    that registration, cross-occurrence verification fails CLOSED — correct,
+    but it means every multi-occurrence approval reads as unverified. These
+    two tests pin both halves: closed without the registration, open with it.
+    """
+
+    class _SiblingOccurrenceEngine:
+        """The verifying occurrence: same shared persist corpus (all calls
+        delegate to the real engine), but a DIFFERENT local signing identity —
+        so `_signing_pubkeys`' local fast path misses and the signer must
+        resolve from the federation directory, exactly as on a sibling."""
+
+        def __init__(self, real: Any) -> None:
+            self._real = real
+
+        def local_derived_key_id(self) -> str:
+            return "sibling-occurrence-key"
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._real, name)
+
+    @pytest.mark.asyncio
+    async def test_unregistered_signer_fails_closed_on_a_sibling(
+        self, auth: AuthenticationService, engine: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No directory row -> the sibling refuses. This is the #944 residual
+        shape a deployment is in when edge-init never ran its registration."""
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        import ciris_engine.logic.persistence.models.graph as graph_mod
+
+        monkeypatch.setattr(graph_mod, "_engine", self._SiblingOccurrenceEngine(engine))
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
+
+    @pytest.mark.asyncio
+    async def test_registered_signer_verifies_on_a_sibling(
+        self, auth: AuthenticationService, engine: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """After the edge-init registration (the 5-arg self-registration path,
+        same call edge_runtime.py makes at boot), the sibling verifies."""
+        signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
+        engine.register_self_federation_key("agent", "test-key", None, None, None)
+
+        import ciris_engine.logic.persistence.models.graph as graph_mod
+
+        monkeypatch.setattr(graph_mod, "_engine", self._SiblingOccurrenceEngine(engine))
+        assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is True
+
+
 class TestCanonicalPayload:
     @pytest.mark.asyncio
     async def test_signer_and_verifier_share_one_definition(

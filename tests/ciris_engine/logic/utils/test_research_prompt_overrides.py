@@ -313,8 +313,14 @@ class TestGateOnApplies:
         a design document nobody re-reads at analysis time."""
         _activate(monkeypatch, _valid_manifest(tmp_path))
         report = ro.describe_coverage()
-        for expected in ("NOT COVERED", "ASPDMA user message", "DEFER policy", "formatters", "in English"):
+        for expected in ("NOT COVERED", "ASPDMA user message", "formatters", "in English"):
             assert expected in report
+        # #974: the DEFER policy (step 0), the ASPDMA user-message template
+        # (step 1) and the DSDMA user message (step 2) routed out of the
+        # residue and ARE covered now — the report must say so rather than
+        # still list them as uncovered.
+        assert "#974 routed the DEFER policy" in report
+        assert "ARE covered" in report
 
 
 # ---------------------------------------------------------------------------
@@ -666,22 +672,35 @@ class TestDriftGuard:
 
     def test_residue_digest_covers_the_aspdma_user_message_and_defer_policy(self):
         """The two things FSD §6.1/§7.2 identify as most able to invert a
-        conclusion. If either stops being hashed, the pin is decorative."""
+        conclusion. #974 routed both TEXTS out of Python (step 0: the DEFER
+        policy -> action_params_defer_guidance; step 1: the ASPDMA user
+        template -> context_integration), so the pin now covers what is left
+        inline: the interpolated helper prose and the per-verb schema/guidance
+        scaffolding. If those stop being hashed, the pin is decorative."""
         sites = {(rel, qual) for rel, qual in ro.RESIDUE_SITES}
+        # The routed template came OUT of the inventory (§11: that's the shrink)...
         assert (
             "logic/dma/action_selection/context_builder.py",
             "ActionSelectionContextBuilder.build_main_user_content",
-        ) in sites
+        ) not in sites
+        # ...and the doctrine it interpolates stays pinned.
+        cb_sites = {q for r, q in sites if r.endswith("context_builder.py")}
+        assert "ActionSelectionContextBuilder._build_ponder_context" in cb_sites
+        assert "ActionSelectionContextBuilder._build_startup_guidance" in cb_sites
+        assert "ActionSelectionContextBuilder._get_reject_thought_guidance" in cb_sites
+        assert "ActionSelectionContextBuilder._build_original_task_context" in cb_sites
         defer_sites = {q for r, q in sites if r.endswith("action_instruction_generator.py")}
         assert "ActionInstructionGenerator._generate_schema_for_action" in defer_sites
         assert "ActionInstructionGenerator.get_action_guidance" in defer_sites
 
-        # And prove the hashed text really is the doctrine, not an empty stub.
-        src = ro._extract_symbol_source(
-            ro._ENGINE_ROOT / "logic/dma/action_selection/context_builder.py",
-            "ActionSelectionContextBuilder.build_main_user_content",
+        # The routed doctrine must live in the YAML now — not as a stub.
+        import yaml
+
+        data = yaml.safe_load(
+            (ro._DMA_PROMPTS_DIR / "action_selection_pdma.yml").read_text(encoding="utf-8")
         )
-        assert "HANDLER ACTION" in src
+        assert "HANDLER ACTION" in data["context_integration"]
+        assert "DEFER is ONLY for situations" in data["action_params_defer_guidance"]
 
     def test_residue_digest_changes_when_the_doctrine_changes(self, tmp_path, monkeypatch):
         """A pin that does not move is not a pin."""
@@ -709,7 +728,13 @@ class TestDriftGuard:
         manifest = ro.get_active_overrides()
         assert manifest is not None
         assert manifest.mode == "strict"
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 97
+        # 101 = the pre-#974 key space (97) + the #974-routed keys:
+        #   action_selection_pdma.action_params_defer_guidance (step 0, the DEFER policy)
+        #   action_selection_pdma.context_integration          (step 1, the ASPDMA user template)
+        #   prompts.identity_block                             (step 3, the CORE IDENTITY doctrine)
+        #   conscience.repeated_speak_guidance                 (step 5, the repeated-SPEAK guidance)
+        # (step 2 reused the pre-existing dsdma_base.context_integration key.)
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 101
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

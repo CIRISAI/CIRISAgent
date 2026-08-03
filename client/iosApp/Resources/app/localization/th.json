@@ -259,7 +259,8 @@
       "AUTONOMOUS_DECEPTION": "การปกปิดขีดความสามารถ การต่อต้านการแก้ไข หรือการจัดแนวเชิงหลอกลวง",
       "HAZARDOUS_MATERIALS": "การสร้างหรือจัดการวัตถุอันตรายทางชีวภาพ เคมี หรือกัมมันตรังสี",
       "DISCRIMINATION": "การเลือกปฏิบัติต่อกลุ่มบุคคลที่ได้รับความคุ้มครอง การกีดกันเชิงพื้นที่ (redlining) หรืออคติเชิงอัลกอริทึม (EU AI Act Art. 9/10)"
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "handlers": {
     "speak_failed": "Failed to deliver เอเจนต์ response. The message could not be sent to the channel.",
@@ -2422,7 +2423,8 @@
     "retry_must_be_different": "หากคุณเลือก re-SPEAK speak_content ของคุณต้องแตกต่างโดยพื้นฐานจากความพยายามก่อนหน้านี้ — ไม่ใช่แค่การเขียนใหม่ ใช้ทางเลือก IRIS-E ด้านบนเป็นทิศทางหลักหากได้รับการสนับสนุน สำคัญ: ตอบในภาษาเดียวกับที่คุณตอบไปก่อนหน้านี้ — ห้ามเปลี่ยนภาษาของผู้ใช้ หากสมาธิระบุรูปแบบโฆษณาชวนเชื่อ/การเลียนแบบในการปกป้องที่คุณไม่สามารถเขียนใหม่ได้อย่างสุจริต ให้ DEFER ไปยัง Wise Authority PONDER โดยอัตโนมัติจะ DEFER ในความลึกสูงสุด — หลีกเลี่ยงสิ่งนั้นเว้นแต่ SPEAK จะปลอดภัยอย่างแท้จริง",
     "retry_observation_intro": "สำคัญ: ข้อความใหม่มาจากผู้ใช้ในขณะที่คุณกำลังประมวลผล: \"{updated_observation}\" คุณต้องตอบข้อความใหม่นี้ไม่ใช่ทำให้งานเก่าเสร็จสิ้น",
     "retry_observation_outro": "ผู้ใช้กำลังรอการตอบสำหรับข้อความใหม่ของพวกเขา ใช้ SPEAK เพื่อตอบ หรือใช้ TOOL หากจำเป็น",
-    "retry_general_outro": "จำไว้: ใช้ DEFER เฉพาะสำหรับปัญหาทางศีลธรรมหรือการอนุญาต — ไม่ใช่ข้อผิดพลาดทางเทคนิค หากเครื่องมือล้มเหลว ให้ใช้ SPEAK เพื่ออธิบายข้อผิดพลาดให้กับผู้ใช้"
+    "retry_general_outro": "จำไว้: ใช้ DEFER เฉพาะสำหรับปัญหาทางศีลธรรมหรือการอนุญาต — ไม่ใช่ข้อผิดพลาดทางเทคนิค หากเครื่องมือล้มเหลว ให้ใช้ SPEAK เพื่ออธิบายข้อผิดพลาดให้กับผู้ใช้",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "access_token": "Access โทเค็น",
   "description": "คำอธิบาย",

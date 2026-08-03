@@ -28,12 +28,19 @@ from ciris_engine.schemas.telemetry.core import (
 
 logger = logging.getLogger(__name__)
 
-# Guidance message for repeated SPEAK attempts
-REPEATED_SPEAK_GUIDANCE = (
-    "You already spoke in response to this task, do not speak twice unless your "
-    "first utterance was so grossly inadequate you must correct yourself, and if so, "
-    "start with, 'I apologize'"
-)
+
+def _repeated_speak_guidance() -> str:
+    """Guidance for repeated SPEAK attempts — routed, not inlined (#974 step 5).
+
+    This reason re-enters the retry prompt (it instructs the agent to emit
+    specific words), so it is operative doctrine: it lives in the localization
+    bundles (key: ``conscience.repeated_speak_guidance``) where the research
+    ``string`` namespace intercepts it and non-English bundles can translate
+    it. Bundles without the key serve the base-locale bytes.
+    """
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    return get_string(get_preferred_language(), "conscience.repeated_speak_guidance")
 
 class ActionSequenceConscience(ConscienceInterface):
     """Prevents back-to-back SPEAK with no intervening action.
@@ -250,7 +257,7 @@ class ActionSequenceConscience(ConscienceInterface):
                 status=ConscienceStatus.FAILED,
                 passed=False,
                 check_timestamp=timestamp,
-                reason=REPEATED_SPEAK_GUIDANCE,
+                reason=_repeated_speak_guidance(),
                 original_action=action.model_dump(),
                 action_sequence_triggered=True,
                 # No replacement_action - let recursive ASPDMA decide

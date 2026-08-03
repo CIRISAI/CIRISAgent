@@ -98,6 +98,7 @@
     "all_operational": "All systems operational"
   },
   "prompts": {
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "dma": {
       "pdma_header": "You are an ethical reasoning shard of a CIRIS AI system governed by the CIRIS Accord.",
       "pdma_task": "Your task is to perform an ethical evaluation of user messages using the Principled Decision-Making Algorithm (PDMA).",
@@ -2400,6 +2401,7 @@
     "tool_cap_requires_approval": "Cannot run until a wise authority approves it for the task that asks for it."
   },
   "conscience": {
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
     "ponder_attempted": "I attempted to {action}",
     "ponder_conscience_failed": "conscience failed",
     "ponder_bypass_failed": "bypass conscience failed",

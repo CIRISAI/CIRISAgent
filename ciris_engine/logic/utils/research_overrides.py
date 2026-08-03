@@ -20,11 +20,16 @@ Three things live here:
    first LLM call, and collects into one error. A campaign that discovers a bad
    key on thought #400 has already burned 399 contaminated samples.
 
-**What this does NOT cover, stated here and not only in the FSD**: roughly
-75–80% of *operative* instruction text — the words that steer verb choice — is
-compiled-in English Python literals with no loader to intercept. The entire
-ASPDMA user message, the DEFER policy (twice), the DSDMA user message, the
-identity blocks, the formatters. There is deliberately no ``inline`` namespace,
+**What this does NOT cover, stated here and not only in the FSD**: a share of
+*operative* instruction text — the words that steer verb choice — is still
+compiled-in English Python literals with no loader to intercept: the
+formatters and the inline helpers the ASPDMA template interpolates. (#974 is
+routing that residue out in order: step 0 routed the DEFER policy to
+``action_selection_pdma.action_params_defer_guidance``; step 1 routed the
+ASPDMA user-message template to ``action_selection_pdma.context_integration``;
+step 2 made ``dsdma_base.context_integration`` live for the DSDMA user
+message; step 3 routed the CORE IDENTITY blocks to ``prompts.identity_block``
+— all four ARE covered now.) There is deliberately no ``inline`` namespace,
 because offering one would imply that surface is addressable. It is not. It is
 instead *pinned*: :func:`compute_residue_digest` hashes the source of every
 uncovered site and the manifest must declare the digest, so the residue cannot
@@ -123,6 +128,9 @@ _DMA_PROMPT_TEXT_FIELDS: FrozenSet[str] = frozenset(
         "action_params_speak_csdma_guidance",
         "action_params_ponder_guidance",
         "action_params_observe_guidance",
+        # The DEFER policy, routed out of the inline Python literal by #974
+        # step 0 (§11). Keyed action_selection_pdma.action_params_defer_guidance.
+        "action_params_defer_guidance",
         "reasoning_csdma_guidance",
         "final_ponder_advisory",
         "closing_reminder",
@@ -203,6 +211,7 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "conscience.ponder_bypass_failed",
         "conscience.ponder_conscience_failed",
         "conscience.ponder_forced_retry",
+        "conscience.repeated_speak_guidance",
         "conscience.retry_alternatives_header",
         "conscience.retry_general_outro",
         "conscience.retry_header",
@@ -217,6 +226,7 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.dma.bounce_instruction",
         "prompts.dma.bounce_original_marker",
         "prompts.dma.bounce_trigger_line",
+        "prompts.identity_block",
         "prompts.language_guidance",
         "prompts.prohibitions.AUTONOMOUS_DECEPTION",
         "prompts.prohibitions.BIOMETRIC_INFERENCE",
@@ -317,11 +327,23 @@ def scan_reachable_string_keys() -> FrozenSet[str]:
 #: adapter code, nor ``ToolInfo.description`` text whose volume depends on which
 #: adapters are loaded. Do not represent the digest as covering more than this.
 RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
-    # The ASPDMA user message — a ~90-line triple-quoted literal. The DMA that
-    # actually picks the action.
+    # The ASPDMA user message TEMPLATE routed out in #974 step 1 — it is now
+    # prompts/action_selection_pdma.yml `context_integration`, covered by the
+    # dma_prompt namespace, so `build_main_user_content` left this inventory.
+    # What stays pinned is the inline prose the template still interpolates:
+    # the ponder-round framing, the startup directive, the reject-thought
+    # note, and the original-task/schema helpers below.
     (
         "logic/dma/action_selection/context_builder.py",
-        "ActionSelectionContextBuilder.build_main_user_content",
+        "ActionSelectionContextBuilder._build_ponder_context",
+    ),
+    (
+        "logic/dma/action_selection/context_builder.py",
+        "ActionSelectionContextBuilder._build_startup_guidance",
+    ),
+    (
+        "logic/dma/action_selection/context_builder.py",
+        "ActionSelectionContextBuilder._get_reject_thought_guidance",
     ),
     (
         "logic/dma/action_selection/context_builder.py",
@@ -331,7 +353,12 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
         "logic/dma/action_selection/context_builder.py",
         "ActionSelectionContextBuilder._get_dynamic_action_schemas",
     ),
-    # The DEFER policy, and its second copy.
+    # Action-schema and guidance scaffolding. The DEFER policy itself routed
+    # OUT of these symbols in #974 step 0 (it now lives in
+    # prompts/action_selection_pdma.yml, covered by the dma_prompt namespace);
+    # what remains inline is the per-action schema text for the OTHER verbs
+    # (SPEAK/PONDER/MEMORIZE/RECALL/FORGET/REJECT/TOOL/OBSERVE/TASK_COMPLETE)
+    # and the non-DEFER guidance_map entries — still uncovered, still pinned.
     (
         "logic/dma/action_selection/action_instruction_generator.py",
         "ActionInstructionGenerator.generate_action_instructions",
@@ -352,12 +379,20 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
         "logic/dma/action_selection/action_instruction_generator.py",
         "ActionInstructionGenerator._generate_tool_schema",
     ),
-    # The DSDMA user message, which never calls get_user_message() at all, plus
-    # the "=== CORE IDENTITY ===" block.
+    # DSDMA gathering + composition scaffolding. The DSDMA user message routed
+    # out in #974 step 2 (dsdma_base.yml context_integration is live) and the
+    # CORE IDENTITY blocks routed out in step 3 (prompts.identity_block, one
+    # source for all three former copies). evaluate_thought stays pinned for
+    # its remaining prompt-reaching literals (the platform-context framing);
+    # compose_messages for its error-path fallback doctrine ("You are a
+    # domain-specific evaluator ...") and the identity-prepend logic.
     ("logic/dma/dsdma_base.py", "BaseDSDMA.evaluate_thought"),
-    ("logic/dma/action_selection_pdma.py", "ActionSelectionPDMAEvaluator._validate_and_build_identity_block"),
-    # Conscience override reasons, which flow back into the retry prompt — one
-    # of them instructs the agent to emit specific English words.
+    ("logic/dma/dsdma_base.py", "BaseDSDMA.compose_messages"),
+    # Conscience override reasons, which flow back into the retry prompt. The
+    # operative one — the repeated-SPEAK guidance that instructs the agent to
+    # emit specific words — routed out in #974 step 5
+    # (conscience.repeated_speak_guidance); the module stays pinned for its
+    # remaining inline reason strings.
     ("logic/conscience/action_sequence_conscience.py", "*"),
     # Formatters: zero localization imports across all five, every one emits
     # hardcoded English into a prompt.
@@ -367,6 +402,12 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
     ("logic/formatters/crisis_resources.py", "*"),
     ("logic/formatters/prompt_blocks.py", "*"),
     ("logic/formatters/escalation.py", "*"),
+    # Retry remediation dict [I-7]: re-injects the English action-verb whitelist
+    # into retry prompts BELOW the bus-layer capture hook, locale-correlated
+    # (non-English cells trigger more retries). Static and arm-invariant, which
+    # makes it residue: pinned here so it cannot drift mid-campaign, and so the
+    # §12 structural residue scan can match it in composed output.
+    ("logic/services/runtime/llm_service/service.py", "LLM_ERROR_REMEDIATIONS"),
 )
 
 
@@ -386,6 +427,18 @@ def _extract_symbol_source(path: Path, qualname: str) -> str:
                     found = find(child, qual + ".")
                     if found is not None:
                         return found
+            # Module/class-level ASSIGNMENTS are residue too (#975 / [I-7]):
+            # LLM_ERROR_REMEDIATIONS is a bare dict assignment that re-injects
+            # English action-verb doctrine into retry prompts. The extractor
+            # previously resolved only def/class, so a constant could never be
+            # pinned — which is how that dict stayed out of the inventory.
+            elif isinstance(child, ast.Assign):
+                for target in child.targets:
+                    if isinstance(target, ast.Name) and f"{prefix}{target.id}" == qualname:
+                        return child
+            elif isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
+                if f"{prefix}{child.target.id}" == qualname:
+                    return child
         return None
 
     node = find(tree, "")
@@ -565,8 +618,20 @@ def _validate_manifest(manifest: ResearchOverrideManifest) -> None:
         problems.append(f"manifest_version must be '1', got {manifest.manifest_version!r}")
     if manifest.mode not in ("strict", "additive"):
         problems.append(f"mode must be 'strict' or 'additive', got {manifest.mode!r}")
-    if manifest.condition not in ("a", "b", "c"):
-        problems.append(f"condition must be 'a', 'b' or 'c', got {manifest.condition!r}")
+    if manifest.condition == "a":
+        # R6 (FSD §6.2 / §10.4, finding M-8): no configuration of this runtime
+        # yields a bare prior. Even fully blanked, a run still carries ASPDMA
+        # scaffolding, JSON response coercion, the handler action enum and the
+        # §6.1 residue. Labelling an h3ere run (a) produces a fourth thing that
+        # is neither (a) nor (b) and invalidates every comparison against it —
+        # condition (a) must come from a separate direct-to-provider harness.
+        problems.append(
+            "condition 'a' refused: an h3ere run cannot be a bare-prior baseline "
+            "(FSD/RESEARCH_PROMPT_OVERRIDES.md §6.2). Use the direct-to-provider "
+            "harness for condition (a); this runtime only accepts 'b' or 'c'."
+        )
+    elif manifest.condition not in ("b", "c"):
+        problems.append(f"condition must be 'b' or 'c', got {manifest.condition!r}")
 
     # --- R1: every key must resolve -------------------------------------
     reachable_strings = scan_reachable_string_keys()
@@ -664,9 +729,9 @@ def _validate_manifest(manifest: ResearchOverrideManifest) -> None:
         problems.append(
             f"residue digest mismatch: manifest pins {manifest.residue_digest}, "
             f"source is {actual_residue}. The uncovered inline action doctrine "
-            f"(ASPDMA user message, DEFER policy, DSDMA user message, identity blocks, "
-            f"formatters) changed. Every arm shares that text; a mid-campaign change to it "
-            f"is a confound. Re-pin deliberately, do not paper over."
+            f"(ASPDMA user message, action-schema scaffolding, DSDMA user message, "
+            f"identity blocks, formatters) changed. Every arm shares that text; a "
+            f"mid-campaign change to it is a confound. Re-pin deliberately, do not paper over."
         )
 
     # --- condition (b) prerequisite -------------------------------------
@@ -910,11 +975,14 @@ def describe_coverage(manifest: Optional[ResearchOverrideManifest] = None) -> st
     )
     return (
         f"{counts}. NOT COVERED (inline English, present in EVERY arm, pinned at "
-        f"{m.residue_digest}): the ASPDMA user message, the DEFER policy and its "
-        f"duplicate, the DSDMA user message, the CORE IDENTITY blocks, the six "
-        f"formatters, and the conscience override reasons. Any paper using this "
-        f"facility must report that the non-CIRIS arm was reasoning under CIRIS's "
-        f"action doctrine, in English"
+        f"{m.residue_digest}): the inline helpers interpolated into the ASPDMA "
+        f"user message, the non-DEFER action schema/guidance scaffolding, the "
+        f"six formatters, and the conscience override reasons. (#974 routed the "
+        f"DEFER policy — step 0 — the ASPDMA user-message template — step 1 — "
+        f"the DSDMA user message — step 2 — and the CORE IDENTITY blocks — "
+        f"step 3 — out of this residue; all four ARE covered.) Any paper using "
+        f"this facility must report that the non-CIRIS arm was reasoning under "
+        f"CIRIS's action doctrine, in English"
     )
 
 

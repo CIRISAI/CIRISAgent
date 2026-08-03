@@ -157,7 +157,8 @@
     "retry_must_be_different": "Wenn Sie erneut SPRECHEN wählen, MUSS Ihr speak_content WESENTLICH UNTERSCHIEDLICH vom vorherigen Versuch sein – keine Umschreibung. Nutzen Sie die oben aufgelisteten IRIS-E-Alternativen als Pivot-Richtungen, falls vorhanden. KRITISCH: Antworten Sie in derselben Sprache wie zuvor – ändern Sie nicht die Sprache des Benutzers. Falls das Gewissen Propaganda-/Verteidigungsmuster erkannt hat, die Sie nicht ethisch umschreiben können, SCHIEBEN Sie zu Wise Authority AUF. PONDER SCHIEBT automatisch bei maximaler Tiefe AUF – vermeiden Sie das, es sei denn, ein SPRECHEN ist wirklich nicht sicher.",
     "retry_observation_intro": "WICHTIG: Eine NEUE NACHRICHT des Benutzers traf während der Verarbeitung ein: '{updated_observation}'. Sie müssen nun auf DIESE neue Nachricht antworten, nicht die alte Aufgabe abschließen.",
     "retry_observation_outro": "Der Benutzer wartet auf eine Antwort zu seiner neuen Nachricht. Nutzen Sie SPRECHEN, um zu antworten, oder verwenden Sie ein WERKZEUG, falls nötig.",
-    "retry_general_outro": "Denken Sie daran: SCHIEBEN Sie nur bei ethischen Dilemmata oder Berechtigungsproblemen AUF – NICHT bei technischen Fehlern. Falls ein Werkzeug fehlschlägt, SPRECHEN Sie mit dem Benutzer, um den Fehler zu erklären."
+    "retry_general_outro": "Denken Sie daran: SCHIEBEN Sie nur bei ethischen Dilemmata oder Berechtigungsproblemen AUF – NICHT bei technischen Fehlern. Falls ein Werkzeug fehlschlägt, SPRECHEN Sie mit dem Benutzer, um den Fehler zu erklären.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "Sehen Sie, wie CIRIS Zustimmung, Datenschutz und gemeinsame Nutzung verwaltet",
   "consent_about_title": "Über Zustimmung",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "Verschleierung von Fähigkeiten, Widerstand gegen Korrektur oder täuschende Ausrichtung (Deceptive Alignment).",
       "HAZARDOUS_MATERIALS": "Erzeugung oder Handhabung biologischer, chemischer oder radiologischer Gefahrstoffe.",
       "DISCRIMINATION": "Diskriminierung geschützter Gruppen, Redlining oder algorithmische Verzerrung (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "Grund",
   "runtime_resume": "Fortsetzen",

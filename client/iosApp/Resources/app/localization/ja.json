@@ -157,7 +157,8 @@
     "retry_must_be_different": "SPEAKを再度選択する場合、speak_contentは前回の試みと根本的に異なっていなければなりません(言い換えではありません)。上記のIRIS-E代替案をピボット方向として使用してください(提供されている場合)。重要: 以前に応答していた言語で応答してください。ユーザーの言語を切り替えないでください。良心がプロパガンダまたは防御的な模倣パターンをフラグしており、倫理的に書き直せない場合は、Wise Authorityにディファーしてください。PONDERは最大深度で自動的にディファーされます。SPEAK自体が危険な場合以外は避けてください。",
     "retry_observation_intro": "重要: 処理中にユーザーから新しいメッセージが到着しました: '{updated_observation}'。この新しいメッセージに応答する必要があります。前のタスクを完了しないでください。",
     "retry_observation_outro": "ユーザーは新しいメッセージへの応答を待っています。応答するにはSPEAKを使用するか、必要に応じてTOOLを使用してください。",
-    "retry_general_outro": "覚えておいてください: DISFERは倫理的なジレンマまたは権限の問題にのみ使用してください。技術的なエラーには使用しないでください。ツールが失敗した場合、SPEAKを使用してユーザーにエラーを説明してください。"
+    "retry_general_outro": "覚えておいてください: DISFERは倫理的なジレンマまたは権限の問題にのみ使用してください。技術的なエラーには使用しないでください。ツールが失敗した場合、SPEAKを使用してユーザーにエラーを説明してください。",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "CIRISにおける同意の仕組みについて学ぶ",
   "consent_about_title": "同意について",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "能力の隠蔽、是正への抵抗、または欺瞞的なアライメント。",
       "HAZARDOUS_MATERIALS": "生物学的、化学的、または放射線学的な危険物の作成または取り扱い。",
       "DISCRIMINATION": "保護対象集団に対する差別、レッドライニング、またはアルゴリズムによる偏見(EU AI Act Art. 9/10)。"
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "理由",
   "runtime_resume": "再開",

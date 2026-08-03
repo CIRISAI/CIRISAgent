@@ -1376,6 +1376,25 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     token_param = {"max_tokens": max_toks}
                     temp_param = {"temperature": temp}
 
+                # Seed plumbing (#975, FSD §14 step 6): transmitted ONLY when
+                # explicitly configured, on the OpenAI-compatible path only.
+                # A regime manifest that pins `seed` is refused unless the
+                # runtime actually sends it (enforced-or-refused, set-equality
+                # [M-6/M-N3]); this is the sending half. Opt-in on purpose:
+                # some OpenAI-compatible providers reject unknown params, and
+                # under a pinned manifest that rejection must be a loud
+                # per-call failure, never a silently-dropped pin.
+                seed_param: Dict[str, int] = {}
+                _seed_env = os.environ.get("CIRIS_LLM_SEED", "")
+                if _seed_env and token_param:  # token_param empty == gemini branch; seed is OpenAI-path only
+                    try:
+                        seed_param = {"seed": int(_seed_env)}
+                    except ValueError:
+                        raise RuntimeError(
+                            f"CIRIS_LLM_SEED must be an integer, got {_seed_env!r} — "
+                            f"refusing to run with an unparseable determinism pin"
+                        )
+
                 import time as _time
 
                 _call_start = _time.monotonic()
@@ -1399,6 +1418,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                         max_retries=2,
                         **temp_param,
                         **token_param,
+                        **seed_param,
                         **extra_kwargs,
                     )
                 except Exception as inst_exc:

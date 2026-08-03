@@ -64,6 +64,9 @@ class PromptCollection(BaseModel):
     action_params_speak_csdma_guidance: Optional[str] = Field(None, description="SPEAK action guidance")
     action_params_ponder_guidance: Optional[str] = Field(None, description="PONDER action guidance")
     action_params_observe_guidance: Optional[str] = Field(None, description="OBSERVE action guidance")
+    # The DEFER policy — the action-tier outcome doctrine, routed out of the
+    # inline Python literal by #974 step 0 (FSD/RESEARCH_PROMPT_OVERRIDES.md §11).
+    action_params_defer_guidance: Optional[str] = Field(None, description="DEFER action policy/guidance")
     reasoning_csdma_guidance: Optional[str] = Field(None, description="Reasoning guidance for CSDMA-flagged ambiguity")
 
     # Special case prompts

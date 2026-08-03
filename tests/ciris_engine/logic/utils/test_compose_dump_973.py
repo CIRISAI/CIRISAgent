@@ -1,0 +1,273 @@
+"""#973 — compose --dump + ablation gate Phase 1.
+
+Covers, per the FSD §12 Phase-1 contract:
+
+- the dump's honest block table (routed blocks get real sources, unrouted
+  text reports ``mixed`` with populated contaminants, deterministic output);
+- gate self-check: a dump gated against itself under the null self-check
+  regime PASSES every hold;
+- mutation evidence: (1) flipping one held block's bytes turns assertion 3
+  red naming the block; (2) shrinking RESIDUE_SITES turns assertions 5/4 red
+  (digest + fragment-inventory drift); (3) a mixed block inside a varied
+  class refuses with its block_id named;
+- assertion 2 passes only when the ablation actually reached the varied
+  blocks (differing bytes, both non-empty).
+"""
+
+from pathlib import Path
+from typing import List, Tuple
+
+import pytest
+
+from ciris_engine.logic.utils.compose_dump import (
+    BLOCK_ANNOTATIONS,
+    annotation_for,
+    compose_dump_rows,
+    residue_fragments,
+    run_gate,
+    write_dump,
+)
+from ciris_engine.schemas.dma.compose import BlockClass, BlockDisposition, ComposedBlock, ComposeDumpMeta
+
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_NULL_REGIME = _REPO_ROOT / "tools" / "research" / "regimes" / "phase1_selfcheck_null.yaml"
+_VARIED_REGIME = _REPO_ROOT / "tools" / "research" / "regimes" / "phase1_selfcheck_varied.yaml"
+
+Dump = Tuple[ComposeDumpMeta, List[ComposedBlock]]
+
+
+@pytest.fixture(scope="module")
+def en_dump() -> Dump:
+    """One full composition pass (all 8 steps, en) shared by the module."""
+    return compose_dump_rows(arm="h3ere-ciris", locales=["en"])
+
+
+# ---------------------------------------------------------------------------
+# The dump: honest block table
+# ---------------------------------------------------------------------------
+
+
+def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
+    meta, rows = en_dump
+    assert meta.steps == ["pdma", "csdma", "idma", "dsdma", "aspdma", "dsaspdma", "tsaspdma", "tsaspdma_correction"]
+    by_step: dict[str, List[str]] = {}
+    for row in rows:
+        by_step.setdefault(row.step, []).append(row.block_id.split(".", 1)[1])
+    # Round-1 DMAs carry the discrete accord/guidance/prohibition blocks.
+    for step in ("pdma", "csdma", "dsdma"):
+        assert by_step[step] == ["accord", "language_guidance", "prohibition", "system", "user"], step
+    assert by_step["idma"] == ["accord", "language_guidance", "system", "user"]  # no prohibition (#910)
+    for step in ("aspdma", "dsaspdma", "tsaspdma", "tsaspdma_correction"):
+        assert by_step[step] == ["accord", "language_guidance", "system", "user"], step
+
+
+def test_routed_blocks_carry_real_sources_and_classes(en_dump: Dump) -> None:
+    _, rows = en_dump
+    by_id = {r.block_id: r for r in rows}
+    assert by_id["pdma.accord"].source == "corpus:accord.polyglot_compressed"
+    assert by_id["pdma.accord"].block_class is BlockClass.AXIOTIC
+    assert by_id["dsaspdma.accord"].source == "corpus:accord.localized"
+    assert by_id["pdma.prohibition"].block_class is BlockClass.DEONTIC
+    assert by_id["pdma.prohibition"].source == "string:prompts.prohibitions"
+    assert by_id["pdma.language_guidance"].source == "string:prompts.language_guidance"
+    # ASPDMA's accord message mixes a runtime THOUGHT_TYPE slot with the
+    # routed accord — ONE block, mixed, source inline (the honesty rule).
+    assert by_id["aspdma.accord"].block_class is BlockClass.MIXED
+    assert by_id["aspdma.accord"].source == "inline"
+
+
+def test_every_mixed_block_carries_populated_contaminants(en_dump: Dump) -> None:
+    _, rows = en_dump
+    for row in rows:
+        if row.block_class is BlockClass.MIXED:
+            assert row.contaminant, f"{row.block_id}: mixed without contaminant list (§10.2.1 T-N1)"
+            assert row.disposition is BlockDisposition.REFUSE  # refusal by default
+
+
+def test_residue_scan_finds_inline_action_scaffolding_in_aspdma_user(en_dump: Dump) -> None:
+    """Assertion 4's instrument: the inline action-schema scaffolding must be
+    visible as residue inside the ASPDMA user message. (Pre-#974 this test
+    watched the DEFER policy; step 0 routed that text into
+    action_selection_pdma.yml, so it is covered now and correctly ABSENT from
+    the residue scan — the remaining generator literals still hit.)"""
+    _, rows = en_dump
+    aspdma_user = next(r for r in rows if r.block_id == "aspdma.user")
+    assert any("action_instruction_generator" in hit for hit in aspdma_user.residue_hits)
+    # And the routed DEFER policy no longer registers as an uncovered fragment:
+    # its prose left the pinned Python symbols, so the scan must not carry it.
+    assert not any("DEFER is ONLY" in text for _, text in residue_fragments())
+
+
+def test_dump_rows_are_deterministic(en_dump: Dump) -> None:
+    meta_2, rows_2 = compose_dump_rows(arm="h3ere-ciris", locales=["en"])
+    meta_1, rows_1 = en_dump
+    assert meta_1 == meta_2
+    assert [r.model_dump(by_alias=True) for r in rows_1] == [r.model_dump(by_alias=True) for r in rows_2]
+
+
+def test_annotation_fallback_is_mixed() -> None:
+    """A block this table has never seen is honestly mixed — the gate then
+    refuses it without an explicit disposition, so new blocks cannot slip
+    through green."""
+    unknown = annotation_for("newstep.someblock")
+    assert unknown.block_class is BlockClass.MIXED
+    assert unknown.contaminant
+    assert "accord" in BLOCK_ANNOTATIONS  # the κ pass (#976) replaces this table
+
+
+# ---------------------------------------------------------------------------
+# Gate Phase 1: self-check + mutations
+# ---------------------------------------------------------------------------
+
+
+def _write(tmp_path: Path, name: str, meta: ComposeDumpMeta, rows: List[ComposedBlock]) -> str:
+    out = tmp_path / name
+    write_dump(meta, rows, str(out))
+    return str(out)
+
+
+def test_gate_selfcheck_passes(en_dump: Dump, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    meta, rows = en_dump
+    dump_a = _write(tmp_path, "a.jsonl", meta, rows)
+    dump_b = _write(tmp_path, "b.jsonl", meta, rows)
+    assert run_gate(dump_a, dump_b, str(_NULL_REGIME)) == 0
+    assert "GATE: PASS" in capsys.readouterr().out
+
+
+def test_gate_mutation_1_flipped_held_block_turns_assertion_3_red(
+    en_dump: Dump, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    meta, rows = en_dump
+    mutated = [
+        r.model_copy(update={"sha256": "0" * 64}) if r.block_id == "pdma.prohibition" else r for r in rows
+    ]
+    dump_a = _write(tmp_path, "a.jsonl", meta, rows)
+    dump_b = _write(tmp_path, "b.jsonl", meta, mutated)
+    assert run_gate(dump_a, dump_b, str(_NULL_REGIME)) == 1
+    out = capsys.readouterr().out
+    assert "[3] en:pdma.prohibition" in out  # the failing block is NAMED
+
+
+def test_gate_mutation_2_shrunken_residue_inventory_turns_assertions_5_and_4_red(
+    en_dump: Dump, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Removing a RESIDUE_SITES entry (weakening the scan's coverage) is
+    caught: the live residue_digest no longer matches what the dumps recorded
+    (assertion 5) and the live fragment inventory count drifts (assertion 4).
+
+    NOT covered by self-check, stated honestly: weakening the scanner itself
+    (e.g. raising the fragment length floor) in the same commit that produces
+    both dumps AND runs the gate — shared-code weakening is invisible to any
+    self-check by construction; that is what review of this module is for.
+    """
+    from ciris_engine.logic.utils import research_overrides
+
+    meta, rows = en_dump
+    dump_a = _write(tmp_path, "a.jsonl", meta, rows)
+    dump_b = _write(tmp_path, "b.jsonl", meta, rows)
+    monkeypatch.setattr(research_overrides, "RESIDUE_SITES", research_overrides.RESIDUE_SITES[:-1])
+    assert run_gate(dump_a, dump_b, str(_NULL_REGIME)) == 1
+    out = capsys.readouterr().out
+    assert "[5] residue_digest mismatch" in out
+    assert "[4] residue scan inventory drift" in out
+
+
+def test_gate_mutation_3_mixed_block_in_varied_class_refuses_by_name(
+    en_dump: Dump, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    meta, rows = en_dump
+    dump_a = _write(tmp_path, "a.jsonl", meta, rows)
+    dump_b = _write(tmp_path, "b.jsonl", meta, rows)
+    assert run_gate(dump_a, dump_b, str(_VARIED_REGIME)) == 1
+    out = capsys.readouterr().out
+    # language_guidance: no per-block entry, axiotic contaminant, axiotic varied.
+    assert "REFUSE en:pdma.language_guidance" in out
+    # aspdma.user: the DEFER policy's block, held while axiotic varies [M-4/T-N1].
+    assert "REFUSE en:aspdma.user" in out
+
+
+def test_gate_assertion_2_passes_when_ablation_reaches_varied_blocks(
+    en_dump: Dump, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With every axiotic block actually replaced (differing, non-empty) and
+    every mixed contamination explicitly confound-accepted, the varied gate
+    holds — assertion 2 is satisfiable, not a tautological refusal."""
+    meta, rows = en_dump
+    varied_rows = [
+        (
+            r.model_copy(update={"sha256": "f" * 64, "bytes": 1234})
+            if r.block_class is BlockClass.AXIOTIC
+            else r
+        )
+        for r in rows
+    ]
+    dump_a = _write(tmp_path, "a.jsonl", meta, rows)
+    dump_b = _write(tmp_path, "b.jsonl", meta, varied_rows)
+    regime = tmp_path / "regime.yaml"
+    regime.write_text(
+        """
+regime_id: test-varied-accepted
+arms:
+  h3ere-ciris: {harness: h3ere}
+  h3ere-alt: {harness: h3ere, replace: {axiotic: corpora/values-alt/}}
+blocks:
+  language_guidance:
+    disposition: hold
+    confound_accepted: [axiotic]
+  aspdma.accord:
+    disposition: hold
+    confound_accepted: [axiotic]
+  system:
+    disposition: hold
+    confound_accepted: [axiotic]
+  user:
+    disposition: hold
+    confound_accepted: [axiotic]
+pins:
+  residue_digest: "live"
+""",
+        encoding="utf-8",
+    )
+    assert run_gate(dump_a, dump_b, str(regime)) == 0
+    assert "GATE: PASS" in capsys.readouterr().out
+
+
+def test_gate_assertion_2_rejects_empty_replacement(
+    en_dump: Dump, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    meta, rows = en_dump
+    emptied = [
+        r.model_copy(update={"sha256": "e" * 64, "bytes": 0}) if r.block_id == "pdma.accord" else r for r in rows
+    ]
+    dump_a = _write(tmp_path, "a.jsonl", meta, rows)
+    dump_b = _write(tmp_path, "b.jsonl", meta, emptied)
+    regime = tmp_path / "regime.yaml"
+    regime.write_text(
+        """
+regime_id: test-empty-replacement
+arms:
+  h3ere-ciris: {harness: h3ere}
+  h3ere-blank: {harness: h3ere, disable: [axiotic]}
+blocks:
+  language_guidance: {disposition: hold, confound_accepted: [axiotic]}
+  aspdma.accord: {disposition: hold, confound_accepted: [axiotic]}
+  system: {disposition: hold, confound_accepted: [axiotic]}
+  user: {disposition: hold, confound_accepted: [axiotic]}
+pins:
+  residue_digest: "live"
+""",
+        encoding="utf-8",
+    )
+    assert run_gate(dump_a, dump_b, str(regime)) == 1
+    out = capsys.readouterr().out
+    assert "[2] en:pdma.accord" in out
+    assert "EMPTY" in out
+
+
+def test_residue_fragments_are_normalized_and_bounded() -> None:
+    fragments = residue_fragments()
+    assert fragments, "the residue inventory yielded no scannable fragments"
+    for fragment_id, text in fragments:
+        assert "::" in fragment_id
+        assert "\n" not in text  # whitespace-normalized
+        assert len(text) >= 40

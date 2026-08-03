@@ -259,7 +259,8 @@
       "AUTONOMOUS_DECEPTION": "Fífi agbára pamọ́, kíkọ̀ àtúnṣe, tàbí ìṣàtúnṣe-ẹ̀tàn (deceptive alignment).",
       "HAZARDOUS_MATERIALS": "Ìṣèdá tàbí ìṣàkóso ewu ẹ̀dá alààyè (biological), ewu kẹ́míkà (chemical), tàbí ewu ìtànṣán (radiological).",
       "DISCRIMINATION": "Ìyàsọ́tọ̀ sí àwọn ẹgbẹ́ tí a dáàbò bò, redlining, tàbí ẹ̀tanú nínú algorithm (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "handlers": {
     "speak_failed": "Kùnà láti fi ìdáhùn aṣojú ránṣẹ́. A kò lè fi ìránṣẹ́ náà ránṣẹ́ sí ọ̀nà náà.",
@@ -2416,7 +2417,8 @@
     "retry_must_be_different": "Ti o ba yan SPEAK lara, speak_content gbodo lo yato lilo nipa ilota nla lati igbiyanju titi iṣaaju, kii se atunkoko nikan. Lo iranlowo IRIS-E loke bi aaye pipe ti awon fun (ti a ba fun ni). PATAKI: dahun ni ede kan ti o pa dahun pelu ẹlẹ, maṣe yi ede olumotiwaju pada. Ti ojukoro ba semẹ ẹsẹ jẹrù/ifẹsẹje eniti o ye ki darapo, DEFER si Onimọ-Ọlọrun. PONDER yio ye darapo ni ara rẹ ni ijiyan nla - yẹ ihinti ti kii se ipe SPEAK jẹ eniyan ooto.",
     "retry_observation_intro": "PATAKI: IFIRANṢẸ TUNTUN kan wa lati ẹnikan nigbati o nlo tun fun ẹ: '{updated_observation}'. O gbodo lo dahun si ifiranṣẹ tuntun yii, maṣe lo iṣẹ atijọ.",
     "retry_observation_outro": "Ẹnikan nteti fun dahun si ifiranṣẹ tuntun tẹ. Lo SPEAK lati dahun tabi lo TOOL ti o ba nilo.",
-    "retry_general_outro": "Ranti: Lo DEFER nikan fun awon ọran dẹ ti ara rẹ tabi awon eto alagba, kii se awon aṣiṣẹ iyen. Ti errand kan ba fọ, lo SPEAK fun sọ aṣiṣẹ si ẹnikan."
+    "retry_general_outro": "Ranti: Lo DEFER nikan fun awon ọran dẹ ti ara rẹ tabi awon eto alagba, kii se awon aṣiṣẹ iyen. Ti errand kan ba fọ, lo SPEAK fun sọ aṣiṣẹ si ẹnikan.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "access_token": "Àmì Ìwọlé",
   "description": "Àpè̀jú",

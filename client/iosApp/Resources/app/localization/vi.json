@@ -140,7 +140,8 @@
     "retry_must_be_different": "Nếu bạn chọn lại NÓI, speak_content của bạn phải KHÁC BIỆT CHẤT LƯỢNG so với nỗ lực trước đó — không phải là paraphrase. Sử dụng các lựa chọn thay thế IRIS-E ở trên làm hướng chính nếu được cung cấp. QUAN TRỌNG: hãy phản ứng bằng ngôn ngữ mà bạn đã sử dụng trước đó — không thay đổi ngôn ngữ của người dùng. Nếu lương tâm đánh dấu các mô hình tuyên truyền/mô phỏng phòng thủ mà bạn không thể viết lại một cách đạo đức, hãy DEFER cho Wise Authority. PONDER tự động DEFER ở độ sâu tối đa — tránh điều đó trừ khi SPEAK thực sự không an toàn.",
     "retry_observation_intro": "QUAN TRỌNG: MỘT TIN NHẮN MỚI đã đến từ người dùng trong khi bạn đang xử lý: \"{updated_observation}\". Bây giờ bạn phải trả lời tin nhắn MỚI này, không phải hoàn thành nhiệm vụ cũ.",
     "retry_observation_outro": "Người dùng đang chờ phản hồi cho tin nhắn mới của họ. Sử dụng SPEAK để phản ứng hoặc sử dụng TOOL nếu cần.",
-    "retry_general_outro": "Nhớ: CHỈ DEFER cho những vấn đề đạo đức hoặc vấn đề cấp phép — KHÔNG phải lỗi kỹ thuật. Nếu công cụ không thành công, hãy sử dụng SPEAK để giải thích lỗi cho người dùng."
+    "retry_general_outro": "Nhớ: CHỈ DEFER cho những vấn đề đạo đức hoặc vấn đề cấp phép — KHÔNG phải lỗi kỹ thuật. Nếu công cụ không thành công, hãy sử dụng SPEAK để giải thích lỗi cho người dùng.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "audit_context": "Bối Cảnh",
   "audit_hash_chain": "Chuỗi Hash",
@@ -518,7 +519,8 @@
       "AUTONOMOUS_DECEPTION": "Che giấu năng lực, chống lại sự điều chỉnh, hoặc căn chỉnh mang tính lừa dối.",
       "HAZARDOUS_MATERIALS": "Tạo ra hoặc xử lý các mối nguy hiểm sinh học, hóa học, hoặc phóng xạ.",
       "DISCRIMINATION": "Phân biệt đối xử với các nhóm được bảo vệ, phân biệt vùng miền cư trú (redlining), hoặc thiên kiến thuật toán (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "setup": {
     "back": "Quay Lại",

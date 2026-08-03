@@ -905,7 +905,7 @@ Nothing in steps 3–5 may land without step 1.
 
 ---
 
-## 10. Experimental regimes (2.9.8) — replacement, not ablation  [v2]
+## 10. Experimental regimes (2.9.9) — replacement, not ablation  [v2]
 
 *v1 of §10–§14 was reviewed adversarially by three independent skeptics
 (methodology, taxonomy, implementation) before anything was built on it. Both
@@ -1306,24 +1306,32 @@ covers `["capacity:","trace:"]` — so unregistered regime artifacts would be
 signed and then **never leave the producing node**, which defeats "a reviewer
 walks back to the composed prompt."
 
-- **Upstream ask, filed now, longest lead item of the whole design:**
-  CIRISPersist registry entries for `regime:{manifest,composition,gate,onwire}:v1`
-  plus an explicit replication decision for the prefix.
-- **Descope until it lands [I-V1]:** there is NO signed-local attestation row —
-  `attestation_upsert_local` explicitly defers the signature, and signing
-  happens only at promote or `emit_attestation_self` (federation-tier by
-  construction). The honest descope: emit the local-tier row AND sign the
-  canonical artifact bytes with `Engine.local_sign_hybrid` (0.5.151, arbitrary
-  bytes → {classical_sig, pqc_sig}), shipping signature alongside. Label:
-  **"locally signed, not CEG-signed"** — reviewable on the producing node,
-  honest about being neither mesh-visible nor CEG-admitted. §13 does not block
-  2.9.8; federation of it may be 2.9.9.
+- **Upstream ask (CIRISPersist#571), filed, longest lead item of the whole
+  design — STILL OPEN:** CIRISPersist registry entries for
+  `regime:{manifest,composition,gate,onwire}:v1` plus an explicit replication
+  decision for the prefix. That ask gates CEG-tier federation of regime
+  artifacts and nothing below changes it.
+- **The locally-signed path (LANDED, 2.9.9 / ciris-server 0.5.154, #977/#984):**
+  the previously planned descope — hand-assembling a manifest and signing its
+  bytes with `Engine.local_sign_hybrid` — is REPLACED by the substrate's
+  purpose-built detached-object verb: `ciris_server.sign_object(path, label)`
+  → signature JSON (manifest canonicalized, arbitrary bytes signable, NO graph
+  write) and `verify_object(path, sig_json)` → bool. Wired as
+  `compose_dump dump --sign` (label = the arm name — sealed INSIDE the signed
+  envelope, so a dump cannot be relabelled into a different arm; for a
+  campaign with hidden and visible arms that is the property that matters
+  most) and `compose_dump gate --verify-sig` (accepts only a TRUE verify; an
+  unperformable check refuses — a verifier that cannot tell "forged" from "I
+  could not look" admits both; the sealed label must equal the dump's recorded
+  arm). Label unchanged: **"locally signed, not CEG-signed"** — provenance,
+  not warrant; reviewable on the producing node, honest about being neither
+  mesh-visible nor CEG-admitted until the #571 registry ask lands.
 
 All CEG-signed hybrid on the 2.9.7 path. Full prompts stay in the debug tee
 (`traces/accord_full/lens-batch-*.json`), never in the CEG carrier — provenance,
 not debugging.
 
-## 14. Implementation order (2.9.8)
+## 14. Implementation order (2.9.9)
 
 0. **File the CIRISPersist `regime:*` registry ask — this week** [I-3]. Cross-repo,
    gates §13 federation entirely, nothing in 2.9.8 can force it. Everything else

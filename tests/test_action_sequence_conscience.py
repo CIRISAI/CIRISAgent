@@ -12,7 +12,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from ciris_engine.logic.conscience.action_sequence_conscience import REPEATED_SPEAK_GUIDANCE, ActionSequenceConscience
+from ciris_engine.logic.conscience.action_sequence_conscience import ActionSequenceConscience, _repeated_speak_guidance
 from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.persistence.models.tasks import add_task
 from ciris_engine.logic.persistence.models.thoughts import add_thought, update_thought_status
@@ -208,7 +208,8 @@ class TestActionSequenceConscience:
         assert result.passed is False
         assert result.status == ConscienceStatus.FAILED
         assert result.action_sequence_triggered is True
-        assert REPEATED_SPEAK_GUIDANCE in result.reason
+        # #974 step 5: the guidance is routed (conscience.repeated_speak_guidance)
+        assert _repeated_speak_guidance() in result.reason
         # Should NOT have a replacement_action (soft bounce to recursive ASPDMA)
         assert result.replacement_action is None
 

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.logic.formatters import (
     append_round1_accord_blocks,
+    format_core_identity_block,
     format_system_prompt_blocks,
     format_system_snapshot,
     format_user_profiles,
@@ -16,6 +17,7 @@ from ciris_engine.protocols.dma.base import DSDMAProtocol
 from ciris_engine.schemas.dma.core import DMAInputData
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import DSDMAResult
+from ciris_engine.schemas.runtime.models import ImageContent
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.types import JSONDict
 
@@ -250,11 +252,12 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             if not role:
                 raise ValueError(f"CRITICAL: role is missing from identity! This is a fatal error.")
 
-            identity_block = "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
-            identity_block += f"Agent: {agent_id}\n"
-            identity_block += f"Description: {description}\n"
-            identity_block += f"Role: {role}\n"
-            identity_block += "============================================"
+            # Routed (#974 step 3): one keyed source (prompts.identity_block)
+            # for the CORE IDENTITY doctrine, replaceable via the research
+            # `string` namespace and translatable per bundle.
+            identity_block = format_core_identity_block(
+                str(agent_id), str(description), str(role), language=self._explicit_language
+            )
         else:
             # NO FALLBACK - STRICT TYPE CHECKING ONLY
             # When no DMAInputData, we still need to get identity from ProcessingQueueItem
@@ -309,12 +312,14 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                     f"CRITICAL: role is missing from identity in DSDMA domain '{self.domain_name}'! This is a fatal error."
                 )
 
-            # Build identity block
-            identity_block = "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
-            identity_block += f"Agent: {agent_id}\n"
-            identity_block += f"Description: {description}\n"
-            identity_block += f"Role: {role}\n"
-            identity_block += "============================================"
+            # Build identity block — routed (#974 step 3), see branch above.
+            # NOTE: language sync happens a few lines below in this branch
+            # (pre-existing order); the block renders under the previously
+            # synced language, and en-fallback keeps bytes identical wherever
+            # the bundle has no translation.
+            identity_block = format_core_identity_block(
+                str(agent_id), str(description), str(role), language=self._explicit_language
+            )
 
             # Format optional blocks - type narrow for .get() access
             if isinstance(system_snapshot_raw, dict):
@@ -332,12 +337,137 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 # No profiles → reset language so previous thought doesn't bleed.
                 self._sync_language_from_context(None)
 
+        # Get images from thought item for multimodal
+        thought_images = getattr(thought_item, "images", []) or []
+
+        # Compose messages via the extracted seam (#972)
+        messages = self.compose_messages(
+            thought_content_str,
+            thought_item.thought_id,
+            task_context_block,
+            identity_block,
+            system_snapshot_block,
+            user_profiles_block,
+            context_str,
+            rules_summary_str,
+            images=thought_images,
+        )
+
+        try:
+            # The dsdma_base.yml output contract asks the LLM for the 4
+            # DSDMAResult fields directly (domain, domain_alignment, flags,
+            # reasoning) — no intermediate shim. Using DSDMAResult as the
+            # instructor response_model means Pydantic validates against the
+            # exact shape we asked the LLM to produce; the legacy
+            # `score`-based LLMOutputForDSDMA shim was a 2.7.4 regression
+            # source (the prompt asked for domain_alignment, the response
+            # model demanded score → InstructorRetryException → circuit
+            # breaker → "All LLM services failed").
+            llm_eval_data, _ = await self.call_llm_structured(
+                messages=messages,
+                response_model=DSDMAResult,
+                max_tokens=8192,
+                temperature=0.0,
+                thought_id=thought_item.thought_id,
+                task_id=thought_item.source_task_id,
+            )
+
+            # The LLM picks its own domain string — use that. Clamp the
+            # alignment to [0, 1] defensively in case the model exceeded
+            # the schema's bounds (instructor usually catches this, but
+            # paranoia is cheap).
+            result = DSDMAResult(
+                domain=llm_eval_data.domain or self.domain_name,
+                domain_alignment=min(max(llm_eval_data.domain_alignment, 0.0), 1.0),
+                flags=llm_eval_data.flags,
+                reasoning=llm_eval_data.reasoning,
+            )
+            logger.info(
+                f"DSDMA '{self.domain_name}' (instructor) evaluation successful for thought ID {thought_item.thought_id}: "
+                f"Domain Alignment: {result.domain_alignment}"
+            )
+            return result
+        except Exception as e:
+            logger.error(
+                f"DSDMA {self.domain_name} evaluation failed for thought ID {thought_item.thought_id}: {e}",
+                exc_info=True,
+            )
+            return DSDMAResult(
+                domain=self.domain_name,
+                domain_alignment=0.0,
+                flags=["LLM_Error_Instructor"],
+                reasoning=f"Failed DSDMA evaluation via instructor: {str(e)}",
+            )
+
+    def _resolve_user_template(self) -> "tuple[DMAPromptLoader, PromptCollection]":
+        """Resolve the DSDMA user-message template (#974 step 2).
+
+        ``context_integration`` existed in dsdma_base.yml before #974 but was
+        never rendered, and all 28 localized files carry translations of that
+        DEAD template. Routing must not silently activate them (that would be
+        a material non-base-locale prompt change, not a routing), so a
+        template renders only when it is one of:
+
+        - an explicit research override for ``dsdma_base.context_integration``
+          (honored verbatim — fail-loud if it names unknown slots), or
+        - a post-#974 template carrying the live structural slot
+          ``{full_snapshot_and_profile_context_str}``.
+
+        Anything else — stale localized translation, missing field — serves
+        the base-locale doctrine, exactly what the inline f-string always did.
+        """
+        from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE
+        from ciris_engine.logic.utils.research_overrides import override_dma_prompt
+
+        loader = self.prompt_loader
+        template_data = self.prompt_template_data
+        text = template_data.context_integration
+        if text:
+            if override_dma_prompt(self._prompt_template_name, "context_integration") == text:
+                return loader, template_data
+            if "{full_snapshot_and_profile_context_str}" in text:
+                return loader, template_data
+        if loader.language != DEFAULT_LANGUAGE:
+            loader = get_prompt_loader(DEFAULT_LANGUAGE)
+            template_data = loader.load_prompt_template(self._prompt_template_name)
+            if template_data.context_integration:
+                return loader, template_data
+        raise ValueError(
+            "dsdma_base.yml no longer defines a live context_integration — the DSDMA "
+            "user message has no source. #974 routed it out of Python; it must live "
+            "in the YAML with the {full_snapshot_and_profile_context_str} slot."
+        )
+
+    def compose_messages(
+        self,
+        thought_content_str: str,
+        thought_id: str,
+        task_context_block: str,
+        identity_block: str,
+        system_snapshot_block: str,
+        user_profiles_block: str,
+        context_str: str,
+        rules_summary_str: str,
+        images: Optional[List[ImageContent]] = None,
+    ) -> List[JSONDict]:
+        """Compose the full DSDMA prompt message list from gathered inputs (#972).
+
+        Pure prompt composition - no LLM call, no data fetching. All awaited
+        data gathering (task fetch, snapshot/identity extraction, language
+        sync) happens in ``evaluate_thought()`` before this is called.
+        """
         escalation_guidance_block = get_escalation_guidance(0)
 
         # Import crisis resources formatter
         from ciris_engine.logic.formatters import format_crisis_resources_block
 
-        crisis_resources_block = format_crisis_resources_block(include_full_disclaimer=False)
+        # Locale-aware since CIRISAgent#971: the thread's active language selects
+        # the corpus registry (crisis_resources_{lang}.json); en/unknown locales
+        # resolve to the byte-frozen en base block.
+        crisis_resources_block = format_crisis_resources_block(
+            include_full_disclaimer=False,
+            language=self.prompt_loader.language,
+        )
 
         task_history_block = ""
 
@@ -394,14 +524,30 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             )
 
         full_snapshot_and_profile_context_str = task_context_block + system_snapshot_block + user_profiles_block
-        user_message_content = f"{full_snapshot_and_profile_context_str}\nEvaluate this thought for the '{self.domain_name}' domain: \"{thought_content_str}\""
+        # Routed (#974 step 2, FSD RESEARCH_PROMPT_OVERRIDES §11.2): the DSDMA
+        # user message lives in dsdma_base.yml `context_integration`, rendered
+        # through the loader so the research-override dma_prompt namespace
+        # intercepts it (key: dsdma_base.context_integration).
+        user_loader, user_template_data = self._resolve_user_template()
+        user_message_content = user_loader.get_user_message(
+            user_template_data,
+            full_snapshot_and_profile_context_str=full_snapshot_and_profile_context_str,
+            domain_name=self.domain_name,
+            thought_content_str=thought_content_str,
+            # Slots the stale pre-#974 template shape used — supplied so an
+            # explicit research override written against the old shape still
+            # renders instead of KeyError-ing.
+            rules_summary_str=rules_summary_str,
+            context_str=context_str,
+            original_thought_content=thought_content_str,
+        )
 
         # Store prompts for streaming/debugging
         self.last_system_prompt = system_message_content
         self.last_user_prompt = user_message_content
 
         logger.debug(
-            f"DSDMA '{self.domain_name}' input to LLM for thought {thought_item.thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
+            f"DSDMA '{self.domain_name}' input to LLM for thought {thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
         )
 
         # CRITICAL: Identity block must ALWAYS be first in system message after accord
@@ -409,8 +555,8 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         if identity_block and "CORE IDENTITY" not in system_message_content:
             system_message_content = identity_block + "\n\n" + system_message_content
 
-        # Get images from thought item for multimodal
-        thought_images = getattr(thought_item, "images", []) or []
+        # Build multimodal content if images are present
+        thought_images = images or []
         if thought_images:
             logger.info(
                 f"[VISION] DSDMA '{self.domain_name}' building multimodal content with {len(thought_images)} images"
@@ -428,51 +574,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         messages.append({"role": "system", "content": system_message_content})
         messages.append({"role": "user", "content": user_content})
 
-        try:
-            # The dsdma_base.yml output contract asks the LLM for the 4
-            # DSDMAResult fields directly (domain, domain_alignment, flags,
-            # reasoning) — no intermediate shim. Using DSDMAResult as the
-            # instructor response_model means Pydantic validates against the
-            # exact shape we asked the LLM to produce; the legacy
-            # `score`-based LLMOutputForDSDMA shim was a 2.7.4 regression
-            # source (the prompt asked for domain_alignment, the response
-            # model demanded score → InstructorRetryException → circuit
-            # breaker → "All LLM services failed").
-            llm_eval_data, _ = await self.call_llm_structured(
-                messages=messages,
-                response_model=DSDMAResult,
-                max_tokens=8192,
-                temperature=0.0,
-                thought_id=thought_item.thought_id,
-                task_id=thought_item.source_task_id,
-            )
-
-            # The LLM picks its own domain string — use that. Clamp the
-            # alignment to [0, 1] defensively in case the model exceeded
-            # the schema's bounds (instructor usually catches this, but
-            # paranoia is cheap).
-            result = DSDMAResult(
-                domain=llm_eval_data.domain or self.domain_name,
-                domain_alignment=min(max(llm_eval_data.domain_alignment, 0.0), 1.0),
-                flags=llm_eval_data.flags,
-                reasoning=llm_eval_data.reasoning,
-            )
-            logger.info(
-                f"DSDMA '{self.domain_name}' (instructor) evaluation successful for thought ID {thought_item.thought_id}: "
-                f"Domain Alignment: {result.domain_alignment}"
-            )
-            return result
-        except Exception as e:
-            logger.error(
-                f"DSDMA {self.domain_name} evaluation failed for thought ID {thought_item.thought_id}: {e}",
-                exc_info=True,
-            )
-            return DSDMAResult(
-                domain=self.domain_name,
-                domain_alignment=0.0,
-                flags=["LLM_Error_Instructor"],
-                reasoning=f"Failed DSDMA evaluation via instructor: {str(e)}",
-            )
+        return messages
 
     async def evaluate_alias(self, input_data: ProcessingQueueItem, **kwargs: Any) -> DSDMAResult:
         """Alias for evaluate_thought to satisfy BaseDMA."""

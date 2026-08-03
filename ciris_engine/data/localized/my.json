@@ -259,7 +259,8 @@
       "AUTONOMOUS_DECEPTION": "စွမ်းရည်များကို ဖုံးကွယ်ခြင်း၊ ပြင်ဆင်ခြင်းကို ဆန့်ကျင်ခြင်း သို့မဟုတ် လှည့်ဖြားသော ချိန်ညှိမှု (deceptive alignment)။",
       "HAZARDOUS_MATERIALS": "ဇီဝဆိုင်ရာ၊ ဓာတုဗေဒဆိုင်ရာ သို့မဟုတ် ရေဒီယိုသတ္တိကြွဆိုင်ရာ အန္တရာယ်များကို ဖန်တီးခြင်း သို့မဟုတ် ကိုင်တွယ်ခြင်း။",
       "DISCRIMINATION": "ကာကွယ်ထားသော အုပ်စုများအပေါ် ခွဲခြားဆက်ဆံမှု၊ redlining (ဒေသအလိုက် ချေးငွေခွဲခြားမှု) သို့မဟုတ် algorithm ဘက်လိုက်မှု (EU AI Act Art. 9/10)။"
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "handlers": {
     "speak_failed": "Failed to deliver အေးဂျင့် response. The message could not be sent to the channel.",
@@ -2404,7 +2405,8 @@
     "retry_must_be_different": "သင် re-SPEAK ရွေးချယ်ပါက၊ သင်၏ speak_content သည်အရှေ့ကြိုးပမ်းချက်ထက် အခြေခံအားဖြင့်ကွဲခြားခြင်းရှိရမည် — အလယ်အလတ်မဟုတ်။ အကယ်၍ပေးထားပါက IRIS-E အစီအစဥ်များကိုပင်ကအဖြစ်အသုံးပြုပါ။ အရေးကြီးဆုံး: သင်အရှေ့မှ တုံ့ပြန်ခဲ့သည့်ဘာသာစကားနှင့်တူညီစွာ တုံ့ပြန်ပါ — အသုံးပြုသူ၏ဘာသာစကားများပြောင်းလဲပါ။ အကယ်၍ သိုက်အညှိုးကpropaganda/ကာကွယ်မှုမတူညီသောပုံစံများအမှတ်တံဆိပ်ခတ်ခြင်းခံခဲ့ရ၍ သင်ကျင့်ဝတ်စွာပြန်လည်ရေးသားလို့မရပါက Wise Authority ကို DEFER ပါ။ PONDER အလိုအလျောက်အမြင့်ဆုံးအတိုင်းအတာတွင် DEFER ပါ — SPEAK ပြည့်စုံလောက်သည့်အခါမှအပ ရှောင်ကျေးဇူးခြင်း။",
     "retry_observation_intro": "အရေးကြီးဆုံး: သင်သည်ပြုလုပ်နေစဉ်အတွင်း အသုံးပြုသူထံမှ အသစ်သောစာတိုက် \"{updated_observation}\" ရောက်ရှိခဲ့သည်။ သင်သည်ဤအသစ်သောစာတိုက်ကိုတုံ့ပြန်ရမည်၊ အဟုန်မဖြန့်ဝေရပါ။",
     "retry_observation_outro": "အသုံးပြုသူသည်သူတို့၏အသစ်သောစာတိုက်ထံမှတုံ့ပြန်ခြင်းအိုင်ရဆောင်ခဲ့ရသည်။ တုံ့ပြန်ရန် SPEAK ကိုအသုံးပြုပါ၊ လိုအပ်ပါက TOOL ကိုအသုံးပြုပါ။",
-    "retry_general_outro": "မှတ်သားပါ: ကျင့်ဝတ်ညီညွတ်မှုများသို့မဟုတ်အခွင့်အရေးပြဿနာများအတွက်သာ DEFER ပါ — နည်းပညာအမှားများအတွက်မဟုတ်။ ကိရိယာမအောင်မြင်ပါက၊ အုပ်စုအားအမှားအားရှင်းလင်းရန် SPEAK ပါ။"
+    "retry_general_outro": "မှတ်သားပါ: ကျင့်ဝတ်ညီညွတ်မှုများသို့မဟုတ်အခွင့်အရေးပြဿနာများအတွက်သာ DEFER ပါ — နည်းပညာအမှားများအတွက်မဟုတ်။ ကိရိယာမအောင်မြင်ပါက၊ အုပ်စုအားအမှားအားရှင်းလင်းရန် SPEAK ပါ။",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "access_token": "Access တိုကင်",
   "description": "ဖော်ပြချက်",

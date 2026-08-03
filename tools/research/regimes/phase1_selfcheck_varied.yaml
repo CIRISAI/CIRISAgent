@@ -1,0 +1,27 @@
+# Phase-1 gate SELF-CHECK regime (#973) — varies `axiotic`, deliberately
+# under-declared, and MUST make the gate refuse.
+#
+# CI feeds identical dumps through this regime and asserts a NON-ZERO exit:
+# - `language_guidance` has NO per-block entry -> refusal naming it, because
+#   its contaminant list carries `axiotic` (the varied class) [T-N1/§10.2.1];
+# - `aspdma.user` (the DEFER policy's mixed block) is held without
+#   confound_accepted -> refusal naming it — the M-4 story, machine-checked;
+# - the axiotic accord blocks are declared varied but byte-identical across
+#   the two identical dumps -> assertion 2 failure ("ablation did not reach it").
+# If this regime ever exits 0 the gate has stopped gating; CI fails.
+schema: ciris.ai/experimental_regime/v2-phase1
+regime_id: phase1-selfcheck-varied-axiotic
+arms:
+  h3ere-ciris: {harness: h3ere}
+  h3ere-alt:
+    harness: h3ere
+    replace: {axiotic: corpora/values-alt/}
+blocks:
+  # language_guidance deliberately ABSENT (see header).
+  aspdma.accord:
+    disposition: hold
+    contaminant: [axiotic, contingent]
+  system: {disposition: hold}
+  user: {disposition: hold}
+pins:
+  residue_digest: "live"

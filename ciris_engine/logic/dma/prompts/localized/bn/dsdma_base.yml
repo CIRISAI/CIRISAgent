@@ -67,11 +67,13 @@ response_format: |
     {{"domain": "Task management", "domain_alignment": 0.85,
       "flags": [], "reasoning": "এই চিন্তাটি ডোমেইন নিয়মের সাথে ভালভাবে সংযুক্ত"}}
 
-context_integration: |
-  ডোমেইন এজেন্ট: {domain_name}
-  ডোমেইন জ্ঞান:
-  {rules_summary_str}
-  প্ল্যাটফর্ম প্রসঙ্গ: {context_str}
-  চিন্তা: {original_thought_content}
+# --- #974 step 2: the previous localized template here was a translation of a
+# --- DEAD template (never rendered; the runtime guard falls back to base bytes
+# --- for stale variants). Replaced with base-locale text VERBATIM so the file
+# --- matches actual runtime behaviour. Translating the LIVE template (slot
+# --- structure preserved) is future localization work.
+context_integration: |-
+  {full_snapshot_and_profile_context_str}
+  Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
-accord_header: true  # ACCORD_TEXT কে সিস্টেম বার্তা হিসাবে ব্যবহার করুন
+accord_header: true  # Use ACCORD_TEXT as system message

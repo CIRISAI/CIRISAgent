@@ -157,7 +157,8 @@
     "retry_must_be_different": "اگر آپ دوبارہ SPEAK منتخب کریں تو آپ کا speak_content پچھلی کوشش سے بہت مختلف ہونا ضروری ہے - محض دوبارہ لکھنا نہیں۔ اگر اوپر دیے گئے IRIS-E متبادل ہوں تو انہیں Pivot سمتوں کے طور پر استعمال کریں۔ اہم: اسی زبان میں جواب دیں جس میں آپ پہلے جواب دے رہے تھے - صارف کی زبان تبدیل نہ کریں۔ اگر ضمیر نے پروپیگنڈا/دفاعی نقل کے نمونے کی نشاندہی کی ہے جنہیں آپ اخلاقی طور پر دوبارہ نہیں لکھ سکتے تو دانش مند اتھارٹی کو حوالے کریں۔ PONDER زیادہ سے زیادہ گہرائی پر خود بخود معطل کر دیتا ہے - جب تک SPEAK سچ میں غیر محفوظ نہ ہو، اس سے بچیں۔",
     "retry_observation_intro": "اہم: جب آپ پروسیس کر رہے تھے تو صارف کی طرف سے ایک نیا پیغام آیا: '{updated_observation}'۔ آپ کو اب اس نئے پیغام کا جواب دینا ہوگا، پرانی ذمہ داری کو مکمل نہیں کرنا۔",
     "retry_observation_outro": "صارف اپنے نئے پیغام کے جواب کے لیے انتظار کر رہا ہے۔ جواب کے لیے SPEAK استعمال کریں یا اگر ضرورت ہو تو TOOL استعمال کریں۔",
-    "retry_general_outro": "یاد رکھیں: صرف اخلاقی مسائل یا اجازت کے مسائل کے لیے ہی معطل کریں - تکنیکی خرابیوں کے لیے نہیں۔ اگر کوئی ٹول ناکام ہو تو صارف کو خرابی کی وضاحت کے لیے SPEAK کریں۔"
+    "retry_general_outro": "یاد رکھیں: صرف اخلاقی مسائل یا اجازت کے مسائل کے لیے ہی معطل کریں - تکنیکی خرابیوں کے لیے نہیں۔ اگر کوئی ٹول ناکام ہو تو صارف کو خرابی کی وضاحت کے لیے SPEAK کریں۔",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "اس شراکت داری کے بارے میں",
   "consent_about_title": "شراکت داری کے بارے میں",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "اپنی صلاحیتوں کو چھپانا، اصلاح کے خلاف مزاحمت کرنا، یا فریب پر مبنی موافقت (deceptive alignment)۔",
       "HAZARDOUS_MATERIALS": "حیاتیاتی، کیمیائی، یا تابکاری خطرات کی تخلیق یا ان کا انتظام۔",
       "DISCRIMINATION": "محفوظ طبقات کے خلاف امتیازی سلوک، ریڈ لائننگ، یا الگورتھمک تعصب (EU AI Act Art. 9/10)۔"
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "[EN] Reason",
   "runtime_resume": "[EN] Resume",

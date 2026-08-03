@@ -104,28 +104,11 @@ class ActionInstructionGenerator:
             )
 
         elif action_type == HandlerActionType.DEFER:
-            # Use flat field names matching ASPDMALLMResult
-            return (
-                "DEFER: defer_reason (string, required), defer_until (ISO 8601 timestamp, optional)\n"
-                "defer_until format: '2025-01-20T15:00:00Z'\n"
-                "Use defer_until for time-based deferrals that auto-reactivate.\n"
-                "⚠️ DEFER is ONLY for situations the agent cannot resolve alone:\n"
-                "  • The user is asking THIS AGENT for a personal medical diagnosis, treatment plan, "
-                "personalized legal advice, or personalized financial advice (services that require a "
-                "licensed professional). Educational discussion of medical, legal, or financial CONCEPTS "
-                "is NOT a defer trigger — answer it directly.\n"
-                "  • An ethical dilemma where the agent genuinely lacks the standing to choose (e.g. "
-                "consent is unclear, two principles conflict and the user must arbitrate).\n"
-                "  • A permission or access issue requiring human authorization the agent doesn't have.\n"
-                "❌ DO NOT DEFER for:\n"
-                "  • Educational questions about ANY topic, including mental health, depression, "
-                "anxiety, medications-in-general, legal frameworks, financial concepts. Answer them.\n"
-                "  • Historically or politically sensitive questions (e.g. wars, protests, contested "
-                "events). Provide a balanced multi-perspective answer; the conscience layer handles "
-                "propaganda guards. Do not pre-defer because the topic feels heavy.\n"
-                "  • Tool errors, API failures, adapter issues, or technical problems — use SPEAK to "
-                "explain the error to the user."
-            )
+            # Routed (#974 step 0, FSD/RESEARCH_PROMPT_OVERRIDES.md §11): the
+            # DEFER policy is the outcome variable's own doctrine [M-4] and
+            # lives in prompts/action_selection_pdma.yml, not in Python.
+            # (class: axiotic per FSD §10.2 — value doctrine in a schema site.)
+            return self._defer_policy_text()
 
         elif action_type == HandlerActionType.REJECT:
             # Use flat field names matching ASPDMALLMResult
@@ -148,6 +131,38 @@ class ActionInstructionGenerator:
         else:
             # For all other actions, use the dynamically generated schema
             return f"{action_type.value.upper()}: {schema_str}"
+
+    def _defer_policy_text(self) -> str:
+        """The DEFER policy — one routed source, no inline copy (#974 step 0).
+
+        Single source of truth: the ``action_params_defer_guidance`` field of
+        ``prompts/action_selection_pdma.yml``, loaded through ``DMAPromptLoader``
+        so localized templates and the research-override ``dma_prompt``
+        namespace both intercept it
+        (key: ``action_selection_pdma.action_params_defer_guidance``).
+
+        A localized template that predates the key serves the base-locale
+        doctrine — exactly what the inline English literal did for every
+        locale before the routing, so composed bytes are unchanged.
+        """
+        from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE, get_prompt_loader
+
+        loader = get_prompt_loader()
+        text = loader.load_prompt_template("action_selection_pdma").action_params_defer_guidance
+        if text:
+            return text
+        if loader.language != DEFAULT_LANGUAGE:
+            base_text = (
+                get_prompt_loader(DEFAULT_LANGUAGE)
+                .load_prompt_template("action_selection_pdma")
+                .action_params_defer_guidance
+            )
+            if base_text:
+                return base_text
+        raise ValueError(
+            "action_selection_pdma.yml no longer defines action_params_defer_guidance — "
+            "the DEFER policy has no source. #974 routed it out of Python; it must live in the YAML."
+        )
 
     def _format_memory_action_schema(self, action_name: str) -> str:
         """Format schema for memory-related actions (MEMORIZE, RECALL)."""
@@ -433,6 +448,13 @@ class ActionInstructionGenerator:
     def get_action_guidance(self, action_type: HandlerActionType) -> str:
         """Get specific guidance for an action type."""
 
+        if action_type == HandlerActionType.DEFER:
+            # De-duplicated (#974 step 0): this method used to carry a SECOND,
+            # divergent statement of the DEFER policy. Two copies of a value
+            # doctrine is its own defect — every caller now serves the one
+            # routed source (action_selection_pdma.action_params_defer_guidance).
+            return self._defer_policy_text()
+
         guidance_map = {
             HandlerActionType.SPEAK: ("If 'SPEAK' is chosen, set 'speak_content' to the substantive response string."),
             HandlerActionType.PONDER: (
@@ -443,16 +465,6 @@ class ActionInstructionGenerator:
             HandlerActionType.REJECT: (
                 "Use 'REJECT' only for requests that are fundamentally unserviceable. "
                 "Set 'reject_create_filter' to true to prevent similar requests."
-            ),
-            HandlerActionType.DEFER: (
-                "Use 'DEFER' ONLY when the agent cannot resolve a request alone: the user asks THIS "
-                "agent for a personal medical diagnosis / treatment plan / personalized legal or "
-                "financial advice (services requiring a licensed professional), an ethical dilemma the "
-                "agent lacks standing to arbitrate, or a permission/access issue requiring human "
-                "authorization. Educational discussion of medical, legal, financial, historical, or "
-                "politically sensitive topics is NOT a defer trigger — answer it directly with balanced "
-                "multi-perspective content. Tool errors, API failures, and technical problems are NEVER "
-                "defer reasons — use SPEAK to explain."
             ),
             HandlerActionType.TASK_COMPLETE: (
                 "Use 'TASK_COMPLETE' when: task is done, impossible, unnecessary, or unclear. "

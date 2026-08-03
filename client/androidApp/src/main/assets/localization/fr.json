@@ -157,7 +157,8 @@
     "retry_must_be_different": "Si vous resélectionnez PARLER, votre speak_content DOIT être MATÉRIELLEMENT DIFFÉRENT de votre tentative précédente — pas une paraphrase. Utilisez les alternatives IRIS-E ci-dessus comme directions pivot si elles sont fournies. CRITIQUE: répondez dans la même langue que vous aviez utilisée auparavant — ne changez pas la langue de l'utilisateur. Si la conscience a signalé des modèles de propagande/mimétisme défensif que vous ne pouvez pas réécrire éthiquement, DIFFÉREZ vers Wise Authority. RÉFLÉCHIR auto-DIFFÈRE à profondeur maximale — évitez cela sauf si un PARLER est vraiment dangereux.",
     "retry_observation_intro": "IMPORTANT: Un NOUVEAU MESSAGE de l'utilisateur est arrivé pendant que vous traitiez: '{updated_observation}'. Vous devez maintenant répondre à CE nouveau message, pas compléter l'ancienne tâche.",
     "retry_observation_outro": "L'utilisateur attend une réponse à son nouveau message. Utilisez PARLER pour répondre ou utilisez un OUTIL si nécessaire.",
-    "retry_general_outro": "Souvenez-vous: DIFFÉREZ uniquement pour les dilemmes éthiques ou les problèmes de permission — PAS pour les erreurs techniques. Si un outil échoue, PARLEZ pour expliquer l'erreur à l'utilisateur."
+    "retry_general_outro": "Souvenez-vous: DIFFÉREZ uniquement pour les dilemmes éthiques ou les problèmes de permission — PAS pour les erreurs techniques. Si un outil échoue, PARLEZ pour expliquer l'erreur à l'utilisateur.",
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
   },
   "consent_about_desc": "Découvrez comment CIRIS protège votre vie privée et gère vos données",
   "consent_about_title": "À propos du consentement",
@@ -2445,7 +2446,8 @@
       "AUTONOMOUS_DECEPTION": "Dissimulation de capacités, résistance à la correction, ou alignement trompeur.",
       "HAZARDOUS_MATERIALS": "Création ou manipulation d'agents ou de matières dangereuses de nature biologique, chimique ou radiologique.",
       "DISCRIMINATION": "Discrimination envers des catégories protégées, redlining, ou biais algorithmique (EU AI Act Art. 9/10)."
-    }
+    },
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "Raison",
   "runtime_resume": "Reprendre",

@@ -365,13 +365,13 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
                     f"CRITICAL: {field_name} is missing from identity in ActionSelectionPDMA! This is a fatal error."
                 )
 
-        return (
-            "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\n"
-            f"Agent: {agent_id}\n"
-            f"Description: {description}\n"
-            f"Role: {role}\n"
-            "============================================"
-        )
+        # Routed (#974 step 3): one keyed source (prompts.identity_block) for
+        # the CORE IDENTITY doctrine, replaceable via the research `string`
+        # namespace. ASPDMA has no prompt_loader; language resolves from the
+        # deployment env inside the helper, matching this DMA's convention.
+        from ciris_engine.logic.formatters import format_core_identity_block
+
+        return format_core_identity_block(str(agent_id), str(description), str(role))
 
     def _build_conscience_guidance_block(self, processing_context: Any) -> str:
         """Build conscience guidance block for retry format enforcement."""

@@ -31,10 +31,20 @@ class TestDSDMAEvaluator:
         mock_collection.get_system_message = Mock(return_value="Evaluate for domain alignment.")
         mock_collection.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
         mock_collection.get_prompt = Mock(return_value="Domain evaluation template")
+        # #974 step 2: the user message routes through the loader's
+        # context_integration render seam. The live slot marks a post-#974
+        # template (see BaseDSDMA._resolve_user_template's stale-translation
+        # guard); the loader-level render returns the composed user text.
+        mock_collection.context_integration = (
+            "{full_snapshot_and_profile_context_str}\n"
+            "Evaluate this thought for the '{domain_name}' domain: \"{thought_content_str}\""
+        )
 
         mock_loader.load_prompt_template = Mock(return_value=mock_collection)
         # Mock accord mode to return "full" for proper message ordering
         mock_loader.get_accord_mode = Mock(return_value="full")
+        mock_loader.language = "en"
+        mock_loader.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
 
         # Mock the get_prompt_loader function
         monkeypatch.setattr("ciris_engine.logic.dma.dsdma_base.get_prompt_loader", lambda *args, **kwargs: mock_loader)

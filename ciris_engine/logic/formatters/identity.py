@@ -11,6 +11,35 @@ from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_list, get_st
 from ciris_engine.schemas.types import JSONDict
 
 
+def format_core_identity_block(
+    agent_id: str,
+    description: str,
+    role: str,
+    language: Optional[str] = None,
+) -> str:
+    """The "=== CORE IDENTITY ===" block — one routed source (#974 step 3).
+
+    Before #974 this doctrine existed as THREE inline copies (two branches of
+    ``BaseDSDMA.evaluate_thought`` and
+    ``ActionSelectionPDMAEvaluator._validate_and_build_identity_block``). It
+    now resolves through ``get_string`` (key: ``prompts.identity_block``) so
+    the research-override ``string`` namespace intercepts it and non-English
+    bundles can translate it. Bundles without the key fall back to the
+    base-locale template — exactly the English bytes the inline literals
+    produced for every locale.
+    """
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    lang = language or get_preferred_language()
+    return get_string(
+        lang,
+        "prompts.identity_block",
+        agent_id=agent_id,
+        description=description,
+        role=role,
+    )
+
+
 def _format_core_identity(agent_identity: JSONDict) -> List[str]:
     """Extract and format core identity fields."""
     lines = []

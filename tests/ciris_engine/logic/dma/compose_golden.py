@@ -96,6 +96,7 @@ def prompt_content_environment(
     localized_accord: Callable[..., str],
     language_guidance: Callable[[str], str],
     prohibition_guidance: Callable[[str], str],
+    user_message: Callable[..., str] | None = None,
 ) -> Iterator[None]:
     """Pin language + prompt-content loaders for byte-reproducible composition.
 
@@ -133,6 +134,15 @@ def prompt_content_environment(
         stack.enter_context(
             patch("ciris_engine.logic.dma.tsaspdma.get_localized_accord_text", localized_accord)
         )
+        # Optional (#974): a recording pass-through around the loader's
+        # user-message render seam, so the #973 dump can identify user
+        # messages whose bytes are wholly the render of a routed
+        # `context_integration` template. The #972 golden environment does
+        # NOT pass this — the goldens exercise the unpatched render path.
+        if user_message is not None:
+            stack.enter_context(
+                patch("ciris_engine.logic.dma.prompt_loader.DMAPromptLoader.get_user_message", user_message)
+            )
         yield
 
 

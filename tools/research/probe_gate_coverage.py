@@ -59,7 +59,7 @@ from ciris_engine.logic.utils.research_overrides import (  # noqa: E402
     _ACCORD_CORPUS_KEYS,
     _TEMPLATE_TEXT_FIELDS,
     _required_conscience_prompt_keys,
-    _required_dma_prompt_keys,
+    _schema_present_dma_prompt_keys,
     _valid_corpus_keys,
     compute_residue_digest,
     scan_reachable_string_keys,
@@ -205,7 +205,10 @@ def namespace_keys() -> Dict[str, Tuple[str, ...]]:
     """
     return {
         "corpus": tuple(sorted(_valid_corpus_keys())),
-        "dma_prompt": tuple(sorted(_required_dma_prompt_keys())),
+        # Schema-present, NOT R2-required: the immune keys (#989) are excluded from
+        # R2 totality but must stay in the probe — measuring which keys are dark
+        # is its purpose, and skipping them would blind it to #989 being fixed.
+        "dma_prompt": tuple(sorted(_schema_present_dma_prompt_keys())),
         "string": tuple(sorted(scan_reachable_string_keys())),
         "conscience_prompt": tuple(sorted(_required_conscience_prompt_keys())),
         "template": tuple(sorted(_TEMPLATE_TEXT_FIELDS)),

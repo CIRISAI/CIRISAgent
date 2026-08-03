@@ -137,6 +137,10 @@ class ComposeDumpMeta(BaseModel):
     steps: List[str] = Field(..., description="Steps composed per locale, in composition order")
     residue_digest: str = Field(..., description="compute_residue_digest() of the composing tree")
     fragment_count: int = Field(..., ge=0, description="Residue fragments the scan matched against")
+    conscience_guidance_mode: str = Field(
+        default="full",
+        description="#983 mode at compose time (#986: arm assignment must be auditable from artifacts, never from operator intention)",
+    )
 
 
 class RegimeArm(BaseModel):

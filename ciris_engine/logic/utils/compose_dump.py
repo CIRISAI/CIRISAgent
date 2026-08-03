@@ -489,6 +489,7 @@ def compose_dump_rows(
     from ciris_engine.logic.utils.research_overrides import compute_residue_digest
 
     meta = ComposeDumpMeta(
+        conscience_guidance_mode=_conscience_mode_for_dump(),
         arm=arm,
         manifest=manifest,
         locales=list(locales),
@@ -499,6 +500,13 @@ def compose_dump_rows(
     rows.sort(key=lambda r: (r.locale, r.step, r.seq))
     return meta, rows
 
+
+
+def _conscience_mode_for_dump() -> str:
+    """#986: the dump is an audit artifact; it pins the #983 mode it composed under."""
+    from ciris_engine.logic.utils.conscience_mode import conscience_guidance_mode
+
+    return conscience_guidance_mode()
 
 def write_dump(meta: ComposeDumpMeta, rows: Sequence[ComposedBlock], out: Optional[str]) -> None:
     lines = [meta.model_dump_json()]

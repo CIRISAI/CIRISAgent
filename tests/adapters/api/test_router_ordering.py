@@ -106,9 +106,35 @@ class TestRouterOrdering:
         # pytest-xdist worker before reading the routers (a mock that errored
         # before its cleanup ran). This rebuilds the real router objects and
         # self-heals worker state.
+        #
+        # SNAPSHOT FIRST, RESTORE AFTER. importlib.reload re-executes the
+        # module in place: the module object survives but every class inside
+        # is a NEW object. Any test collected earlier that imported a class
+        # from these modules (e.g. test_system_extensions holds
+        # SingleStepResponse) then fails isinstance against instances the
+        # ROUTE constructs from the reloaded class — this exact contamination
+        # broke shard 5 on main's 2.9.9 merge (deterministic when the two
+        # tests share a worker; invisible otherwise). The reload is still
+        # needed for THIS test's self-heal, so: snapshot the modules' dicts,
+        # reload, assert, and restore identity in the finally below.
+        _snapshots = [
+            (system_extensions, dict(system_extensions.__dict__)),
+            (system_runtime, dict(system_runtime.__dict__)),
+        ]
         importlib.reload(system_extensions)
         importlib.reload(system_runtime)
 
+        try:
+            self._assert_route_order(create_app, system_extensions, system_runtime)
+        finally:
+            # Restore pre-reload identity so every other collected test's
+            # imported classes match what the modules now hold.
+            for _mod, _snap in _snapshots:
+                _mod.__dict__.clear()
+                _mod.__dict__.update(_snap)
+
+    @staticmethod
+    def _assert_route_order(create_app, system_extensions, system_runtime):
         # Happy path: build the app and look for the runtime routes.
         app = create_app()
         routes = [route.path for route in app.routes if hasattr(route, "path")]

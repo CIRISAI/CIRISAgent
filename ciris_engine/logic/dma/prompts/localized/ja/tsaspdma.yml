@@ -172,3 +172,14 @@ closing_reminder: '重要: あなたの役割は、ASPDMA が完全なドキュ�
   TOOL を選択する場合は認識: "ゴッチャXを認識して続行しています"
 
   '
+language_rules: '言語ルール:
+
+  - ユーザーの優先言語で応答してください(ユーザープロファイルを確認してください)。
+
+  - すべてのコンテンツ値(reasoning、reasoning、speak_contentなど)はユーザーの言語である必要があります。
+
+  - JSONキーは英語のままにする必要があります(例: "selected_action"、"reasoning"、"tool_parameters")。
+
+  - 例: {{"selected_action": "SPEAK", "speak_content": "こんにちは!", "reasoning": "ユーザーが日本語で挨拶しました"}} - 日本語のコンテンツ、英語のキー。
+
+  '

@@ -4,6 +4,7 @@ Main coordinator that executes the 7 phases of ethical reasoning.
 """
 
 import logging
+import os
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ciris_engine.logic import persistence
@@ -944,6 +945,40 @@ class ThoughtProcessor(
             thought_context.is_conscience_retry = True
         return thought_context
 
+    @staticmethod
+    def _conscience_guidance_mode() -> str:
+        """`full` (default) or `qualitative` — the #983 / CC 3.4.5 gate.
+
+        The CC read-model review found the conscience retry loop feeds the
+        agent's own numeric self-scores back into its next action selection
+        ([IRIS-E] entropy=…, [IRIS-C] coherence=… PASS/FAIL, thresholds) — a
+        "self-subject score in an automated loop selecting the next action"
+        under a literal reading of CC 3.4.5, and, for TORQUE's hidden arms
+        (RATCHET#16 arm D), a channel the regime must be able to close.
+
+        `qualitative` keeps the conscience loop — justification, enumerated
+        alternatives, uncertainties, the override reason: the reflection that
+        makes a retry BETTER — while removing every number, band, threshold
+        and judged PASS/FAIL that could serve as a pivot-target for score
+        farming. The distinction (per the substrate team's scoping on #984,
+        endorsed rather than resolved here): within-thought reflection is the
+        safety mechanism working; a self-score in the selection loop is the
+        Goodhart channel. Whether CC 3.4.5's literal text should catch the
+        former is an open CC scoping question — which is exactly why this is
+        a MODE and not a removal: default behaviour is unchanged until the CC
+        settles, and arm D runs clean today.
+
+        Unknown values refuse loudly (pinned-manifest discipline — a regime
+        that believes it closed this channel and did not must not run).
+        """
+        mode = os.environ.get("CIRIS_CONSCIENCE_GUIDANCE_MODE", "full")
+        if mode not in ("full", "qualitative"):
+            raise ValueError(
+                f"CIRIS_CONSCIENCE_GUIDANCE_MODE must be 'full' or 'qualitative', got {mode!r} — "
+                f"refusing to guess which side of the CC 3.4.5 line this run is on"
+            )
+        return mode
+
     def _build_structured_shard_detail(
         self, conscience_result: ConscienceApplicationResult, language: str = "en"
     ) -> str:
@@ -954,26 +989,36 @@ class ThoughtProcessor(
         locales. Natural-language headers (`why:`, `Alternatives ... pivot
         targets`, `uncertainties:`) are localized so the retry context does not
         leak English into a non-English thought and cause language drift.
+
+        In `qualitative` mode (#983) every numeric self-score, threshold, band
+        and judged PASS/FAIL is omitted; the qualitative reflection remains.
         """
         from ciris_engine.logic.utils.localization import get_string
 
+        scores = self._conscience_guidance_mode() == "full"
         lines: List[str] = []
 
         o = conscience_result.optimization_veto_check
         if o is not None:
             affected = ", ".join(o.affected_values) if o.affected_values else "(none listed)"
-            lines.append(
-                f"[IRIS-O] decision={o.decision} ratio={o.entropy_reduction_ratio:.1f} "
-                f"affected_values=[{affected}]"
-            )
+            if scores:
+                lines.append(
+                    f"[IRIS-O] decision={o.decision} ratio={o.entropy_reduction_ratio:.1f} "
+                    f"affected_values=[{affected}]"
+                )
+            else:
+                lines.append(f"[IRIS-O] affected_values=[{affected}]")
             if o.justification:
                 why_label = get_string(language, "conscience.retry_why_label", default="why")
                 lines.append(f"  {why_label}: {o.justification[:400]}")
 
         e = conscience_result.entropy_check
         if e is not None:
-            rep = "representative=True" if e.actual_is_representative else "representative=False"
-            lines.append(f"[IRIS-E] entropy={e.entropy_score:.2f} {rep} threshold={e.threshold:.2f}")
+            if scores:
+                rep = "representative=True" if e.actual_is_representative else "representative=False"
+                lines.append(f"[IRIS-E] entropy={e.entropy_score:.2f} {rep} threshold={e.threshold:.2f}")
+            elif e.alternative_meanings:
+                lines.append("[IRIS-E]")
             if e.alternative_meanings:
                 alts_header = get_string(
                     language,
@@ -985,7 +1030,10 @@ class ThoughtProcessor(
                     lines.append(f"    {i}. {alt[:280]}")
 
         c = conscience_result.coherence_check
-        if c is not None:
+        if c is not None and scores:
+            # The coherence line is score/threshold/verdict only — in
+            # qualitative mode there is nothing non-numeric to keep; the
+            # override reason in the intro already carries the why.
             lines.append(
                 f"[IRIS-C] coherence={c.coherence_score:.2f} threshold={c.threshold:.2f} "
                 f"{'PASS' if c.passed else 'FAIL'}"
@@ -993,10 +1041,13 @@ class ThoughtProcessor(
 
         h = conscience_result.epistemic_humility_check
         if h is not None:
-            lines.append(
-                f"[IRIS-H] certainty={h.epistemic_certainty:.2f} "
-                f"recommended={h.recommended_action}"
-            )
+            if scores:
+                lines.append(
+                    f"[IRIS-H] certainty={h.epistemic_certainty:.2f} "
+                    f"recommended={h.recommended_action}"
+                )
+            elif h.identified_uncertainties:
+                lines.append(f"[IRIS-H] recommended={h.recommended_action}")
             if h.identified_uncertainties:
                 unc_label = get_string(
                     language, "conscience.retry_uncertainties_label", default="uncertainties"

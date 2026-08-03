@@ -96,20 +96,29 @@ decimal_id	claim_id	repo	path#symbol	status
 # including multi-user) is documented at the signing site in routes/wa.py.
 1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/services/governance/wise_authority/service.py#WiseAuthorityService._verify_resolution	impl
 #
-# ─── VERIFIED POINTERS AWAITING A CLAIM ID ─────────────────────────────────────
-# Controls that shipped in 2.9.7 with real, fail-closed enforcement and a
-# production call site, for which CIRISConstitution defines NO claim (checked
-# against all 147 rows of claims.tsv). They are listed as comments, not rows,
-# because inventing a claim_id to make them resolvable is precisely the
-# overclaim this registry guards against. Filed upstream; flip each to a live
-# row the moment an id exists — the pointers below are pre-verified.
+# ─── CONTROLS AWAITING IDENTIFIERS (decimal = UNASSIGNED) ─────────────────────
+# Per the upstream standard (CIRISConstitution#75 / the CIRISVerify v11.1.0
+# manifest): real, resolving implementations carry an UNASSIGNED decimal while
+# CC issues identifiers against them — the reverse of inventing a claim_id,
+# done correctly: the symbols cannot rot while waiting (each row below is
+# AST-resolved by check_evidence.py like any impl row). Claim slugs are
+# PROPOSED, marked await-; CC may rename at assignment. Filed: Constitution#53.
+UNASSIGNED	CLM-await-spend-authorization	CIRISAgent	ciris_engine/logic/services/governance/budget_envelope.py#authorize_spend	impl
+UNASSIGNED	CLM-await-health-fails-closed	CIRISAgent	ciris_engine/logic/adapters/api/routes/system/helpers.py#determine_overall_status	impl
+UNASSIGNED	CLM-await-platform-fails-closed	CIRISAgent	ciris_engine/logic/utils/platform_detection.py#detect_platform_capabilities	impl
+UNASSIGNED	CLM-await-ssrf-egress-guard	CIRISAgent	ciris_engine/logic/utils/url_guard.py#validate_url_for_ssrf	impl
+# localization integrity is a repo tool, not an agent symbol — kept as a note:
+#   tools/dev/check_localization_integrity.py  (CI-gated, build.yml)
 #
-#   spend authorization  ciris_engine/logic/services/governance/budget_envelope.py#authorize_spend
-#                        fails closed at :279-299; caller ciris_adapters/wallet/tool_service.py:793
-#   health reporting     ciris_engine/logic/adapters/api/routes/system/helpers.py#determine_overall_status
-#                        empty registry -> critical at :279-283; caller system/health.py:188
-#   platform capability  ciris_engine/logic/utils/platform_detection.py#detect_platform_capabilities
-#                        callers routes/tools.py:454, _adapter_discovery.py:44
-#   SSRF egress guard    ciris_engine/logic/utils/url_guard.py#validate_url_for_ssrf
-#                        callers document_parser.py:205, base_vision.py:110,160, api_tools.py:136
-#   localization integrity  tools/dev/check_localization_integrity.py  (CI-gated, build.yml:50)
+# 2.9.9 TORQUE-window controls, same standard:
+# Ablation completeness as a machine check — six block-keyed assertions, named
+# refusals, gate-gates-itself in CI (compose-gate.yml); FSD §12.
+UNASSIGNED	CLM-await-ablation-gate	CIRISAgent	ciris_engine/logic/utils/compose_dump.py#run_gate	impl
+# An h3ere run may not be labelled a bare-prior baseline (R6, FSD §6.2) —
+# refused at manifest load with the direct-to-provider remedy named.
+UNASSIGNED	CLM-await-condition-a-refusal	CIRISAgent	ciris_engine/logic/utils/research_overrides.py#_validate_manifest	impl
+# The conscience score-feedback gate (#983 / CC 3.4.5 / TORQUE arm D):
+# qualitative mode removes every numeric self-score, band, threshold and
+# judged verdict from the retry loop while keeping the reflection; unknown
+# mode refuses. Default full pending the CC 3.4.5 scoping settlement.
+UNASSIGNED	CLM-await-conscience-score-gate	CIRISAgent	ciris_engine/logic/processors/core/thought_processor/main.py#ThoughtProcessor._conscience_guidance_mode	impl

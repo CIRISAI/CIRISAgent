@@ -1,0 +1,34 @@
+VERIFICATION RE-RUN INDEPENDENTLY AGAINST THIS HEAD (9fc0c107c), with two
+CORRECTIONS to the counts stated in the commit message.
+
+  test_compose_messages_golden.py .......... 12 passed  (byte-identical; the
+      goldens are the safety net — language_guidance composes into all 13 DMA
+      steps, so an off-by-one byte fails them at `en`)
+  test_language_guidance_split_997.py ...... 46 passed   [message said 44 — WRONG]
+  test_taxonomy_gate_997.py ................ 22 passed   [message said 24 — WRONG]
+  test_compose_dump_973.py ................. 15 passed   (confirmed over 4 runs)
+  test_regime_manifest_976.py + 986 ........ 68 passed, 2 skipped
+  test_localization_completeness.py ........ 281 passed, 2 xfailed
+  mypy ..................................... Success, 4 touched production files
+  compose-gate CI steps 1-4 (en,am) ........ determinism cmp OK;
+      null self-check GATE: PASS;
+      mutated dump FAILs naming en:pdma.prohibition;
+      varied regime REFUSES (rc=1), 104 output lines naming language_guidance
+  probe_gate_coverage --assert-floors ...... COVERAGE: PASS (rc=0)
+      string 71/75 gated, string:prompts.* 58/58, nothing dark
+
+The two wrong numbers were off by two in opposite directions and no claim
+depended on them; they are corrected here rather than silently left, because
+the point of this cut is that a stated verification must be the one that ran.
+
+CAVEAT ON EVIDENCE QUALITY. These runs happened in a worktree with other agents
+actively editing tracked files. One run of test_compose_dump_973.py reported 2
+failures while ciris_engine/logic/formatters/*.py and research_overrides.py were
+mid-edit by another agent; it passed 15/15 on four subsequent runs with those
+edits settled. A single green run in this worktree is therefore weaker evidence
+than usual, and CI on a clean checkout is the authority.
+
+WHAT WAS NOT DONE, stated so it is not mistaken for done: 24 of 29 locales are
+NOT split. Only en/es/fr/it/pt partition on the English boundaries. No new
+translation was generated for any locale; every emitted part is a byte slice of
+text that was already in the corpus.

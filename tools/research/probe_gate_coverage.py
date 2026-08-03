@@ -99,7 +99,7 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 40,
-    "string": 75,
+    "string": 132,
     "conscience_prompt": 12,
     "template": 3,
 }
@@ -166,7 +166,17 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
 GATED_FLOOR: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 39,
-    "string": 71,
+    # 71/75 -> 76/132 in 2.9.10. The count went UP and the FRACTION went down,
+    # and that is the honest number: #991 wired 57 `prompts.formatters.*` keys
+    # that had 1,653 translations and no reader, and the probe fixture cannot
+    # exercise most of them. They render into system-snapshot / identity /
+    # user-profile blocks, and the compose fixture carries no populated snapshot
+    # or profile — so they are FIXTURE-dark, not WIRING-dark. The distinction is
+    # evidenced: #991 verified translated labels rendering end to end at
+    # es/ja/am/ar, and en output byte-identical via the 12 goldens plus a
+    # 17-render differential. Raising this floor by asserting they are covered
+    # would be the exact move this check exists to prevent.
+    "string": 76,
     "conscience_prompt": 12,
     "template": 2,
 }
@@ -178,7 +188,8 @@ SUBSPLIT_GATED_FLOOR: Dict[str, int] = {
     "string:conscience.*": 13,
     # 29 -> 58 in 2.9.10: the #997 language_guidance split, plus the parent key
     # becoming performable again. Nothing in this sub-namespace is dark.
-    "string:prompts.*": 58,
+    # 58 -> 63 of 115. Same story: the denominator grew by the 57 formatter keys.
+    "string:prompts.*": 63,
 }
 
 

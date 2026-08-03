@@ -10,7 +10,13 @@ name: Compose Gate (Phase 1)
 #   3. a deliberately mutated copy FAILS, naming the mutated block —
 #      the gate still detects a flipped held block;
 #   4. a regime that varies `axiotic` while its mixed blocks are unresolved
-#      REFUSES, naming `language_guidance` — §10.2.1 refusal-by-default is live.
+#      REFUSES, naming the smuggling block — §10.2.1 refusal-by-default is live.
+#      Asserted on the REFUSAL SHAPE, not on a block name: this step used to
+#      grep for `language_guidance` specifically, and the #997 split legitimately
+#      changed which block gets named first. A CI check pinned to one block's
+#      name fails on correct work and teaches people to loosen it. What must
+#      hold is that a varied class contaminating an unresolved mixed block is
+#      refused BY NAME — any name, with the reason attached.
 #
 # If 2 ever fails, composition drifted or the gate broke; if 3 or 4 ever
 # PASSES, the gate has stopped gating. Either way this workflow goes red.
@@ -133,8 +139,8 @@ jobs:
             echo '::error::the gate PASSED a regime whose varied class contaminates unresolved mixed blocks'
             exit 1
           fi
-          grep -q 'language_guidance' /tmp/gate-varied.out \
-            || { echo '::error::refusal did not name language_guidance'; exit 1; }
+          grep -qE 'REFUSE .*(smuggles varied class|no per-block disposition)' /tmp/gate-varied.out \
+            || { echo '::error::gate refused but did not NAME a smuggling/unresolved mixed block with its reason'; exit 1; }
 
       - name: Gate COVERAGE must not regress (#986)
         run: |

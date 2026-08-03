@@ -540,3 +540,14 @@ UNASSIGNED	CLM-await-google-token-fails-closed	CIRISAgent	tests/adapters/api/tes
 # availability failure; an auth control may never become MORE permissive when a
 # dependency is unreachable.
 UNASSIGNED	CLM-await-degraded-path-no-weaker	CIRISAgent	tests/adapters/api/test_google_auth_fails_closed_999.py#test_every_verification_failure_path_raises	impl
+# Emergency shutdown resolves authority from the accord verifier — ONE trust
+# root, both entry surfaces (#999). The route carried its own hardcoded key list
+# whose single entry did not match the steward's actual root key, so the
+# endpoint rejected the person holding the key while a comment claimed the key
+# came from that file. Failed closed, and was a non-functional safety control.
+UNASSIGNED	CLM-await-one-emergency-trust-root	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#is_authorized_key	impl
+# The independent variable is content-addressed (#999, FSD §15.3): sha256 over
+# JCS-canonical manifest bytes, so two arms cannot claim distinct identities
+# while carrying the same manifest. Without it a manifest edited in place left
+# two dumps indistinguishable from the artifacts alone.
+UNASSIGNED	CLM-await-manifest-content-identity	CIRISAgent	ciris_engine/logic/utils/research_overrides.py#compute_manifest_digest	impl

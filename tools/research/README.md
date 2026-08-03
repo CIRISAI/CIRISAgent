@@ -156,3 +156,40 @@ avoids the problem entirely.
 exit 0 with 6 traces across generic/detailed/full_traces, all 6 PQC-signed,
 written through the volume mount to the host. Guards verified in-container:
 exit 2 with no key, exit 3 on a bad key naming the cause.
+
+## Experimental regimes (v2) and the class-set κ gate
+
+`schema: ciris.ai/experimental_regime/v2` (FSD §10.3) declares a whole study —
+arms, contrasts, tiered DV, repeats, holds, pins, per-block dispositions. It is
+validated against the source tree before a campaign spends anything:
+
+```bash
+python3 -c "from ciris_engine.logic.utils.regime_manifest import load_regime_v2; \
+    load_regime_v2('tools/research/regimes/my_regime.yaml')"
+```
+
+Every §10.4 refusal fires here, with the tree as the authority — the residue
+inventory decides whether an `action_tier` DV is honest, the LLM call path
+decides which decoding keys are actually transmitted (set equality, both
+directions), and the per-locale U-row tables decide whether a kill is operable.
+`compose_dump gate --regime` also routes a v2 file through this validation
+before projecting it to the Phase-1 gate view, so a campaign manifest cannot
+reach the gate with its DV and holds silently ignored.
+
+`regimes/torque1_v2_fsd_example.yaml` is §10.3's own example. **It refuses**, on
+purpose, in five distinct ways — it is a regression fixture, not a template.
+
+The class-set annotation pass (§10.2.3) needs two independent annotators:
+
+```bash
+python3 -m tools.research.annotate_classes emit --annotator alice --out alice.csv
+python3 -m tools.research.annotate_classes emit --annotator bob   --out bob.csv
+# each fills the `class` column WITHOUT seeing the other sheet
+python3 -m tools.research.annotate_classes kappa --a alice.csv --b bob.csv \
+    --class-set-version 2 --adjudication-log adj.md
+```
+
+Exit 0 only when Cohen's κ ≥ 0.8 **overall AND on every class pair whose default
+disposition differs** — an aggregate κ over eleven classes with skewed marginals
+can pass while exactly the decision-relevant boundaries fail. A boundary neither
+annotator exercised reads NOT ESTIMABLE, never 1.0.

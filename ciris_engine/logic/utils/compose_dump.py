@@ -63,6 +63,7 @@ from ciris_engine.schemas.dma.compose import (
     GateRegime,
     RegimeBlockEntry,
 )
+from ciris_engine.schemas.research.regime import REGIME_SCHEMA_V2, ExperimentalRegimeV2
 from ciris_engine.schemas.types import JSONDict
 
 # --------------------------------------------------------------------------
@@ -645,10 +646,24 @@ def _regime_entry_for(regime: GateRegime, block_id: str) -> Optional[RegimeBlock
 
 
 def load_regime(path: str) -> GateRegime:
+    """Load a regime file as the Phase-1 gate view.
+
+    A file declaring the FULL v2 schema (``ciris.ai/experimental_regime/v2``,
+    #976) is parsed as ``ExperimentalRegimeV2`` and put through EVERY §10.4
+    refusal first — a campaign manifest must not reach the gate by having its
+    tiered DV, its holds and its kills silently ignored. The Phase-1 self-check
+    regimes carry ``…/v2-phase1`` and load as the bare gate view, unchanged.
+    """
     import yaml
 
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
+    if isinstance(raw, dict) and raw.get("schema") == REGIME_SCHEMA_V2:
+        from ciris_engine.logic.utils.regime_manifest import validate_regime
+
+        regime = ExperimentalRegimeV2.model_validate(raw)
+        validate_regime(regime)
+        return regime.gate_view()
     return GateRegime.model_validate(raw)
 
 

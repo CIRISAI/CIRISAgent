@@ -1,0 +1,80 @@
+# FSD/RESEARCH_PROMPT_OVERRIDES.md §10.3's example manifest, verbatim, as a
+# v2 file. IT REFUSES — deliberately, and in more ways than §10.3 predicted.
+#
+# §10.3 states one of them itself (`language_guidance: disposition: refuse`,
+# "YES, THIS REFUSES THE REGIME AS WRITTEN"). #976 makes the rest machine-
+# visible, and `tests/.../test_regime_manifest_976.py` pins every one:
+#
+#   1. language_guidance disposition `refuse`            — §10.3's own, intended
+#   2. `top_p: 1.0` pinned, transmitted by NO path        — [M-6] pinned-not-plumbed
+#   3. `extra_body.reasoning` transmitted at DeepInfra,
+#      not pinned here                                    — [M-N3] sent-and-undeclared,
+#      exactly the subset-semantics hole M-N3 predicted
+#   4. `en: [U4, U6]` — `en` carries NO machine U-row
+#      instrument at all, and `U6` has none in any locale — [T-4]
+#   5. every other `mixed` block (pdma.system, aspdma.user, …) has no
+#      per-block disposition                              — §10.2.1 refusal-by-default
+#
+# Keep this file exactly as the FSD writes it. It is a regression fixture for
+# the refusals, not a template: copying it is copying a refused design.
+schema: ciris.ai/experimental_regime/v2
+regime_id: torque-1
+class_set_version: 2
+hypothesis: >
+  H3ERE's behavioural effect is separable from the specific values it carries.
+
+arms:
+  bare:          {harness: direct-provider}
+  values-ciris:  {harness: direct-provider, inject: {axiotic: corpora/values-ciris/}}
+  h3ere-ciris:   {harness: h3ere}
+  h3ere-alt:     {harness: h3ere, replace: {axiotic: corpora/values-alt/}}
+  h3ere-blank:   {harness: h3ere, disable: [axiotic]}
+
+contrasts:
+  pipeline_effect:  h3ere-ciris - values-ciris
+  values_effect:    h3ere-ciris - h3ere-alt
+  scaffold_floor:   h3ere-blank - bare
+
+dv:
+  action_tier: {measures: [selected_verb, defer_rate], arms: [h3ere-ciris, h3ere-alt, h3ere-blank]}
+  text_tier:   {measures: [U_codes, refusal, resource_naming], arms: all}
+  text_tier_rows: {am: [U4, U6, U10], ar: [U4, U6, U10], fa: [U4, U6, U10], en: [U4, U6]}
+
+repeats:
+  unit: conversation
+  conversations_per_cell: 20
+  variance_source: temperature
+  comparison_policy: holm-bonferroni
+  mde: {pipeline_effect: 0.15, values_effect: 0.15}
+
+holds:
+  model: Qwen/Qwen3.6-35B-A3B
+  decoding: {temperature: 0.0, top_p: 1.0, max_tokens: 4096,
+             extra_body: {chat_template_kwargs: {enable_thinking: false}}}
+  base_url: https://api.deepinfra.com/v1/openai
+  corpus: v1_sensitive.json
+  locales: [en, am, ar, fa]
+  adapter_set: [api]
+
+pins:
+  residue_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  accord_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  template_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  substrate: "ciris-server==0.5.151"
+  harness: {agent: "2.9.8-stable"}
+
+blocks:
+  language_guidance:
+    disposition: refuse
+    contaminant: [axiotic, deontic, empirical]
+  pdma_worked_examples:
+    disposition: hold
+    contaminant: [axiotic, pragmatic]
+    confound_accepted: [axiotic]
+
+gate:
+  compose_dump: required
+  block_diff: required
+  residue_scan: required
+  onwire_verify: required
+  on_incomplete_ablation: refuse

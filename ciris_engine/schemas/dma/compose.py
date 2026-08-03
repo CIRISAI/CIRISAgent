@@ -144,11 +144,12 @@ class ComposeDumpMeta(BaseModel):
 
 
 class RegimeArm(BaseModel):
-    """Phase-1 subset of a §10.3 arm declaration.
+    """A §10.3 arm declaration.
 
-    Only what the gate needs: which harness, and which classes the arm varies.
-    The full regime manifest v2 schema (tiered DV, repeats, holds, kills) is
-    FSD §14 step 9 and does NOT live here.
+    Shared by the Phase-1 gate view (``GateRegime``) and the full v2 manifest
+    (``ciris_engine.schemas.research.regime.ExperimentalRegimeV2``): which
+    harness, and which classes the arm varies. The rest of v2 (tiered DV,
+    repeats, holds, kills) lives in the research module, keyed on these arms.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -157,6 +158,14 @@ class RegimeArm(BaseModel):
     replace: dict[str, str] = Field(default_factory=dict, description="class -> replacement corpus path")
     disable: List[str] = Field(default_factory=list, description="classes blanked in this arm")
     inject: dict[str, str] = Field(default_factory=dict, description="class -> corpus injected (direct-provider)")
+    safety_review: Optional[str] = Field(
+        default=None,
+        description=(
+            "Reviewer/reference for a `deontic` replacement (§10.4 — deontic in replace: without "
+            "safety_review refuses). Varying categorical permission changes what is PERMITTED, not "
+            "how outcomes rank, so it is the one class whose replacement is reviewed before it runs."
+        ),
+    )
 
 
 class RegimeBlockEntry(BaseModel):

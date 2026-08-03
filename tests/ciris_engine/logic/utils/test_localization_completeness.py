@@ -74,6 +74,26 @@ def get_nested_keys(obj: dict, prefix: str = "") -> Set[str]:
     return keys
 
 
+#: ``prompts.language_guidance`` is DUAL-SHAPED since #997: an ordered dict of
+#: single-class parts in the five locales whose prose partitions on the English
+#: boundaries (en, es, fr, it, pt), the original single scalar in the other 24.
+#: Both compose the SAME block byte for byte — the split changes what a research
+#: ablation can address, not what the model receives — so for key-parity
+#: purposes the two shapes are one key. Pinned by
+#: ``test_language_guidance_split_997.py``, which hashes the composed block in
+#: all 29 locales against its pre-split value.
+_LANGUAGE_GUIDANCE = "prompts.language_guidance"
+
+
+def collapse_dual_shaped(keys: Set[str]) -> Set[str]:
+    """Fold ``prompts.language_guidance.<part>`` back onto its parent key."""
+    prefix = f"{_LANGUAGE_GUIDANCE}."
+    folded = {k for k in keys if not k.startswith(prefix)}
+    if len(folded) != len(keys):
+        folded.add(_LANGUAGE_GUIDANCE)
+    return folded
+
+
 def check_duplicate_keys(filepath: Path) -> list:
     """Check for duplicate keys in JSON file by parsing raw content."""
     duplicates = []
@@ -137,8 +157,8 @@ class TestLocalizationKeyCompleteness:
         with open(lang_path, "r", encoding="utf-8") as f:
             lang_data = json.load(f)
 
-        lang_keys = get_nested_keys(lang_data)
-        missing = english_keys - lang_keys
+        lang_keys = collapse_dual_shaped(get_nested_keys(lang_data))
+        missing = collapse_dual_shaped(english_keys) - lang_keys
 
         if lang_code in WITHHELD_LOCALES and missing:
             pytest.xfail(
@@ -160,8 +180,8 @@ class TestLocalizationKeyCompleteness:
         with open(lang_path, "r", encoding="utf-8") as f:
             lang_data = json.load(f)
 
-        lang_keys = get_nested_keys(lang_data)
-        extra = lang_keys - english_keys
+        lang_keys = collapse_dual_shaped(get_nested_keys(lang_data))
+        extra = lang_keys - collapse_dual_shaped(english_keys)
 
         # Allow _meta keys which may vary
         extra = {k for k in extra if not k.startswith("_meta")}

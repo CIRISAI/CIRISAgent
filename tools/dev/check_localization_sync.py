@@ -97,6 +97,27 @@ def load_flat(path: Path) -> Set[str]:
     return flatten(json.load(open(path, encoding="utf-8")))
 
 
+# ``prompts.language_guidance`` is DUAL-SHAPED since #997: an ordered dict of
+# single-class parts in the five locales whose prose partitions on the English
+# boundaries, the original single scalar in the other 24. Both compose the same
+# block — the split changes what a research ablation can address, not what the
+# model receives — so for CROSS-LANGUAGE parity the two shapes are the same key.
+#
+# Only the cross-language WARNING collapses them. Mirror parity (an ERROR) keeps
+# comparing exact keys, because a mirror carrying a different shape from its
+# source really is a bug.
+_LANGUAGE_GUIDANCE = "prompts.language_guidance"
+
+
+def collapse_dual_shaped(keys: Set[str]) -> Set[str]:
+    """Fold ``prompts.language_guidance.<part>`` back onto its parent key."""
+    prefix = f"{_LANGUAGE_GUIDANCE}."
+    folded = {k for k in keys if not k.startswith(prefix)}
+    if len(folded) != len(keys):
+        folded.add(_LANGUAGE_GUIDANCE)
+    return folded
+
+
 def manifest_languages(bundle: Path) -> List[str]:
     """Read the supported-language list from the bundle manifest (source of truth)."""
     manifest = json.load(open(bundle / "manifest.json", encoding="utf-8"))
@@ -170,6 +191,7 @@ def check_mirror_parity() -> List[str]:
 def check_cross_language(bundle: Path, langs: List[str], en_keys: Set[str]) -> List[str]:
     """WARNING: each locale file should match en.json's key set."""
     warnings: List[str] = []
+    en_keys = collapse_dual_shaped(en_keys)
     for lang in langs:
         if lang == "en":
             continue
@@ -177,7 +199,7 @@ def check_cross_language(bundle: Path, langs: List[str], en_keys: Set[str]) -> L
         if not f.exists():
             warnings.append(f"{lang}.json missing from {bundle.name} bundle")
             continue
-        keys = load_flat(f)
+        keys = collapse_dual_shaped(load_flat(f))
         missing = en_keys - keys
         extra = keys - en_keys
         if missing or extra:

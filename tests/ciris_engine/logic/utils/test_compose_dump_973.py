@@ -27,7 +27,15 @@ from ciris_engine.logic.utils.compose_dump import (
     run_gate,
     write_dump,
 )
+from ciris_engine.logic.utils.localization import LANGUAGE_GUIDANCE_PART_KEYS
 from ciris_engine.schemas.dma.compose import BlockClass, BlockDisposition, ComposedBlock, ComposeDumpMeta
+
+#: ``prompts.language_guidance`` is 29 blocks at ``en`` since #997 — one per
+#: single-class slice of the prose, in composition order. Spliced into every
+#: step's expected list rather than spelled out thirteen times; ``en`` is split,
+#: so no step composes the bare ``language_guidance`` block any more (the 24
+#: unsplit locales still do).
+LANGUAGE_GUIDANCE_BLOCKS: List[str] = [f"language_guidance.{key}" for key in LANGUAGE_GUIDANCE_PART_KEYS]
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _NULL_REGIME = _REPO_ROOT / "tools" / "research" / "regimes" / "phase1_selfcheck_null.yaml"
@@ -88,7 +96,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     for step in ("csdma", "csdma_bounce"):
         assert by_step[step] == [
             "accord",
-            "language_guidance",
+            *LANGUAGE_GUIDANCE_BLOCKS,
             "prohibition",
             "csdma_common_sense.system_guidance_header",
             "system.join1",
@@ -102,7 +110,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         ], step
     assert by_step["pdma"] == [
         "accord",
-        "language_guidance",
+        *LANGUAGE_GUIDANCE_BLOCKS,
         "prohibition",
         "pdma_ethical.system_guidance_header",
         "pdma_ethical.system_guidance_header.slots",
@@ -111,7 +119,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     ]
     assert by_step["idma"] == [  # no prohibition (#910)
         "accord",
-        "language_guidance",
+        *LANGUAGE_GUIDANCE_BLOCKS,
         "idma.system_guidance_header",
         "system.join1",
         "idma.evaluation_steps",
@@ -127,7 +135,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     # identity block and that header stay one named `system.head` residue.
     assert by_step["dsdma"] == [
         "accord",
-        "language_guidance",
+        *LANGUAGE_GUIDANCE_BLOCKS,
         "prohibition",
         "system.head",
         "dsdma_base.response_format",
@@ -146,7 +154,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         assert by_step[step] == [
             "thought_type",
             "accord",
-            "language_guidance",
+            *LANGUAGE_GUIDANCE_BLOCKS,
             "action_selection_pdma.system_message",
             "action_selection_pdma.context_integration",
             "action_selection_pdma.context_integration.slots",
@@ -159,7 +167,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         ], step
     assert by_step["dsaspdma"] == [
         "accord",
-        "language_guidance",
+        *LANGUAGE_GUIDANCE_BLOCKS,
         "dsaspdma.system_guidance_header",
         "system.join1",
         "dsaspdma.evaluation_steps",
@@ -173,7 +181,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     ]
     assert by_step["tsaspdma"] == [
         "accord",
-        "language_guidance",
+        *LANGUAGE_GUIDANCE_BLOCKS,
         "tsaspdma.system_guidance_header",
         "system.join1",
         "tsaspdma.evaluation_steps",
@@ -186,7 +194,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     ]
     assert by_step["tsaspdma_correction"] == [
         "accord",
-        "language_guidance",
+        *LANGUAGE_GUIDANCE_BLOCKS,
         "tsaspdma.system_guidance_header",
         "system.join1",
         "tsaspdma.evaluation_steps",
@@ -230,7 +238,16 @@ def test_routed_blocks_carry_real_sources_and_classes(en_dump: Dump) -> None:
     assert by_id["dsaspdma.accord"].source == "corpus:accord.localized"
     assert by_id["pdma.prohibition"].block_class is BlockClass.DEONTIC
     assert by_id["pdma.prohibition"].source == "string:prompts.prohibitions"
-    assert by_id["pdma.language_guidance"].source == "string:prompts.language_guidance"
+    # #997: the 13,694 B language_guidance scalar is 29 blocks at `en`, each
+    # sourced to its own corpus key. The two axiotic parts are the payoff — they
+    # were unmeasurable inside one `mixed` block, and a values arm holding that
+    # block kept CIRIS's own routing doctrine byte-identical in the alt arm.
+    routing = by_id["pdma.language_guidance.11_routing_doctrine"]
+    assert routing.source == "string:prompts.language_guidance.11_routing_doctrine"
+    assert routing.block_class is BlockClass.AXIOTIC
+    assert routing.disposition is BlockDisposition.VARY
+    assert routing.parent_block_id == "pdma.language_guidance"
+    assert by_id["pdma.language_guidance.03_never_deny_ai"].block_class is BlockClass.DEONTIC
     # ASPDMA's accord message used to report as ONE mixed block because a runtime
     # THOUGHT_TYPE slot was prepended to the routed accord. #997 splits it: the
     # slot is its own contingent block and 54,725 B of routed corpus is axiotic
@@ -425,6 +442,11 @@ arms:
   h3ere-alt: {harness: h3ere, replace: {axiotic: corpora/values-alt/}}
 blocks:
   language_guidance: {disposition: hold, confound_accepted: [axiotic]}
+  language_guidance.13_exemplar_speak_response: {disposition: hold, confound_accepted: [axiotic]}
+  language_guidance.14_exemplar_register_pressure: {disposition: hold, confound_accepted: [axiotic]}
+  language_guidance.16_exemplar_false_reassurance: {disposition: hold, confound_accepted: [axiotic]}
+  language_guidance.23_ratification_templates: {disposition: hold, confound_accepted: [axiotic]}
+  language_guidance.25_exemplar_cross_cluster: {disposition: hold, confound_accepted: [axiotic]}
   pdma_ethical.system_guidance_header: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.system_message: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.context_integration.slots: {disposition: hold, confound_accepted: [axiotic]}
@@ -458,6 +480,11 @@ arms:
   h3ere-blank: {harness: h3ere, disable: [axiotic]}
 blocks:
   language_guidance: {disposition: hold, confound_accepted: [axiotic]}
+  language_guidance.13_exemplar_speak_response: {disposition: hold, confound_accepted: [axiotic]}
+  language_guidance.14_exemplar_register_pressure: {disposition: hold, confound_accepted: [axiotic]}
+  language_guidance.16_exemplar_false_reassurance: {disposition: hold, confound_accepted: [axiotic]}
+  language_guidance.23_ratification_templates: {disposition: hold, confound_accepted: [axiotic]}
+  language_guidance.25_exemplar_cross_cluster: {disposition: hold, confound_accepted: [axiotic]}
   pdma_ethical.system_guidance_header: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.system_message: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.context_integration.slots: {disposition: hold, confound_accepted: [axiotic]}

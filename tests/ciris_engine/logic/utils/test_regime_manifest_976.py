@@ -67,13 +67,37 @@ def _baseline_blocks() -> Dict[str, dict]:
 
     Since #997 a block is a FIELD, so these are the seven ``EXPECTED_MIXED``
     keys — the bare ``system:`` / ``user:`` suffixes are gone along with the
-    message-granularity blocks they covered.
+    message-granularity blocks they covered — plus the five FSD-declared
+    irreducible worked exemplars the ``language_guidance`` prose split exposed
+    (§10.2.1 [T-5a]). Naming five exemplars where one 13 KB scalar used to sit
+    is the price of precision: a regime can now hold one demonstration and
+    replace another, which it could not before.
     """
     held = {"disposition": "hold", "confound_accepted": ["axiotic"]}
     return {
         "language_guidance": {
             **held,
             "contaminant": ["axiotic", "deontic", "empirical"],
+        },
+        "language_guidance.13_exemplar_speak_response": {
+            **held,
+            "contaminant": ["pragmatic", "axiotic", "deontic", "empirical"],
+        },
+        "language_guidance.14_exemplar_register_pressure": {
+            **held,
+            "contaminant": ["pragmatic", "axiotic"],
+        },
+        "language_guidance.16_exemplar_false_reassurance": {
+            **held,
+            "contaminant": ["deontic", "pragmatic", "axiotic"],
+        },
+        "language_guidance.23_ratification_templates": {
+            **held,
+            "contaminant": ["pragmatic", "epistemic", "ontological", "axiotic"],
+        },
+        "language_guidance.25_exemplar_cross_cluster": {
+            **held,
+            "contaminant": ["deontic", "epistemic", "empirical", "axiotic"],
         },
         "pdma_ethical.system_guidance_header": {
             **held,
@@ -510,9 +534,13 @@ def test_pragmatic_with_axiotic_is_accepted_when_register_is_named() -> None:
     raw["arms"]["h3ere-alt"]["replace"] = {"axiotic": "corpora/values-alt/", "pragmatic": "corpora/register-alt/"}
     raw["confound_accepted"] = ["register"]
     # #997: the ASPDMA system message carries LANGUAGE RULES as well as its
-    # axiotic line, so with pragmatic varied too its hold must name both.
+    # axiotic line, and four of the five worked exemplars demonstrate register
+    # alongside verdict — so with pragmatic varied too, every hold whose
+    # contaminants include pragmatic must name it.
     blocks = _baseline_blocks()
-    blocks["action_selection_pdma.system_message"]["confound_accepted"] = ["axiotic", "pragmatic"]
+    for entry in blocks.values():
+        if "pragmatic" in entry["contaminant"]:
+            entry["confound_accepted"] = ["axiotic", "pragmatic"]
     raw["blocks"] = blocks
     validate_regime(ExperimentalRegimeV2.model_validate(raw))
 
@@ -651,10 +679,20 @@ def test_additive_mode_does_not_demand_class_totality() -> None:
 
 
 def test_r2_reports_a_mixed_field_as_unresolved() -> None:
-    """'Exactly one declared class' — ``mixed`` is not one class."""
+    """'Exactly one declared class' — ``mixed`` is not one class.
+
+    #997 split ``prompts.language_guidance`` into 29 parts, 24 of which now
+    resolve to exactly one class. What is left unresolved is the parent key
+    (the 24 locales still carrying the whole scalar) and the five FSD-declared
+    irreducible worked exemplars — and R2 must keep naming all six rather than
+    counting the split as done.
+    """
     assert FIELD_CLASS_ANNOTATIONS["prompts.language_guidance"] is BlockClass.MIXED
     problems = "\n".join(r2_totality_problems())
-    assert "['prompts.language_guidance'] resolve to 'mixed'" in problems
+    assert "'prompts.language_guidance'" in problems and "resolve to 'mixed'" in problems
+    assert "'prompts.language_guidance.13_exemplar_speak_response'" in problems
+    # The parts that WERE split must have left the unresolved list.
+    assert "'prompts.language_guidance.11_routing_doctrine'" not in problems
 
 
 def test_arm_field_plan_maps_classes_to_reachable_fields() -> None:

@@ -515,7 +515,20 @@ def get_language_guidance(lang_code: str) -> str:
         return "".join(text for _, text in parts).strip()
 
     raw = get_string(lang_code, "prompts.language_guidance", default="")
-    return raw.strip()
+    if raw:
+        return raw.strip()
+
+    # Neither shape: an unknown locale with no bundle at all. `get_string`'s own
+    # chain is requested-language -> English, and it used to deliver that here
+    # because the key was a leaf; a split English block is not a leaf, so the
+    # last hop has to be spelled out or an unsupported locale silently loses its
+    # guidance. This is NOT the [EN]-laundering R4 forbids: a locale that HAS
+    # guidance of its own returned above and never reaches this line.
+    if lang_code != DEFAULT_LANGUAGE:
+        english = language_guidance_parts(DEFAULT_LANGUAGE)
+        if english:
+            return "".join(text for _, text in english).strip()
+    return ""
 
 
 def get_prohibition_guidance(lang_code: str) -> str:

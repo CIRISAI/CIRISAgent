@@ -94,7 +94,7 @@ async def _get_attestation_summary() -> Optional[str]:
         return None
 
 
-async def _get_wallet_summary(service_registry: Optional[Any] = None) -> Optional[str]:
+async def _get_wallet_summary(runtime: Optional[Any] = None) -> Optional[str]:
     """Get a concise wallet summary from the wallet adapter.
 
     Returns a string like:
@@ -102,23 +102,23 @@ async def _get_wallet_summary(service_registry: Optional[Any] = None) -> Optiona
 
     This is fetched on startup and included in context enrichment so the
     agent knows its financial capabilities without needing to call tools.
+
+    The wallet adapter is discovered off ``runtime.adapters`` — the same seam
+    the live API route uses (``routes/wallet.py:_get_wallet_adapter_from_app``).
+    It is an ADAPTER instance, not a registry service: nothing in the
+    ServiceRegistry holds one, and no tool service exposes an ``_adapters`` map.
+    The previous lookup went through ``service_registry.get_service()`` (an
+    ``async def`` called un-awaited, with the service type passed as the
+    ``handler`` argument), so it raised TypeError into the caller's swallowed
+    debug log on every batch and this block was never produced.
     """
     try:
-        # Try to get wallet adapter from service registry
-        if service_registry is None:
+        if runtime is None:
             return None
 
-        # Get tool service which manages adapters
-        from ciris_engine.schemas.runtime.enums import ServiceType
-
-        tool_service = service_registry.get_service(ServiceType.TOOL)
-        if tool_service is None:
-            return None
-
-        # Try to find wallet adapter
         wallet_adapter = None
-        for adapter in getattr(tool_service, "_adapters", {}).values():
-            if hasattr(adapter, "provider_id") and "wallet" in type(adapter).__name__.lower():
+        for adapter in getattr(runtime, "adapters", None) or []:
+            if type(adapter).__name__ == "WalletAdapter":
                 wallet_adapter = adapter
                 break
 
@@ -533,7 +533,7 @@ async def prefetch_batch_context(
 
     # 8. Wallet Status (async, uses wallet adapter if available)
     try:
-        batch_data.wallet_summary = await _get_wallet_summary(service_registry)
+        batch_data.wallet_summary = await _get_wallet_summary(runtime)
         if batch_data.wallet_summary:
             logger.info(f"[BATCH] Wallet context loaded: {batch_data.wallet_summary}")
     except Exception as e:

@@ -591,12 +591,28 @@ class CIRISRuntime(ServicePropertyMixin):
 
         # Adapter loading can be slow on mobile due to graph DB queries
         adapter_load_timeout = 60.0 if (is_android() or is_ios()) else 30.0
+        # Enrichment tools are network/IO bound (200-400ms each) and slower on mobile
+        enrichment_cache_timeout = 60.0 if (is_android() or is_ios()) else 30.0
         init_manager.register_step(
             phase=InitializationPhase.SERVICES,
             name="Load Saved Adapters",
             handler=self._load_saved_adapters,
             critical=False,  # Non-critical - system can run without saved adapters
             timeout=adapter_load_timeout,
+        )
+
+        # Warm the context-enrichment cache before the first thought needs it.
+        # Shipped in 2.4.2 (#669) but only ever registered by the dead duplicate
+        # registrar in initialization_steps.py, so it never ran at boot: every
+        # first thought paid the full 200-400ms per enrichment tool.
+        # Non-critical by construction — the handler is first-run aware and
+        # swallows its own failures; enrichment then runs lazily as before.
+        init_manager.register_step(
+            phase=InitializationPhase.SERVICES,
+            name="Populate Context Enrichment Cache",
+            handler=self._populate_context_enrichment_cache,
+            critical=False,  # Non-critical - context enrichment can run on-demand
+            timeout=enrichment_cache_timeout,
         )
 
         init_manager.register_step(
@@ -1183,6 +1199,17 @@ class CIRISRuntime(ServicePropertyMixin):
         from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
 
         await load_saved_adapters_from_graph(self)
+
+    async def _populate_context_enrichment_cache(self) -> None:
+        """Pre-run context-enrichment tools so the first thought does not pay for them.
+
+        Delegates to the step handler in initialization_steps, which is
+        first-run aware and swallows its own failures (enrichment falls back to
+        running lazily on the first thought).
+        """
+        from ciris_engine.logic.runtime.initialization_steps import populate_context_enrichment_cache
+
+        await populate_context_enrichment_cache(self)
 
     async def _build_components(self) -> None:
         """Build all processing components.

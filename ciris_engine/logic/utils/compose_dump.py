@@ -22,9 +22,18 @@ in-process locale iteration.
 Usage::
 
     python3 -m ciris_engine.logic.utils.compose_dump dump --arm h3ere-ciris \
-        --locales en,am --out /tmp/a.jsonl [--manifest overrides.json]
+        --locales en,am --out /tmp/a.jsonl [--manifest overrides.json] [--sign]
     python3 -m ciris_engine.logic.utils.compose_dump dump --arms-config arms.yaml --out-dir /tmp/dumps
-    python3 -m ciris_engine.logic.utils.compose_dump gate --dump-a a.jsonl --dump-b b.jsonl --regime regime.yaml
+    python3 -m ciris_engine.logic.utils.compose_dump gate --dump-a a.jsonl --dump-b b.jsonl \
+        --regime regime.yaml [--verify-sig]
+
+Signed dumps (#977, ciris-server 0.5.154): ``--sign`` signs the emitted JSONL
+via ``ciris_server.sign_object`` with label = the arm name — sealed inside the
+signed manifest, so a dump cannot be relabelled into a different arm. ``gate
+--verify-sig`` accepts only a TRUE ``verify_object`` (an unperformable check
+refuses) and requires the sealed label to equal each dump's recorded arm.
+Both sides need the live node runtime in-process (engine + edge + federation
+delivery) — the 0.5.154 contract for detached-object signing.
 
 The dump needs the repo checkout: the compose fixture lives in
 ``tests/ciris_engine/logic/dma/compose_golden.py`` (load-bearing for #972's
@@ -511,6 +520,109 @@ def load_dump(path: str) -> Tuple[ComposeDumpMeta, List[ComposedBlock]]:
 
 
 # --------------------------------------------------------------------------
+# Detached dump signatures (#977 / FSD §13) — ciris_server 0.5.154 sign_object
+# --------------------------------------------------------------------------
+
+
+def _sig_path_for(dump_path: str) -> str:
+    """The detached-signature path convention: ``<dump>.sig.json`` beside it."""
+    return dump_path + ".sig.json"
+
+
+def sign_dump(out_path: str, arm: str) -> str:
+    """Sign the emitted dump with the node's key — ``ciris_server.sign_object``.
+
+    ``label`` = the arm name, and it rides INSIDE the signed manifest, so a
+    dump cannot be relabelled into a different arm after the fact — for a
+    campaign with hidden and visible arms that is the property that matters
+    most, and it is why the label goes here rather than into a filename. The
+    signature claims only provenance: this node's key saw exactly these bytes.
+
+    This is the #977 replacement for the FSD §13 ``local_sign_hybrid``
+    descope: same "locally signed, not CEG-signed" honesty, but the manifest
+    (byte hash + label + signer + timestamp) and the hybrid signature come
+    from the substrate's single purpose-built verb instead of being assembled
+    here. NOTE ``sign_object`` requires the LIVE node runtime (in-process
+    Engine + edge + federation delivery, 0.5.154 contract); outside one the
+    substrate refuses and the dump run FAILS LOUDLY rather than silently
+    emitting output that was asked to be signed and is not.
+
+    Writes ``<out>.sig.json`` next to the dump; returns the signature path.
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(f"--sign requires ciris_server: {exc}")
+    sign = getattr(ciris_server, "sign_object", None)
+    if sign is None:
+        raise SystemExit("--sign requires ciris_server.sign_object (ciris-server >= 0.5.154)")
+    try:
+        signature_json = sign(out_path, label=arm)
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(
+            f"--sign FAILED for {out_path}: {exc} "
+            f"(sign_object signs with the live node's key — it needs the in-process "
+            f"Engine + edge + federation delivery running; a bare CLI process has none)"
+        )
+    sig_path = _sig_path_for(out_path)
+    Path(sig_path).write_text(str(signature_json), encoding="utf-8")
+    return sig_path
+
+
+def verify_dump_signature(dump_path: str, expected_arm: str) -> Optional[str]:
+    """Verify a dump's detached signature. None = verified; str = the failure.
+
+    Accepts ONLY ``ciris_server.verify_object(...) is True``. False is an
+    honest mismatch (the dump changed, or the signature is bad). An exception
+    means the check could not be PERFORMED — refused here too, because a
+    verifier that cannot tell "forged" from "I could not look" admits both.
+
+    The sealed label must equal the arm the dump's meta row claims: the label
+    lives inside the signed manifest, so a valid signature with a different
+    label is a dump signed FOR another arm being presented as this one — the
+    exact relabelling the label-in-envelope design exists to refuse.
+    """
+    sig_file = Path(_sig_path_for(dump_path))
+    if not sig_file.exists():
+        return f"{sig_file}: missing detached signature (produce the dump with --sign)"
+    sig_json = sig_file.read_text(encoding="utf-8")
+
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    except Exception as exc:  # noqa: BLE001
+        return f"ciris_server not importable — verification could not be performed: {exc}"
+    verify = getattr(ciris_server, "verify_object", None)
+    if verify is None:
+        return "ciris_server.verify_object unavailable (need >= 0.5.154) — verification could not be performed"
+
+    try:
+        verified = verify(dump_path, sig_json)
+    except Exception as exc:  # noqa: BLE001
+        return f"verification could not be PERFORMED ({exc}) — refused; 'could not look' is not 'verified'"
+    if verified is not True:
+        return (
+            "signature does not verify: the dump bytes changed since signing, the signature "
+            "document was tampered with (including its sealed label), or the signer's key is "
+            "not registered in this node's federation directory"
+        )
+
+    label: Optional[str] = None
+    try:
+        manifest = json.loads(sig_json).get("manifest")
+        if isinstance(manifest, dict):
+            raw_label = manifest.get("label")
+            label = raw_label if isinstance(raw_label, str) else None
+    except (TypeError, ValueError):
+        label = None
+    if label != expected_arm:
+        return (
+            f"sealed label {label!r} != dump arm {expected_arm!r} — a dump signed under one arm "
+            f"is being presented as another"
+        )
+    return None
+
+
+# --------------------------------------------------------------------------
 # Gate Phase 1 (FSD §12) — six assertions, block-keyed
 # --------------------------------------------------------------------------
 
@@ -532,7 +644,7 @@ def load_regime(path: str) -> GateRegime:
     return GateRegime.model_validate(raw)
 
 
-def run_gate(dump_a_path: str, dump_b_path: str, regime_path: str) -> int:
+def run_gate(dump_a_path: str, dump_b_path: str, regime_path: str, verify_sig: bool = False) -> int:
     """FSD §12 Phase-1 assertions over two dumps. Returns process exit code."""
     from ciris_engine.logic.utils.research_overrides import compute_residue_digest
 
@@ -544,6 +656,13 @@ def run_gate(dump_a_path: str, dump_b_path: str, regime_path: str) -> int:
     failures: List[str] = []
     na_blocks: List[str] = []
     contingent_excluded = 0
+
+    # ---- --verify-sig: detached signatures must verify TRUE (#977) ------
+    if verify_sig:
+        for label, path, meta in (("dump-a", dump_a_path, meta_a), ("dump-b", dump_b_path, meta_b)):
+            problem = verify_dump_signature(path, meta.arm)
+            if problem is not None:
+                failures.append(f"[sig] {label}: {problem}")
 
     def block_key(row: ComposedBlock) -> Tuple[str, str]:
         return (row.locale, row.block_id)
@@ -760,6 +879,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     dump_p.add_argument("--steps", default=None, help="comma-separated steps (default: all)")
     dump_p.add_argument("--manifest", default=None, help="research override manifest to compose under")
     dump_p.add_argument("--out", default=None, help="output JSONL path (default: stdout)")
+    dump_p.add_argument(
+        "--sign",
+        action="store_true",
+        help="sign the emitted JSONL with the node's key (ciris_server.sign_object, >=0.5.154); "
+        "label = the arm name, sealed inside the signed manifest so the dump cannot be relabelled. "
+        "Writes <out>.sig.json. Requires --out and a live node runtime in-process.",
+    )
     dump_p.add_argument("--arms-config", default=None, help="YAML {arms: {name: {manifest: path}}}; subprocess per arm")
     dump_p.add_argument("--out-dir", default=None, help="output directory for --arms-config")
 
@@ -767,18 +893,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     gate_p.add_argument("--dump-a", required=True)
     gate_p.add_argument("--dump-b", required=True)
     gate_p.add_argument("--regime", required=True, help="regime manifest YAML (Phase-1 subset of §10.3)")
+    gate_p.add_argument(
+        "--verify-sig",
+        action="store_true",
+        help="require a verifying <dump>.sig.json beside each dump whose sealed label equals the "
+        "dump's arm; only ciris_server.verify_object(...) is True passes — an unperformable "
+        "check refuses, it does not pass",
+    )
 
     args = parser.parse_args(argv)
 
     if args.command == "dump":
         if args.arms_config:
             return _run_arms_config(args.arms_config, args.locales, args.out_dir or ".", args.steps)
+        if args.sign and args.out is None:
+            raise SystemExit("--sign requires --out: a signature covers a file's exact bytes, and stdout is not a file")
         locales = [loc.strip() for loc in args.locales.split(",") if loc.strip()]
         steps = [s.strip() for s in args.steps.split(",") if s.strip()] if args.steps else None
         meta, rows = compose_dump_rows(arm=args.arm, locales=locales, steps=steps, manifest=args.manifest)
         write_dump(meta, rows, args.out)
+        if args.sign:
+            sig_path = sign_dump(args.out, args.arm)
+            print(f"signed: {sig_path} (label={args.arm!r} sealed in the manifest)", file=sys.stderr)
         return 0
-    return run_gate(args.dump_a, args.dump_b, args.regime)
+    return run_gate(args.dump_a, args.dump_b, args.regime, verify_sig=args.verify_sig)
 
 
 if __name__ == "__main__":

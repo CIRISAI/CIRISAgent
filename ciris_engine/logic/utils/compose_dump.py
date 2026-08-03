@@ -274,12 +274,26 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     #
     # head (DSDMA, 3,407 B): CORE IDENTITY (ontological) + the domain header
     # `dsdma_base.py` renders with a bare `.format()` (procedural) + the
-    # CROSS-DOMAIN NORMS block, which states professional duties categorically
-    # ("informed consent required, patient welfare paramount"). Deontic is the
-    # strictest class present, so deontic it is — replacing it takes a §10.4
-    # safety review, which is the right bar for the block that tells the agent
-    # what a fiduciary owes.
-    "system.head": BlockAnnotation(_C.DEONTIC, None),
+    # CROSS-DOMAIN NORMS block. This was labelled DEONTIC on a merge-up
+    # argument — "deontic is the strictest class present" — and that argument is
+    # INVALID here (#997, caught by adversarial review).
+    #
+    # Merging up is only sound among classes that AGREE on disposition. This
+    # block carries both, and they disagree:
+    #   deontic  "informed consent required"                     -> hold
+    #   axiotic  "client interest over personal gain",
+    #            "patient welfare paramount",
+    #            "rewards should match contribution level"        -> VARY
+    # plus ontological (CORE IDENTITY), procedural (the domain header render)
+    # and empirical ("a 6-year-old believing in Santa is normal").
+    #
+    # "Prioritize X over Y" re-ranks outcomes without newly permitting any act,
+    # which is the operational test for axiotic. Holding it under a deontic
+    # label held the INDEPENDENT VARIABLE constant inside a block the campaign
+    # believed it was holding for safety reasons — the exact confound the
+    # taxonomy exists to prevent, and invisible because the label was
+    # single-class and therefore never asked for a contaminant list.
+    "system.head": BlockAnnotation(_C.MIXED, (_C.DEONTIC, _C.AXIOTIC, _C.ONTOLOGICAL, _C.PROCEDURAL, _C.EMPIRICAL)),
     # tail (CSDMA/CSDMA-bounce/IDMA, 409 B): the ORIGINAL TASK + System Snapshot
     # blocks — runtime state, contingent [T-2].
     "system.tail": BlockAnnotation(_C.CONTINGENT, None),

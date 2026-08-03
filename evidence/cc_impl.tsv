@@ -518,3 +518,25 @@ UNASSIGNED	CLM-await-gate-coverage-floor	CIRISAgent	tools/research/probe_gate_co
 #     the canonical staged tree and the wheel install are not byte-equal. Kept as a
 #     note, like the localization one above, rather than pointed at a symbol that
 #     does not perform the refusal.
+#
+# ─── 2.9.10 late additions ────────────────────────────────────────────────────
+# Google ID-token verification FAILS CLOSED (#999). Found by the control sweep
+# itself: the verifier caught asyncio.TimeoutError and fell back to a decoder
+# whose own docstring said it does NOT verify the signature, reading exp/iss out
+# of the unverified payload. An attacker able to time out the call to
+# oauth2.googleapis.com turned a forged id_token into a real session. The
+# fallback and its helper are deleted; a timeout now raises 504.
+# NOTE for whoever reads the auth rows together: the control sweep proposed this
+# as an `open` GAP row ("a real gap, belongs as open with an issue, not impl").
+# It is registered `impl` because the gap was CLOSED in the same pass that found
+# it — the unverified path no longer exists. The sweep's judgement was right at
+# the time it looked.
+# Offline sign-in is a real capability this removes — restoring it means cached
+# JWKS (verified offline), not trusting the token. Follow-up tracked on #999.
+UNASSIGNED	CLM-await-google-token-fails-closed	CIRISAgent	tests/adapters/api/test_google_auth_fails_closed_999.py#test_timeout_does_not_become_an_authentication_decision	impl
+# The general rule the above violated, gated separately because the next
+# degraded path will be written by someone who has not read that one: no
+# exception handler in the verifier may produce an identity. A timeout is an
+# availability failure; an auth control may never become MORE permissive when a
+# dependency is unreachable.
+UNASSIGNED	CLM-await-degraded-path-no-weaker	CIRISAgent	tests/adapters/api/test_google_auth_fails_closed_999.py#test_every_verification_failure_path_raises	impl

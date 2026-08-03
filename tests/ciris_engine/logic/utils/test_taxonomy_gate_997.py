@@ -80,6 +80,13 @@ from ciris_engine.schemas.dma.compose import BlockClass
 #: Blocks still awaiting a split, each with what it must become. A ratchet.
 #: Entries leave as composition is split; nothing may join without an issue.
 EXPECTED_MIXED: Dict[str, str] = {
+    "system.head": (
+        "CIRISAgent#997 — the DSDMA identity+norms preamble: CORE IDENTITY (ontological), "
+        "the domain header rendered by a bare .format() (procedural), and CROSS-DOMAIN NORMS "
+        "carrying both categorical duties (deontic) and outcome rankings (axiotic). Splitting "
+        "needs the norms block cut out of the Python-side render, not a boundary the composer "
+        "already knows"
+    ),
     "language_guidance": (
         "CIRISAgent#997 — the UNSPLIT scalar, now scoped to the 24 locales whose prose "
         "does not partition on the English boundaries (am ar bn de fa ha hi id ja ko mr "
@@ -212,7 +219,7 @@ def test_no_mixed_blocks_beyond_the_ratchet() -> None:
 #: relabelled from one register to the other to make a bound look better,
 #: because moving it changes neither this number nor the disposition the gate
 #: applies.
-TOTAL_MIXED_CEILING = 12
+TOTAL_MIXED_CEILING = 13
 
 #: What the surface measured BEFORE the per-field split, recorded so the ratchet
 #: has a baseline the repository can witness.
@@ -224,6 +231,24 @@ TOTAL_MIXED_CEILING = 12
 #: in version control is an assertion, not a ratchet.
 MIXED_BEFORE_THE_SPLIT = 48
 
+#: A CORRECTION IS NOT A REGRESSION, and the ratchet must not punish one.
+#:
+#: 12 -> 13 because `system.head` was relabelled DEONTIC -> MIXED. It was
+#: single-class on a merge-up argument ("deontic is the strictest class
+#: present") that is invalid when the classes DISAGREE about disposition: the
+#: block states both "informed consent required" (deontic, hold) and "client
+#: interest over personal gain" / "patient welfare paramount" (axiotic, VARY).
+#: Holding it as deontic held the independent variable inside a block the
+#: campaign believed it was holding for safety reasons.
+#:
+#: A ratchet that only ever shrinks makes fixing a mislabel look like a
+#: regression, which is an incentive to keep the mislabel. So the ceiling moves
+#: for a CORRECTION and never for new debt — and the distinction has to be
+#: stated in the same commit, because nothing mechanical can tell them apart.
+MIXED_CEILING_CORRECTIONS = {
+    "system.head": "#997 — DEONTIC -> MIXED; merge-up merged the varied class into a held one",
+}
+
 
 def test_the_mixed_ratchet_only_turns_one_way() -> None:
     """Bound the SUM, not each register — see TOTAL_MIXED_CEILING."""
@@ -233,7 +258,10 @@ def test_the_mixed_ratchet_only_turns_one_way() -> None:
         f"IRREDUCIBLE_EXEMPLARS={len(IRREDUCIBLE_EXEMPLARS)}) — split it, don't move it "
         f"between registers"
     )
-    assert len(EXPECTED_MIXED) <= 7, f"EXPECTED_MIXED grew to {len(EXPECTED_MIXED)} — split it, don't park it"
+    assert len(EXPECTED_MIXED) <= 7 + len(MIXED_CEILING_CORRECTIONS), (
+        f"EXPECTED_MIXED grew to {len(EXPECTED_MIXED)} — split it, don't park it "
+        f"(corrections allowed: {sorted(MIXED_CEILING_CORRECTIONS)})"
+    )
     assert all(v.startswith("CIRISAgent#") for v in EXPECTED_MIXED.values())
 
 
@@ -241,6 +269,11 @@ def test_the_ratchet_records_where_it_started() -> None:
     """The baseline, committed, so a future reader can check the direction of
     travel against something other than a commit message."""
     assert MIXED_BEFORE_THE_SPLIT == 48
+    # every ceiling raise is accounted for by a named correction
+    assert TOTAL_MIXED_CEILING == 12 + len(MIXED_CEILING_CORRECTIONS), (
+        "the mixed ceiling moved without a named correction — new debt must shrink the "
+        "surface or stay out of it, only a mislabel fix may raise the bound"
+    )
     total = len(EXPECTED_MIXED) + len(IRREDUCIBLE_EXEMPLARS)
     assert total < MIXED_BEFORE_THE_SPLIT, "the split did not reduce the mixed surface"
 

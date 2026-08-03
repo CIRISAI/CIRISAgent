@@ -2,7 +2,6 @@
 Tests for native auth helper functions in auth.py
 
 Covers:
-- _decode_google_jwt_locally()
 - _auto_mint_system_admin_if_needed()
 """
 
@@ -15,7 +14,6 @@ import pytest
 
 from ciris_engine.logic.adapters.api.routes.auth import (
     _auto_mint_system_admin_if_needed,
-    _decode_google_jwt_locally,
 )
 from ciris_engine.logic.adapters.api.services.auth_service import OAuthUser
 from ciris_engine.schemas.api.auth import UserRole
@@ -36,108 +34,6 @@ def _create_test_jwt(payload: dict, header: dict | None = None) -> str:
     signature_b64 = base64.urlsafe_b64encode(b"fake_signature").rstrip(b"=").decode("utf-8")
 
     return f"{header_b64}.{payload_b64}.{signature_b64}"
-
-
-class TestDecodeGoogleJwtLocally:
-    """Tests for _decode_google_jwt_locally function."""
-
-    def test_decodes_valid_google_jwt(self):
-        """Decodes a valid Google JWT and extracts user info."""
-        payload = {
-            "iss": "accounts.google.com",
-            "sub": "123456789",
-            "email": "test@example.com",
-            "name": "Test User",
-            "picture": "https://example.com/photo.jpg",
-            "exp": int(time.time()) + 3600,  # 1 hour from now
-        }
-        token = _create_test_jwt(payload)
-
-        result = _decode_google_jwt_locally(token)
-
-        assert result["external_id"] == "123456789"
-        assert result["email"] == "test@example.com"
-        assert result["name"] == "Test User"
-        assert result["picture"] == "https://example.com/photo.jpg"
-
-    def test_accepts_https_issuer(self):
-        """Accepts https://accounts.google.com as valid issuer."""
-        payload = {
-            "iss": "https://accounts.google.com",
-            "sub": "123456789",
-            "email": "test@example.com",
-            "exp": int(time.time()) + 3600,
-        }
-        token = _create_test_jwt(payload)
-
-        result = _decode_google_jwt_locally(token)
-
-        assert result["external_id"] == "123456789"
-
-    def test_rejects_expired_token(self):
-        """Rejects expired tokens."""
-        payload = {
-            "iss": "accounts.google.com",
-            "sub": "123456789",
-            "email": "test@example.com",
-            "exp": int(time.time()) - 3600,  # 1 hour ago
-        }
-        token = _create_test_jwt(payload)
-
-        with pytest.raises(ValueError, match="Token has expired"):
-            _decode_google_jwt_locally(token)
-
-    def test_rejects_invalid_issuer(self):
-        """Rejects tokens with invalid issuer."""
-        payload = {
-            "iss": "https://evil.com",
-            "sub": "123456789",
-            "email": "test@example.com",
-            "exp": int(time.time()) + 3600,
-        }
-        token = _create_test_jwt(payload)
-
-        with pytest.raises(ValueError, match="Invalid issuer"):
-            _decode_google_jwt_locally(token)
-
-    def test_rejects_invalid_jwt_format(self):
-        """Rejects tokens that don't have 3 parts."""
-        with pytest.raises(ValueError, match="Invalid JWT format"):
-            _decode_google_jwt_locally("not.a.valid.jwt.token")
-
-        with pytest.raises(ValueError, match="Invalid JWT format"):
-            _decode_google_jwt_locally("only_one_part")
-
-    def test_handles_missing_optional_fields(self):
-        """Handles tokens missing optional fields like name and picture."""
-        payload = {
-            "iss": "accounts.google.com",
-            "sub": "123456789",
-            "email": "test@example.com",
-            "exp": int(time.time()) + 3600,
-        }
-        token = _create_test_jwt(payload)
-
-        result = _decode_google_jwt_locally(token)
-
-        assert result["external_id"] == "123456789"
-        assert result["email"] == "test@example.com"
-        assert result["name"] is None
-        assert result["picture"] is None
-
-    def test_handles_token_without_expiry(self):
-        """Handles tokens without exp field (no expiry check)."""
-        payload = {
-            "iss": "accounts.google.com",
-            "sub": "123456789",
-            "email": "test@example.com",
-            # No exp field
-        }
-        token = _create_test_jwt(payload)
-
-        result = _decode_google_jwt_locally(token)
-
-        assert result["external_id"] == "123456789"
 
 
 class TestAutoMintSystemAdminIfNeeded:

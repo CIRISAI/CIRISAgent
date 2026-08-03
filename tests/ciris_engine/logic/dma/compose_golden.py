@@ -257,7 +257,7 @@ def prompt_content_environment(
         # this and so exercise the unpatched `safe_format` — which is the whole
         # guarantee that per-field REPORTING never becomes per-field COMPOSING.
         #
-        # TWO targets, one reason: `prompt_loader` is the defining module (covers
+        # THREE targets, one reason: `prompt_loader` is the defining module (covers
         # get_system_message / get_user_message and the lazy importers in
         # conscience/prompt_loader.py and action_selection/context_builder.py),
         # and dsdma_base binds the name at module top, so its #990 append needs

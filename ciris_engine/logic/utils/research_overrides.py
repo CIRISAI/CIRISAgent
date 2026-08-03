@@ -362,6 +362,23 @@ OVERRIDE_IMMUNE_DMA_PROMPT_KEYS: Tuple[str, ...] = ()
 #: adapter code, nor ``ToolInfo.description`` text whose volume depends on which
 #: adapters are loaded. Do not represent the digest as covering more than this.
 RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
+    # #995 P1-4 — the TSASPDMA correction-mode scaffold. A 523 B inline
+    # f-string, not localized, that never passes through
+    # prompt_loader.get_user_message. The equivalent literal in
+    # ActionSelectionContextBuilder was routed out by #974 step 1; this one was
+    # missed, so `tsaspdma_correction.user` was reachable by NO override key —
+    # overriding all 101 keys moves 34 of 35 blocks and leaves this one
+    # byte-identical.
+    #
+    # Being outside the manifest is a coverage gap. Being outside the digest
+    # too meant it could drift mid-campaign without stopping the run, which is
+    # precisely what residue_digest exists to prevent. Pinned here; the
+    # manifest-reachability fix (adding tool_correction_section to
+    # _DMA_PROMPT_TEXT_FIELDS) is separate and does not close this hole.
+    (
+        "logic/dma/tsaspdma.py",
+        "TSASPDMAEvaluator._create_correction_mode_messages",
+    ),
     # The ASPDMA user message TEMPLATE routed out in #974 step 1 — it is now
     # prompts/action_selection_pdma.yml `context_integration`, covered by the
     # dma_prompt namespace, so `build_main_user_content` left this inventory.
@@ -429,8 +446,12 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
     # (conscience.repeated_speak_guidance); the module stays pinned for its
     # remaining inline reason strings.
     ("logic/conscience/action_sequence_conscience.py", "*"),
-    # Formatters: zero localization imports across all five, every one emits
-    # hardcoded English into a prompt.
+    # Formatters: zero localization imports across all six, every one emits
+    # hardcoded English into a prompt. (Said "five" while listing six since the
+    # inventory was written — #995. The count matters: `baseline_note` reports
+    # "six formatters" to anyone reading a manifest, and two numbers for the
+    # same uncovered surface is exactly the kind of drift the digest exists to
+    # make impossible.)
     ("logic/formatters/system_snapshot.py", "*"),
     ("logic/formatters/identity.py", "*"),
     ("logic/formatters/user_profiles.py", "*"),

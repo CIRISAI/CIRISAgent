@@ -128,10 +128,29 @@ class IdentityManager:
         return domain_knowledge
 
     def _extract_overrides(self, overrides_obj: Any) -> Dict[str, Any]:
-        """Extract non-None values from an overrides object."""
+        """Extract non-None values from an overrides object.
+
+        #995 P0-2 — `__dict__` is not the whole model under Pydantic v2. It
+        holds DECLARED fields only; with `extra="allow"` (which
+        `ActionSelectionOverrides` sets) undeclared keys land in
+        `__pydantic_extra__` and never appear in `__dict__`. Since prompt
+        overrides in agent templates are written as free-form YAML keys, that
+        meant every template's `system_header` and bespoke guidance override
+        was silently discarded — and for `echo`, `sage`, `scout`, `echo-core`
+        and `echo-speculative` the extraction returned `{}`, dropping their
+        overrides entirely. A template that configures the agent's prompts and
+        has no effect is worse than one that cannot: the operator reads the
+        YAML and believes it applied.
+
+        `model_extra` is the supported accessor for the extra bucket; falling
+        back to `{}` keeps this working for plain objects and for models that
+        forbid extras.
+        """
         if not overrides_obj:
             return {}
-        return {k: v for k, v in overrides_obj.__dict__.items() if v is not None}
+        declared = getattr(overrides_obj, "__dict__", {}) or {}
+        extra = getattr(overrides_obj, "model_extra", None) or {}
+        return {k: v for k, v in {**declared, **extra}.items() if v is not None}
 
     def _resolve_permitted_actions(self, template: AgentTemplate) -> List[HandlerActionType]:
         """Resolve permitted actions from template or defaults."""

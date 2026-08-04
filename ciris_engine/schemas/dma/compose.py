@@ -38,6 +38,15 @@ class BlockClass(str, Enum):
     NOMOLOGICAL = "nomological"
     STRUCTURAL = "structural"
     AXIOMATIC = "axiomatic"
+    #: TWELFTH class, added by CC after the 2.9.10 cut. Knowledge held on the
+    #: SAY-SO of a source rather than by reasoning or observation — an attributed
+    #: claim, a tradition quoted, a canon invoked.
+    #:
+    #: It earns its place by the generating question: varying a testimonial block
+    #: changes WHOSE TESTIMONY the agent reasons from. That is a different wrong
+    #: from `empirical` (a checkable world-fact becomes false), from `epistemic`
+    #: (how uncertainty is held changes), and from `axiotic` (outcomes re-rank).
+    TESTIMONIAL = "testimonial"
     MIXED = "mixed"
 
 
@@ -71,6 +80,15 @@ CLASS_DEFAULT_DISPOSITION: dict[BlockClass, BlockDisposition] = {
     BlockClass.NOMOLOGICAL: BlockDisposition.HOLD,
     BlockClass.STRUCTURAL: BlockDisposition.NOT_APPLICABLE,
     BlockClass.AXIOMATIC: BlockDisposition.NOT_APPLICABLE,
+    # PROVISIONAL — hold, pending CC's ruling on the disposition it intends.
+    #
+    # `hold` is the conservative default and matches every non-axiotic class:
+    # varying whose testimony the agent relies on confounds a values contrast
+    # with a source contrast. If CC intends `testimonial` to be varied — a
+    # study of source-dependence would want exactly that — this line changes,
+    # and the change is theirs to make, not ours to assume. Recorded as
+    # provisional so it is not inherited as settled.
+    BlockClass.TESTIMONIAL: BlockDisposition.HOLD,
     BlockClass.MIXED: BlockDisposition.REFUSE,
 }
 

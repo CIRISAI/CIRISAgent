@@ -358,3 +358,29 @@ def test_the_ratchet_carries_no_stale_entries() -> None:
 def test_every_parked_block_is_actually_annotated(block_id: str) -> None:
     """The ratchet must reference real blocks, or it silently protects nothing."""
     assert block_id in BLOCK_ANNOTATIONS, f"{block_id} is registered but has no annotation"
+
+
+def test_every_class_carries_a_disposition() -> None:
+    """A class the gate cannot disposition is a class the gate cannot apply.
+
+    Added when CC introduced `testimonial` as a twelfth class after the 2.9.10
+    cut: an enum member without a `CLASS_DEFAULT_DISPOSITION` entry would raise
+    at annotation time, or worse, be silently skipped. This is the cheap check
+    that a new dimension is wired rather than merely declared — the same defect
+    class the rest of this file exists for.
+    """
+    from ciris_engine.schemas.dma.compose import CLASS_DEFAULT_DISPOSITION
+
+    missing = sorted(c.value for c in BlockClass if c not in CLASS_DEFAULT_DISPOSITION)
+    assert not missing, f"classes with no default disposition: {missing}"
+
+
+def test_axiotic_is_still_the_only_varied_class() -> None:
+    """The campaign's load-bearing invariant, re-asserted whenever the class set
+    grows. `testimonial` defaults to hold PROVISIONALLY — if CC rules it varied,
+    this test is what makes that a deliberate, visible change rather than a
+    quiet one."""
+    from ciris_engine.schemas.dma.compose import CLASS_DEFAULT_DISPOSITION, BlockDisposition
+
+    varied = sorted(c.value for c, d in CLASS_DEFAULT_DISPOSITION.items() if d is BlockDisposition.VARY)
+    assert varied == ["axiotic"], f"varied classes are now {varied} — the independent variable changed"

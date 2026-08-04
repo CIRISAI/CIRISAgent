@@ -52,7 +52,26 @@ on:
         # failing a full run ten minutes in (#962). The run's own digest is
         # printed by the "Record the instrument" step below, and a bad manifest
         # is now rejected at staging with the value to paste.
-        description: 'Research-bound prompt overrides as INLINE JSON. Applied through the audited facility, so the run records having been manipulated. REQUIRED fields: manifest_version, experiment_id, condition, mode, residue_digest (see the Instrument summary, or `python3 -m ciris_engine.logic.utils.research_overrides digest`). Generate a complete strict manifest with `... research_overrides skeleton`. Blank = none.'
+        description: 'Research-bound prompt overrides as INLINE JSON. Applied through the audited facility, so the run records having been manipulated. REQUIRED fields: manifest_version, experiment_id, condition, mode, residue_digest (see the Instrument summary, or `python3 -m ciris_engine.logic.utils.research_overrides digest`). Generate a complete strict manifest with `... research_overrides skeleton`. Blank = none. TOO SMALL FOR A CAMPAIGN ARM — use overrides_manifest_path instead.'
+        default: ''
+        type: string
+      overrides_manifest_path:
+        # Inline JSON cannot carry a campaign arm. A strict manifest names all
+        # ~191 keys, and since #994 the localized ones are {locale: text} maps,
+        # so a single-locale baseline is ~167 KB and every locale added
+        # multiplies it. That exceeds the dispatch input limit outright — the
+        # researcher gets "Argument list too long" from their own shell before
+        # GitHub ever sees it. A committed manifest also gets what a pasted one
+        # never can: review, history, and a digest anyone can recompute.
+        description: 'Repo-relative path to a COMMITTED manifest, e.g. tools/research/manifests/torque-mvm-armB.json. Use this instead of overrides_manifest for anything larger than a toy: a strict single-locale manifest is ~167 KB and will not fit inline. Blank = none.'
+        default: ''
+        type: string
+      overrides_manifest_digest:
+        # Without this, "which manifest produced this cohort" is answered by a
+        # filename, and a filename is not evidence (FSD §15.3). With it, an arm
+        # is content-addressed: editing a committed manifest between dispatch
+        # and run changes the digest and the run refuses.
+        description: 'Expected sha256:... of the manifest above, from `python3 -m ciris_engine.logic.utils.research_overrides manifest-digest <path>`. STRONGLY RECOMMENDED: the run refuses on mismatch, so an arm cannot be edited in place after dispatch. Blank = skip the check (and forfeit the provenance claim).'
         default: ''
         type: string
 
@@ -182,7 +201,7 @@ jobs:
 
       - name: Stage the override manifest
         id: manifest
-        if: steps.secrets_check.outputs.have_secret == 'true' && inputs.overrides_manifest != ''
+        if: steps.secrets_check.outputs.have_secret == 'true' && (inputs.overrides_manifest != '' || inputs.overrides_manifest_path != '')
         env:
           # VIA env:, NEVER interpolated into the script body.
           #
@@ -199,14 +218,60 @@ jobs:
           # quoting the reference fixes the parsing and closes the injection in
           # one move, which is GitHub's own guidance.
           OVERRIDES_MANIFEST: ${{ inputs.overrides_manifest }}
+          #: Same discipline — a path and a digest are untrusted input too.
+          MANIFEST_PATH: ${{ inputs.overrides_manifest_path }}
+          MANIFEST_DIGEST: ${{ inputs.overrides_manifest_digest }}
           #: Same discipline for a step output — nothing reaches the script body
           #: through ${{ }}, so the rule stays one rule with no exceptions.
           RESIDUE: ${{ steps.instrument.outputs.residue }}
         run: |
           mkdir -p /tmp/research
-          printf '%s' "$OVERRIDES_MANIFEST" > /tmp/research/manifest.json
+
+          if [ -n "$MANIFEST_PATH" ] && [ -n "$OVERRIDES_MANIFEST" ]; then
+            echo "::error::give overrides_manifest OR overrides_manifest_path, not both — refusing to guess which one the run means"
+            exit 1
+          fi
+
+          if [ -n "$MANIFEST_PATH" ]; then
+            # Resolve INSIDE the checkout. A path escaping the workspace would
+            # read an arbitrary runner file into a prompt, so reject it before
+            # anything is copied.
+            case "$MANIFEST_PATH" in
+              /*|*..*) echo "::error::overrides_manifest_path must be repo-relative and must not traverse upward"; exit 1 ;;
+            esac
+            SRC="$GITHUB_WORKSPACE/$MANIFEST_PATH"
+            [ -f "$SRC" ] || { echo "::error::no manifest at $MANIFEST_PATH on ${{ github.sha }} — a manifest is referenced by COMMIT, so it must exist on the ref being run"; exit 1; }
+            cp "$SRC" /tmp/research/manifest.json
+            echo "manifest by reference: $MANIFEST_PATH @ ${{ github.sha }}"
+          else
+            printf '%s' "$OVERRIDES_MANIFEST" > /tmp/research/manifest.json
+          fi
+
           python3 -c "import json,sys;json.load(open('/tmp/research/manifest.json'))" \
-            || { echo '::error::overrides_manifest is not valid JSON'; exit 1; }
+            || { echo '::error::manifest is not valid JSON'; exit 1; }
+
+          # CONTENT-ADDRESS THE ARM (FSD §15.3).
+          #
+          # Named by path, two arms that differ are indistinguishable after the
+          # fact, and an arm edited in place between dispatch and run leaves no
+          # trace. The digest is over canonical content, so it is independent of
+          # filename and of key order, and a one-byte edit changes it.
+          ACTUAL=$(python3 -m ciris_engine.logic.utils.research_overrides manifest-digest /tmp/research/manifest.json)
+          echo "manifest_digest: $ACTUAL"
+          if [ -n "$MANIFEST_DIGEST" ] && [ "$ACTUAL" != "$MANIFEST_DIGEST" ]; then
+            echo "::error::manifest digest mismatch — declared $MANIFEST_DIGEST, actual $ACTUAL. The manifest changed since the digest was taken; this run would attribute a cohort to an arm it did not use."
+            exit 1
+          fi
+          [ -n "$MANIFEST_DIGEST" ] || echo "::warning::no overrides_manifest_digest declared — this cohort cannot be tied to a specific manifest by content, only by path"
+          {
+            echo "### Manifest"
+            echo ""
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| source | \`${MANIFEST_PATH:-inline}\` |"
+            echo "| digest | \`$ACTUAL\` |"
+            echo "| declared | \`${MANIFEST_DIGEST:-(none — provenance forfeited)}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
           # VALIDATE HERE, NOT TEN MINUTES FROM NOW.
           #

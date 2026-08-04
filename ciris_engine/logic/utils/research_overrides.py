@@ -1562,6 +1562,16 @@ if __name__ == "__main__":  # pragma: no cover - operator convenience
         ok, report = validate_manifest_file(sys.argv[2])
         print(report, file=sys.stdout if ok else sys.stderr)
         sys.exit(0 if ok else 1)
+    elif command == "manifest-digest":
+        # The value a dispatch pins so a committed manifest cannot be edited in
+        # place between dispatch and run. Content-addressed, path-independent:
+        # the same bytes under any filename give the same digest, and a one-byte
+        # edit gives a different one. §15.3.
+        if len(sys.argv) < 3:
+            print("usage: ... research_overrides manifest-digest <manifest.json>", file=sys.stderr)
+            sys.exit(2)
+        with open(sys.argv[2], encoding="utf-8") as _fh:
+            print(compute_manifest_digest(json.load(_fh)))
     elif command == "skeleton":
         print(json.dumps(strict_manifest_skeleton(), indent=2, ensure_ascii=False))
     elif command == "baseline":

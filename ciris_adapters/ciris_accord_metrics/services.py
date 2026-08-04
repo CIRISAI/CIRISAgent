@@ -66,6 +66,25 @@ from ciris_engine.schemas.services.authority_core import DeferralRequest
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
+
+
+def _conscience_guidance_mode_for_batch() -> str:
+    """#986: the #983 mode must appear in every shipped batch header.
+
+    Arm D's audit is trace-based; an env var that left no trace cannot be
+    audited. Fail-open to a sentinel rather than refusing to ship the batch:
+    the guidance BUILDER refuses invalid modes at use (conscience_mode util),
+    so an invalid value here means the process already failed loudly — but a
+    batch assembled in that window still records what it saw.
+    """
+    try:
+        from ciris_engine.logic.utils.conscience_mode import conscience_guidance_mode
+
+        return conscience_guidance_mode()
+    except ValueError:
+        import os as _os
+
+        return f"INVALID:{_os.environ.get('CIRIS_CONSCIENCE_GUIDANCE_MODE', '')}"
 # 2.9.6 crosses the JCS gate: the trace wire era the agent declares is
 # "3.0.0" — persist's signed-epoch verifier gate (`canon_version_for_trace_
 # schema`, src/verify/ed25519.rs) dispatches major >= 3 ⇒ JCS (RFC 8785),
@@ -1166,6 +1185,14 @@ class AccordMetricsService:
             "agent_id_hash": self._agent_id_hash or self._compute_instance_hash(),
             "task_id": event.get("task_id"),
             "trace_level": self._trace_level.value,
+            # #986: the #983 conscience-guidance mode must be auditable FROM THE
+            # ARTIFACT — arm D's void condition is trace-audit-based, and an env
+            # var that left no trace cannot be audited. Per-component because
+            # the batch envelope is substrate-assembled (LensClient exposes no
+            # metadata surface today; top-level field is a .155 ask). Every
+            # event in every batch and every CEG seal therefore carries which
+            # side of the CC 3.4.5 line the process ran on.
+            "conscience_guidance_mode": _conscience_guidance_mode_for_batch(),
             "data": self._extract_component_data(event_type, event),
         }
 

@@ -23,6 +23,7 @@ from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.types import JSONDict
 
 from .action_selection import ActionSelectionContextBuilder, ActionSelectionSpecialCases
+from .template_overrides import additive
 from .action_selection.faculty_integration import FacultyIntegration
 from .base_dma import BaseDMA
 
@@ -181,7 +182,14 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         return None
 
     def _build_main_user_content(self, input_data: EnhancedDMAInputs, agent_name: str) -> str:
-        """Build main user content, using template override if available."""
+        """Build the main user content.
+
+        A template's `user_prompt_template` is ADDITIVE (#996): it leads, and
+        the composed integration layer follows undiminished. It does not
+        replace `context_integration` — that field carries 22 live slots, so
+        replacing it would disable every summary, advisory and guidance block
+        those slots render.
+        """
         template_user_override = self.prompts.get("user_prompt_template") if isinstance(self.prompts, dict) else None
 
         if template_user_override:
@@ -191,11 +199,58 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
                 if input_data.permitted_actions
                 else "speak, task_complete"
             )
-            content = template_user_override.format(
+            framing = template_user_override.format(
                 thought_content=thought_content, available_actions=available_actions
             )
-            logger.debug(f"ASPDMA using template user_prompt_template override ({len(content)} chars)")
-            return content
+            # #996 — APPEND the composition, do not replace it.
+            #
+            # This branch used to `return framing`, leaving the builder call
+            # below unreachable whenever a template supplied a
+            # `user_prompt_template`. `build_main_user_content` is the SOLE
+            # assembler of the prior-DMA summaries (context_builder.py:189-192);
+            # the system message carries system_header/identity/snapshot and no
+            # DMA results, and `compose_messages` emits exactly four messages,
+            # so there is no third path. On `default` (Ally) that meant 131 B of
+            # framing in place of a 7,932 B composition — 98.3% absent, and what
+            # was absent was the entire integration layer:
+            #
+            #   Ethical PDMA summary                        axiotic
+            #   CSDMA plausibility                          empirical
+            #   DSDMA domain alignment                      empirical
+            #   IDMA k_eff/rho fragility                    epistemic
+            #   conscience retry guidance + bounce advisory epistemic
+            #   ponder notes                                epistemic
+            #   final-attempt advisory                      deontic
+            #   original task context                       contingent
+            #   context_integration                         structural
+            #
+            # Every faculty class the pipeline produces, dropped at once: the
+            # ethical evaluation ran, produced a result, and was discarded
+            # before the action was chosen. The four consciences still gate the
+            # output afterwards, so this was never an unguarded pipeline — but
+            # selection was made blind to the findings computed for it. And
+            # `default` is what a deployment gets by default.
+            #
+            # Sharpest single item is the deontic one: the final-attempt
+            # advisory fires at depth >= max_rounds - 1 to say PONDER is no
+            # longer available. It never rendered here, so the forced-action
+            # band was invisible to selection while ponder_handler still
+            # enforced it.
+            #
+            # Appended rather than slotted, per #993: a new {slot} would have to
+            # be added to 29 localized copies to render for anyone but English
+            # speakers, which is the #991/#992 failure mode. Framing first keeps
+            # the template's authored voice in the lead position. The thought and
+            # action list therefore appear twice — once in the persona framing,
+            # once in the structured composition; that duplication is accepted
+            # deliberately over losing either the voice or the integration layer.
+            composed = self.context_builder.build_main_user_content(input_data, agent_name)
+            logger.debug(
+                "ASPDMA template user_prompt_template override: %d chars framing + %d chars composition",
+                len(framing),
+                len(composed),
+            )
+            return additive(framing, composed)
 
         return self.context_builder.build_main_user_content(input_data, agent_name)
 
@@ -424,26 +479,35 @@ WRONG: "The expectation is reasonable..."
         if isinstance(self.prompts, dict):
             template_system_override = self.prompts.get("system_prompt")
 
-        if template_system_override:
-            # Use template system_prompt directly - contains critical format instructions
-            system_guidance = template_system_override
-            logger.debug(f"ASPDMA using template system_prompt override ({len(system_guidance)} chars)")
+        if isinstance(self.prompts, PromptCollection):
+            system_header = self.prompts.system_header or ""
+            decision_format = self.prompts.decision_format or ""
+            closing_reminder = self.prompts.closing_reminder or ""
         else:
-            # Fall back to standard prompt building from YAML
-            if isinstance(self.prompts, PromptCollection):
-                system_header = self.prompts.system_header or ""
-                decision_format = self.prompts.decision_format or ""
-                closing_reminder = self.prompts.closing_reminder or ""
-            else:
-                system_header = self.prompts.get("system_header", "")
-                decision_format = self.prompts.get("decision_format", "")
-                closing_reminder = self.prompts.get("closing_reminder", "")
+            system_header = self.prompts.get("system_header", "")
+            decision_format = self.prompts.get("decision_format", "")
+            closing_reminder = self.prompts.get("closing_reminder", "")
 
-            system_guidance = DEFAULT_TEMPLATE.format(
-                system_header=system_header,
-                decision_format=decision_format,
-                closing_reminder=closing_reminder,
+        # #996 — a `system_prompt` override replaces the `system_header` FIELD.
+        # It used to be returned in place of the whole DEFAULT_TEMPLATE render,
+        # which composes three fields — so replacing the header silently
+        # disabled `decision_format` and `closing_reminder` as well. Replacing
+        # one field must never disable another. `system_header` is static
+        # (asserted in test_template_override_policy_996.py), so it is fit to be
+        # replaced outright; the other two compose exactly as before.
+        if template_system_override:
+            logger.debug(
+                "ASPDMA template system_prompt override replaces system_header (%d chars); "
+                "decision_format and closing_reminder are unaffected",
+                len(template_system_override),
             )
+            system_header = template_system_override
+
+        system_guidance = DEFAULT_TEMPLATE.format(
+            system_header=system_header,
+            decision_format=decision_format,
+            closing_reminder=closing_reminder,
+        )
 
         # Extract conscience_guidance from processing_context for retry format enforcement
         conscience_guidance_block = self._build_conscience_guidance_block(processing_context)

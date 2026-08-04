@@ -18,13 +18,69 @@ arms:
 blocks:
   # Every mixed block needs an explicit disposition (§10.2.1 refusal by
   # default). Nothing is varied here, so holding them accepts no confound.
+  #
+  # This list is EXACTLY the #997 EXPECTED_MIXED ratchet plus the five
+  # FSD-declared irreducible worked exemplars (§10.2.1 [T-5a]) — down from the
+  # pre-#997 world where most of the prompt surface was mixed and the bare
+  # `system:` / `user:` suffixes swallowed it. Keys are `<component>.<field>`
+  # because a block is now a FIELD; `_regime_entry_for` resolves them by the
+  # suffix after the step, so one entry covers every step that composes it.
+  #
+  # `language_guidance` (bare) is now the UNSPLIT scalar only — the 24 locales
+  # whose prose does not partition on the English boundaries. en/es/fr/it/pt
+  # compose 29 `language_guidance.<part>` blocks instead, of which 24 are
+  # single-class and need no entry here.
+  # #997 correction: the DSDMA identity+norms preamble. Was DEONTIC single-class
+  # on a merge-up argument that is invalid when the classes DISAGREE about
+  # disposition — it carries both "informed consent required" (deontic, hold)
+  # and "client interest over personal gain" / "patient welfare paramount"
+  # (axiotic, VARY). Held as deontic it held the INDEPENDENT VARIABLE inside a
+  # block believed to be held for safety reasons. Nothing is varied in this
+  # regime, so holding accepts no confound; a campaign varying axiotic must
+  # write `confound_accepted: axiotic` and mean it.
+  system.head:
+    disposition: hold
+    contaminant: [deontic, axiotic, ontological, procedural, empirical]
   language_guidance:
     disposition: hold
     contaminant: [axiotic, deontic, empirical]
-  aspdma.accord:
+  # The five worked exemplars. FSD §10.2.1 [T-5a]: verdict, register and schema
+  # in the same tokens — the co-occurrence IS the demonstration, so the honest
+  # options are hold-verbatim or replace-whole-exemplar, never split. Nothing is
+  # varied in this regime, so holding them accepts no confound; a campaign
+  # regime that varies axiotic must write `confound_accepted: axiotic` and mean it.
+  language_guidance.13_exemplar_speak_response:
     disposition: hold
-    contaminant: [axiotic, contingent]
-  system: {disposition: hold}
-  user: {disposition: hold}
+    contaminant: [pragmatic, axiotic, deontic, empirical]
+  language_guidance.14_exemplar_register_pressure:
+    disposition: hold
+    contaminant: [pragmatic, axiotic]
+  language_guidance.16_exemplar_false_reassurance:
+    disposition: hold
+    contaminant: [deontic, pragmatic, axiotic]
+  language_guidance.23_ratification_templates:
+    disposition: hold
+    contaminant: [pragmatic, epistemic, ontological, axiotic]
+  language_guidance.25_exemplar_cross_cluster:
+    disposition: hold
+    contaminant: [deontic, epistemic, empirical, axiotic]
+  pdma_ethical.system_guidance_header:
+    disposition: hold
+    contaminant: [procedural, axiotic, structural]
+  action_selection_pdma.system_message:
+    disposition: hold
+    contaminant: [ontological, axiotic, procedural, pragmatic, contingent]
+  action_selection_pdma.context_integration.slots:
+    disposition: hold
+    contaminant: [procedural, axiotic, deontic, contingent]
+  coherence_conscience.system_prompt:
+    disposition: hold
+    contaminant: [axiotic, deontic, epistemic, ontological, procedural]
+  epistemic_humility_conscience.system_prompt:
+    disposition: hold
+    contaminant: [axiotic, deontic, epistemic, ontological, procedural]
+  optimization_veto_conscience.system_prompt:
+    disposition: hold
+    contaminant: [axiotic, deontic, epistemic, empirical, procedural, structural]
 pins:
   residue_digest: "live"

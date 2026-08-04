@@ -12,7 +12,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -114,13 +114,24 @@ def _apply_research_overrides(template_name: str, collection: PromptCollection) 
         name, _, field = key.partition(".")
         if name != template_name:
             continue
-        if not hasattr(collection, field):
-            raise RuntimeError(
-                f"research override {key!r} names a PromptCollection field that does "
-                f"not exist. Manifest validation should have caught this — the key "
-                f"space and the schema have diverged."
-            )
-        setattr(collection, field, value)
+        if hasattr(collection, field):
+            setattr(collection, field, value)
+        else:
+            # #995 P1-6 — a live YAML key that is not a declared
+            # PromptCollection field. `load_prompt_template` routes unknown keys
+            # into `custom_prompts`, and `get_prompt()` reads that bucket, so
+            # such a field DOES reach a prompt: `dsaspdma.taxonomy_text` is
+            # 3,273 B of rights/needs deferral taxonomy steering DEFER
+            # classification, and `tsaspdma.tool_correction_section` is 899 B
+            # localized in 28 bundles.
+            #
+            # This used to raise. Raising made the key uncoverable rather than
+            # wrong — the operator could not override operative doctrine at all.
+            # Writing into the same bucket the loader and reader already use
+            # makes every live field overridable without a schema entry per key,
+            # which is the structural fix; R1 still rejects keys outside the
+            # scanned key space, so a genuinely bogus key is refused at load.
+            collection.custom_prompts[field] = value
         applied.append(field)
 
     if applied:
@@ -130,6 +141,47 @@ def _apply_research_overrides(template_name: str, collection: PromptCollection) 
             sorted(applied),
         )
     return collection
+
+
+def apply_research_overrides_to_mapping(template_name: str, prompts: Dict[str, Any]) -> Dict[str, Any]:
+    """Overlay the ``dma_prompt`` namespace onto a RAW YAML MAPPING (#989).
+
+    ``BaseDMA._load_prompts`` reads prompt YAML with ``yaml.safe_load`` and
+    keeps a plain dict on ``self.prompts`` — it never constructs a
+    ``PromptCollection``, so :func:`_apply_research_overrides` (which
+    ``setattr``s onto a model) could not serve it. That mismatch, not a policy
+    decision, is why thirteen fields were override-immune while the loader
+    logged successful replacements for their siblings.
+
+    Same manifest, same keys, same fail-loud posture; only the container
+    differs. Returns the mapping unchanged when the research gate is closed,
+    so production composition is byte-identical.
+    """
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+    manifest = get_active_overrides()
+    if manifest is None:
+        return prompts
+
+    applied = []
+    for key, value in manifest.overrides.dma_prompt.items():
+        name, _, field = key.partition(".")
+        if name != template_name:
+            continue
+        # No hasattr() guard here: a raw mapping has no schema to check
+        # against, and R1 already rejected at manifest load any key whose
+        # field the base template does not define. Silently creating an
+        # unknown key would be the same lie in the other direction.
+        prompts[field] = value
+        applied.append(field)
+
+    if applied:
+        logger.warning(
+            "[RESEARCH-OVERRIDES] DMA mapping %s: replaced %s",
+            template_name,
+            sorted(applied),
+        )
+    return prompts
 
 
 class DMAPromptLoader:
@@ -322,6 +374,10 @@ class DMAPromptLoader:
                 reasoning_csdma_guidance=template_data.get("reasoning_csdma_guidance"),
                 final_ponder_advisory=template_data.get("final_ponder_advisory"),
                 closing_reminder=template_data.get("closing_reminder"),
+                tool_selection_guidance=template_data.get("tool_selection_guidance"),
+                csdma_ambiguity_alignment_example=template_data.get("csdma_ambiguity_alignment_example"),
+                taxonomy_text=template_data.get("taxonomy_text"),
+                tool_correction_section=template_data.get("tool_correction_section"),
                 context_integration=template_data.get("context_integration"),
                 accord_mode=self._normalize_accord_mode(template_data.get("accord_header", "full")),
                 supports_agent_modes=bool(template_data.get("supports_agent_modes", True)),
@@ -414,6 +470,37 @@ class DMAPromptLoader:
                 safe_format(
                     template_data.response_guidance,
                     source=f"{component}.response_guidance[{lang}]",
+                    **kwargs,
+                )
+            )
+
+        # Add the closing reminder LAST — #990.
+        #
+        # This composer is an allowlist: it renders six fields and silently
+        # drops every other populated key on the collection. `closing_reminder`
+        # was never one of the six. `git log -S "template_data.closing_reminder"`
+        # over this file returns zero commits — it has never been composed, in
+        # any release, by any DMA that routes through here.
+        #
+        # Two DMAs hand-compose their own (`action_selection_pdma`, `dsaspdma`),
+        # which is why the field looked live. The two that route through this
+        # method did not: `idma.closing_reminder` — the propaganda-pattern
+        # final check that forces k_eff = 1.0 / phase = "rigidity" /
+        # fragility_flag = TRUE on contested claims — has been inert since
+        # v2.6.0, and `tsaspdma.closing_reminder` since v1.9.5. Both were
+        # faithfully translated into 29 locales the whole time, which is
+        # precisely why nobody caught it: 29 translated copies read as proof
+        # that a block ships.
+        #
+        # Last is the correct position: a closing reminder is the final
+        # instruction the model reads, and it is where both hand-composing
+        # DMAs already put theirs (action_selection_pdma.py:43,
+        # dsaspdma.py:219).
+        if template_data.closing_reminder:
+            system_parts.append(
+                safe_format(
+                    template_data.closing_reminder,
+                    source=f"{component}.closing_reminder[{lang}]",
                     **kwargs,
                 )
             )

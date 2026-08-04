@@ -6,7 +6,6 @@ duplicate string literals and improve maintainability.
 """
 
 # Error Messages
-ERROR_ADAPTER_MANAGER_NOT_AVAILABLE = "Adapter manager not available"
 ERROR_AUDIT_SERVICE_NOT_AVAILABLE = "Audit service not available"
 ERROR_CONFIG_SERVICE_NOT_AVAILABLE = "Config service not available"
 ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE = "Runtime control service not available"

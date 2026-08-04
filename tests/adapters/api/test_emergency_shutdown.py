@@ -16,13 +16,38 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.routes.emergency import (
-    ROOT_WA_AUTHORITY_KEYS,
     emergency_shutdown,
     is_authorized_key,
     verify_signature,
     verify_timestamp,
 )
 from ciris_engine.schemas.services.shutdown import EmergencyCommandType, EmergencyShutdownStatus, WASignedCommand
+
+# #999 — the route no longer carries its own key list; authority comes from the
+# accord verifier, the same trust root the stego kill switch uses. These tests
+# want "a key the endpoint will accept", which is now a question for the
+# verifier rather than a module constant.
+#
+# Worth knowing why the constant went: its single entry was
+# 7Bp-e4M4M-eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk, commented "Root WA key from
+# ~/.ciris/wa_keys/root_wa_metadata.json" — and the steward's actual key in that
+# file is QK0ZQ9FhWKMtP8YL3wXU_n0cmqYyV3HoDi-AIJgSHi0. The endpoint rejected the
+# person holding the key while a comment asserted otherwise. So these tests were
+# passing against a key nobody holds.
+def _authorized_key() -> str:
+    from ciris_engine.logic.accord.verifier import AccordVerifier
+    import base64
+
+    verifier = AccordVerifier()
+    authorities = verifier.list_authorities()
+    assert authorities, "no accord authorities loaded — the kill switch would SIGKILL at boot"
+    raw = verifier.public_key_for(authorities[0]["wa_id"])
+    assert raw is not None
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+ROOT_WA_AUTHORITY_KEYS = [_authorized_key()]
+
 
 
 class TestEmergencyShutdownAPI:

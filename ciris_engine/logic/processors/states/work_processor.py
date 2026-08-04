@@ -152,11 +152,8 @@ class WorkProcessor(BaseProcessor):
                 self.idle_rounds = 0
                 round_metrics["was_idle"] = False
             else:
-                # Handle idle state - DISABLED
+                # Idle mode is disabled - no automatic transitions.
                 round_metrics["was_idle"] = True
-                # Idle mode disabled - no automatic transitions
-                # self.idle_rounds += 1
-                # await self._handle_idle_state(round_number)
 
             # Update metrics
             self.metrics.rounds_completed += 1
@@ -264,18 +261,6 @@ class WorkProcessor(BaseProcessor):
         except Exception as e:
             logger.error(f"Error dispatching action for thought {thought_id}: {e}")
             self._mark_thought_failed(thought_id, f"Dispatch failed: {str(e)}")
-
-    def _handle_idle_state(self, round_number: int) -> None:
-        """Handle idle state when no thoughts are pending."""
-        logger.info(f"Round {round_number}: No thoughts to process (idle rounds: {self.idle_rounds})")
-
-        # Create job thought if needed
-        created_job = self.thought_manager.handle_idle_state(round_number)
-
-        if created_job:
-            logger.info("Created job thought for idle monitoring")
-        else:
-            logger.debug("No job thought needed")
 
     def _mark_thought_failed(self, thought_id: str, error: str) -> None:
         """Mark a thought as failed."""

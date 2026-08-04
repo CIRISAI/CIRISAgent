@@ -28,7 +28,6 @@ from ..services.auth_service import (
 from ._common import (
     RESPONSES_400,
     RESPONSES_400_404_500,
-    RESPONSES_401_403_404_500,
     RESPONSES_403,
     RESPONSES_404,
     RESPONSES_404_500,

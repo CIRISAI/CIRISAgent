@@ -66,6 +66,23 @@ on:
       - 'tools/qa_runner/modules/_module_metadata.py'
       - 'tools/safety_battery_migrate.py'
       - 'ciris_engine/data/localized/**'
+      # #990 — what the agent is INSTRUCTED to do is as much a safety input as
+      # the battery itself. Three blocks turned out never to have been composed
+      # (idma's propaganda-pattern check, dsdma's LANGUAGE RULES, tsaspdma's
+      # closing reminder), and no CI signal existed that would have noticed
+      # them appearing or disappearing. A change to prompt composition is
+      # exactly the change class this battery exists to validate, so it now
+      # triggers here.
+      #
+      # Cost note: GitHub evaluates `paths` cumulatively over a PR, not
+      # per-push — once one commit in a PR has matched, every later push to
+      # that PR re-triggers this workflow, live LLM calls included. Cancel
+      # superseded runs (configured below) rather than expecting the filter to
+      # narrow again.
+      - 'ciris_engine/logic/dma/prompts/**'
+      - 'ciris_engine/logic/dma/prompt_loader.py'
+      - 'ciris_engine/logic/dma/dsdma_base.py'
+      - 'ciris_engine/logic/dma/action_selection/context_builder.py'
       # Note: the spec the loop consumes (BatteryManifest, criteria.json,
       # Verdict shape) lives at github.com/CIRISAI/CIRISNodeCore.
       # Spec changes trigger this workflow only via the cell artifacts

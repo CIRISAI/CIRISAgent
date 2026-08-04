@@ -1369,3 +1369,109 @@ not debugging.
     threads one channel_id through the arc — `safety_battery.py:90-93`); a
     stateless per-question runner changes the arc's meaning and is not the
     same instrument [M-V2]. Built against the same battery scorer.
+
+---
+
+## 15. Stated limitations (2.9.10)
+
+Things known to be true of the instrument as shipped. Each is a limitation of
+what a campaign may *claim*, not merely a to-do.
+
+### 15.1 A composed prompt is not the same object as a populated YAML key  [#990]
+
+Until 2.9.10 the coverage arithmetic in §1.3 counted **populated keys**, on the
+assumption that a key present in a prompt YAML and loaded onto a
+`PromptCollection` is a key the model reads. That assumption was false.
+`DMAPromptLoader.get_system_message()` is an allowlist of six fields and drops
+every other populated key silently; `BaseDSDMA` never used it at all. Three
+blocks were authored, localized into 29 languages, and never composed —
+`idma.closing_reminder` (the propaganda-pattern check) since v2.6.0,
+`dsdma_base.response_format` (the LANGUAGE RULES block) since v2.3.1,
+`tsaspdma.closing_reminder` since v1.9.5 — plus three more in
+`action_selection_pdma` including the tool-hallucination guard.
+
+Consequence for the *research* facility, which is why it belongs here: an
+override that replaces an uncomposed key applies cleanly, logs a successful
+replacement, and changes nothing the model sees. R2 totality over such a key is
+satisfied and meaningless. **Coverage must be measured over composed bytes, not
+declared keys** — the §12 ablation gate already is; the §1.3 arithmetic now
+inherits `tests/.../test_prompt_key_consumption_990.py` as its floor.
+
+### 15.2 A marker probe's negative result is uninterpretable without controls
+
+"Key replaced with a marker, zero composed blocks moved" and "the harness
+silently did nothing" are the same observation. This is not a hypothetical: an
+early 29-locale sweep returned zero for **every** key including known-live ones,
+because an active research manifest makes the conscience steps refuse an English
+fallback for `am`. Any probe run that reports deadness MUST carry live sibling
+controls through the identical path in the same sweep, and the evidence pack
+MUST record them (`evidence/prompt_key_consumption_990.tsv`). A dark-key count
+published without controls is not evidence.
+
+### 15.3 The manifest is identified by path, not by content
+
+`ComposeDumpMeta.manifest` and `trace_fields()["research_manifest"]` both carry a
+filesystem path. `residue_digest` content-pins the surface overrides do *not*
+cover, `fragment_count` pins scanner strength, and `sign_object` pins the output
+bytes — but the input that **defines the arm** is named by a filename. Editing a
+manifest in place between arms leaves both dumps claiming the same manifest,
+with the same residue digest and valid signatures. The Phase-1 gate catches the
+difference indirectly, by diffing composed blocks; the artifact set cannot
+answer "which manifest produced this?" after the fact. Until a
+`manifest_digest` (sha256 over `jcs_canonicalize`d bytes, per the 2.9.6 JCS cut)
+is carried and gate-asserted, **no campaign may claim content-addressed
+provenance of its independent variable.**
+
+### 15.4 Carried forward
+
+- **#987** — h3ere holds three distinct axiotic byte strings against one
+  `inject: {axiotic: <corpus>}`; a varied class must be shown to cover every
+  source hash.
+- **#988** — the text tier is unsatisfiable as specified: `en` has no U-row
+  instrument.
+- **#991** — `tsaspdma` builds two blocks as hardcoded English in Python,
+  shadowing 29 localized templates. Every user receives English. An override of
+  the localized key applies and is then discarded.
+- **#992** — four locales carry a LANGUAGE RULES key with no base counterpart
+  and no schema field. Three translators independently concluded the base was
+  missing a language-rules block; §15.1 shows they were right.
+- `action_selection_pdma.final_ponder_advisory` remains outside the dump's
+  reach — a fixture gap (it renders only at
+  `current_thought_depth >= max_rounds - 1`), not a composer defect. It is
+  therefore unverified by the gate, and a regime must not hold it.
+
+### 15.5 The taxonomy split is a five-locale result  [#997]
+
+`prompts.language_guidance` — the largest cross-cutting contaminant, composed
+into every DMA step — is split into single-class parts in **five** locales
+(`en`, `es`, `fr`, `it`, `pt`) and left whole in the other **24**, including
+every Tier-0 locale.
+
+The five are exactly those whose line-type fingerprint matches English across
+all 123 lines. Nothing mechanical transfers to the rest: `my` carries no section
+markers, `hi` numbers 1-12, `uk` renumbers to 6a-6d, `fa`/`ur` open at section
+4, bullet counts run 5 to 50. And byte-identical reassembly — the check that
+makes the English split safe — **does not detect a cut in the wrong place**: the
+pieces rejoin perfectly while the text is silently mis-classed. Each remaining
+locale therefore needs a native-language semantic read, which is what makes
+completing all 29 prohibitive here.
+
+**This bounds a campaign; it does not block one.** In an unsplit locale the
+block stays `mixed` and therefore REFUSES, which is the correct conservative
+behaviour — the gate declines to measure what it cannot disposition. A TORQUE
+series runs. What it cannot do is carry a *measurable axiotic contrast* in an
+unsplit locale: such an arm must either run in a split locale or declare the
+confound explicitly under §10.2.1.
+
+Two consequences a paper must state rather than discover:
+
+1. **The measurable share is locale-dependent and is worst where it matters
+   most.** Tier-0 locales carry ~1.8x English's guidance bytes (`am` 25,338 B
+   vs `en` 13,694 B) and 100% of it is currently unmeasurable. Reporting an
+   `en` coverage figure as the system's coverage would overstate it for the
+   populations the mission prioritises.
+2. **Coverage went first to the locales that needed it least**, because the
+   selection criterion was structural tractability, not need. That ordering is
+   an artifact of method, not a judgement about importance, and closing the
+   Tier-0 gap is tracked as RATCHET work — per-locale, as required by a given
+   campaign, rather than as a precondition for the series.

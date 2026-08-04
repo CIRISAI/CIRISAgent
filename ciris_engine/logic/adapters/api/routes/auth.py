@@ -1756,63 +1756,27 @@ def _log_email_verification_warning(token_info: Dict[str, Any]) -> None:
     email_verified = token_info.get("email_verified")
     if email_verified is not None and str(email_verified).lower() not in ("true", "1"):
         logger.warning(f"[NativeAuth] Email not verified for user {token_info.get('sub')}")
+def _validate_all_token_claims(token_info: Dict[str, Any], allowed_audiences: Optional[Set[str]]) -> None:
+    """Validate all required token claims (audience, issuer, expiry, sub)."""
+    # SECURITY: Validate all token claims
+    _validate_token_audience(token_info.get("aud"), allowed_audiences)
+    _validate_token_issuer(token_info.get("iss"))
+    _validate_token_expiry(token_info.get("exp"))
+    _log_email_verification_warning(token_info)
+    _validate_token_sub_claim(token_info.get("sub"))
 
 
-def _decode_google_jwt_locally(id_token: str) -> Dict[str, Optional[str]]:
-    """
-    Decode a Google ID token locally without calling Google's API.
+def _extract_user_info_from_token(token_info: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    """Extract user information from validated token."""
+    sub = token_info.get("sub")
+    logger.debug("[NativeAuth] Token verified successfully")
 
-    This is a fallback for on-device mode when the Google tokeninfo API
-    is unreachable. The token is trusted because it came from Google Sign-In
-    SDK running on the device, which already verified it cryptographically.
-
-    WARNING: This does NOT verify the token signature. Only use this as a
-    fallback when the token is known to come from the native Google SDK.
-    """
-    import base64
-    import json
-    import time
-
-    logger.debug("[NativeAuth] Decoding Google JWT locally (fallback mode)...")
-
-    try:
-        # JWT has 3 parts: header.payload.signature
-        parts = id_token.split(".")
-        if len(parts) != 3:
-            raise ValueError(f"Invalid JWT format: expected 3 parts, got {len(parts)}")
-
-        # Decode the payload (second part) - use URL-safe base64
-        payload_b64 = parts[1]
-        # Add padding if needed
-        padding = 4 - len(payload_b64) % 4
-        if padding != 4:
-            payload_b64 += "=" * padding
-
-        payload_bytes = base64.urlsafe_b64decode(payload_b64)
-        payload = json.loads(payload_bytes.decode("utf-8"))
-
-        logger.debug("[NativeAuth] Local decode successful")
-
-        # Basic validation
-        exp = payload.get("exp")
-        if exp and int(exp) < time.time():
-            raise ValueError("Token has expired")
-
-        iss = payload.get("iss")
-        if iss not in ("accounts.google.com", "https://accounts.google.com"):
-            raise ValueError(f"Invalid issuer: {iss}")
-
-        # Extract user info
-        return {
-            "external_id": payload.get("sub"),
-            "email": payload.get("email"),
-            "name": payload.get("name"),
-            "picture": payload.get("picture"),
-        }
-
-    except Exception as e:
-        logger.error(f"[NativeAuth] Local JWT decode failed: {type(e).__name__}: {e}")
-        raise
+    return {
+        "external_id": sub,
+        "email": token_info.get("email"),
+        "name": token_info.get("name"),
+        "picture": token_info.get("picture"),
+    }
 
 
 async def _call_google_tokeninfo_api(id_token: str) -> Dict[str, Any]:
@@ -1837,29 +1801,6 @@ async def _call_google_tokeninfo_api(id_token: str) -> Dict[str, Any]:
 
             token_info: Dict[str, Any] = await response.json()
             return token_info
-
-
-def _validate_all_token_claims(token_info: Dict[str, Any], allowed_audiences: Optional[Set[str]]) -> None:
-    """Validate all required token claims (audience, issuer, expiry, sub)."""
-    # SECURITY: Validate all token claims
-    _validate_token_audience(token_info.get("aud"), allowed_audiences)
-    _validate_token_issuer(token_info.get("iss"))
-    _validate_token_expiry(token_info.get("exp"))
-    _log_email_verification_warning(token_info)
-    _validate_token_sub_claim(token_info.get("sub"))
-
-
-def _extract_user_info_from_token(token_info: Dict[str, Any]) -> Dict[str, Optional[str]]:
-    """Extract user information from validated token."""
-    sub = token_info.get("sub")
-    logger.debug("[NativeAuth] Token verified successfully")
-
-    return {
-        "external_id": sub,
-        "email": token_info.get("email"),
-        "name": token_info.get("name"),
-        "picture": token_info.get("picture"),
-    }
 
 
 async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
@@ -1900,19 +1841,31 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     except HTTPException:
         raise
     except asyncio.TimeoutError:
-        logger.warning("[NativeAuth] Google tokeninfo API timed out")
-        # On-device fallback: if we can't reach Google, decode the JWT locally
-        # This is safe because the token came from Google Sign-In SDK on the device
-        # which already verified it cryptographically
-        logger.debug("[NativeAuth] Attempting local JWT decode fallback for on-device mode...")
-        try:
-            return _decode_google_jwt_locally(id_token)
-        except Exception as fallback_error:
-            logger.error(f"[NativeAuth] Local JWT fallback also failed: {fallback_error}")
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="Google verification service timed out. Please try again.",
-            )
+        # FAIL CLOSED (#999). This used to fall back to _decode_google_jwt_locally,
+        # which does NOT verify the token signature — its own docstring said so.
+        #
+        # The justification was "the token came from the Google Sign-In SDK on the
+        # device, which already verified it cryptographically". That is transport
+        # provenance, and HTTP cannot establish it: this is a public endpoint, and
+        # anyone can POST a JWT. An attacker who can make the outbound call to
+        # oauth2.googleapis.com time out — a hostile network, a DNS hold, a
+        # sufficiently slow link — turned a FORGED id_token into a real CIRIS
+        # session, because the fallback checked only `exp` and `iss` read out of
+        # the unverified payload.
+        #
+        # A timeout is an availability failure. Converting it into an
+        # authentication decision is the bug: the one thing an auth control may
+        # never do is become more permissive when a dependency is unreachable.
+        #
+        # Offline sign-in is a real capability and this removes it. Restoring it
+        # correctly means verifying the signature against CACHED Google JWKS
+        # (CIRISAgent#999) — offline, but still verified. Not by trusting the
+        # token.
+        logger.warning("[NativeAuth] Google tokeninfo API timed out — refusing (no unverified fallback)")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Google verification service timed out. Please try again.",
+        )
     except aiohttp.ClientError as e:
         logger.error(f"[NativeAuth] Network error calling Google API: {type(e).__name__}: {e}")
         raise HTTPException(

@@ -971,13 +971,9 @@ class ThoughtProcessor(
         Unknown values refuse loudly (pinned-manifest discipline — a regime
         that believes it closed this channel and did not must not run).
         """
-        mode = os.environ.get("CIRIS_CONSCIENCE_GUIDANCE_MODE", "full")
-        if mode not in ("full", "qualitative"):
-            raise ValueError(
-                f"CIRIS_CONSCIENCE_GUIDANCE_MODE must be 'full' or 'qualitative', got {mode!r} — "
-                f"refusing to guess which side of the CC 3.4.5 line this run is on"
-            )
-        return mode
+        from ciris_engine.logic.utils.conscience_mode import conscience_guidance_mode
+
+        return conscience_guidance_mode()
 
     def _build_structured_shard_detail(
         self, conscience_result: ConscienceApplicationResult, language: str = "en"

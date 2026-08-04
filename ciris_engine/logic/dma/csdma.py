@@ -22,6 +22,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader
+from .template_overrides import additive
 
 logger = logging.getLogger(__name__)
 
@@ -103,9 +104,15 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
     ) -> List[JSONDict]:
         """Assemble prompt messages using canonical formatting utilities and prompt loader.
 
-        Template overrides (from agent template's csdma_overrides) take precedence:
-        - system_prompt: Overrides the system message from YAML
-        - user_prompt_template: Overrides the user message from YAML
+        Template overrides (from the agent template's `csdma_overrides`) are
+        FIELD-scoped — see `dma/template_overrides.py`. Replacing one field must
+        never disable another (#996):
+
+        - `system_prompt` REPLACES the `system_guidance_header` field. The other
+          five fields `get_system_message` composes are unaffected.
+        - `user_prompt_template` is ADDITIVE: it leads, and the composed user
+          message follows undiminished. `context_integration` carries live slots
+          (`context_summary`), so it is not fit for replacement.
         """
         messages: List[JSONDict] = []
 
@@ -122,14 +129,23 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         if isinstance(self.prompts, dict):
             template_system_override = self.prompts.get("system_prompt")
 
+        # #996 — a `system_prompt` override replaces the `system_guidance_header`
+        # FIELD, not the composed system message. It used to return the override
+        # in place of get_system_message(), which composes six fields — so
+        # replacing the header also disabled domain_principles, evaluation_steps,
+        # evaluation_criteria, response_format and response_guidance. Replacing
+        # one field must never disable another.
+        template_data = self.prompt_template_data
         if template_system_override:
-            # Use template override directly - these contain critical format instructions
-            system_message = template_system_override
-            logger.debug(f"CSDMA using template system_prompt override ({len(system_message)} chars)")
-        else:
-            system_message = self.prompt_loader.get_system_message(
-                self.prompt_template_data, context_summary=context_summary, original_thought_content=thought_content
+            template_data = template_data.model_copy(update={"system_guidance_header": template_system_override})
+            logger.debug(
+                "CSDMA template system_prompt override replaces system_guidance_header (%d chars); "
+                "the other composed fields are unaffected",
+                len(template_system_override),
             )
+        system_message = self.prompt_loader.get_system_message(
+            template_data, context_summary=context_summary, original_thought_content=thought_content
+        )
 
         formatted_system = format_system_prompt_blocks(
             identity_context_block,
@@ -146,24 +162,33 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         if isinstance(self.prompts, dict):
             template_user_override = self.prompts.get("user_prompt_template")
 
+        user_message_text = self.prompt_loader.get_user_message(
+            self.prompt_template_data, context_summary=context_summary, original_thought_content=thought_content
+        )
+
+        if not user_message_text or user_message_text == f"Thought to evaluate: {thought_content}":
+            user_message_text = format_user_prompt_blocks(
+                format_parent_task_chain([]),
+                format_thoughts_chain([{"content": thought_content}]),
+                None,
+            )
+
+        # #996 — ADDITIVE. `context_integration` carries live slots
+        # (`context_summary`, `original_thought_content`), so it is not fit for
+        # replacement: substituting a template's text for it dropped
+        # `context_summary` outright. The authored framing leads, the
+        # composition follows undiminished.
         if template_user_override:
-            # Use template override with thought_content substitution
-            user_message_text = template_user_override.format(
+            framing = template_user_override.format(
                 thought_content=thought_content,
                 context_summary=context_summary,
             )
-            logger.debug(f"CSDMA using template user_prompt_template override ({len(user_message_text)} chars)")
-        else:
-            user_message_text = self.prompt_loader.get_user_message(
-                self.prompt_template_data, context_summary=context_summary, original_thought_content=thought_content
+            logger.debug(
+                "CSDMA template user_prompt_template override: %d chars framing + %d chars composition",
+                len(framing),
+                len(user_message_text),
             )
-
-            if not user_message_text or user_message_text == f"Thought to evaluate: {thought_content}":
-                user_message_text = format_user_prompt_blocks(
-                    format_parent_task_chain([]),
-                    format_thoughts_chain([{"content": thought_content}]),
-                    None,
-                )
+            user_message_text = additive(framing, user_message_text)
 
         # Build multimodal content if images are present
         images_list = images or []

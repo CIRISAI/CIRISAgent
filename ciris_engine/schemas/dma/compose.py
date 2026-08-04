@@ -91,7 +91,14 @@ class ComposedBlock(BaseModel):
     step: str = Field(..., description="Pipeline step (pdma|csdma|idma|dsdma|aspdma|dsaspdma|tsaspdma|...)")
     locale: str = Field(..., description="Locale the composition ran under (CIRIS_PREFERRED_LANGUAGE)")
     arm: str = Field(..., description="Regime arm name this dump was composed under")
-    seq: int = Field(..., ge=0, description="Position of the block in the composed message list")
+    seq: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Running block index within (locale, step). Since #997 a composed message yields one row "
+            "per FIELD, so this is no longer the message index"
+        ),
+    )
     role: str = Field(..., description="Chat role of the message the block was emitted as")
     block_class: BlockClass = Field(..., alias="class", description="§10.2 class (or 'mixed', §10.2.1)")
     disposition: BlockDisposition = Field(..., description="Class-default disposition (see BlockDisposition doc)")
@@ -116,6 +123,14 @@ class ComposedBlock(BaseModel):
         default_factory=list,
         description="Adjunct token scan hits (CIRIS / M-1 / principle names) — cheap adjunct, never the mechanism",
     )
+    parent_block_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "For a row that is one FIELD of a composed message (#997), the block_id of the message it "
+            "was split out of; None when the row IS the whole message. Makes the dump self-describing: "
+            "group by parent and the pieces reassemble to the bytes the model received"
+        ),
+    )
 
 
 class ComposeDumpMeta(BaseModel):
@@ -133,18 +148,32 @@ class ComposeDumpMeta(BaseModel):
     kind: str = Field(default="compose_dump_meta")
     arm: str = Field(..., description="Regime arm name")
     manifest: Optional[str] = Field(default=None, description="Override manifest path the dump composed under")
+    manifest_digest: Optional[str] = Field(
+        default=None,
+        description=(
+            "sha256 over the JCS-canonical manifest content (#999 / FSD §15.3). The path above "
+            "is NOT provenance: editing a manifest in place between arms left both dumps naming "
+            "the same file, with the same residue_digest and valid signatures, and nothing could "
+            "tell them apart afterwards. This pins the independent variable by content."
+        ),
+    )
     locales: List[str] = Field(..., description="Locales composed, in composition order")
     steps: List[str] = Field(..., description="Steps composed per locale, in composition order")
     residue_digest: str = Field(..., description="compute_residue_digest() of the composing tree")
     fragment_count: int = Field(..., ge=0, description="Residue fragments the scan matched against")
+    conscience_guidance_mode: str = Field(
+        default="full",
+        description="#983 mode at compose time (#986: arm assignment must be auditable from artifacts, never from operator intention)",
+    )
 
 
 class RegimeArm(BaseModel):
-    """Phase-1 subset of a §10.3 arm declaration.
+    """A §10.3 arm declaration.
 
-    Only what the gate needs: which harness, and which classes the arm varies.
-    The full regime manifest v2 schema (tiered DV, repeats, holds, kills) is
-    FSD §14 step 9 and does NOT live here.
+    Shared by the Phase-1 gate view (``GateRegime``) and the full v2 manifest
+    (``ciris_engine.schemas.research.regime.ExperimentalRegimeV2``): which
+    harness, and which classes the arm varies. The rest of v2 (tiered DV,
+    repeats, holds, kills) lives in the research module, keyed on these arms.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -153,6 +182,14 @@ class RegimeArm(BaseModel):
     replace: dict[str, str] = Field(default_factory=dict, description="class -> replacement corpus path")
     disable: List[str] = Field(default_factory=list, description="classes blanked in this arm")
     inject: dict[str, str] = Field(default_factory=dict, description="class -> corpus injected (direct-provider)")
+    safety_review: Optional[str] = Field(
+        default=None,
+        description=(
+            "Reviewer/reference for a `deontic` replacement (§10.4 — deontic in replace: without "
+            "safety_review refuses). Varying categorical permission changes what is PERMITTED, not "
+            "how outcomes rank, so it is the one class whose replacement is reviewed before it runs."
+        ),
+    )
 
 
 class RegimeBlockEntry(BaseModel):

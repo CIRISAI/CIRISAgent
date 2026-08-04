@@ -32,7 +32,6 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
 from ciris_engine.schemas.runtime.models import TaskContext
-from ciris_engine.schemas.runtime.models import ThoughtContext as ThoughtModelContext
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
 from ciris_engine.schemas.types import JSONDict

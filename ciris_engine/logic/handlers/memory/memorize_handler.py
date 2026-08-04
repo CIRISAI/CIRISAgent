@@ -20,7 +20,7 @@ from ciris_engine.logic.infrastructure.handlers.shared_helpers import (
     validate_config_node,
 )
 from ciris_engine.logic.services.governance.consent import ConsentService
-from ciris_engine.schemas.actions import MemorizeParams
+from ciris_engine.schemas.actions import DreamConsolidationParams, MemorizeParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
@@ -37,8 +37,33 @@ class MemorizeHandler(BaseActionHandler):
     async def handle(
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext
     ) -> Optional[str]:
-        """Handle a memorize action."""
+        """Handle a memorize action.
+
+        Dispatches on PARAMETER TYPE: ``DreamConsolidationParams`` routes to
+        :class:`DreamMemorizeHandler`, everything else is handled here.
+        """
         thought_id = thought.thought_id
+
+        # #998 — route dream consolidation to the handler written for it.
+        #
+        # DreamMemorizeHandler creates the three edges that ARE the dream's
+        # work — CONNECTS (links two memories by pattern), IMPLIES (extracts a
+        # behavioural insight), ASPIRES_TO (links identity to an aspiration).
+        # It was defined, complete, and registered NOWHERE: it appeared exactly
+        # once repo-wide, its own class statement. handler_registry.py maps
+        # MEMORIZE to this class alone, so every dream consolidation has been
+        # handled as an ordinary memorize since the handler was written.
+        #
+        # The dream processor meanwhile announced "Wove N connections" and
+        # published an `edges_created` metric off a hardcoded `+= 3`. The claim
+        # was made; the edges were never created. Registering by parameter type
+        # rather than adding a second MEMORIZE registry slot keeps one action ->
+        # one entry point, which is what the dispatcher assumes.
+        if isinstance(result.action_parameters, DreamConsolidationParams):
+            self.logger.info("MEMORIZE carries DreamConsolidationParams — routing to DreamMemorizeHandler")
+            from ciris_engine.logic.handlers.memory.dream_memorize_handler import DreamMemorizeHandler
+
+            return await DreamMemorizeHandler(self.dependencies).handle(result, thought, dispatch_context)
 
         # Validate parameters
         try:

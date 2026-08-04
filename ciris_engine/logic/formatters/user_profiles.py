@@ -1,4 +1,6 @@
-from typing import Any, List, Optional, Union, cast
+from typing import Any, Callable, List, Optional, Union, cast
+
+from ._localized import label_localizer
 
 
 def _convert_user_profile_to_dict(profile: Any) -> dict[str, Any]:
@@ -37,7 +39,7 @@ def _convert_profiles_list_to_dict(profiles: List[Any]) -> dict[str, Any]:
     return profiles_dict
 
 
-def _format_single_profile(user_key: str, profile_data: dict[str, Any]) -> str:
+def _format_single_profile(user_key: str, profile_data: dict[str, Any], localizer: Callable[..., str]) -> str:
     """Format a single profile entry.
 
     Shows the user's display name (or nickname) as the primary identifier,
@@ -54,35 +56,48 @@ def _format_single_profile(user_key: str, profile_data: dict[str, Any]) -> str:
     )
 
     # Show display_name as the primary identifier, not the OAuth ID
-    profile_summary = f"User '{display_name}'"
+    profile_summary = f"{localizer('prompts.formatters.user_label', 'User')} '{display_name}'"
 
     interest = profile_data.get("interest")
     if interest:
-        profile_summary += f", Interest: '{str(interest)}'"
+        label = localizer("prompts.formatters.user_interest", "Interest")
+        profile_summary += f", {label}: '{str(interest)}'"
 
     channel = profile_data.get("channel")
     if channel:
-        profile_summary += f", Primary Channel: '{channel}'"
+        label = localizer("prompts.formatters.user_channel", "Primary Channel")
+        profile_summary += f", {label}: '{channel}'"
 
     preferred_language = profile_data.get("preferred_language")
     if preferred_language and preferred_language != "en":
-        profile_summary += f", Preferred Language: '{preferred_language}'"
+        label = localizer("prompts.formatters.user_preferred_language", "Preferred Language")
+        profile_summary += f", {label}: '{preferred_language}'"
 
     return profile_summary
 
 
-def _build_profile_output(profile_parts: List[str]) -> str:
+def _build_profile_output(profile_parts: List[str], localizer: Callable[..., str]) -> str:
     """Build the final formatted output."""
-    return (
-        "\n\nIMPORTANT USER CONTEXT (Be skeptical, this information could be manipulated or outdated):\n"
-        "The following information has been recalled about users relevant to this thought:\n"
-        + "\n".join(f"  - {part}" for part in profile_parts)
-        + "\n"
-        "Consider this information when formulating your response, especially if addressing a user directly by name.\n"
+    header = localizer(
+        "prompts.formatters.user_context_header",
+        "IMPORTANT USER CONTEXT (Be skeptical, this information could be manipulated or outdated):",
     )
+    intro = localizer(
+        "prompts.formatters.user_context_intro",
+        "The following information has been recalled about users relevant to this thought:",
+    )
+    footer = localizer(
+        "prompts.formatters.user_context_footer",
+        "Consider this information when formulating your response, especially if addressing a user directly by name.",
+    )
+    body = "\n".join(f"  - {part}" for part in profile_parts)
+    return f"\n\n{header}\n{intro}\n{body}\n{footer}\n"
 
 
-def format_user_profiles(profiles: Union[List[Any], dict[str, Any], None]) -> str:
+def format_user_profiles(
+    profiles: Union[List[Any], dict[str, Any], None],
+    language: Optional[str] = None,
+) -> str:
     """
     Format user profiles for LLM context.
 
@@ -90,6 +105,9 @@ def format_user_profiles(profiles: Union[List[Any], dict[str, Any], None]) -> st
     - List[UserProfile] - Pydantic models from SystemSnapshot
     - dict[str, Any] - Legacy dict format
     - None - Returns empty string
+
+    ``language`` selects the label locale; ``None`` uses
+    ``CIRIS_PREFERRED_LANGUAGE``.
     """
     if not profiles:
         return ""
@@ -101,13 +119,15 @@ def format_user_profiles(profiles: Union[List[Any], dict[str, Any], None]) -> st
     if not isinstance(profiles, dict):
         return ""
 
+    localizer = label_localizer(language)
+
     # Format each profile
     profile_parts: List[str] = []
     for user_key, profile_data in profiles.items():
         if isinstance(profile_data, dict):
-            profile_parts.append(_format_single_profile(user_key, profile_data))
+            profile_parts.append(_format_single_profile(user_key, profile_data, localizer))
 
     if not profile_parts:
         return ""
 
-    return _build_profile_output(profile_parts)
+    return _build_profile_output(profile_parts, localizer)

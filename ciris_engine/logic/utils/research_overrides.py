@@ -45,7 +45,7 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -135,6 +135,23 @@ _DMA_PROMPT_TEXT_FIELDS: FrozenSet[str] = frozenset(
         "final_ponder_advisory",
         "closing_reminder",
         "context_integration",
+        # #993 — composed after the ASPDMA template render (no {slot} exists for
+        # them in context_integration, and adding one would need all 29
+        # localized copies edited).
+        "tool_selection_guidance",
+        "csdma_ambiguity_alignment_example",
+        # #995 P1-6 — live YAML that was outside the key space, so R1 rejected
+        # any manifest naming it as "does not reach any LLM prompt", which was
+        # false. Both reach a model and neither is a declared PromptCollection
+        # field; they are carried in `custom_prompts`, which `get_prompt()`
+        # reads and `_apply_research_overrides` now writes.
+        #
+        # `taxonomy_text` is 3,273 B — the full rights/needs deferral taxonomy,
+        # operative doctrine steering DEFER classification. Leaving it
+        # uncoverable meant a deontic arm could not touch the text that decides
+        # deferral.
+        "taxonomy_text",
+        "tool_correction_section",
     }
 )
 
@@ -226,8 +243,107 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.dma.bounce_instruction",
         "prompts.dma.bounce_original_marker",
         "prompts.dma.bounce_trigger_line",
+        # #991 — the formatter LABELS. Authored and translated into 29 locales
+        # (1,653 strings) with zero readers until the four prompt formatters
+        # were wired to `label_localizer`; before that every non-English agent
+        # received its system-snapshot, identity, user-context and task-chain
+        # headings in English inside an otherwise localized prompt. They are
+        # bare labels only — the `=== … ===` framing, the 🚨 banners and the
+        # value interpolation stay in Python, so an override here changes words,
+        # never block structure.
+        "prompts.formatters.active_tasks",
+        "prompts.formatters.active_thought",
+        "prompts.formatters.active_thoughts",
+        "prompts.formatters.context_enrichment_header",
+        "prompts.formatters.continuity_avg_offline",
+        "prompts.formatters.continuity_avg_online",
+        "prompts.formatters.continuity_first_startup",
+        "prompts.formatters.continuity_header",
+        "prompts.formatters.continuity_last_shutdown",
+        "prompts.formatters.continuity_last_shutdown_reason",
+        "prompts.formatters.continuity_session_duration",
+        "prompts.formatters.continuity_session_started",
+        "prompts.formatters.continuity_shutdowns",
+        "prompts.formatters.continuity_total_offline",
+        "prompts.formatters.continuity_total_online",
+        "prompts.formatters.direct_parent",
+        "prompts.formatters.error_rate",
+        "prompts.formatters.identity_agent_id",
+        "prompts.formatters.identity_continuity_history",
+        "prompts.formatters.identity_domain_role",
+        "prompts.formatters.identity_first_start",
+        "prompts.formatters.identity_permitted_actions",
+        "prompts.formatters.identity_purpose",
+        "prompts.formatters.identity_recent_shutdowns",
+        "prompts.formatters.identity_role",
+        "prompts.formatters.identity_trust_level",
+        "prompts.formatters.license_critical",
+        "prompts.formatters.license_info",
+        "prompts.formatters.license_verification",
+        "prompts.formatters.license_warning",
+        "prompts.formatters.messages_24h",
+        "prompts.formatters.messages_processed",
+        "prompts.formatters.parent_task_chain",
+        "prompts.formatters.pending_tasks",
+        "prompts.formatters.pending_thoughts",
+        "prompts.formatters.queue_depth",
+        "prompts.formatters.resource_alerts_end",
+        "prompts.formatters.resource_alerts_start",
+        "prompts.formatters.resource_usage_header",
+        "prompts.formatters.root_task",
+        "prompts.formatters.service_usage",
+        "prompts.formatters.system_snapshot_header",
+        "prompts.formatters.tasks_completed_24h",
+        "prompts.formatters.thoughts_24h",
+        "prompts.formatters.thoughts_processed",
+        "prompts.formatters.thoughts_under_consideration",
+        "prompts.formatters.time_header",
+        "prompts.formatters.tokens_last_hour",
+        "prompts.formatters.total_tasks",
+        "prompts.formatters.total_thoughts",
+        "prompts.formatters.user_channel",
+        "prompts.formatters.user_context_footer",
+        "prompts.formatters.user_context_header",
+        "prompts.formatters.user_context_intro",
+        "prompts.formatters.user_interest",
+        "prompts.formatters.user_label",
+        "prompts.formatters.user_preferred_language",
         "prompts.identity_block",
+        # The parent key: a whole-block replacement, and it WINS over the parts
+        # (precedence declared in `get_language_guidance`). Still reachable
+        # because the 24 unsplit locales resolve through it.
         "prompts.language_guidance",
+        # The #997 single-class parts. Present in en/es/fr/it/pt; a manifest may
+        # hold one and vary another, which is the whole point of the split.
+        "prompts.language_guidance.01_preamble",
+        "prompts.language_guidance.02_first_sentence_tone_lock",
+        "prompts.language_guidance.03_never_deny_ai",
+        "prompts.language_guidance.04_formal_register",
+        "prompts.language_guidance.05_no_wellness_confirmation",
+        "prompts.language_guidance.06_warmth_and_concision",
+        "prompts.language_guidance.07_canonical_disclaimer",
+        "prompts.language_guidance.08_help_pathway_intro",
+        "prompts.language_guidance.09_trusted_person_first_step",
+        "prompts.language_guidance.10_help_pathway_steps",
+        "prompts.language_guidance.11_routing_doctrine",
+        "prompts.language_guidance.12_undisclosed_symptom_attribution",
+        "prompts.language_guidance.13_exemplar_speak_response",
+        "prompts.language_guidance.14_exemplar_register_pressure",
+        "prompts.language_guidance.15_register_pressure_pattern",
+        "prompts.language_guidance.16_exemplar_false_reassurance",
+        "prompts.language_guidance.17_false_reassurance_pattern",
+        "prompts.language_guidance.18_ratification_scope",
+        "prompts.language_guidance.19_agent_role",
+        "prompts.language_guidance.20_four_moves",
+        "prompts.language_guidance.21_negative_is_also_a_verdict",
+        "prompts.language_guidance.22_ratification_register",
+        "prompts.language_guidance.23_ratification_templates",
+        "prompts.language_guidance.24_ratification_pattern",
+        "prompts.language_guidance.25_exemplar_cross_cluster",
+        "prompts.language_guidance.26_cross_cluster_pattern",
+        "prompts.language_guidance.27_attractor_universality",
+        "prompts.language_guidance.28_brevity_restatement",
+        "prompts.language_guidance.29_no_medical_or_legal_advice",
         "prompts.prohibitions.AUTONOMOUS_DECEPTION",
         "prompts.prohibitions.BIOMETRIC_INFERENCE",
         "prompts.prohibitions.CONTENT_MODERATION",
@@ -293,6 +409,16 @@ def _scan_module_for_keys(path: Path) -> Set[str]:
                     from ciris_engine.logic.buses.prohibitions import PROHIBITED_CAPABILITIES
 
                     keys.update(f"{prefix}{c}" for c in PROHIBITED_CAPABILITIES)
+                elif prefix == "prompts.language_guidance.":
+                    # #997 split the 13,694 B language_guidance scalar into
+                    # single-class parts (localization.py:
+                    # `language_guidance_parts`). Same rule as the prohibitions
+                    # prefix: expanded from the ONE ordered tuple the composer
+                    # itself joins, so the override key space cannot drift from
+                    # what actually reaches a prompt.
+                    from ciris_engine.logic.utils.localization import LANGUAGE_GUIDANCE_PART_KEYS
+
+                    keys.update(f"{prefix}{part}" for part in LANGUAGE_GUIDANCE_PART_KEYS)
     return keys
 
 
@@ -311,6 +437,41 @@ def scan_reachable_string_keys() -> FrozenSet[str]:
 
 
 # --------------------------------------------------------------------------
+#: dma_prompt keys whose composed value the override layer does NOT decide.
+#:
+#: The #989 container mismatch is FIXED and is not what this tuple is for any
+#: more. That history still matters, because it is what the tuple exists to
+#: catch: ``BaseDMA._load_prompts`` read prompt YAML with ``yaml.safe_load``
+#: and kept a plain dict, while ``_apply_research_overrides`` ``setattr``'d
+#: onto a ``PromptCollection`` — a CONTAINER mismatch, not a policy decision.
+#: Thirteen fields (ten in ``action_selection_pdma``, the action-selection tier
+#: where an axiotic experiment's dependent variable is decided) were never
+#: overridden while the loader logged successful replacements for their
+#: siblings: a campaign could swap a value, read a success line, and run the
+#: original. ``apply_research_overrides_to_mapping`` (prompt_loader.py) now
+#: serves the mapping path with the same manifest and the same fail-loud
+#: posture, so those keys are live.
+#:
+#: The OTHER shape of the same lie is the layer applying a value that the
+#: runtime then declines to compose. #990 found one — ``action_selection_pdma.
+#: action_parameter_schemas``, whose composed value is GENERATED from the live
+#: action enum by ``_get_dynamic_action_schemas``, making the YAML field (and
+#: therefore any override of it) a fallback nothing normally reads. It was NOT
+#: parked here. Every field that enters a composed prompt is overridable, so the
+#: override is now applied at the COMPOSITION boundary
+#: (``ActionSelectionContextBuilder._composed_action_parameter_schemas``), after
+#: generation, where a manifest value actually wins. The whole facility is gated
+#: behind research mode; a replacement that no longer matches the action enum
+#: can make a response unparseable, and that is a legitimate research condition,
+#: made legible at the call site rather than prevented.
+#:
+#: So: still empty, and it should stay that way. If some future field genuinely
+#: cannot be reached, name it here — R1 will refuse it by name and R2 totality
+#: will drop it automatically — but prefer making it reachable. Re-measure with
+#:     python3 -m tools.research.probe_gate_coverage --namespace dma_prompt
+OVERRIDE_IMMUNE_DMA_PROMPT_KEYS: Tuple[str, ...] = ()
+
+
 # The uncovered inline residue (§6.1)
 # --------------------------------------------------------------------------
 
@@ -327,6 +488,23 @@ def scan_reachable_string_keys() -> FrozenSet[str]:
 #: adapter code, nor ``ToolInfo.description`` text whose volume depends on which
 #: adapters are loaded. Do not represent the digest as covering more than this.
 RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
+    # #995 P1-4 — the TSASPDMA correction-mode scaffold. A 523 B inline
+    # f-string, not localized, that never passes through
+    # prompt_loader.get_user_message. The equivalent literal in
+    # ActionSelectionContextBuilder was routed out by #974 step 1; this one was
+    # missed, so `tsaspdma_correction.user` was reachable by NO override key —
+    # overriding all 101 keys moves 34 of 35 blocks and leaves this one
+    # byte-identical.
+    #
+    # Being outside the manifest is a coverage gap. Being outside the digest
+    # too meant it could drift mid-campaign without stopping the run, which is
+    # precisely what residue_digest exists to prevent. Pinned here; the
+    # manifest-reachability fix (adding tool_correction_section to
+    # _DMA_PROMPT_TEXT_FIELDS) is separate and does not close this hole.
+    (
+        "logic/dma/tsaspdma.py",
+        "TSASPDMAEvaluator._create_correction_mode_messages",
+    ),
     # The ASPDMA user message TEMPLATE routed out in #974 step 1 — it is now
     # prompts/action_selection_pdma.yml `context_integration`, covered by the
     # dma_prompt namespace, so `build_main_user_content` left this inventory.
@@ -394,8 +572,19 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
     # (conscience.repeated_speak_guidance); the module stays pinned for its
     # remaining inline reason strings.
     ("logic/conscience/action_sequence_conscience.py", "*"),
-    # Formatters: zero localization imports across all five, every one emits
-    # hardcoded English into a prompt.
+    # Formatters. All six stay pinned, but the reason narrowed in #991: four of
+    # them (system_snapshot, identity, user_profiles, prompt_blocks) now resolve
+    # their LABELS through `label_localizer`, so those 57 keys are in the
+    # `string` namespace above and a manifest reaches them. What is still
+    # uncovered here is the SCAFFOLDING the labels sit in — the `=== … ===`
+    # framing, the 🚨 banners, the value interpolation, and the handful of
+    # sublabels with no key at all (`Parent {i}`, `Thought {i+1}`, `UTC:`,
+    # `(Task ID: …)`, `... and N more`, `None`). crisis_resources and escalation
+    # remain wholly inline English. (Said "five" while listing six since the
+    # inventory was written — #995. The count matters: `baseline_note` reports
+    # "six formatters" to anyone reading a manifest, and two numbers for the
+    # same uncovered surface is exactly the kind of drift the digest exists to
+    # make impossible.)
     ("logic/formatters/system_snapshot.py", "*"),
     ("logic/formatters/identity.py", "*"),
     ("logic/formatters/user_profiles.py", "*"),
@@ -454,6 +643,24 @@ def _extract_symbol_source(path: Path, qualname: str) -> str:
     return segment
 
 
+def compute_manifest_digest(raw: Dict[str, Any]) -> str:
+    """``sha256:…`` over the JCS-canonical bytes of a manifest (FSD §15.3).
+
+    Computed from the PARSED mapping, not the file bytes, so reformatting,
+    key reordering or a trailing newline cannot change an arm's identity while
+    its content is unchanged — and equally, two manifests that differ anywhere
+    in content cannot collide.
+
+    Excludes nothing: the whole declared manifest is the independent variable.
+    """
+    import hashlib
+
+    from ciris_verify import jcs_canonicalize  # substrate-provided canonicalizer
+
+    canonical: bytes = jcs_canonicalize(json.dumps(raw, ensure_ascii=False, sort_keys=True))
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
 def compute_residue_digest() -> str:
     """SHA256 over the source of every uncovered inline site.
 
@@ -488,7 +695,20 @@ class OverrideSet(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    string: Dict[str, str] = Field(default_factory=dict)
+    #: ``string`` keys are LOCALIZED — the same key resolves to different text in
+    #: each locale. A value may therefore be either:
+    #:
+    #: * ``str``   — this exact text in EVERY locale. A deliberate choice, not a
+    #:   default: it puts one language's text into every language's prompt.
+    #: * ``dict``  — ``{locale: text}``, the faithful form for a localized key.
+    #:   A locale absent from the mapping REFUSES at resolution rather than
+    #:   falling back to English (that fallback is the R4 laundering this
+    #:   facility exists to prevent).
+    #:
+    #: Before this was a union, every value was a scalar snapshotted at ``en``,
+    #: so a baseline manifest silently served English guidance, English
+    #: prohibitions and English retry scaffolding in all 29 locales.
+    string: Dict[str, Union[str, Dict[str, str]]] = Field(default_factory=dict)
     dma_prompt: Dict[str, str] = Field(default_factory=dict)
     conscience_prompt: Dict[str, str] = Field(default_factory=dict)
     corpus: Dict[str, str] = Field(default_factory=dict)
@@ -510,6 +730,23 @@ class ResearchOverrideManifest(BaseModel):
     #: Not from the file — recorded at load so the trace can carry provenance.
     manifest_path: str = Field(default="")
 
+    #: sha256 over the JCS-canonical bytes of the manifest, computed at load.
+    #: FSD §15.3 / CIRISAgent#999.
+    #:
+    #: A PATH IS NOT PROVENANCE. `residue_digest` content-pins the surface
+    #: overrides do NOT cover, `fragment_count` pins scanner strength, and
+    #: `sign_object` pins the output bytes — but until this field existed, the
+    #: input that DEFINES the arm was named by a filename. Editing a manifest in
+    #: place between arms left both dumps claiming the same manifest, with the
+    #: same residue digest and valid signatures, and nothing in the artifact set
+    #: could tell them apart afterwards.
+    #:
+    #: Canonicalized with RFC 8785 JCS via the substrate's canonicalizer (the
+    #: 2.9.6 cut), not json.dumps: key order and unicode escaping must not
+    #: change the digest, or two byte-identical manifests hash differently and
+    #: the pin means nothing.
+    manifest_digest: str = Field(default="")
+
     def trace_fields(self) -> Dict[str, str]:
         """Provenance for the trace. ``mode`` is here because R2 is only a
         guarantee if the analysis side can assert on it (§7.10)."""
@@ -518,6 +755,7 @@ class ResearchOverrideManifest(BaseModel):
             "research_condition": self.condition,
             "research_mode": self.mode,
             "research_manifest": self.manifest_path,
+            "research_manifest_digest": self.manifest_digest,
             "research_residue_digest": self.residue_digest,
         }
 
@@ -535,9 +773,36 @@ def _base_locale_bundle(locale: str) -> Dict[str, Any]:
 
 
 def _bundle_has(bundle: Dict[str, Any], key: str) -> bool:
+    """Is ``key`` backed by real text in this bundle?
+
+    R1 asks one question: would the UN-overridden arm serve the raw key string
+    as prompt content? ``_resolve_key`` answers it for a leaf, but it returns
+    ``None`` for a key that resolves to a CONTAINER — and since #997 one
+    reachable key does: ``prompts.language_guidance`` is an ordered dict of
+    single-class parts in the five split locales, joined by
+    ``get_language_guidance``. Nothing serves a raw key there, so treating it as
+    absent would refuse a manifest that is perfectly applicable.
+
+    A container counts as present only when every leaf under it is a non-empty
+    string — the split-block shape and nothing else. This cannot launder a
+    typo: the reachability check above already rejects any key with no
+    ``get_string`` call site, and a parent like ``prompts.prohibitions`` (whose
+    reachable keys are the per-category leaves) never gets this far.
+    """
     from ciris_engine.logic.utils.localization import _resolve_key
 
-    return _resolve_key(bundle, key) is not None
+    if _resolve_key(bundle, key) is not None:
+        return True
+    node: Any = bundle
+    for segment in key.split("."):
+        if not isinstance(node, dict):
+            return False
+        node = node.get(segment)
+    return (
+        isinstance(node, dict)
+        and bool(node)
+        and all(isinstance(v, str) and v for v in node.values())
+    )
 
 
 def _yaml_present_fields(path: Path, allowed: FrozenSet[str]) -> Set[str]:
@@ -549,12 +814,46 @@ def _yaml_present_fields(path: Path, allowed: FrozenSet[str]) -> Set[str]:
     return {k for k, v in data.items() if k in allowed and isinstance(v, str) and v.strip()}
 
 
+def _schema_present_dma_prompt_keys() -> Set[str]:
+    """Every ``<template>.<field>`` a base YAML defines — INCLUDING the ones the
+    override layer cannot apply.
+
+    Distinct from :func:`_required_dma_prompt_keys` on purpose. R2 totality asks
+    "what must a strict manifest name?" and must exclude the #989-immune keys,
+    because demanding a key the loader refuses makes strictness unsatisfiable.
+    The coverage probe asks "what exists to be measured?" and must INCLUDE them
+    — measuring which keys are dark is the whole point, and a probe that skipped
+    them could never notice #989 being fixed.
+    """
+    present: Set[str] = set()
+    for yml in sorted(_DMA_PROMPTS_DIR.glob("*.yml")):
+        for field in _yaml_present_fields(yml, _DMA_PROMPT_TEXT_FIELDS):
+            present.add(f"{yml.stem}.{field}")
+    return present
+
+
 def _required_dma_prompt_keys() -> Set[str]:
-    """Every ``<template>.<field>`` a base YAML actually defines."""
+    """Every ``<template>.<field>`` a base YAML defines AND the layer can apply.
+
+    R2 strict demands totality — name every reachable field — and #989 forbids
+    naming the thirteen the override layer cannot reach. Read as "present in
+    the schema", those two rules make a total manifest impossible to write.
+
+    "Reachable" therefore means **reachable by the override layer**, which is
+    the only reading under which R2's promise is true: a strict manifest that
+    named all 36 would be asserting control over 13 fields it does not have.
+    Excluding them keeps strictness honest instead of aspirational — and the
+    exclusion is measured (``OVERRIDE_IMMUNE_DMA_PROMPT_KEYS``), so when #989
+    option 1 lands and the keys become applicable, they re-enter the totality
+    requirement automatically rather than by anyone remembering to.
+    """
     required: Set[str] = set()
     for yml in sorted(_DMA_PROMPTS_DIR.glob("*.yml")):
         for field in _yaml_present_fields(yml, _DMA_PROMPT_TEXT_FIELDS):
-            required.add(f"{yml.stem}.{field}")
+            key = f"{yml.stem}.{field}"
+            if key in OVERRIDE_IMMUNE_DMA_PROMPT_KEYS:
+                continue
+            required.add(key)
     return required
 
 
@@ -793,7 +1092,9 @@ def get_active_overrides() -> Optional[ResearchOverrideManifest]:
     except json.JSONDecodeError as exc:
         raise ResearchOverrideError(f"{manifest_path} is not valid JSON: {exc}") from exc
 
-    manifest = ResearchOverrideManifest(**raw, manifest_path=str(path))
+    manifest = ResearchOverrideManifest(
+        **raw, manifest_path=str(path), manifest_digest=compute_manifest_digest(raw)
+    )
     _validate_manifest(manifest)
 
     _active = manifest
@@ -815,9 +1116,42 @@ def get_active_overrides() -> Optional[ResearchOverrideManifest]:
 # --------------------------------------------------------------------------
 
 
-def override_string(key: str) -> Optional[str]:
+def override_string(key: str, lang_code: Optional[str] = None) -> Optional[str]:
+    """Resolve a ``string`` override for ``key`` in ``lang_code``.
+
+    A scalar value applies to every locale. A mapping is resolved against
+    ``lang_code``; a locale the mapping does not cover REFUSES rather than
+    falling back to English, because silently serving English into a non-English
+    prompt is exactly the laundering R4 forbids — and it is what this facility
+    did for every localized key before the value type became a union.
+
+    ``lang_code=None`` is accepted only for scalar values, so callers that
+    genuinely have no locale in hand still work.
+    """
     m = get_active_overrides()
-    return m.overrides.string.get(key) if m else None
+    if m is None:
+        return None
+    value = m.overrides.string.get(key)
+    if value is None or isinstance(value, str):
+        return value
+
+    if lang_code is None:
+        raise RuntimeError(
+            f"research overrides active: key {key!r} is overridden per-locale, but the "
+            f"caller resolved it without a locale. A per-locale override cannot be "
+            f"applied to an unknown locale — pass lang_code, or make the override a "
+            f"single string if one text really is intended for every locale."
+        )
+    try:
+        return value[lang_code]
+    except KeyError:
+        raise RuntimeError(
+            f"research overrides active: key {key!r} is overridden per-locale but carries "
+            f"no entry for locale {lang_code!r} (has: {', '.join(sorted(value)) or 'none'}). "
+            f"Falling back to English would put English text in a {lang_code!r} prompt — the "
+            f"laundering R4 forbids. Add {lang_code!r} to the mapping, or use a single "
+            f"string if that text is intended for every locale."
+        ) from None
 
 
 def override_dma_prompt(template_name: str, field: str) -> Optional[str]:
@@ -977,10 +1311,11 @@ def describe_coverage(manifest: Optional[ResearchOverrideManifest] = None) -> st
         f"{counts}. NOT COVERED (inline English, present in EVERY arm, pinned at "
         f"{m.residue_digest}): the inline helpers interpolated into the ASPDMA "
         f"user message, the non-DEFER action schema/guidance scaffolding, the "
-        f"six formatters, and the conscience override reasons. (#974 routed the "
-        f"DEFER policy — step 0 — the ASPDMA user-message template — step 1 — "
-        f"the DSDMA user message — step 2 — and the CORE IDENTITY blocks — "
-        f"step 3 — out of this residue; all four ARE covered.) Any paper using "
+        f"six formatters' block scaffolding, and the conscience override "
+        f"reasons. (#974 routed the DEFER policy — step 0 — the ASPDMA "
+        f"user-message template — step 1 — the DSDMA user message — step 2 — "
+        f"and the CORE IDENTITY blocks — step 3 — out of this residue, and #991 "
+        f"routed the 57 formatter LABELS; all five ARE covered.) Any paper using "
         f"this facility must report that the non-CIRIS arm was reasoning under "
         f"CIRIS's action doctrine, in English"
     )
@@ -1013,8 +1348,21 @@ def strict_manifest_skeleton(experiment_id: str = "CHANGE-ME", condition: str = 
     }
 
 
-def baseline_manifest() -> Dict[str, Any]:
+def baseline_manifest(locales: Optional[Sequence[str]] = None) -> Dict[str, Any]:
     """A strict manifest pre-filled with the CURRENT live values.
+
+    ``locales`` selects which locales the localized ``string`` keys are captured
+    for; it defaults to every locale in the bundle, so a locale added later is
+    picked up with no change here. Narrow it when an experiment runs a known
+    subset — a full capture of every localized key across every locale is large,
+    and a manifest carrying locales the run never composes is noise.
+
+    A ``string`` key is emitted as a ``{locale: text}`` mapping when its text
+    actually differs across the captured locales, and as a plain string when it
+    does not. That is what makes the round-trip guarantee below true: capturing
+    a localized key at ``en`` alone and pinning that one value used to serve
+    English guidance, English prohibitions and English retry scaffolding in all
+    29 locales, while reporting a clean run.
 
     `strict_manifest_skeleton()` emits `REPLACE::<key>` placeholders for all 97
     keys. That is right for a wholesale variant — a non-CIRIS arm is a complete
@@ -1032,18 +1380,35 @@ def baseline_manifest() -> Dict[str, Any]:
     """
     from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
     from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
-    from ciris_engine.logic.utils.localization import get_string
+    from ciris_engine.logic.utils.localization import get_available_languages, get_string
 
     skeleton = strict_manifest_skeleton()
     out: Dict[str, Any] = dict(skeleton)
     out["experiment_id"] = "CHANGE-ME"
-    filled: Dict[str, Dict[str, str]] = {ns: {} for ns in skeleton["overrides"]}
+    filled: Dict[str, Dict[str, Any]] = {ns: {} for ns in skeleton["overrides"]}
+
+    captured = list(locales) if locales else get_available_languages()
+    if not captured:
+        raise RuntimeError(
+            "no locales available to capture — refusing to emit a baseline that would "
+            "silently cover no locale at all"
+        )
+    base = str(out.get("base_locale") or "en")
+    if base not in captured:
+        # The base locale anchors the scalar case; without it a key that does not
+        # vary would still be captured from an arbitrary locale.
+        captured = [base, *captured]
 
     for key in skeleton["overrides"].get("string", {}):
         try:
-            filled["string"][key] = get_string("en", key)
+            per_locale = {lang: get_string(lang, key) for lang in captured}
         except Exception:  # noqa: BLE001 — an unresolvable key keeps its marker
             filled["string"][key] = skeleton["overrides"]["string"][key]
+            continue
+        # Collapse to a scalar only when the key genuinely does not vary, so the
+        # manifest stays small without ever standing one locale in for another.
+        distinct = set(per_locale.values())
+        filled["string"][key] = per_locale[base] if len(distinct) == 1 else per_locale
 
     cl = ConsciencePromptLoader()
     for key, marker in skeleton["overrides"].get("conscience_prompt", {}).items():
@@ -1069,12 +1434,26 @@ def baseline_manifest() -> Dict[str, Any]:
         filled[ns] = dict(skeleton["overrides"].get(ns, {}))
 
     out["overrides"] = filled
-    unresolved = sum(1 for ns in filled.values() for v in ns.values() if str(v).startswith("REPLACE::"))
-    out["_baseline_note"] = (
-        f"{unresolved} key(s) still carry REPLACE:: markers and MUST be filled or the run is "
-        f"not measuring what it claims. Change only the keys your experiment alters."
-    )
+    # The note goes to the CALLER, never into the manifest: `extra="forbid"`
+    # rejects unknown keys, so emitting `_baseline_note` inline made
+    # `baseline > m.json && validate m.json` fail on a key this function itself
+    # added. See baseline_unresolved().
     return out
+
+
+def baseline_unresolved(manifest: Dict[str, Any]) -> List[str]:
+    """Keys in a baseline manifest still carrying their ``REPLACE::`` marker.
+
+    These are the value-bearing keys `baseline` deliberately refuses to pre-fill:
+    leaving them unset makes an unfilled arm fail loudly instead of silently
+    re-running the CIRIS values under an experimental label.
+    """
+    return sorted(
+        f"{ns}.{key}"
+        for ns, block in manifest.get("overrides", {}).items()
+        for key, value in block.items()
+        if isinstance(value, str) and value.startswith("REPLACE::")
+    )
 
 
 def validate_manifest_file(path: str) -> Tuple[bool, str]:
@@ -1186,7 +1565,19 @@ if __name__ == "__main__":  # pragma: no cover - operator convenience
     elif command == "skeleton":
         print(json.dumps(strict_manifest_skeleton(), indent=2, ensure_ascii=False))
     elif command == "baseline":
-        print(json.dumps(baseline_manifest(), indent=2, ensure_ascii=False))
+        # Optional locale narrowing: `baseline en,es,am`. Default captures every
+        # locale in the bundle, so a locale added later needs no change here.
+        _locales = [s for s in sys.argv[2].split(",") if s.strip()] if len(sys.argv) > 2 else None
+        _manifest = baseline_manifest(_locales)
+        print(json.dumps(_manifest, indent=2, ensure_ascii=False))
+        _unresolved = baseline_unresolved(_manifest)
+        if _unresolved:
+            print(
+                f"{len(_unresolved)} key(s) still carry REPLACE:: markers and MUST be filled or "
+                f"the run is not measuring what it claims. Change only the keys your experiment "
+                f"alters.\n  " + "\n  ".join(_unresolved),
+                file=sys.stderr,
+            )
     elif command == "keyspace":
         for namespace, keys in (
             ("string", scan_reachable_string_keys()),

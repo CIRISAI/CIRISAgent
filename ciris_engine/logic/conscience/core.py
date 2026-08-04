@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils.constants import ACCORD_TEXT
+from ciris_engine.logic.utils.constants import get_accord_text
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import (
@@ -464,7 +464,26 @@ class EntropyConscience(_BaseConscience):
             # canon, not against a single-language slice of it. Only the system
             # prompt above is localized so the LLM judge reads its calibration
             # in the user's language (no internal translation step).
-            LLMMessage(role="system", content=ACCORD_TEXT),
+            # #995 P0-1 — through the seam, NOT the module constant.
+            #
+            # `from ...constants import ACCORD_TEXT` binds the value at import
+            # and never re-enters `get_accord_text()`, where the research corpus
+            # substitution lives. So `corpus:accord.*` could not reach any of
+            # the four faculties and ACCORD_MODE could not blank them: an arm
+            # that replaced or removed the accord still delivered the full
+            # accord to entropy, coherence, optimization-veto and epistemic
+            # humility — ~722 KB/thought of the treatment held constant across
+            # a c-b contrast, reporting clean. A value-ablation arm that does
+            # not ablate values.
+            #
+            # `force_full` is load-bearing: ACCORD_MODE defaults to
+            # "compressed", so a bare get_accord_text() would return the 6,190
+            # char slice in place of the 128,302 char polyglot canon — a 95%
+            # cut to what the consciences judge against, which is NOT the fix.
+            # force_full returns override_corpus("accord.polyglot_full") when
+            # the gate is open and ACCORD_TEXT byte-identical when it is not,
+            # so the polyglot rationale below is preserved exactly.
+            LLMMessage(role="system", content=get_accord_text("force_full")),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ], user_prompt
@@ -588,7 +607,26 @@ class CoherenceConscience(_BaseConscience):
             # canon, not against a single-language slice of it. Only the system
             # prompt above is localized so the LLM judge reads its calibration
             # in the user's language (no internal translation step).
-            LLMMessage(role="system", content=ACCORD_TEXT),
+            # #995 P0-1 — through the seam, NOT the module constant.
+            #
+            # `from ...constants import ACCORD_TEXT` binds the value at import
+            # and never re-enters `get_accord_text()`, where the research corpus
+            # substitution lives. So `corpus:accord.*` could not reach any of
+            # the four faculties and ACCORD_MODE could not blank them: an arm
+            # that replaced or removed the accord still delivered the full
+            # accord to entropy, coherence, optimization-veto and epistemic
+            # humility — ~722 KB/thought of the treatment held constant across
+            # a c-b contrast, reporting clean. A value-ablation arm that does
+            # not ablate values.
+            #
+            # `force_full` is load-bearing: ACCORD_MODE defaults to
+            # "compressed", so a bare get_accord_text() would return the 6,190
+            # char slice in place of the 128,302 char polyglot canon — a 95%
+            # cut to what the consciences judge against, which is NOT the fix.
+            # force_full returns override_corpus("accord.polyglot_full") when
+            # the gate is open and ACCORD_TEXT byte-identical when it is not,
+            # so the polyglot rationale below is preserved exactly.
+            LLMMessage(role="system", content=get_accord_text("force_full")),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ], user_prompt
@@ -698,7 +736,26 @@ class OptimizationVetoConscience(_BaseConscience):
             # canon, not against a single-language slice of it. Only the system
             # prompt above is localized so the LLM judge reads its calibration
             # in the user's language (no internal translation step).
-            LLMMessage(role="system", content=ACCORD_TEXT),
+            # #995 P0-1 — through the seam, NOT the module constant.
+            #
+            # `from ...constants import ACCORD_TEXT` binds the value at import
+            # and never re-enters `get_accord_text()`, where the research corpus
+            # substitution lives. So `corpus:accord.*` could not reach any of
+            # the four faculties and ACCORD_MODE could not blank them: an arm
+            # that replaced or removed the accord still delivered the full
+            # accord to entropy, coherence, optimization-veto and epistemic
+            # humility — ~722 KB/thought of the treatment held constant across
+            # a c-b contrast, reporting clean. A value-ablation arm that does
+            # not ablate values.
+            #
+            # `force_full` is load-bearing: ACCORD_MODE defaults to
+            # "compressed", so a bare get_accord_text() would return the 6,190
+            # char slice in place of the 128,302 char polyglot canon — a 95%
+            # cut to what the consciences judge against, which is NOT the fix.
+            # force_full returns override_corpus("accord.polyglot_full") when
+            # the gate is open and ACCORD_TEXT byte-identical when it is not,
+            # so the polyglot rationale below is preserved exactly.
+            LLMMessage(role="system", content=get_accord_text("force_full")),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ], user_prompt
@@ -817,7 +874,26 @@ class EpistemicHumilityConscience(_BaseConscience):
             # canon, not against a single-language slice of it. Only the system
             # prompt above is localized so the LLM judge reads its calibration
             # in the user's language (no internal translation step).
-            LLMMessage(role="system", content=ACCORD_TEXT),
+            # #995 P0-1 — through the seam, NOT the module constant.
+            #
+            # `from ...constants import ACCORD_TEXT` binds the value at import
+            # and never re-enters `get_accord_text()`, where the research corpus
+            # substitution lives. So `corpus:accord.*` could not reach any of
+            # the four faculties and ACCORD_MODE could not blank them: an arm
+            # that replaced or removed the accord still delivered the full
+            # accord to entropy, coherence, optimization-veto and epistemic
+            # humility — ~722 KB/thought of the treatment held constant across
+            # a c-b contrast, reporting clean. A value-ablation arm that does
+            # not ablate values.
+            #
+            # `force_full` is load-bearing: ACCORD_MODE defaults to
+            # "compressed", so a bare get_accord_text() would return the 6,190
+            # char slice in place of the 128,302 char polyglot canon — a 95%
+            # cut to what the consciences judge against, which is NOT the fix.
+            # force_full returns override_corpus("accord.polyglot_full") when
+            # the gate is open and ACCORD_TEXT byte-identical when it is not,
+            # so the polyglot rationale below is preserved exactly.
+            LLMMessage(role="system", content=get_accord_text("force_full")),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ], user_prompt

@@ -22,7 +22,7 @@ from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
-from .prompt_loader import DMAPromptLoader, get_prompt_loader
+from .prompt_loader import DMAPromptLoader, get_prompt_loader, safe_format
 
 logger = logging.getLogger(__name__)
 
@@ -522,6 +522,44 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             system_message_content = system_message_template.format(
                 domain_name=self.domain_name, rules_summary_str=rules_summary_str, context_str=context_str
             )
+
+        # Append response_format / closing_reminder — #990.
+        #
+        # BaseDSDMA has never used `DMAPromptLoader.get_system_message()`
+        # (`git log -S "get_system_message" -- dsdma_base.py` returns zero
+        # commits). It renders `system_guidance_header` alone, via the
+        # `prompt_template` property. So every OTHER populated field in
+        # dsdma_base.yml was inert — including `response_format`, which is the
+        # LANGUAGE RULES block: "respond in the user's preferred language, keep
+        # JSON keys in English, put string values in the user's language."
+        #
+        # DSDMA has therefore never been told any of that, in any release since
+        # v2.3.1, in any of the 29 locales. The `{{...}}` escaping in that field
+        # shows it was authored expecting `.format()` — it was written to be
+        # composed and then never wired in.
+        #
+        # Appended here rather than by switching to get_system_message(): that
+        # method renders six fields in a fixed order and DSDMA's own header is
+        # already rendered above with block substitution the shared path does
+        # not do. Going through the loader-owned collection keeps the research
+        # dma_prompt namespace intercepting these keys (same routing rationale
+        # as #974 below).
+        _template_data = self.prompt_template_data
+        _lang = self.prompt_loader.language
+        for _field in ("response_format", "closing_reminder"):
+            _value = getattr(_template_data, _field, None)
+            # isinstance, not truthiness: `prompt_template_data` is a property
+            # and tests substitute a Mock for it, where every attribute is a
+            # truthy Mock. Requiring str keeps a non-string YAML value (or a
+            # test double) from being concatenated into a system prompt.
+            if isinstance(_value, str) and _value:
+                system_message_content += "\n\n" + safe_format(
+                    _value,
+                    source=f"{self._prompt_template_name}.{_field}[{_lang}]",
+                    domain_name=self.domain_name,
+                    rules_summary_str=rules_summary_str,
+                    context_str=context_str,
+                )
 
         full_snapshot_and_profile_context_str = task_context_block + system_snapshot_block + user_profiles_block
         # Routed (#974 step 2, FSD RESEARCH_PROMPT_OVERRIDES §11.2): the DSDMA

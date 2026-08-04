@@ -62,14 +62,8 @@ from .bootstrap_helpers import (
 )
 from .component_builder import ComponentBuilder
 from .config_migration import (
-    check_existing_cognitive_config,
-    create_legacy_cognitive_behaviors,
-    get_cognitive_behaviors_from_template,
     migrate_adapter_configs_to_graph,
-    migrate_cognitive_state_behaviors_to_graph,
     migrate_tickets_config_to_graph,
-    save_cognitive_behaviors_to_graph,
-    should_skip_cognitive_migration,
 )
 from .identity_manager import IdentityManager
 from .resume_helpers import (
@@ -597,12 +591,28 @@ class CIRISRuntime(ServicePropertyMixin):
 
         # Adapter loading can be slow on mobile due to graph DB queries
         adapter_load_timeout = 60.0 if (is_android() or is_ios()) else 30.0
+        # Enrichment tools are network/IO bound (200-400ms each) and slower on mobile
+        enrichment_cache_timeout = 60.0 if (is_android() or is_ios()) else 30.0
         init_manager.register_step(
             phase=InitializationPhase.SERVICES,
             name="Load Saved Adapters",
             handler=self._load_saved_adapters,
             critical=False,  # Non-critical - system can run without saved adapters
             timeout=adapter_load_timeout,
+        )
+
+        # Warm the context-enrichment cache before the first thought needs it.
+        # Shipped in 2.4.2 (#669) but only ever registered by the dead duplicate
+        # registrar in initialization_steps.py, so it never ran at boot: every
+        # first thought paid the full 200-400ms per enrichment tool.
+        # Non-critical by construction — the handler is first-run aware and
+        # swallows its own failures; enrichment then runs lazily as before.
+        init_manager.register_step(
+            phase=InitializationPhase.SERVICES,
+            name="Populate Context Enrichment Cache",
+            handler=self._populate_context_enrichment_cache,
+            critical=False,  # Non-critical - context enrichment can run on-demand
+            timeout=enrichment_cache_timeout,
         )
 
         init_manager.register_step(
@@ -993,30 +1003,6 @@ class CIRISRuntime(ServicePropertyMixin):
         """Migrate tickets config to graph."""
         await migrate_tickets_config_to_graph(self)
 
-    def _should_skip_cognitive_migration(self, force_from_template: bool) -> bool:
-        """Check if cognitive migration should be skipped."""
-        return should_skip_cognitive_migration(force_from_template)
-
-    async def _check_existing_cognitive_config(self, config_service: Any) -> bool:
-        """Check if cognitive config already exists in graph."""
-        return await check_existing_cognitive_config(config_service)
-
-    def _get_cognitive_behaviors_from_template(self) -> Optional[Any]:
-        """Get cognitive behaviors from the agent template if available."""
-        return get_cognitive_behaviors_from_template(self)
-
-    def _create_legacy_cognitive_behaviors(self) -> Any:
-        """Create pre-1.7 compatible cognitive behaviors config."""
-        return create_legacy_cognitive_behaviors()
-
-    async def _save_cognitive_behaviors_to_graph(self, config_service: Any, cognitive_behaviors: Any) -> None:
-        """Save cognitive behaviors to the graph with IDENTITY scope."""
-        await save_cognitive_behaviors_to_graph(config_service, cognitive_behaviors)
-
-    async def _migrate_cognitive_state_behaviors_to_graph(self, force_from_template: bool = False) -> None:
-        """Migrate cognitive state behaviors to graph."""
-        await migrate_cognitive_state_behaviors_to_graph(self, force_from_template)
-
     async def _final_verification(self) -> None:
         """Perform final system verification."""
         from ciris_engine.logic.setup.first_run import is_first_run
@@ -1213,6 +1199,17 @@ class CIRISRuntime(ServicePropertyMixin):
         from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
 
         await load_saved_adapters_from_graph(self)
+
+    async def _populate_context_enrichment_cache(self) -> None:
+        """Pre-run context-enrichment tools so the first thought does not pay for them.
+
+        Delegates to the step handler in initialization_steps, which is
+        first-run aware and swallows its own failures (enrichment falls back to
+        running lazily on the first thought).
+        """
+        from ciris_engine.logic.runtime.initialization_steps import populate_context_enrichment_cache
+
+        await populate_context_enrichment_cache(self)
 
     async def _build_components(self) -> None:
         """Build all processing components.

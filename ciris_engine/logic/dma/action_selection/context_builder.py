@@ -256,31 +256,66 @@ class ActionSelectionContextBuilder:
         # (key: action_selection_pdma.context_integration). The {slot}
         # structure is structural; only the values are supplied here.
         loader, template_data = self._load_user_template()
-        formatted_content = loader.get_user_message(
-            template_data,
-            action_options_str=_action_options_str,
-            available_tools_str=_available_tools_str,
-            installable_tools_str=_installable_tools_str,
-            startup_guidance=_startup_guidance,
-            conscience_guidance=_conscience_guidance,
-            reject_thought_guidance=_reject_thought_guidance,
-            action_parameter_schemas=_action_parameter_schemas,
-            action_parameters_speak_csdma_guidance=_action_parameters_speak_csdma_guidance,
-            action_parameters_ponder_guidance=_action_parameters_ponder_guidance,
-            action_parameters_observe_guidance=_action_parameters_observe_guidance,
-            reasoning_csdma_guidance=_reasoning_csdma_guidance,
-            final_ponder_advisory=_final_ponder_advisory,
-            original_thought_content=original_thought.content,
-            original_task_str=_original_task_str,
-            thought_depth=original_thought.thought_depth,
-            ponder_notes_str=_ponder_notes_str,
-            user_profile_context_str=user_profile_context_str,
-            system_snapshot_context_str=system_snapshot_context_str,
-            ethical_summary=_ethical_summary,
-            csdma_summary=_csdma_summary,
-            dsdma_summary_str=_dsdma_summary_str,
-            idma_summary_str=_idma_summary_str,
-        )
+        _slots: Dict[str, Any] = {
+            "action_options_str": _action_options_str,
+            "available_tools_str": _available_tools_str,
+            "installable_tools_str": _installable_tools_str,
+            "startup_guidance": _startup_guidance,
+            "conscience_guidance": _conscience_guidance,
+            "reject_thought_guidance": _reject_thought_guidance,
+            "action_parameter_schemas": _action_parameter_schemas,
+            "action_parameters_speak_csdma_guidance": _action_parameters_speak_csdma_guidance,
+            "action_parameters_ponder_guidance": _action_parameters_ponder_guidance,
+            "action_parameters_observe_guidance": _action_parameters_observe_guidance,
+            "reasoning_csdma_guidance": _reasoning_csdma_guidance,
+            "final_ponder_advisory": _final_ponder_advisory,
+            "original_thought_content": original_thought.content,
+            "original_task_str": _original_task_str,
+            "thought_depth": original_thought.thought_depth,
+            "ponder_notes_str": _ponder_notes_str,
+            "user_profile_context_str": user_profile_context_str,
+            "system_snapshot_context_str": system_snapshot_context_str,
+            "ethical_summary": _ethical_summary,
+            "csdma_summary": _csdma_summary,
+            "dsdma_summary_str": _dsdma_summary_str,
+            "idma_summary_str": _idma_summary_str,
+        }
+        formatted_content = loader.get_user_message(template_data, **_slots)
+
+        # Three localized blocks the template has no {slot} for — #993, and the
+        # #990 pair. Every slot in `context_integration` is filled and every
+        # value supplied has a slot; these keys sit outside that closed set, so
+        # they were loaded, localized into 29 languages, and discarded.
+        #
+        # `tool_selection_guidance` is the tool-hallucination guard: "Use the
+        # EXACT tool name from the 'Available tools' list. Do NOT invent or
+        # modify tool names", plus the TSASPDMA division of labour ("you do NOT
+        # provide tool parameters"). It has never been sent to a model.
+        #
+        # APPENDED rather than slotted, deliberately. A new {slot} in
+        # `context_integration` would have to be added to all 29 localized
+        # copies of the template to render for anyone but English speakers —
+        # and a slot that exists in the base and not in a translation is how
+        # you get a block that silently serves some users and not others. The
+        # text itself is already per-locale, so appending it reaches every
+        # language on the first commit.
+        #
+        # Rendered through safe_format with the same slot values: these blocks
+        # carry `{{...}}` escapes (the alignment example is a literal JSON
+        # snippet) which only resolve under a format pass.
+        from ciris_engine.logic.dma.prompt_loader import safe_format
+
+        for _key in (
+            "csdma_ambiguity_guidance",
+            "csdma_ambiguity_alignment_example",
+            "tool_selection_guidance",
+        ):
+            _text = self._get_agent_specific_prompt(_key, agent_name)
+            if _text:
+                formatted_content += "\n\n" + safe_format(
+                    _text, source=f"action_selection_pdma.{_key}[{loader.language}]", **_slots
+                )
+
         return formatted_content.strip()
 
     def _load_user_template(self) -> "tuple[DMAPromptLoader, PromptCollection]":
@@ -595,7 +630,19 @@ class ActionSelectionContextBuilder:
     def _build_guidance_sections(
         self, agent_name: Optional[str], permitted_actions: List[HandlerActionType]
     ) -> Dict[str, str]:
-        """Build all guidance sections."""
+        """Build all guidance sections.
+
+        RESOLVED (#990/#993): ``action_alignment_csdma_guidance`` and
+        ``action_alignment_example`` are built here from
+        ``csdma_ambiguity_guidance`` / ``csdma_ambiguity_alignment_example``,
+        and used to be dropped on the floor — :meth:`build_main_user_content`
+        reads only keys with a matching ``{slot}`` in
+        ``action_selection_pdma.yml``'s ``context_integration``, and those two
+        have none. They are now appended after the template render, together
+        with ``tool_selection_guidance``, so all three reach the model in every
+        locale. See the comment at that append site for why appending beats
+        adding a slot.
+        """
         return {
             "action_alignment_csdma_guidance": self._get_agent_specific_prompt("csdma_ambiguity_guidance", agent_name),
             "action_alignment_example": self._get_agent_specific_prompt(
@@ -611,8 +658,47 @@ class ActionSelectionContextBuilder:
                 "action_params_observe_guidance", agent_name
             ),
             "reasoning_csdma_guidance": self._get_agent_specific_prompt("reasoning_csdma_guidance", agent_name),
-            "action_parameter_schemas": self._get_dynamic_action_schemas(permitted_actions),
+            "action_parameter_schemas": self._composed_action_parameter_schemas(permitted_actions),
         }
+
+    def _composed_action_parameter_schemas(self, permitted_actions: List[HandlerActionType]) -> str:
+        """The action schemas as COMPOSED — manifest first, generation second (#990).
+
+        This slot is the one place in the ASPDMA composer where a runtime value
+        shadows a template field: ``_get_dynamic_action_schemas`` derives the
+        per-action FLAT field list from the live permitted-action set and the
+        handler param models, so ``action_selection_pdma.action_parameter_schemas``
+        in the YAML is only ever a fallback. Applying the research override at
+        the YAML load point therefore did nothing — the manifest value was set
+        on the ``PromptCollection`` and then passed over, while the override
+        layer logged a successful replacement. That is the #989 failure shape in
+        a different place, and it made the key invisible to the ablation gate.
+
+        The override is applied HERE, at the composition boundary, so a manifest
+        value is what actually reaches the model. Gate closed (no manifest) this
+        is byte-identical to calling the generator directly — ``override_dma_prompt``
+        returns ``None`` without both ``CIRIS_RESEARCH_PROMPT_OVERRIDES`` and
+        ``CIRIS_TESTING_MODE``, which is what the #972 goldens prove.
+
+        A replacement inconsistent with the live action enum can produce output
+        the ASPDMA parser rejects. That is a legitimate research condition — a
+        campaign may want exactly that degradation — so it is permitted and made
+        LEGIBLE (the warning below names the risk and the key) rather than
+        prevented. Research mode is the correct place for it.
+        """
+        from ciris_engine.logic.utils.research_overrides import override_dma_prompt
+
+        replacement = override_dma_prompt("action_selection_pdma", "action_parameter_schemas")
+        if replacement is not None:
+            logger.warning(
+                "[RESEARCH-OVERRIDE] action_selection_pdma.action_parameter_schemas replaced at the "
+                "composition boundary: the generated per-action schemas were DISCARDED in favour of "
+                "the manifest value. If it does not match the permitted action set %s, the model's "
+                "response may not parse — that is a property of this arm, not a bug.",
+                [a.value for a in permitted_actions],
+            )
+            return replacement
+        return self._get_dynamic_action_schemas(permitted_actions)
 
     def _build_system_context(self, processing_context_data: Any) -> tuple[str, str]:
         """Build user profile and system snapshot context."""

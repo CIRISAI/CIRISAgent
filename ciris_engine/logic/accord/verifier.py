@@ -366,6 +366,22 @@ class AccordVerifier:
         """Number of rejected accords."""
         return self._rejected_count
 
+    def public_key_for(self, wa_id: str) -> Optional[bytes]:
+        """Raw Ed25519 public key for a trusted authority, or None.
+
+        LEGACY (see module docstring). Exists so the WA-signed emergency
+        shutdown API at ``/v1/emergency/shutdown`` resolves its key from THIS
+        authority list rather than keeping a second one of its own. That
+        endpoint's ``WASignedCommand`` is a different wire format from the
+        stego ``AccordPayload``, so it cannot reuse :meth:`verify` — but it
+        must not reuse a different set of keys. One authority source, two entry
+        surfaces (#998).
+        """
+        for auth in self._authorities:
+            if auth.wa_id == wa_id:
+                return bytes(auth.public_key)
+        return None
+
     def list_authorities(self) -> list[dict[str, Any]]:
         """List all trusted authorities (public info only)."""
         return [

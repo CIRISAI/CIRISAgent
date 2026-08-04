@@ -1015,8 +1015,6 @@ async def check_duplicate_transaction(
             )
 
         # Check for duplicate
-        from ciris_adapters.wallet.providers.validation import DuplicateProtection
-
         dup_protection = validator.duplicate_protection
 
         # Compute fingerprint and check

@@ -1,0 +1,16 @@
+# Deterministic AgentTemplate fixture for the #986 compose-dump coverage steps.
+#
+# WHY A FILE AND NOT A CONSTRUCTED OBJECT: the `template` override namespace is
+# applied by `research_overrides.apply_template_overrides()`, which runs inside
+# `profile_loader.load_template()` — i.e. it intercepts a template that was
+# PARSED FROM YAML. Loading this file drives that real production entry point,
+# so a `template.*` manifest key reaches the composed prompt through exactly the
+# code path a campaign would use. Hand-building an AgentTemplate would skip it.
+#
+# The three prose fields below are the whole `template` namespace
+# (`_TEMPLATE_TEXT_FIELDS`). Values are fixture constants, deliberately
+# distinctive so a block that carries them is unmistakable in a diff.
+name: golden_template_agent
+description: Deterministic golden-fixture agent, loaded from a template file.
+role_description: Template-loaded role text for the compose-dump coverage steps.
+domain: golden_template_domain

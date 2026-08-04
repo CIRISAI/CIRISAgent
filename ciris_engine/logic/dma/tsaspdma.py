@@ -29,7 +29,7 @@ from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
-from .prompt_loader import DMAPromptLoader, get_prompt_loader
+from .prompt_loader import DMAPromptLoader, get_prompt_loader, safe_format
 
 
 class TSASPDMALLMResult(BaseModel):
@@ -653,7 +653,16 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
 
         # Get the correction section template (stored in custom_prompts by loader)
         correction_template = self.prompt_template_data.get_prompt("tool_correction_section") or ""
-        correction_section = correction_template.format(
+        # `safe_format`, not bare `.format()` — #997. Byte-identical by
+        # construction (`safe_format` returns `template.format(**kwargs)`); what
+        # it adds is the composer's own provenance tag, which is the seam the
+        # compose dump splits blocks on. Without it these 899 B of LOCALIZED
+        # correction doctrine are indistinguishable from the English f-string
+        # scaffold around them, and the whole user message reports as one
+        # unmeasurable `mixed` block.
+        correction_section = safe_format(
+            correction_template,
+            source=f"tsaspdma.tool_correction_section[{self.prompt_loader.language}]",
             requested_tool=requested_tool,
             available_tools_list=available_tools_list,
         )

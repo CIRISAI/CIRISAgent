@@ -340,7 +340,13 @@ class TestFailLoudOnPartialApplication:
     @pytest.mark.parametrize(
         "dead_key",
         [
-            "prompts.formatters.system_snapshot_header",
+            # `prompts.formatters.*` used to head this list. #991 wired all 57 of
+            # them into the four prompt formatters, so the whole namespace is
+            # LIVE now and would no longer be rejected — a passing assertion
+            # here would mean the fix regressed. `prompts.escalation.*` replaces
+            # it as the representative of a namespace that is still authored,
+            # still translated into 29 locales, and still read by nobody.
+            "prompts.escalation.early",
             "prompts.dma.pdma_task",
             "prompts.crisis.header",
             "prompts.engine_overview",
@@ -734,7 +740,42 @@ class TestDriftGuard:
         #   prompts.identity_block                             (step 3, the CORE IDENTITY doctrine)
         #   conscience.repeated_speak_guidance                 (step 5, the repeated-SPEAK guidance)
         # (step 2 reused the pre-existing dsdma_base.context_integration key.)
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 101
+        # Back to 101: #989's fix landed, so OVERRIDE_IMMUNE_DMA_PROMPT_KEYS is
+        # empty and R2 totality requires all 36 dma_prompt keys again. The
+        # number moved 101 -> 88 -> 101 across this window: the dip was the
+        # honest stopgap (refuse what cannot be applied), the return is the
+        # real fix (apply it). If it ever drops again, a key became
+        # unapplicable and the inventory says which. #990 kept it at 101 on
+        # purpose: `action_parameter_schemas` was made to APPLY at the
+        # composition boundary rather than being declared unapplicable.
+        #
+        # 101 -> 105 in 2.9.10: four live YAML fields joined the key space.
+        # `tool_selection_guidance` and `csdma_ambiguity_alignment_example`
+        # became composable in #993; `taxonomy_text` (3,273 B of rights/needs
+        # deferral taxonomy — operative doctrine steering DEFER) and
+        # `tool_correction_section` were live all along but sat outside the
+        # inventory, so R1 rejected any manifest naming them as "does not reach
+        # any LLM prompt", which was false (#995 P1-6). Coverage going UP is the
+        # only direction this number should ever move without an inventory entry
+        # explaining a drop.
+        #
+        # 105 -> 191 in 2.9.10, in two independent steps, both increases:
+        #   +29  #997 split `prompts.language_guidance` into single-class parts.
+        #        The parent key stays reachable (24 unsplit locales resolve
+        #        through it), so this is 29 NEW keys, not a re-partition. This
+        #        landed without moving the number, which is why the count is
+        #        asserted at all.
+        #   +57  #991 wired the four prompt formatters to `label_localizer`.
+        #        These keys were authored and translated into 29 locales —
+        #        1,653 strings — and read by nobody: the formatters emitted
+        #        hardcoded English twins, so every non-English agent got its
+        #        system-snapshot, identity, user-context and task-chain headings
+        #        in English inside an otherwise localized prompt. They were the
+        #        largest dead namespace in the bundle and are now the largest
+        #        block of the `string` key space.
+        # 105 + 29 + 57 = 191. Both moves are coverage going UP, which the note
+        # above says is the only direction this may move unexplained.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 191
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

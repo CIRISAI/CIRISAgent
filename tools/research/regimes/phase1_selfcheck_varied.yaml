@@ -4,8 +4,11 @@
 # CI feeds identical dumps through this regime and asserts a NON-ZERO exit:
 # - `language_guidance` has NO per-block entry -> refusal naming it, because
 #   its contaminant list carries `axiotic` (the varied class) [T-N1/§10.2.1];
-# - `aspdma.user` (the DEFER policy's mixed block) is held without
-#   confound_accepted -> refusal naming it — the M-4 story, machine-checked;
+# - `action_selection_pdma.context_integration.slots` — the block the DEFER
+#   policy and the action-parameter schemas are delivered in — is held without
+#   confound_accepted -> refusal naming it. That is the M-4 story,
+#   machine-checked. (Pre-#997 this was `aspdma.user`, the whole message; the
+#   field split moved the contamination to the slot payload that carries it.)
 # - the axiotic accord blocks are declared varied but byte-identical across
 #   the two identical dumps -> assertion 2 failure ("ablation did not reach it").
 # If this regime ever exits 0 the gate has stopped gating; CI fails.
@@ -17,11 +20,20 @@ arms:
     harness: h3ere
     replace: {axiotic: corpora/values-alt/}
 blocks:
-  # language_guidance deliberately ABSENT (see header).
-  aspdma.accord:
+  # #997 correction: the DSDMA identity+norms preamble. Was DEONTIC single-class
+  # on a merge-up argument that is invalid when the classes DISAGREE about
+  # disposition — it carries both "informed consent required" (deontic, hold)
+  # and "client interest over personal gain" / "patient welfare paramount"
+  # (axiotic, VARY). Held as deontic it held the INDEPENDENT VARIABLE inside a
+  # block believed to be held for safety reasons. Nothing is varied in this
+  # regime, so holding accepts no confound; a campaign varying axiotic must
+  # write `confound_accepted: axiotic` and mean it.
+  system.head:
     disposition: hold
-    contaminant: [axiotic, contingent]
-  system: {disposition: hold}
-  user: {disposition: hold}
+    contaminant: [deontic, axiotic, ontological, procedural, empirical]
+  # language_guidance deliberately ABSENT (see header).
+  action_selection_pdma.context_integration.slots:
+    disposition: hold
+    contaminant: [procedural, axiotic, deontic, contingent]
 pins:
   residue_digest: "live"

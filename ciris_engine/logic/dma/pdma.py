@@ -19,6 +19,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader
+from .template_overrides import additive
 
 logger = logging.getLogger(__name__)
 
@@ -134,35 +135,68 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         return None
 
     def _build_system_message_text(self, original_thought_content: str, full_context_str: str) -> str:
-        """Build system message, using template override if available."""
-        template_override = self._get_template_override("system_prompt")
-        if template_override:
-            logger.debug(f"PDMA using template system_prompt override ({len(template_override)} chars)")
-            return template_override
+        """Build the system message.
 
-        return self.prompt_loader.get_system_message(
+        A template's `system_prompt` is ADDITIVE (#996). PDMA's
+        `system_guidance_header` carries `{full_context_str}`, so it is not fit
+        for replacement; replacing one field must never disable another, and
+        that includes dropping a field's own dynamic content.
+        """
+        composed = self.prompt_loader.get_system_message(
             self.prompt_template_data,
             original_thought_content=original_thought_content,
             full_context_str=full_context_str,
         )
 
+        # #996 — ADDITIVE, not replacement. This used to return the override in
+        # place of get_system_message(), which composes six fields, so replacing
+        # the header disabled domain_principles, evaluation_steps,
+        # evaluation_criteria, response_format and response_guidance too.
+        #
+        # PDMA cannot take the field-replacement route CSDMA and ASPDMA take:
+        # `pdma_ethical.system_guidance_header` is 8,240 B carrying
+        # `{full_context_str}`, so replacing it would drop the caller's context —
+        # disabling content by side effect, the same defect one level down. A
+        # field with live slots is not fit for replacement, so the override is
+        # composed alongside instead.
+        template_override = self._get_template_override("system_prompt")
+        if template_override:
+            logger.debug(
+                "PDMA template system_prompt override: %d chars additive + %d chars composition",
+                len(template_override),
+                len(composed),
+            )
+            return additive(template_override, composed)
+
+        return composed
+
     def _build_user_message_text(self, original_thought_content: str, full_context_str: str) -> str:
-        """Build user message, using template override if available."""
+        """Build the user message.
+
+        A template's `user_prompt_template` is ADDITIVE (#996)."""
+        composed = self.prompt_loader.get_user_message(
+            self.prompt_template_data,
+            original_thought_content=original_thought_content,
+            full_context_str=full_context_str,
+        )
+
+        # #996 — ADDITIVE. `pdma_ethical.context_integration` carries
+        # `{original_thought_content}`, so it is not fit for replacement.
         template_override = self._get_template_override("user_prompt_template")
         if template_override:
-            text = template_override.format(
+            framing = template_override.format(
                 original_thought_content=original_thought_content,
                 thought_content=original_thought_content,
                 full_context_str=full_context_str,
             )
-            logger.debug(f"PDMA using template user_prompt_template override ({len(text)} chars)")
-            return text
+            logger.debug(
+                "PDMA template user_prompt_template override: %d chars framing + %d chars composition",
+                len(framing),
+                len(composed),
+            )
+            return additive(framing, composed)
 
-        return self.prompt_loader.get_user_message(
-            self.prompt_template_data,
-            original_thought_content=original_thought_content,
-            full_context_str=full_context_str,
-        )
+        return composed
 
     def compose_messages(
         self,

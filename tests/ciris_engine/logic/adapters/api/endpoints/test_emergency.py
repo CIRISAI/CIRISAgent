@@ -115,28 +115,57 @@ class TestKillSwitchStatusEndpoint:
     """Tests for kill switch status endpoint."""
 
     def test_get_kill_switch_status_configured(self, client: TestClient, mock_runtime_service: MagicMock) -> None:
-        """Test getting kill switch status when configured."""
+        """Status reports the REAL authority set, plus the service's tuning fields.
+
+        `root_wa_count` used to be `len(config.root_wa_public_keys)` — a list
+        nothing populated in production, so the endpoint answered
+        "enabled: true, root_wa_count: 0" while every signed shutdown command
+        was rejected. It now counts accord-verifier authorities, so a mock's
+        two fake keys no longer decide the number (#999).
+        """
         response = client.get("/emergency/kill-switch/status")
 
         assert response.status_code == 200
         data = response.json()
         assert data["enabled"] is True
-        assert data["root_wa_count"] == 2
+        assert data["root_wa_count"] >= 1
+        assert data["trust_root"] == "accord-verifier"
         assert data["trust_tree_depth"] == 3
         assert data["allow_relay"] is True
         assert data["max_shutdown_time_ms"] == 5000
         assert data["command_expiry_seconds"] == 300
 
-    def test_get_kill_switch_status_not_configured(self, client: TestClient, mock_runtime_service: MagicMock) -> None:
-        """Test getting kill switch status when not configured."""
+    def test_status_without_a_service_config_still_reports_the_real_authorities(
+        self, client: TestClient, mock_runtime_service: MagicMock
+    ) -> None:
+        """`enabled` means AUTHORITIES ARE LOADED, not "a flag was set" (#999).
+
+        This test used to assert `enabled is False` plus an "error" key when the
+        service carried no `_kill_switch_config`. That encoded the old, false
+        semantics: `enabled` came from a KillSwitchConfig constructed with
+        `enabled=True` in the service __init__ and never updated, so the endpoint
+        answered "enabled: true, root_wa_count: 0" while every signed shutdown
+        command was being rejected — and answered "enabled: false" when a config
+        object happened to be absent, regardless of whether the kill switch
+        worked.
+
+        The service config now contributes only tuning fields. Authority comes
+        from the accord verifier, which SIGKILLs the process rather than run with
+        zero authorities — so a missing service config does NOT mean a missing
+        kill switch, and reporting one would be the same lie in the other
+        direction.
+        """
         del mock_runtime_service._kill_switch_config
 
         response = client.get("/emergency/kill-switch/status")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["enabled"] is False
-        assert "error" in data
+        assert data["enabled"] is True, "authorities are loaded; the kill switch is live"
+        assert data["root_wa_count"] >= 1
+        assert data["trust_root"] == "accord-verifier"
+        # the tuning fields the service config would have supplied are simply absent
+        assert "trust_tree_depth" not in data
 
 
 class TestGetRuntimeServiceDependency:

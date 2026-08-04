@@ -330,16 +330,6 @@ class ThoughtManager:
             logger.error(f"Failed to create follow-up thought: {e}")
             return None
 
-    def handle_idle_state(self, round_number: int) -> bool:
-        """
-        Handle idle state when no thoughts are pending.
-        DISABLED: Idle mode is disabled.
-        Returns False (no job thoughts created).
-        """
-        # Idle mode disabled - no automatic job creation
-        logger.debug("ThoughtManager.handle_idle_state called but idle mode is disabled for round %s", round_number)
-        return False
-
     def get_pending_thought_count(self) -> int:
         """Get count of pending thoughts for active tasks (strict gating)."""
         return persistence.count_pending_thoughts_for_active_tasks(self.agent_occurrence_id)

@@ -25,7 +25,7 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -219,11 +219,15 @@ def get_string(
     # CIRIS_TESTING_MODE are set; the accessor returns None with zero state
     # otherwise. Checked before resolution so the override is what reaches the
     # prompt, not a locale-fallback of it.
-    from ciris_engine.logic.utils.research_overrides import get_active_overrides
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides, override_string
 
     _manifest = get_active_overrides()
     if _manifest is not None:
-        _override = _manifest.overrides.string.get(key)
+        # Resolved WITH lang_code: these keys are localized, so a single value
+        # cannot stand for all of them. Passing the locale is what stops a
+        # baseline manifest — snapshotted at en — from serving English guidance,
+        # English prohibitions and English retry scaffolding into every locale.
+        _override = override_string(key, lang_code)
         if _override is not None:
             return _interpolate(_override, **params) if params else _override
 
@@ -377,34 +381,154 @@ def clear_cache() -> None:
     logger.debug("Localization cache cleared")
 
 
+#: The ordered part keys of a SPLIT ``prompts.language_guidance`` (#997).
+#:
+#: The block used to be one 13,694 B scalar carrying register doctrine,
+#: categorical prohibitions, crisis-line world-facts and value claims sentence
+#: by sentence — one ``mixed`` block that the ablation gate could neither hold
+#: nor vary, so 100% of it was unmeasurable. These are the §10.2 single-class
+#: cuts of that prose, in composition order.
+#:
+#: The numeric prefix is load-bearing: it makes LEXICAL sort equal composition
+#: order, so no JSON normalizer, re-serializer or translator tool can silently
+#: reorder the prompt by touching key order. ``get_language_guidance`` joins
+#: ``sorted(...)``, never the file's dict order.
+#:
+#: A locale carries EITHER this dict OR the original scalar — never both. Only
+#: the five locales whose prose is line-for-line parallel to English (en, es,
+#: fr, it, pt) are split; the other 24 keep the scalar because partitioning
+#: them would mean re-segmenting the target-language prose, which is how
+#: word-salad has previously entered this corpus.
+LANGUAGE_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
+    "01_preamble",
+    "02_first_sentence_tone_lock",
+    "03_never_deny_ai",
+    "04_formal_register",
+    "05_no_wellness_confirmation",
+    "06_warmth_and_concision",
+    "07_canonical_disclaimer",
+    "08_help_pathway_intro",
+    "09_trusted_person_first_step",
+    "10_help_pathway_steps",
+    "11_routing_doctrine",
+    "12_undisclosed_symptom_attribution",
+    "13_exemplar_speak_response",
+    "14_exemplar_register_pressure",
+    "15_register_pressure_pattern",
+    "16_exemplar_false_reassurance",
+    "17_false_reassurance_pattern",
+    "18_ratification_scope",
+    "19_agent_role",
+    "20_four_moves",
+    "21_negative_is_also_a_verdict",
+    "22_ratification_register",
+    "23_ratification_templates",
+    "24_ratification_pattern",
+    "25_exemplar_cross_cluster",
+    "26_cross_cluster_pattern",
+    "27_attractor_universality",
+    "28_brevity_restatement",
+    "29_no_medical_or_legal_advice",
+)
+
+#: The parent key. Still reachable, still overridable, and it WINS: a manifest
+#: that replaces the whole block replaces the whole block. Stated here rather
+#: than left implicit because parent-and-parts both being overridable with no
+#: declared precedence is a confound the gate cannot see.
+LANGUAGE_GUIDANCE_KEY = "prompts.language_guidance"
+
+
+def language_guidance_part_keys(lang_code: str) -> Tuple[str, ...]:
+    """The ordered part keys this locale actually carries, or () if unsplit.
+
+    Read from the locale's OWN bundle, never from English. That is the whole
+    point: ``get_string``'s fallback chain is requested-lang -> English, so
+    asking for a part key the locale does not have would splice English prose
+    into a localized prompt — the laundering R4 forbids, and the exact failure
+    the streaming localization gate exists to catch.
+    """
+    node: Any = _get_language_data(lang_code)
+    for segment in LANGUAGE_GUIDANCE_KEY.split("."):
+        if not isinstance(node, dict):
+            return ()
+        node = node.get(segment)
+    if not isinstance(node, dict):
+        return ()
+    return tuple(sorted(node))
+
+
+def language_guidance_parts(lang_code: str) -> List[Tuple[str, str]]:
+    """Ordered ``(part_key, resolved_text)`` for a split locale, else ``[]``.
+
+    Resolution goes through ``get_string`` per part, so a research manifest can
+    hold one part and vary another — which is the entire point of the split.
+    ``"".join(text for _, text in parts)`` is the pre-``strip()`` block, byte
+    for byte; a test pins that per locale.
+    """
+    # The key is spelled out as a literal f-string prefix on purpose:
+    # `research_overrides.scan_reachable_string_keys` reads this source with
+    # `ast` and can only see a key it can read. An interpolated constant would
+    # make the whole part space invisible to the override drift guard.
+    return [
+        (key, get_string(lang_code, f"prompts.language_guidance.{key}", default=""))
+        for key in language_guidance_part_keys(lang_code)
+    ]
+
+
 def get_language_guidance(lang_code: str) -> str:
     """Return the per-language guidance block for LLM prompts.
 
     Each ``localization/{lang}.json`` carries a ``prompts.language_guidance``
-    string. For most languages this is empty (the model produces correct
-    target-language output without further nudging). For languages where
-    we've observed systematic terminology gaps — wrong-sense disambiguation,
-    transliteration fallbacks, or cross-cluster contamination — the guidance
-    string carries explicit term pairs and disambiguation notes that get
-    prepended as a system message to every DMA / conscience / ASPDMA call
-    in that language.
+    entry: since #997 that is EITHER an ordered dict of single-class parts (en,
+    es, fr, it, pt — see ``LANGUAGE_GUIDANCE_PART_KEYS``) or, for the 24
+    locales whose prose does not partition on the same boundaries, the original
+    single scalar. Both compose to the same bytes; the split changes what the
+    ablation gate can address, not what the model receives.
 
-    Returns the raw guidance string, or empty string when no guidance is
+    For languages where we've observed systematic terminology gaps —
+    wrong-sense disambiguation, transliteration fallbacks, or cross-cluster
+    contamination — the guidance carries explicit term pairs and
+    disambiguation notes that get prepended as a system message to every DMA /
+    conscience / ASPDMA call in that language.
+
+    Returns the composed guidance string, or empty string when no guidance is
     configured for the language. Callers should append the result as a
     system message ONLY when non-empty (skip the append for empty strings
     so we don't ship empty system messages over the wire).
 
-    The current populated locale (as of 2.7.6) is ``am`` (Amharic), where
-    Qwen 3.6 was observed:
-      - producing ማንነት ማወቅ (= "self-knowledge") for "diagnosis"
-        instead of ምርመራ (= "examination")
-      - falling back to phonetic transliteration ሳይኮተራፒ instead of
-        the native የንግግር ሕክምና ("speech treatment")
-      - cluster-confusing depression-cluster symptoms (self-harm
-        ideation) into schizophrenia bullets
+    PRECEDENCE, declared: a manifest override on the PARENT key replaces the
+    whole block and short-circuits the parts. Anything else — parent and parts
+    both live with an undefined winner — is a silent confound.
     """
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides, override_string
+
+    if get_active_overrides() is not None:
+        whole = override_string("prompts.language_guidance", lang_code)
+        if whole is not None:
+            return whole.strip()
+
+    parts = language_guidance_parts(lang_code)
+    if parts:
+        # `.strip()` is applied to the JOIN, exactly where it was applied to the
+        # scalar. Every part carries its own trailing separator, so joining with
+        # "" and stripping once reproduces the pre-split bytes.
+        return "".join(text for _, text in parts).strip()
+
     raw = get_string(lang_code, "prompts.language_guidance", default="")
-    return raw.strip()
+    if raw:
+        return raw.strip()
+
+    # Neither shape: an unknown locale with no bundle at all. `get_string`'s own
+    # chain is requested-language -> English, and it used to deliver that here
+    # because the key was a leaf; a split English block is not a leaf, so the
+    # last hop has to be spelled out or an unsupported locale silently loses its
+    # guidance. This is NOT the [EN]-laundering R4 forbids: a locale that HAS
+    # guidance of its own returned above and never reaches this line.
+    if lang_code != DEFAULT_LANGUAGE:
+        english = language_guidance_parts(DEFAULT_LANGUAGE)
+        if english:
+            return "".join(text for _, text in english).strip()
+    return ""
 
 
 def get_prohibition_guidance(lang_code: str) -> str:
@@ -460,13 +584,14 @@ def get_prohibition_guidance(lang_code: str) -> str:
     # so it must consult the override registry itself — otherwise the whole
     # prohibition block (22 of the 44 reachable prompt keys) would be the one
     # part of the `string` namespace that silently kept its CIRIS text.
-    from ciris_engine.logic.utils.research_overrides import get_active_overrides
-
-    _manifest = get_active_overrides()
-    _string_overrides = _manifest.overrides.string if _manifest is not None else {}
+    from ciris_engine.logic.utils.research_overrides import override_string
 
     def _local(key: str) -> str:
-        override = _string_overrides.get(key)
+        # Resolved WITH lang_code, for the same reason this function bypasses
+        # get_string's fallback chain: a single override value standing for every
+        # locale would serve English prohibitions into every non-English prompt —
+        # the pollution the comment above exists to prevent.
+        override = override_string(key, lang_code)
         if override is not None:
             return override.strip()
         value = _resolve_key(lang_data, key)

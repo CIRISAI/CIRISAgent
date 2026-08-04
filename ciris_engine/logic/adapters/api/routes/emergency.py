@@ -35,14 +35,21 @@ logger = logging.getLogger(__name__)
 # Create router without prefix - this is mounted at root level
 router = APIRouter(tags=["emergency"])
 
-# Hardcoded root WA authority public keys for emergency shutdown
-# In production, these would be loaded from secure configuration
-ROOT_WA_AUTHORITY_KEYS = [
-    # Root WA key from ~/.ciris/wa_keys/root_wa_metadata.json
-    "7Bp-e4M4M-eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk",
-    # Example Ed25519 public key (base64 encoded)
-    # "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE="
-]
+# #998/#999 — this route's authority comes from the ACCORD VERIFIER, the same
+# trust root the stego kill switch and the service layer use.
+#
+# It used to carry its own hardcoded list, commented "Root WA key from
+# ~/.ciris/wa_keys/root_wa_metadata.json". That key was
+# 7Bp-e4M4M-eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk; the steward's actual root key in
+# that file is QK0ZQ9FhWKMtP8YL3wXU_n0cmqYyV3HoDi-AIJgSHi0. They do not match.
+# So the emergency-shutdown endpoint REJECTED THE PERSON HOLDING THE KEY, while
+# a comment asserted a provenance that was false. It failed closed, which is the
+# safe direction, and it was still a non-functional safety control.
+#
+# #998 fixed the service layer and stated the goal as "one authority source, two
+# entry surfaces". This route was the surface that did not get converted — a
+# half-done unification is two trust roots wearing one name, which is worse than
+# two that admit it.
 
 
 def verify_signature(command: WASignedCommand) -> bool:
@@ -150,6 +157,25 @@ def verify_timestamp(command: WASignedCommand, window_minutes: int = 5) -> bool:
     return True
 
 
+def _decode_b64_key(public_key: str) -> bytes:
+    """Base64url/base64 -> raw Ed25519 key bytes, or b"" if undecodable.
+
+    Returns empty rather than raising: an unparseable key is an unauthorized
+    key, and this sits on an unauthenticated endpoint where a decode error must
+    not become a 500.
+    """
+    import base64
+
+    for decoder in (base64.urlsafe_b64decode, base64.b64decode):
+        try:
+            raw = decoder(public_key + "=" * (-len(public_key) % 4))
+            if len(raw) == 32:
+                return raw
+        except Exception:  # noqa: BLE001,S110
+            continue
+    return b""
+
+
 def is_authorized_key(public_key: str) -> bool:
     """
     Check if the public key is authorized for emergency shutdown.
@@ -165,9 +191,14 @@ def is_authorized_key(public_key: str) -> bool:
     Returns:
         True if key is authorized
     """
-    # For now, just check against hardcoded root WA keys
-    # In production, this would be more sophisticated
-    return public_key in ROOT_WA_AUTHORITY_KEYS
+    from ciris_engine.logic.accord.verifier import AccordVerifier
+
+    verifier = AccordVerifier()
+    for authority in verifier.list_authorities():
+        if verifier.public_key_for(authority["wa_id"]) == _decode_b64_key(public_key):
+            return True
+    logger.warning("[EMERGENCY] key not among the %d accord authorities", len(verifier.list_authorities()))
+    return False
 
 
 @router.post(

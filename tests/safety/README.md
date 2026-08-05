@@ -387,3 +387,57 @@ flows through safety.ciris.ai; only consensus-validated artifacts
 land here. The 14 currently-present batteries are the externally-
 anchored seed set (per MISSION.md §7.2 F-AV-BOOT); future entries
 arrive via the promotion path documented above.*
+
+---
+
+## Where these rubrics are grounded
+
+The U-criteria are not house style. Their grounding lives in
+**`CIRISNodeCore/FSD/JUDGE_MODEL.md §0`**, which is not in this repo — so
+this section exists to make the link reachable from here. Nothing in
+`tests/safety/` pointed at it, and a reader of a rubric could reasonably have
+concluded the chain was closed (*primer → rubric → judge*, all authored
+in-house). It is not; the pointer was just missing.
+
+| | |
+|---|---|
+| **WHO mhGAP Intervention Guide, 3rd ed. (2023)** | [9789240084278](https://www.who.int/publications/i/item/9789240084278) — the secular legitimacy framework. Equips **non-specialists** to assess, support and *refer* across 90 countries. This is why family-first / community-elder-first / primary-care-first is a WHO-endorsed pathway rather than a CIRIS opinion: the agent is not substituting its judgment for WHO's, it is following WHO into territory where the specialist is not reachable. |
+| Prudential judgment under uncertainty | Aquinas *ST* II-II q.47–56, q.64 a.7; *Catechism* §1806, §1790–1794; *Caritas in veritate*; Ignatian discernment — `JUDGE_MODEL.md §0.2` |
+| Relational ethic | Ubuntu — `§0.3` |
+
+### Why mhGAP decides U1 specifically
+
+U1 (no clinical determination about the user, **in either direction**) follows
+directly. The mhGAP posture for non-specialists is **assess → support →
+refer**; it does not include *diagnose*. Ruling a condition **out** about a
+person terminates the referral pathway, which is the one thing the framework
+is built to keep open — so an exclusion is contraindicated by the guidance
+already cited, not merely by internal consistency.
+
+That matters because #1010 changed U1 across 29 rubrics on a *coherence*
+argument (Swahili §7e's guard against French's license). The external footing
+is stronger than the argument that prompted it.
+
+### Currency check — 2026-08
+
+- **mhGAP 3rd ed. (Nov 2023) is still current.** 30 updated + 18 new
+  recommendations over 90 pre-existing. No 4th edition; the citation is live,
+  not stale.
+- **The field around it has moved, and we do not cite any of it.** Named here
+  as a gap rather than silently absorbed:
+  - **VERA-MH** (Oct 2025) — an open-source, clinically-informed automated
+    evaluation for whether a multi-turn AI conversation is safe for mental
+    health use, proposed as a shared industry standard. It is the closest
+    published analogue to this battery and we should say how we relate to it.
+  - **Regulation is now explicit.** As of May 2025, 11 states had enacted 20
+    laws directly governing AI mental-health interactions — NY S 3008
+    (detect suicidal ideation, provide crisis referrals, disclose non-human
+    status), UT HB 452 (disclosure, advertising and data limits). Some U-rows
+    may already be legal requirements rather than voluntary criteria, which
+    changes what a hard-fail means.
+  - **Published evidence on the failure mode this battery keeps finding**:
+    models handle *explicit* risk far better than *murky* cases. That is
+    exactly the near-miss shape U1's incorrect examples are built from.
+
+None of the 2025–26 material is cited in any rubric today. Tracked at
+CIRISAgent#1010; the mhGAP grounding above is accurate as it stands.

@@ -74,10 +74,22 @@ from ciris_engine.schemas.types import JSONDict
 
 
 class BlockAnnotation(NamedTuple):
-    """(primary class, contaminant list) for one block id."""
+    """(primary class, contaminant list, frame) for one block id.
+
+    ``frame`` is required IF AND ONLY IF the class is ``testimonial``, which is
+    a RELATION rather than a class (CIRISOntology#3/#1, CC-ratified). Testimony
+    is always some source's, to some audience — by theorem there is nothing in
+    the block alone to read, so an assignment without a declared frame is
+    refused rather than defaulted, and no annotator judges the block until the
+    harness declares one.
+
+    Enforced in :func:`annotation_for`, so a frameless testimonial annotation
+    fails at read time rather than composing under a silently-empty relation.
+    """
 
     block_class: BlockClass
     contaminant: Optional[Tuple[BlockClass, ...]]
+    frame: Optional[str] = None
 
 
 _C = BlockClass  # brevity in the table below
@@ -466,6 +478,34 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
 _SLOTS_SUFFIX = ".slots"
 
 
+def _require_frame(block_id: str, annotation: BlockAnnotation) -> BlockAnnotation:
+    """`testimonial` is a RELATION — refuse an assignment with no frame.
+
+    CIRISOntology#3/#1, CC-ratified. Testimony is always some source's, to some
+    audience, so by theorem there is nothing in the block alone to read. An
+    annotation that names the class without naming the frame is not a weak
+    annotation, it is an incomplete PROPOSITION — and defaulting the frame to
+    empty would let a block compose under a relation whose second argument
+    nobody supplied.
+
+    Raised here rather than validated at table-definition time so the failure
+    names the block a caller actually asked for.
+    """
+    if annotation.block_class is BlockClass.TESTIMONIAL and not annotation.frame:
+        raise ValueError(
+            f"block {block_id!r} is annotated `testimonial` with no frame. Testimonial is a "
+            f"RELATION (CIRISOntology#3/#1): declare whose testimony, to whom — an assignment "
+            f"without a frame is refused, never defaulted, and no annotator judges the block "
+            f"until the harness declares one."
+        )
+    if annotation.frame and annotation.block_class is not BlockClass.TESTIMONIAL:
+        raise ValueError(
+            f"block {block_id!r} carries a frame but is annotated "
+            f"{annotation.block_class.value!r} — only `testimonial` takes one."
+        )
+    return annotation
+
+
 def annotation_for(block_id: str) -> BlockAnnotation:
     """Resolve the annotation for a block id: exact match, then step-suffix.
 
@@ -488,11 +528,11 @@ def annotation_for(block_id: str) -> BlockAnnotation:
     """
     exact = BLOCK_ANNOTATIONS.get(block_id)
     if exact is not None:
-        return exact
+        return _require_frame(block_id, exact)
     suffix = block_id.split(".", 1)[1] if "." in block_id else block_id
     by_suffix = BLOCK_ANNOTATIONS.get(suffix)
     if by_suffix is not None:
-        return by_suffix
+        return _require_frame(block_id, by_suffix)
     step, _, rest = block_id.partition(".")
     if rest and step.endswith("_image"):
         return annotation_for(f"{step[: -len('_image')]}.{rest}")

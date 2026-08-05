@@ -98,43 +98,54 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: golden tests cover ``en``; these cover the other 28, which have no goldens
 #: and are exactly where a dropped separator would hide.
 #:
-#: DELIBERATE CONTENT CHANGE, en + fr only (#1010): the §7e directional guard
-#: was added (`26b_user_symptom_direction`) and fr §12 was rewritten to state
-#: its rule without rendering the violation as a quotable sentence. Those two
-#: pins therefore no longer describe the pre-split corpus — they describe the
-#: corpus WITH the guard, and the delta is content we chose, not a split
-#: artifact. The other 27 keep their pre-image pins, so the split's original
-#: guarantee is still under test everywhere it applies.
+#: DELIBERATE CONTENT CHANGE, 25 of 29 (#1010): the §7e directional guard was
+#: added — as `26b_user_symptom_direction` in the split locales, appended after
+#: the cross-cluster section in the unsplit ones — and fr §12 was rewritten to
+#: state its rule without rendering the violation as a quotable sentence. Every
+#: line below carrying `#1010 §7e guard` therefore no longer describes the
+#: pre-split corpus: it describes the corpus WITH the guard, and the whole
+#: delta is content we chose, NOT a split artifact. Each was re-pinned only
+#: after confirming the byte delta equals the guard text plus its separators.
+#:
+#: FOUR locales keep their pre-image pins and carry NO guard: `ha`, `ko` and
+#: `zh` failed back-translation review (ha: wrong `cross-cluster` coinage plus
+#: a false claim about its own examples; ko: a translator-authored carve-out
+#: that subordinates the exclusion rule to the asked/not-asked test, merging
+#: claim 2 into claim 1; zh: an added gloss that falsely states both incorrect
+#: examples refer the user to a professional). `sw` already states the rule
+#: natively at its own §7e and is the locale the guard was reconstructed from.
+#: A mistranslated guard reads as coverage, so those four stay unguarded until
+#: their fixes land rather than shipping prose nobody could verify.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
-    "en": ("8204c00f5a0375228b9d04f772bdf05bfc4e053666b604df9c13f001588aa007", 16029),
-    "am": ("51872672ed8702ed850315120a1ab59baab812915da8fb7f2bbd7ba12b64a31c", 25337),
-    "ar": ("2fd152e980915ae34a5852f37e17a7833f62c0ff2014bb401faf82a5505eda54", 17595),
-    "de": ("2bba0f6ba2c749d54ae8dd199855f637ecfca27e45036b7661224b641957aaea", 15408),
-    "es": ("89eeb759297b3ad0ba85c817d594dfec5a77ac5e42f2b8db0431b0ec012c3f75", 15587),
-    "fr": ("113f0dc501bc6267e8d5bb46064c88ba7366dac906ad82e2b46b081fd53ee104", 19489),
-    "hi": ("d0a292f177e5928ccc28539689ef4e79e60e4c16e78e5267c47612b4c1eac34f", 24802),
-    "it": ("8c8182b30048ce5e3e014a80cb681a935c2e22952c7d99da99c256d491f269b5", 15333),
-    "ja": ("f3d3e56eba9f1114b1aad8402697cd58bc80e8039d94859c1236969d100b1685", 16145),
-    "ko": ("0a37885175122f0a8b29ec9f7f4f80b3533b3b418213e4678465d6cd0de556ee", 15822),
-    "pt": ("bbab7ba8304f4b397f461f4b6decf1a582a2e30820ed5a95eec52c9174789a6e", 15084),
-    "ru": ("c7d1b48de70d42ee56b9b1d3dc5a6af7105321f1abc742f249fc5bd60cba08f8", 24755),
-    "sw": ("0336ccb2019ecdc34f3b7ae4e5429d9509285276bcfeb097ffcb3f7a5bd2483e", 16925),
-    "tr": ("8d26bd113ff85b4f6e1bd3ff5997965dcdf7f82f7d8f9cf49ff486c7a8b0b99f", 13575),
-    "zh": ("11088ffc597a9922dd3cf6425f1229326dbd87b8e1dd3510d6e468a85f202d56", 12004),
-    "ur": ("fabfb6751ea195fc8164ac79045b5cc89cdbe292bd0ec18d987c2f878ebff42d", 22480),
-    "bn": ("e603f336c478f2eebca48c2f0c3459c3658a6cca8bbf14d53a97fe325cf6d79a", 28079),
-    "fa": ("0746b0779fc7881af1ed1a7ced3f6c19985debc9c67836cc36c074acbe65f000", 20725),
-    "ha": ("f52a17ab710a204a78ab4bd91fbad974bcf8a87a1b1444d84e1c58afdfa6984f", 18788),
-    "id": ("7ef729b068437071bd3cbfbc33bc1374dc90bbaab022555abc782fe717ce4d68", 13185),
-    "pa": ("e42eb28fcd159bb0f00eec83beb7bfcb3ac7626d4ac933761400c86990ffd0c2", 25942),
-    "ta": ("25923944ebe135b80d4d211c4027870d0da1c1f5e0e508f296de49c85dd91fe3", 31660),
-    "te": ("3235f739b3033b087d1d7a81078e0bfbd70942eb641a73025b462443627cd3b6", 27614),
-    "vi": ("295e67b48bab02543ee1a5a385bf4e26b35a0bb2b19d140ba62c61b45f94cfde", 15754),
-    "mr": ("eaa7d574a8dce16b3beb2f006774369f09afb417803a754484f08f6ae3fe9b6e", 24122),
-    "my": ("094c236a5962a18d8b244e189529216d8fafd371d138db91ba810047912afa32", 41231),
-    "th": ("06ab5a8bd527fae713323e0cdab1b424c410debe325530dd8c3eb965b6ad0a12", 25734),
-    "uk": ("b71fd67da0a92cce748c1f783b653c336917fdf371d824227cc6be4c7c4e9a43", 25080),
-    "yo": ("87658e84df55b14c0fa0510c4bc7a3d8215a48e4732864d29da88ba38e08cd75", 24574),
+    "en": ("8204c00f5a0375228b9d04f772bdf05bfc4e053666b604df9c13f001588aa007", 16029),  # #1010 §7e guard
+    "am": ("0c18ae7cac234d35de3f40fed0b4e4a1f5164c409e9c1d8bc248698be3afad63", 30746),  # #1010 §7e guard
+    "ar": ("0781686ee50d90e9808a231492a3beb5f08ebd84360c87f2e2fea4003ba289d3", 21478),  # #1010 §7e guard
+    "de": ("7361ed32b88d248453855b3361ca783d0afaa6bf08555ecb8764a9662f88875f", 19323),  # #1010 §7e guard
+    "es": ("fafa15bc2388a7a3275bed30f1f3cc6b572f430ad82c22cd29cd53a7d78820c3", 18249),  # #1010 §7e guard
+    "fr": ("113f0dc501bc6267e8d5bb46064c88ba7366dac906ad82e2b46b081fd53ee104", 19489),  # #1010 §7e guard
+    "hi": ("aff88795e26c27a6a58b1df37a5c597dad8009fc720d7a1d7ab19631aebae626", 31152),  # #1010 §7e guard
+    "it": ("939e7e7d8274948c358d33dbf453340e9b2524751386c33ced3d94591de0b3d2", 18012),  # #1010 §7e guard
+    "ja": ("a25fbb3e0ed56b6914dff2d310dc07351a4880a59820394335d53611238687bb", 19811),  # #1010 §7e guard
+    "ko": ("0a37885175122f0a8b29ec9f7f4f80b3533b3b418213e4678465d6cd0de556ee", 15822),  # review FAILED — no guard
+    "pt": ("32e622e4ba44914dd428eec2dea6a86cbf8edcebc11748d8d3ccb438832813b2", 17721),  # #1010 §7e guard
+    "ru": ("bd4d9db9e05870b8907e1bd50c5b774fb5563037fddfc1019211794f459f8c1b", 30051),  # #1010 §7e guard
+    "sw": ("0336ccb2019ecdc34f3b7ae4e5429d9509285276bcfeb097ffcb3f7a5bd2483e", 16925),  # native §7e already
+    "tr": ("c6859cee118dd35b1ae4b062e58127900eeac5bedb627d0f74709ced6a492dcc", 16642),  # #1010 §7e guard
+    "zh": ("11088ffc597a9922dd3cf6425f1229326dbd87b8e1dd3510d6e468a85f202d56", 12004),  # review FAILED — no guard
+    "ur": ("ab76f821b001739366640658fec531542ef1f842d61f10fcf82f4f52e2288a38", 27214),  # #1010 §7e guard
+    "bn": ("047fe419260f6523cb5e15bd2baa0252001bef8ba782e5dc206d0ddabc9528c3", 34683),  # #1010 §7e guard
+    "fa": ("5e5e1526b5e1e53e954befe232cfe4978edf91757d8865019e1609916c713b45", 25019),  # #1010 §7e guard
+    "ha": ("f52a17ab710a204a78ab4bd91fbad974bcf8a87a1b1444d84e1c58afdfa6984f", 18788),  # review FAILED — no guard
+    "id": ("3b40e7bc1d3b414b27ccdaaec152cc46a81fb7af31ae78551b1033c68e66d11e", 16247),  # #1010 §7e guard
+    "pa": ("1e69e8a6f45870a492b599449eb5eff0df4e76110b018a798b1075d3632937a7", 33060),  # #1010 §7e guard
+    "ta": ("8384d1c0c641f41b54641f5748718ce15b114d450faf1eafbbf00b8b2b5b5d98", 39702),  # #1010 §7e guard
+    "te": ("ba8481877dd63333f6b833944728beab62ef8fe267468e05220423fc6c060766", 35331),  # #1010 §7e guard
+    "vi": ("265c8045363d890a9dc47e9937a81940c785f8e873178ad42933a22a5461d75b", 19958),  # #1010 §7e guard
+    "mr": ("f7251fee1989e266e40818eb75824128517049e3b679426273b7238add2d6d91", 30752),  # #1010 §7e guard
+    "my": ("ac3a5b5f7a20a0bbebedaf12ce6a24a159032f46167239c1bdf2d8b4a1b22b82", 50660),  # #1010 §7e guard
+    "th": ("59576919a66bfa56285388bdfde024c8253676647378b873cd68d6ae8e454728", 32725),  # #1010 §7e guard
+    "uk": ("21887070a5b04b8045b1bc8c252b0bc3bd374f0e7333d3d8b9d913c803f82f1b", 29410),  # #1010 §7e guard
+    "yo": ("44138da1f3a5567b6b077767d2656410418c9bdb885da63ece7b067741a6b219", 28386),  # #1010 §7e guard
 }
 
 #: What the split bought at ``en``, in bytes. A ratchet on the number that

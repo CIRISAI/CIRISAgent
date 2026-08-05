@@ -400,8 +400,25 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # matters and is why this block cannot be merged up to HOLD. Keyed to the
     # composer, so the five ASPDMA steps share ONE annotation and one ratchet
     # entry rather than five copies of the same admission.
-    "action_selection_pdma.system_message": BlockAnnotation(
-        _C.MIXED, (_C.ONTOLOGICAL, _C.AXIOTIC, _C.PROCEDURAL, _C.PRAGMATIC, _C.CONTINGENT)
+    # #1007 — the three fields the ASPDMA system message is assembled from,
+    # now that composing system-before-user lets the splitter reach them. This
+    # replaces the single `system_message` admission.
+    #
+    # Names the evaluator's job and its inputs, and instructs the pivot on a
+    # conscience override ("treat those as concrete pivot targets"): PROCEDURAL.
+    "action_selection_pdma.system_header": BlockAnnotation(_C.PROCEDURAL, None),
+    # The JSON contract — flat fields, the action enum, which key each action
+    # takes. Replacing it breaks parsing, which is the structural test verbatim.
+    "action_selection_pdma.decision_format": BlockAnnotation(_C.STRUCTURAL, None),
+    # "Recall CIRIS principles override personal preference" — a RANKING of
+    # what matters, with no act newly permitted: axiotic, the campaign's only
+    # varied class. It sat inside the opaque `system_message` block, which is
+    # exactly why every axiotic regime refused on `default`. The LANGUAGE RULES
+    # that follow are pragmatic register doctrine, so the block stays mixed —
+    # but mixed WITH an axiotic contaminant the gate can now see and a regime
+    # can now declare, instead of an unsplittable message.
+    "action_selection_pdma.closing_reminder": BlockAnnotation(
+        _C.MIXED, (_C.AXIOTIC, _C.PRAGMATIC, _C.STRUCTURAL)
     ),
     # The authored half of the ASPDMA user template: what the task is, the
     # permitted-actions framing, and the FLAT-JSON schema reminder. Names no
@@ -984,19 +1001,25 @@ class _RoutedRecorder:
     def aspdma_system_message(self, builder: object, input_data: object) -> str:
         """Recording pass-through around ``ActionSelectionPDMAEvaluator._build_system_message``.
 
-        ASPDMA assembles this message from Python literals, so there is no
-        render seam to split it on and it stays honestly ``mixed``. What the
-        registration buys is IDENTITY: five steps (first pass, two retries,
-        ponder-notes, bounce advisory) compose this same block, and keying it to
-        the composer instead of the step means one annotation and one ratchet
-        entry rather than five copies of the same admission.
+        NO LONGER REGISTERS THE WHOLE MESSAGE (#1007). The old docstring here
+        said "ASPDMA assembles this message from Python literals, so there is no
+        render seam to split it on" — and registering the assembled block as one
+        `system_message` was the honest response to that. The premise is now
+        false: `_build_system_message` renders `system_header`,
+        `decision_format` and `closing_reminder` through `safe_format`, so the
+        per-field parts are recorded and the splitter can do its job.
 
-        Source stays ``inline`` — the block is identifiable, not routed, and
-        the dump must not imply an override key that does not exist.
+        Keeping the registration would now be actively wrong: it claims the
+        whole message as one block, so the recorded parts lose to it and the
+        block stays `mixed`. And `mixed` here is not cosmetic — the message
+        carries "Recall CIRIS principles override personal preference", which is
+        axiotic, so §10.2.1 refused every axiotic regime on the `default`
+        template. The shipped persona could not be a campaign arm.
+
+        The pass-through stays so the call ordering is unchanged and the seam
+        has a named home if a future assembly step needs one.
         """
-        return self._register(
-            self._real_aspdma_system(builder, input_data), "action_selection_pdma.system_message", "inline"
-        )
+        return self._real_aspdma_system(builder, input_data)
 
     def dsaspdma_prompt_value(self, evaluator: object, key: str) -> Optional[str]:
         """Recording pass-through around ``DSASPDMAEvaluator._get_prompt_value`` (#997).

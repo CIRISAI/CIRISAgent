@@ -342,6 +342,24 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         ``context_builder.pre_cache_context()`` (tools + task cache) must run
         in ``_perform_main_evaluation()`` before this is called.
         """
+        # #1007 — SYSTEM FIRST, matching the order the messages are emitted in.
+        #
+        # The #997 dump records each field render as it happens and matches those
+        # parts to messages FIFO, because composition order IS the honesty rule:
+        # a part queue that searched instead of consuming could attribute a field
+        # to whichever message happened to contain similar bytes.
+        #
+        # User content used to be built first while the system message is emitted
+        # first, so the queue read [user parts…, system parts…] against messages
+        # [system…, user]. Covering the system message hit a user part, failed,
+        # and the whole 2,755 B message fell back to one opaque `mixed` block —
+        # which carries "Recall CIRIS principles override personal preference",
+        # axiotic, so §10.2.1 refused every axiotic regime on `default`.
+        #
+        # The two builders are independent (both read only `input_data`), so the
+        # swap is order-of-evaluation only. The 12 goldens are the proof.
+        system_message = self._build_system_message(input_data)
+
         # Build main user content
         main_user_content = self._build_main_user_content(input_data, agent_name)
 
@@ -349,9 +367,6 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         if input_data.faculty_evaluations and self.faculty_integration:
             faculty_insights = self.faculty_integration.build_faculty_insights_string(input_data.faculty_evaluations)
             main_user_content += faculty_insights
-
-        # Build messages
-        system_message = self._build_system_message(input_data)
         accord_with_metadata = self._build_accord_with_metadata(
             input_data.original_thought, input_data.processing_context
         )

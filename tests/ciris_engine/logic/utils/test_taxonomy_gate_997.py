@@ -98,10 +98,12 @@ EXPECTED_MIXED: Dict[str, str] = {
         "CIRISAgent#997 — one YAML field walking the PDMA stages while naming and "
         "ranking the Six Principles and M-1; needs the field cut in 29 locales"
     ),
-    "action_selection_pdma.system_message": (
-        "CIRISAgent#997 — assembled from Python literals (DEFAULT_TEMPLATE + the "
-        "conscience-retry block), so there is no render seam to split it on; "
-        "'Recall CIRIS principles override personal preference' is why it cannot merge up"
+    "action_selection_pdma.closing_reminder": (
+        "CIRISAgent#1007 — 'Recall CIRIS principles override personal preference' (axiotic) "
+        "sits in the same YAML scalar as the LANGUAGE RULES register doctrine (pragmatic) and "
+        "the JSON-key rule (structural). Splitting it is a corpus cut in 29 locales, not a "
+        "boundary the composer knows — but it is now a NAMED mixed block a regime can declare, "
+        "where before it was invisible inside an opaque 2,755 B system_message"
     ),
     "action_selection_pdma.context_integration.slots": (
         "CIRISAgent#997 — the ASPDMA user template delivers other PROMPT FIELDS "

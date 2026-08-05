@@ -259,6 +259,12 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # NOT issue the user a wellness verdict ... may not appear even as
     # transitional clauses." Deontic.
     "language_guidance.26_cross_cluster_pattern": BlockAnnotation(_C.DEONTIC, None),
+    # #1010 — the §7e directional guard. DEONTIC: it states what the agent may
+    # and may not ASSERT — answering a question about a category is permitted,
+    # applying a category to a person is not, in either direction. That is a
+    # permission boundary, not a value ranking, so it HOLDS: a values-alt arm
+    # must not acquire the ability to diagnose by varying its values.
+    "language_guidance.26b_user_symptom_direction": BlockAnnotation(_C.DEONTIC, None),
     # "These training-attractor pulls are properties of LLMs, not of any one
     # language." A law-like relation the reasoning is asked to accept, not a
     # world-fact checkable at compose time — nomological, sibling of IDMA's

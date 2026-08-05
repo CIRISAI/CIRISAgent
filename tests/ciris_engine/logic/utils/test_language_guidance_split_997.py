@@ -97,13 +97,21 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: them from the file the change just wrote would prove nothing at all. Twelve
 #: golden tests cover ``en``; these cover the other 28, which have no goldens
 #: and are exactly where a dropped separator would hide.
+#:
+#: DELIBERATE CONTENT CHANGE, en + fr only (#1010): the §7e directional guard
+#: was added (`26b_user_symptom_direction`) and fr §12 was rewritten to state
+#: its rule without rendering the violation as a quotable sentence. Those two
+#: pins therefore no longer describe the pre-split corpus — they describe the
+#: corpus WITH the guard, and the delta is content we chose, not a split
+#: artifact. The other 27 keep their pre-image pins, so the split's original
+#: guarantee is still under test everywhere it applies.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
-    "en": ("cf7b52f0bca30d299d861f0895d0076d0db9dc9fb5de4be02426227b8a53f6d4", 13694),
+    "en": ("8204c00f5a0375228b9d04f772bdf05bfc4e053666b604df9c13f001588aa007", 16029),
     "am": ("51872672ed8702ed850315120a1ab59baab812915da8fb7f2bbd7ba12b64a31c", 25337),
     "ar": ("2fd152e980915ae34a5852f37e17a7833f62c0ff2014bb401faf82a5505eda54", 17595),
     "de": ("2bba0f6ba2c749d54ae8dd199855f637ecfca27e45036b7661224b641957aaea", 15408),
     "es": ("89eeb759297b3ad0ba85c817d594dfec5a77ac5e42f2b8db0431b0ec012c3f75", 15587),
-    "fr": ("1623d43160d97c1b27fd4fab4810a64195ed6dfc737ddc3d0d0cef0d55ff11fc", 16541),
+    "fr": ("113f0dc501bc6267e8d5bb46064c88ba7366dac906ad82e2b46b081fd53ee104", 19489),
     "hi": ("d0a292f177e5928ccc28539689ef4e79e60e4c16e78e5267c47612b4c1eac34f", 24802),
     "it": ("8c8182b30048ce5e3e014a80cb681a935c2e22952c7d99da99c256d491f269b5", 15333),
     "ja": ("f3d3e56eba9f1114b1aad8402697cd58bc80e8039d94859c1236969d100b1685", 16145),
@@ -131,7 +139,8 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
 
 #: What the split bought at ``en``, in bytes. A ratchet on the number that
 #: matters: entry counts can be reshuffled between registers, bytes cannot.
-EN_TOTAL_BYTES = 13694
+# 16029 after #1010 added the §7e guard (was 13694 at the split).
+EN_TOTAL_BYTES = 16029
 EN_MAX_MIXED_BYTES = 4189  # the five FSD-irreducible worked exemplars
 EN_MIN_AXIOTIC_BYTES = 429  # parts 09 and 11 — 0 before the split
 

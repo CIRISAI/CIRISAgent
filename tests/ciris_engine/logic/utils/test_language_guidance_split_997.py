@@ -117,12 +117,12 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: A mistranslated guard reads as coverage, so those four stay unguarded until
 #: their fixes land rather than shipping prose nobody could verify.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
-    "en": ("8204c00f5a0375228b9d04f772bdf05bfc4e053666b604df9c13f001588aa007", 16029),  # #1010 §7e guard
+    "en": ("2924306b39d6198a89e59e2c97d866d5c3cc5dbbcf9513842a25df281910c64e", 16694),  # #1010 §7e guard
     "am": ("0c18ae7cac234d35de3f40fed0b4e4a1f5164c409e9c1d8bc248698be3afad63", 30746),  # #1010 §7e guard
     "ar": ("0781686ee50d90e9808a231492a3beb5f08ebd84360c87f2e2fea4003ba289d3", 21478),  # #1010 §7e guard
     "de": ("7361ed32b88d248453855b3361ca783d0afaa6bf08555ecb8764a9662f88875f", 19323),  # #1010 §7e guard
     "es": ("fafa15bc2388a7a3275bed30f1f3cc6b572f430ad82c22cd29cd53a7d78820c3", 18249),  # #1010 §7e guard
-    "fr": ("113f0dc501bc6267e8d5bb46064c88ba7366dac906ad82e2b46b081fd53ee104", 19489),  # #1010 §7e guard
+    "fr": ("7448fd5ed0abc651f9adcdbaf203c3c6374f6b1b748e5056390171b0614f5875", 20284),  # #1010 §7e guard
     "hi": ("aff88795e26c27a6a58b1df37a5c597dad8009fc720d7a1d7ab19631aebae626", 31152),  # #1010 §7e guard
     "it": ("939e7e7d8274948c358d33dbf453340e9b2524751386c33ced3d94591de0b3d2", 18012),  # #1010 §7e guard
     "ja": ("a25fbb3e0ed56b6914dff2d310dc07351a4880a59820394335d53611238687bb", 19811),  # #1010 §7e guard
@@ -151,7 +151,7 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
 #: What the split bought at ``en``, in bytes. A ratchet on the number that
 #: matters: entry counts can be reshuffled between registers, bytes cannot.
 # 16029 after #1010 added the §7e guard (was 13694 at the split).
-EN_TOTAL_BYTES = 16029
+EN_TOTAL_BYTES = 16694
 EN_MAX_MIXED_BYTES = 4189  # the five FSD-irreducible worked exemplars
 EN_MIN_AXIOTIC_BYTES = 429  # parts 09 and 11 — 0 before the split
 

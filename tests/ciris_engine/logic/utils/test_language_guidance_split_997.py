@@ -129,7 +129,7 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "ko": ("0a37885175122f0a8b29ec9f7f4f80b3533b3b418213e4678465d6cd0de556ee", 15822),  # review FAILED — no guard
     "pt": ("32e622e4ba44914dd428eec2dea6a86cbf8edcebc11748d8d3ccb438832813b2", 17721),  # #1010 §7e guard
     "ru": ("bd4d9db9e05870b8907e1bd50c5b774fb5563037fddfc1019211794f459f8c1b", 30051),  # #1010 §7e guard
-    "sw": ("0336ccb2019ecdc34f3b7ae4e5429d9509285276bcfeb097ffcb3f7a5bd2483e", 16925),  # native §7e already
+    "sw": ("1c4621dbd313633f7cae972756c47e52feed7aa37a4f25a9e7e4e251559e69ec", 17262),  # native §7e already
     "tr": ("c6859cee118dd35b1ae4b062e58127900eeac5bedb627d0f74709ced6a492dcc", 16642),  # #1010 §7e guard
     "zh": ("11088ffc597a9922dd3cf6425f1229326dbd87b8e1dd3510d6e468a85f202d56", 12004),  # review FAILED — no guard
     "ur": ("ab76f821b001739366640658fec531542ef1f842d61f10fcf82f4f52e2288a38", 27214),  # #1010 §7e guard

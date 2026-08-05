@@ -252,12 +252,11 @@ jobs:
               *[!0-9]*) echo "::error::llm_seed must be a non-negative integer, got '${LLM_SEED}'"; exit 1 ;;
             esac
             # $GITHUB_ENV, not `export`: each `run:` is its OWN shell, so an
-  # exported var dies with this step and would never reach the
-  # capture. It would have failed SILENTLY — the run completes, the
-  # seed is simply absent, and the cohort looks like a determinism
-  # pin that was never transmitted. Exactly the shape this release
-  # spent its length removing.
-  echo "CIRIS_LLM_SEED=${LLM_SEED}" >> "$GITHUB_ENV"
+            # exported var dies with this step and never reaches the capture.
+            # It would have failed SILENTLY — the run completes, the seed is
+            # simply absent, and a cohort with no pin is indistinguishable from
+            # one that has it.
+            echo "CIRIS_LLM_SEED=${LLM_SEED}" >> "$GITHUB_ENV"
             echo "::notice::determinism pin: seed=${LLM_SEED} — replicates are genuine, not sampling noise"
           else
             echo "::notice::no seed pinned — replicates vary by provider sampling"

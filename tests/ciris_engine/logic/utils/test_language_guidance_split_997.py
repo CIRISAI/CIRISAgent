@@ -154,12 +154,12 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: was a different fix, the §3d false incorrect-examples header, which belongs
 #: to the fa/ru/ta/te/ur/yo header sweep, not here); `en`/`fr` already done.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
-    "en": ("2924306b39d6198a89e59e2c97d866d5c3cc5dbbcf9513842a25df281910c64e", 16694),  # #1010 §7e guard
+    "en": ("fbeceaa216da042790c046812bc76a4b17ea076fcdd36e4be3cdc3b897b36de6", 16907),  # #1010 §7e guard
     "am": ("33fb7ed6229f16fc59036becc33915916ed15c44e4cd1ecb333644729b9f6641", 32861),  # #1010 §7e guard + §26 reconciled
     "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
     "de": ("69d48927767343e36f741b2b75fe2162e8dc30b65c8ff0450690ce368055ddcd", 20065),  # #1010 §7e guard + §26 reconciled
     "es": ("f2c7e348babf1c86ecf85cbba3afa5149c117323dee3509542197b7843e32a82", 19008),  # #1010 §7e guard + §26 reconciled
-    "fr": ("7448fd5ed0abc651f9adcdbaf203c3c6374f6b1b748e5056390171b0614f5875", 20284),  # #1010 §7e guard
+    "fr": ("ee761eb64c67bf910de2e65480855195544df8966aa36be245c91ec47a446293", 20549),  # #1010 §7e guard
     "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
     "it": ("5ed796959aa5466c31f84acad6d4320a1c8f356873e00b0e4ecc34fb849462c6", 18824),  # #1010 §7e guard + §26 reconciled
     "ja": ("941caca76b8056e7cd321c82d948c9f0fd64df5bf862ba557714c57d77408254", 20960),  # #1010 §7e guard + §26 reconciled
@@ -188,8 +188,18 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
 #: What the split bought at ``en``, in bytes. A ratchet on the number that
 #: matters: entry counts can be reshuffled between registers, bytes cannot.
 # 16029 after #1010 added the §7e guard (was 13694 at the split).
-EN_TOTAL_BYTES = 16694
-EN_MAX_MIXED_BYTES = 4189  # the five FSD-irreducible worked exemplars
+EN_TOTAL_BYTES = 16907
+# 4189 -> 4402 (#1010). The cross-cluster EXEMPLAR is a `mixed` block, and
+# fixing it made it longer: its CORRECT RESPONSE used to model the exclusion
+# ("what you're describing doesn't match psychosis") — the exact move §7e
+# forbids — so §25 taught the violation while §26b prohibited it. The
+# replacement keeps the explanation on the CATEGORY and declines the
+# determination, which costs words.
+#
+# The ratchet is RIGHT to flag it: 213 more bytes the ablation can neither
+# hold nor vary. Raised deliberately, for a correction, and named — a silent
+# bump here would be indistinguishable from the surface quietly rotting.
+EN_MAX_MIXED_BYTES = 4402  # the five FSD-irreducible worked exemplars
 EN_MIN_AXIOTIC_BYTES = 429  # parts 09 and 11 — 0 before the split
 
 

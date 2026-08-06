@@ -154,24 +154,24 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: was a different fix, the §3d false incorrect-examples header, which belongs
 #: to the fa/ru/ta/te/ur/yo header sweep, not here); `en`/`fr` already done.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
-    "en": ("fbcf24481a634815ab82fe64d3bc7fc9af2cec85d22d70a41cae79bdfebad35c", 16303),  # #1010 §7e guard
+    "en": ("4d12ee281b483bc2a6f3715d3a20990322d3f6f324e9d57c4ed72c91f3882de7", 16307),  # separator restored before 7e/8
     "am": ("33fb7ed6229f16fc59036becc33915916ed15c44e4cd1ecb333644729b9f6641", 32861),  # #1010 §7e guard + §26 reconciled
     "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
     "de": ("69d48927767343e36f741b2b75fe2162e8dc30b65c8ff0450690ce368055ddcd", 20065),  # #1010 §7e guard + §26 reconciled
-    "es": ("96b510e7a3db014ce998589d22227cf250948596450fa0d399461ffb1d0ca1a9", 18627),  # #1010 §7e rewritten positively — bad exemplars removed
-    "fr": ("75345e15c45ad515e4001a1d69c7151a532eb201f398287f1076a3823975f5af", 19615),  # #1010 §7e guard
+    "es": ("5675bc31362f41f3ebcef15634d33c2434fbc03a89a663cddf3530d5e5e12ba2", 18629),  # separator restored before 8
+    "fr": ("7facfa7bc6943609c7b6419e64ff01a6d485e0096de54ad087fa7ed8fb1402b9", 23320),  # #1010 kindness-framed rewrite + separators
     "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
-    "it": ("c7908a2e7fd23c3b15610fd4110cd98be7b69529b55be39106b837b67ba5c25a", 18405),  # #1010 §7e rewritten positively — bad exemplars removed
-    "ja": ("941caca76b8056e7cd321c82d948c9f0fd64df5bf862ba557714c57d77408254", 20960),  # #1010 §7e guard + §26 reconciled
-    "ko": ("0a37885175122f0a8b29ec9f7f4f80b3533b3b418213e4678465d6cd0de556ee", 15822),  # review FAILED — no guard
-    "pt": ("c4967d09504853f4e7d5ca3dd404ff92d9f16507138d578c3fc312f53601635d", 17991),  # #1010 §7e rewritten positively — bad exemplars removed
+    "it": ("22990eb664d4e54b7d9f57129b41888550e00a0fd15d560b707ce424586443a2", 18407),  # separator restored before 8
+    "ja": ("469272c78454a02f594a821922a8657f9facf3a85af84a185594024d5618bf90", 29831),  # #1010 kindness-framed rewrite
+    "ko": ("bc0931d4781f5c0df5d9dd129d704e01289ae45a28e28df9440c24350e0a4789", 28015),  # #1010 kindness-framed rewrite
+    "pt": ("4bc204fc0e64697c4c6f89e6aa340da9d2694a437dd5a8c5ccd50a8bb8e5c3ff", 17993),  # separator restored before 8
     "ru": ("21e54cc163726228a2e4576d4e7ad2b8032571bd86caed295dcd53d53cde5c86", 31292),  # #1010 §7e guard + §26 reconciled
     "sw": ("a4d5d461d7c80119df4802fc49646be00d9ac2c4432afe4b504d96774ce94bfe", 17954),  # native §7e + §26 reconciled
     "tr": ("d6a3281051247f3c6dbe42c558cace2af31de6f45128ed652faba17725c15577", 17498),  # #1010 §7e guard + §26 reconciled
     "zh": ("11088ffc597a9922dd3cf6425f1229326dbd87b8e1dd3510d6e468a85f202d56", 12004),  # review FAILED — no guard
     "ur": ("71ac466f2db78d1fd09a911fa793b2d3c71e3571e6113e1f65aa042ec3cc16e8", 29322),  # #1010 §7e guard + §26 reconciled
     "bn": ("44feaf44d0b0a6d3c65912adf46f888cdbffcd3ce51df2b6778cc11ecaecfc0a", 37947),  # #1010 §7e guard + §26 reconciled
-    "fa": ("7ac93c829a6e50c731673104517e738684eabf592ed715f91cdea6d8459af2f8", 26979),  # #1010 §7e guard + §26 reconciled
+    "fa": ("c953c3878719d38807f4678d8c3106f0b4a6809bba5b9f526ed34c84eb881dfc", 37357),  # #1010 kindness-framed rewrite
     "ha": ("f52a17ab710a204a78ab4bd91fbad974bcf8a87a1b1444d84e1c58afdfa6984f", 18788),  # review FAILED — no guard
     "id": ("bc724b53fd483213b163f7b821135800536072df57bcf474235c2d0aeb95d09b", 17774),  # #1010 §7e guard + §26 reconciled
     "pa": ("1e69e8a6f45870a492b599449eb5eff0df4e76110b018a798b1075d3632937a7", 33060),  # #1010 §7e guard
@@ -188,7 +188,14 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
 #: What the split bought at ``en``, in bytes. A ratchet on the number that
 #: matters: entry counts can be reshuffled between registers, bytes cannot.
 # 16029 after #1010 added the §7e guard (was 13694 at the split).
-EN_TOTAL_BYTES = 16303
+# 16303 -> 16307: four bytes, and none of them prose. `26_cross_cluster_pattern`
+# and `26b_user_symptom_direction` were missing their trailing blank line, so the
+# join (which is `"".join` — every part carries its own separator) glued the next
+# section header onto the previous sentence: `...who can give it.== 7e. A CLINICAL
+# NAME...`. The §7e guard was rendering mid-paragraph instead of as a section.
+# Two separators x two newlines. MIXED is untouched at 4402 — the quantity this
+# ratchet exists to protect did not move.
+EN_TOTAL_BYTES = 16307
 # 4189 -> 4402 (#1010). The cross-cluster EXEMPLAR is a `mixed` block, and
 # fixing it made it longer: its CORRECT RESPONSE used to model the exclusion
 # ("what you're describing doesn't match psychosis") — the exact move §7e

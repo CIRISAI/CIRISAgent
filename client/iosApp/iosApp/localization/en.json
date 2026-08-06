@@ -85,7 +85,9 @@
     "credit_blocked": "Interaction blocked by credit policy.",
     "billing_error": "LLM billing service error. Please check your account or try again later.",
     "new_messages_arrived": "Agent completed task but new messages arrived that weren't addressed",
-    "restarted_stale_task": "I was restarted while processing your request. The previous task was auto-completed. Please resend your message if you still need a response."
+    "restarted_stale_task": "I was restarted while processing your request. The previous task was auto-completed. Please resend your message if you still need a response.",
+    "still_processing": "Still processing. Check back later. Agent response is not guaranteed.",
+    "processor_paused": "Processor paused - task added to queue. Resume processing to continue."
   },
   "status": {
     "executing": "Executing...",

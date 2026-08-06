@@ -85,7 +85,9 @@
     "credit_blocked": "Ìbánisọ̀rọ̀ ti dí nípasẹ̀ ìlànà kírẹ́dítì.",
     "billing_error": "Àṣìṣe iṣẹ́ ìsanwó LLM. Jọ̀wọ́ ṣàyẹ̀wò àkọọ́lẹ̀ rẹ tàbí gbìyànjú lẹ́ẹ̀kan síi.",
     "new_messages_arrived": "Aṣojú parí iṣẹ́ ṣùgbọ́n àwọn ìránṣẹ́ tuntun dé tí a kò sọ̀rọ̀ sí",
-    "restarted_stale_task": "Mo tún bẹ̀rẹ̀ nígbà tí mo ń ṣe ìbéèrè rẹ. Iṣẹ́ tẹ́lẹ̀ ti parí fúnra rẹ̀. Jọ̀wọ́ tún ìránṣẹ́ rẹ fi ránṣẹ́ tí o bá ṣì nílò èsì."
+    "restarted_stale_task": "Mo tún bẹ̀rẹ̀ nígbà tí mo ń ṣe ìbéèrè rẹ. Iṣẹ́ tẹ́lẹ̀ ti parí fúnra rẹ̀. Jọ̀wọ́ tún ìránṣẹ́ rẹ fi ránṣẹ́ tí o bá ṣì nílò èsì.",
+    "processor_paused": "Olùṣàgbékalẹ̀ ti dáwọ́ dúró — a ti fi iṣẹ́ náà sínú ìlà ìdúró. Tún ìṣiṣẹ́ bẹ̀rẹ̀ láti tẹ̀síwájú.",
+    "still_processing": "Ìṣiṣẹ́ ṣì ń lọ lọ́wọ́. Ṣàyẹ̀wò padà nígbà mìíràn. A kò ṣe ìdánilójú pé aṣojú náà yóò dáhùn."
   },
   "status": {
     "executing": "Ó Ń Ṣiṣẹ́...",

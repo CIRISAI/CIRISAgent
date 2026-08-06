@@ -116,7 +116,9 @@
     "credit_blocked": "Mwingiliano umezuiliwa na sera ya mikopo.",
     "billing_error": "Hitilafu ya huduma ya malipo ya LLM. Tafadhali angalia akaunti yako au jaribu tena baadaye.",
     "new_messages_arrived": "Wakala alikamilisha kazi lakini jumbe mpya zilifika ambazo hazikushughulikiwa",
-    "restarted_stale_task": "Nilianzishwa tena wakati wa kushughulikia ombi lako. Kazi iliyopita ilikamilishwa kiotomatiki. Tafadhali tuma tena ujumbe wako ikiwa unahitaji jibu."
+    "restarted_stale_task": "Nilianzishwa tena wakati wa kushughulikia ombi lako. Kazi iliyopita ilikamilishwa kiotomatiki. Tafadhali tuma tena ujumbe wako ikiwa unahitaji jibu.",
+    "still_processing": "Bado inashughulikiwa. Tafadhali angalia tena baadaye. Hakuna uhakika kwamba wakala atajibu.",
+    "processor_paused": "Kichakataji kimesitishwa — kazi imeongezwa kwenye foleni. Anza tena uchakataji ili kuendelea."
   },
   "audit_context": "Muktadha",
   "audit_hash_chain": "Mnyororo wa Hash",

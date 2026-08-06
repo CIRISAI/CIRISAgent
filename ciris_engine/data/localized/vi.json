@@ -115,7 +115,9 @@
     "credit_blocked": "Tương tác bị chặn bởi chính sách tín dụng.",
     "billing_error": "Lỗi dịch vụ thanh toán LLM. Vui lòng kiểm tra tài khoản của bạn hoặc thử lại sau.",
     "new_messages_arrived": "Tác nhân hoàn thành nhiệm vụ nhưng có tin nhắn mới đến không được giải quyết",
-    "restarted_stale_task": "Tôi đã được khởi động lại trong khi xử lý yêu cầu của bạn. Nhiệm vụ trước đó đã được hoàn thành tự động. Vui lòng gửi lại tin nhắn của bạn nếu bạn vẫn cần một phản hồi."
+    "restarted_stale_task": "Tôi đã được khởi động lại trong khi xử lý yêu cầu của bạn. Nhiệm vụ trước đó đã được hoàn thành tự động. Vui lòng gửi lại tin nhắn của bạn nếu bạn vẫn cần một phản hồi.",
+    "still_processing": "Vẫn đang xử lý. Vui lòng quay lại kiểm tra sau. Phản hồi của tác nhân không được đảm bảo.",
+    "processor_paused": "Bộ xử lý đã tạm dừng — nhiệm vụ đã được thêm vào hàng đợi. Hãy tiếp tục xử lý để tiến hành."
   },
   "conscience": {
     "ponder_attempted": "Tôi đã cố gắng {action}",

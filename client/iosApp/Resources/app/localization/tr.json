@@ -116,7 +116,9 @@
     "credit_blocked": "Etkileşim kredi politikası tarafından engellendi.",
     "billing_error": "LLM faturalandırma hizmet hatası. Lütfen hesabınızı kontrol edin veya daha sonra tekrar deneyin.",
     "new_messages_arrived": "Ajan görevini tamamladı ancak ele alınmayan yeni mesajlar geldi",
-    "restarted_stale_task": "İsteğinizi işlerken yeniden başlatıldım. Önceki görev otomatik olarak tamamlandı. Hâlâ bir yanıt gerekiyorsa lütfen mesajınızı yeniden gönderin."
+    "restarted_stale_task": "İsteğinizi işlerken yeniden başlatıldım. Önceki görev otomatik olarak tamamlandı. Hâlâ bir yanıt gerekiyorsa lütfen mesajınızı yeniden gönderin.",
+    "still_processing": "İşlem hâlâ sürüyor. Lütfen daha sonra tekrar kontrol edin. Ajanın yanıt vermesi garanti edilmez.",
+    "processor_paused": "İşlemci duraklatıldı — görev kuyruğa eklendi. Devam etmek için işlemeyi sürdürün."
   },
   "audit_context": "Bağlam",
   "audit_hash_chain": "Hash Zinciri",

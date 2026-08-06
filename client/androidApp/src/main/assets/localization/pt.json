@@ -116,7 +116,9 @@
     "credit_blocked": "Interação bloqueada pela política de crédito.",
     "billing_error": "Erro no serviço de cobrança do LLM. Por favor, verifique sua conta ou tente novamente mais tarde.",
     "new_messages_arrived": "O agente completou a tarefa, mas novas mensagens chegaram que não foram abordadas",
-    "restarted_stale_task": "Fui reiniciado enquanto processava sua solicitação. A tarefa anterior foi concluída automaticamente. Por favor, reenvie sua mensagem se ainda precisar de uma resposta."
+    "restarted_stale_task": "Fui reiniciado enquanto processava sua solicitação. A tarefa anterior foi concluída automaticamente. Por favor, reenvie sua mensagem se ainda precisar de uma resposta.",
+    "still_processing": "Ainda em processamento. Volte a verificar mais tarde. A resposta do agente não é garantida.",
+    "processor_paused": "Processador pausado — a tarefa foi adicionada à fila. Retome o processamento para continuar."
   },
   "audit_context": "Contexto",
   "audit_hash_chain": "Cadeia de Hash",

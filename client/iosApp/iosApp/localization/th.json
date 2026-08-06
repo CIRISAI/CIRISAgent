@@ -85,7 +85,9 @@
     "credit_blocked": "Interกระทำion blocked by credit policy.",
     "billing_error": "แอลแอลเอ็ม billing บริการ ข้อผิดพลาด. Please check your account or try again later.",
     "new_messages_arrived": "เอเจนต์ completed task but new ข้อความ arrived that weren't addressed",
-    "restarted_stale_task": "I was restarted while processing your request. The previous task was auto-completed. Please reส่ง your message if you still need a response."
+    "restarted_stale_task": "I was restarted while processing your request. The previous task was auto-completed. Please reส่ง your message if you still need a response.",
+    "still_processing": "ยังอยู่ระหว่างการประมวลผล กรุณากลับมาตรวจสอบอีกครั้งในภายหลัง ไม่มีการรับประกันว่าเอเจนต์จะตอบกลับ",
+    "processor_paused": "ตัวประมวลผลหยุดชั่วคราว — เพิ่มงานลงในคิวแล้ว ดำเนินการประมวลผลต่อเพื่อทำงานต่อไป"
   },
   "status": {
     "executing": "กำลังดำเนินการ...",

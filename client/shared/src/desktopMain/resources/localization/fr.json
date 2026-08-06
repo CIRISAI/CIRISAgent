@@ -116,7 +116,9 @@
     "credit_blocked": "Interaction bloquée par la politique de crédit.",
     "billing_error": "Erreur de service de facturation LLM. Veuillez vérifier votre compte ou réessayer plus tard.",
     "new_messages_arrived": "L'agent a terminé la tâche mais de nouveaux messages sont arrivés qui n'ont pas été traités",
-    "restarted_stale_task": "J'ai été redémarré pendant le traitement de votre demande. La tâche précédente a été automatiquement terminée. Veuillez renvoyer votre message si vous avez toujours besoin d'une réponse."
+    "restarted_stale_task": "J'ai été redémarré pendant le traitement de votre demande. La tâche précédente a été automatiquement terminée. Veuillez renvoyer votre message si vous avez toujours besoin d'une réponse.",
+    "still_processing": "Traitement toujours en cours. Veuillez revenir plus tard. La réponse de l'agent n'est pas garantie.",
+    "processor_paused": "Processeur en pause — la tâche a été ajoutée à la file. Reprenez le traitement pour continuer."
   },
   "audit_context": "Contexte",
   "audit_hash_chain": "Chaîne de hachage",

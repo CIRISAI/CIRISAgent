@@ -85,7 +85,9 @@
     "credit_blocked": "An toshe mu'amala saboda manufar kuɗi.",
     "billing_error": "Kuskuren sabis na lissafin LLM. Don Allah a duba asusun ku ko a sake gwadawa daga baya.",
     "new_messages_arrived": "Wakili ya gama aiki amma sabon saƙonni sun iso da ba a magance su ba",
-    "restarted_stale_task": "An sake kunna ni yayin sarrafa buƙatar ku. An gama aikin da ya gabata ta atomatik. Don Allah a sake aika saƙon ku idan har yanzu kuna bukatar amsa."
+    "restarted_stale_task": "An sake kunna ni yayin sarrafa buƙatar ku. An gama aikin da ya gabata ta atomatik. Don Allah a sake aika saƙon ku idan har yanzu kuna bukatar amsa.",
+    "still_processing": "Ana ci gaba da sarrafawa. Don Allah a sake dubawa daga baya. Ba a tabbatar da amsar wakili ba.",
+    "processor_paused": "An dakatar da na'urar sarrafawa — an ƙara aikin a layin jira. Don Allah a sake kunna sarrafawa don a ci gaba."
   },
   "status": {
     "executing": "Ana aiwatarwa...",

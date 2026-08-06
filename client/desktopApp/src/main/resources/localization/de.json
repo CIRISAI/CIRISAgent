@@ -116,7 +116,9 @@
     "credit_blocked": "Interaktion durch Gutschriftrichtlinie blockiert.",
     "billing_error": "LLM-Abrechnungsdienst Fehler. Bitte überprüfen Sie Ihr Konto oder versuchen Sie es später erneut.",
     "new_messages_arrived": "Agent hat die Aufgabe erledigt, aber es sind neue Nachrichten eingegangen, die nicht beantwortet wurden",
-    "restarted_stale_task": "Ich wurde während der Verarbeitung Ihrer Anfrage neu gestartet. Die vorherige Aufgabe wurde automatisch abgeschlossen. Bitte senden Sie Ihre Nachricht erneut, wenn Sie noch eine Antwort benötigen."
+    "restarted_stale_task": "Ich wurde während der Verarbeitung Ihrer Anfrage neu gestartet. Die vorherige Aufgabe wurde automatisch abgeschlossen. Bitte senden Sie Ihre Nachricht erneut, wenn Sie noch eine Antwort benötigen.",
+    "still_processing": "Die Verarbeitung läuft noch. Bitte schauen Sie später erneut nach. Eine Antwort des Agenten ist nicht garantiert.",
+    "processor_paused": "Prozessor pausiert – die Aufgabe wurde der Warteschlange hinzugefügt. Nehmen Sie die Verarbeitung wieder auf, um fortzufahren."
   },
   "audit_context": "Kontext",
   "audit_hash_chain": "Hash-Kette",

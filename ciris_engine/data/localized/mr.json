@@ -85,7 +85,9 @@
     "credit_blocked": "Interकृतीion blocked by credit policy.",
     "billing_error": "एलएलएम billing सेवा त्रुटी. Please check your account or try again later.",
     "new_messages_arrived": "एजंट completed task but new संदेश arrived that weren't addressed",
-    "restarted_stale_task": "I was restarted while processing your request. The previous task was auto-completed. Please reपाठवा your message if you still need a response."
+    "restarted_stale_task": "I was restarted while processing your request. The previous task was auto-completed. Please reपाठवा your message if you still need a response.",
+    "still_processing": "अजूनही प्रक्रिया सुरू आहे. कृपया नंतर पुन्हा पाहा. एजंटच्या प्रतिसादाची हमी नाही.",
+    "processor_paused": "प्रोसेसर थांबवला आहे — कार्य रांगेत जोडले आहे. पुढे चालू ठेवण्यासाठी प्रक्रिया पुन्हा सुरू करा."
   },
   "status": {
     "executing": "अंमलबजावणी होत आहे...",

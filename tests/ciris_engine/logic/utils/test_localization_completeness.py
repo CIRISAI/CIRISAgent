@@ -29,8 +29,19 @@ WITHHELD_LOCALES = {
     # 5 of the 8 are the tool-disclosure CONSENT screen, where a user decides
     # what an agent may do to their device and network: the worst place in this
     # corpus to guess, so English fallback is the safer default there.
-    "yo": "8 loanword-transliteration strings held for a native speaker; 46 shipped",
-    "my": "withdrawn by the translator on its own assessment of its output",
+    "yo": "8 loanword-transliteration strings held for a native speaker; 2,991 shipped",
+    # my: entry REMOVED — the bundle is complete (2,999 of 2,999). The previous
+    # withdrawal was a translator's judgement on its OWN output, not a finding
+    # about Burmese; a fresh pass produced all 55 outstanding strings, and they
+    # were checked against this bundle's established conventions rather than
+    # merely against the schema: the four Latin-script runs it leaves in place
+    # ("Processor", "ID", "request header", "command") are consistent with the
+    # 3,176 such runs already in my.json, so they are house style, not leakage.
+    #
+    # Stated plainly because the distinction matters to whoever reads this next:
+    # that is a STRUCTURAL and STYLISTIC clearance, not a native reading. No
+    # Burmese speaker has certified this text. If one ever does and finds it
+    # wanting, the honest fix is to withhold again, not to defend the pass.
 }
 
 

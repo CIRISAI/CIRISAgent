@@ -85,7 +85,9 @@
     "credit_blocked": "Interaksi diblokir oleh kebijakan kredit.",
     "billing_error": "Kesalahan layanan penagihan LLM. Periksa akun Anda atau coba lagi nanti.",
     "new_messages_arrived": "Agen menyelesaikan tugas tetapi pesan baru tiba yang belum ditangani",
-    "restarted_stale_task": "Saya dimulai ulang saat memproses permintaan Anda. Tugas sebelumnya diselesaikan secara otomatis. Kirim ulang pesan Anda jika masih memerlukan respons."
+    "restarted_stale_task": "Saya dimulai ulang saat memproses permintaan Anda. Tugas sebelumnya diselesaikan secara otomatis. Kirim ulang pesan Anda jika masih memerlukan respons.",
+    "still_processing": "Masih diproses. Silakan periksa kembali nanti. Respons agen tidak dijamin.",
+    "processor_paused": "Prosesor dijeda — tugas telah ditambahkan ke antrean. Lanjutkan pemrosesan untuk meneruskan."
   },
   "status": {
     "executing": "Mengeksekusi...",

@@ -116,7 +116,9 @@
     "credit_blocked": "交互被信用政策阻止。",
     "billing_error": "LLM 计费服务错误。请检查您的账户或稍后重试。",
     "new_messages_arrived": "智能体已完成任务，但有新消息未被处理",
-    "restarted_stale_task": "处理您的请求时我被重启了。之前的任务已自动完成。如果您仍需要回复，请重新发送您的消息。"
+    "restarted_stale_task": "处理您的请求时我被重启了。之前的任务已自动完成。如果您仍需要回复，请重新发送您的消息。",
+    "still_processing": "仍在处理中，请稍后再来查看。不保证智能体一定会回复。",
+    "processor_paused": "处理器已暂停 — 任务已加入队列。请恢复处理以继续。"
   },
   "audit_context": "审计上下文",
   "audit_hash_chain": "哈希链",

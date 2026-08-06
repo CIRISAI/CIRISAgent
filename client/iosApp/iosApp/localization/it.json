@@ -116,7 +116,9 @@
     "credit_blocked": "Interazione bloccata dalla politica di credito.",
     "billing_error": "Errore del servizio di fatturazione LLM. Per favore, controlla il tuo account o riprova più tardi.",
     "new_messages_arrived": "L'agente ha completato l'attività ma sono arrivati nuovi messaggi che non sono stati affrontati",
-    "restarted_stale_task": "Sono stato riavviato durante l'elaborazione della tua richiesta. L'attività precedente è stata completata automaticamente. Per favore, reinvia il tuo messaggio se hai ancora bisogno di una risposta."
+    "restarted_stale_task": "Sono stato riavviato durante l'elaborazione della tua richiesta. L'attività precedente è stata completata automaticamente. Per favore, reinvia il tuo messaggio se hai ancora bisogno di una risposta.",
+    "still_processing": "Elaborazione ancora in corso. Torna a controllare più tardi. La risposta dell'agente non è garantita.",
+    "processor_paused": "Processore in pausa — l'attività è stata aggiunta alla coda. Riprendi l'elaborazione per continuare."
   },
   "audit_context": "Contesto",
   "audit_hash_chain": "Catena di Hash",

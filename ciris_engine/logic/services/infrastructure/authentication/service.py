@@ -1974,8 +1974,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
           - raises on collision with differing content (intentional —
             signals key rotation that the operator must approve)
         """
-        import base64
-
         from ciris_engine.logic.persistence import get_persist_engine
 
         engine = get_persist_engine()
@@ -1986,76 +1984,62 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             )
             return
 
-        # CIRISVerify is the trust anchor for the agent's signing key.
-        # Pull the pubkey via the same path the audit signer uses.
+        # #1009 — id AND key both come from the ENGINE, or neither does.
+        #
+        # `local_derived_key_id()` is derive_key_id output, and derive_key_id is a
+        # function of the PUBLIC KEY: same alias with a different key yields a
+        # different id (verified — ciris-agent-bootstrap-f6wqvxosm2 vs
+        # ...-gpjyxfcrm3). So the id and the pubkey in a row are not independent
+        # fields; a row pairing one key's id with another key's bytes is not a
+        # weaker registration, it is a wrong one, and every verifier that
+        # resolves through it gets the wrong key.
+        #
+        # This function was written for 2.9.0, when the agent signed with the
+        # CIRISVerify/TPM key and `agent-{sha256(pub)[:12]}` correctly named that
+        # key. 2.9.7 moved signing to the engine's local signer and this site was
+        # not updated — so it registered a key nothing signs with, under an id no
+        # peer had ever seen. canonical-server-1 answered 401 verify_unknown_key
+        # 8,631 times a day for 71 hours while trace delivery sat at zero.
         try:
-            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
-                get_verifier,
-            )
-            verifier = get_verifier()
-        except Exception as exc:
-            logger.debug(
-                f"[AuthenticationService] CIRISVerify not yet available for "
-                f"key registration: {exc}"
-            )
-            return
-
-        if not hasattr(verifier, "get_ed25519_public_key_sync"):
-            logger.debug(
-                "[AuthenticationService] CIRISVerify version lacks "
-                "get_ed25519_public_key_sync; skipping registration"
+            key_id = engine.local_derived_key_id()
+            pubkey_b64 = engine.local_public_key_b64()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[AuthenticationService] no federation identity on the persist Engine "
+                "(%s); skipping pubkey registration. The Engine needs local_key_id + "
+                "local_key_path. NOT falling back to an agent-{fingerprint} id: that "
+                "namespace is unverifiable to peers and fails silently (#1009).",
+                exc,
             )
             return
 
-        pubkey_bytes = verifier.get_ed25519_public_key_sync()
-        if not pubkey_bytes:
-            logger.debug(
-                "[AuthenticationService] CIRISVerify returned no pubkey; "
-                "key may not be initialized yet"
+        if not key_id or not pubkey_b64:
+            logger.warning(
+                "[AuthenticationService] engine returned an empty federation key id or "
+                "pubkey; skipping registration rather than writing an unverifiable row (#1009)."
             )
             return
-
-        pubkey_b64 = base64.b64encode(pubkey_bytes).decode("ascii")
-
-        # Stable key_id: prefer CIRIS_AGENT_ID env var when set;
-        # otherwise derive from the pubkey fingerprint so the value is
-        # deterministic across reboots without operator coordination.
-        import hashlib
-        import os
-
-        agent_id = os.environ.get("CIRIS_AGENT_ID")
-        if agent_id:
-            key_id = f"agent-{agent_id}"
-        else:
-            fingerprint = hashlib.sha256(pubkey_bytes).hexdigest()[:12]
-            key_id = f"agent-{fingerprint}"
 
         try:
             engine.register_public_key(
                 signature_key_id=key_id,
                 public_key_b64=pubkey_b64,
                 algorithm="ed25519",
-                description="CIRISAgent signing key (CIRISVerify-managed)",
+                description="CIRISAgent federation signing key (persist local signer)",
                 added_by="agent_bootstrap",
             )
             logger.info(
-                f"[AuthenticationService] agent pubkey registered with persist "
-                f"directory: key_id={key_id}"
+                "[AuthenticationService] registered federation signing key %s in "
+                "accord_public_keys",
+                key_id,
             )
-        except Exception as exc:
-            # Idempotent no-op on match; raises on content collision.
-            # We log + swallow either way — the boot path is non-blocking.
-            msg = str(exc).lower()
-            if "already" in msg or "exists" in msg or "conflict" in msg:
-                logger.debug(
-                    f"[AuthenticationService] steward key already registered "
-                    f"(key_id={key_id}): {exc}"
-                )
-            else:
-                logger.warning(
-                    f"[AuthenticationService] steward key registration failed "
-                    f"(key_id={key_id}): {exc}"
-                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[AuthenticationService] accord_public_keys registration failed for %s: %s",
+                key_id,
+                exc,
+            )
+        return
 
     async def start(self) -> None:
         """Start the service."""

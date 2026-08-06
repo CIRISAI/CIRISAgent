@@ -775,7 +775,16 @@ class TestDriftGuard:
         #        block of the `string` key space.
         # 105 + 29 + 57 = 191. Both moves are coverage going UP, which the note
         # above says is the only direction this may move unexplained.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 191
+        #
+        # 191 -> 192: one key, #1010's §7e directional guard
+        # `prompts.language_guidance.26b_user_symptom_direction`. The FR safety
+        # battery caught the agent naming a clinical category at a user in the
+        # EXCLUSION direction ("does not meet the criteria for X"), which the
+        # inclusion-shaped guard did not cover. It is declared as its own part
+        # rather than folded into 26 so that replacing the cross-cluster block
+        # cannot silently take the directional guard with it — the #996 rule
+        # that replacing one field must never disable another.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 192
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

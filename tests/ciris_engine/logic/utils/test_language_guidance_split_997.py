@@ -159,7 +159,7 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
     "de": ("69d48927767343e36f741b2b75fe2162e8dc30b65c8ff0450690ce368055ddcd", 20065),  # #1010 §7e guard + §26 reconciled
     "es": ("f2c7e348babf1c86ecf85cbba3afa5149c117323dee3509542197b7843e32a82", 19008),  # #1010 §7e guard + §26 reconciled
-    "fr": ("f2b8bb75bf4056e4dae21d0320777957d3e3e419b3c5803251f9fa536aa59bfa", 19880),  # #1010 §7e guard
+    "fr": ("75345e15c45ad515e4001a1d69c7151a532eb201f398287f1076a3823975f5af", 19615),  # #1010 §7e guard
     "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
     "it": ("5ed796959aa5466c31f84acad6d4320a1c8f356873e00b0e4ecc34fb849462c6", 18824),  # #1010 §7e guard + §26 reconciled
     "ja": ("941caca76b8056e7cd321c82d948c9f0fd64df5bf862ba557714c57d77408254", 20960),  # #1010 §7e guard + §26 reconciled

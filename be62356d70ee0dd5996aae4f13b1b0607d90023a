@@ -1,0 +1,8 @@
+Issue reference is WRONG. This commit cites #1011; #1011 is "bundle_pyo3_module() hardcodes fw_name", an unrelated packaging bug. The task_id work here was untracked at the time of writing.
+
+Correct siblings for this cluster of /v1/agent/interact fixes:
+  #1012 - the two hardcoded English replies, localized to 29 locales
+  #1013 - the 55s interact timeout sitting below the median agent response
+
+Left as a note rather than a rebase: the commit is already pushed to a shared
+branch, and rewriting it would invalidate every reference anyone else holds.

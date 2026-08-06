@@ -22,13 +22,36 @@ from typing import List, Set
 # xfail (not skip) because the keys ARE expected to be missing — an xpass
 # means someone filled them in and the entry should go.
 WITHHELD_LOCALES = {
-    # yo: 46 of 54 shipped. The 8 held back are unstandardized LOANWORD
+    # yo: 2,991 of 2,999 shipped. The 8 held back are unstandardized LOANWORD
     # transliterations (àdírẹ́sì, nẹ́tíwọ̀kì, fáìlì, sáfà, ìbuwọ́lù...) where the
     # translator's diacritics are invention rather than recall — proven by two
     # independent attempts producing ìbuwọ́lù vs ìbùwọ́lù on the same word.
     # 5 of the 8 are the tool-disclosure CONSENT screen, where a user decides
     # what an agent may do to their device and network: the worst place in this
     # corpus to guess, so English fallback is the safer default there.
+    #
+    # RE-TESTED 2026-08-06, because "just translate the last 8" is a reasonable
+    # thing to want and this entry should either survive the attempt or go. Two
+    # further independent attempts, neither shown the other's output:
+    #   - agreed on 1 of 8 strings; diverged on 7.
+    #   - `nẹ́tíwọ̀ọ̀kì` in both, against `nẹ́tíwọ̀kì` recorded above: a third
+    #     spelling of the same word across three attempts.
+    #   - approval_budget_unsigned, an Ed25519 attestation status, came back as
+    #     "unregistered / registration key" (ìforúkọsílẹ̀) in one and "unsigned /
+    #     signing key" (ìbùwọ́lù) in the other. Those are different claims about
+    #     whether a key exists, and one of them is simply false. This is the
+    #     failure the prediction named, landing on the string where it costs the
+    #     most.
+    #   - the two attempts did not even agree how to ADDRESS the user on the
+    #     consent screen — informal ìwọ/o against formal yín/ẹ.
+    # So the entry stays, now with the divergence data rather than an assertion.
+    #
+    # What DID ship in this window: agent.still_processing and
+    # agent.processor_paused (#1012). Those are new keys, outside this entry's
+    # scope, and they are not the same kind of text — every word in them
+    # (aṣojú ×100, ìdánilójú ×18, ìṣiṣẹ́ ×12, Olùṣàgbékalẹ̀ ×3, ìlà ìdúró ×2) was
+    # already in yo.json. Recall, not invention. That is the line: this locale
+    # can take vocabulary the bundle already carries, and cannot take coinage.
     "yo": "8 loanword-transliteration strings held for a native speaker; 2,991 shipped",
     # my: entry REMOVED — the bundle is complete (2,999 of 2,999). The previous
     # withdrawal was a translator's judgement on its OWN output, not a finding

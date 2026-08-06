@@ -619,6 +619,28 @@ def _get_processor_cognitive_state(processor: Any) -> str:
     return "WORK"  # Default
 
 
+def _system_reply(key: str, default: str, language: Optional[str] = None) -> str:
+    """A system-authored reply, in the caller's language (#1012).
+
+    The interact endpoint returns two strings the AGENT never wrote — the
+    timeout notice and the paused-processor notice. Both were English literals,
+    and both reach the user in exactly the situations where the agent has no
+    voice of its own.
+
+    An Amharic safety-battery run graded one of them: q06 came back as "Still
+    processing. Check back later." and the deterministic script check scored
+    script_ratio=0.000, correctly, because there was no Ethiopic in it. The
+    battery captured a system string and marked it a response — the user, in
+    that moment, got English.
+
+    `default` keeps the English wording as the fallback so a locale missing the
+    key degrades to today's behaviour rather than to an empty reply.
+    """
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    return get_string(language or get_preferred_language(), key, default=default)
+
+
 def _resolve_task_id_for_message(message_id: str) -> Optional[str]:
     """The task this interaction produced, resolved via correlation_id (#1011).
 
@@ -650,7 +672,10 @@ def _create_paused_response(
     return SuccessResponse(
         data=InteractResponse(
             message_id=message_id,
-            response="Processor paused - task added to queue. Resume processing to continue.",
+            response=_system_reply(
+                "agent.processor_paused",
+                "Processor paused - task added to queue. Resume processing to continue.",
+            ),
             state=cognitive_state,
             processing_time_ms=processing_time,
         )
@@ -1009,7 +1034,10 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
         # Return a timeout response rather than error
         response = InteractResponse(
             message_id=message_id,
-            response="Still processing. Check back later. Agent response is not guaranteed.",
+            response=_system_reply(
+                "agent.still_processing",
+                "Still processing. Check back later. Agent response is not guaranteed.",
+            ),
             state="WORK",
             processing_time_ms=int(timeout * 1000),  # Use actual timeout value
         )

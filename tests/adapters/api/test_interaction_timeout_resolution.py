@@ -43,7 +43,9 @@ def _make_request(api_config_timeout):
 class TestInteractionTimeoutResolution:
     def test_default_when_no_config_no_env(self, monkeypatch):
         monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)
-        assert _get_interaction_timeout(_make_request(None)) == 55.0
+        # 110.0 since #1013 — 55.0 sat below the median successful response,
+        # so a thought that PONDERed could never win against it.
+        assert _get_interaction_timeout(_make_request(None)) == 110.0
 
     def test_config_value_when_no_env(self, monkeypatch):
         monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)

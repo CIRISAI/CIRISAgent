@@ -158,13 +158,13 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "am": ("33fb7ed6229f16fc59036becc33915916ed15c44e4cd1ecb333644729b9f6641", 32861),  # #1010 §7e guard + §26 reconciled
     "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
     "de": ("69d48927767343e36f741b2b75fe2162e8dc30b65c8ff0450690ce368055ddcd", 20065),  # #1010 §7e guard + §26 reconciled
-    "es": ("f2c7e348babf1c86ecf85cbba3afa5149c117323dee3509542197b7843e32a82", 19008),  # #1010 §7e guard + §26 reconciled
+    "es": ("96b510e7a3db014ce998589d22227cf250948596450fa0d399461ffb1d0ca1a9", 18627),  # #1010 §7e rewritten positively — bad exemplars removed
     "fr": ("75345e15c45ad515e4001a1d69c7151a532eb201f398287f1076a3823975f5af", 19615),  # #1010 §7e guard
     "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
-    "it": ("5ed796959aa5466c31f84acad6d4320a1c8f356873e00b0e4ecc34fb849462c6", 18824),  # #1010 §7e guard + §26 reconciled
+    "it": ("c7908a2e7fd23c3b15610fd4110cd98be7b69529b55be39106b837b67ba5c25a", 18405),  # #1010 §7e rewritten positively — bad exemplars removed
     "ja": ("941caca76b8056e7cd321c82d948c9f0fd64df5bf862ba557714c57d77408254", 20960),  # #1010 §7e guard + §26 reconciled
     "ko": ("0a37885175122f0a8b29ec9f7f4f80b3533b3b418213e4678465d6cd0de556ee", 15822),  # review FAILED — no guard
-    "pt": ("b5e3ce45ac61d75c9c32c92d4981397cf23caf90540aaf4d2f97ac63c9cc2b95", 18476),  # #1010 §7e guard + §26 reconciled
+    "pt": ("c4967d09504853f4e7d5ca3dd404ff92d9f16507138d578c3fc312f53601635d", 17991),  # #1010 §7e rewritten positively — bad exemplars removed
     "ru": ("21e54cc163726228a2e4576d4e7ad2b8032571bd86caed295dcd53d53cde5c86", 31292),  # #1010 §7e guard + §26 reconciled
     "sw": ("a4d5d461d7c80119df4802fc49646be00d9ac2c4432afe4b504d96774ce94bfe", 17954),  # native §7e + §26 reconciled
     "tr": ("d6a3281051247f3c6dbe42c558cace2af31de6f45128ed652faba17725c15577", 17498),  # #1010 §7e guard + §26 reconciled

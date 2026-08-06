@@ -40,7 +40,9 @@ class APIAdapterConfig(BaseModel):
     auth_enabled: bool = Field(default=True, description="Enable authentication")
 
     # Timeout configuration
-    interaction_timeout: float = Field(default=55.0, description="Timeout for agent interactions in seconds")
+    #: 55.0 -> 110.0 (#1013) — kept in lockstep with the resolver default in
+    #: routes/agent.py. Two defaults for one knob is how they drift apart.
+    interaction_timeout: float = Field(default=110.0, description="Timeout for agent interactions in seconds")
 
     # Proxy configuration
     proxy_path: str = Field(

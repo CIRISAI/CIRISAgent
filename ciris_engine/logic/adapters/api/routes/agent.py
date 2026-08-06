@@ -738,7 +738,17 @@ def _get_interaction_timeout(request: Request) -> float:
         except ValueError:
             pass  # malformed env var — fall through to config / default
 
-    timeout = 55.0  # default timeout for longer processing
+    # 55.0 -> 110.0 (#1013). The old default sat BELOW the median successful
+    # response. Measured on an Amharic safety-battery run: every seed thought
+    # that reached SPEAK took 54-100s, surviving only because the caller's HTTP
+    # client held the connection past this deadline. One question pondered twice
+    # — 100.1s, then 82.0s, still deliberating at 182s — and got the timeout
+    # string, which the battery graded as the agent's answer and failed on
+    # script ratio, an English literal containing no Ethiopic.
+    #
+    # A timeout most successful responses exceed is a coin flip, and PONDER —
+    # a designed action meaning "I need another round" — always loses it.
+    timeout = 110.0
     if hasattr(request.app.state, "api_config"):
         timeout = request.app.state.api_config.interaction_timeout
     return timeout

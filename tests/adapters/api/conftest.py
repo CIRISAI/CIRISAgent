@@ -293,7 +293,9 @@ def mock_agent_processor():
 def mock_api_config():
     """Create mock API configuration."""
     config = Mock()
-    config.interaction_timeout = 55.0
+    # Fixture pins an explicit value so it does not silently track the
+    # production default; aligned to it (110.0, #1013) so the two agree.
+    config.interaction_timeout = 110.0
     config.max_message_length = 4000
     config.rate_limit_per_minute = 60
     return config

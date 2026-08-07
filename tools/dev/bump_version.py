@@ -202,6 +202,35 @@ def bump_version(bump_type: str):
         with open(android_gradle_file, "w") as f:
             f.write(gradle_content)
 
+    # Update the DESKTOP Compose packageVersion.
+    #
+    # This tool knew about Android and iOS and not about desktopApp, so
+    # `packageVersion` sat at 2.6.0 while the wheel said 2.9.10 — the JAR is
+    # rebuilt every CI run, so the CODE was current and only its IDENTITY was
+    # stale. That is the worse half of the two: the binary reports a version
+    # from many releases back, and anyone diagnosing a desktop issue reaches for
+    # the wrong tree. The APK-shipping-a-wheel-eight-releases-stale note in
+    # tools/update_substrate_libs.py is the same trap, and a whole diagnosis was
+    # conducted against that stale runtime before it was caught.
+    #
+    # Compose's packageVersion must be plain MAJOR.MINOR.PATCH — a stage suffix
+    # like "-stable" makes the packaging task fail, which is why display_version
+    # is used rather than the full version string.
+    desktop_gradle_file = (
+        Path(__file__).parent.parent.parent / "client" / "desktopApp" / "build.gradle.kts"
+    )
+    if desktop_gradle_file.exists():
+        with open(desktop_gradle_file, "r") as f:
+            desktop_content = f.read()
+        display_version = f"{major}.{minor}.{patch}"
+        old = re.search(r'packageVersion\s*=\s*"([^"]+)"', desktop_content)
+        desktop_content = re.sub(
+            r'packageVersion\s*=\s*"[^"]+"', f'packageVersion = "{display_version}"', desktop_content
+        )
+        with open(desktop_gradle_file, "w") as f:
+            f.write(desktop_content)
+        print(f"  Updated desktop packageVersion: {old.group(1) if old else '?'} -> {display_version}")
+
     # Update client Python version files (android + iOS)
     display_version = f"{major}.{minor}.{patch}"
     client_version_files = [

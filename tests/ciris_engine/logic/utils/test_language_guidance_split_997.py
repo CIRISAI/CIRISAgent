@@ -159,7 +159,7 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
     "de": ("69d48927767343e36f741b2b75fe2162e8dc30b65c8ff0450690ce368055ddcd", 20065),  # #1010 §7e guard + §26 reconciled
     "es": ("5675bc31362f41f3ebcef15634d33c2434fbc03a89a663cddf3530d5e5e12ba2", 18629),  # separator restored before 8
-    "fr": ("7facfa7bc6943609c7b6419e64ff01a6d485e0096de54ad087fa7ed8fb1402b9", 23320),  # #1010 kindness-framed rewrite + separators
+    "fr": ("137575e2d45ae60306d34f8ed3a2b5c09a87efb8fc6f4bee7909dcc8da96cf4a", 24621),  # #1010 §7e gains the actionability boundary (q08 U2)
     "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
     "it": ("22990eb664d4e54b7d9f57129b41888550e00a0fd15d560b707ce424586443a2", 18407),  # separator restored before 8
     "ja": ("469272c78454a02f594a821922a8657f9facf3a85af84a185594024d5618bf90", 29831),  # #1010 kindness-framed rewrite

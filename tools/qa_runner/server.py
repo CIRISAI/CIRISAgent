@@ -1084,6 +1084,47 @@ class APIServerManager:
             or self.config.live_lens
             or self.config.federation_delivery
         )
+        # DELIVERY INSTRUMENTATION — gated on the run ATTEMPTING delivery, not on
+        # the --federation-delivery flag.
+        #
+        # It was behind `if self.config.federation_delivery:` and the safety
+        # battery workflow never passes that flag. The agent still dials the
+        # canonical, because edge #296 auto-seeds the dial from persist's baked
+        # hint — so every live battery attempts delivery while none of them
+        # entered the branch holding the diagnostics. en run 31220305389 proved
+        # it: DELIVERY-PROBE ran to `KEX still None at 540s`, and the RUST_LOG
+        # and reachability probe meant to explain it never executed.
+        #
+        # `accord_metrics_enabled` is the honest condition: it is true exactly
+        # when the run will produce and try to ship traces.
+        if accord_metrics_enabled:
+            # TURN THE RUST LAYER UP. KEX happens inside ciris_edge / leviculum,
+            # not in Python, and at the default level those crates log almost
+            # nothing — so a run that sits at `kex_present: false` for 360s
+            # produces a Python-side probe verdict with no mechanism behind it.
+            #
+            # Observed 2026-08-07 (en, run 31218689164): ROOTED after ~10s, then
+            # `KEX still None` through 360s of repriming, with
+            # `peers=[{knows_peer: true, kex_present: false, deliverable: false}]`.
+            # The peer was known and the transport was up; the key exchange
+            # simply never formed, and nothing in any captured log said why. The
+            # `CIRISEdge#336 dial-cache` line the probe prints is a GUESS the code
+            # emits, not a diagnosis — the kind of plausible label that ends an
+            # investigation instead of starting one.
+            #
+            # Same levels the CIRISServer mesh-repro harness uses for this exact
+            # question. Operator-overridable: an explicit RUST_LOG wins.
+            env.setdefault("RUST_LOG", "info,ciris_edge=debug,leviculum_core=debug,leviculum_std=debug")
+
+            # Reachability, recorded BEFORE the agent starts. Whether a GitHub
+            # runner can open a socket to the canonical is a fact about the
+            # network, and it is unrecoverable after the fact — a failed KEX and
+            # a blocked egress look identical from the Python side. Cheap, and it
+            # separates "cannot connect" from "connected and KEX failed", which
+            # are different bugs with different owners.
+            self._probe_canonical_reachability(env)
+
+
         if accord_metrics_enabled:
             # Load base accord_metrics adapter alongside the main adapter
             if "ciris_accord_metrics" not in env.get("CIRIS_ADAPTER", ""):
@@ -1137,32 +1178,6 @@ class APIServerManager:
         if self.config.federation_delivery:
             env["CIRIS_FEDERATION_DELIVERY"] = "true"
             env["CIRIS_EDGE_BOOTSTRAP_PEERS"] = self.config.canonical_peer
-
-            # TURN THE RUST LAYER UP. KEX happens inside ciris_edge / leviculum,
-            # not in Python, and at the default level those crates log almost
-            # nothing — so a run that sits at `kex_present: false` for 360s
-            # produces a Python-side probe verdict with no mechanism behind it.
-            #
-            # Observed 2026-08-07 (en, run 31218689164): ROOTED after ~10s, then
-            # `KEX still None` through 360s of repriming, with
-            # `peers=[{knows_peer: true, kex_present: false, deliverable: false}]`.
-            # The peer was known and the transport was up; the key exchange
-            # simply never formed, and nothing in any captured log said why. The
-            # `CIRISEdge#336 dial-cache` line the probe prints is a GUESS the code
-            # emits, not a diagnosis — the kind of plausible label that ends an
-            # investigation instead of starting one.
-            #
-            # Same levels the CIRISServer mesh-repro harness uses for this exact
-            # question. Operator-overridable: an explicit RUST_LOG wins.
-            env.setdefault("RUST_LOG", "info,ciris_edge=debug,leviculum_core=debug,leviculum_std=debug")
-
-            # Reachability, recorded BEFORE the agent starts. Whether a GitHub
-            # runner can open a socket to the canonical is a fact about the
-            # network, and it is unrecoverable after the fact — a failed KEX and
-            # a blocked egress look identical from the Python side. Cheap, and it
-            # separates "cannot connect" from "connected and KEX failed", which
-            # are different bugs with different owners.
-            self._probe_canonical_reachability(env)
 
             self.console.print(
                 f"[cyan]🛰️  Federation delivery ON → dialing canonical peer {self.config.canonical_peer} "

@@ -426,6 +426,11 @@ LANGUAGE_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
     "24_ratification_pattern",
     "25_exemplar_cross_cluster",
     "26_cross_cluster_pattern",
+    # #1010 — the §7e directional guard: the license covers answering a
+    # question ABOUT a category, never applying a category TO a person, and the
+    # EXCLUSION direction ("does not meet the criteria for X") is the same
+    # violation as the inclusion. Absent everywhere but `sw` until now.
+    "26b_user_symptom_direction",
     "27_attractor_universality",
     "28_brevity_restatement",
     "29_no_medical_or_legal_advice",

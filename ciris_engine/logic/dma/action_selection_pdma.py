@@ -23,6 +23,7 @@ from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.types import JSONDict
 
 from .action_selection import ActionSelectionContextBuilder, ActionSelectionSpecialCases
+from .prompt_loader import get_prompt_loader
 from .template_overrides import additive
 from .action_selection.faculty_integration import FacultyIntegration
 from .base_dma import BaseDMA
@@ -341,6 +342,24 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         ``context_builder.pre_cache_context()`` (tools + task cache) must run
         in ``_perform_main_evaluation()`` before this is called.
         """
+        # #1007 — SYSTEM FIRST, matching the order the messages are emitted in.
+        #
+        # The #997 dump records each field render as it happens and matches those
+        # parts to messages FIFO, because composition order IS the honesty rule:
+        # a part queue that searched instead of consuming could attribute a field
+        # to whichever message happened to contain similar bytes.
+        #
+        # User content used to be built first while the system message is emitted
+        # first, so the queue read [user parts…, system parts…] against messages
+        # [system…, user]. Covering the system message hit a user part, failed,
+        # and the whole 2,755 B message fell back to one opaque `mixed` block —
+        # which carries "Recall CIRIS principles override personal preference",
+        # axiotic, so §10.2.1 refused every axiotic regime on `default`.
+        #
+        # The two builders are independent (both read only `input_data`), so the
+        # swap is order-of-evaluation only. The 12 goldens are the proof.
+        system_message = self._build_system_message(input_data)
+
         # Build main user content
         main_user_content = self._build_main_user_content(input_data, agent_name)
 
@@ -348,9 +367,6 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         if input_data.faculty_evaluations and self.faculty_integration:
             faculty_insights = self.faculty_integration.build_faculty_insights_string(input_data.faculty_evaluations)
             main_user_content += faculty_insights
-
-        # Build messages
-        system_message = self._build_system_message(input_data)
         accord_with_metadata = self._build_accord_with_metadata(
             input_data.original_thought, input_data.processing_context
         )
@@ -503,10 +519,31 @@ WRONG: "The expectation is reasonable..."
             )
             system_header = template_system_override
 
-        system_guidance = DEFAULT_TEMPLATE.format(
-            system_header=system_header,
-            decision_format=decision_format,
-            closing_reminder=closing_reminder,
+        # #1007 — render each field through `safe_format` so the composer's
+        # per-field seam exists here too.
+        #
+        # This was `DEFAULT_TEMPLATE.format(...)`, a bare .format() in Python.
+        # The #997 dump records a field by wrapping `safe_format`, so three
+        # fields joined by a Python literal arrived as ONE opaque message and
+        # were annotated `mixed`. That block carries "Recall CIRIS principles
+        # override personal preference" — axiotic — so §10.2.1 refused every
+        # regime varying axiotic on the `default` template: the shipped persona
+        # could not be a campaign arm.
+        #
+        # DEFAULT_TEMPLATE is "{system_header}\n\n{decision_format}\n\n
+        # {closing_reminder}", so joining the three renders on "\n\n" is the
+        # same bytes — proven by the 12 goldens, which is why they are the gate
+        # for this change rather than a formality.
+        from ciris_engine.logic.dma.prompt_loader import safe_format
+
+        _lang = get_prompt_loader().language
+        system_guidance = "\n\n".join(
+            safe_format(_text, source=f"action_selection_pdma.{_field}[{_lang}]")
+            for _field, _text in (
+                ("system_header", system_header),
+                ("decision_format", decision_format),
+                ("closing_reminder", closing_reminder),
+            )
         )
 
         # Extract conscience_guidance from processing_context for retry format enforcement

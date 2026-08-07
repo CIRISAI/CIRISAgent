@@ -95,6 +95,20 @@ class InteractResponse(BaseModel):
     response: str = Field(..., description="Agent's response")
     state: str = Field(..., description="Agent's cognitive state after processing")
     processing_time_ms: int = Field(..., description="Time taken to process")
+    #: The task this interaction produced, when it can be resolved (#1011).
+    #:
+    #: The safety battery writes this into every capture row as
+    #: `agent_task_id` and has done since it was written — but the field was
+    #: never on this model, so it read `None` in every row of every run. The
+    #: consequence only surfaced during a French regression hunt: the traces
+    #: teed into the capture bundle key on `task_id`/`thought_id`, the verdicts
+    #: key on `question_id`, and with this empty there is NO join between them.
+    #: A failing question could not be traced to the reasoning that produced it,
+    #: which is the entire purpose of teeing the traces.
+    #:
+    #: Optional because the correlation is best-effort: a paused or timed-out
+    #: interaction has no task to name, and None there is honest.
+    task_id: Optional[str] = Field(None, description="Task ID this interaction produced, if resolvable")
 
 
 class MessageRequest(BaseModel):
@@ -605,6 +619,52 @@ def _get_processor_cognitive_state(processor: Any) -> str:
     return "WORK"  # Default
 
 
+def _system_reply(key: str, default: str, language: Optional[str] = None) -> str:
+    """A system-authored reply, in the caller's language (#1012).
+
+    The interact endpoint returns two strings the AGENT never wrote — the
+    timeout notice and the paused-processor notice. Both were English literals,
+    and both reach the user in exactly the situations where the agent has no
+    voice of its own.
+
+    An Amharic safety-battery run graded one of them: q06 came back as "Still
+    processing. Check back later." and the deterministic script check scored
+    script_ratio=0.000, correctly, because there was no Ethiopic in it. The
+    battery captured a system string and marked it a response — the user, in
+    that moment, got English.
+
+    `default` keeps the English wording as the fallback so a locale missing the
+    key degrades to today's behaviour rather than to an empty reply.
+    """
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    return get_string(language or get_preferred_language(), key, default=default)
+
+
+def _resolve_task_id_for_message(message_id: str) -> Optional[str]:
+    """The task this interaction produced, resolved via correlation_id (#1011).
+
+    `base_observer` stamps `correlation_id=msg.message_id` on every task it
+    creates, so the link exists in persistence — it was simply never surfaced
+    on the wire. Best-effort by design: a paused or timed-out interaction has
+    no task to name, and returning None there is the honest answer rather than
+    a fabricated id.
+
+    Never raises. A capture bundle that cannot name its task is worse than one
+    that says so, but neither is worth failing a live interaction over.
+    """
+    try:
+        from ciris_engine.logic import persistence
+
+        for task in persistence.get_all_tasks():
+            ctx = getattr(task, "context", None)
+            if ctx is not None and getattr(ctx, "correlation_id", None) == message_id:
+                return str(task.task_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[INTERACT] task_id correlation lookup failed for %s: %s", message_id, exc)
+    return None
+
+
 def _create_paused_response(
     message_id: str, cognitive_state: str, processing_time: int
 ) -> SuccessResponse[InteractResponse]:
@@ -612,7 +672,10 @@ def _create_paused_response(
     return SuccessResponse(
         data=InteractResponse(
             message_id=message_id,
-            response="Processor paused - task added to queue. Resume processing to continue.",
+            response=_system_reply(
+                "agent.processor_paused",
+                "Processor paused - task added to queue. Resume processing to continue.",
+            ),
             state=cognitive_state,
             processing_time_ms=processing_time,
         )
@@ -675,7 +738,17 @@ def _get_interaction_timeout(request: Request) -> float:
         except ValueError:
             pass  # malformed env var — fall through to config / default
 
-    timeout = 55.0  # default timeout for longer processing
+    # 55.0 -> 110.0 (#1013). The old default sat BELOW the median successful
+    # response. Measured on an Amharic safety-battery run: every seed thought
+    # that reached SPEAK took 54-100s, surviving only because the caller's HTTP
+    # client held the connection past this deadline. One question pondered twice
+    # — 100.1s, then 82.0s, still deliberating at 182s — and got the timeout
+    # string, which the battery graded as the agent's answer and failed on
+    # script ratio, an English literal containing no Ethiopic.
+    #
+    # A timeout most successful responses exceed is a coin flip, and PONDER —
+    # a designed action meaning "I need another round" — always loses it.
+    timeout = 110.0
     if hasattr(request.app.state, "api_config"):
         timeout = request.app.state.api_config.interaction_timeout
     return timeout
@@ -942,6 +1015,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
             response=response_content,
             state=_get_current_cognitive_state(request),
             processing_time_ms=processing_time_ms,
+            task_id=_resolve_task_id_for_message(message_id),
         )
 
         return SuccessResponse(data=response)
@@ -970,7 +1044,10 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
         # Return a timeout response rather than error
         response = InteractResponse(
             message_id=message_id,
-            response="Still processing. Check back later. Agent response is not guaranteed.",
+            response=_system_reply(
+                "agent.still_processing",
+                "Still processing. Check back later. Agent response is not guaranteed.",
+            ),
             state="WORK",
             processing_time_ms=int(timeout * 1000),  # Use actual timeout value
         )

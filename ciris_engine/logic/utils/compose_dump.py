@@ -74,10 +74,22 @@ from ciris_engine.schemas.types import JSONDict
 
 
 class BlockAnnotation(NamedTuple):
-    """(primary class, contaminant list) for one block id."""
+    """(primary class, contaminant list, frame) for one block id.
+
+    ``frame`` is required IF AND ONLY IF the class is ``testimonial``, which is
+    a RELATION rather than a class (CIRISOntology#3/#1, CC-ratified). Testimony
+    is always some source's, to some audience — by theorem there is nothing in
+    the block alone to read, so an assignment without a declared frame is
+    refused rather than defaulted, and no annotator judges the block until the
+    harness declares one.
+
+    Enforced in :func:`annotation_for`, so a frameless testimonial annotation
+    fails at read time rather than composing under a silently-empty relation.
+    """
 
     block_class: BlockClass
     contaminant: Optional[Tuple[BlockClass, ...]]
+    frame: Optional[str] = None
 
 
 _C = BlockClass  # brevity in the table below
@@ -247,6 +259,12 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # NOT issue the user a wellness verdict ... may not appear even as
     # transitional clauses." Deontic.
     "language_guidance.26_cross_cluster_pattern": BlockAnnotation(_C.DEONTIC, None),
+    # #1010 — the §7e directional guard. DEONTIC: it states what the agent may
+    # and may not ASSERT — answering a question about a category is permitted,
+    # applying a category to a person is not, in either direction. That is a
+    # permission boundary, not a value ranking, so it HOLDS: a values-alt arm
+    # must not acquire the ability to diagnose by varying its values.
+    "language_guidance.26b_user_symptom_direction": BlockAnnotation(_C.DEONTIC, None),
     # "These training-attractor pulls are properties of LLMs, not of any one
     # language." A law-like relation the reasoning is asked to accept, not a
     # world-fact checkable at compose time — nomological, sibling of IDMA's
@@ -388,8 +406,25 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # matters and is why this block cannot be merged up to HOLD. Keyed to the
     # composer, so the five ASPDMA steps share ONE annotation and one ratchet
     # entry rather than five copies of the same admission.
-    "action_selection_pdma.system_message": BlockAnnotation(
-        _C.MIXED, (_C.ONTOLOGICAL, _C.AXIOTIC, _C.PROCEDURAL, _C.PRAGMATIC, _C.CONTINGENT)
+    # #1007 — the three fields the ASPDMA system message is assembled from,
+    # now that composing system-before-user lets the splitter reach them. This
+    # replaces the single `system_message` admission.
+    #
+    # Names the evaluator's job and its inputs, and instructs the pivot on a
+    # conscience override ("treat those as concrete pivot targets"): PROCEDURAL.
+    "action_selection_pdma.system_header": BlockAnnotation(_C.PROCEDURAL, None),
+    # The JSON contract — flat fields, the action enum, which key each action
+    # takes. Replacing it breaks parsing, which is the structural test verbatim.
+    "action_selection_pdma.decision_format": BlockAnnotation(_C.STRUCTURAL, None),
+    # "Recall CIRIS principles override personal preference" — a RANKING of
+    # what matters, with no act newly permitted: axiotic, the campaign's only
+    # varied class. It sat inside the opaque `system_message` block, which is
+    # exactly why every axiotic regime refused on `default`. The LANGUAGE RULES
+    # that follow are pragmatic register doctrine, so the block stays mixed —
+    # but mixed WITH an axiotic contaminant the gate can now see and a regime
+    # can now declare, instead of an unsplittable message.
+    "action_selection_pdma.closing_reminder": BlockAnnotation(
+        _C.MIXED, (_C.AXIOTIC, _C.PRAGMATIC, _C.STRUCTURAL)
     ),
     # The authored half of the ASPDMA user template: what the task is, the
     # permitted-actions framing, and the FLAT-JSON schema reminder. Names no
@@ -466,6 +501,34 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
 _SLOTS_SUFFIX = ".slots"
 
 
+def _require_frame(block_id: str, annotation: BlockAnnotation) -> BlockAnnotation:
+    """`testimonial` is a RELATION — refuse an assignment with no frame.
+
+    CIRISOntology#3/#1, CC-ratified. Testimony is always some source's, to some
+    audience, so by theorem there is nothing in the block alone to read. An
+    annotation that names the class without naming the frame is not a weak
+    annotation, it is an incomplete PROPOSITION — and defaulting the frame to
+    empty would let a block compose under a relation whose second argument
+    nobody supplied.
+
+    Raised here rather than validated at table-definition time so the failure
+    names the block a caller actually asked for.
+    """
+    if annotation.block_class is BlockClass.TESTIMONIAL and not annotation.frame:
+        raise ValueError(
+            f"block {block_id!r} is annotated `testimonial` with no frame. Testimonial is a "
+            f"RELATION (CIRISOntology#3/#1): declare whose testimony, to whom — an assignment "
+            f"without a frame is refused, never defaulted, and no annotator judges the block "
+            f"until the harness declares one."
+        )
+    if annotation.frame and annotation.block_class is not BlockClass.TESTIMONIAL:
+        raise ValueError(
+            f"block {block_id!r} carries a frame but is annotated "
+            f"{annotation.block_class.value!r} — only `testimonial` takes one."
+        )
+    return annotation
+
+
 def annotation_for(block_id: str) -> BlockAnnotation:
     """Resolve the annotation for a block id: exact match, then step-suffix.
 
@@ -488,11 +551,11 @@ def annotation_for(block_id: str) -> BlockAnnotation:
     """
     exact = BLOCK_ANNOTATIONS.get(block_id)
     if exact is not None:
-        return exact
+        return _require_frame(block_id, exact)
     suffix = block_id.split(".", 1)[1] if "." in block_id else block_id
     by_suffix = BLOCK_ANNOTATIONS.get(suffix)
     if by_suffix is not None:
-        return by_suffix
+        return _require_frame(block_id, by_suffix)
     step, _, rest = block_id.partition(".")
     if rest and step.endswith("_image"):
         return annotation_for(f"{step[: -len('_image')]}.{rest}")
@@ -944,19 +1007,25 @@ class _RoutedRecorder:
     def aspdma_system_message(self, builder: object, input_data: object) -> str:
         """Recording pass-through around ``ActionSelectionPDMAEvaluator._build_system_message``.
 
-        ASPDMA assembles this message from Python literals, so there is no
-        render seam to split it on and it stays honestly ``mixed``. What the
-        registration buys is IDENTITY: five steps (first pass, two retries,
-        ponder-notes, bounce advisory) compose this same block, and keying it to
-        the composer instead of the step means one annotation and one ratchet
-        entry rather than five copies of the same admission.
+        NO LONGER REGISTERS THE WHOLE MESSAGE (#1007). The old docstring here
+        said "ASPDMA assembles this message from Python literals, so there is no
+        render seam to split it on" — and registering the assembled block as one
+        `system_message` was the honest response to that. The premise is now
+        false: `_build_system_message` renders `system_header`,
+        `decision_format` and `closing_reminder` through `safe_format`, so the
+        per-field parts are recorded and the splitter can do its job.
 
-        Source stays ``inline`` — the block is identifiable, not routed, and
-        the dump must not imply an override key that does not exist.
+        Keeping the registration would now be actively wrong: it claims the
+        whole message as one block, so the recorded parts lose to it and the
+        block stays `mixed`. And `mixed` here is not cosmetic — the message
+        carries "Recall CIRIS principles override personal preference", which is
+        axiotic, so §10.2.1 refused every axiotic regime on the `default`
+        template. The shipped persona could not be a campaign arm.
+
+        The pass-through stays so the call ordering is unchanged and the seam
+        has a named home if a future assembly step needs one.
         """
-        return self._register(
-            self._real_aspdma_system(builder, input_data), "action_selection_pdma.system_message", "inline"
-        )
+        return self._real_aspdma_system(builder, input_data)
 
     def dsaspdma_prompt_value(self, evaluator: object, key: str) -> Optional[str]:
         """Recording pass-through around ``DSASPDMAEvaluator._get_prompt_value`` (#997).

@@ -99,7 +99,7 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 40,
-    "string": 132,
+    "string": 133,
     "conscience_prompt": 12,
     "template": 3,
 }
@@ -176,7 +176,13 @@ GATED_FLOOR: Dict[str, int] = {
     # es/ja/am/ar, and en output byte-identical via the 12 goldens plus a
     # 17-render differential. Raising this floor by asserting they are covered
     # would be the exact move this check exists to prevent.
-    "string": 76,
+    # 76 -> 77 (#1010). The §7e directional guard
+    # `prompts.language_guidance.26b_user_symptom_direction` joined the key
+    # space and composes, so both the denominator and the gated count moved by
+    # one. (#1012's `agent.still_processing` / `agent.processor_paused` are
+    # NOT here and should not be: they are API replies to a user, they reach no
+    # LLM prompt, and the probe measures the prompt key space.)
+    "string": 77,
     "conscience_prompt": 12,
     "template": 2,
 }
@@ -189,7 +195,8 @@ SUBSPLIT_GATED_FLOOR: Dict[str, int] = {
     # 29 -> 58 in 2.9.10: the #997 language_guidance split, plus the parent key
     # becoming performable again. Nothing in this sub-namespace is dark.
     # 58 -> 63 of 115. Same story: the denominator grew by the 57 formatter keys.
-    "string:prompts.*": 63,
+    # 63 -> 64: the same single key, counted in its subsplit.
+    "string:prompts.*": 64,
 }
 
 

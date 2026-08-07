@@ -46,6 +46,18 @@ import ai.ciris.mobile.shared.localization.localizedString
  * - Search and filter configurations
  * - Edit configuration values
  * - Category filtering (adapters, services, security, etc.)
+ * - **The mesh-config plane** (CIRISServer#346 / #365) at the head of the list
+ *
+ * # Two planes on one screen, never merged
+ *
+ * Everything below [MeshConfigSection] is the node's own SELF config plane —
+ * dotted keys its OWNER sets and edits here. [MeshConfigSection] is the
+ * federation-scoped mesh-config plane: what a subscribed TRUST ROOT asks of
+ * this node, which this screen can only read and submit rows onto. The server
+ * keeps their vocabularies apart on purpose (`mesh_config.baseline.*` in the
+ * config plane vs persist's `mesh_config:` dimension prefix), and this screen
+ * keeps them visually apart for the same reason: a shared spelling is how two
+ * planes start looking like one.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,7 +74,13 @@ fun ConfigScreen(
     onDeleteConfig: (String) -> Unit,
     onRefresh: () -> Unit,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * The mesh-config plane. Optional so a host that has not wired it yet still
+     * renders the SELF plane — an absent section is honest about being absent,
+     * where a section rendering defaults would not be.
+     */
+    meshConfigViewModel: ai.ciris.mobile.shared.viewmodels.MeshConfigViewModel? = null,
 ) {
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
     var editingConfig by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -163,6 +181,28 @@ fun ConfigScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // The MESH plane first, and separately: it is not one more
+                    // section of the node's own config, it is another plane
+                    // entirely — read-only values a trust root decided, each
+                    // one carrying whether anything in this build reads it.
+                    meshConfigViewModel?.let { vm ->
+                        item(key = "mesh-config-plane") {
+                            MeshConfigSection(viewModel = vm)
+                        }
+                        item(key = "mesh-config-divider") {
+                            Column {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                HorizontalDivider()
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = localizedString("surfaces.mesh_config.self_plane_below"),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+
                     val filteredSections = configData.sections
                         .filter { section ->
                             (selectedCategory == null || section.category == selectedCategory) &&

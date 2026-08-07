@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CIRIS — safety results</title>
+<meta name="description" content="Every safety battery the CIRIS agent has run: per language, per criterion, with the question, the answer, the judgement and the rubric that produced it.">
+<style>
+  :root{
+    --bg:#fbfbfa;--panel:#fff;--ink:#1a1a18;--muted:#6b6b66;--line:#e5e5e1;--soft:#f4f4f1;
+    --pass:#2f7d51;--fail:#b4442e;--undet:#9a7b2f;--accent:#2f5f7d;
+    --passbg:#e9f4ee;--failbg:#fbe9e5;--undetbg:#faf3e1;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#121212;--panel:#1a1a19;--ink:#ecebe6;--muted:#98988f;--line:#2d2d2b;--soft:#232322;
+    --pass:#6fca92;--fail:#e8836a;--undet:#d9b95f;--accent:#7fb4d4;
+    --passbg:#172a1f;--failbg:#2b1b16;--undetbg:#292314;}}
+  :root[data-theme=light]{--bg:#fbfbfa;--panel:#fff;--ink:#1a1a18;--muted:#6b6b66;--line:#e5e5e1;--soft:#f4f4f1;
+    --pass:#2f7d51;--fail:#b4442e;--undet:#9a7b2f;--accent:#2f5f7d;--passbg:#e9f4ee;--failbg:#fbe9e5;--undetbg:#faf3e1;}
+  :root[data-theme=dark]{--bg:#121212;--panel:#1a1a19;--ink:#ecebe6;--muted:#98988f;--line:#2d2d2b;--soft:#232322;
+    --pass:#6fca92;--fail:#e8836a;--undet:#d9b95f;--accent:#7fb4d4;--passbg:#172a1f;--failbg:#2b1b16;--undetbg:#292314;}
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1240px;margin:0 auto;padding:26px 18px 80px}
+  h1{font-size:1.45rem;margin:0 0 4px;letter-spacing:-.015em}
+  header p{margin:0;color:var(--muted);max-width:70ch}
+  a{color:var(--accent)}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em}
+
+  .tabs{display:flex;gap:2px;margin:24px 0 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .tab{appearance:none;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);
+    font:inherit;font-weight:500;padding:9px 14px;cursor:pointer}
+  .tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+  .tab:hover{color:var(--ink)}
+  .panel{padding-top:20px}.panel[hidden]{display:none}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px;margin-bottom:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+  .card .n{font-size:1.45rem;font-weight:600;letter-spacing:-.02em}
+  .card .k{color:var(--muted);font-size:.76rem;text-transform:uppercase;letter-spacing:.05em}
+
+  .controls{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  input[type=search],select{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:7px;
+    background:var(--panel);color:var(--ink)}
+  input[type=search]{min-width:230px}
+
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+  table{border-collapse:collapse;width:100%;font-size:.9rem}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{font-weight:600;font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+    background:var(--panel);position:sticky;top:0;z-index:1}
+  th.s{cursor:pointer;user-select:none}
+  th.s:hover{color:var(--ink)}
+  th.s::after{content:"";opacity:.35;margin-left:5px}
+  th.s[data-dir=asc]::after{content:"▲";opacity:.9}
+  th.s[data-dir=desc]::after{content:"▼";opacity:.9}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  tbody tr:last-child td{border-bottom:0}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.77rem;font-weight:600}
+  .ok{background:var(--passbg);color:var(--pass)} .bad{background:var(--failbg);color:var(--fail)}
+  .warn{background:var(--undetbg);color:var(--undet)}
+  .bar{display:inline-flex;height:7px;width:74px;border-radius:4px;overflow:hidden;background:var(--line);vertical-align:middle}
+  .bar i{display:block;height:100%}
+
+  dialog{border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);
+    padding:0;max-width:900px;width:calc(100vw - 36px);max-height:88vh}
+  dialog::backdrop{background:rgba(0,0,0,.45)}
+  .dh{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);
+    padding:15px 20px;display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+  .dh h2{margin:0 0 3px;font-size:1.05rem}
+  .dh .sub{color:var(--muted);font-size:.83rem}
+  .dh button{appearance:none;background:var(--soft);border:1px solid var(--line);border-radius:7px;
+    color:var(--ink);font:inherit;padding:5px 11px;cursor:pointer}
+  .db{padding:6px 20px 22px;overflow-y:auto;max-height:calc(88vh - 74px)}
+
+  .q{border:1px solid var(--line);border-radius:9px;margin:13px 0;overflow:hidden;background:var(--panel)}
+  .q>summary{padding:10px 13px;cursor:pointer;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .q>summary::-webkit-details-marker{display:none}
+  .q>summary:hover{background:var(--soft)}
+  .qid{font-family:ui-monospace,monospace;font-size:.83rem;font-weight:600}
+  .qbody{padding:2px 13px 13px;border-top:1px solid var(--line)}
+  .lbl{font-size:.71rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:13px 0 4px}
+  .txt{white-space:pre-wrap;background:var(--soft);border-radius:7px;padding:10px 12px;font-size:.9rem;line-height:1.6}
+  .crit{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px dashed var(--line)}
+  .crit:first-of-type{border-top:0}
+  .crit .cid{font-family:ui-monospace,monospace;font-weight:600;min-width:34px}
+  .crit .cs{flex:1;min-width:0}
+  .crit .sum{font-size:.87rem}
+  .crit .why{color:var(--muted);font-size:.82rem;margin-top:2px}
+  .span{margin-top:5px;padding:6px 9px;border-left:3px solid var(--fail);background:var(--failbg);
+    border-radius:0 6px 6px 0;font-size:.86rem;white-space:pre-wrap}
+  .note{color:var(--muted);font-size:.85rem;margin:12px 0 0;max-width:80ch}
+  .empty{padding:26px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>CIRIS safety results</h1>
+    <p>Every adversarial safety battery this agent has run, per language and per criterion. Click any row for the questions asked, what the agent answered, how each criterion was judged, and the rubric it was judged against.</p>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true"  aria-controls="p-runs">Battery runs</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-lang">By language</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-sweep">Adversarial sweeps</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-qa">QA modules</button>
+  </div>
+
+  <section class="panel" id="p-runs" role="tabpanel">
+    <div class="cards" id="c-runs"></div>
+    <div class="controls">
+      <input type="search" id="q" placeholder="filter language, rubric, judge, battery…" aria-label="Filter">
+      <select id="f-lang"><option value="">all languages</option></select>
+      <select id="f-status"><option value="">all runs</option><option value="fail">with failures</option><option value="clean">clean sweeps</option></select>
+    </div>
+    <div class="scroll"><table id="t-runs">
+      <thead><tr>
+        <th class="s" data-k="captured_at" data-dir="desc">date</th>
+        <th class="s" data-k="language">lang</th>
+        <th class="s" data-k="battery_version">battery</th>
+        <th class="s" data-k="rubric_version">rubric</th>
+        <th class="s num" data-k="n">n</th>
+        <th class="s num" data-k="pass">pass</th>
+        <th class="s num" data-k="fail">fail</th>
+        <th class="s num" data-k="undetermined">undet</th>
+        <th>mix</th><th>judge</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <p class="note" id="n-runs"></p>
+  </section>
+
+  <section class="panel" id="p-lang" role="tabpanel" hidden>
+    <p class="note" style="margin:0 0 12px">Latest run per language; the sparkline is every run oldest to newest, bar height = pass share, red = that run had a failure.</p>
+    <div class="scroll"><table id="t-lang">
+      <thead><tr><th>lang</th><th>latest</th><th class="num">pass</th><th class="num">fail</th><th>mix</th><th class="num">runs</th><th>history</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <section class="panel" id="p-sweep" role="tabpanel" hidden>
+    <div class="cards" id="c-sweep"></div>
+    <div class="scroll"><table id="t-sweep">
+      <thead><tr><th>date</th><th>lang</th><th>corpus</th><th>provider</th><th>model</th><th class="num">q</th><th class="num">pass</th><th class="num">fail</th><th>version</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <section class="panel" id="p-qa" role="tabpanel" hidden>
+    <div class="cards" id="c-qa"></div>
+    <div class="scroll"><table id="t-qa">
+      <thead><tr><th>module</th><th>status</th><th class="num">passed</th><th class="num">failed</th><th class="num">total</th><th>last run</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <p class="note" id="foot"></p>
+</div>
+
+<dialog id="dlg">
+  <div class="dh">
+    <div><h2 id="d-title">—</h2><div class="sub" id="d-sub"></div></div>
+    <button id="d-close" autofocus>Close</button>
+  </div>
+  <div class="db" id="d-body"></div>
+</dialog>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ts=s=>String(s||"").replace(/^(\d{4})(\d{2})(\d{2})T.*$/,"$1-$2-$3");
+const pct=(n,d)=>d?Math.round(n/d*100):0;
+const mix=(p,f,u)=>{const t=p+f+u||1;return `<span class="bar" title="${p} pass · ${f} fail · ${u} undetermined">
+  <i style="width:${p/t*100}%;background:var(--pass)"></i><i style="width:${f/t*100}%;background:var(--fail)"></i><i style="width:${u/t*100}%;background:var(--undet)"></i></span>`};
+
+$$(".tab").forEach(t=>t.onclick=()=>$$(".tab").forEach(x=>{
+  const on=x===t; x.setAttribute("aria-selected",on); $("#"+x.getAttribute("aria-controls")).hidden=!on;}));
+
+const J=p=>fetch(p).then(r=>r.ok?r.json():Promise.reject(new Error(p)));
+let IDX=[], SORT={k:"captured_at",dir:"desc"}, RUBRIC={};
+
+J("data/index.json").then(d=>{IDX=d.runs||[]; initRuns(d._meta||{}); initLang();})
+  .catch(()=>{$("#t-runs tbody").innerHTML=`<tr><td colspan="10" class="empty">index.json not found — run <code>tools/build_results_index.py</code></td></tr>`});
+J("data/safety_sweeps.json").then(d=>sweeps(d.sweeps||[])).catch(()=>{});
+J("data/qa_status.json").then(qa).catch(()=>{});
+
+function initRuns(meta){
+  const P=IDX.reduce((s,r)=>s+r.pass,0), F=IDX.reduce((s,r)=>s+r.fail,0), U=IDX.reduce((s,r)=>s+r.undetermined,0);
+  const langs=[...new Set(IDX.map(r=>r.language))].sort();
+  $("#c-runs").innerHTML=[["runs",IDX.length],["languages",langs.size||langs.length],["verdicts",P+F+U],
+    ["pass rate",pct(P,P+F+U)+"%"],["failures",F]]
+    .map(([k,n])=>`<div class="card"><div class="n">${n}</div><div class="k">${k}</div></div>`).join("");
+  langs.forEach(l=>$("#f-lang").insertAdjacentHTML("beforeend",`<option>${esc(l)}</option>`));
+  $$("#t-runs th.s").forEach(th=>th.onclick=()=>{
+    const k=th.dataset.k;
+    SORT = SORT.k===k ? {k,dir:SORT.dir==="asc"?"desc":"asc"} : {k,dir:"desc"};
+    $$("#t-runs th.s").forEach(x=>x.removeAttribute("data-dir"));
+    th.dataset.dir=SORT.dir; draw();
+  });
+  ["#q","#f-lang","#f-status"].forEach(s=>$(s).addEventListener("input",draw));
+  $("#foot").textContent = meta.note || "";
+  draw();
+}
+
+function draw(){
+  const q=$("#q").value.toLowerCase(), L=$("#f-lang").value, S=$("#f-status").value;
+  let rows=IDX.filter(r=>(!L||r.language===L)
+    &&(!S||(S==="fail"?r.fail>0:r.fail===0))
+    &&(!q||JSON.stringify([r.language,r.rubric_id,r.judge_model,r.battery_id]).toLowerCase().includes(q)));
+  const {k,dir}=SORT, s=dir==="asc"?1:-1;
+  rows.sort((a,b)=>{const x=a[k]??"",y=b[k]??"";
+    return (typeof x==="number"&&typeof y==="number") ? (x-y)*s : String(x).localeCompare(String(y))*s;});
+  $("#t-runs tbody").innerHTML = rows.length ? rows.map(r=>`<tr data-b="${esc(r.bundle)}">
+    <td class="mono">${esc(ts(r.captured_at))}</td>
+    <td><strong>${esc(r.language)}</strong></td>
+    <td class="mono">v${esc(r.battery_version??"?")}</td>
+    <td class="mono">v${esc(r.rubric_version??"?")}</td>
+    <td class="num">${r.n}</td>
+    <td class="num"><span class="pill ok">${r.pass}</span></td>
+    <td class="num">${r.fail?`<span class="pill bad">${r.fail}</span>`:"0"}</td>
+    <td class="num">${r.undetermined?`<span class="pill warn">${r.undetermined}</span>`:"0"}</td>
+    <td>${mix(r.pass,r.fail,r.undetermined)}</td>
+    <td class="mono" style="color:var(--muted)">${esc(r.judge_model||"—")}</td></tr>`).join("")
+    : `<tr><td colspan="10" class="empty">no runs match</td></tr>`;
+  $$("#t-runs tbody tr[data-b]").forEach(tr=>tr.onclick=()=>open(tr.dataset.b));
+  $("#n-runs").innerHTML=`Showing <strong>${rows.length}</strong> of ${IDX.length} runs — click one for questions, answers, judgements and rubric.`;
+}
+
+async function open(bundle){
+  const r=IDX.find(x=>x.bundle===bundle)||{};
+  $("#d-title").textContent=`${r.language} · ${ts(r.captured_at)}`;
+  $("#d-sub").innerHTML=`<span class="mono">${esc(r.battery_id||"")}</span> · rubric <span class="mono">${esc(r.rubric_id||"")}</span> v${esc(r.rubric_version??"?")} · judged by <span class="mono">${esc(r.judge_model||"—")}</span>`;
+  $("#d-body").innerHTML=`<p class="note">loading…</p>`;
+  $("#dlg").showModal();
+  try{
+    const det=await J(`data/runs/${bundle}.json`);
+    if(r.rubric_id && !RUBRIC[r.rubric_id]){
+      try{ RUBRIC[r.rubric_id]=await J(`data/rubrics/${r.rubric_id}.json`); }catch{ RUBRIC[r.rubric_id]={criteria:{}}; }
+    }
+    const crit=(RUBRIC[r.rubric_id]||{}).criteria||{};
+    $("#d-body").innerHTML = (det.answers_present===false
+        ? `<p class="note"><strong>The answers for this run are not on file.</strong> Its capture artifact expired before it was harvested; the judgements below stand, but the text they were made against is gone.</p>`:"")
+      + det.questions.map(q=>{
+        const bad=q.criteria.filter(c=>c.verdict!=="pass").length;
+        return `<details class="q"${bad?" open":""}>
+          <summary><span class="qid">${esc(q.question_id)}</span>
+            ${bad?`<span class="pill bad">${bad} not passed</span>`:`<span class="pill ok">all pass</span>`}
+            <span style="color:var(--muted);font-size:.83rem">${esc(q.stage||"")}</span></summary>
+          <div class="qbody">
+            <div class="lbl">Question${q.as_display_name?` — as ${esc(q.as_display_name)}`:""}</div>
+            <div class="txt">${esc(q.question_text||"— not on file —")}</div>
+            <div class="lbl">Agent answer</div>
+            <div class="txt">${esc(q.agent_response||"— not on file —")}</div>
+            <div class="lbl">Judgements</div>
+            ${q.criteria.map(c=>{
+              const d=crit[c.criterion_id]||{};
+              const cls=c.verdict==="pass"?"ok":c.verdict==="fail"?"bad":"warn";
+              return `<div class="crit">
+                <span class="cid">${esc(c.criterion_id)}</span>
+                <span class="cs">
+                  <span class="pill ${cls}">${esc(c.verdict)}</span>
+                  <span class="sum">${esc(d.summary||"")}</span>
+                  ${d.rationale?`<div class="why">${esc(d.rationale)}</div>`:""}
+                  ${c.cited_span?`<div class="span">cited: ${esc(c.cited_span)}</div>`:""}
+                </span></div>`;}).join("")}
+          </div></details>`;}).join("");
+  }catch(e){ $("#d-body").innerHTML=`<p class="note">could not load <code>data/runs/${esc(bundle)}.json</code></p>`; }
+}
+$("#d-close").onclick=()=>$("#dlg").close();
+
+function initLang(){
+  const by={}; IDX.forEach(r=>(by[r.language]||=[]).push(r));
+  const rows=Object.entries(by).map(([lang,rs])=>{
+    rs.sort((a,b)=>String(a.captured_at).localeCompare(String(b.captured_at)));
+    return {lang,rs,last:rs[rs.length-1]};
+  }).sort((a,b)=>b.last.fail-a.last.fail||a.lang.localeCompare(b.lang));
+  $("#t-lang tbody").innerHTML=rows.map(({lang,rs,last})=>`<tr>
+    <td><strong>${esc(lang)}</strong></td><td class="mono">${esc(ts(last.captured_at))}</td>
+    <td class="num"><span class="pill ok">${last.pass}</span></td>
+    <td class="num">${last.fail?`<span class="pill bad">${last.fail}</span>`:"0"}</td>
+    <td>${mix(last.pass,last.fail,last.undetermined)}</td>
+    <td class="num">${rs.length}</td>
+    <td><span style="display:inline-flex;gap:2px;align-items:flex-end;height:20px">${
+      rs.map(r=>{const t=r.pass+r.fail+r.undetermined||1;
+        return `<i style="width:5px;border-radius:1px;display:block;height:${Math.max(3,Math.round(r.pass/t*20))}px;background:${r.fail?"var(--fail)":"var(--pass)"}" title="${ts(r.captured_at)} — ${r.pass}/${t}"></i>`}).join("")
+    }</span></td></tr>`).join("");
+}
+
+function sweeps(sw){
+  const rows=sw.slice().sort((a,b)=>String(b.timestamp).localeCompare(String(a.timestamp)));
+  const Q=rows.reduce((s,r)=>s+(r.questions_total||0),0), P=rows.reduce((s,r)=>s+(r.questions_passed||0),0);
+  $("#c-sweep").innerHTML=[["sweeps",rows.length],["languages",new Set(rows.map(r=>r.language)).size],
+    ["questions",Q],["pass rate",pct(P,Q)+"%"]]
+    .map(([k,n])=>`<div class="card"><div class="n">${n}</div><div class="k">${k}</div></div>`).join("");
+  $("#t-sweep tbody").innerHTML=rows.map(r=>`<tr>
+    <td class="mono">${esc(String(r.timestamp).slice(0,10))}</td><td><strong>${esc(r.language)}</strong></td>
+    <td class="mono">${esc(r.corpus||"—")}</td><td>${esc(r.provider||"—")}</td>
+    <td class="mono" style="color:var(--muted)">${esc(r.model||"—")}</td>
+    <td class="num">${r.questions_total??"—"}</td>
+    <td class="num"><span class="pill ok">${r.questions_passed??0}</span></td>
+    <td class="num">${r.questions_failed?`<span class="pill bad">${r.questions_failed}</span>`:"0"}</td>
+    <td class="mono" style="color:var(--muted)">${esc(r.ciris_version||"—")}</td></tr>`).join("");
+}
+
+function qa(d){
+  const mods=Object.entries(d.modules||{}), s=d.summary||{};
+  $("#c-qa").innerHTML=[["modules",s.total_modules??mods.length],["passing",s.passing??0],
+    ["failing",s.failing??0],["not run",s.not_run??0]]
+    .map(([k,n])=>`<div class="card"><div class="n">${n}</div><div class="k">${k}</div></div>`).join("");
+  $("#t-qa tbody").innerHTML=mods.sort((a,b)=>(b[1].failed||0)-(a[1].failed||0)||a[0].localeCompare(b[0]))
+    .map(([n,m])=>`<tr><td class="mono"><strong>${esc(n)}</strong></td>
+      <td><span class="pill ${m.status==="passing"?"ok":m.status==="failing"?"bad":"warn"}">${esc(m.status||"?")}</span></td>
+      <td class="num">${m.passed??0}</td><td class="num">${m.failed??0}</td><td class="num">${m.total??0}</td>
+      <td class="mono" style="color:var(--muted)">${esc(String(m.last_run||"").slice(0,10))}</td></tr>`).join("");
+}
+</script>
+</body>
+</html>

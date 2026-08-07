@@ -626,7 +626,7 @@ class TestGetInteractionTimeout:
 
         timeout = _get_interaction_timeout(mock_request)
 
-        assert timeout == 55.0
+        assert timeout == 110.0  # 110.0 since #1013 — 55.0 sat below the median successful response
 
     def test_get_interaction_timeout_from_config(self, monkeypatch):
         """Test timeout from API config."""
@@ -653,7 +653,7 @@ class TestGetInteractionTimeout:
 
         timeout = _get_interaction_timeout(mock_request)
 
-        assert timeout == 55.0
+        assert timeout == 110.0  # 110.0 since #1013 — 55.0 sat below the median successful response
 
 
 class TestGetCurrentCognitiveState:

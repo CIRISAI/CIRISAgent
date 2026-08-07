@@ -112,7 +112,7 @@ def _baseline_blocks() -> Dict[str, dict]:
             **held,
             "contaminant": ["procedural", "axiotic", "structural"],
         },
-        "action_selection_pdma.system_message": {
+        "action_selection_pdma.closing_reminder": {
             **held,
             "contaminant": ["ontological", "axiotic", "procedural", "pragmatic", "contingent"],
         },

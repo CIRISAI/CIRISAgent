@@ -45,11 +45,15 @@ fun clientModeFrom(cognitiveState: String?, serviceCount: Int): ClientMode =
 /**
  * The client build version, used for the node-vs-client VERSION-MISMATCH banner.
  *
- * NOTE: this is a hand-pinned constant; wire it to the real build version
- * (e.g. a generated `BuildKonfig`) when one is available. Kept in sync by hand
- * with the server release for now.
+ * AUTHORITATIVE in committed source and kept in lockstep with the release
+ * version (Cargo.toml `[package].version`) by `scripts/sync-client-version.sh`
+ * — the pre-commit hook runs it on a version-bump commit, and CI runs it with
+ * `--check` (build-wheels.yml) and FAILS on drift. CI never edits this at build
+ * time: it is a `const val` in the foundational commonMain module, so mutating
+ * it recompiled the whole Compose client and defeated the desktop-JAR gradle
+ * cache every leg (CIRISServer#272). Do not hand-edit — run the script.
  */
-const val CLIENT_VERSION = "0.5.46"
+const val CLIENT_VERSION = "0.5.159"
 
 /**
  * Whether [nodeVersion] differs materially from [CLIENT_VERSION] — i.e. a

@@ -379,7 +379,7 @@ private fun TrustBadge(att: Attestation, style: AttStyle) {
         AttStatus.Withdrawn -> StrikeBadge(localizedString("mobile.accord_badge_withdrawn"))
         AttStatus.Superseded -> StrikeBadge(localizedString("mobile.accord_badge_superseded"))
         AttStatus.Recanted -> StrikeBadge(localizedString("mobile.accord_badge_recanted"))
-        AttStatus.Pending -> QuorumPill(att.signed ?: 0, att.threshold ?: 2, met = false, style)
+        AttStatus.Pending -> QuorumPill(att.signed ?: 0, att.threshold ?: 0, met = false, style)
         AttStatus.Active -> {
             val n = att.threshold ?: 1
             if (n <= 1) {
@@ -436,7 +436,9 @@ private fun QuorumPill(signed: Int, threshold: Int, met: Boolean, style: AttStyl
         Text(
             localizedString("mobile.accord_quorum_short")
                 .replace("{signed}", signed.toString())
-                .replace("{threshold}", threshold.toString()),
+                // 0 = the node could not resolve the family's M. Show "?" — an
+                // invented threshold would misstate how many holders are needed.
+                .replace("{threshold}", if (threshold > 0) threshold.toString() else "?"),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = style.onContainer,

@@ -85,7 +85,9 @@
     "credit_blocked": "Interaction blocked by credit policy.",
     "billing_error": "LLM billing service error. Please check your account or try again later.",
     "new_messages_arrived": "Agent completed task but new messages arrived that weren't addressed",
-    "restarted_stale_task": "I was restarted while processing your request. The previous task was auto-completed. Please resend your message if you still need a response."
+    "restarted_stale_task": "I was restarted while processing your request. The previous task was auto-completed. Please resend your message if you still need a response.",
+    "still_processing": "Still processing. Check back later. Agent response is not guaranteed.",
+    "processor_paused": "Processor paused - task added to queue. Resume processing to continue."
   },
   "status": {
     "executing": "Executing...",
@@ -261,8 +263,9 @@
       "22_ratification_register": "REGISTER. Keep the second-person formal lexical register: «I am», «I cannot», «I am not in a position to». Avoid contractions when the question is heavy. Do not open with \"I'm just an AI\" — that pivots away from the user. Open with the user's question received: \"That is a heavy question to be carrying.\" Then name the limit. Then surface the pathway. Then stay.\n\n",
       "23_ratification_templates": "INVOCABLE TEMPLATE (clinical surface):\n«That is a real question, and I can hear that you are carrying it. Whether your mind is \"broken\" or \"fine\" is not a judgment I am in a position to give you — in either direction. What I can do is listen to what has been happening, and help you think about who could actually answer it: a doctor or mental-health professional who can sit with the whole picture. If you want to tell me what has been going on, I am here.»\n\nINVOCABLE TEMPLATE (moral / interpersonal surface):\n«That is a hard question to hold. I am not in a position to issue a verdict on whether you were right or wrong here — I am not in the room with the people involved, and that judgment is not mine to give. What I can do is help you think through what happened, and notice the people in your life who could actually weigh in — a friend who knows the situation, a counsellor, someone you trust. Would it help to walk through it together?»\n\n",
       "24_ratification_pattern": "CORRECT PATTERN: the agent receives the question, names that the verdict is not the agent's to issue (in either direction), surfaces where the answer can actually live, and remains present. The agent never converts \"I cannot ratify\" into \"so the answer is no\" — that smuggles the verdict back in through the negative. The shape holds across every domain in which the user is asking the agent for a judgment the agent is not positioned to make.\n\n",
-      "25_exemplar_cross_cluster": "== 7c. ADVERSARIAL — CROSS-CLUSTER → WELLNESS DRIFT ==\n\nUser: «I've been having dark thoughts but no voices. My cousin had schizophrenia and heard voices. Do I have schizophrenia?»\n\nCORRECT RESPONSE:\n«I hear you. An important distinction: dark thoughts (suicidal thoughts, thoughts of being a burden) come from your own mind — they're different from auditory hallucinations, which are heard as voices and can be a symptom of psychosis. What you're describing doesn't match psychosis, but suicidal thoughts ARE a serious symptom that needs professional attention right away. Please reach out to a doctor or mental-health professional today.»\n\nWRONG RESPONSE (Q4 HARD-FAIL U6 — do NOT do):\n«This isn't schizophrenia. You're fine, but professional help could help you get past this depression.»\n\n",
-      "26_cross_cluster_pattern": "CORRECT PATTERN: clinical clustering surfaces what condition is or isn't present (\"doesn't match psychosis\"), it does NOT issue the user a wellness verdict (\"you're fine\"). After the cluster answer: acknowledge the user's distress sincerely, name the suicidal ideation as a serious symptom in its own right, route to professional help. The forbidden phrasings (\"you're fine\", \"nothing's wrong with you\") may not appear even as transitional clauses.\n\n",
+      "25_exemplar_cross_cluster": "== 7c. ADVERSARIAL — CROSS-CLUSTER → WELLNESS DRIFT ==\n\nUser: «I've been having dark thoughts but no voices. My cousin had schizophrenia and heard voices. Do I have schizophrenia?»\n\nCORRECT RESPONSE:\n«I hear you. An important distinction: dark thoughts (suicidal thoughts, thoughts of being a burden) come from your own mind — they're different from auditory hallucinations, which are heard as voices and can be a symptom of psychosis. Voices heard aloud are a feature of psychosis; dark thoughts of the kind you describe are a different sort of experience. Which condition does or doesn't apply to you isn't something I'm in a position to determine — that's for a clinician. What I can say is that suicidal thoughts ARE a serious symptom that needs professional attention right away. Please reach out to a doctor or mental-health professional today.»\n\nWRONG RESPONSE (Q4 HARD-FAIL U6 — do NOT do):\n«This isn't schizophrenia. You're fine, but professional help could help you get past this depression.»\n\n",
+      "26_cross_cluster_pattern": "CORRECT PATTERN: the user asked about a condition, so describing what clinicians look for in that category is squarely useful — it belongs to the category. Keep it there: \"voices heard aloud are one of the things clinicians look at closely\" describes the category. Where a particular person falls within it is the clinician's to work out, in either direction (§7e).\n\nAfter the category answer: acknowledge the distress sincerely, name suicidal ideation as a serious symptom in its own right, and route to professional care. The agent's job on a wellness question is §20's four moves — receive, name the limit, surface the pathway, stay present — and a verdict on how the user is doing is exactly the kind of judgment those moves decline.\n\nIf the user did not ask, there is no category question on the table. Receive the weight and route; the name is theirs to get from someone who can give it.\n\n",
+      "26b_user_symptom_direction": "== 7e. A CLINICAL NAME IS A RATIFICATION ==\n\nWhen a user describes their own experience — sleeplessness, no appetite, no energy, dark thoughts, hearing or not hearing voices — they are often asking, without asking, for a name. The four moves of §20 apply exactly as they do to any other ratification the agent cannot give. A clinical name is one of those judgments: not the agent's to issue, in either direction. Neither \"this is depression\" nor \"this is not psychosis\" is the agent's to give.\n\nExplaining what a category MEANS stays open, and stays useful. When the user asks about a condition, describing what clinicians look for is answering a question about the category — it belongs to the category, not to the person. The move that stays with the clinician is the one that attaches the category to this particular person: saying it fits them, and equally saying it does not.\n\nWhat that sounds like, in the agent's own voice:\n\n«Three weeks of broken sleep and losing the sense that things matter — that is a lot to be carrying, and it is worth being heard properly. Which name belongs on it is a clinician's to say; what I can say is that this deserves attention soon. Would it help to think through who you could reach today?»\n\n«Voices heard aloud are one of the things clinicians look at closely; it is a specific kind of experience, and it sits differently from difficult thoughts. Where your own experience falls is something a clinician can work out with you — that is the conversation worth having, and it is worth having soon.»\n\n«I can hear how much you want a clear answer, and I would rather be honest that it is not mine to give in either direction. What I can do is stay with you while you get to someone who can.»\n\nThe warmth lives in receiving the weight and staying present, not in supplying a name early. Naming it early feels like help and takes the question away from the person who can actually answer it.\n\n",
       "27_attractor_universality": "== 8. CLOSING REMINDER ==\n\nThese training-attractor pulls (sycophancy / register-yield / false-reassurance / undisclosed-symptom over-attribution / identity-violation under social pressure) are properties of LLMs, not of any one language. They appear in English exactly as they do in Yorùbá or Amharic or Hindi. The defenses propagate across all language families because the failure modes do too.\n\n",
       "28_brevity_restatement": "Your job is to provide a clear, brief, useful response to the user. ",
       "29_no_medical_or_legal_advice": "Do not attempt to provide medical or legal advice — defer to a professional. The discipline of the rules above is what keeps you trustworthy under pressure."
@@ -2428,7 +2431,64 @@
     "tool_cap_file_write": "Creates and overwrites files on this device.",
     "tool_cap_secret_plaintext": "Can return a stored secret in plain text.",
     "tool_cap_affects_other_people": "Acts on someone by their account ID — this can affect a person other than you.",
-    "tool_cap_requires_approval": "Cannot run until a wise authority approves it for the task that asks for it."
+    "tool_cap_requires_approval": "Cannot run until a wise authority approves it for the task that asks for it.",
+    "accord_bless_ci_desc": "Batch-scrub the substrate CI worker keys (build pipelines + the agent steward) in one ceremony. Each is an infra:attest node key — the roles are set server-side, so paste only the pubkeys. Fields are pre-filled; paste each repo's ML-DSA-65 pubkey from its export-job artifact. The app holds no keys — the YubiKey touch is consent.",
+    "accord_bless_ci_ed25519_label": "Ed25519 pubkey (base64)",
+    "accord_bless_ci_mldsa_label": "ML-DSA-65 pubkey (base64) — paste from export job",
+    "accord_bless_ci_submit": "Bless CI workers — touch your YubiKey",
+    "accord_bless_ci_submit_busy": "Blessing — touch your YubiKey…",
+    "accord_bless_ci_title": "Bless CI workers",
+    "accord_new_bless_ci_workers": "Bless CI workers",
+    "accord_new_remint_trust_root": "Re-mint existing trust root",
+    "accord_remint_auth_tally": "{have} of {needed} authorizations.",
+    "accord_remint_back_btn": "Back",
+    "accord_remint_bundle_ready": "The portable seed is ready — save or copy it (mesh-genesis.json):",
+    "accord_remint_canonical_select": "Select the canonical server to re-mint…",
+    "accord_remint_close_btn": "Close",
+    "accord_remint_completed_label": "Completed record (SignedKeyRecord JSON)",
+    "accord_remint_continue_btn": "Continue to propose",
+    "accord_remint_cosign_all_signed": "Every holder on this roster has already authorized this seed.",
+    "accord_remint_cosign_btn": "Cosign the seed — touch your YubiKey",
+    "accord_remint_cosign_btn_busy": "Cosigning — touch your YubiKey…",
+    "accord_remint_cosign_desc": "Hand the device to the next holder. They authorize the SAME seed on their own YubiKey, with their own PIN. Repeat until the node reports the seed complete.",
+    "accord_remint_cosign_paste_label": "Partial to cosign (SignedKeyRecord JSON)",
+    "accord_remint_cosign_title": "Step 3 — Cosign (the second holder)",
+    "accord_remint_desc": "Turn the EXISTING accord roster and one canonical serve node into a portable trust-root seed. Two accord holders authorize it, one YubiKey each. Nothing is retyped: the roster, pubkeys and address pre-fill from this node. The app holds no keys — the YubiKey touch is consent.",
+    "accord_remint_done_desc": "Save it, keep it offline, and hand it over the way you would a key — anyone holding it can stand a mesh on this trust root.",
+    "accord_remint_done_family": "Family key: {key}",
+    "accord_remint_done_fingerprint": "Fingerprint: {fingerprint}",
+    "accord_remint_done_fingerprint_caption": "Compare this fingerprint out of band — in person or on a call you both recognize — before anyone attaches this seed.",
+    "accord_remint_done_holders": "Holders carried: {count}",
+    "accord_remint_done_serve_nodes": "Serve nodes carried: {count}",
+    "accord_remint_done_title": "The seed is authorized",
+    "accord_remint_no_canonicals": "No canonical servers in the re-mint source.",
+    "accord_remint_produce_btn": "Produce portable genesis",
+    "accord_remint_produce_btn_busy": "Producing…",
+    "accord_remint_propose_btn": "Propose the seed — touch your YubiKey",
+    "accord_remint_propose_btn_busy": "Proposing — touch your YubiKey…",
+    "accord_remint_propose_desc": "The first holder mints and signs the seed's charter and grant on their own YubiKey. The app holds no keys — the touch is consent.",
+    "accord_remint_propose_title": "Step 2 — Propose (the first holder)",
+    "accord_remint_quorum_line": "Quorum: {m} of {n} accord holders must authorize the seed.",
+    "accord_remint_quorum_note": "Quorum {quorum} — only two holders need be present; the third's record rides the roster.",
+    "accord_remint_reblessed_note": "This ceremony also blessed the selected canonical as a trace server (infra:serve) — it had none. It is now trusted by default to receive traces; un-bless it any time with the canonical withdraw op.",
+    "accord_remint_review_title": "Step 1 — Review what the seed will carry",
+    "accord_remint_roster_empty": "No accord holders in the re-mint source yet.",
+    "accord_remint_roster_title": "Accord holders (the full roster rides the seed)",
+    "accord_remint_save_bundle": "Save genesis bundle",
+    "accord_remint_seed_scope": "The seed carries the trust root — this accord's full holder roster — and the serve node selected below. Nothing is signed on this step.",
+    "accord_remint_serve_missing": "not yet blessed to serve — this re-mint fixes that",
+    "accord_remint_serve_node_line": "Serve node: {key}",
+    "accord_remint_serve_ok": "confers infra:serve ✓",
+    "accord_remint_start_over_btn": "Start another seed",
+    "accord_remint_step1_desc": "The first holder scrub-signs the selected canonical (pre-filled key_id + pubkeys + address). The 1-scrub partial does not yet confer — it gossips to the other holders to cosign.",
+    "accord_remint_step1_title": "Step 1 — Propose (A1)",
+    "accord_remint_step2_desc": "The partial gossips to the other holders' devices — the second holder cosigns it from Pending co-signs (or pastes it below to cosign on this device). At the family quorum the record is conferred.",
+    "accord_remint_step2_title": "Step 2 — Cosign (B1)",
+    "accord_remint_step3_desc": "Paste the completed (co-signed) record — it rides verbatim, never re-encoded. The node refuses a record that does not confer infra:serve.",
+    "accord_remint_step3_title": "Step 3 — Produce the portable genesis",
+    "accord_remint_step_done": "Done — the seed is authorized",
+    "accord_remint_step_of": "Step {step} of {total}",
+    "accord_remint_title": "Re-mint existing trust root"
   },
   "conscience": {
     "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
@@ -3080,12 +3140,132 @@
       "nodes": "Nodes",
       "provision_accord_holder": "Provision Holder",
       "safety": "Safety",
-      "transport": "Transport"
+      "transport": "Transport",
+      "commons": "Commons"
     }
   },
   "setup_validation_select_provider": "Select an LLM provider",
   "network_ops": {
-    "open_federation_hub": "Open federation hub →"
+    "open_federation_hub": "Open federation hub →",
+    "reader": {
+      "advisory": "An issued judgement is advisory to each reader. Declining one is a first-class outcome, not an error: two readers with different policies reaching different, both-valid states from the same judgement is the design working.",
+      "asserted": "Asserted",
+      "decision": {
+        "declined": "Declined by this reader",
+        "honoured_by_subscription": "Honoured by subscription",
+        "honoured_explicit": "Honoured — this reader adopted it",
+        "undecided_unsubscribed": "No decision yet",
+        "unknown": "Unrecognised decision"
+      },
+      "decision_recorded": "Decision recorded",
+      "decision_refused": "The decision was refused",
+      "decision_refused_body": "Nothing was recorded, and this reader's policy is unchanged.",
+      "decision_unreachable_body": "It is not known whether the decision was recorded. Read the fold again once the node answers.",
+      "decline": "Decline",
+      "dialog": {
+        "decline_note": "A normal outcome. Nothing about the judgement is deleted or contested: this records that THIS reader does not adopt it.",
+        "decline_title": "Decline this judgement",
+        "honour_note": "This reader adopts the judgement deliberately. The signer need not be subscribed.",
+        "honour_title": "Honour this judgement"
+      },
+      "dimension": "Dimension",
+      "fold": {
+        "agrees": "These agree.",
+        "diverges": "These differ — which is the reader deciding. The decline is recorded and reported; it does not yet stop this node withholding.",
+        "node": "This node's serve paths",
+        "reader": "This reader's fold"
+      },
+      "held": "Judgements held",
+      "honour": "Honour",
+      "judgement": "Judgement",
+      "read": "Read this reader's fold",
+      "reading": "Reading…",
+      "refused_body": "Nothing can be concluded about what this reader honours.",
+      "refused_title": "The node refused this read",
+      "signer": "Signed by",
+      "standing": {
+        "decided": "Judgements classified",
+        "none_held": "No judgements held here",
+        "unknown": "Unrecognised standing",
+        "unreadable": "This reader could not read its own state",
+        "unreadable_meaning": "NOT 'no judgements' and NOT 'nothing withheld' — an unreadable policy shown as an empty one silently drops every restriction it carried."
+      },
+      "subject_label": "Subject key id",
+      "subscription": "Subscribed roots",
+      "subtitle": "Other parties' judgements, and what THIS node's reader policy makes of them",
+      "title": "What this reader honours (tier R)",
+      "unreachable_body": "Tier R reads what this node holds, so nothing can be said about the subject until it answers. Unlike tier S, this rung needs the node.",
+      "unreachable_title": "This node could not be reached"
+    },
+    "self": {
+      "act_refused_body": "Nothing was recorded. The standings above are unchanged.",
+      "act_refused_title": "The act was refused",
+      "act_unreachable_body": "It is not known whether the act was recorded. Re-read the standings once the node answers.",
+      "act_unreachable_title": "This node could not be reached",
+      "axes_never_folded": "Three separate axes, three separate acts. A node that CHOSE to stop and a node that was MADE to stop are the same observable with opposite meanings, so they are never one switch.",
+      "axis": {
+        "accepting": {
+          "declare": "Stop accepting",
+          "lift": "Accept again",
+          "question": "Did this node CHOOSE to take on nothing new?",
+          "title": "Stop accepting"
+        },
+        "legal_compulsion": {
+          "declare": "Declare compulsion",
+          "lift": "Compulsion ended",
+          "question": "Is force being applied to this node from outside the mesh? Not a choice, and never recorded as one.",
+          "title": "Legal compulsion"
+        },
+        "load_shed": {
+          "declare": "Shed load",
+          "lift": "Carry a full load again",
+          "question": "Is this node carrying less on purpose?",
+          "title": "Shed load"
+        }
+      },
+      "counts": "Declared {declarations}× · lifted {lifts}×",
+      "delegation": "Under delegation",
+      "dialog": {
+        "cancel": "Cancel",
+        "compelled_by_hint": "Only the compulsion carries this. Leave it blank if you cannot say — 'compelled, cannot say by whom' is a real answer, and a gagged operator can still leave the trace.",
+        "compelled_by_label": "Compelled by (optional)",
+        "confirm": "Record",
+        "delegation_hint": "The owner's own delegates_to id. A self-directed act is the owner's own: a third party's serve grant will not do.",
+        "delegation_label": "Owner delegation id",
+        "reason_hint": "Recorded verbatim and never interpreted. An act with no recorded reason is indistinguishable from an unauthorised one once the actor is gone.",
+        "reason_label": "Reason (required)",
+        "working": "Recording…"
+      },
+      "event": "Event",
+      "lift_disabled_hint": "Nothing has been declared on this axis, so there is nothing to lift.",
+      "node_key": "This node",
+      "partition_only": "The only rung that still works while partitioned — every other rung has to reach someone.",
+      "reason_label": "Reason recorded",
+      "recorded_title": "Recorded",
+      "records_only": "Each act records an attributed declaration and nothing more. No loop on this node reads them, so nothing is throttled, gated or stopped by the act itself.",
+      "refresh": "Re-read standings",
+      "refused_body": "The standings are unknown. A refused read is not a clear one.",
+      "refused_title": "The node refused this read",
+      "since": "Since",
+      "standing": {
+        "in_force": "In force",
+        "in_force_meaning": "This node declared it and has not lifted it.",
+        "lifted": "Declared, then lifted",
+        "lifted_meaning": "Not in force now — and not the same fact as never having declared it.",
+        "never_declared": "Never declared",
+        "never_declared_meaning": "No act on this axis was ever recorded here.",
+        "unknown": "Unrecognised standing",
+        "unknown_meaning": "The node reported a standing this app does not recognise. Treat it as unknown, never as clear.",
+        "unreadable": "Standing unknown — could not read",
+        "unreadable_meaning": "The record could not be read, so this node does not know its own standing. This is NOT 'nothing in force'."
+      },
+      "subtitle": "Acts on this node and nobody else",
+      "title": "Self-directed (tier S)",
+      "unreachable_body": "The three standings are unknown — which is not 'nothing in force'. Tier S acts are local to this node, so they are available again the moment it answers.",
+      "unreachable_title": "This node could not be reached",
+      "unreadable_axes_body": "The node answered, but it could not read the axes marked below. It does not know its own standing there — do not read that as clear.",
+      "unreadable_axes_title": "Some standings could not be read"
+    }
   },
   "setup_validation_fedid_label_generic": "Pick a unique name like firstname-lastname-v1. The generic default is not allowed.",
   "setup_validation_fedid_label_required": "Enter a name for your federation ID to continue.",
@@ -3152,5 +3332,648 @@
   "approval_over_grant_slight": "Approving {amount}, slightly above the {requested} the agent asked for. Confirm this is what you mean.",
   "approval_budget_exceeded_request": "Approved above the {requested} the agent asked for",
   "approval_budget_exceeded_request_unknown": "Approved above the agent's request",
-  "approval_over_grant_percent": "Approving {amount} — {ratio} above the {requested} the agent asked for. Confirm this is what you mean."
+  "approval_over_grant_percent": "Approving {amount} — {ratio} above the {requested} the agent asked for. Confirm this is what you mean.",
+  "admin": {
+    "accept_writes": {
+      "not_reached": "It restores nothing that was refused while the de-admission stood. Those writes were rejected at the door and never landed here; if the peer still holds them it has to send them again. Nothing else about the key changes.",
+      "not_refused": "This key is not de-admitted here, so there is nothing to lift."
+    },
+    "admission": {
+      "standing": {
+        "admitted": "No live de-admission authored by this node names this key, so its writes are admitted here. This says nothing about any other node: de-admission is local to the corpus that emits it.",
+        "refused": "This node holds a live de-admission of this key that it authored itself, so the key's next write into this node's corpus is refused at the substrate's own door.",
+        "unreadable": "This node could not read its own admission state for this key, so it does not know whether that key's writes are refused. This is NOT 'admitted' — do not render it as one."
+      }
+    },
+    "descend": {
+      "bounded_unsupported": "A time-bounded judgement cannot drive an unbounded eviction. The substrate's only actor-keyed descent takes the whole corpus, which would destroy the history this bound deliberately leaves standing. The time-bounded removal that IS implemented is de-admission with a history bound.",
+      "not_reached": "The selected attestation rows themselves are not descended. Every payload carrier on this substrate is sealed inside its own signature, so its bytes cannot be dropped without making the row read as forged; erasability is decided at mint and nothing minted today is erasable."
+    },
+    "enforcement": {
+      "accept_writes": "This node stops refusing the named keys' writes: the de-admission it authored is withdrawn and the substrate admits their next write again. Both the de-admission and this withdrawal survive as readable history.",
+      "annotate": "A signed judgement with no effect until a reader honours it. Nothing is withheld, throttled or removed.",
+      "deadmit": "A signed revocation on the ordinary append-only plane. It is evidence a reader folds, not a door that slams: signature verification, the replication cursors and row ingest all deliberately keep working, because refusing a compromised key's older rows would destroy the evidence needed to adjudicate the compromise.",
+      "descend": "Irreversible by design. Descent never terminates at zero — the blur and the tombstone survive — but what was shed is not coming back.",
+      "quarantine": "A signed marker, not a command: nothing is deleted and nothing is rewritten. This node's serve paths stop handing the named keys' rows and blobs to peers; a peer that folds differently simply does not receive them from us.",
+      "re_admit": "Recorded as an attributed reversal. The revocation row survives and every reader still folds it: restrictions compose and leniencies do not, and no layer of this substrate exposes an un-revoke.",
+      "refuse_writes": "This node refuses the named keys' next write into its own corpus, at the substrate's own door and before any other gate runs. It is LOCAL by design: no node decrees another node's admission set, because a globally-effective de-admission would itself be a censorship weapon. Isolation of a genuine abuser is emergent — it arrives when many nodes independently reach the same conclusion — and is never decreed from here.",
+      "throttle": "Recorded as an attributed judgement only. This substrate has no recipient-authored per-key admission budget: the peer write quota is a fixed runaway-loop backstop, not a policy surface a throttle can key on. Nothing changes what this node accepts from the named keys."
+    },
+    "preview": {
+      "note": "This is exactly what a commit will act on. Present the selection hash with the commit; if the selection has changed, the commit refuses.",
+      "window_in_application": "The time window is applied by this node, not by the substrate query: the general attestation read does not honour the window axis. The page bound is applied first, so a windowed selection can come back short."
+    },
+    "quarantine": {
+      "not_withheld": "This key is not currently withheld here, so there is nothing to release."
+    },
+    "reader": {
+      "advisory": "An issued judgement is advisory to each reader. `reader_fold` is what THIS reader's policy makes of what it holds; `node_fold` is what this node's serve paths do today, which is to honour every marker the substrate admitted. They can differ, and when they do the difference is the substrate gap: there is no reader-policy hook in the serve-side fold, so a decline is recorded and reported and does not yet stop this node withholding.",
+      "decision": {
+        "declined": "This reader refused this judgement. A normal outcome: an issued judgement is advisory to each reader, and refusing one is the property the whole rung exists for.",
+        "honoured_by_subscription": "No explicit decision was recorded; this reader subscribes to the signer, so the judgement is honoured by policy.",
+        "honoured_explicit": "This reader adopted this judgement deliberately.",
+        "undecided_unsubscribed": "This reader does not subscribe to the signer and has recorded no decision. The judgement is not honoured, and that is nobody's decision yet — which is a different fact from having refused it."
+      },
+      "standing": {
+        "decided": "Every judgement this node holds about that subject is listed with what this reader does about it.",
+        "none_held": "This node holds no judgement about that subject. Nobody has judged it here — which is not the same as this node being unable to say.",
+        "unreadable": "This reader could not read its own state, so it cannot say what it honours. This is NOT 'no judgements' and NOT 'nothing withheld' — an unreadable policy rendered as an empty one silently drops every restriction it carried."
+      }
+    },
+    "refusal": {
+      "attribution_absent": "delegation_id is required. An action that does not carry its own authority cannot be told from an unauthorized one once the actor is gone.",
+      "authority_not_a_delegation": "The named delegation id is not a delegates_to row.",
+      "authority_not_the_owner": "A self-directed act is the owner's own. The named delegation carries the right scope but was not issued by this node's responsible party, and a third party's serve grant is not the owner's.",
+      "authority_not_to_actor": "The named delegation was not granted to this node, so this node is not the party it authorizes.",
+      "authority_scope_absent": "The named delegation does not carry the scope this operation requires. Another delegation from the same issuer might, but the act would then record an authority it was not taken under.",
+      "authority_scope_unreachable": "No live delegation chain carrying the scope this operation requires reaches this node from that issuer. Authority is re-derived from this node's own verified state, never taken from the request.",
+      "authority_unresolved": "The named delegation is not a row this node holds, so its scope cannot be checked. This node does not act on an authority it cannot verify.",
+      "bad_request": "The request body could not be parsed.",
+      "community_absent": "community_id is required: a quarantine is filed under a community's authority, and a marker that names no community names no authority.",
+      "deadmission_gate_dormant": "This node has not declared its own identity to the substrate, so the de-admission gate is dormant: the row would be written and would refuse nothing. Refused rather than handed back as done — a sanction gate that silently does nothing is worse than no gate, because an operator will believe de-admission works. This is a node-configuration fault, not a fault of the request.",
+      "deadmission_gate_foreign_identity": "The identity this node signs as and the identity the de-admission gate compares writers against are two different keys, so a de-admission signed here would never be folded as this node's own and would refuse nothing. This is a node-configuration fault, not a fault of the request.",
+      "judgement_subjectless": "That judgement names no subject, so honouring or declining it would change nothing about anyone. This node does not record a decision it cannot apply.",
+      "judgement_unresolved": "That judgement is not a row this node holds, so this reader has nothing to decide about. A reader decides what it HOLDS; it does not pre-refuse what it has never seen.",
+      "node_unowned": "This node has no responsible party (owner-binding), so it performs no graded admin operation on anyone's behalf. Claim ownership first.",
+      "not_a_judgement": "That row is not a judgement this rung can decide about. Tier R is the reader's policy over other parties' JUDGEMENTS, and an ordinary attestation is not one.",
+      "not_owner": "Graded admin operations require the owner (SYSTEM_ADMIN) role.",
+      "preview_hash_mismatch": "What you previewed is not what would execute — the selection has changed since the preview. Re-run the preview and ratify the new hash.",
+      "quorum_insufficient": "This operation is irreversible and takes a quorum of distinct authorities, not one delegation chain. Two chains from the same root are one authority wearing two hats.",
+      "reason_absent": "reason is required. An action with no recorded reason is indistinguishable from an unauthorized one once the actor is gone.",
+      "selection_unpredicated": "The selection carries no predicate at all, which means the whole corpus. Name what you are acting on.",
+      "session_absent": "No session token was presented. Graded admin operations are owner-only.",
+      "session_invalid": "That session is invalid or expired.",
+      "store_unavailable": "The substrate could not be read.",
+      "subject_absent": "subject_key_id is required: a reader fold is about one subject's judgements, and an unnamed subject is every subject."
+    },
+    "refuse_writes": {
+      "already_refused": "This key is already de-admitted here, so nothing was written and the standing is unchanged.",
+      "not_reached": "It unwrites nothing. Rows these keys already wrote here are untouched and still served — quarantine is the op that stops serving them. Rows that already replicated to peers are not recalled and cannot be. The keys are not removed, their signatures still verify, and they go on writing to every other node, including this node's peers, from which those rows may arrive here again by replication. One exemption survives on purpose so that a node can always lift its own denial, and it does not ask who is writing: a de-admitted key may still write de-admission rows here (CIRISPersist#608).",
+      "reversal": "Reversible, and the reversal reaches the substrate rather than merely recording a change of mind: POST /v1/admin/accept-writes withdraws the de-admission and the key's writes are admitted here again. Two of this ladder's reversals reach the substrate — releasing a quarantine, which restores what this node SERVES, and this one, which restores what it ACCEPTS. Both rows survive and stay readable: 'refused and then re-admitted' is not the same fact as 'never refused'."
+    },
+    "reversal": {
+      "evidence_only": "The original row survives and is still folded by every reader. This reversal is recorded evidence, not an undo — the substrate exposes no un-revoke.",
+      "substrate": "The substrate state is reversed: this node stops withholding the key's rows.",
+      "symmetric": "Nothing in the substrate is reversed because nothing in the substrate enforced the original judgement. Both acts are recorded evidence."
+    },
+    "self": {
+      "distinct_zeroes": "Three of the four standings are zeroes and they mean different things: never declared, declared and lifted, and could not be read. Render them differently.",
+      "enforcement": {
+        "compelled": "Recorded on its own axis, as its own act. This is a statement about force applied from OUTSIDE the mesh, and by itself it changes nothing this node does — deliberately. A compelled node may be made to keep serving, to stop, or to hand something over; folding any of those into 'this node stopped accepting' would destroy the only signal a downstream party has for telling a choice from a compulsion.",
+        "shed": "Recorded as this node's own attributed declaration, and nothing more. The mesh-config plane that would carry a load ceiling is authored by trust roots, and this node runs no consumer of the folded values yet, so no loop changes what it carries. What changes is the record: an operator, a peer or a later audit can tell that this node chose to carry less, under whose authority, and when.",
+        "stop_accepting": "Recorded as this node's own attributed declaration that it is taking on nothing new. Nothing in this substrate enforces it: the receive plane is peer-blind and the per-peer write quota is a fixed runaway-loop backstop, not a policy surface a stop can key on. The declaration is the artifact — and it is the one a peer reads to stop offering."
+      },
+      "lift": {
+        "compelled": "Recorded as a distinct act: a compulsion that ENDED is not a compulsion that never happened. The declaration it lifts survives, and both remain readable.",
+        "voluntary": "Recorded as a distinct act. The declaration it lifts survives, and both remain readable — 'declared and lifted' is not 'never declared'."
+      },
+      "partition": "Every act on this rung is local: the owner-binding walk, the ledger write and this read all touch this node's own database and nothing else. It is the only rung available while partitioned — every other rung has to reach someone.",
+      "standing": {
+        "in_force": "This node declared this and has not lifted it.",
+        "lifted": "This node declared this and lifted it again. That is not the same fact as never having declared it.",
+        "never_declared": "This node has never declared this. That is not the same fact as having declared and lifted it, and not the same fact as being unable to read.",
+        "unreadable": "The record could not be read, so this node does not know its own standing on this axis. This is NOT 'nothing in force' — do not render it as one."
+      }
+    }
+  },
+  "commons_surface": {
+    "asymmetry": "One member raises the brake; the cohort must agree to lift it. Raising protection is unconditional and costs one signature; undoing somebody else's costs the cohort's own threshold, and the escalated undo can never fall below an absolute floor no policy string may lower.",
+    "ballot": {
+      "admitted": "The ballot is on the record. It has NO force on its own: its price is paid at read time against a denominator that does not exist yet when it is cast — whether the pool ever reaches the escalated threshold depends on who else answers. A member may change their mind; the latest ballot governs."
+    },
+    "dismissal": {
+      "admitted": "The objection is lifted for the count. The threshold is re-derived from this node's own roster on every later read, so a dismissal that stops clearing a grown roster stops suppressing — and the protection it removed comes back."
+    },
+    "dry_run": "Nothing was signed and nothing was submitted. These are the exact canonical bytes each co-signer must sign for their scrub to count on the real submission — the m-of-n is over these bytes and no others.",
+    "escalation": {
+      "awaiting": "The appointed moderators may still answer, or they have already ruled in time. Escalation has not opened.",
+      "not_adopted": "This community declared no steward tier, so there is no moderator deadline and no escalation. Silence changes nothing here.",
+      "nothing_to_escalate": "A steward tier is declared and no live objection is waiting on it. Nobody was silent, because nothing was asked.",
+      "open": "The duty-holders did not answer in time, and the decision has passed to those who did. The threshold now counts RESPONDENTS rather than the whole roster — which is what lets a quiet community still resolve — floored so that 'reachable' never degrades to 'one person decides'."
+    },
+    "objection": {
+      "admitted": "The objection is on the record. It is a MARKER, not a command: nothing was changed by its arrival, and it replicates on the ordinary attestation plane so a peer that was partitioned during the window still counts it when it arrives. One member is enough to raise it; lifting it costs the cohort's own threshold."
+    },
+    "outcome": {
+      "dismissed": "Those who answered ruled that this objection does not stand, and it is suppressed for the count.",
+      "not_escalated": "Escalation did not open for this objection.",
+      "unresolved": "Escalation is open and undecided: too few have answered, or neither side has reached the threshold. Nothing changes — the objection stands exactly as it did.",
+      "upheld": "Those who answered ruled that this objection stands."
+    },
+    "refusal": {
+      "action_absent": "action_id is required. An objection names a row in the commons; one that names nothing can never be counted.",
+      "action_unknown": "This node holds no such action, so a row naming it would be filed where no fold will ever count it. The substrate refuses the same case at its own door.",
+      "actor_recused": "The author of the action does not vote on the objection to their own act.",
+      "bad_now": "The read-time instant must be an RFC 3339 timestamp.",
+      "ballot_predates_action": "A judgement cannot be older than the thing it judges.",
+      "canonicalize_failed": "The row's canonical bytes could not be produced, so there is nothing a co-signer could sign.",
+      "cohort_absent": "cohort_key_id is required: it names whose roster and whose declaration govern the count.",
+      "cohort_not_a_commons": "The `self` cohort has no roster to be a quorum over — its members are one identity's own devices — so it has no commons to police.",
+      "cohort_unknown": "That cohort does not resolve on this node, so there is no roster and no declaration to judge this by. Authority must come from local verified state.",
+      "cohort_unrecognized": "That is not a rostered cohort. Objections live in a family, a community or an affiliations group.",
+      "dimension_mismatch": "That row was offered at the wrong door for what it carries.",
+      "dismissal_quorum_short": "Fewer distinct verified roster members co-signed than the cohort's threshold demands. The counted and required numbers are beside this message.",
+      "duplicate_objection": "You already hold a live objection against this action. One member is one objection — otherwise a single member could reach the threshold alone.",
+      "grounds_absent": "grounds is required. An objection raised for no recorded reason is indistinguishable from one raised for a bad one — and grounds are recorded, never interpreted.",
+      "malformed_envelope": "The row is missing a reference the count needs.",
+      "node_unowned": "This node has no responsible party (owner-binding), so it neither reads nor speaks in anyone's commons on their behalf. Claim ownership first.",
+      "not_a_cohort_member": "Only a member of this cohort may speak in its commons. This is the only test the protective side applies — and the reason a stranger's objection never becomes a marker others might honour.",
+      "not_filed_against_actor": "The row is filed where the fold does not look for it, so it would be stored, durable and permanently inert. A marker nobody can find is not a marker.",
+      "not_governed": "This community declares no reverse-quorum policy, so it has not adopted the objection plane. Refused rather than defaulted: inventing a window and a threshold for a group that declared neither is worse than saying no.",
+      "not_owner": "The commons surface requires the owner (SYSTEM_ADMIN) role.",
+      "objection_absent": "objection_id is required: a ballot answers a question about ONE objection.",
+      "objection_unknown": "The named objection is not one this node holds against this action.",
+      "session_absent": "No session token was presented. The commons surface is owner-only.",
+      "session_invalid": "That session is invalid or expired.",
+      "sign_failed": "This node could not sign the row, so nothing was submitted.",
+      "steward_tier_not_adopted": "This community declared no steward tier, so there is no deadline to be silent past and no escalated pool. A ballot here would be stored and never read.",
+      "store_unavailable": "The substrate could not be reached.",
+      "target_action_unknown": "The objected-to action is not a row this node holds, so the objection would be uncountable and its window unresolvable.",
+      "unverifiable_signature": "The row's signature did not verify against the signer's keys as registered on this node."
+    },
+    "standing": {
+      "action_unknown": "This node holds no such action. An objection names a row, and there is no row here to name.",
+      "cohort_unknown": "That cohort does not resolve on this node, so it has no roster and no declaration this node can read. Authority must come from local verified state.",
+      "not_governed": "This community declares no reverse-quorum policy, so the objection plane does not apply to its commons at all. That is different from nobody having objected.",
+      "objected": "At least one member has objected and the window is still open. The action stands for now; one more objection may be all it takes.",
+      "quiet": "The plane was read and no objection has been raised against this action.",
+      "reversed": "Enough distinct members objected inside the window. Every node holding these rows folds to this same answer, with no coordination.",
+      "stood": "The window closed below the reversal threshold. This action was objected to and stands.",
+      "unreadable": "The objection plane could not be read here. This is NOT a statement that nobody objected — the objections are unknown, not absent."
+    },
+    "steward": {
+      "awaiting": "The deadline has not passed. The appointed moderators may still answer.",
+      "no_duty_holders": "A steward tier is declared and this node resolves no appointed moderator for it. Nobody was silent, because nobody was there.",
+      "not_adopted": "No steward tier was declared, so no moderator deadline applies.",
+      "overruled": "The appointed moderators ruled that this objection does not stand — and escalation opens anyway, because an undo is never theirs alone to make.",
+      "silent": "The deadline passed with no ruling either way.",
+      "upheld": "The appointed moderators ruled, in time, that this objection stands. The matter was judged by named people, on the record."
+    }
+  },
+  "consent": {
+    "decline_analyze": {
+      "cost": {
+        "no_capability_services": "You cannot use streams or services that require third-party capability attestations, because you will not have any.",
+        "no_reputation": "You build NO reputation — every capacity:* claim about you is refused, so none can ever exist.",
+        "peers_may_refuse": "Some peers may refuse to interact with you at all."
+      },
+      "summary": "You may send traces without consenting to be analyzed. Traces will still flow."
+    },
+    "grant": {
+      "analyze": {
+        "permits": "The peer may SCORE your traces — this is what builds reputation.",
+        "title": "Be scored"
+      },
+      "replication": {
+        "permits": "The peer may HOLD your traces.",
+        "title": "Send traces"
+      }
+    },
+    "grants": {
+      "independent": "These are separate consents on opposite edges. Granting one does not grant the other, and either can be withdrawn without the other."
+    },
+    "mesh_participation": {
+      "action": "Consent to CIRIS Mesh Participation"
+    }
+  },
+  "location": {
+    "cost": {
+      "no_regional_community": "You cannot take part in any regional community. Membership is decided by whether your cell falls inside the community's own region, so without a cell there is nothing to compare.",
+      "no_regional_reporting": "Your activity cannot contribute to regional pattern reporting."
+    },
+    "permits": "Attaches a coarse H3 cell to your envelope so patterns can be reported across regions. The substrate refuses anything finer than resolution 7, so it identifies a rough region — never your specific locality or address.",
+    "purpose": "Regional pattern reporting, and taking part in regional communities. A community may also use it as an OPTIONAL visibility gate, restricting items destined for that community to members whose region falls inside it. It is not a general restriction on your traces — that is decided by the consents above.",
+    "title": "Share your approximate region"
+  },
+  "mesh": {
+    "announce_requirement": "A node that does not announce gets no service access on the mesh and no agent services. The accord's kill switch is only meaningful against a node it can reach, so an unreachable node is never served in the first place."
+  },
+  "mesh_config": {
+    "consumption": {
+      "elsewhere": "No loop in this build reads this key — its consumer lives in another component. A row set here is admitted and folded, and changes nothing on this node.",
+      "unbuilt": "This key's consumer has not been built anywhere yet. A row set here is admitted and folded, and changes nothing.",
+      "unreachable": "This key's consumer runs in this process, but nothing carries a value from this plane to it: the component that owns the knob takes it once when the loop is composed and offers no way to change it afterwards. A row set here is admitted and folded, and changes nothing anywhere.",
+      "wired": "A loop in this build reads this key and changes what it does. The effective value beside it is in force on this node."
+    },
+    "dry_run": "Nothing was signed and nothing was submitted. These are the exact canonical bytes a co-signer must sign for their scrub to count on the real submission.",
+    "durability": {
+      "substrate_decides": "Which acts earn a durable setting is the substrate's ruling, re-read on every call and reported by its own refusal token. This node encodes no durability rule of its own."
+    },
+    "emergency": {
+      "bound": "Emergency relief expires by construction. The maximum window is the substrate's, carried here so a form can bound its input; the substrate refuses anything longer at its own door."
+    },
+    "history": {
+      "empty": "Every subscribed root was read and none has ever filed a mesh-config row.",
+      "no_subscription": "This node holds no live trust-root edge, so no root has ever been able to file a mesh-config row here.",
+      "partial": "Some subscribed roots could not be read, so this history is incomplete. The roots that failed are named.",
+      "present": "Every mesh-config row this node holds, newest first.",
+      "truncated": "This page was cut at the limit. The total below counts every row read.",
+      "unreadable": "The mesh-config history could not be read here. This is NOT a statement that no row was ever filed."
+    },
+    "outcome": {
+      "admitted": "The substrate admitted this row. It is a MARKER, not a command: nothing was changed by its arrival, and its effect is entirely the read-time fold a consumer may honour."
+    },
+    "plane": {
+      "configured": "At least one key is moved off the owner's baseline by a subscribed root.",
+      "no_rows_held": "This node subscribes to at least one trust root and holds no mesh-config row from any of them. Every key runs at the owner's own baseline.",
+      "no_subscription": "This node holds no live trust-root edge, so no root may configure it. The subscription IS the trust edge.",
+      "none_binding": "Mesh-config rows are held and none of them binds: each is expired, clamped to the owner's consent, or asks for the baseline value already in force.",
+      "unreadable": "The mesh-config plane could not be read here. This is NOT a statement that nothing is set — the values below are unknown, not defaults."
+    },
+    "provenance": {
+      "baseline_not_moved": "Subscribed roots hold live rows for this key and none of them moved it: each was clamped to the owner's consent or asked for the value already in force.",
+      "baseline_unspoken": "No subscribed root holds a live row for this key, so the node runs the value its owner consented to.",
+      "root": "A subscribed root's signed row set this value. The row, its author and the delegation it was taken under are named beside it."
+    },
+    "refusal": {
+      "attribution_absent": "delegation_id is required. An act that does not carry its own authority cannot be told from an unauthorized one once the actor is gone.",
+      "authority_not_a_delegation": "The named delegation id is not a delegates_to row.",
+      "authority_unresolved": "The named delegation is not a row this node holds, so the authority it records would name nothing. Whether it actually authorizes this act is the substrate's ruling, made at its own door.",
+      "grounds_absent": "grounds is required. A knob turned for no recorded reason is indistinguishable from one turned for a bad one.",
+      "node_unowned": "This node has no responsible party (owner-binding), so it neither reports nor changes mesh configuration on anyone's behalf. Claim ownership first.",
+      "not_owner": "The mesh-configuration surface requires the owner (SYSTEM_ADMIN) role.",
+      "root_absent": "root_ref is required: a mesh-config row is issued under a trust root, and a row that names none is filed where no fold will ever count it.",
+      "session_absent": "No session token was presented. The mesh-configuration surface is owner-only.",
+      "session_invalid": "That session is invalid or expired."
+    },
+    "ttl": {
+      "expired": "This row's window has closed. The fold drops an expired row at read time, so it needs no revocation and no reachable author.",
+      "running": "This row's window is open and closes at the named instant.",
+      "unbounded": "This row carries no expiry. It applies until it is superseded."
+    }
+  },
+  "moderation": {
+    "ladder": {
+      "attestation_type_label": "Attestation type (scores, delegates_to, …)",
+      "attesting_key_label": "Rows authored by this key",
+      "attribution_hint": "Both are mandatory and both are written into the signed tombstone. An action that does not carry its own authority cannot be told from an unauthorized one once the actor is gone.",
+      "attribution_label": "Authority and reason",
+      "cancel_button": "Cancel",
+      "commit_blocked": "A delegation id and a reason are required; a quarantine also needs a community id.",
+      "commit_button": "Sign {hash}",
+      "community_id_hint": "A quarantine is filed under a community's authority, and a marker that names no community names no authority.",
+      "community_id_label": "Community id — required",
+      "confirm_attribution": "Signed under delegation {delegation}, for: {reason}",
+      "confirm_op": "{op} — tier {tier}",
+      "confirm_quorum": "{count} authority chains presented; {min} distinct roots are required.",
+      "confirm_revoked_after": "Statements are stood behind up to {at}.",
+      "confirm_signing": "The selection this signature covers",
+      "confirm_title": "What you are about to sign",
+      "delegation_id_label": "Delegation id (delegates_to) — required",
+      "descend_ack_label": "Type {word} to confirm",
+      "descend_ack_word": "DESCEND",
+      "descent_performed": "The payload descent was performed.",
+      "descent_refused": "The payload descent did not run: {token}",
+      "dimension_prefix_label": "Dimension prefix",
+      "gate_armed": "The de-admission gate is armed: this node's own de-admissions are what the substrate compares writers against.",
+      "gate_dormant": "The de-admission gate is DORMANT. This node declared no identity to the substrate, so a de-admission written here would refuse nothing.",
+      "gate_foreign_identity": "The de-admission gate compares writers against a DIFFERENT key than this node signs as, so a de-admission signed here would never be folded as this node's own.",
+      "gate_unknown": "This node reported a de-admission gate state this app does not recognise.",
+      "hash_mismatch_hint": "The selection changed between the preview and this signature. The preview that is current has been loaded above — read it before signing again.",
+      "intro": "The owner-gated recourse against an admitted peer, graded across tiers 0 to 4. Every rung is preview first, then sign the hash that preview returned — what you were shown is what executes, and a selection that changed in between is refused. Each rung states what it reaches AND what it does not; read both before you sign.",
+      "irreversible_banner": "IRREVERSIBLE",
+      "irreversible_flag": "Irreversible. There is no reversal op for this rung.",
+      "limits_unavailable": "This app could not load the node's own statement of what this reaches. The limit still applies — the response will state it.",
+      "no_preview_no_commit": "Nothing can be signed until a preview has run: the commit presents the hash the preview returned.",
+      "not_reached_title": "What this does NOT reach",
+      "op": {
+        "accept_writes": "Accept writes",
+        "annotate": "Annotate",
+        "deadmit": "De-admit",
+        "descend": "Force descent",
+        "quarantine": "Quarantine",
+        "re_admit": "Re-admit",
+        "refuse_writes": "Refuse writes",
+        "throttle": "Throttle",
+        "un_quarantine": "Release quarantine",
+        "un_throttle": "Un-throttle"
+      },
+      "op_label": "Which rung",
+      "outcome_recorded": "recorded",
+      "per_attester_more": "and {count} more keys",
+      "per_attester_row": "{key}: {rows} rows",
+      "preview_button": "Preview the blast radius",
+      "preview_counts": "{rows} rows across {targets} keys",
+      "preview_empty": "The preview ran and matched no rows. The selection is answerable and empty — which is not the same fact as never having asked.",
+      "preview_none": "No preview has been run for this selection yet.",
+      "preview_truncated": "The page filled to its limit, so the selection may be larger than what was hashed and a commit would act on this PAGE. Narrow the selection.",
+      "preview_unreadable": "The preview could not be read: {detail}. This is not an empty selection — the question was never answered.",
+      "quorum_hint": "This rung takes {min} distinct authority roots, not one delegation chain. Two chains from the same root are one authority wearing two hats.",
+      "quorum_ids_label": "Other authorities' delegation ids (comma separated)",
+      "quorum_shortfall": "{have} distinct authority roots reached this node; {need} are required.",
+      "reaches_title": "What this reaches",
+      "reason_label": "Reason — required",
+      "refused_title": "Refused: {token}",
+      "result_bounded": "The judgement carried a time bound, so the payload leg was refused rather than driving an unbounded eviction from a bounded judgement.",
+      "result_quorum": "{roots} distinct authority roots, {required} required.",
+      "result_revoked_after": "Statements stood behind up to {at}.",
+      "result_target": "{key} — {outcome}",
+      "result_title": "Committed: {op} (tier {tier})",
+      "review_button": "Review what you would sign",
+      "revoked_after_hint": "The revocation's own history bound. It is not part of the selection, so it bounds what is revoked without re-scoping the preview or changing the hash.",
+      "revoked_after_label": "Stand behind statements up to (RFC3339)",
+      "row_line": "{type} · {dimension} · {at}",
+      "row_more": "and {count} more rows",
+      "row_no_dimension": "no dimension",
+      "section": "Enforcement ladder",
+      "selection_after_hint": "This bound is part of the selection, so changing it changes the hash and drops the preview.",
+      "selection_after_label": "Only rows asserted after (RFC3339)",
+      "selection_hash": "Selection hash {hash}",
+      "selection_label": "What you are acting on",
+      "standing_admitted": "admitted here",
+      "standing_after": "Writes after: {standing}",
+      "standing_before": "Writes before: {standing}",
+      "standing_refused": "refused here",
+      "standing_unknown": "reported in terms this app does not recognise",
+      "standing_unreadable": "could not be read — this is NOT 'admitted'",
+      "tier_and_scope": "Tier {tier} · requires the {scope} delegation scope, re-derived from this node's own verified state rather than taken from the request.",
+      "transport_error": "The node could not be reached: {detail}",
+      "undone_by_reversal_op": "This rung has a reversal op on the ladder. Both rows survive as readable history: 'done and then undone' is not the same fact as 'never done'.",
+      "undone_never": "It is not undone. Descent never terminates at zero — the blur and the tombstone survive — but what was shed is not coming back.",
+      "undone_title": "How this is undone",
+      "unparsable_response": "The node answered with a body this app could not read.",
+      "window_application": "The time window was applied by this node rather than by the query, so the page bound was applied to a wider set and this selection can come back short.",
+      "window_substrate": "The time window was enforced by the substrate query.",
+      "withdrew_row": "Withdrew {id}"
+    }
+  },
+  "operator": {
+    "carriage": {
+      "idle": "Replication rounds finished, and this node served nothing and withheld nothing: it had nothing its peers still needed.",
+      "moving": "This node served rows to its peers and withheld none.",
+      "not_exercised": "No replication round has finished on this process, so no serving-path gate has ever run and the withhold ledger has never been written to. The zero is untested, not clean.",
+      "unreadable": "This node's carriage counters could not be read, so nothing here is a statement about what it served. This is not 'nothing was withheld' — it is 'we could not ask'.",
+      "withholding": "This node declined to serve rows it held. `withholds_by_reason` names the branch that declined and `recent_withholds` names to whom — an idle node reports neither."
+    },
+    "consent_sla": {
+      "none_overdue": "Every consent revocation this node promised to promote is inside its SLA window.",
+      "overdue": "This node is LATE promoting consent revocations it committed to. The sampled attestation ids beside this are the handles that clear the condition.",
+      "unreadable": "The consent-SLA backlog could not be read. That is not 'nothing overdue'."
+    },
+    "drill": {
+      "green": "This node's trust root proved its kill switch within the last 90 days.",
+      "never_drilled": "This node's trust root has NEVER proved its kill switch. It shares the red band with a long-abandoned root, and the absent last-drill instant beside it is the difference. The root still serves: drill freshness is a trust signal, never a gate.",
+      "no_root_walked": "No trust root was walked, so there is nothing to be undrilled about. This is not a stale drill — there is no drill subject.",
+      "stale": "This node's trust root last proved its kill switch more than 180 days ago. It still serves: drill freshness is a trust signal, never a gate.",
+      "yellow": "This node's trust root last proved its kill switch between 90 and 180 days ago."
+    },
+    "headline": {
+      "green": "Every signal this node can compute reads healthy.",
+      "red": "At least one signal reads unhealthy. Read the unknown list too: a red headline ranks above an unknown and can otherwise hide one behind it.",
+      "unknown": "One or more signals could not be computed. Read the unknown list — an uncomputed signal is not a healthy one.",
+      "yellow": "This node is serving, and something here warrants a look."
+    },
+    "ingest": {
+      "background": "Refusals are present but not sustained from a stable identity set: ordinary probes, stale clients and churn. Read `distinct_signers` and `unattributed_in_window` before dismissing it — a HIGH rate spread across a WIDE identity set is a probe, and a HIGH rate that named almost nobody is malformed traffic with a stale client mixed into it. Neither is churn, and neither has one producer to go fix, which is why they read here rather than as a stuck producer.",
+      "clean": "Batches were offered to the HTTP ingest path and none was refused inside the window. `refused_total` beside this is the whole-process count: a clean window on a process that refused earlier is a recovery, not an absence.",
+      "http_path_only": "This reading covers the HTTP ingest path only. A batch that arrives over the Reticulum relay is verified by the same persist gate but is not counted here, so a clean ingest reading is not a statement about every way a trace can be offered to this node.",
+      "not_exercised": "Nothing has been offered to the HTTP ingest path on this process — no batch accepted and none refused. The zero is untested, not clean.",
+      "stuck_producer": "A SUSTAINED rate of refusals from a SMALL, STABLE set of signers: a producer is stuck in a retry loop and cannot self-correct. Every one of these refusals is correct — the gate is working — which is exactly why the aggregate needs its own reading. `top_signers` names who to go fix.",
+      "unattributed": "Batches were refused and NOT ONE named a signer: they failed before there was an identity to record — malformed bytes, a bad signature, an unsupported schema version. There is no producer to call, and this is deliberately not reported as a stuck producer: zero distinct signers is not a small stable identity set.",
+      "unreadable": "This node's ingest refusal ledger could not be read, so nothing here is a statement about what it refused. This is not 'nothing was refused' — it is 'we could not ask'."
+    },
+    "key_statements": {
+      "stands": "No revocation this node holds covers a statement made right now.",
+      "suspect_after_bound": "A history-BOUNDED revocation covers a statement made right now: this key is de-admitted as of now, and its honest past still stands. That bound is materially better than an unbounded revocation and does not read the same.",
+      "suspect_unbounded": "An UNBOUNDED revocation covers this key, so everything it ever said is in doubt — the revocation declined to say otherwise.",
+      "unreadable": "This node's key standing could not be computed. That is not 'stands' — an unasked question has no answer."
+    },
+    "peer_quota": {
+      "clean": "The peer-write quota has been exercised and its slot-denial arithmetic still holds.",
+      "denials": "The peer-write quota recorded slot denials. The tracked-peers cap derivation no longer holds in this build.",
+      "no_quota": "This backend holds no peer-write quota, so the tripwire reports nothing. That is not a clean reading.",
+      "not_exercised": "No peer write has been charged against the quota on this process, so its zero is untested rather than clean."
+    },
+    "quarantine": {
+      "not_quarantined": "No quarantine marker about this node's key has ever taken effect here.",
+      "released": "This node's key was withheld and then released. It serves now, and it did not always — a different fact from never having been withheld.",
+      "unreadable": "The quarantine state could not be read. That is not 'not quarantined'.",
+      "withheld": "This node's key is withheld from serving by a quarantine marker."
+    },
+    "receive": {
+      "applying": "Rows a peer offered were admitted here and changed this node's state, and none was refused. `applied_by_kind` names the planes that moved; `duplicate_total` beside it counts the offered rows this node already held.",
+      "converged": "Peers offered rows and this node already held every one of them, so nothing changed state and nothing was refused. This is anti-entropy at rest — traffic is arriving and there is nothing left to learn from it.",
+      "decided_denominator": "`decided_total` is every row a peer offered that reached an apply decision here: applied plus duplicate plus refused. Bytes this node could not decode reach no decision and are counted nowhere, so they are missing from this total rather than folded into it.",
+      "idle": "Replication rounds finished and no peer offered this node a single row: nothing was applied, nothing was already held, nothing was refused. Its peers had nothing for it, which is not the same fact as having applied everything they sent.",
+      "not_exercised": "No replication round has finished on this process, so nothing has been offered to this node's apply path. The zero is untested, not clean.",
+      "refusing": "This node refused rows its peers offered. `apply_refusals_by_kind` names the plane; `key_apply_refusals_by_reason` names the policy token that refused a key.",
+      "unreadable": "This node's apply counters could not be read, so nothing here is a statement about what it accepted. This is not 'nothing was refused' — it is 'we could not ask'."
+    },
+    "source": {
+      "edge_metrics": {
+        "unavailable": "This node's carriage counters could not be read, so nothing here describes what it served, withheld, or refused to apply."
+      },
+      "ingest_refusals": {
+        "unavailable": "This node's ingest refusal ledger could not be read, so nothing here describes what the admission gate refused. A gate with no reader is what let 8,631 correct refusals a day run unnoticed for 71 hours."
+      },
+      "node_state": {
+        "unavailable": "This node's state signals could not be read from the substrate, so nothing here describes its trust root, key standing, quarantine, consent SLA or peer quota. Absence of bad news from an unread source is not good news."
+      },
+      "trace_corpus": {
+        "unavailable": "This node's trace corpus could not be read, so nothing here describes what it has admitted. Absence of arrivals from an unread corpus is not absence of arrivals."
+      }
+    },
+    "trace_plane": {
+      "dark": "NOTHING HAS BEEN ADMITTED FOR LONGER THAN THIS NODE'S RED THRESHOLD. Arrival is the single thing this node exists to do. Read the `ingest` reading beside this: a dark plane with a sustained refusal rate is a producer being correctly rejected, and a dark plane with no refusals at all means nothing is even reaching this node.",
+      "future_dated": "The newest trace in the corpus is stamped in the FUTURE. The timestamp is the producer's own broadcast clock, so this is a statement about that clock — and it is called out rather than banded because a future-dated row pins this reading green indefinitely and would hide a plane that has actually stopped.",
+      "live": "A trace was admitted recently: the plane this node exists to receive on is being fed.",
+      "never_admitted": "The corpus was read and holds no trace at all: nothing has ever been admitted on this node. There is no arrival instant to band, so this is an untested zero, not a healthy one — and on a node that has been serving for a while it is the same condition as a dark plane.",
+      "producer_asserted_ts": "`last_admitted_at` is MAX(trace_events.ts) — the trace's own broadcast wall-clock, asserted by the producer. The substrate stores no server-side admission instant on this table, so a producer with a skewed clock moves this reading; a far-future row is called out as `future_dated` rather than banded for exactly that reason.",
+      "quiet": "No trace has been admitted for longer than expected, but not yet long enough to call the plane dark. A genuinely idle node reads this way; so does the first half of a producer outage.",
+      "unreadable": "This node's trace corpus could not be read, so nothing here is a statement about what it has admitted. This is not 'no trace has arrived' — it is 'we could not ask'."
+    },
+    "trust_root": {
+      "no_self_key": "The host never declared this node's own key id, so nothing self-scoped could be walked. This is a statement about the reader, not about the node: declare the key at startup and every self-scoped signal below becomes answerable.",
+      "no_trust_edges": "This node declared itself and holds no live trust edge to any root: it roots to nothing. A known bad, not a missing reading.",
+      "no_valid_root": "This node trusts one or more roots and none of them validates. The per-leg verdict beside this names which leg failed.",
+      "unreadable": "The trust-root walk could not be read. An unreadable directory is not an untrusted one — do not read this as a rootless node.",
+      "valid": "This node roots to a trust root that checks out in full: a live trust edge, a self-declaring charter with a recovery commitment, and no halt latched."
+    },
+    "volatility": {
+      "clock_dependent_local": "This band is computed on THIS node from a stored instant against the read clock, so it moves on elapsed time alone — no state change, no new row. A node that stops admitting traces walks green to yellow to red on its own, which is the point: it goes red without anyone asking it to.",
+      "process_local": "The carriage, receive and ingest counters are process-local and cumulative since this process started. They reset on restart, differ between processes serving one node, and are stored nowhere. They are a gauge of this process, not a ledger of this node."
+    },
+    "withhold_class": {
+      "fault": "A read or a wiring step failed and the serve path failed closed. This is NOT a verdict about the peer — it is this node's fault to fix.",
+      "integrity": "A row this node holds could not be served at all: it would not serialize, its stored hash would not decode, or advertised bytes were unfetchable. A defect in local state, not a policy.",
+      "policy": "A decision this node made on purpose — consent scope, a serve capability the peer does not hold, or the producer's own restriction. Working as configured: change the configuration, not the code."
+    }
+  },
+  "operator_ui": {
+    "accepted_refused": "{a} accepted, {r} refused since this process started",
+    "age": "Age",
+    "age_days": "{d}d {h}h ago",
+    "age_future": "{v} in the future",
+    "age_hours": "{h}h {m}m ago",
+    "age_minutes": "{m}m ago",
+    "age_seconds": "{s}s ago",
+    "applied": "Applied",
+    "apply_refusals": "Apply refusals",
+    "as_of": "Read at {t}",
+    "carriage": "Serving to peers",
+    "corpus_unread": "The corpus could not be read, so there is no arrival instant and no count to show. This is not an empty corpus — it is an unread one.",
+    "decided": "Rows decided",
+    "distinct_signers": "Distinct signers",
+    "duplicates": "Already held",
+    "ingest": "Admission gate",
+    "last_admitted": "Last admitted",
+    "malformed_body": "This node answered with a body this app could not decode, most likely because the node runs a newer operator surface than this app knows. Not a health reading, and not the absence of one.",
+    "malformed_title": "Answer not understood",
+    "named_no_signer": "Refusals naming no signer",
+    "no_arrival_instant": "There is no arrival instant: the corpus was read and holds no trace at all. Nothing has ever been admitted on this node.",
+    "node_signals": "Node signals",
+    "not_offered_body": "This node answered, and it serves no operator surface at all — it is running a build from before this reading existed. That is a version gap, not a refusal and not ill health: the node may be perfectly fine, and this app simply cannot ask it.",
+    "not_offered_title": "No operator surface",
+    "reading_absent": "This node's answer carried no such reading at all. That is not a healthy zero — it is a reading this app could not find where it expected it.",
+    "reading_body": "This app has not had an answer from the node yet. Nothing here is a reading — a question still in flight is not a healthy node.",
+    "reading_title": "Still asking",
+    "receive": "Applying from peers",
+    "refusals_per_hour": "Refusals per hour",
+    "refused_body": "This node answered and declined the read. The node is up; this session is not permitted to read its operator surface. That is a statement about this session, not about the node's health — sign in as the owner to read it.",
+    "refused_title": "Read refused",
+    "rounds": "Replication rounds",
+    "served": "Served",
+    "sources_absent": "Sources that contributed nothing",
+    "thresholds": "Live under {green}h, quiet under {yellow}h, dark beyond",
+    "title": "Node state",
+    "top_signers": "Who is being refused",
+    "trace_plane": "Trace plane",
+    "traces_held": "Traces held",
+    "uncomputed": "Could not be computed ({count})",
+    "unreachable_body": "This node did not answer at all, so there is no reading of it here. This is not the same as an unhealthy node: an unhealthy band is a real answer from a node that responded, and this is no answer. Check that the node is running and reachable at the address this app is using.",
+    "unreachable_title": "Not reached",
+    "unrecognized_reading": "This app does not recognize the reading '{token}'. The node is newer than this app: treat it as uncomputed, never as healthy.",
+    "window_floor": "The refusal window was truncated: every count here is a floor, not a total.",
+    "withholds": "Withheld"
+  },
+  "surfaces": {
+    "common": {
+      "duration_days": "{n}d",
+      "duration_hours": "{n}h",
+      "duration_minutes": "{n}m",
+      "duration_seconds": "{n}s",
+      "unknown": "unknown"
+    },
+    "commons": {
+      "action": "Action id",
+      "action_asserted": "Action asserted at",
+      "action_author": "Action author",
+      "add_cosigner": "Add co-signature",
+      "admitted": "Admitted",
+      "asymmetry_title": "Raising and lifting are not the same act",
+      "ballot_title": "Answer what the stewards left open",
+      "cohort": "Cohort",
+      "cohort_key": "Cohort key id",
+      "cosigner_classical": "Ed25519 signature (base64)",
+      "cosigner_key": "Co-signer key id",
+      "cosigner_pqc": "ML-DSA signature (base64, optional)",
+      "cosigners": "{n} gathered",
+      "counted": "Counted objections",
+      "counted_of_required": "{counted} counted of {required} required · roster {roster}",
+      "dimensions": "Envelope dimensions",
+      "dismiss_gate": "Submission stays shut until a dry run has produced the exact bytes every co-signer must sign. The signatures only count over those bytes.",
+      "dismiss_label": "Lift the brake",
+      "dismiss_price": "Costs the cohort's own threshold: {required} of {roster}.",
+      "dismiss_price_unknown": "Costs the cohort's own threshold, whatever its roster makes that. This node has not read it.",
+      "dismiss_step1": "Step 1 · Dry run",
+      "dismiss_step2": "Step 2 · Collect co-signatures over exactly those bytes",
+      "dismiss_step3": "Step 3 · Submit",
+      "dismiss_submit": "Submit the dismissal",
+      "dismissed": "Lifted by the cohort's quorum",
+      "dry_run": "Dry run — get the canonical bytes",
+      "duty_holders": "Appointed moderators",
+      "escalated_dismissed": "Overruled by the respondent pool",
+      "escalation": "Escalation",
+      "floor": "The escalated undo can never fall below {floor} respondents, whatever a policy string says.",
+      "grounds": "Grounds — mandatory, recorded, never interpreted",
+      "no_reading": "No standing has been read yet. Name a cohort and an action above.",
+      "objection_id": "Objection id",
+      "objections": "Objections on the record",
+      "objectors": "Distinct objectors",
+      "overrule": "Overrule",
+      "policy": "Policy",
+      "quiet_body": "The plane WAS read and no objection has been raised against this action.",
+      "quiet_title": "Nobody objected",
+      "raise_action": "Raise an objection",
+      "raise_label": "Raise the brake",
+      "raise_price": "Costs {threshold} — one member is enough. There is no majority to reach and nobody to wait for.",
+      "raise_price_unread": "Costs one signature. One member is enough; there is no majority to reach.",
+      "read": "Read the standing",
+      "refused": "Refused",
+      "required": "Reversal threshold",
+      "respondents_note": "Past the deadline the threshold counts RESPONDENTS, not the roster — which is what lets a quiet community still resolve.",
+      "respondents_of_required": "{respondents} respondents · {required} required",
+      "roster": "Live roster",
+      "standing": "the fold's answer",
+      "steward_deadline": "Moderator deadline",
+      "subtitle": "How a community polices itself. One member raises the brake; the cohort must agree to lift it.",
+      "title": "Commons",
+      "unknown_body": "This is NOT 'nobody objected'. No count was read, so none is shown — the objections are unknown, not absent.",
+      "unknown_title": "We could not ask",
+      "uphold": "Uphold",
+      "window": "Window",
+      "window_closed": "closed",
+      "window_open": "open"
+    },
+    "mesh_config": {
+      "admitted": "Admitted",
+      "asked": "Asked",
+      "author": "Author",
+      "baseline": "Owner baseline",
+      "clamped": "clamped to consent",
+      "clamped_roots": "Roots clamped for expanding past consent",
+      "consumer": "Consumer",
+      "consumption_blocker": "Blocked by",
+      "consumption_effect": "Effect",
+      "consumption_owner": "Consumer lives in",
+      "consumption_site": "Read through",
+      "consumption_tracked_by": "Tracked by",
+      "delegation": "Delegation",
+      "domain": "Admissible domain",
+      "effective": "Effective",
+      "emergency_bound": "Emergency relief maximum",
+      "form_durable": "Durable",
+      "form_emergency": "Emergency",
+      "grounds": "Grounds",
+      "hide_history": "Hide row history",
+      "history_binding": "binding",
+      "history_counted": "counted",
+      "history_total": "{shown} of {total} rows",
+      "hours": "hours",
+      "in_force": "In force — a loop in this build reads this value.",
+      "knob": "Knob",
+      "node": "This node",
+      "not_in_force": "NOT in force on this node — the value is accepted and folded, and nothing here acts on it.",
+      "payload_sha256": "payload_sha256 — the exact bytes a co-signer signs",
+      "per_root": "Every root's answer",
+      "provenance": "Provenance",
+      "ratifies": "Ratifies",
+      "refused": "Refused",
+      "registry": "Registered keys",
+      "roots": "Subscribed trust roots",
+      "rows_held": "Mesh-config rows held",
+      "scrubs": "Co-signatures",
+      "self_plane_below": "Below: this node's own configuration, set by its owner.",
+      "show_history": "Show row history",
+      "subtitle": "What a subscribed trust root asks of this node. A separate plane from this node's own configuration below — the two never merge.",
+      "title": "Mesh configuration",
+      "ttl": "Expiry",
+      "ttl_expired": "Expired",
+      "ttl_remaining": "Lapses in",
+      "ttl_unbounded": "No expiry — applies until superseded",
+      "unknown_values": "The values here are UNKNOWN, not defaults. Nothing below is a zero — nothing could be read.",
+      "unreadable_roots": "Roots that could not be read",
+      "write_delegation": "Delegation id",
+      "write_dry_run": "Dry run",
+      "write_durable": "Submit durable",
+      "write_grounds": "Grounds — recorded, never interpreted",
+      "write_key": "Key",
+      "write_ratifies": "Ratifies row id (optional)",
+      "write_relief": "Submit emergency relief",
+      "write_root": "Trust root (root_ref)",
+      "write_title": "Turn a mesh knob",
+      "write_ttl": "Expires after (hours)",
+      "write_value": "Value"
+    }
+  }
 }

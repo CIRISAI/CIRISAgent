@@ -341,6 +341,10 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.language_guidance.24_ratification_pattern",
         "prompts.language_guidance.25_exemplar_cross_cluster",
         "prompts.language_guidance.26_cross_cluster_pattern",
+        # #1010 — the §7e directional guard. Declared alongside its siblings so a
+        # research arm can replace the exclusion-direction rule explicitly rather
+        # than losing it as collateral when 26 is replaced.
+        "prompts.language_guidance.26b_user_symptom_direction",
         "prompts.language_guidance.27_attractor_universality",
         "prompts.language_guidance.28_brevity_restatement",
         "prompts.language_guidance.29_no_medical_or_legal_advice",

@@ -66,6 +66,23 @@ on:
         description: 'Repo-relative path to a COMMITTED manifest, e.g. tools/research/manifests/torque-mvm-armB.json. Use this instead of overrides_manifest for anything larger than a toy: a strict single-locale manifest is ~167 KB and will not fit inline. Blank = none.'
         default: ''
         type: string
+      llm_seed:
+        # #975 M-N1, the dispatch half. The LLM service already transmits `seed`
+        # when CIRIS_LLM_SEED is set, and a regime pinning `seed` is refused
+        # unless the runtime actually sends it — but nothing could SET it from a
+        # dispatch, so the pin was unreachable and replicates had to come from
+        # temperature > 0, which Miller explicitly advises against as a variance
+        # source.
+        #
+        # With this, genuine replicates run at temperature 0: same seed, same
+        # arm, and any difference is the model, not sampling noise.
+        #
+        # OpenAI-compatible providers only (the gemini branch has no seed). An
+        # unparseable value is a loud per-call failure, never a silently-dropped
+        # determinism pin.
+        description: 'Integer seed for OpenAI-compatible providers, so replicates run at temperature 0 instead of relying on sampling noise. Blank = provider default (nondeterministic).'
+        default: ''
+        type: string
       overrides_manifest_digest:
         # Without this, "which manifest produced this cohort" is answered by a
         # filename, and a filename is not evidence (FSD §15.3). With it, an arm
@@ -221,10 +238,30 @@ jobs:
           #: Same discipline — a path and a digest are untrusted input too.
           MANIFEST_PATH: ${{ inputs.overrides_manifest_path }}
           MANIFEST_DIGEST: ${{ inputs.overrides_manifest_digest }}
+          #: Same discipline (#975 M-N1) — a seed is untrusted input too.
+          LLM_SEED: ${{ inputs.llm_seed }}
           #: Same discipline for a step output — nothing reaches the script body
           #: through ${{ }}, so the rule stays one rule with no exceptions.
           RESIDUE: ${{ steps.instrument.outputs.residue }}
         run: |
+          # #975 M-N1 — the determinism pin. Validated HERE so an unparseable
+          # seed fails the dispatch, rather than raising per-call partway
+          # through a cohort and leaving half an arm captured.
+          if [ -n "${LLM_SEED}" ]; then
+            case "${LLM_SEED}" in
+              *[!0-9]*) echo "::error::llm_seed must be a non-negative integer, got '${LLM_SEED}'"; exit 1 ;;
+            esac
+            # $GITHUB_ENV, not `export`: each `run:` is its OWN shell, so an
+            # exported var dies with this step and never reaches the capture.
+            # It would have failed SILENTLY — the run completes, the seed is
+            # simply absent, and a cohort with no pin is indistinguishable from
+            # one that has it.
+            echo "CIRIS_LLM_SEED=${LLM_SEED}" >> "$GITHUB_ENV"
+            echo "::notice::determinism pin: seed=${LLM_SEED} — replicates are genuine, not sampling noise"
+          else
+            echo "::notice::no seed pinned — replicates vary by provider sampling"
+          fi
+          
           mkdir -p /tmp/research
 
           if [ -n "$MANIFEST_PATH" ] && [ -n "$OVERRIDES_MANIFEST" ]; then

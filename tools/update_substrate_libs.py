@@ -285,6 +285,18 @@ LIBS: Dict[str, SubstrateLib] = {
         has_jni_libs=False,
         is_pyo3=True,
         has_adapter=False,
+        # #1011 — the iOS leg. Unlike its three PyO3 siblings, CIRISServer's
+        # module is an IN-PACKAGE SUBMODULE: pyproject declares
+        # `module-name = "ciris_server._native"` and the `#[pymodule] fn _native`
+        # exports `PyInit__native`. A slice named `ciris_server.abi3.so` would
+        # need `PyInit_ciris_server`, which does not exist — so the published
+        # file must be `_native.abi3.so`, and the framework name derived from it
+        # is `ciris_server._native`, which is what embed_native_frameworks.sh
+        # computes from the same path.
+        dylib_filename="_native.abi3.so",
+        device_dir="ios-device",
+        simulator_dir="ios-simulator",
+        framework_name="",        # PyO3 module — no xcframework leg
     ),
     # Future:
     # "nodecore": SubstrateLib(...),
@@ -1004,13 +1016,45 @@ def bundle_pyo3_module(lib: SubstrateLib, extract_dir: Path) -> bool:
         bare_so.unlink()
 
     # .fwork content: path to the framework binary inside Frameworks/
-    fw_name = f"{lib.bindings_package}.{lib.bindings_package}"
+    fw_name = pyo3_framework_name(lib)
     fwork_content = f"Frameworks/{fw_name}.framework/{fw_name}"
     fwork_file = pkg_dir / f"{lib.dylib_filename.replace('.so', '.fwork')}"
     fwork_file.write_text(fwork_content)
     print(f"  -> {fwork_file.name} → {fwork_content}")
 
     return True
+
+
+def pyo3_framework_name(lib: SubstrateLib) -> str:
+    """The framework name the .fwork redirect must point at.
+
+    Extracted so the gate can assert on THIS, not on a second copy of the
+    formula. A test that recomputed the stem would agree with itself and stay
+    green through a revert — the failure mode #1011 is itself an instance of.
+
+    The stem comes from the ARTIFACT, not from the package name repeated.
+    ``embed_native_frameworks.sh`` derives the framework name from the path under
+    ``app_packages_native``: ``ciris_server/_native.abi3.so`` -> strip
+    ``.abi3.so`` -> ``/``->``.`` -> ``ciris_server._native``. Building it here as
+    ``{pkg}.{pkg}`` agreed with that only because persist, edge and lens name
+    their module after their package. CIRISServer's is an in-package submodule
+    (``module-name = "ciris_server._native"``, exporting ``PyInit__native``), so
+    ``{pkg}.{pkg}`` yielded ``ciris_server.ciris_server`` and the redirect
+    pointed at a framework that is never built.
+
+    The failure mode is the bad one: the iOS asset exists, the refresh
+    workflow's asset check passes, CI goes green, and the dangling redirect
+    surfaces only at app launch on a device. Deriving the stem from the artifact
+    makes both sides agree BY CONSTRUCTION rather than by both being edited
+    correctly — which is what matters here, since each side is individually
+    valid and only the pair was wrong. Unchanged for persist, edge and lens.
+    """
+    fw_stem = (
+        lib.dylib_filename[: -len(".abi3.so")]
+        if lib.dylib_filename.endswith(".abi3.so")
+        else Path(lib.dylib_filename).stem
+    )
+    return f"{lib.bindings_package}.{fw_stem}"
 
 
 def update_python_bindings_ios(lib: SubstrateLib, version: str) -> bool:

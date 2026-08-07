@@ -155,7 +155,15 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
             "thought_type",
             "accord",
             *LANGUAGE_GUIDANCE_BLOCKS,
-            "action_selection_pdma.system_message",
+            # #1007 — was one opaque `system_message`; the composer's own field
+            # boundaries are now visible, so the axiotic sentence is reachable.
+            "system.head",
+            "action_selection_pdma.system_header",
+            "system.join1",
+            "action_selection_pdma.decision_format",
+            "system.join2",
+            "action_selection_pdma.closing_reminder",
+            "system.tail",
             "action_selection_pdma.context_integration",
             "action_selection_pdma.context_integration.slots",
             "user.join1",
@@ -449,7 +457,7 @@ blocks:
   language_guidance.23_ratification_templates: {disposition: hold, confound_accepted: [axiotic]}
   language_guidance.25_exemplar_cross_cluster: {disposition: hold, confound_accepted: [axiotic]}
   pdma_ethical.system_guidance_header: {disposition: hold, confound_accepted: [axiotic]}
-  action_selection_pdma.system_message: {disposition: hold, confound_accepted: [axiotic]}
+  action_selection_pdma.closing_reminder: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.context_integration.slots: {disposition: hold, confound_accepted: [axiotic]}
   coherence_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
   epistemic_humility_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
@@ -487,7 +495,7 @@ blocks:
   language_guidance.23_ratification_templates: {disposition: hold, confound_accepted: [axiotic]}
   language_guidance.25_exemplar_cross_cluster: {disposition: hold, confound_accepted: [axiotic]}
   pdma_ethical.system_guidance_header: {disposition: hold, confound_accepted: [axiotic]}
-  action_selection_pdma.system_message: {disposition: hold, confound_accepted: [axiotic]}
+  action_selection_pdma.closing_reminder: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.context_integration.slots: {disposition: hold, confound_accepted: [axiotic]}
   coherence_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
   epistemic_humility_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}

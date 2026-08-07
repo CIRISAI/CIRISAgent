@@ -38,6 +38,25 @@ class BlockClass(str, Enum):
     NOMOLOGICAL = "nomological"
     STRUCTURAL = "structural"
     AXIOMATIC = "axiomatic"
+    #: The twelfth row — and a RELATION, not a class (CIRISOntology#3/#1,
+    #: CC-ratified). Carved by the REPAIRABILITY line: varying a testimonial
+    #: block leaves the record unable to prove what happened — the refusal token
+    #: that no longer says why, the absence claim nothing re-checks.
+    #:
+    #: NOT the epistemology sense ("knowledge held on another's say-so"). Both
+    #: are standard English and they are different carvings; the operational
+    #: test is the only authority. That distinction is what kept the accord
+    #: axiotic: vary it and the agent VALUES differently while the record still
+    #: proves exactly what happened — demonstrability untouched, outcomes
+    #: re-ranked with no act newly permitted, which is the axiotic test verbatim.
+    #: The accord has testimonial PROVENANCE and axiotic CLASS; provenance
+    #: declares in the TORQUE arm (RATCHET#18), not here.
+    #:
+    #: Because it is a relation it takes a FRAME — testimony is always some
+    #: source's, to some audience. There is nothing in a block alone to read, so
+    #: an annotation without a declared frame is REFUSED, never defaulted, and
+    #: no annotator judges it until the harness declares one.
+    TESTIMONIAL = "testimonial"
     MIXED = "mixed"
 
 
@@ -71,6 +90,12 @@ CLASS_DEFAULT_DISPOSITION: dict[BlockClass, BlockDisposition] = {
     BlockClass.NOMOLOGICAL: BlockDisposition.HOLD,
     BlockClass.STRUCTURAL: BlockDisposition.NOT_APPLICABLE,
     BlockClass.AXIOMATIC: BlockDisposition.NOT_APPLICABLE,
+    # RATIFIED by CC (CIRISOntology#3/#1): hold, gate-checkable. No longer
+    # provisional — the entry exists so the disposition is defined, but an
+    # ASSIGNMENT still requires a declared frame (see BlockAnnotation.frame).
+    # A disposition without a frame would be exactly the defaulting the ruling
+    # forbids.
+    BlockClass.TESTIMONIAL: BlockDisposition.HOLD,
     BlockClass.MIXED: BlockDisposition.REFUSE,
 }
 

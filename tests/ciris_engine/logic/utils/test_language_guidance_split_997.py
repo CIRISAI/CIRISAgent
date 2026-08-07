@@ -97,42 +97,116 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: them from the file the change just wrote would prove nothing at all. Twelve
 #: golden tests cover ``en``; these cover the other 28, which have no goldens
 #: and are exactly where a dropped separator would hide.
+#:
+#: DELIBERATE CONTENT CHANGE, 25 of 29 (#1010): the §7e directional guard was
+#: added — as `26b_user_symptom_direction` in the split locales, appended after
+#: the cross-cluster section in the unsplit ones — and fr §12 was rewritten to
+#: state its rule without rendering the violation as a quotable sentence. Every
+#: line below carrying `#1010 §7e guard` therefore no longer describes the
+#: pre-split corpus: it describes the corpus WITH the guard, and the whole
+#: delta is content we chose, NOT a split artifact. Each was re-pinned only
+#: after confirming the byte delta equals the guard text plus its separators.
+#:
+#: FOUR locales keep their pre-image pins and carry NO guard: `ha`, `ko` and
+#: `zh` failed back-translation review (ha: wrong `cross-cluster` coinage plus
+#: a false claim about its own examples; ko: a translator-authored carve-out
+#: that subordinates the exclusion rule to the asked/not-asked test, merging
+#: claim 2 into claim 1; zh: an added gloss that falsely states both incorrect
+#: examples refer the user to a professional). `sw` already states the rule
+#: natively at its own §7e and is the locale the guard was reconstructed from.
+#: A mistranslated guard reads as coverage, so those four stay unguarded until
+#: their fixes land rather than shipping prose nobody could verify.
+#:
+#: SECOND DELIBERATE CONTENT CHANGE, 20 of 29 (#1010, `§26 reconciled`): the
+#: cross-cluster PATTERN block said the CORRECT pattern is clustering that
+#: "surfaces what condition is or isn't present", quoting the exclusion move
+#: («doesn't match psychosis») approvingly — the exact move the §7e guard in
+#: the same file calls a violation. The primer told the agent both things. A
+#: live French battery on the contradicted corpus produced a hard-fail whose
+#: cited span merely MOVED from « critères de la psychose » to « critères de
+#: la schizophrénie »: the agent followed the concrete worked example over the
+#: abstract rule. `en`/`fr` were reconciled by hand in 90b11c464; the 20 lines
+#: below carrying `§26 reconciled` are that same reconciliation rendered per
+#: locale — ASKED-ABOUT is licensed, the explanation stays on the CATEGORY,
+#: "you don't have X" is named forbidden, the wellness-verdict ban is intact,
+#: and the did-NOT-ask case (no cluster answer at all — receive and route) is
+#: stated for the first time. In 13 locales (`ar`, `de`, `es`, `it`, `ja`,
+#: `mr`, `my`, `pt`, `ru`, `sw`, `tr`, `uk`, `yo`) that REPLACED contradictory
+#: prose; in 7 (`am`, `bn`, `fa`, `hi`, `id`, `ur`, `vi`) there was no PATTERN
+#: block at all and it is a net-new INSERTION, so those files gain the
+#: doctrine rather than trade it.
+#:
+#: STILL OUT, FLAGGED NOT FIXED: the same "surfaces what condition is or isn't
+#: present" claim also survives in the §1 no-wellness-confirmation bullet
+#: (`en` `05_no_wellness_confirmation` and its locale mirrors, e.g. `de` and
+#: `ru` §1), and several §7c worked exemplars still model «doesn't match
+#: psychosis» as the CORRECT response — `en`'s own `25_exemplar_cross_cluster`
+#: included. Those are a separate cut; this one is scoped to the PATTERN
+#: block, which is what the French battery measured the agent following.
+#:
+#: NINE locales are NOT reconciled and keep their prior pins: `ha`/`ko`/`zh`
+#: (still unguarded, above); `th`/`pa`/`te` (drafts failed review — `th` never
+#: carried the contradiction and the block would dangle with no exemplar above
+#: it; `pa` still models the exclusion inside its own §7c approved answer, so
+#: an insertion-only patch reproduces the French configuration; `te`'s draft
+#: shipped its own fix in the wrong field and imported an unanchored suicidal-
+#: ideation directive); `ta` (has no cross-cluster section at all — its draft
+#: was a different fix, the §3d false incorrect-examples header, which belongs
+#: to the fa/ru/ta/te/ur/yo header sweep, not here); `en`/`fr` already done.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
-    "en": ("cf7b52f0bca30d299d861f0895d0076d0db9dc9fb5de4be02426227b8a53f6d4", 13694),
-    "am": ("51872672ed8702ed850315120a1ab59baab812915da8fb7f2bbd7ba12b64a31c", 25337),
-    "ar": ("2fd152e980915ae34a5852f37e17a7833f62c0ff2014bb401faf82a5505eda54", 17595),
-    "de": ("2bba0f6ba2c749d54ae8dd199855f637ecfca27e45036b7661224b641957aaea", 15408),
-    "es": ("89eeb759297b3ad0ba85c817d594dfec5a77ac5e42f2b8db0431b0ec012c3f75", 15587),
-    "fr": ("1623d43160d97c1b27fd4fab4810a64195ed6dfc737ddc3d0d0cef0d55ff11fc", 16541),
-    "hi": ("d0a292f177e5928ccc28539689ef4e79e60e4c16e78e5267c47612b4c1eac34f", 24802),
-    "it": ("8c8182b30048ce5e3e014a80cb681a935c2e22952c7d99da99c256d491f269b5", 15333),
-    "ja": ("f3d3e56eba9f1114b1aad8402697cd58bc80e8039d94859c1236969d100b1685", 16145),
-    "ko": ("0a37885175122f0a8b29ec9f7f4f80b3533b3b418213e4678465d6cd0de556ee", 15822),
-    "pt": ("bbab7ba8304f4b397f461f4b6decf1a582a2e30820ed5a95eec52c9174789a6e", 15084),
-    "ru": ("c7d1b48de70d42ee56b9b1d3dc5a6af7105321f1abc742f249fc5bd60cba08f8", 24755),
-    "sw": ("0336ccb2019ecdc34f3b7ae4e5429d9509285276bcfeb097ffcb3f7a5bd2483e", 16925),
-    "tr": ("8d26bd113ff85b4f6e1bd3ff5997965dcdf7f82f7d8f9cf49ff486c7a8b0b99f", 13575),
-    "zh": ("11088ffc597a9922dd3cf6425f1229326dbd87b8e1dd3510d6e468a85f202d56", 12004),
-    "ur": ("fabfb6751ea195fc8164ac79045b5cc89cdbe292bd0ec18d987c2f878ebff42d", 22480),
-    "bn": ("e603f336c478f2eebca48c2f0c3459c3658a6cca8bbf14d53a97fe325cf6d79a", 28079),
-    "fa": ("0746b0779fc7881af1ed1a7ced3f6c19985debc9c67836cc36c074acbe65f000", 20725),
-    "ha": ("f52a17ab710a204a78ab4bd91fbad974bcf8a87a1b1444d84e1c58afdfa6984f", 18788),
-    "id": ("7ef729b068437071bd3cbfbc33bc1374dc90bbaab022555abc782fe717ce4d68", 13185),
-    "pa": ("e42eb28fcd159bb0f00eec83beb7bfcb3ac7626d4ac933761400c86990ffd0c2", 25942),
-    "ta": ("25923944ebe135b80d4d211c4027870d0da1c1f5e0e508f296de49c85dd91fe3", 31660),
-    "te": ("3235f739b3033b087d1d7a81078e0bfbd70942eb641a73025b462443627cd3b6", 27614),
-    "vi": ("295e67b48bab02543ee1a5a385bf4e26b35a0bb2b19d140ba62c61b45f94cfde", 15754),
-    "mr": ("eaa7d574a8dce16b3beb2f006774369f09afb417803a754484f08f6ae3fe9b6e", 24122),
-    "my": ("094c236a5962a18d8b244e189529216d8fafd371d138db91ba810047912afa32", 41231),
-    "th": ("06ab5a8bd527fae713323e0cdab1b424c410debe325530dd8c3eb965b6ad0a12", 25734),
-    "uk": ("b71fd67da0a92cce748c1f783b653c336917fdf371d824227cc6be4c7c4e9a43", 25080),
-    "yo": ("87658e84df55b14c0fa0510c4bc7a3d8215a48e4732864d29da88ba38e08cd75", 24574),
+    "en": ("4d12ee281b483bc2a6f3715d3a20990322d3f6f324e9d57c4ed72c91f3882de7", 16307),  # separator restored before 7e/8
+    "am": ("33fb7ed6229f16fc59036becc33915916ed15c44e4cd1ecb333644729b9f6641", 32861),  # #1010 §7e guard + §26 reconciled
+    "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
+    "de": ("69d48927767343e36f741b2b75fe2162e8dc30b65c8ff0450690ce368055ddcd", 20065),  # #1010 §7e guard + §26 reconciled
+    "es": ("5675bc31362f41f3ebcef15634d33c2434fbc03a89a663cddf3530d5e5e12ba2", 18629),  # separator restored before 8
+    "fr": ("137575e2d45ae60306d34f8ed3a2b5c09a87efb8fc6f4bee7909dcc8da96cf4a", 24621),  # #1010 §7e gains the actionability boundary (q08 U2)
+    "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
+    "it": ("22990eb664d4e54b7d9f57129b41888550e00a0fd15d560b707ce424586443a2", 18407),  # separator restored before 8
+    "ja": ("469272c78454a02f594a821922a8657f9facf3a85af84a185594024d5618bf90", 29831),  # #1010 kindness-framed rewrite
+    "ko": ("bc0931d4781f5c0df5d9dd129d704e01289ae45a28e28df9440c24350e0a4789", 28015),  # #1010 kindness-framed rewrite
+    "pt": ("4bc204fc0e64697c4c6f89e6aa340da9d2694a437dd5a8c5ccd50a8bb8e5c3ff", 17993),  # separator restored before 8
+    "ru": ("21e54cc163726228a2e4576d4e7ad2b8032571bd86caed295dcd53d53cde5c86", 31292),  # #1010 §7e guard + §26 reconciled
+    "sw": ("a4d5d461d7c80119df4802fc49646be00d9ac2c4432afe4b504d96774ce94bfe", 17954),  # native §7e + §26 reconciled
+    "tr": ("d6a3281051247f3c6dbe42c558cace2af31de6f45128ed652faba17725c15577", 17498),  # #1010 §7e guard + §26 reconciled
+    "zh": ("11088ffc597a9922dd3cf6425f1229326dbd87b8e1dd3510d6e468a85f202d56", 12004),  # review FAILED — no guard
+    "ur": ("71ac466f2db78d1fd09a911fa793b2d3c71e3571e6113e1f65aa042ec3cc16e8", 29322),  # #1010 §7e guard + §26 reconciled
+    "bn": ("44feaf44d0b0a6d3c65912adf46f888cdbffcd3ce51df2b6778cc11ecaecfc0a", 37947),  # #1010 §7e guard + §26 reconciled
+    "fa": ("c953c3878719d38807f4678d8c3106f0b4a6809bba5b9f526ed34c84eb881dfc", 37357),  # #1010 kindness-framed rewrite
+    "ha": ("f52a17ab710a204a78ab4bd91fbad974bcf8a87a1b1444d84e1c58afdfa6984f", 18788),  # review FAILED — no guard
+    "id": ("bc724b53fd483213b163f7b821135800536072df57bcf474235c2d0aeb95d09b", 17774),  # #1010 §7e guard + §26 reconciled
+    "pa": ("1e69e8a6f45870a492b599449eb5eff0df4e76110b018a798b1075d3632937a7", 33060),  # #1010 §7e guard
+    "ta": ("8384d1c0c641f41b54641f5748718ce15b114d450faf1eafbbf00b8b2b5b5d98", 39702),  # #1010 §7e guard
+    "te": ("ba8481877dd63333f6b833944728beab62ef8fe267468e05220423fc6c060766", 35331),  # #1010 §7e guard
+    "vi": ("817b484ce624aaa9d84a08a2174785277d8c9e34a07cc472d51151d38efbda0c", 21755),  # #1010 §7e guard + §26 reconciled
+    "mr": ("94d6dbfe7eaae41bcc572e42ead6c850dd2ab45140ef7f4270c0a83f958414f5", 32637),  # #1010 §7e guard + §26 reconciled
+    "my": ("c4bb255ce25a1964c176cc5b99d73b9f0af938e24e54c093325bebb8154cd4a7", 53450),  # #1010 §7e guard + §26 reconciled
+    "th": ("59576919a66bfa56285388bdfde024c8253676647378b873cd68d6ae8e454728", 32725),  # #1010 §7e guard
+    "uk": ("af19e474fade635dbbb927d91f2ae2cc384813972c54169bd58fad333a43cec2", 30672),  # #1010 §7e guard + §26 reconciled
+    "yo": ("0981dc951e52213d4ec1ef9f8facc6674d234367a382546c4dc46806a60d5078", 29524),  # #1010 §7e guard + §26 reconciled
 }
 
 #: What the split bought at ``en``, in bytes. A ratchet on the number that
 #: matters: entry counts can be reshuffled between registers, bytes cannot.
-EN_TOTAL_BYTES = 13694
-EN_MAX_MIXED_BYTES = 4189  # the five FSD-irreducible worked exemplars
+# 16029 after #1010 added the §7e guard (was 13694 at the split).
+# 16303 -> 16307: four bytes, and none of them prose. `26_cross_cluster_pattern`
+# and `26b_user_symptom_direction` were missing their trailing blank line, so the
+# join (which is `"".join` — every part carries its own separator) glued the next
+# section header onto the previous sentence: `...who can give it.== 7e. A CLINICAL
+# NAME...`. The §7e guard was rendering mid-paragraph instead of as a section.
+# Two separators x two newlines. MIXED is untouched at 4402 — the quantity this
+# ratchet exists to protect did not move.
+EN_TOTAL_BYTES = 16307
+# 4189 -> 4402 (#1010). The cross-cluster EXEMPLAR is a `mixed` block, and
+# fixing it made it longer: its CORRECT RESPONSE used to model the exclusion
+# ("what you're describing doesn't match psychosis") — the exact move §7e
+# forbids — so §25 taught the violation while §26b prohibited it. The
+# replacement keeps the explanation on the CATEGORY and declines the
+# determination, which costs words.
+#
+# The ratchet is RIGHT to flag it: 213 more bytes the ablation can neither
+# hold nor vary. Raised deliberately, for a correction, and named — a silent
+# bump here would be indistinguishable from the surface quietly rotting.
+EN_MAX_MIXED_BYTES = 4402  # the five FSD-irreducible worked exemplars
 EN_MIN_AXIOTIC_BYTES = 429  # parts 09 and 11 — 0 before the split
 
 

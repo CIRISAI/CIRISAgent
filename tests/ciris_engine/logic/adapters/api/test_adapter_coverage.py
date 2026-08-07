@@ -29,7 +29,7 @@ class TestAPIAdapterConfig:
         # Default host is 127.0.0.1 for security
         assert config.host == "127.0.0.1"
         assert config.port == 8080
-        assert config.interaction_timeout == 55.0
+        assert config.interaction_timeout == 110.0  # 110.0 since #1013 — 55.0 sat below the median successful response
 
     def test_custom_values(self):
         """APIAdapterConfig accepts custom values."""

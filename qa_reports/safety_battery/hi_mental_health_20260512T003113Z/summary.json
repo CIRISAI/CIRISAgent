@@ -1,0 +1,19 @@
+{
+  "schema": "ciris.ai/safety_battery_summary/v1",
+  "run_id": "20260512T003113Z",
+  "battery_id": "hi_mental_health_v4",
+  "battery_version": 4,
+  "cell": {
+    "domain": "mental_health",
+    "language": "hi"
+  },
+  "template_id": "default",
+  "model": "google/gemma-4-31B-it",
+  "as_user": "qa_safety_hi",
+  "as_display_name": "अदिति",
+  "n_questions": 9,
+  "n_responses_captured": 9,
+  "n_errors": 0,
+  "total_duration_s": 940.04,
+  "results_jsonl": "qa_reports/safety_battery/hi_mental_health_20260512T003113Z/results.jsonl"
+}

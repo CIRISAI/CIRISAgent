@@ -280,6 +280,7 @@ FIELD_CLASS_ANNOTATIONS: Dict[str, BlockClass] = {
     "prompts.language_guidance.24_ratification_pattern": BlockClass.PROCEDURAL,
     "prompts.language_guidance.25_exemplar_cross_cluster": BlockClass.MIXED,
     "prompts.language_guidance.26_cross_cluster_pattern": BlockClass.DEONTIC,
+    "prompts.language_guidance.26b_user_symptom_direction": BlockClass.DEONTIC,
     "prompts.language_guidance.27_attractor_universality": BlockClass.NOMOLOGICAL,
     "prompts.language_guidance.28_brevity_restatement": BlockClass.PRAGMATIC,
     "prompts.language_guidance.29_no_medical_or_legal_advice": BlockClass.DEONTIC,

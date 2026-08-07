@@ -69,6 +69,22 @@ logs/.current_incident_log
 qa_reports/*
 !qa_reports/qa_status.json
 !qa_reports/safety_sweeps.json
+# Safety-battery evidence is TRACKED on purpose. Actions artifacts expire at 90
+# days and 20,894 of this repo's 24,109 had already aged out; the repo is the
+# copy that outlives them. ~18 KB per run — question, answer, per-criterion
+# verdict, signed manifest.
+!qa_reports/safety_battery/
+!qa_reports/safety_interpret/
+# `*.jsonl` at line 23 is a global rule and matches results.jsonl / verdicts.jsonl,
+# so the evidence needs its own negation AFTER it — last match wins.
+!qa_reports/safety_battery/**/*.jsonl
+!qa_reports/safety_battery/**/*.json
+!qa_reports/safety_interpret/**/*.jsonl
+!qa_reports/safety_interpret/**/*.json
+# ...but NEVER the reasoning traces. They are 99.9% of a capture bundle (19 MB
+# against 15 KB of Q&A) and a separate retention question — Release, not git.
+qa_reports/safety_battery/**/traces/
+qa_reports/safety_interpret/**/traces/
 
 # Backup directories and temporary files
 CLAUDE_LOCAL_BACKUP*/

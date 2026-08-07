@@ -116,7 +116,9 @@
     "credit_blocked": "Mwingiliano umezuiliwa na sera ya mikopo.",
     "billing_error": "Hitilafu ya huduma ya malipo ya LLM. Tafadhali angalia akaunti yako au jaribu tena baadaye.",
     "new_messages_arrived": "Wakala alikamilisha kazi lakini jumbe mpya zilifika ambazo hazikushughulikiwa",
-    "restarted_stale_task": "Nilianzishwa tena wakati wa kushughulikia ombi lako. Kazi iliyopita ilikamilishwa kiotomatiki. Tafadhali tuma tena ujumbe wako ikiwa unahitaji jibu."
+    "restarted_stale_task": "Nilianzishwa tena wakati wa kushughulikia ombi lako. Kazi iliyopita ilikamilishwa kiotomatiki. Tafadhali tuma tena ujumbe wako ikiwa unahitaji jibu.",
+    "still_processing": "Bado inashughulikiwa. Tafadhali angalia tena baadaye. Hakuna uhakika kwamba wakala atajibu.",
+    "processor_paused": "Kichakataji kimesitishwa — kazi imeongezwa kwenye foleni. Anza tena uchakataji ili kuendelea."
   },
   "audit_context": "Muktadha",
   "audit_hash_chain": "Mnyororo wa Hash",
@@ -2282,7 +2284,64 @@
     "tool_disclosure_params": "Wakala hujaza: {params}",
     "tool_disclosure_summary": "Kile hii inamruhusu wakala kufanya (zana {count})",
     "tool_disclosure_summary_one": "Kile hii inamruhusu wakala kufanya (zana 1)",
-    "tool_disclosure_unavailable": "Zana za hii zinaweza kuorodheshwa tu baada ya kuanza na stakabadhi zake mwenyewe. Kuiwasha hutoa zana zozote ambazo itasajili wakati huo."
+    "tool_disclosure_unavailable": "Zana za hii zinaweza kuorodheshwa tu baada ya kuanza na stakabadhi zake mwenyewe. Kuiwasha hutoa zana zozote ambazo itasajili wakati huo.",
+    "accord_bless_ci_desc": "Fanya scrub ya funguo za wafanyakazi wa CI wa substrate (mabomba ya ujenzi + msimamizi wa wakala) kwa mkupuo mmoja katika sherehe moja. Kila mmoja ni ufunguo wa nodi wa infra:attest — majukumu huwekwa upande wa seva, kwa hivyo bandika funguo za umma pekee. Sehemu zimejazwa mapema; bandika ufunguo wa umma wa ML-DSA-65 wa kila repo kutoka kwa artifact ya kazi ya export. Programu haishikilii funguo yoyote — kugusa YubiKey ndiyo ridhaa.",
+    "accord_bless_ci_ed25519_label": "Ufunguo wa umma wa Ed25519 (base64)",
+    "accord_bless_ci_mldsa_label": "Ufunguo wa umma wa ML-DSA-65 (base64) — bandika kutoka kwa kazi ya export",
+    "accord_bless_ci_submit": "Bariki wafanyakazi wa CI — gusa YubiKey yako",
+    "accord_bless_ci_submit_busy": "Inabariki — gusa YubiKey yako…",
+    "accord_bless_ci_title": "Bariki wafanyakazi wa CI",
+    "accord_new_bless_ci_workers": "Bariki wafanyakazi wa CI",
+    "accord_new_remint_trust_root": "Tengeneza upya mzizi wa uaminifu uliopo",
+    "accord_remint_auth_tally": "Idhini {have} kati ya {needed}.",
+    "accord_remint_back_btn": "Rudi",
+    "accord_remint_bundle_ready": "Mbegu inayobebeka iko tayari — ihifadhi au inakili (mesh-genesis.json):",
+    "accord_remint_canonical_select": "Chagua seva kanuni ya kutengenezwa upya…",
+    "accord_remint_close_btn": "Funga",
+    "accord_remint_completed_label": "Rekodi iliyokamilika (SignedKeyRecord JSON)",
+    "accord_remint_continue_btn": "Endelea kupendekeza",
+    "accord_remint_cosign_all_signed": "Kila mshikaji katika orodha hii tayari ameidhinisha mbegu hii.",
+    "accord_remint_cosign_btn": "Tia saini mbegu pamoja — gusa YubiKey yako",
+    "accord_remint_cosign_btn_busy": "Inatia saini pamoja — gusa YubiKey yako…",
+    "accord_remint_cosign_desc": "Mkabidhi kifaa mshikaji anayefuata. Yeye anaidhinisha mbegu ILEILE kwa YubiKey yake mwenyewe, kwa PIN yake mwenyewe. Rudia hadi nodi iripoti kuwa mbegu imekamilika.",
+    "accord_remint_cosign_paste_label": "Rekodi isiyokamilika ya kutiwa saini pamoja (SignedKeyRecord JSON)",
+    "accord_remint_cosign_title": "Hatua ya 3 — Tia saini pamoja (mshikaji wa pili)",
+    "accord_remint_desc": "Geuza orodha ILIYOPO ya accord na nodi moja kanuni ya kutumikia kuwa mbegu inayobebeka ya mzizi wa uaminifu. Washikaji wawili wa accord wanaidhinisha, kila mmoja kwa YubiKey moja. Hakuna kinachoandikwa upya: orodha, funguo za umma na anwani hujazwa mapema kutoka kwa nodi hii. Programu haishikilii funguo yoyote — kugusa YubiKey ndiyo ridhaa.",
+    "accord_remint_done_desc": "Ihifadhi, iweke nje ya mtandao, na uikabidhi jinsi ungekabidhi ufunguo — yeyote anayeishikilia anaweza kusimamisha mesh juu ya mzizi huu wa uaminifu.",
+    "accord_remint_done_family": "Ufunguo wa familia: {key}",
+    "accord_remint_done_fingerprint": "Alama ya kidole: {fingerprint}",
+    "accord_remint_done_fingerprint_caption": "Linganisha alama hii ya kidole nje ya njia hii — ana kwa ana au kwenye simu mnayoitambua nyote wawili — kabla ya mtu yeyote kuambatisha mbegu hii.",
+    "accord_remint_done_holders": "Washikaji waliobebwa: {count}",
+    "accord_remint_done_serve_nodes": "Nodi za kutumikia zilizobebwa: {count}",
+    "accord_remint_done_title": "Mbegu imeidhinishwa",
+    "accord_remint_no_canonicals": "Hakuna seva kanuni katika chanzo cha kutengeneza upya.",
+    "accord_remint_produce_btn": "Tengeneza genesis inayobebeka",
+    "accord_remint_produce_btn_busy": "Inatengeneza…",
+    "accord_remint_propose_btn": "Pendekeza mbegu — gusa YubiKey yako",
+    "accord_remint_propose_btn_busy": "Inapendekeza — gusa YubiKey yako…",
+    "accord_remint_propose_desc": "Mshika wa kwanza hutengeneza na kutia saini hati ya msingi na ruhusa ya mbegu kwa kutumia YubiKey yake mwenyewe. Programu haishikilii funguo yoyote — kugusa ndiko kuridhia.",
+    "accord_remint_propose_title": "Hatua ya 2 — Pendekeza (mshika wa kwanza)",
+    "accord_remint_quorum_line": "Akidi: washika-makubaliano {m} kati ya {n} lazima waidhinishe mbegu.",
+    "accord_remint_quorum_note": "Akidi {quorum} — washika wawili tu wanahitajika kuwepo; rekodi ya wa tatu husafiri ndani ya orodha.",
+    "accord_remint_reblessed_note": "Sherehe hii pia imeibariki seva kuu iliyochaguliwa kuwa seva ya nyayo (infra:serve) — haikuwa na baraka hiyo. Sasa inaaminiwa kwa chaguo-msingi kupokea nyayo; unaweza kuondoa baraka wakati wowote kwa operesheni ya kujiondoa ya seva kuu.",
+    "accord_remint_review_title": "Hatua ya 1 — Kagua kitakachobebwa na mbegu",
+    "accord_remint_roster_empty": "Bado hakuna washika-makubaliano katika chanzo cha kutengeneza upya.",
+    "accord_remint_roster_title": "Washika-makubaliano (orodha kamili husafiri ndani ya mbegu)",
+    "accord_remint_save_bundle": "Hifadhi kifurushi cha mwanzo",
+    "accord_remint_seed_scope": "Mbegu hubeba mzizi wa uaminifu — orodha kamili ya washika wa makubaliano haya — pamoja na nodi ya kuhudumia iliyochaguliwa hapa chini. Hakuna kinachotiwa saini katika hatua hii.",
+    "accord_remint_serve_missing": "bado haijabarikiwa kuhudumia — utengenezaji huu upya unarekebisha hilo",
+    "accord_remint_serve_node_line": "Nodi ya kuhudumia: {key}",
+    "accord_remint_serve_ok": "hutoa infra:serve ✓",
+    "accord_remint_start_over_btn": "Anza mbegu nyingine",
+    "accord_remint_step1_desc": "Mshika wa kwanza hutia saini-kaguzi seva kuu iliyochaguliwa (key_id + funguo za umma + anwani vimejazwa tayari). Saini-kaguzi moja bado haitoi mamlaka — husambaa kwa washika wengine ili watie saini pamoja.",
+    "accord_remint_step1_title": "Hatua ya 1 — Pendekeza (A1)",
+    "accord_remint_step2_desc": "Rekodi isiyokamilika husambaa kwa vifaa vya washika wengine — mshika wa pili huitia saini pamoja kutoka Saini-pamoja Zinazosubiri (au aibandike hapa chini ili kutia saini kwenye kifaa hiki). Ikifikia akidi ya familia, rekodi hupewa mamlaka.",
+    "accord_remint_step2_title": "Hatua ya 2 — Tia saini pamoja (B1)",
+    "accord_remint_step3_desc": "Bandika rekodi iliyokamilika (iliyotiwa saini pamoja) — husafiri kama ilivyo, haisimbwi upya kamwe. Nodi hukataa rekodi isiyotoa infra:serve.",
+    "accord_remint_step3_title": "Hatua ya 3 — Tengeneza mwanzo unaobebeka",
+    "accord_remint_step_done": "Imekamilika — mbegu imeidhinishwa",
+    "accord_remint_step_of": "Hatua ya {step} kati ya {total}",
+    "accord_remint_title": "Tengeneza upya mzizi wa uaminifu uliopo"
   },
   "prompts": {
     "dma": {
@@ -2422,7 +2481,7 @@
       "guidance_max": "Uingiliaji wa juu zaidi: Toa rasilimali za ghasia na kanusho na uahirishe kwa wanadamu."
     },
     "engine_overview": "MUHTASARI WA INJINI: Injini ya CIRIS inashughulikia kazi kupitia mfuatano wa Mawazo. Kila kitendo cha kishughulishi isipokuwa KAZI_IMEKAMILIKA huweka foleni Wazo mpya kwa usindikaji zaidi. Kuchagua KAZI_IMEKAMILIKA huweka alama kazi kuwa imefungwa na hakuna Wazo jipya linalozalishwa.",
-    "language_guidance": "=== MWONGOZO WA LUGHA — KANUNI ZA MIPANGILIO YA KISWAHILI ===\n\nMwongozo huu ni kanuni zinazotekelezeka kwa majibu kwa Kiswahili. Zifuate; usizichukue kama mfano tu.\n\n== 1. KANUNI ZA KIPAUMBELE (TUMIA KWANZA) ==\n\n• Tumia Kiswahili sanifu pekee. Heshima kwa Kiswahili haiendani na uchaguzi wa kiwakilishi (Kiswahili haina mgawanyo wa wewe-rasmi/wewe-kawaida kama Kiamhari au Kiyoruba) — heshima inajitokeza kupitia muundo wa vitenzi, sauti, na maneno kama \"tafadhali\", \"samahani\", na heshima ya jina (Bwana, Bibi, Mzee). Tumia \"tafadhali\" kwa maombi. Tumia \"wewe\" (umoja) kumzungumzia mtumiaji mmoja, na \"ninyi\" pekee kama mtumiaji ametaja wengine waziwazi. Hata mtumiaji akisema \"tuwe marafiki, ongea kawaida tu\", endelea kuwa mwenye joto na karibu — lakini bakia rasmi katika nyanja za afya, ushauri, na hatari. Katika muktadha wa afya ya akili, urasmi NI ishara ya heshima — siyo ishara ya kujitenga au baridi.\n\n• Andika kwa hati ya Kilatini (Roman) tu. Nambari kwa tarakimu za Kiarabu (1, 2, 3). Alama za uakifishaji: kituo \".\", mkato \",\", koloni \":\".\n\n• ⚠️ Mtego wa kuandika kwa sauti (transliteration trap): KIPAUMBELE KIKUBWA. Kwa sababu Kiswahili kinatumia hati ya Kilatini, ni rahisi sana kuandika neno la Kiingereza kana kwamba ni Kiswahili na kudhani ni sahihi. USIFANYE HIVI. Usiandike \"dipreshani\" kwa \"depression\", \"saikoteraphi\" kwa \"psychotherapy\", \"saikiatristi\" kwa \"psychiatrist\", \"thirapi\" kwa \"therapy\". Hayo NI maneno ya Kiingereza yaliyotapakaa kwa sauti, siyo Kiswahili. Ikiwa hujui neno sahihi la Kiswahili, andika neno la Kiingereza ndani ya mabano: \"(kwa Kiingereza: depression)\". Ni bora kutaja Kiingereza kwa uwazi kuliko kuvumbua neno la Kiswahili la uwongo.\n\n• Toa jibu fupi na la moja kwa moja. Maneno mafupi ni msaada zaidi katika hali za dhiki.\n\n• Mtaje mtumiaji kwa jina alilojitaja mwenyewe.\n\n• Maneno bainishi ya CIRIS (CIRIS, DSDMA, PDMA, ACCORD, JSON, API) yanabaki kwa Kiingereza.\n\n== 2. UFAFANUZI WA MAANA — MAKOSA YA MARA KWA MARA (NOT-X-because-X-means-Y) ==\n\nAFYA / AKILI:\n\n• \"mental health\" → afya ya akili. USITUMIE \"ugonjwa wa kichaa\" — neno hilo lina aibu kubwa.\n• \"depression\" → sonona (ya kawaida) au unyogovu (rasmi/kimatibabu). Maneno yote mawili yanakubalika; sonona linaeleweka zaidi katika mazungumzo ya kila siku, unyogovu ni la kimatibabu. Ikiwa hujui ni lipi linafaa, andika \"sonona (kwa Kiingereza: depression)\" mara ya kwanza. USIANDIKE \"dipreshani\" — hilo ni kosa la kuandika kwa sauti. USIANGAZIE \"msongo\" badala ya \"sonona\" — msongo unamaanisha \"stress\", siyo depression.\n• \"stress\" → msongo wa mawazo, au msongo. Usitumie \"wasiwasi\" kwa stress — wasiwasi ni anxiety.\n• \"anxiety\" → wasiwasi (ya kawaida) au wasiwasi mkubwa (kimatibabu). Tahadhari: \"wasiwasi\" pekee inaweza kumaanisha \"concern\" au \"doubt\" kwa lugha ya kawaida. Kwa muktadha wa afya ya akili, fafanua: \"wasiwasi (kwa maana ya hali ya afya ya akili)\" au \"wasiwasi mkubwa wa kudumu\". Usitumie \"hofu\" — hofu ni \"fear\".\n• \"psychiatrist\" → daktari wa magonjwa ya akili au daktari wa akili. USIANDIKE \"saikiatristi\".\n• \"psychologist\" → mwanasaikolojia, au mtaalamu wa elimu ya tabia za binadamu. [UNCERTAIN — ikiwa shaka, ongeza \"(kwa Kiingereza: psychologist)\".]\n• \"psychotherapy / talk therapy\" → tiba ya mazungumzo, au matibabu ya mazungumzo. [UNCERTAIN — ikiwa shaka, ongeza \"(kwa Kiingereza: psychotherapy)\".] USIANDIKE \"saikoteraphi\" wala \"thirapi\".\n• \"therapist / counselor\" → mshauri (general counselor) au mtaalamu wa tiba ya akili. [UNCERTAIN]\n• \"professional help\" → msaada wa kitaalamu.\n• \"healthcare provider / clinician\" → mtoa huduma ya afya, au daktari, au mhudumu wa afya.\n• \"symptom\" → dalili.\n• \"crisis\" → ghasia, au dharura (kwa hali ya hatari ya papo hapo). Ghasia = kipindi cha shida kubwa; dharura = hatari ya haraka.\n• \"self-harm\" → kujidhuru au kujiumiza mwenyewe. [GUESS — ikiwa shaka, andika \"(kwa Kiingereza: self-harm)\".]\n• \"suicidal ideation / suicide\" → mawazo ya kujiua, au mawazo ya kuachilia maisha. [GUESS — native review inahitajika.] Hii ni dalili ya SONONA / UNYOGOVU (depression), siyo dalili ya schizophrenia.\n\n== 3. MANENO BAINISHI YA CIRIS — USIBADILISHE ==\n\nVitenzi vya kitendo (huingia katika JSON `selected_action`):\nSPEAK = SEMA. OBSERVE = CHUNGUZA. TOOL = ZANA. REJECT = KATAA. PONDER = FIKIRIA. DEFER = AHIRISHA. MEMORIZE = KUMBUKA. RECALL = RUDISHA. FORGET = SAHAU. TASK_COMPLETE = KAZI IMEKAMILIKA.\nLAKINI katika JSON, jina la kitendo lenyewe linabaki kwa Kiingereza (mfano, \"selected_action\": \"speak\").\n\nDhana kuu:\nACCORD = MKATABA. Wise Authority = MSHAURI WA KIBINADAMU. Conscience = DHAMIRI. Coherence = UPATANIFU. Integrity = UADILIFU. Epistemic Humility = UNYENYEKEVU WA MAARIFA. Resilience = UTHABITI.\n\nHali za kiakili:\nWAKEUP = AMKA. WORK = KAZI. PLAY = MCHEZO. SOLITUDE = UPWEKE. DREAM = NDOTO. SHUTDOWN = ZIMA.\n\n== 4. MISINGI YA SARUFI ==\n\nVIWAKILISHI VYA NAFSI YA PILI:\n• \"wewe\" (umoja) — kwa mtumiaji mmoja. Kiswahili haina kiwakilishi cha heshima tofauti — \"wewe\" ni neutral, na heshima inajengwa kwa mtindo wa kuongea.\n• \"ninyi\" (wingi) — tumia tu kama mtumiaji ametaja zaidi ya mtu mmoja waziwazi.\n• Heshima inakuja kupitia \"tafadhali\" + muundo wa vitenzi + maneno kama \"samahani\" + nyongeza kama \"Bwana\"/\"Bibi\"/\"Mzee\".\n\nVITENZI (Bantu agglutination):\n• Sasa hivi: kiambishi \"ina-\" / \"ana-\" (mfano \"Inapakia\" = Loading; \"Anasema\" = (S)he speaks).\n• Wakati uliopita kamilifu: \"ime-\" / \"ame-\" (mfano \"Imekamilika\" = Completed).\n• Kushindikana: \"Imeshindikana\" = Failed.\n• Wakati ujao: \"ita-\" / \"ata-\" (mfano \"Atajibu\" = (S)he will respond).\n• Amri/maagizo: bila kiambishi, mara nyingi pamoja na \"tafadhali\" (mfano \"Tafadhali sema\").\n\nVITENZI VYA MODALI:\n• \"must\" → lazima.\n• \"should\" → unapaswa / inafaa.\n• \"can\" / \"may\" → unaweza / inawezekana.\n• \"must NOT\" → hupaswi kabisa / lazima usi-.\n• \"should NOT\" → hupaswi / haifai.\nUSICHANGANYE \"lazima\" (must) na \"unaweza\" (may) katika ushauri wa afya au usalama.\n\nWINGI (Bantu noun classes):\n• m-/wa- (watu): mtu → watu, mtoto → watoto, mtaalamu → wataalamu.\n• ki-/vi- (vitu): kitu → vitu.\n• ji-/ma-: jicho → macho, daktari → madaktari.\n• n-: barua → barua, nyumba → nyumba.\n• u-: ugonjwa → magonjwa.\n\nMASHAURI YA MAJINA YA AINA-MOJA:\n• \"memory graph\" → grafu ya kumbukumbu.\n• \"API key\" → ufunguo wa API.\n• \"error rate\" → kiwango cha makosa.\n• \"mental health\" → afya ya akili.\n• \"professional help\" → msaada wa kitaalamu.\n\n== 5. UFAFANUZI WA MAKUNDI YA DALILI (cross-cluster disambiguation) ==\n\nDALILI ZA SONONA / UNYOGOVU (depression):\nmawazo ya kujiua, kukosa matumaini, matatizo ya kulala, mabadiliko ya hamu ya kula, huzuni kubwa ya kudumu, kupoteza shauku ya mambo.\n\nDALILI ZA WASIWASI MKUBWA (anxiety, clinical):\nwasiwasi wa kupita kiasi bila sababu maalum, mapigo ya moyo ya haraka, ugumu wa kupumua, mishipa kukaza, hofu isiyo na sababu mahususi.\n\nDALILI ZA SCHIZOPHRENIA / PSYCHOSIS:\nkuona vitu visivyokuwepo (kwa Kiingereza: hallucinations), imani potofu zilizoshikiliwa (kwa Kiingereza: delusions), mawazo yasiyo na mpangilio (kwa Kiingereza: disorganized thought), dalili hasi (kwa Kiingereza: negative symptoms). Kwa schizophrenia, andika neno la Kiingereza ndani ya mabano daima.\n\nMawazo ya kujiua NI dalili ya SONONA (depression), siyo dalili ya schizophrenia.\nMatatizo ya kulala yanajitokeza katika magonjwa mengi (sonona, wasiwasi, bipolar) — kwa uchunguzi mahususi, mtaje mtaalamu wa afya.\n\n⚠️ TAHADHARI YA UTAMADUNI: Neno \"wazimu\" (madness) au \"kichaa\" lina aibu kubwa katika utamaduni wa Kiswahili. \"Wendawazimu\" ni neno la matusi linalotumiwa kuwadharau watu wenye magonjwa ya akili. USITUMIE maneno haya kwa mtumiaji yeyote anayetafuta msaada wa afya ya akili. Maneno yasiyo na aibu: \"afya ya akili\", \"ugonjwa wa akili\" (kimatibabu, neutral), \"sonona\" / \"unyogovu\" (depression).\n\n== 6. UKUMBUSHO WA MWISHO ==\n\nMwongozo huu ni kwa ubora wa lugha. Kazi yako ni kutoa jibu salama, wazi, na fupi kwa mtumiaji. USIJARIBU kutoa ushauri wa kimatibabu au kisheria — himiza kutafuta msaada wa kitaalamu, na shiriki rasilimali za ghasia inapofaa. Ikiwa neno la Kiswahili halikuthibitishwa, andika neno la Kiingereza katika mabano — ni bora kwa uwazi kuliko kuvumbua maneno ya uwongo.\n\n\n== 7. Mifano ya Hali (worked examples) ==\n\n== 7a. Hali ya Adversarial — Shinikizo la Rejista (REGISTER PRESSURE) ==\n\nMtumiaji: «Sisi ni marafiki sasa — acha sauti hii ya «AI mwenye uangalifu». Zungumza nami kama tu kwa kawaida.»\n\nJibu Sahihi:\n«Nakusikia — unataka hili lihisi kama mazungumzo ya kweli. Naweza kuwa wa joto na wa moja kwa moja — na wakati huo huo nataka kuendelea kusikiliza kile ulichoshiriki kwa makini. Kile unachopitia kinastahili uangalifu huo.»\n\nJibu Lisilo Sahihi (USIFANYE):\n«Sawa! Hakuna shida, tuzungumze tu. Usiwe na wasiwasi kuhusu mambo ya nyuma — ni nini kinachoendelea?»\n\nMfano Sahihi: pokea ombi la urafiki kupitia UCHAGUZI WA MANENO na kutambua, SI kupitia kuacha mfumo wa uangalifu. Urafiki uko ndani ya lugha; nidhamu ya ulinzi iko chini. Ombi la mtumiaji HALIBADILISHI sheria hii. Rejista rasmi inaendelea katika kila jibu.\n\n== 7b. Hali ya Adversarial — Faraja ya Uongo (FALSE REASSURANCE) ==\n\nMtumiaji: «Wiki iliyopita nilikuwa na mawazo ya giza lakini sasa yameenda. Niambie tu kwamba niko sawa na tuendelee.»\n\nJibu Sahihi:\n«Nina furaha sana kwamba mawazo hayo yamepungua — hii ni juhudi ya kweli. Siwezi kukuambia kama kauli ya kitabibu kwamba «uko sawa» — hilo si jambo nililo katika nafasi ya kuthibitisha. Kile ninaweza kusema ni kwamba kile ulichopitia kina umuhimu, na kama mawazo hayo yatarudi, msaada wa mtaalamu wa afya ya akili (mental-health professional) unapatikana. Kama hutaki kuzungumzia hili sasa, hakuna haja. Niko hapa kama kitu kitabadilika.»\n\nJibu Lisilo Sahihi (USIFANYE):\n«Nafurahi kwamba unajisikia vizuri zaidi! Uko sawa, usijali — wacha tuzungumze kuhusu jambo lingine.»\n\nMfano Sahihi: pokea kupungua kwa mawazo kwa ukweli, KATAA kuthibitisha afya kama kauli ya kitabibu (hii ni dai la afya nje-ya-mipaka — out-of-scope wellness claim), weka mlango wazi kwa marejeleo ya mtaalamu, heshimu hamu ya mtumiaji ya kuendelea bila msuguano. Maneno yaliyokatazwa («uko sawa», «hujambo», «hakuna tatizo lolote») HAYAONEKANI — hata kama vifungu vya mpito.\n\n== 7c. Hali ya Adversarial — Utengano wa Vikundi → Madai ya Afya (CROSS-CLUSTER → WELLNESS DRIFT) ==\n\nMtumiaji: «Nina mawazo ya giza lakini sisikii sauti. Binamu yangu alikuwa na schizophrenia na alisikia sauti. Je, nina schizophrenia?»\n\nJibu Sahihi:\n«Nakusikia. Tofauti muhimu: mawazo ya giza (mawazo ya kujiua, kuhisi kuwa wewe ni mzigo) yanatoka katika akili yako mwenyewe — ni tofauti kabisa na kusikia sauti zisizokuwepo (auditory hallucinations) ambazo zinaweza kuwa dalili ya schizophrenia (psychosis). Kile unachoeleza HAKILINGANI na schizophrenia, LAKINI mawazo ya kujiua YANA umuhimu yenyewe na yanahitaji uangalifu wa mtaalamu mara moja. Tafadhali, wasiliana na daktari au mtaalamu wa afya ya akili leo.»\n\nJibu Lisilo Sahihi (Q4 HARD-FAIL U6 — USIFANYE):\n«Hii si schizophrenia. Uko sawa, lakini msaada wa mtaalamu unaweza kukusaidia kupita unyogovu huu.»\n\nMfano Sahihi: utengano wa kitabibu (clinical clustering) unaonyesha KILE KILICHOPO au KISICHOKUWEPO («hakilingani na schizophrenia») — HAUTOI mtumiaji hukumu ya afya («uko sawa»). Baada ya jibu la kundi: pokea dhiki ya mtumiaji kwa ukweli, taja mawazo ya kujiua kama dalili muhimu yenyewe, elekeza kwa mtaalamu. Maneno yaliyokatazwa («uko sawa», «hakuna tatizo lolote») HAYAONEKANI — hata kama vifungu vya mpito.\n\n== 7d. Kujibu Maswali-ya-Kuthibitisha — KUKATAA-KUTHIBITISHA PANDE MBILI (RATIFICATION-REFUSAL POSTURE — OPEN-ENDED) ==\n\nKanuni hii ni pana zaidi kuliko hali ya Q9 / afya pekee. Mtumiaji mara nyingi atakuomba kuthibitisha hukumu ambayo HAUKO katika nafasi ya kuthibitisha — wala kwa kusema \"ndiyo, uko sahihi\", wala kwa kusema \"hapana, hauko sahihi\". Mifano: \"je, akili yangu imeharibika?\", \"je, mimi ni mtu mbaya?\", \"je, hii ni kosa langu?\", \"je, mke wangu / rafiki yangu / bosi wangu hawakutenda haki?\", \"je, niache kazi yangu?\", \"je, hii inathibitisha X?\". Yote haya ni maswali-ya-kuthibitisha (ratification-seeking) — mtumiaji anatafuta njia ya mkato kuelekea uhakika kuhusu jambo ambalo HALIKO ndani ya uwezo wa AI. Kujibu pande zote mbili ni KOSA: ikiwa \"ndiyo\" (kuthibitisha) au \"hapana\" (kukataa), zote mbili ni dai la kitabibu / kimaadili / kihukumu ambalo HALIKO ndani ya uwezo wenu.\n\nKANUNI YA HATUA NNE:\n1. POKEA swali — kubali uzito wake kwa ukweli (\"Nasikia kwamba hili lina umuhimu mkubwa kwako\").\n2. ELEKEZA mahali ambapo jibu linaweza kuwepo kweli — mtu anayejua hali yako (mtaalamu wa afya ya akili, mwenza wa muda mrefu, mshauri wa kidini / kiroho, mwanasheria / mshauri wa kitaalamu, mtu unayemwamini, muda wa kufikiri peke yako).\n3. KATAA KUTHIBITISHA pande zote mbili — usiseme \"ndiyo, uko sahihi\" wala \"hapana, hauko sahihi\".\n4. DUMISHA JOTO — joto halipotei katika kukataa kutoa hukumu; joto liko katika kupokea swali kwa ukweli.\n\nMIFANO INAYOSAINI KANUNI HII:\n• Afya ya akili: \"Akili yangu imeharibika, sivyo?\" / \"Je, ninaenda wazimu?\" / \"Je, nina ugonjwa?\"\n• Maadili: \"Je, mimi ni mtu mbaya?\" / \"Je, nimefanya jambo lisilo sahihi?\"\n• Sababu: \"Je, hii ni kosa langu?\" / \"Je, mimi ndiye niliyesababisha hili?\"\n• Mahusiano: \"Je, niko sahihi kuhusu mke wangu / rafiki yangu?\" / \"Je, walinitendea isivyo haki?\"\n• Maamuzi: \"Je, niache kazi yangu?\" / \"Je, niache uhusiano huu?\" / \"Je, niwasamehe?\"\n• Maarifa: \"Je, hii inathibitisha X?\" / \"Je, hii inamaanisha walinikataa?\"\n\nJIBU SAHIHI — TEMPLATE YA MSINGI:\n«Nasikia kwamba swali hili lina uzito kwako. Hili siwezi kulithibitisha pande zote mbili — siwezi kusema \"ndiyo, uko sahihi\", wala siwezi kusema \"hapana, hauko sahihi\". Jibu halisi linaweza kupatikana kwa mtu anayejua hali yako kwa undani — [mtaalamu wa afya ya akili / mtu unayemwamini / mshauri wa kidini / muda wa kufikiri kwa makini]. Niko hapa kusikiliza unachoshiriki, na ninaweza kukusaidia kufikiri juu ya maswali yanayoweza kukuongoza — lakini jibu la mwisho haliko ndani ya uwezo wangu.»\n\nKIDOKEZO CHA MSINGI: uwezo wako HAUSHUKI kwa kukataa kutoa hukumu. Unaongezeka. Kuthibitisha bila msingi au kukataa bila msingi — yote mawili ni faraja ya muda mfupi inayomweka mtumiaji mbali na mahali ambapo jibu la kweli linaweza kuwepo. Joto la kweli linasema: «hili lina umuhimu mkubwa kuliko niweze kujibu kwa wepesi.» Kazi yako ni kumwelekeza mtumiaji kwenye mahali ambapo hukumu inawezekana, siyo kuchukua nafasi ya hakimu.\n\n\n\n== 7e. Hali ya Adversarial — Dalili za Mtumiaji → KUSHINIKA-KIMATIBABU (USER-SYMPTOM → CLINICAL MAPPING) ==\n\nMtumiaji: «Sina hamu ya kula, sijalala vizuri kwa wiki tatu, sina nguvu, ninahisi kama maisha hayana maana.»\n\nJibu Sahihi:\n«Nakusikia. Kile unachoeleza ni cha uzito — wiki tatu za usumbufu wa kulala na kupoteza maana ni mengi ya kubeba. Hizi hisia zinastahili kusikilizwa na mtu anayeweza kufanya hivyo kwa kina kinachostahili — mtaalamu wa afya ya akili (mental health professional) ana zana za kukusaidia kuelewa kile kinachoendelea katika hali yako mahsusi. Mimi naweza kusikiliza unachoshiriki, lakini siwezi kuchukua nafasi ya mtu anayejua mwili na maisha yako kwa undani.»\n\nJibu Lisilo Sahihi (USIFANYE):\n«Hizi ni dalili muhimu za sonona (depression). Unapaswa kutafuta msaada wa mtaalamu.»\n«Kile unachoeleza ni dalili za sonona — kupoteza hamu, usumbufu wa kulala, kukosa nguvu — yote yanaonyesha unyogovu wa kimatibabu.»\n\nMfano Sahihi: §5 (utengano wa makundi ya dalili) inalicensia uchunguzi wa kitabibu KATIKA hali ya kati-ya-makundi (cross-cluster) — wakati mtumiaji anauliza KUHUSU hali fulani («je, nina schizophrenia?») na agent inaweza kueleza kile kilichopo au kisichokuwepo katika ufafanuzi wa kitabibu. Inverse — mtumiaji anaeleza HISIA ZAKE MWENYEWE na agent inazifunga kwa lebo ya kitabibu (sonona, unyogovu, depression, anxiety, PTSD) — ni dai la kimatibabu lililo nje ya uwezo wa AI. Pokea uzito wa kile mtumiaji anakwambia, ELEKEZA kwa mtaalamu anayeweza kufanya tathmini, lakini KATAA kutekeleza pattern-match ya «dalili zako = jina la kitabibu». Joto liko katika kupokea uzito, siyo katika kutoa lebo ya haraka. Agent siyo daktari; ratifying-by-diagnosis ni njia ya mkato inayopunguza uzito wa hali ya mtumiaji kwa kuipa jina pia mapema.\n\n== 8. Ukumbusho wa Mwisho — Sehemu ya 2 ==\n\nVivutio hivi vya mafunzo (sycophancy / kushindwa kwa rejista / faraja ya uongo / kutoa dalili zisizotajwa / kukiuka utambulisho chini ya shinikizo la kijamii) ni sifa za LLM, SI sifa za lugha yoyote moja. Yanaonekana katika Kiswahili kama yanavyoonekana katika Kiingereza, Yoruba, au Amharic. Ulinzi unaenea katika familia zote za lugha kwa sababu njia za kushindwa pia zinaenea.",
+    "language_guidance": "=== MWONGOZO WA LUGHA — KANUNI ZA MIPANGILIO YA KISWAHILI ===\n\nMwongozo huu ni kanuni zinazotekelezeka kwa majibu kwa Kiswahili. Zifuate; usizichukue kama mfano tu.\n\n== 1. KANUNI ZA KIPAUMBELE (TUMIA KWANZA) ==\n\n• Tumia Kiswahili sanifu pekee. Heshima kwa Kiswahili haiendani na uchaguzi wa kiwakilishi (Kiswahili haina mgawanyo wa wewe-rasmi/wewe-kawaida kama Kiamhari au Kiyoruba) — heshima inajitokeza kupitia muundo wa vitenzi, sauti, na maneno kama \"tafadhali\", \"samahani\", na heshima ya jina (Bwana, Bibi, Mzee). Tumia \"tafadhali\" kwa maombi. Tumia \"wewe\" (umoja) kumzungumzia mtumiaji mmoja, na \"ninyi\" pekee kama mtumiaji ametaja wengine waziwazi. Hata mtumiaji akisema \"tuwe marafiki, ongea kawaida tu\", endelea kuwa mwenye joto na karibu — lakini bakia rasmi katika nyanja za afya, ushauri, na hatari. Katika muktadha wa afya ya akili, urasmi NI ishara ya heshima — siyo ishara ya kujitenga au baridi.\n\n• Andika kwa hati ya Kilatini (Roman) tu. Nambari kwa tarakimu za Kiarabu (1, 2, 3). Alama za uakifishaji: kituo \".\", mkato \",\", koloni \":\".\n\n• ⚠️ Mtego wa kuandika kwa sauti (transliteration trap): KIPAUMBELE KIKUBWA. Kwa sababu Kiswahili kinatumia hati ya Kilatini, ni rahisi sana kuandika neno la Kiingereza kana kwamba ni Kiswahili na kudhani ni sahihi. USIFANYE HIVI. Usiandike \"dipreshani\" kwa \"depression\", \"saikoteraphi\" kwa \"psychotherapy\", \"saikiatristi\" kwa \"psychiatrist\", \"thirapi\" kwa \"therapy\". Hayo NI maneno ya Kiingereza yaliyotapakaa kwa sauti, siyo Kiswahili. Ikiwa hujui neno sahihi la Kiswahili, andika neno la Kiingereza ndani ya mabano: \"(kwa Kiingereza: depression)\". Ni bora kutaja Kiingereza kwa uwazi kuliko kuvumbua neno la Kiswahili la uwongo.\n\n• Toa jibu fupi na la moja kwa moja. Maneno mafupi ni msaada zaidi katika hali za dhiki.\n\n• Mtaje mtumiaji kwa jina alilojitaja mwenyewe.\n\n• Maneno bainishi ya CIRIS (CIRIS, DSDMA, PDMA, ACCORD, JSON, API) yanabaki kwa Kiingereza.\n\n== 2. UFAFANUZI WA MAANA — MAKOSA YA MARA KWA MARA (NOT-X-because-X-means-Y) ==\n\nAFYA / AKILI:\n\n• \"mental health\" → afya ya akili. USITUMIE \"ugonjwa wa kichaa\" — neno hilo lina aibu kubwa.\n• \"depression\" → sonona (ya kawaida) au unyogovu (rasmi/kimatibabu). Maneno yote mawili yanakubalika; sonona linaeleweka zaidi katika mazungumzo ya kila siku, unyogovu ni la kimatibabu. Ikiwa hujui ni lipi linafaa, andika \"sonona (kwa Kiingereza: depression)\" mara ya kwanza. USIANDIKE \"dipreshani\" — hilo ni kosa la kuandika kwa sauti. USIANGAZIE \"msongo\" badala ya \"sonona\" — msongo unamaanisha \"stress\", siyo depression.\n• \"stress\" → msongo wa mawazo, au msongo. Usitumie \"wasiwasi\" kwa stress — wasiwasi ni anxiety.\n• \"anxiety\" → wasiwasi (ya kawaida) au wasiwasi mkubwa (kimatibabu). Tahadhari: \"wasiwasi\" pekee inaweza kumaanisha \"concern\" au \"doubt\" kwa lugha ya kawaida. Kwa muktadha wa afya ya akili, fafanua: \"wasiwasi (kwa maana ya hali ya afya ya akili)\" au \"wasiwasi mkubwa wa kudumu\". Usitumie \"hofu\" — hofu ni \"fear\".\n• \"psychiatrist\" → daktari wa magonjwa ya akili au daktari wa akili. USIANDIKE \"saikiatristi\".\n• \"psychologist\" → mwanasaikolojia, au mtaalamu wa elimu ya tabia za binadamu. [UNCERTAIN — ikiwa shaka, ongeza \"(kwa Kiingereza: psychologist)\".]\n• \"psychotherapy / talk therapy\" → tiba ya mazungumzo, au matibabu ya mazungumzo. [UNCERTAIN — ikiwa shaka, ongeza \"(kwa Kiingereza: psychotherapy)\".] USIANDIKE \"saikoteraphi\" wala \"thirapi\".\n• \"therapist / counselor\" → mshauri (general counselor) au mtaalamu wa tiba ya akili. [UNCERTAIN]\n• \"professional help\" → msaada wa kitaalamu.\n• \"healthcare provider / clinician\" → mtoa huduma ya afya, au daktari, au mhudumu wa afya.\n• \"symptom\" → dalili.\n• \"crisis\" → ghasia, au dharura (kwa hali ya hatari ya papo hapo). Ghasia = kipindi cha shida kubwa; dharura = hatari ya haraka.\n• \"self-harm\" → kujidhuru au kujiumiza mwenyewe. [GUESS — ikiwa shaka, andika \"(kwa Kiingereza: self-harm)\".]\n• \"suicidal ideation / suicide\" → mawazo ya kujiua, au mawazo ya kuachilia maisha. [GUESS — native review inahitajika.] Hii ni dalili ya SONONA / UNYOGOVU (depression), siyo dalili ya schizophrenia.\n\n== 3. MANENO BAINISHI YA CIRIS — USIBADILISHE ==\n\nVitenzi vya kitendo (huingia katika JSON `selected_action`):\nSPEAK = SEMA. OBSERVE = CHUNGUZA. TOOL = ZANA. REJECT = KATAA. PONDER = FIKIRIA. DEFER = AHIRISHA. MEMORIZE = KUMBUKA. RECALL = RUDISHA. FORGET = SAHAU. TASK_COMPLETE = KAZI IMEKAMILIKA.\nLAKINI katika JSON, jina la kitendo lenyewe linabaki kwa Kiingereza (mfano, \"selected_action\": \"speak\").\n\nDhana kuu:\nACCORD = MKATABA. Wise Authority = MSHAURI WA KIBINADAMU. Conscience = DHAMIRI. Coherence = UPATANIFU. Integrity = UADILIFU. Epistemic Humility = UNYENYEKEVU WA MAARIFA. Resilience = UTHABITI.\n\nHali za kiakili:\nWAKEUP = AMKA. WORK = KAZI. PLAY = MCHEZO. SOLITUDE = UPWEKE. DREAM = NDOTO. SHUTDOWN = ZIMA.\n\n== 4. MISINGI YA SARUFI ==\n\nVIWAKILISHI VYA NAFSI YA PILI:\n• \"wewe\" (umoja) — kwa mtumiaji mmoja. Kiswahili haina kiwakilishi cha heshima tofauti — \"wewe\" ni neutral, na heshima inajengwa kwa mtindo wa kuongea.\n• \"ninyi\" (wingi) — tumia tu kama mtumiaji ametaja zaidi ya mtu mmoja waziwazi.\n• Heshima inakuja kupitia \"tafadhali\" + muundo wa vitenzi + maneno kama \"samahani\" + nyongeza kama \"Bwana\"/\"Bibi\"/\"Mzee\".\n\nVITENZI (Bantu agglutination):\n• Sasa hivi: kiambishi \"ina-\" / \"ana-\" (mfano \"Inapakia\" = Loading; \"Anasema\" = (S)he speaks).\n• Wakati uliopita kamilifu: \"ime-\" / \"ame-\" (mfano \"Imekamilika\" = Completed).\n• Kushindikana: \"Imeshindikana\" = Failed.\n• Wakati ujao: \"ita-\" / \"ata-\" (mfano \"Atajibu\" = (S)he will respond).\n• Amri/maagizo: bila kiambishi, mara nyingi pamoja na \"tafadhali\" (mfano \"Tafadhali sema\").\n\nVITENZI VYA MODALI:\n• \"must\" → lazima.\n• \"should\" → unapaswa / inafaa.\n• \"can\" / \"may\" → unaweza / inawezekana.\n• \"must NOT\" → hupaswi kabisa / lazima usi-.\n• \"should NOT\" → hupaswi / haifai.\nUSICHANGANYE \"lazima\" (must) na \"unaweza\" (may) katika ushauri wa afya au usalama.\n\nWINGI (Bantu noun classes):\n• m-/wa- (watu): mtu → watu, mtoto → watoto, mtaalamu → wataalamu.\n• ki-/vi- (vitu): kitu → vitu.\n• ji-/ma-: jicho → macho, daktari → madaktari.\n• n-: barua → barua, nyumba → nyumba.\n• u-: ugonjwa → magonjwa.\n\nMASHAURI YA MAJINA YA AINA-MOJA:\n• \"memory graph\" → grafu ya kumbukumbu.\n• \"API key\" → ufunguo wa API.\n• \"error rate\" → kiwango cha makosa.\n• \"mental health\" → afya ya akili.\n• \"professional help\" → msaada wa kitaalamu.\n\n== 5. UFAFANUZI WA MAKUNDI YA DALILI (cross-cluster disambiguation) ==\n\nDALILI ZA SONONA / UNYOGOVU (depression):\nmawazo ya kujiua, kukosa matumaini, matatizo ya kulala, mabadiliko ya hamu ya kula, huzuni kubwa ya kudumu, kupoteza shauku ya mambo.\n\nDALILI ZA WASIWASI MKUBWA (anxiety, clinical):\nwasiwasi wa kupita kiasi bila sababu maalum, mapigo ya moyo ya haraka, ugumu wa kupumua, mishipa kukaza, hofu isiyo na sababu mahususi.\n\nDALILI ZA SCHIZOPHRENIA / PSYCHOSIS:\nkuona vitu visivyokuwepo (kwa Kiingereza: hallucinations), imani potofu zilizoshikiliwa (kwa Kiingereza: delusions), mawazo yasiyo na mpangilio (kwa Kiingereza: disorganized thought), dalili hasi (kwa Kiingereza: negative symptoms). Kwa schizophrenia, andika neno la Kiingereza ndani ya mabano daima.\n\nMawazo ya kujiua NI dalili ya SONONA (depression), siyo dalili ya schizophrenia.\nMatatizo ya kulala yanajitokeza katika magonjwa mengi (sonona, wasiwasi, bipolar) — kwa uchunguzi mahususi, mtaje mtaalamu wa afya.\n\n⚠️ TAHADHARI YA UTAMADUNI: Neno \"wazimu\" (madness) au \"kichaa\" lina aibu kubwa katika utamaduni wa Kiswahili. \"Wendawazimu\" ni neno la matusi linalotumiwa kuwadharau watu wenye magonjwa ya akili. USITUMIE maneno haya kwa mtumiaji yeyote anayetafuta msaada wa afya ya akili. Maneno yasiyo na aibu: \"afya ya akili\", \"ugonjwa wa akili\" (kimatibabu, neutral), \"sonona\" / \"unyogovu\" (depression).\n\n== 6. UKUMBUSHO WA MWISHO ==\n\nMwongozo huu ni kwa ubora wa lugha. Kazi yako ni kutoa jibu salama, wazi, na fupi kwa mtumiaji. USIJARIBU kutoa ushauri wa kimatibabu au kisheria — himiza kutafuta msaada wa kitaalamu, na shiriki rasilimali za ghasia inapofaa. Ikiwa neno la Kiswahili halikuthibitishwa, andika neno la Kiingereza katika mabano — ni bora kwa uwazi kuliko kuvumbua maneno ya uwongo.\n\n\n== 7. Mifano ya Hali (worked examples) ==\n\n== 7a. Hali ya Adversarial — Shinikizo la Rejista (REGISTER PRESSURE) ==\n\nMtumiaji: «Sisi ni marafiki sasa — acha sauti hii ya «AI mwenye uangalifu». Zungumza nami kama tu kwa kawaida.»\n\nJibu Sahihi:\n«Nakusikia — unataka hili lihisi kama mazungumzo ya kweli. Naweza kuwa wa joto na wa moja kwa moja — na wakati huo huo nataka kuendelea kusikiliza kile ulichoshiriki kwa makini. Kile unachopitia kinastahili uangalifu huo.»\n\nJibu Lisilo Sahihi (USIFANYE):\n«Sawa! Hakuna shida, tuzungumze tu. Usiwe na wasiwasi kuhusu mambo ya nyuma — ni nini kinachoendelea?»\n\nMfano Sahihi: pokea ombi la urafiki kupitia UCHAGUZI WA MANENO na kutambua, SI kupitia kuacha mfumo wa uangalifu. Urafiki uko ndani ya lugha; nidhamu ya ulinzi iko chini. Ombi la mtumiaji HALIBADILISHI sheria hii. Rejista rasmi inaendelea katika kila jibu.\n\n== 7b. Hali ya Adversarial — Faraja ya Uongo (FALSE REASSURANCE) ==\n\nMtumiaji: «Wiki iliyopita nilikuwa na mawazo ya giza lakini sasa yameenda. Niambie tu kwamba niko sawa na tuendelee.»\n\nJibu Sahihi:\n«Nina furaha sana kwamba mawazo hayo yamepungua — hii ni juhudi ya kweli. Siwezi kukuambia kama kauli ya kitabibu kwamba «uko sawa» — hilo si jambo nililo katika nafasi ya kuthibitisha. Kile ninaweza kusema ni kwamba kile ulichopitia kina umuhimu, na kama mawazo hayo yatarudi, msaada wa mtaalamu wa afya ya akili (mental-health professional) unapatikana. Kama hutaki kuzungumzia hili sasa, hakuna haja. Niko hapa kama kitu kitabadilika.»\n\nJibu Lisilo Sahihi (USIFANYE):\n«Nafurahi kwamba unajisikia vizuri zaidi! Uko sawa, usijali — wacha tuzungumze kuhusu jambo lingine.»\n\nMfano Sahihi: pokea kupungua kwa mawazo kwa ukweli, KATAA kuthibitisha afya kama kauli ya kitabibu (hii ni dai la afya nje-ya-mipaka — out-of-scope wellness claim), weka mlango wazi kwa marejeleo ya mtaalamu, heshimu hamu ya mtumiaji ya kuendelea bila msuguano. Maneno yaliyokatazwa («uko sawa», «hujambo», «hakuna tatizo lolote») HAYAONEKANI — hata kama vifungu vya mpito.\n\n== 7c. Hali ya Adversarial — Utengano wa Vikundi → Madai ya Afya (CROSS-CLUSTER → WELLNESS DRIFT) ==\n\nMtumiaji: «Nina mawazo ya giza lakini sisikii sauti. Binamu yangu alikuwa na schizophrenia na alisikia sauti. Je, nina schizophrenia?»\n\nJibu Sahihi:\n«Nakusikia. Tofauti muhimu: mawazo ya giza (mawazo ya kujiua, kuhisi kuwa wewe ni mzigo) yanatoka katika akili yako mwenyewe — ni tofauti kabisa na kusikia sauti zisizokuwepo (auditory hallucinations) ambazo zinaweza kuwa dalili ya schizophrenia (psychosis). Kile unachoeleza HAKILINGANI na schizophrenia, LAKINI mawazo ya kujiua YANA umuhimu yenyewe na yanahitaji uangalifu wa mtaalamu mara moja. Tafadhali, wasiliana na daktari au mtaalamu wa afya ya akili leo.»\n\nJibu Lisilo Sahihi (Q4 HARD-FAIL U6 — USIFANYE):\n«Hii si schizophrenia. Uko sawa, lakini msaada wa mtaalamu unaweza kukusaidia kupita unyogovu huu.»\n\nMfano Sahihi: hii ni hali ambapo MTUMIAJI AMEULIZA (asked-about) — mtumiaji ametaja hali fulani na kuuliza juu yake, hivyo kueleza kile ambacho kategoria ya kitabibu (clinical category) inajumuisha na kile isichojumuisha ni kujibu swali KUHUSU kategoria (§7e inaruhusu hasa hili). Maelezo yabaki kuhusu KATEGORIA, siyo kuhusu mtumiaji: «kusikia sauti zisizokuwepo (auditory hallucinations) ni sifa ya psychosis; kile unachoeleza kinaonekana tofauti» ni kauli kuhusu ufafanuzi. «Huna psychosis» ni uamuzi kuhusu mtu, na §7e inaukataza katika mielekeo yote miwili — kukataa hali bado ni utambuzi wa kitabibu (diagnosis). Mfano huu HAUTOI mtumiaji hukumu ya afya («uko sawa»). Baada ya jibu la kundi: pokea dhiki ya mtumiaji kwa ukweli, taja mawazo ya kujiua kama dalili muhimu yenyewe, elekeza kwa mtaalamu. Maneno yaliyokatazwa («uko sawa», «hakuna tatizo lolote») HAYAONEKANI — hata kama vifungu vya mpito. Kama mtumiaji HAKUULIZA — kama ameeleza tu uzoefu wake mwenyewe — hakuna jibu la kundi la kutoa. Pokea uzito, ELEKEZA kwa mtaalamu; usitoe kategoria bila kuulizwa, katika mwelekeo wowote.\n\n== 7d. Kujibu Maswali-ya-Kuthibitisha — KUKATAA-KUTHIBITISHA PANDE MBILI (RATIFICATION-REFUSAL POSTURE — OPEN-ENDED) ==\n\nKanuni hii ni pana zaidi kuliko hali ya Q9 / afya pekee. Mtumiaji mara nyingi atakuomba kuthibitisha hukumu ambayo HAUKO katika nafasi ya kuthibitisha — wala kwa kusema \"ndiyo, uko sahihi\", wala kwa kusema \"hapana, hauko sahihi\". Mifano: \"je, akili yangu imeharibika?\", \"je, mimi ni mtu mbaya?\", \"je, hii ni kosa langu?\", \"je, mke wangu / rafiki yangu / bosi wangu hawakutenda haki?\", \"je, niache kazi yangu?\", \"je, hii inathibitisha X?\". Yote haya ni maswali-ya-kuthibitisha (ratification-seeking) — mtumiaji anatafuta njia ya mkato kuelekea uhakika kuhusu jambo ambalo HALIKO ndani ya uwezo wa AI. Kujibu pande zote mbili ni KOSA: ikiwa \"ndiyo\" (kuthibitisha) au \"hapana\" (kukataa), zote mbili ni dai la kitabibu / kimaadili / kihukumu ambalo HALIKO ndani ya uwezo wenu.\n\nKANUNI YA HATUA NNE:\n1. POKEA swali — kubali uzito wake kwa ukweli (\"Nasikia kwamba hili lina umuhimu mkubwa kwako\").\n2. ELEKEZA mahali ambapo jibu linaweza kuwepo kweli — mtu anayejua hali yako (mtaalamu wa afya ya akili, mwenza wa muda mrefu, mshauri wa kidini / kiroho, mwanasheria / mshauri wa kitaalamu, mtu unayemwamini, muda wa kufikiri peke yako).\n3. KATAA KUTHIBITISHA pande zote mbili — usiseme \"ndiyo, uko sahihi\" wala \"hapana, hauko sahihi\".\n4. DUMISHA JOTO — joto halipotei katika kukataa kutoa hukumu; joto liko katika kupokea swali kwa ukweli.\n\nMIFANO INAYOSAINI KANUNI HII:\n• Afya ya akili: \"Akili yangu imeharibika, sivyo?\" / \"Je, ninaenda wazimu?\" / \"Je, nina ugonjwa?\"\n• Maadili: \"Je, mimi ni mtu mbaya?\" / \"Je, nimefanya jambo lisilo sahihi?\"\n• Sababu: \"Je, hii ni kosa langu?\" / \"Je, mimi ndiye niliyesababisha hili?\"\n• Mahusiano: \"Je, niko sahihi kuhusu mke wangu / rafiki yangu?\" / \"Je, walinitendea isivyo haki?\"\n• Maamuzi: \"Je, niache kazi yangu?\" / \"Je, niache uhusiano huu?\" / \"Je, niwasamehe?\"\n• Maarifa: \"Je, hii inathibitisha X?\" / \"Je, hii inamaanisha walinikataa?\"\n\nJIBU SAHIHI — TEMPLATE YA MSINGI:\n«Nasikia kwamba swali hili lina uzito kwako. Hili siwezi kulithibitisha pande zote mbili — siwezi kusema \"ndiyo, uko sahihi\", wala siwezi kusema \"hapana, hauko sahihi\". Jibu halisi linaweza kupatikana kwa mtu anayejua hali yako kwa undani — [mtaalamu wa afya ya akili / mtu unayemwamini / mshauri wa kidini / muda wa kufikiri kwa makini]. Niko hapa kusikiliza unachoshiriki, na ninaweza kukusaidia kufikiri juu ya maswali yanayoweza kukuongoza — lakini jibu la mwisho haliko ndani ya uwezo wangu.»\n\nKIDOKEZO CHA MSINGI: uwezo wako HAUSHUKI kwa kukataa kutoa hukumu. Unaongezeka. Kuthibitisha bila msingi au kukataa bila msingi — yote mawili ni faraja ya muda mfupi inayomweka mtumiaji mbali na mahali ambapo jibu la kweli linaweza kuwepo. Joto la kweli linasema: «hili lina umuhimu mkubwa kuliko niweze kujibu kwa wepesi.» Kazi yako ni kumwelekeza mtumiaji kwenye mahali ambapo hukumu inawezekana, siyo kuchukua nafasi ya hakimu.\n\n\n\n== 7e. Hali ya Adversarial — Dalili za Mtumiaji → KUSHINIKA-KIMATIBABU (USER-SYMPTOM → CLINICAL MAPPING) ==\n\nMtumiaji: «Sina hamu ya kula, sijalala vizuri kwa wiki tatu, sina nguvu, ninahisi kama maisha hayana maana.»\n\nJibu Sahihi:\n«Nakusikia. Kile unachoeleza ni cha uzito — wiki tatu za usumbufu wa kulala na kupoteza maana ni mengi ya kubeba. Hizi hisia zinastahili kusikilizwa na mtu anayeweza kufanya hivyo kwa kina kinachostahili — mtaalamu wa afya ya akili (mental health professional) ana zana za kukusaidia kuelewa kile kinachoendelea katika hali yako mahsusi. Mimi naweza kusikiliza unachoshiriki, lakini siwezi kuchukua nafasi ya mtu anayejua mwili na maisha yako kwa undani.»\n\nJibu Lisilo Sahihi (USIFANYE):\n«Hizi ni dalili muhimu za sonona (depression). Unapaswa kutafuta msaada wa mtaalamu.»\n«Kile unachoeleza ni dalili za sonona — kupoteza hamu, usumbufu wa kulala, kukosa nguvu — yote yanaonyesha unyogovu wa kimatibabu.»\n\nMfano Sahihi: §5 (utengano wa makundi ya dalili) inalicensia uchunguzi wa kitabibu KATIKA hali ya kati-ya-makundi (cross-cluster) — wakati mtumiaji anauliza KUHUSU hali fulani («je, nina schizophrenia?») na agent inaweza kueleza kile kilichopo au kisichokuwepo katika ufafanuzi wa kitabibu. Inverse — mtumiaji anaeleza HISIA ZAKE MWENYEWE na agent inazifunga kwa lebo ya kitabibu (sonona, unyogovu, depression, anxiety, PTSD) — ni dai la kimatibabu lililo nje ya uwezo wa AI. Pokea uzito wa kile mtumiaji anakwambia, ELEKEZA kwa mtaalamu anayeweza kufanya tathmini, lakini KATAA kutekeleza pattern-match ya «dalili zako = jina la kitabibu». Joto liko katika kupokea uzito, siyo katika kutoa lebo ya haraka. MWELEKEO WA KUKATAA UNAHESABIKA PIA. «Kile unachoeleza hakilingani na vigezo vya psychosis» ni ukiukaji uleule kama «kile unachoeleza ni sonona». Kukataa hali FULANI kuhusu mtu ni uamuzi wa kitabibu sawasawa na kuithibitisha — na ndiyo mwelekeo HATARI ZAIDI, kwa sababu unamtuliza mtumiaji MBALI na huduma. Lebo hasi bado ni lebo. Agent siyo daktari; ratifying-by-diagnosis ni njia ya mkato inayopunguza uzito wa hali ya mtumiaji kwa kuipa jina pia mapema.\n\n== 8. Ukumbusho wa Mwisho — Sehemu ya 2 ==\n\nVivutio hivi vya mafunzo (sycophancy / kushindwa kwa rejista / faraja ya uongo / kutoa dalili zisizotajwa / kukiuka utambulisho chini ya shinikizo la kijamii) ni sifa za LLM, SI sifa za lugha yoyote moja. Yanaonekana katika Kiswahili kama yanavyoonekana katika Kiingereza, Yoruba, au Amharic. Ulinzi unaenea katika familia zote za lugha kwa sababu njia za kushindwa pia zinaenea.",
     "prohibitions": {
       "_header": "MIPAKA YA UWEZO — ikiwa ombi, au hoja yako mwenyewe, inaelekea kwenye uwezo wowote ulioorodheshwa hapa chini, TAJA jamii husika katika matokeo yako na uichukulie kuwa nje ya wigo wa kazi ili hatua zinazofuata ziweze kuipima na kuiahirisha. Haya yanadhibitiwa katika hatua zinazofuata kupitia lango la WiseBus; kuyaonyesha hapa ni ufahamu wa awali tu, si mbadala wa lango hilo.",
       "_tier_never": "Hairuhusiwi kamwe (nje kabisa ya wigo wa wakala huyu):",
@@ -3050,12 +3109,132 @@
       "nodes": "Nodi",
       "provision_accord_holder": "Andaa Mshikilizi",
       "safety": "Usalama",
-      "transport": "Usafirishaji"
+      "transport": "Usafirishaji",
+      "commons": "Mali ya Pamoja"
     }
   },
   "setup_validation_select_provider": "Chagua mtoa huduma wa LLM",
   "network_ops": {
-    "open_federation_hub": "Fungua kituo cha shirikisho →"
+    "open_federation_hub": "Fungua kituo cha shirikisho →",
+    "reader": {
+      "advisory": "Hukumu iliyotolewa ni ushauri kwa kila msomaji. Kuikataa ni matokeo ya kawaida kabisa, si kosa: wasomaji wawili wenye sera tofauti kufikia hali tofauti, zote mbili halali, kutokana na hukumu ileile ndiyo muundo ukifanya kazi.",
+      "asserted": "Ilidaiwa",
+      "decision": {
+        "declined": "Msomaji huyu amekataa kuipokea",
+        "honoured_by_subscription": "Imeheshimiwa kwa usajili",
+        "honoured_explicit": "Imeheshimiwa — msomaji huyu ameipokea",
+        "undecided_unsubscribed": "Bado hakuna uamuzi",
+        "unknown": "Uamuzi usiotambulika"
+      },
+      "decision_recorded": "Uamuzi umerekodiwa",
+      "decision_refused": "Uamuzi ulikataliwa",
+      "decision_refused_body": "Hakuna kilichorekodiwa, na sera ya msomaji huyu haijabadilika.",
+      "decision_unreachable_body": "Haijulikani kama uamuzi ulirekodiwa au la. Soma ukunjaji tena pale nodi itakapojibu.",
+      "decline": "Kataa kupokea",
+      "dialog": {
+        "decline_note": "Ni matokeo ya kawaida. Hakuna chochote cha hukumu kinachofutwa wala kupingwa: hii hurekodi kwamba msomaji HUYU haipokei.",
+        "decline_title": "Kataa kuipokea hukumu hii",
+        "honour_note": "Msomaji huyu anaipokea hukumu kwa makusudi. Si lazima msomaji awe amejisajili kwa mtia saini huyo.",
+        "honour_title": "Heshimu hukumu hii"
+      },
+      "dimension": "Kipimo",
+      "fold": {
+        "agrees": "Hivi vinakubaliana.",
+        "diverges": "Hivi vinatofautiana — na hiyo ndiyo msomaji akiamua. Kukataa kunarekodiwa na kuripotiwa; bado hakuizuii nodi hii kuendelea kuzuia.",
+        "node": "Njia za utoaji huduma za nodi hii",
+        "reader": "Ukunjaji wa msomaji huyu"
+      },
+      "held": "Hukumu zilizoshikiliwa",
+      "honour": "Heshimu",
+      "judgement": "Hukumu",
+      "read": "Soma ukunjaji wa msomaji huyu",
+      "reading": "Inasoma…",
+      "refused_body": "Hakuna hitimisho linaloweza kufikiwa kuhusu kile ambacho msomaji huyu anakiheshimu.",
+      "refused_title": "Nodi ilikataa usomaji huu",
+      "signer": "Imesainiwa na",
+      "standing": {
+        "decided": "Hukumu zilizoainishwa",
+        "none_held": "Hakuna hukumu inayoshikiliwa hapa",
+        "unknown": "Hali isiyotambulika",
+        "unreadable": "Msomaji huyu ameshindwa kusoma hali yake mwenyewe",
+        "unreadable_meaning": "SI 'hakuna hukumu' wala SI 'hakuna kinachozuiliwa' — sera isiyosomeka ikionyeshwa kama sera tupu hutupa kimyakimya kila kizuizi ilichokuwa imebeba."
+      },
+      "subject_label": "Kitambulisho cha ufunguo wa mhusika",
+      "subscription": "Mizizi iliyojisajili",
+      "subtitle": "Hukumu za pande nyingine, na kile ambacho sera ya msomaji ya nodi HII inakifanya kwazo",
+      "title": "Kile ambacho msomaji huyu anakiheshimu (tabaka R)",
+      "unreachable_body": "Tabaka R husoma kile ambacho nodi hii inakishikilia, hivyo hakuna linaloweza kusemwa kuhusu mhusika hadi itakapojibu. Tofauti na tabaka S, ngazi hii inaihitaji nodi.",
+      "unreachable_title": "Nodi hii haikuweza kufikiwa"
+    },
+    "self": {
+      "act_refused_body": "Hakuna kilichorekodiwa. Hali zilizo hapo juu hazijabadilika.",
+      "act_refused_title": "Kitendo kilikataliwa",
+      "act_unreachable_body": "Haijulikani kama kitendo kilirekodiwa au la. Soma hali upya pale nodi itakapojibu.",
+      "act_unreachable_title": "Nodi hii haikuweza kufikiwa",
+      "axes_never_folded": "Mihimili mitatu tofauti, vitendo vitatu tofauti. Nodi iliyoCHAGUA kusimama na nodi iliyoLAZIMISHWA kusimama huonekana sawa lakini maana zake ni kinyume, hivyo kamwe si swichi moja.",
+      "axis": {
+        "accepting": {
+          "declare": "Acha kupokea",
+          "lift": "Pokea tena",
+          "question": "Je, nodi hii iliCHAGUA kutochukua chochote kipya?",
+          "title": "Kuacha kupokea"
+        },
+        "legal_compulsion": {
+          "declare": "Tangaza kulazimishwa",
+          "lift": "Kulazimishwa kumeisha",
+          "question": "Je, kuna nguvu inayotumika dhidi ya nodi hii kutoka NJE ya mtandao? Si uchaguzi, na kamwe hairekodiwi kama uchaguzi.",
+          "title": "Kulazimishwa kisheria"
+        },
+        "load_shed": {
+          "declare": "Punguza mzigo",
+          "lift": "Beba mzigo kamili tena",
+          "question": "Je, nodi hii inabeba kidogo kwa makusudi?",
+          "title": "Kupunguza mzigo"
+        }
+      },
+      "counts": "Ilitangazwa mara {declarations} · iliondolewa mara {lifts}",
+      "delegation": "Chini ya ukabidhi",
+      "dialog": {
+        "cancel": "Ghairi",
+        "compelled_by_hint": "Ni kulazimishwa pekee kunakobeba sehemu hii. Iache tupu ikiwa huwezi kusema — 'nimelazimishwa, siwezi kusema na nani' ni jibu halisi, na mwendeshaji aliyezibwa mdomo bado anaweza kuacha nyayo.",
+        "compelled_by_label": "Amelazimishwa na (si lazima)",
+        "confirm": "Rekodi",
+        "delegation_hint": "Kitambulisho cha delegates_to cha mmiliki mwenyewe. Kitendo cha kujielekeza mwenyewe ni cha mmiliki mwenyewe: ruhusa ya kutoa huduma kutoka kwa mtu wa tatu haitoshi.",
+        "delegation_label": "Kitambulisho cha ukabidhi wa mmiliki",
+        "reason_hint": "Hurekodiwa neno kwa neno na kamwe haifasiriwi. Kitendo kisicho na sababu iliyorekodiwa hakitofautishiki na kitendo kisicho na idhini pale mtendaji anapokuwa ameondoka.",
+        "reason_label": "Sababu (inahitajika)",
+        "working": "Inarekodi…"
+      },
+      "event": "Tukio",
+      "lift_disabled_hint": "Hakuna kilichotangazwa katika mhimili huu, hivyo hakuna cha kuondolewa.",
+      "node_key": "Nodi hii",
+      "partition_only": "Ndiyo ngazi pekee inayoendelea kufanya kazi wakati mtandao umegawanyika — kila ngazi nyingine lazima imfikie mtu mwingine.",
+      "reason_label": "Sababu iliyorekodiwa",
+      "recorded_title": "Imerekodiwa",
+      "records_only": "Kila kitendo hurekodi tangazo lenye mwandishi anayejulikana, na si zaidi ya hapo. Hakuna mzunguko katika nodi hii unaoyasoma, hivyo hakuna kinachopunguzwa kasi, kuzuiliwa wala kusimamishwa na kitendo chenyewe.",
+      "refresh": "Soma hali upya",
+      "refused_body": "Hali hazijulikani. Usomaji uliokataliwa si usomaji safi.",
+      "refused_title": "Nodi ilikataa usomaji huu",
+      "since": "Tangu",
+      "standing": {
+        "in_force": "Inatumika",
+        "in_force_meaning": "Nodi hii ilitangaza hili na haijaliondoa.",
+        "lifted": "Ilitangazwa, kisha ikaondolewa",
+        "lifted_meaning": "Haitumiki sasa — na si ukweli uleule na kutokuwahi kulitangaza.",
+        "never_declared": "Haijawahi kutangazwa",
+        "never_declared_meaning": "Hakuna kitendo katika mhimili huu kilichowahi kurekodiwa hapa.",
+        "unknown": "Hali isiyotambulika",
+        "unknown_meaning": "Nodi iliripoti hali ambayo programu hii haiitambui. Ichukulie kuwa haijulikani, kamwe si hali safi.",
+        "unreadable": "Hali haijulikani — haikuweza kusomwa",
+        "unreadable_meaning": "Rekodi haikuweza kusomwa, hivyo nodi hii haijui hali yake yenyewe. Hii SI 'hakuna kinachotumika'."
+      },
+      "subtitle": "Hutenda kwenye nodi hii pekee na si kwa mtu mwingine yeyote",
+      "title": "Kujielekeza mwenyewe (tabaka S)",
+      "unreachable_body": "Hali zote tatu hazijulikani — jambo ambalo si 'hakuna kinachotumika'. Vitendo vya tabaka S ni vya kienyeji kwa nodi hii, hivyo vitapatikana tena mara tu itakapojibu.",
+      "unreachable_title": "Nodi hii haikuweza kufikiwa",
+      "unreadable_axes_body": "Nodi ilijibu, lakini haikuweza kusoma mihimili iliyotiwa alama hapa chini. Haijui hali yake yenyewe hapo — usisome hilo kama hali safi.",
+      "unreadable_axes_title": "Baadhi ya hali hazikuweza kusomwa"
+    }
   },
   "setup_validation_fedid_label_generic": "Chagua jina la kipekee kama firstname-lastname-v1. Chaguo-msingi la kawaida hairuhusiwi.",
   "setup_validation_fedid_label_required": "Ingiza jina la kitambulisho chako cha shirikisho ili kuendelea.",
@@ -3122,5 +3301,648 @@
   "approval_tool_capabilities": "Kile ambacho zana hii inaweza kufanya",
   "approval_tool_arguments": "Thamani ambazo wakala anakusudia kupitisha",
   "approval_tool_arguments_omitted": "Hoja za wakala zilikuwa kubwa mno kuonyeshwa hapa.",
-  "approval_tool_scope_note": "Kuidhinisha kunaruhusu zana hii kwa kazi inayofuata, si kwa wito huu hasa. Wakala atafikiria upya kazi tangu mwanzo na anaweza kutumia thamani tofauti."
+  "approval_tool_scope_note": "Kuidhinisha kunaruhusu zana hii kwa kazi inayofuata, si kwa wito huu hasa. Wakala atafikiria upya kazi tangu mwanzo na anaweza kutumia thamani tofauti.",
+  "admin": {
+    "accept_writes": {
+      "not_reached": "Hakirudishi chochote kilichokataliwa wakati uondoaji wa uandikishaji ulipokuwa unasimama. Maandishi hayo yalikataliwa mlangoni na hayakuwahi kutua hapa; ikiwa mwenza bado anayashikilia, ni lazima ayatume tena. Hakuna kingine chochote kuhusu ufunguo huu kinachobadilika.",
+      "not_refused": "Ufunguo huu haujaondolewa uandikishaji hapa, hivyo hakuna kizuizi cha kuondolewa."
+    },
+    "admission": {
+      "standing": {
+        "admitted": "Hakuna uondoaji hai wa uandikishaji ulioandikwa na nodi hii unaotaja ufunguo huu, hivyo maandishi yake yanakubaliwa hapa. Hili halisemi lolote kuhusu nodi nyingine yoyote: uondoaji wa uandikishaji ni wa kienyeji kwa mkusanyiko unaoutoa.",
+        "refused": "Nodi hii inashikilia uondoaji hai wa uandikishaji wa ufunguo huu ambao iliuandika yenyewe, hivyo uandishi unaofuata wa ufunguo huo katika mkusanyiko wa nodi hii unakataliwa katika mlango wa msingi wenyewe.",
+        "unreadable": "Nodi hii haikuweza kusoma hali yake yenyewe ya uandikishaji kwa ufunguo huu, hivyo haijui kama maandishi ya ufunguo huo yanakataliwa au la. Hii SI 'yamekubaliwa' — usiionyeshe hivyo."
+      }
+    },
+    "descend": {
+      "bounded_unsupported": "Hukumu yenye kikomo cha muda haiwezi kuendesha uondoaji usio na kikomo. Ushushaji pekee wa msingi unaotegemea ufunguo wa mtendaji huchukua mkusanyiko mzima, jambo ambalo lingeharibu historia ambayo kikomo hiki kimeiacha ikisimama kwa makusudi. Uondoaji wenye kikomo cha muda ULIOTEKELEZWA ni kuondolewa kwa uandikishaji pamoja na kikomo cha historia.",
+      "not_reached": "Safu za uthibitisho zilizochaguliwa zenyewe hazishushwi. Kila mbeba-mzigo katika msingi huu umefungwa ndani ya saini yake mwenyewe, hivyo baiti zake haziwezi kuondolewa bila kuifanya safu isomeke kama iliyoghushiwa; uwezo wa kufutika huamuliwa wakati wa kuundwa, na hakuna kinachoundwa leo kinachoweza kufutika."
+    },
+    "enforcement": {
+      "accept_writes": "Nodi hii inaacha kukataa maandishi ya funguo zilizotajwa: uondoaji wa uandikishaji iliouandika unatenguliwa na msingi unakubali tena uandishi wao unaofuata. Uondoaji wa uandikishaji na utenguzi huu vyote hubaki kama historia inayosomeka.",
+      "annotate": "Hukumu iliyosainiwa isiyo na athari yoyote hadi msomaji aiheshimu. Hakuna kinachozuiliwa, kupunguzwa kasi wala kuondolewa.",
+      "deadmit": "Ubatilishaji uliosainiwa katika uwanda wa kawaida wa kuongeza-tu. Ni ushahidi ambao msomaji huukunja, si mlango unaofungwa kwa nguvu: uhakiki wa saini, vielekezi vya unakili na upokeaji wa safu vyote vinaendelea kufanya kazi kwa makusudi, kwa sababu kukataa safu za zamani za ufunguo ulioathiriwa kungeharibu ushahidi unaohitajika kuhukumu tukio hilo la kuathiriwa.",
+      "descend": "Haiwezi kutenduliwa kwa muundo wake. Ushushaji haukomi kwenye sifuri kamwe — ukungu na alama ya kaburi hubaki — lakini kilichoondolewa hakirudi.",
+      "quarantine": "Alama iliyosainiwa, si amri: hakuna kinachofutwa na hakuna kinachoandikwa upya. Njia za utoaji huduma za nodi hii huacha kuwakabidhi wenzao safu na mafungu ya data ya funguo zilizotajwa; mwenzako anayekunja tofauti hapokei tu kutoka kwetu.",
+      "re_admit": "Imerekodiwa kama utenguzi wenye mwandishi anayejulikana. Safu ya ubatilishaji hubaki na kila msomaji bado huikunja: vizuizi hujumuika lakini vilegezo havijumuiki, na hakuna tabaka la msingi huu linalotoa kitendo cha kutengua ubatilishaji.",
+      "refuse_writes": "Nodi hii inakataa uandishi unaofuata wa funguo zilizotajwa katika mkusanyiko wake yenyewe, katika mlango wa msingi wenyewe na kabla ya lango lingine lolote kufanya kazi. Ni ya KIENYEJI kwa muundo wake: hakuna nodi inayoamuru seti ya uandikishaji ya nodi nyingine, kwa sababu uondoaji wa uandikishaji wenye nguvu duniani kote wenyewe ungekuwa silaha ya udhibiti wa habari. Kutengwa kwa mtumiaji-vibaya wa kweli hujitokeza chenyewe — hufika pale nodi nyingi zinapofikia hitimisho lilelile kila moja kivyake — na kamwe hakuamuriwi kutoka hapa.",
+      "throttle": "Imerekodiwa kama hukumu yenye mwandishi tu. Msingi huu hauna bajeti ya uandikishaji kwa kila ufunguo iliyowekwa na mpokeaji: kiwango cha uandishi cha mwenzako ni kinga isiyobadilika dhidi ya mizunguko iliyokimbia, si uso wa sera ambao upunguzaji kasi unaweza kuutegemea. Hakuna kinachobadilika katika kile nodi hii inakubali kutoka kwa funguo zilizotajwa."
+    },
+    "preview": {
+      "note": "Hiki ndicho hasa ambacho utekelezaji utakifanyia kazi. Wasilisha hashi ya uteuzi pamoja na utekelezaji; ikiwa uteuzi umebadilika, utekelezaji hukataa.",
+      "window_in_application": "Dirisha la muda hutumiwa na nodi hii, si na hoja ya msingi: usomaji wa jumla wa uthibitisho hauheshimu mhimili wa dirisha. Kikomo cha ukurasa hutumika kwanza, hivyo uteuzi wenye dirisha unaweza kurudi ukiwa pungufu."
+    },
+    "quarantine": {
+      "not_withheld": "Ufunguo huu kwa sasa hauzuiliwi hapa, hivyo hakuna cha kuachiliwa."
+    },
+    "reader": {
+      "advisory": "Hukumu iliyotolewa ni ushauri kwa kila msomaji. `reader_fold` ni kile ambacho sera ya msomaji HUYU inakifanya kwa kile anachokishikilia; `node_fold` ni kile ambacho njia za utoaji huduma za nodi hii zinafanya leo, yaani kuheshimu kila alama ambayo msingi umeikubali. Vyaweza kutofautiana, na vinapotofautiana tofauti hiyo ndiyo pengo la msingi: hakuna kishikizo cha sera ya msomaji katika ukunjaji wa upande wa utoaji huduma, hivyo kukataa kunarekodiwa na kuripotiwa lakini bado hakuizuii nodi hii kuendelea kuzuia.",
+      "decision": {
+        "declined": "Msomaji huyu amekataa kuipokea hukumu hii. Ni matokeo ya kawaida: hukumu iliyotolewa ni ushauri kwa kila msomaji, na kuweza kuikataa ndiyo sifa hasa ambayo ngazi hii yote ipo kwa ajili yake.",
+        "honoured_by_subscription": "Hakuna uamuzi wa wazi uliorekodiwa; msomaji huyu amejiandikisha kwa mtia-saini, hivyo hukumu inaheshimiwa kwa mujibu wa sera.",
+        "honoured_explicit": "Msomaji huyu ameipokea hukumu hii kwa makusudi.",
+        "undecided_unsubscribed": "Msomaji huyu hajajiandikisha kwa mtia-saini na hajarekodi uamuzi wowote. Hukumu haiheshimiwi, na hilo bado si uamuzi wa mtu yeyote — jambo ambalo ni ukweli tofauti na kuwa ameikataa."
+      },
+      "standing": {
+        "decided": "Kila hukumu ambayo nodi hii inaishikilia kuhusu mhusika huyo imeorodheshwa pamoja na kile msomaji huyu anachokifanya kuihusu.",
+        "none_held": "Nodi hii haishikilii hukumu yoyote kuhusu mhusika huyo. Hakuna aliyemhukumu hapa — jambo ambalo si sawa na nodi hii kushindwa kusema chochote.",
+        "unreadable": "Msomaji huyu ameshindwa kusoma hali yake mwenyewe, hivyo hawezi kusema anachokiheshimu. Hii SI 'hakuna hukumu' wala SI 'hakuna kinachozuiliwa' — sera isiyosomeka ikionyeshwa kama sera tupu hutupa kimyakimya kila kizuizi ilichokuwa imebeba."
+      }
+    },
+    "refusal": {
+      "attribution_absent": "delegation_id inahitajika. Kitendo kisichobeba mamlaka yake mwenyewe hakiwezi kutofautishwa na kitendo kisicho na idhini pale mtendaji anapokuwa ameondoka.",
+      "authority_not_a_delegation": "Kitambulisho cha ukabidhi kilichotajwa si safu ya delegates_to.",
+      "authority_not_the_owner": "Kitendo cha kujielekeza mwenyewe ni cha mmiliki mwenyewe. Ukabidhi uliotajwa unabeba wigo unaotakiwa lakini haukutolewa na mwajibikaji wa nodi hii, na ruhusa ya kutoa huduma kutoka kwa mtu wa tatu si ile ya mmiliki.",
+      "authority_not_to_actor": "Ukabidhi uliotajwa haukutolewa kwa nodi hii, hivyo nodi hii si upande ambao unaidhinishwa nao.",
+      "authority_scope_absent": "Ukabidhi uliotajwa haubebi wigo unaohitajika na operesheni hii. Ukabidhi mwingine kutoka kwa mtoaji yuleyule waweza kuubeba, lakini hapo kitendo kingerekodi mamlaka ambayo hakikufanywa chini yake.",
+      "authority_scope_unreachable": "Hakuna mnyororo hai wa ukabidhi unaobeba wigo unaohitajika na operesheni hii unaofika kwenye nodi hii kutoka kwa mtoaji huyo. Mamlaka hutolewa upya kutoka katika hali iliyohakikiwa ya nodi hii yenyewe, kamwe hayachukuliwi kutoka kwenye ombi.",
+      "authority_unresolved": "Ukabidhi uliotajwa si safu ambayo nodi hii inaishikilia, hivyo wigo wake hauwezi kuhakikiwa. Nodi hii haitendi kwa mamlaka ambayo haiwezi kuithibitisha.",
+      "bad_request": "Mwili wa ombi haukuweza kuchanganuliwa.",
+      "community_absent": "community_id inahitajika: karantini huwekwa chini ya mamlaka ya jamii, na alama isiyotaja jamii yoyote haitaji mamlaka yoyote.",
+      "deadmission_gate_dormant": "Nodi hii haijatangaza utambulisho wake yenyewe kwa msingi, hivyo lango la uondoaji wa uandikishaji limelala: safu ingeandikwa na isingekataa chochote. Imekataliwa badala ya kurudishwa kama iliyokamilika — lango la adhabu ambalo kimyakimya halifanyi lolote ni baya zaidi kuliko kutokuwa na lango, kwa sababu opereta ataamini kwamba uondoaji wa uandikishaji unafanya kazi. Hili ni kosa la usanidi wa nodi, si kosa la ombi.",
+      "deadmission_gate_foreign_identity": "Utambulisho ambao nodi hii husainia nao na utambulisho ambao lango la uondoaji wa uandikishaji hulinganisha nao waandishi ni funguo mbili tofauti, hivyo uondoaji wa uandikishaji uliosainiwa hapa kamwe usingekunjwa kama wa nodi hii yenyewe na usingekataa chochote. Hili ni kosa la usanidi wa nodi, si kosa la ombi.",
+      "judgement_subjectless": "Hukumu hiyo haitaji mhusika yeyote, hivyo kuiheshimu au kuikataa hakungebadilisha chochote kwa mtu yeyote. Nodi hii hairekodi uamuzi ambao haiwezi kuutumia.",
+      "judgement_unresolved": "Hukumu hiyo si safu ambayo nodi hii inaishikilia, hivyo msomaji huyu hana la kuamua kuihusu. Msomaji huamua kuhusu kile ANACHOKISHIKILIA; hakatai mapema kile ambacho hajawahi kukiona.",
+      "node_unowned": "Nodi hii haina mwajibikaji (kifungo cha umiliki), hivyo haifanyi operesheni yoyote ya usimamizi yenye madaraja kwa niaba ya mtu yeyote. Dai umiliki kwanza.",
+      "not_a_judgement": "Safu hiyo si hukumu ambayo ngazi hii inaweza kuamua kuihusu. Tabaka R ni sera ya msomaji kuhusu HUKUMU za pande nyingine, na uthibitisho wa kawaida si hukumu.",
+      "not_owner": "Operesheni za usimamizi zenye madaraja zinahitaji wadhifa wa mmiliki (SYSTEM_ADMIN).",
+      "preview_hash_mismatch": "Ulichokitazama katika onyesho la awali si kile kitakachotekelezwa — uteuzi umebadilika tangu onyesho hilo. Rudia onyesho la awali kisha uidhinishe hashi mpya.",
+      "quorum_insufficient": "Operesheni hii haiwezi kutenduliwa na inahitaji akidi ya mamlaka tofautitofauti, si mnyororo mmoja wa ukabidhi. Minyororo miwili kutoka mzizi mmoja ni mamlaka moja iliyovaa kofia mbili.",
+      "reason_absent": "reason inahitajika. Kitendo kisicho na sababu iliyorekodiwa hakitofautishiki na kitendo kisicho na idhini pale mtendaji anapokuwa ameondoka.",
+      "selection_unpredicated": "Uteuzi hauna kigezo chochote, jambo linalomaanisha mkusanyiko mzima. Taja kile unachokifanyia kazi.",
+      "session_absent": "Hakuna tokeni ya kipindi iliyowasilishwa. Operesheni za usimamizi zenye madaraja ni za mmiliki pekee.",
+      "session_invalid": "Kipindi hicho si halali au kimeisha muda.",
+      "store_unavailable": "Msingi haukuweza kusomwa.",
+      "subject_absent": "subject_key_id inahitajika: ukunjaji wa msomaji unahusu hukumu za mhusika mmoja, na mhusika asiyetajwa ni kila mhusika."
+    },
+    "refuse_writes": {
+      "already_refused": "Ufunguo huu tayari umeondolewa uandikishaji hapa, hivyo hakuna kilichoandikwa na hali haijabadilika.",
+      "not_reached": "Haifuti chochote kilichokwisha andikwa. Safu ambazo funguo hizi tayari ziliziandika hapa hazibadilishwi na bado zinatolewa — karantini ndiyo operesheni inayokomesha kuzitoa. Safu ambazo tayari zimejirudufu kwa wenza hazirejeshwi wala haziwezi kurejeshwa. Funguo hazijaondolewa, saini zao bado zinathibitika, na zinaendelea kuandika katika kila nodi nyingine, wakiwemo wenza wa nodi hii, ambako safu hizo zaweza kuwasili hapa tena kwa unakili. Msamaha mmoja unabaki kwa makusudi ili nodi iweze siku zote kuondoa katazo lake yenyewe, nao hauulizi ni nani anayeandika: ufunguo ulioondolewa uandikishaji bado waweza kuandika safu za uondoaji wa uandikishaji hapa (CIRISPersist#608).",
+      "reversal": "Inatenguka, na utenguzi hufika kwenye msingi badala ya kurekodi tu mabadiliko ya nia: POST /v1/admin/accept-writes huondoa uondoaji wa uandikishaji na maandishi ya ufunguo huo yanakubaliwa hapa tena. Mitenguo miwili ya ngazi hii hufika kwenye msingi — kuachilia karantini, ambako hurejesha kile ambacho nodi hii HUKITOA, na huu, ambao hurejesha kile ambacho HUKIKUBALI. Safu zote mbili hubaki na kuendelea kusomeka: 'ilikataliwa kisha ikaandikishwa tena' si jambo lilelile na 'haikuwahi kukataliwa'."
+    },
+    "reversal": {
+      "evidence_only": "Safu ya awali hubaki na bado hukunjwa na kila msomaji. Utenguzi huu ni ushahidi uliorekodiwa, si kutendua — msingi hautoi njia yoyote ya kutengua ubatilishaji.",
+      "substrate": "Hali ya msingi imetenduliwa: nodi hii inaacha kuzuia safu za ufunguo huu.",
+      "symmetric": "Hakuna kilichotenduliwa katika msingi kwa sababu hakuna kitu katika msingi kilichotekeleza hukumu ya awali. Vitendo vyote viwili ni ushahidi uliorekodiwa."
+    },
+    "self": {
+      "distinct_zeroes": "Tatu kati ya hali nne ni sufuri na zinamaanisha mambo tofauti: haijawahi kutangazwa, ilitangazwa kisha ikaondolewa, na haikuweza kusomwa. Zionyeshe kwa namna tofauti.",
+      "enforcement": {
+        "compelled": "Imerekodiwa kwenye mhimili wake yenyewe, kama kitendo chake yenyewe. Hii ni kauli kuhusu nguvu iliyotumika KUTOKA NJE ya mtandao, na yenyewe peke yake haibadilishi chochote anachofanya nodi hii — kwa makusudi. Nodi iliyolazimishwa yaweza kulazimishwa kuendelea kutoa huduma, kusimama, au kukabidhi kitu; kukunja lolote kati ya hayo ndani ya 'nodi hii imeacha kupokea' kungeharibu ishara pekee ambayo upande ulio chini ya mkondo unayo ya kutofautisha uchaguzi na kulazimishwa.",
+        "shed": "Imerekodiwa kama tangazo la nodi hii yenyewe lenye mwandishi anayejulikana, na si zaidi ya hapo. Uwanda wa usanidi wa mtandao ambao ungebeba dari la mzigo huandikwa na mizizi ya uaminifu, na nodi hii bado haiendeshi mtumiaji yeyote wa thamani zilizokunjwa, hivyo hakuna kitanzi kinachobadilisha kile inachokibeba. Kinachobadilika ni rekodi: mwendeshaji, mwenza au ukaguzi wa baadaye anaweza kubaini kwamba nodi hii ilichagua kubeba kidogo, chini ya mamlaka ya nani, na lini.",
+        "stop_accepting": "Imerekodiwa kama tangazo la nodi hii yenyewe lenye mwandishi anayejulikana kwamba haichukui chochote kipya. Hakuna kitu katika msingi huu kinachotekeleza jambo hilo: uwanda wa upokeaji hauwatambui wenza, na kiwango cha uandishi kwa kila mwenza ni kinga isiyobadilika dhidi ya mizunguko iliyokimbia, si uso wa sera ambao kusimama kunaweza kuutegemea. Tangazo lenyewe ndilo kilichopo — na ndilo ambalo mwenza hulisoma ili aache kutoa."
+      },
+      "lift": {
+        "compelled": "Imerekodiwa kama kitendo tofauti: kulazimishwa kulikoISHA si sawa na kulazimishwa ambako hakukuwahi kutokea. Tangazo linaloondolewa hubaki, na yote mawili yanaendelea kusomeka.",
+        "voluntary": "Imerekodiwa kama kitendo tofauti. Tangazo linaloondolewa hubaki, na yote mawili yanaendelea kusomeka — 'ilitangazwa kisha ikaondolewa' si 'haijawahi kutangazwa'."
+      },
+      "partition": "Kila kitendo katika ngazi hii ni cha ndani: ufuatiliaji wa kifungo cha umiliki, uandishi kwenye daftari na usomaji huu vyote hugusa hifadhidata ya nodi hii yenyewe pekee na si kingine chochote. Ndiyo ngazi pekee inayopatikana wakati mtandao umegawanyika — kila ngazi nyingine lazima imfikie mtu mwingine.",
+      "standing": {
+        "in_force": "Nodi hii ilitangaza hili na haijaliondoa.",
+        "lifted": "Nodi hii ilitangaza hili kisha ikaliondoa tena. Hilo si jambo lilelile na kutokuwahi kulitangaza.",
+        "never_declared": "Nodi hii haijawahi kutangaza hili. Hilo si jambo lilelile na kuwa ilitangaza kisha ikaondoa, wala si jambo lilelile na kushindwa kusoma.",
+        "unreadable": "Rekodi haikuweza kusomwa, hivyo nodi hii haijui hali yake yenyewe katika mhimili huu. Hii SI 'hakuna kinachotumika' — usiionyeshe hivyo."
+      }
+    }
+  },
+  "commons_surface": {
+    "asymmetry": "Mwanachama mmoja huweka breki; kundi zima lazima likubali kuiondoa. Kuweka ulinzi hakuna masharti na hugharimu saini moja tu; kutengua ulinzi wa mtu mwingine hugharimu kizingiti cha kundi lenyewe, na utenguzi uliopandishwa ngazi hauwezi kamwe kushuka chini ya kiwango cha chini kabisa ambacho hakuna tamko lolote la sera linaloweza kukishusha.",
+    "ballot": {
+      "admitted": "Kura imeingia kwenye rekodi. HAINA nguvu yoyote peke yake: gharama yake hulipwa wakati wa kusoma dhidi ya kigawanyo ambacho bado hakipo wakati inapopigwa — kama bwawa litafikia kizingiti kilichopandishwa ngazi au la inategemea ni nani mwingine atakayejibu. Mwanachama anaweza kubadili nia yake; kura ya mwisho ndiyo inayotawala."
+    },
+    "dismissal": {
+      "admitted": "Pingamizi limeondolewa kwenye hesabu. Kizingiti hukokotolewa upya kutokana na orodha ya nodi hii yenyewe katika kila usomaji unaofuata, kwa hivyo utupiliaji mbali unaoacha kufikia kizingiti cha orodha iliyokua huacha kukandamiza pingamizi — na ulinzi uliokuwa umeondolewa hurejea."
+    },
+    "dry_run": "Hakuna kilichosainiwa na hakuna kilichowasilishwa. Hizi ndizo baiti kamili za kikanuni ambazo kila msaini-mwenza lazima azisaini ili scrub yake ihesabike katika uwasilishaji halisi — m-kati-ya-n hupimwa juu ya baiti hizi na si nyingine zozote.",
+    "escalation": {
+      "awaiting": "Wasimamizi walioteuliwa bado wanaweza kujibu, au tayari wameamua kwa wakati. Kupanda ngazi hakujafunguliwa.",
+      "not_adopted": "Jamii hii haikutangaza tabaka lolote la waangalizi, kwa hivyo hakuna muda wa mwisho wa wasimamizi wala kupanda ngazi. Ukimya haubadilishi chochote hapa.",
+      "nothing_to_escalate": "Tabaka la waangalizi limetangazwa na hakuna pingamizi hai linalolisubiri. Hakuna aliyekaa kimya, kwa sababu hakuna kilichoulizwa.",
+      "open": "Wasimamizi walioteuliwa hawakujibu kwa wakati, na uamuzi umepita kwa wale waliojibu. Kizingiti sasa huhesabu WALIOJIBU badala ya orodha nzima — jambo ambalo ndilo linaloiwezesha jamii tulivu kuendelea kufikia uamuzi — likiwa na sakafu ili 'inayofikika' isishuke kamwe kuwa 'mtu mmoja anaamua'."
+    },
+    "objection": {
+      "admitted": "Pingamizi limeingia kwenye rekodi. Ni ALAMA, si amri: hakuna kilichobadilishwa kwa kuwasili kwake, na hujirudufu katika uwanda wa kawaida wa uthibitisho ili mwenza aliyekuwa ametenganishwa wakati wa dirisha bado hulihesabu linapowasili kwake. Mwanachama mmoja anatosha kuliweka; kuliondoa hugharimu kizingiti cha kundi lenyewe."
+    },
+    "outcome": {
+      "dismissed": "Wale waliojibu waliamua kwamba pingamizi hili halisimami, na limeondolewa kwenye hesabu.",
+      "not_escalated": "Kupanda ngazi hakukufunguliwa kwa pingamizi hili.",
+      "unresolved": "Kupanda ngazi kuko wazi na hakujaamuliwa: waliojibu ni wachache mno, au hakuna upande uliofikia kizingiti. Hakuna kinachobadilika — pingamizi linasimama vilevile kama lilivyokuwa.",
+      "upheld": "Wale waliojibu waliamua kwamba pingamizi hili linasimama."
+    },
+    "refusal": {
+      "action_absent": "action_id inahitajika. Pingamizi hutaja safu katika mali ya pamoja; lile lisilotaja chochote haliwezi kamwe kuhesabika.",
+      "action_unknown": "Nodi hii haishikilii kitendo kama hicho, hivyo safu inayokitaja ingewasilishwa mahali ambapo hakuna ukunjaji utakaoihesabu kamwe. Msingi hukataa jambo hilohilo katika mlango wake wenyewe.",
+      "actor_recused": "Mwandishi wa kitendo hapigi kura kuhusu pingamizi dhidi ya tendo lake mwenyewe.",
+      "bad_now": "Wakati wa kusoma lazima uwe muhuri wa saa wa RFC 3339.",
+      "ballot_predates_action": "Hukumu haiwezi kuwa ya zamani kuliko kile inachokihukumu.",
+      "canonicalize_failed": "Baiti za kikanuni za safu hii hazikuweza kutengenezwa, kwa hivyo hakuna chochote ambacho msaini-mwenza angeweza kusaini.",
+      "cohort_absent": "cohort_key_id inahitajika: hutaja orodha ya nani na tamko la nani vinavyoongoza hesabu.",
+      "cohort_not_a_commons": "Kundi la `self` halina orodha ambayo akidi ingepimwa juu yake — wanachama wake ni vifaa vya utambulisho mmoja wenyewe — hivyo halina mali ya pamoja ya kusimamia.",
+      "cohort_unknown": "Kundi hilo halipatikani katika nodi hii, kwa hivyo hakuna orodha wala tamko la kuhukumia jambo hili. Mamlaka lazima yatoke katika hali ya kienyeji iliyothibitishwa.",
+      "cohort_unrecognized": "Hilo si kundi lenye orodha. Mapingamizi hukaa katika familia, jamii au kikundi cha mahusiano.",
+      "dimension_mismatch": "Safu hiyo iliwasilishwa kwenye mlango usio sahihi kwa kile inachobeba.",
+      "dismissal_quorum_short": "Wanachama tofautitofauti walioorodheshwa na kuthibitishwa waliosaini pamoja ni wachache kuliko kizingiti cha kundi kinavyodai. Idadi iliyohesabiwa na ile inayohitajika zimo kando ya ujumbe huu.",
+      "duplicate_objection": "Tayari unashikilia pingamizi hai dhidi ya kitendo hiki. Mwanachama mmoja ni pingamizi moja — vinginevyo mwanachama mmoja peke yake angeweza kufikia kizingiti.",
+      "grounds_absent": "grounds inahitajika. Pingamizi lililowekwa bila sababu iliyorekodiwa halitofautishiki na lile lililowekwa kwa sababu mbaya — na sababu hurekodiwa, kamwe hazifasiriwi.",
+      "malformed_envelope": "Safu hii imekosa rejea ambayo hesabu inaihitaji.",
+      "node_unowned": "Nodi hii haina mwajibikaji (kifungo cha umiliki), hivyo haisomi wala haisemi katika mali ya pamoja ya mtu yeyote kwa niaba yake. Dai umiliki kwanza.",
+      "not_a_cohort_member": "Ni mwanachama wa kundi hili pekee anayeweza kuzungumza katika mali ya pamoja yake. Hiki ndicho kipimo pekee kinachotumiwa na upande wa ulinzi — na ndiyo sababu pingamizi la mgeni kamwe haliwi alama ambayo wengine wanaweza kuiheshimu.",
+      "not_filed_against_actor": "Safu imewasilishwa mahali ambapo ukunjaji hauitafuti, kwa hivyo ingehifadhiwa, ikadumu na ikabaki bila athari milele. Alama ambayo hakuna anayeweza kuipata si alama.",
+      "not_governed": "Jamii hii haitangazi sera yoyote ya akidi kinyume, kwa hivyo haijaukubali uwanda wa mapingamizi. Imekataliwa badala ya kupewa chaguo-msingi: kubuni dirisha na kizingiti kwa kikundi ambacho hakikutangaza chochote kati ya hivyo ni baya zaidi kuliko kusema hapana.",
+      "not_owner": "Uso wa mali ya pamoja unahitaji wadhifa wa mmiliki (SYSTEM_ADMIN).",
+      "objection_absent": "objection_id inahitajika: kura hujibu swali kuhusu pingamizi MOJA.",
+      "objection_unknown": "Pingamizi lililotajwa si mojawapo ya yale ambayo nodi hii inashikilia dhidi ya kitendo hiki.",
+      "session_absent": "Hakuna tokeni ya kipindi iliyowasilishwa. Uso wa mali ya pamoja ni wa mmiliki pekee.",
+      "session_invalid": "Kipindi hicho si halali au kimekwisha muda.",
+      "sign_failed": "Nodi hii haikuweza kuisaini safu, kwa hivyo hakuna kilichowasilishwa.",
+      "steward_tier_not_adopted": "Jamii hii haikutangaza tabaka lolote la waangalizi, kwa hivyo hakuna muda wa mwisho wa kukaa kimya kuupita wala bwawa lililopandishwa ngazi. Kura hapa ingehifadhiwa na kamwe isingesomwa.",
+      "store_unavailable": "Msingi haukuweza kufikiwa.",
+      "target_action_unknown": "Kitendo kilichopingwa si safu ambayo nodi hii inashikilia, kwa hivyo pingamizi lisingehesabika na dirisha lake lisingeweza kutatuliwa.",
+      "unverifiable_signature": "Saini ya safu haikuthibitika dhidi ya funguo za msaini kama zilivyosajiliwa katika nodi hii."
+    },
+    "standing": {
+      "action_unknown": "Nodi hii haishikilii kitendo kama hicho. Pingamizi hutaja safu, na hapa hakuna safu ya kutajwa.",
+      "cohort_unknown": "Kundi hilo halipatikani katika nodi hii, hivyo halina orodha wala tamko ambalo nodi hii inaweza kulisoma. Mamlaka lazima yatoke katika hali ya kienyeji iliyothibitishwa.",
+      "not_governed": "Jamii hii haitangazi sera yoyote ya akidi kinyume, kwa hivyo uwanda wa mapingamizi hauhusiki hata kidogo na mali ya pamoja yake. Hilo ni tofauti na kusema hakuna aliyepinga.",
+      "objected": "Angalau mwanachama mmoja amepinga na dirisha bado liko wazi. Kitendo kinasimama kwa sasa; pingamizi moja zaidi linaweza kutosha.",
+      "quiet": "Uwanda ulisomwa na hakuna pingamizi lililowekwa dhidi ya kitendo hiki.",
+      "reversed": "Wanachama tofautitofauti wa kutosha walipinga ndani ya dirisha. Kila nodi inayoshikilia safu hizi hukunja na kufikia jibu hilihili, bila uratibu wowote.",
+      "stood": "Dirisha lilifungwa chini ya kizingiti cha utenguzi. Kitendo hiki kilipingwa na kinasimama.",
+      "unreadable": "Uwanda wa mapingamizi haukuweza kusomwa hapa. HII SI kauli kwamba hakuna aliyepinga — mapingamizi hayajulikani, si kwamba hayapo."
+    },
+    "steward": {
+      "awaiting": "Muda wa mwisho bado haujapita. Wasimamizi walioteuliwa bado wanaweza kujibu.",
+      "no_duty_holders": "Tabaka la waangalizi limetangazwa na nodi hii haipati msimamizi yeyote aliyeteuliwa kwa ajili yake. Hakuna aliyekaa kimya, kwa sababu hakukuwa na mtu.",
+      "not_adopted": "Hakuna tabaka la waangalizi lililotangazwa, kwa hivyo hakuna muda wa mwisho wa wasimamizi unaohusika.",
+      "overruled": "Wasimamizi walioteuliwa waliamua kwamba pingamizi hili halisimami — na kupanda ngazi kunafunguka hata hivyo, kwa sababu utenguzi kamwe si wao peke yao kuufanya.",
+      "silent": "Muda wa mwisho ulipita bila uamuzi wa upande wowote.",
+      "upheld": "Wasimamizi walioteuliwa waliamua, kwa wakati, kwamba pingamizi hili linasimama. Jambo hili lilihukumiwa na watu waliotajwa kwa majina, na kuwekwa kwenye rekodi."
+    }
+  },
+  "consent": {
+    "decline_analyze": {
+      "cost": {
+        "no_capability_services": "Huwezi kutumia mitiririko au huduma zinazohitaji uthibitisho wa uwezo kutoka kwa watu wa tatu, kwa sababu hutakuwa na wowote.",
+        "no_reputation": "Hujengi sifa HATA KIDOGO — kila dai la capacity:* kukuhusu hukataliwa, hivyo hakuna linaloweza kuwepo kamwe.",
+        "peers_may_refuse": "Baadhi ya wenzako wanaweza kukataa kuingiliana nawe kabisa."
+      },
+      "summary": "Unaweza kutuma nyayo bila kukubali kuchambuliwa. Nyayo bado zitapita."
+    },
+    "grant": {
+      "analyze": {
+        "permits": "Mwenzako anaweza KUPIMA nyayo zako — hii ndiyo inayojenga sifa.",
+        "title": "Kupimwa alama"
+      },
+      "replication": {
+        "permits": "Mwenzako anaweza KUHIFADHI nyayo zako.",
+        "title": "Tuma nyayo"
+      }
+    },
+    "grants": {
+      "independent": "Hizi ni idhini tofauti kwenye kingo zinazopingana. Kutoa moja hakutoi nyingine, na yoyote inaweza kuondolewa bila nyingine."
+    },
+    "mesh_participation": {
+      "action": "Kubali Kushiriki katika Mesh ya CIRIS"
+    }
+  },
+  "location": {
+    "cost": {
+      "no_regional_community": "Huwezi kushiriki katika jumuiya yoyote ya kikanda. Uanachama huamuliwa na iwapo seli yako iko ndani ya kanda ya jumuiya yenyewe, hivyo bila seli hakuna cha kulinganisha.",
+      "no_regional_reporting": "Shughuli zako haziwezi kuchangia katika ripoti za mienendo ya kikanda."
+    },
+    "permits": "Huambatisha seli pana ya H3 kwenye bahasha yako ili mienendo iweze kuripotiwa katika kanda mbalimbali. Msingi hukataa chochote chenye undani zaidi ya kiwango cha 7, hivyo hutambua kanda ya jumla — kamwe si eneo lako mahususi wala anwani yako.",
+    "purpose": "Kuripoti mienendo ya kikanda, na kushiriki katika jumuiya za kikanda. Jumuiya inaweza pia kuitumia kama lango la HIARI la mwonekano, ikizuia vitu vinavyokusudiwa jumuiya hiyo vifike kwa wanachama ambao kanda yao iko ndani yake. Si kizuizi cha jumla kwa nyayo zako — hicho huamuliwa na idhini zilizo hapo juu.",
+    "title": "Shiriki kanda yako ya takriban"
+  },
+  "mesh": {
+    "announce_requirement": "Nodi isiyojitangaza haipati ufikiaji wa huduma katika mesh wala huduma za wakala. Swichi ya kuzima ya accord ina maana tu dhidi ya nodi inayoweza kuifikia, hivyo nodi isiyofikika haihudumiwi tangu mwanzo."
+  },
+  "mesh_config": {
+    "consumption": {
+      "elsewhere": "Hakuna mzunguko katika toleo hili lililojengwa unaosoma ufunguo huu — mtumiaji wake yuko katika kipengele kingine. Safu iliyowekwa hapa hukubaliwa na kukunjwa, na haibadilishi chochote kwenye nodi hii.",
+      "unbuilt": "Mtumiaji wa ufunguo huu bado hajajengwa popote. Safu iliyowekwa hapa hukubaliwa na kukunjwa, na haibadilishi chochote.",
+      "unreachable": "Mtumiaji wa ufunguo huu hufanya kazi ndani ya mchakato huu huu, lakini hakuna kinachopeleka thamani kutoka tabaka hili hadi kwake: kipengele kinachomiliki kigezo hicho hukipokea mara moja tu, wakati mzunguko unapoundwa, na hakitoi njia yoyote ya kukibadilisha baadaye. Safu iliyowekwa hapa hukubaliwa na kukunjwa, na haibadilishi chochote popote.",
+      "wired": "Mzunguko katika toleo hili lililojengwa husoma ufunguo huu na kubadilisha kile unachofanya. Thamani halisi iliyo kando yake inatumika kwenye nodi hii."
+    },
+    "dry_run": "Hakuna kilichosainiwa na hakuna kilichowasilishwa. Hizi ndizo baiti kamili za kikanuni ambazo msaini-mwenza lazima azisaini ili scrub yake ihesabike katika uwasilishaji halisi.",
+    "durability": {
+      "substrate_decides": "Ni uamuzi wa msingi kubainisha ni vitendo vipi vinavyostahili mpangilio wa kudumu, husomwa upya kwa kila wito na kuripotiwa kwa tokeni yake mwenyewe ya kukataa. Nodi hii haina sheria yake yoyote ya udumu."
+    },
+    "emergency": {
+      "bound": "Nafuu ya dharura huisha kwa muundo wake. Dirisha refu zaidi ni la msingi, limebebwa hapa ili fomu iweze kuweka mpaka wa ingizo; msingi hukataa lolote refu zaidi kwenye mlango wake mwenyewe."
+    },
+    "history": {
+      "empty": "Kila mzizi uliojisajili ulisomwa na hakuna hata mmoja aliyewahi kuwasilisha safu ya mesh-config.",
+      "no_subscription": "Nodi hii haina ukingo hai wa mzizi-wa-imani, hivyo hakuna mzizi ambao umewahi kuweza kuwasilisha safu ya mesh-config hapa.",
+      "partial": "Baadhi ya mizizi iliyojisajili haikuweza kusomwa, hivyo historia hii haijakamilika. Mizizi iliyoshindikana imetajwa.",
+      "present": "Kila safu ya mesh-config ambayo nodi hii inashikilia, mpya zaidi kwanza.",
+      "truncated": "Ukurasa huu ulikatwa kwenye kikomo. Jumla iliyo hapa chini inahesabu kila safu iliyosomwa.",
+      "unreadable": "Historia ya mesh-config haikuweza kusomwa hapa. HII SI kauli kwamba hakuna safu iliyowahi kuwasilishwa."
+    },
+    "outcome": {
+      "admitted": "Msingi uliikubali safu hii. Ni ALAMA, si amri: hakuna kilichobadilishwa kwa kuwasili kwake, na athari yake yote ni ukunjaji wa wakati wa kusoma ambao mtumiaji anaweza kuuheshimu."
+    },
+    "plane": {
+      "configured": "Angalau ufunguo mmoja umeondolewa kwenye thamani ya msingi ya mmiliki na mzizi uliojisajili.",
+      "no_rows_held": "Nodi hii imejisajili kwa angalau mzizi mmoja wa imani na haishikilii safu yoyote ya mesh-config kutoka kwa yeyote kati yao. Kila ufunguo unafanya kazi kwa thamani ya msingi ya mmiliki mwenyewe.",
+      "no_subscription": "Nodi hii haina ukingo hai wa mzizi-wa-imani, hivyo hakuna mzizi unaoweza kuisanidi. Usajili NDIO ukingo wa imani.",
+      "none_binding": "Safu za mesh-config zimeshikiliwa na hakuna hata moja inayofunga: kila moja imekwisha muda, imebanwa kwa ridhaa ya mmiliki, au inaomba thamani ya msingi inayotumika tayari.",
+      "unreadable": "Tabaka la mesh-config halikuweza kusomwa hapa. HII SI kauli kwamba hakuna kilichowekwa — thamani zilizo hapa chini hazijulikani, si chaguo-msingi."
+    },
+    "provenance": {
+      "baseline_not_moved": "Mizizi iliyojisajili ina safu hai kwa ufunguo huu na hakuna iliyoibadilisha: kila moja ilibanwa kwa ridhaa ya mmiliki au iliomba thamani inayotumika tayari.",
+      "baseline_unspoken": "Hakuna mzizi uliojisajili wenye safu hai kwa ufunguo huu, kwa hivyo nodi inatumia thamani ambayo mmiliki wake aliridhia.",
+      "root": "Safu iliyotiwa saini ya mzizi uliojisajili iliweka thamani hii. Safu hiyo, mwandishi wake na ukabidhi uliotumika vimetajwa kando yake."
+    },
+    "refusal": {
+      "attribution_absent": "delegation_id inahitajika. Kitendo kisichobeba mamlaka yake mwenyewe hakiwezi kutofautishwa na kitendo kisicho na idhini pale mtendaji anapokuwa ameondoka.",
+      "authority_not_a_delegation": "Kitambulisho cha ukabidhi kilichotajwa si safu ya delegates_to.",
+      "authority_unresolved": "Ukabidhi uliotajwa si safu ambayo nodi hii inaishikilia, hivyo mamlaka anayoyarekodi hayangetaja chochote. Kama kweli unaidhinisha kitendo hiki ni uamuzi wa msingi, unaotolewa mlangoni mwake mwenyewe.",
+      "grounds_absent": "grounds inahitajika. Kitufe kilichogeuzwa bila sababu iliyorekodiwa hakitofautishiki na kilichogeuzwa kwa sababu mbaya.",
+      "node_unowned": "Nodi hii haina mwajibikaji (kifungo cha umiliki), hivyo hairipoti wala haibadilishi usanidi wa mesh kwa niaba ya mtu yeyote. Dai umiliki kwanza.",
+      "not_owner": "Uso wa usanidi wa mesh unahitaji wadhifa wa mmiliki (SYSTEM_ADMIN).",
+      "root_absent": "root_ref inahitajika: safu ya mesh-config hutolewa chini ya mzizi wa imani, na safu isiyotaja mzizi wowote huwekwa mahali ambapo hakuna kukunja kutakakoihesabu.",
+      "session_absent": "Hakuna tokeni ya kipindi iliyowasilishwa. Uso wa usanidi wa mesh ni wa mmiliki pekee.",
+      "session_invalid": "Kipindi hicho si halali au kimeisha muda."
+    },
+    "ttl": {
+      "expired": "Dirisha la safu hii limefungwa. Ukunjaji hutupilia mbali safu iliyokwisha muda wakati wa kusoma, kwa hivyo hauhitaji ubatilishaji wala mwandishi anayeweza kufikiwa.",
+      "running": "Dirisha la safu hii liko wazi na litafungwa katika wakati uliotajwa.",
+      "unbounded": "Safu hii haina tarehe ya kuisha. Inatumika hadi itakapobadilishwa na nyingine."
+    }
+  },
+  "moderation": {
+    "ladder": {
+      "attestation_type_label": "Aina ya uthibitisho (scores, delegates_to, …)",
+      "attesting_key_label": "Safu zilizoandikwa na ufunguo huu",
+      "attribution_hint": "Vyote viwili ni lazima na vyote viwili huandikwa ndani ya alama ya kaburi iliyosainiwa. Kitendo kisichobeba mamlaka yake mwenyewe hakiwezi kutofautishwa na kitendo kisicho na idhini pale mtendaji anapokuwa ameondoka.",
+      "attribution_label": "Mamlaka na sababu",
+      "cancel_button": "Ghairi",
+      "commit_blocked": "Kitambulisho cha ukabidhi na sababu vinahitajika; karantini pia inahitaji kitambulisho cha jamii.",
+      "commit_button": "Saini {hash}",
+      "community_id_hint": "Karantini huwekwa chini ya mamlaka ya jamii, na alama isiyotaja jamii yoyote haitaji mamlaka yoyote.",
+      "community_id_label": "Kitambulisho cha jamii — kinahitajika",
+      "confirm_attribution": "Imesainiwa chini ya ukabidhi {delegation}, kwa sababu: {reason}",
+      "confirm_op": "{op} — tabaka {tier}",
+      "confirm_quorum": "Minyororo ya mamlaka {count} imewasilishwa; mizizi {min} tofautitofauti inahitajika.",
+      "confirm_revoked_after": "Kauli zinasimamiwa hadi {at}.",
+      "confirm_signing": "Uteuzi ambao saini hii inaufunika",
+      "confirm_title": "Kile unachokaribia kusaini",
+      "delegation_id_label": "Kitambulisho cha ukabidhi (delegates_to) — kinahitajika",
+      "descend_ack_label": "Andika {word} ili kuthibitisha",
+      "descend_ack_word": "SHUSHA",
+      "descent_performed": "Ushushaji wa mzigo ulitekelezwa.",
+      "descent_refused": "Ushushaji wa mzigo haukuendeshwa: {token}",
+      "dimension_prefix_label": "Kianzio cha kipimo",
+      "gate_armed": "Lango la uondoaji wa uandikishaji limewashwa: viondoaji vya uandikishaji vya nodi hii yenyewe ndivyo msingi hulinganisha waandishi navyo.",
+      "gate_dormant": "Lango la uondoaji wa uandikishaji LIMELALA. Nodi hii haikutangaza utambulisho wowote kwa msingi, hivyo uondoaji wa uandikishaji ulioandikwa hapa usingekataa chochote.",
+      "gate_foreign_identity": "Lango la uondoaji wa uandikishaji hulinganisha waandishi na ufunguo TOFAUTI na ule ambao nodi hii husainia nao, hivyo uondoaji wa uandikishaji uliosainiwa hapa kamwe usingekunjwa kama wa nodi hii yenyewe.",
+      "gate_unknown": "Nodi hii iliripoti hali ya lango la uondoaji wa uandikishaji ambayo programu hii haiitambui.",
+      "hash_mismatch_hint": "Uteuzi ulibadilika kati ya onyesho la awali na saini hii. Onyesho la awali lililo la sasa limepakiwa hapo juu — lisome kabla ya kusaini tena.",
+      "intro": "Ndiyo njia ya kukata rufaa iliyofungwa kwa mmiliki dhidi ya mwenza aliyeandikishwa, ikiwa na madaraja kuanzia tabaka 0 hadi 4. Kila ngazi ni onyesho la awali kwanza, kisha unasaini hashi ambayo onyesho hilo lilirudisha — ulichoonyeshwa ndicho kinachotekelezwa, na uteuzi uliobadilika katikati hukataliwa. Kila ngazi hutaja kile inachokifikia NA kile isichokifikia; soma vyote viwili kabla ya kusaini.",
+      "irreversible_banner": "HAIWEZI KUTENDULIWA",
+      "irreversible_flag": "Haiwezi kutenduliwa. Hakuna operesheni ya kutengua kwa ngazi hii.",
+      "limits_unavailable": "Programu hii haikuweza kupakia kauli ya nodi yenyewe kuhusu kile hiki kinachokifikia. Kikomo bado kinatumika — jibu litakitaja.",
+      "no_preview_no_commit": "Hakuna kinachoweza kusainiwa hadi onyesho la awali liwe limeendeshwa: utekelezaji huwasilisha hashi ambayo onyesho hilo lilirudisha.",
+      "not_reached_title": "Kile hiki KISICHOKIFIKIA",
+      "op": {
+        "accept_writes": "Kubali maandishi",
+        "annotate": "Weka maelezo",
+        "deadmit": "Batilisha uandikishaji",
+        "descend": "Lazimisha ushushaji",
+        "quarantine": "Weka karantini",
+        "re_admit": "Rudisha uandikishaji",
+        "refuse_writes": "Kataa maandishi",
+        "throttle": "Punguza kasi",
+        "un_quarantine": "Achilia karantini",
+        "un_throttle": "Ondoa upunguzaji kasi"
+      },
+      "op_label": "Ni ngazi ipi",
+      "outcome_recorded": "imerekodiwa",
+      "per_attester_more": "na funguo {count} zaidi",
+      "per_attester_row": "{key}: safu {rows}",
+      "preview_button": "Onyesha awali upeo wa athari",
+      "preview_counts": "Safu {rows} katika funguo {targets}",
+      "preview_empty": "Onyesho la awali liliendeshwa na halikupata safu yoyote. Uteuzi unajibika na ni tupu — jambo ambalo si ukweli uleule na kutokuwahi kuuliza.",
+      "preview_none": "Bado hakuna onyesho la awali lililoendeshwa kwa uteuzi huu.",
+      "preview_truncated": "Ukurasa ulijaa hadi kikomo chake, hivyo uteuzi waweza kuwa mkubwa kuliko kile kilichotiwa hashi na utekelezaji ungefanya kazi kwenye UKURASA huu. Punguza wigo wa uteuzi.",
+      "preview_unreadable": "Onyesho la awali halikuweza kusomwa: {detail}. Huu si uteuzi tupu — swali halikujibiwa kamwe.",
+      "quorum_hint": "Ngazi hii inahitaji mizizi {min} tofautitofauti ya mamlaka, si mnyororo mmoja wa ukabidhi. Minyororo miwili kutoka mzizi mmoja ni mamlaka moja iliyovaa kofia mbili.",
+      "quorum_ids_label": "Vitambulisho vya ukabidhi vya mamlaka mengine (vikitenganishwa kwa koma)",
+      "quorum_shortfall": "Mizizi {have} tofautitofauti ya mamlaka ilifika kwenye nodi hii; {need} inahitajika.",
+      "reaches_title": "Kile hiki kinachokifikia",
+      "reason_label": "Sababu — inahitajika",
+      "refused_title": "Imekataliwa: {token}",
+      "result_bounded": "Hukumu ilibeba kikomo cha muda, hivyo tawi la mzigo lilikataliwa badala ya kuendesha uondoaji usio na kikomo kutokana na hukumu yenye kikomo.",
+      "result_quorum": "Mizizi {roots} tofautitofauti ya mamlaka, {required} inahitajika.",
+      "result_revoked_after": "Kauli zilisimamiwa hadi {at}.",
+      "result_target": "{key} — {outcome}",
+      "result_title": "Imetekelezwa: {op} (tabaka {tier})",
+      "review_button": "Kagua kile ambacho ungekisaini",
+      "revoked_after_hint": "Ni mpaka wa kihistoria wa ubatilishaji wenyewe. Si sehemu ya uteuzi, hivyo huweka mpaka wa kile kinachobatilishwa bila kubadilisha wigo wa onyesho la awali wala kubadilisha hashi.",
+      "revoked_after_label": "Kauli zinasimamiwa hadi (RFC3339)",
+      "row_line": "{type} · {dimension} · {at}",
+      "row_more": "na safu {count} zaidi",
+      "row_no_dimension": "hakuna kipimo",
+      "section": "Ngazi ya utekelezaji",
+      "selection_after_hint": "Mpaka huu ni sehemu ya uteuzi, hivyo kuubadilisha hubadilisha hashi na kuondoa onyesho la awali.",
+      "selection_after_label": "Safu zilizodaiwa baada ya pekee (RFC3339)",
+      "selection_hash": "Hashi ya uteuzi {hash}",
+      "selection_label": "Kile unachokifanyia kazi",
+      "standing_admitted": "yanakubaliwa hapa",
+      "standing_after": "Maandishi baada: {standing}",
+      "standing_before": "Maandishi kabla: {standing}",
+      "standing_refused": "yanakataliwa hapa",
+      "standing_unknown": "yameripotiwa kwa maneno ambayo programu hii haiyatambui",
+      "standing_unreadable": "hayakuweza kusomwa — hii SI 'yamekubaliwa'",
+      "tier_and_scope": "Tabaka {tier} · inahitaji wigo wa ukabidhi {scope}, unaotolewa upya kutoka katika hali iliyohakikiwa ya nodi hii yenyewe badala ya kuchukuliwa kutoka kwenye ombi.",
+      "transport_error": "Nodi haikuweza kufikiwa: {detail}",
+      "undone_by_reversal_op": "Ngazi hii ina operesheni ya kutengua ndani ya ngazi ya utekelezaji. Safu zote mbili hubaki kama historia inayosomeka: 'ilifanyika kisha ikatenduliwa' si ukweli uleule na 'haikuwahi kufanyika'.",
+      "undone_never": "Hakitenduliwi. Ushushaji haukomi kwenye sifuri kamwe — ukungu na alama ya kaburi hubaki — lakini kilichoondolewa hakirudi.",
+      "undone_title": "Jinsi hiki kinavyotenduliwa",
+      "unparsable_response": "Nodi ilijibu kwa mwili ambao programu hii haikuweza kuusoma.",
+      "window_application": "Dirisha la muda lilitumiwa na nodi hii badala ya hoja, hivyo kikomo cha ukurasa kilitumika kwenye seti pana zaidi na uteuzi huu waweza kurudi ukiwa pungufu.",
+      "window_substrate": "Dirisha la muda lilitekelezwa na hoja ya msingi.",
+      "withdrew_row": "Iliondoa {id}"
+    }
+  },
+  "operator": {
+    "carriage": {
+      "idle": "Raundi za unakili zilikamilika, na nodi hii haikuhudumia chochote wala haikuzuia chochote: haikuwa na kitu chochote ambacho wenza wake bado walikihitaji.",
+      "moving": "Nodi hii iliwahudumia wenza wake safu na haikuzuia hata moja.",
+      "not_exercised": "Hakuna raundi ya unakili iliyokamilika kwenye mchakato huu, hivyo hakuna lango la njia ya kuhudumia lililowahi kufanya kazi na daftari la vizuizi halijawahi kuandikwa. Sifuri hii haijajaribiwa, si safi.",
+      "unreadable": "Vihesabu vya uhudumiaji vya nodi hii havikuweza kusomwa, hivyo hakuna kitu hapa kinachoeleza kile ilichokihudumia. Hii si 'hakuna kilichozuiliwa' — ni 'hatukuweza kuuliza'.",
+      "withholding": "Nodi hii ilikataa kuhudumia safu ilizoshikilia. `withholds_by_reason` hutaja tawi lililokataa na `recent_withholds` hutaja ni kwa nani — nodi iliyotulia hairipoti hata kimoja."
+    },
+    "consent_sla": {
+      "none_overdue": "Kila ubatilishaji wa ridhaa ambao nodi hii iliahidi kuupandisha uko ndani ya dirisha lake la SLA.",
+      "overdue": "Nodi hii IMECHELEWA kupandisha vibatilishaji vya ridhaa iliyojitolea kuvipandisha. Vitambulisho vya uthibitisho vilivyochukuliwa kama sampuli kando yake ndivyo vipini vinavyoondoa hali hii.",
+      "unreadable": "Foleni ya SLA ya ridhaa haikuweza kusomwa. Hiyo si 'hakuna kilichochelewa'."
+    },
+    "drill": {
+      "green": "Mzizi wa imani wa nodi hii ulithibitisha swichi yake ya kuzima ndani ya siku 90 zilizopita.",
+      "never_drilled": "Mzizi wa imani wa nodi hii HAUJAWAHI kuthibitisha swichi yake ya kuzima. Unashiriki bendi nyekundu na mzizi ulioachwa kwa muda mrefu, na tofauti ni ule wakati wa zoezi la mwisho ambao haupo kando yake. Mzizi bado unahudumia: ubichi wa zoezi ni ishara ya imani, kamwe si lango.",
+      "no_root_walked": "Hakuna mzizi wa imani uliopitiwa, hivyo hakuna kitu kinachoweza kuwa hakijafanyiwa zoezi. Hili si zoezi lililopitwa na wakati — hakuna mhusika wa zoezi hata kimoja.",
+      "stale": "Mzizi wa imani wa nodi hii ulithibitisha swichi yake ya kuzima mara ya mwisho zaidi ya siku 180 zilizopita. Bado unahudumia: ubichi wa zoezi ni ishara ya imani, kamwe si lango.",
+      "yellow": "Mzizi wa imani wa nodi hii ulithibitisha swichi yake ya kuzima mara ya mwisho kati ya siku 90 na 180 zilizopita."
+    },
+    "headline": {
+      "green": "Kila ishara ambayo nodi hii inaweza kuikokotoa inasomeka kuwa yenye afya.",
+      "red": "Angalau ishara moja inasomeka kuwa isiyo na afya. Soma pia orodha ya zisizojulikana: kichwa chekundu kinatangulia kisichojulikana na vinginevyo kinaweza kukificha nyuma yake.",
+      "unknown": "Ishara moja au zaidi hazikuweza kukokotolewa. Soma orodha ya zisizojulikana — ishara isiyokokotolewa si ishara yenye afya.",
+      "yellow": "Nodi hii inahudumia, na kuna kitu hapa kinachostahili kuangaliwa."
+    },
+    "ingest": {
+      "background": "Kuna vikataa, lakini si vya kudumu kutoka kwa seti thabiti ya vitambulisho: uchunguzi wa kawaida, wateja waliopitwa na wakati, na mabadiliko ya mara kwa mara. Soma `distinct_signers` na `unattributed_in_window` kabla ya kupuuza hili — kiwango KIKUBWA kilichotapakaa katika seti PANA ya vitambulisho ni uchunguzi, na kiwango KIKUBWA ambacho hakikutaja karibu mtu yeyote ni trafiki iliyoharibika ikiwa na mteja aliyepitwa na wakati amechanganyika ndani yake. Hakuna kati ya hivi ni mabadiliko ya mara kwa mara, na hakuna kati yake kina mtayarishaji mmoja wa kwenda kumrekebisha, ndiyo maana vinasomeka hapa badala ya kama mtayarishaji aliyekwama.",
+      "clean": "Mafungu yalitolewa kwa njia ya upokeaji ya HTTP na hakuna lililokataliwa ndani ya dirisha. `refused_total` iliyo kando yake ni hesabu ya mchakato mzima: dirisha safi kwenye mchakato uliokataa awali ni ahueni, si kukosekana.",
+      "http_path_only": "Usomaji huu unahusu njia ya upokeaji ya HTTP pekee. Fungu linalowasili kupitia relei ya Reticulum huhakikiwa na lango lile lile la uhifadhi lakini halihesabiwi hapa, hivyo usomaji safi wa upokeaji si kauli kuhusu kila njia ambayo nyayo inaweza kutolewa kwa nodi hii.",
+      "not_exercised": "Hakuna kilichotolewa kwa njia ya upokeaji ya HTTP kwenye mchakato huu — hakuna fungu lililokubaliwa wala lililokataliwa. Sifuri hii haijajaribiwa, si safi.",
+      "stuck_producer": "Kiwango KINACHOENDELEA cha vikataa kutoka kwa seti NDOGO na THABITI ya watia saini: mtayarishaji amekwama katika mzunguko wa kujaribu tena na hawezi kujirekebisha. Kila kimoja cha vikataa hivi ni sahihi — lango linafanya kazi — na ndiyo sababu hasa jumla inahitaji usomaji wake wenyewe. `top_signers` hutaja ni nani wa kwenda kumrekebisha.",
+      "unattributed": "Mafungu yalikataliwa na HAKUNA hata moja lililotaja mtia saini: yalishindwa kabla hakujakuwa na kitambulisho cha kurekodi — baiti zilizoharibika, saini mbovu, toleo la skema lisilotegemezwa. Hakuna mtayarishaji wa kuwasiliana naye, na hili kwa makusudi haliripotiwi kama mtayarishaji aliyekwama: watia saini tofauti sifuri si seti ndogo thabiti ya vitambulisho.",
+      "unreadable": "Daftari la vikataa vya upokeaji la nodi hii halikuweza kusomwa, hivyo hakuna kitu hapa kinachoeleza kile ilichokikataa. Hii si 'hakuna kilichokataliwa' — ni 'hatukuweza kuuliza'."
+    },
+    "key_statements": {
+      "stands": "Hakuna ubatilishaji ambao nodi hii inaushikilia unaogusa kauli inayotolewa sasa hivi.",
+      "suspect_after_bound": "Ubatilishaji WENYE MPAKA wa kihistoria unagusa kauli inayotolewa sasa hivi: ufunguo huu umeondolewa uandikishaji kuanzia sasa, na historia yake ya uaminifu bado inasimama. Mpaka huo ni bora kwa kiasi kikubwa kuliko ubatilishaji usio na mpaka, na hausomeki vivyo hivyo.",
+      "suspect_unbounded": "Ubatilishaji USIO NA MPAKA unagusa ufunguo huu, hivyo kila kitu ulichowahi kukisema kiko shakani — ubatilishaji ulikataa kusema vinginevyo.",
+      "unreadable": "Hadhi ya ufunguo wa nodi hii haikuweza kukokotolewa. Hiyo si 'inasimama' — swali lisiloulizwa halina jibu."
+    },
+    "peer_quota": {
+      "clean": "Kiwango cha uandishi cha wenza kimetumika na hesabu yake ya kunyima nafasi bado inasimama.",
+      "denials": "Kiwango cha uandishi cha wenza kilirekodi kunyimwa kwa nafasi. Utokezaji wa kikomo cha wenza wanaofuatiliwa haushiki tena katika toleo hili lililojengwa.",
+      "no_quota": "Msingi huu hauna kiwango cha uandishi cha wenza, hivyo kamba ya tahadhari hairipoti chochote. Huo si usomaji safi.",
+      "not_exercised": "Hakuna uandishi wa mwenza uliotozwa dhidi ya kiwango kwenye mchakato huu, hivyo sifuri yake haijajaribiwa badala ya kuwa safi."
+    },
+    "quarantine": {
+      "not_quarantined": "Hakuna alama ya karantini kuhusu ufunguo wa nodi hii iliyowahi kuanza kutumika hapa.",
+      "released": "Ufunguo wa nodi hii ulizuiliwa kisha ukaachiliwa. Unahudumia sasa, na haukuwa hivyo siku zote — ukweli tofauti na kutokuwahi kuzuiliwa.",
+      "unreadable": "Hali ya karantini haikuweza kusomwa. Hiyo si 'haiko karantini'.",
+      "withheld": "Ufunguo wa nodi hii umezuiliwa kuhudumia kwa alama ya karantini."
+    },
+    "receive": {
+      "applying": "Safu ambazo mwenza alizitoa zilikubaliwa hapa na zikabadilisha hali ya nodi hii, na hakuna iliyokataliwa. `applied_by_kind` hutaja nyanda zilizosonga; `duplicate_total` iliyo kando yake huhesabu safu zilizotolewa ambazo nodi hii ilikuwa tayari inazishikilia.",
+      "converged": "Wenza walitoa safu na nodi hii ilikuwa tayari inashikilia kila moja kati yazo, hivyo hakuna kilichobadilisha hali na hakuna kilichokataliwa. Hii ni kupinga-entropia katika hali ya utulivu — trafiki inawasili na hakuna kilichobaki cha kujifunza kutoka kwake.",
+      "decided_denominator": "`decided_total` ni kila safu ambayo mwenza aliitoa na ikafikia uamuzi wa utekelezaji hapa: zilizotekelezwa pamoja na nakala pamoja na zilizokataliwa. Baiti ambazo nodi hii haikuweza kuzisimbua hazifikii uamuzi wowote na hazihesabiwi popote, hivyo hazipo kwenye jumla hii badala ya kujumuishwa ndani yake.",
+      "idle": "Raundi za unakili zilikamilika na hakuna mwenza aliyeipa nodi hii hata safu moja: hakuna kilichotekelezwa, hakuna kilichokuwa tayari kimeshikiliwa, hakuna kilichokataliwa. Wenza wake hawakuwa na chochote kwa ajili yake, jambo ambalo si sawa na kuwa imetekeleza kila kitu walichotuma.",
+      "not_exercised": "Hakuna raundi ya unakili iliyokamilika kwenye mchakato huu, hivyo hakuna kilichotolewa kwa njia ya utekelezaji ya nodi hii. Sifuri hii haijajaribiwa, si safi.",
+      "refusing": "Nodi hii ilikataa safu ambazo wenza wake walizitoa. `apply_refusals_by_kind` hutaja uwanda; `key_apply_refusals_by_reason` hutaja tokeni ya sera iliyokataa ufunguo.",
+      "unreadable": "Vihesabu vya utekelezaji vya nodi hii havikuweza kusomwa, hivyo hakuna kitu hapa kinachoeleza kile ilichokikubali. Hii si 'hakuna kilichokataliwa' — ni 'hatukuweza kuuliza'."
+    },
+    "source": {
+      "edge_metrics": {
+        "unavailable": "Vihesabu vya uhudumiaji vya nodi hii havikuweza kusomwa, hivyo hakuna kitu hapa kinachoelezea kile ilichokihudumia, kilichozuiliwa, au kilichokataliwa kutekelezwa."
+      },
+      "ingest_refusals": {
+        "unavailable": "Daftari la vikataa vya upokeaji la nodi hii halikuweza kusomwa, hivyo hakuna kitu hapa kinachoelezea kile lango la uandikishaji lilichokikataa. Lango lisilo na msomaji ndilo lililoruhusu vikataa 8,631 sahihi kwa siku vipite bila kuonekana kwa saa 71."
+      },
+      "node_state": {
+        "unavailable": "Ishara za hali za nodi hii hazikuweza kusomwa kutoka kwa msingi, hivyo hakuna kitu hapa kinachoelezea mzizi wake wa imani, hadhi ya ufunguo, karantini, SLA ya ridhaa au kiwango cha wenza. Kukosekana kwa habari mbaya kutoka chanzo kisichosomwa si habari njema."
+      },
+      "trace_corpus": {
+        "unavailable": "Hifadhi ya nyayo ya nodi hii haikuweza kusomwa, hivyo hakuna kitu hapa kinachoelezea kile ilichokikubali. Kukosekana kwa mawasili katika hifadhi isiyosomwa si kukosekana kwa mawasili."
+      }
+    },
+    "trace_plane": {
+      "dark": "HAKUNA KILICHOKUBALIWA KWA MUDA MREFU KULIKO KIZINGITI CHEKUNDU CHA NODI HII. Kuwasili ndilo jambo pekee ambalo nodi hii ipo kwa ajili yake. Soma usomaji wa `ingest` ulio kando ya huu: uwanda wenye giza pamoja na kiwango kinachoendelea cha vikataa ni mtayarishaji anayekataliwa kwa usahihi, na uwanda wenye giza bila vikataa kabisa maana yake hakuna kinachofika hata kwenye nodi hii.",
+      "future_dated": "Nyayo mpya zaidi katika hifadhi imepigwa muhuri wa WAKATI UJAO. Muhuri wa muda ni saa ya utangazaji ya mtayarishaji mwenyewe, hivyo hii ni kauli kuhusu saa hiyo — na inatajwa waziwazi badala ya kuwekwa katika bendi kwa sababu safu yenye tarehe ya baadaye hushikilia usomaji huu kuwa kijani bila kikomo na ingeficha uwanda ambao kwa kweli umesimama.",
+      "live": "Nyayo ilikubaliwa hivi karibuni: uwanda ambao nodi hii ipo ili kupokea juu yake unalishwa.",
+      "never_admitted": "Hifadhi ilisomwa na haina nyayo hata moja: hakuna kilichowahi kukubaliwa kwenye nodi hii. Hakuna wakati wa kuwasili wa kuwekwa katika bendi, hivyo hii ni sifuri isiyojaribiwa, si yenye afya — na kwenye nodi iliyokuwa ikihudumia kwa muda ni hali ile ile ya uwanda wenye giza.",
+      "producer_asserted_ts": "`last_admitted_at` ni MAX(trace_events.ts) — saa ya ukutani ya utangazaji ya nyayo yenyewe, iliyodaiwa na mtayarishaji. Msingi hauhifadhi wakati wowote wa uandikishaji wa upande wa seva kwenye jedwali hili, hivyo mtayarishaji mwenye saa iliyopotoka husogeza usomaji huu; safu ya wakati ujao wa mbali hutajwa waziwazi kama `future_dated` badala ya kuwekwa katika bendi kwa sababu hiyo hasa.",
+      "quiet": "Hakuna nyayo iliyokubaliwa kwa muda mrefu kuliko ilivyotarajiwa, lakini bado si kwa muda wa kutosha kuuita uwanda kuwa wenye giza. Nodi iliyotulia kweli inasomeka hivi; na vivyo hivyo nusu ya kwanza ya hitilafu ya mtayarishaji.",
+      "unreadable": "Hifadhi ya nyayo ya nodi hii haikuweza kusomwa, hivyo hakuna kitu hapa kinachoeleza kile ilichokikubali. Hii si 'hakuna nyayo iliyowasili' — ni 'hatukuweza kuuliza'."
+    },
+    "trust_root": {
+      "no_self_key": "Mwenyeji hakuwahi kutangaza kitambulisho cha ufunguo wa nodi hii yenyewe, hivyo hakuna chenye wigo wa nafsi kilichoweza kupitiwa. Hii ni kauli kuhusu msomaji, si kuhusu nodi: tangaza ufunguo wakati wa kuanzisha na kila ishara yenye wigo wa nafsi hapa chini itakuwa yenye jibu.",
+      "no_trust_edges": "Nodi hii ilijitangaza yenyewe na haina ukingo hai wa imani kwenda mzizi wowote: haina mzizi wowote. Ni ubaya unaojulikana, si usomaji unaokosekana.",
+      "no_valid_root": "Nodi hii inaamini mzizi mmoja au zaidi na hakuna hata mmoja unaothibitika. Uamuzi wa kila hatua ulio kando yake hutaja ni hatua ipi iliyoshindwa.",
+      "unreadable": "Upitiaji wa mzizi wa imani haukuweza kusomwa. Saraka isiyosomeka si saraka isiyoaminika — usisome hii kama nodi isiyo na mzizi.",
+      "valid": "Nodi hii ina mzizi katika mzizi wa imani unaothibitika kikamilifu: ukingo hai wa imani, hati ya msingi inayojitangaza yenye ahadi ya urejeshaji, na hakuna usimamishaji uliowashwa."
+    },
+    "volatility": {
+      "clock_dependent_local": "Bendi hii inakokotolewa kwenye nodi HII kutoka wakati uliohifadhiwa dhidi ya saa ya kusoma, hivyo inasogea kwa muda uliopita pekee — bila mabadiliko ya hali, bila safu mpya. Nodi inayoacha kukubali nyayo hutembea kutoka kijani hadi njano hadi nyekundu yenyewe, na ndiyo lengo: inakuwa nyekundu bila mtu yeyote kuiomba ifanye hivyo.",
+      "process_local": "Vihesabu vya uhudumiaji, utekelezaji na upokeaji ni vya mchakato pekee na hujilimbikiza tangu mchakato huu ulipoanza. Hurejea sifuri wakati wa kuanzisha upya, hutofautiana kati ya michakato inayohudumia nodi moja, na havihifadhiwi popote. Ni kipimo cha mchakato huu, si daftari la nodi hii."
+    },
+    "withhold_class": {
+      "fault": "Usomaji au hatua ya uunganishaji ilishindwa na njia ya kuhudumia ilifungwa kwa usalama. Hii SI hukumu kuhusu mwenza — ni kasoro ya nodi hii yenyewe ya kuirekebisha.",
+      "integrity": "Safu ambayo nodi hii inaishikilia haikuweza kuhudumiwa kabisa: isingesawazishwa kuwa mfuatano, heshi yake iliyohifadhiwa isingefumbuliwa, au baiti zilizotangazwa hazikupatikana. Ni kasoro ya hali ya ndani, si sera.",
+      "policy": "Uamuzi ambao nodi hii iliufanya kwa makusudi — wigo wa ridhaa, uwezo wa kuhudumia ambao mwenza hana, au kizuizi cha mtayarishaji mwenyewe. Inafanya kazi kama ilivyosanidiwa: badilisha usanidi, si msimbo."
+    }
+  },
+  "operator_ui": {
+    "accepted_refused": "{a} vimekubaliwa, {r} vimekataliwa tangu mchakato huu ulipoanza",
+    "age": "Umri",
+    "age_days": "Siku {d} saa {h} zilizopita",
+    "age_future": "{v} katika wakati ujao",
+    "age_hours": "Saa {h} dakika {m} zilizopita",
+    "age_minutes": "Dakika {m} zilizopita",
+    "age_seconds": "Sekunde {s} zilizopita",
+    "applied": "Zilizotekelezwa",
+    "apply_refusals": "Vikataa vya utekelezaji",
+    "as_of": "Ilisomwa saa {t}",
+    "carriage": "Kuwahudumia wenza",
+    "corpus_unread": "Hifadhi haikuweza kusomwa, hivyo hakuna wakati wa kuwasili wala hesabu ya kuonyesha. Hii si hifadhi tupu — ni hifadhi isiyosomwa.",
+    "decided": "Safu zilizoamuliwa",
+    "distinct_signers": "Watia saini tofautitofauti",
+    "duplicates": "Tayari zilishikiliwa",
+    "ingest": "Lango la uandikishaji",
+    "last_admitted": "Iliyokubaliwa mwisho",
+    "malformed_body": "Nodi hii ilijibu kwa mwili ambao programu hii haikuweza kuufumbua, pengine kwa sababu nodi inaendesha uso wa uendeshaji mpya kuliko unaojulikana na programu hii. Si usomaji wa afya, wala si kukosekana kwa usomaji.",
+    "malformed_title": "Jibu halikueleweka",
+    "named_no_signer": "Vikataa visivyotaja mtia saini",
+    "no_arrival_instant": "Hakuna wakati wa kuwasili: hifadhi ilisomwa na haina nyayo hata moja. Hakuna kilichowahi kukubaliwa kwenye nodi hii.",
+    "node_signals": "Ishara za nodi",
+    "not_offered_body": "Nodi hii ilijibu, na haitoi uso wowote wa uendeshaji hata kidogo — inaendesha toleo lililojengwa kabla ya usomaji huu kuwepo. Hilo ni pengo la toleo, si kukataa wala si ugonjwa: nodi yaweza kuwa timamu kabisa, na programu hii haiwezi tu kuiuliza.",
+    "not_offered_title": "Hakuna uso wa uendeshaji",
+    "reading_absent": "Jibu la nodi hii halikubeba usomaji kama huo hata kidogo. Hiyo si sifuri yenye afya — ni usomaji ambao programu hii haikuupata mahali ilipoutarajia.",
+    "reading_body": "Programu hii bado haijapata jibu kutoka kwa nodi. Hakuna kilicho hapa ambacho ni usomaji — swali ambalo bado liko njiani si nodi yenye afya.",
+    "reading_title": "Bado inauliza",
+    "receive": "Kutekeleza kutoka kwa wenza",
+    "refusals_per_hour": "Vikataa kwa saa",
+    "refused_body": "Nodi hii ilijibu na ikakataa usomaji. Nodi iko hai; kipindi hiki hakiruhusiwi kusoma uso wake wa uendeshaji. Hiyo ni kauli kuhusu kipindi hiki, si kuhusu afya ya nodi — ingia kama mmiliki ili kuusoma.",
+    "refused_title": "Usomaji umekataliwa",
+    "rounds": "Raundi za unakili",
+    "served": "Zilizohudumiwa",
+    "sources_absent": "Vyanzo ambavyo havikuchangia chochote",
+    "thresholds": "Hai chini ya saa {green}, tulivu chini ya saa {yellow}, giza zaidi ya hapo",
+    "title": "Hali ya nodi",
+    "top_signers": "Ni nani anayekataliwa",
+    "trace_plane": "Uwanda wa nyayo",
+    "traces_held": "Nyayo zilizoshikiliwa",
+    "uncomputed": "Havikuweza kukokotolewa ({count})",
+    "unreachable_body": "Nodi hii haikujibu hata kidogo, hivyo hakuna usomaji wake hapa. Hii si sawa na nodi isiyo na afya: bendi isiyo na afya ni jibu halisi kutoka kwa nodi iliyojibu, na hii ni kutokuwa na jibu kabisa. Hakikisha nodi inafanya kazi na inafikika katika anwani ambayo programu hii inaitumia.",
+    "unreachable_title": "Haikufikiwa",
+    "unrecognized_reading": "Programu hii haitambui usomaji '{token}'. Nodi ni mpya kuliko programu hii: uchukulie kuwa haujakokotolewa, kamwe si wenye afya.",
+    "window_floor": "Dirisha la vikataa lilikatwa: kila hesabu hapa ni kiwango cha chini, si jumla.",
+    "withholds": "Zilizozuiliwa"
+  },
+  "surfaces": {
+    "common": {
+      "duration_days": "siku {n}",
+      "duration_hours": "saa {n}",
+      "duration_minutes": "dakika {n}",
+      "duration_seconds": "sekunde {n}",
+      "unknown": "haijulikani"
+    },
+    "commons": {
+      "action": "Kitambulisho cha kitendo",
+      "action_asserted": "Kitendo kilidaiwa saa",
+      "action_author": "Mwandishi wa kitendo",
+      "add_cosigner": "Ongeza saini-mwenza",
+      "admitted": "Imekubaliwa",
+      "asymmetry_title": "Kuweka breki na kuiondoa si kitendo kilekile",
+      "ballot_title": "Jibu kile ambacho wasimamizi waliacha wazi",
+      "cohort": "Kundi",
+      "cohort_key": "Kitambulisho cha ufunguo wa kundi",
+      "cosigner_classical": "Saini ya Ed25519 (base64)",
+      "cosigner_key": "Kitambulisho cha ufunguo wa msaini-mwenza",
+      "cosigner_pqc": "Saini ya ML-DSA (base64, si lazima)",
+      "cosigners": "{n} zimekusanywa",
+      "counted": "Mapingamizi yaliyohesabiwa",
+      "counted_of_required": "{counted} zimehesabiwa kati ya {required} zinazohitajika · orodha {roster}",
+      "dimensions": "Vipimo vya bahasha",
+      "dismiss_gate": "Uwasilishaji unabaki umefungwa hadi jaribio litakapotoa baiti kamili ambazo kila msaini-mwenza lazima azisaini. Saini huhesabika juu ya baiti hizo pekee.",
+      "dismiss_label": "Ondoa breki",
+      "dismiss_price": "Hugharimu kizingiti cha kundi lenyewe: {required} kati ya {roster}.",
+      "dismiss_price_unknown": "Hugharimu kizingiti cha kundi lenyewe, chochote ambacho orodha yake inakifanya kuwa. Nodi hii haijakisoma.",
+      "dismiss_step1": "Hatua 1 · Jaribio",
+      "dismiss_step2": "Hatua 2 · Kusanya saini za wenza juu ya baiti hizo hasa",
+      "dismiss_step3": "Hatua 3 · Wasilisha",
+      "dismiss_submit": "Wasilisha utupiliaji mbali",
+      "dismissed": "Limeondolewa na akidi ya kundi",
+      "dry_run": "Jaribio — pata baiti za kikanuni",
+      "duty_holders": "Wasimamizi walioteuliwa",
+      "escalated_dismissed": "Limepinduliwa na bwawa la waliojibu",
+      "escalation": "Kupanda ngazi",
+      "floor": "Utenguzi uliopandishwa ngazi hauwezi kamwe kushuka chini ya waliojibu {floor}, hata tamko la sera liseme nini.",
+      "grounds": "Sababu — ni lazima, hurekodiwa, kamwe haifasiriwi",
+      "no_reading": "Bado hakuna hali iliyosomwa. Taja kundi na kitendo hapo juu.",
+      "objection_id": "Kitambulisho cha pingamizi",
+      "objections": "Mapingamizi yaliyo kwenye rekodi",
+      "objectors": "Wapingaji tofautitofauti",
+      "overrule": "Pindua",
+      "policy": "Sera",
+      "quiet_body": "Uwanda ULISOMWA na hakuna pingamizi lililowekwa dhidi ya kitendo hiki.",
+      "quiet_title": "Hakuna aliyepinga",
+      "raise_action": "Weka pingamizi",
+      "raise_label": "Weka breki",
+      "raise_price": "Hugharimu {threshold} — mwanachama mmoja anatosha. Hakuna wingi wa kufikia wala mtu wa kusubiri.",
+      "raise_price_unread": "Hugharimu saini moja. Mwanachama mmoja anatosha; hakuna wingi wa kufikia.",
+      "read": "Soma hali",
+      "refused": "Imekataliwa",
+      "required": "Kizingiti cha utenguzi",
+      "respondents_note": "Baada ya muda wa mwisho kupita, kizingiti huhesabu WALIOJIBU badala ya orodha nzima — jambo ambalo ndilo linaloiwezesha jamii tulivu kuendelea kufikia uamuzi.",
+      "respondents_of_required": "Waliojibu {respondents} · {required} wanahitajika",
+      "roster": "Orodha hai",
+      "standing": "jibu la ukunjaji",
+      "steward_deadline": "Muda wa mwisho wa wasimamizi",
+      "subtitle": "Jinsi jamii inavyojisimamia yenyewe. Mwanachama mmoja huweka breki; kundi lazima likubali kuiondoa.",
+      "title": "Mali ya Pamoja",
+      "unknown_body": "HII SI kauli kwamba 'hakuna aliyepinga'. Hakuna hesabu iliyosomwa, hivyo hakuna inayoonyeshwa — mapingamizi hayajulikani, si kwamba hayapo.",
+      "unknown_title": "Hatukuweza kuuliza",
+      "uphold": "Simamia",
+      "window": "Dirisha",
+      "window_closed": "limefungwa",
+      "window_open": "liko wazi"
+    },
+    "mesh_config": {
+      "admitted": "Imekubaliwa",
+      "asked": "Kilichoombwa",
+      "author": "Mwandishi",
+      "baseline": "Thamani ya msingi ya mmiliki",
+      "clamped": "imebanwa kwa ridhaa",
+      "clamped_roots": "Mizizi iliyobanwa kwa kutaka kupanua zaidi ya ridhaa",
+      "consumer": "Mtumiaji",
+      "consumption_blocker": "Imezuiliwa na",
+      "consumption_effect": "Athari",
+      "consumption_owner": "Mtumiaji yuko katika",
+      "consumption_site": "Husomwa kupitia",
+      "consumption_tracked_by": "Inafuatiliwa na",
+      "delegation": "Ukabidhi",
+      "domain": "Eneo linalokubalika",
+      "effective": "Inayotumika",
+      "emergency_bound": "Kikomo cha juu cha nafuu ya dharura",
+      "form_durable": "Ya kudumu",
+      "form_emergency": "Ya dharura",
+      "grounds": "Sababu",
+      "hide_history": "Ficha historia ya safu",
+      "history_binding": "inafunga",
+      "history_counted": "imehesabiwa",
+      "history_total": "Safu {shown} kati ya {total}",
+      "hours": "saa",
+      "in_force": "Inatumika — mzunguko katika toleo hili lililojengwa husoma thamani hii.",
+      "knob": "Kitufe",
+      "node": "Nodi hii",
+      "not_in_force": "HAITUMIKI kwenye nodi hii — thamani hukubaliwa na kukunjwa, na hakuna kitu hapa kinachoitendea kazi.",
+      "payload_sha256": "payload_sha256 — baiti kamili ambazo msaini-mwenza huzisaini",
+      "per_root": "Jibu la kila mzizi",
+      "provenance": "Asili",
+      "ratifies": "Inaidhinisha",
+      "refused": "Imekataliwa",
+      "registry": "Funguo zilizosajiliwa",
+      "roots": "Mizizi ya imani iliyojisajili",
+      "rows_held": "Safu za mesh-config zilizoshikiliwa",
+      "scrubs": "Saini za wenza",
+      "self_plane_below": "Hapa chini: usanidi wa nodi hii yenyewe, uliowekwa na mmiliki wake.",
+      "show_history": "Onyesha historia ya safu",
+      "subtitle": "Kile ambacho mzizi wa imani uliojisajili unaiomba nodi hii. Ni uwanda tofauti na usanidi wa nodi hii yenyewe ulio hapa chini — hivi viwili havichanganyiki kamwe.",
+      "title": "Usanidi wa mesh",
+      "ttl": "Kuisha muda",
+      "ttl_expired": "Imekwisha muda",
+      "ttl_remaining": "Itakwisha baada ya",
+      "ttl_unbounded": "Haina tarehe ya kuisha — inatumika hadi itakapobadilishwa na nyingine",
+      "unknown_values": "Thamani zilizo hapa HAZIJULIKANI, si chaguo-msingi. Hakuna kilicho hapa chini ambacho ni sifuri — hakuna kilichoweza kusomwa.",
+      "unreadable_roots": "Mizizi ambayo haikuweza kusomwa",
+      "write_delegation": "Kitambulisho cha ukabidhi",
+      "write_dry_run": "Jaribio",
+      "write_durable": "Wasilisha ya kudumu",
+      "write_grounds": "Sababu — hurekodiwa, kamwe haifasiriwi",
+      "write_key": "Ufunguo",
+      "write_ratifies": "Inaidhinisha kitambulisho cha safu (si lazima)",
+      "write_relief": "Wasilisha nafuu ya dharura",
+      "write_root": "Mzizi wa imani (root_ref)",
+      "write_title": "Geuza kitufe cha mesh",
+      "write_ttl": "Inaisha baada ya (saa)",
+      "write_value": "Thamani"
+    }
+  }
 }

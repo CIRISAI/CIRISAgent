@@ -98,10 +98,12 @@ EXPECTED_MIXED: Dict[str, str] = {
         "CIRISAgent#997 — one YAML field walking the PDMA stages while naming and "
         "ranking the Six Principles and M-1; needs the field cut in 29 locales"
     ),
-    "action_selection_pdma.system_message": (
-        "CIRISAgent#997 — assembled from Python literals (DEFAULT_TEMPLATE + the "
-        "conscience-retry block), so there is no render seam to split it on; "
-        "'Recall CIRIS principles override personal preference' is why it cannot merge up"
+    "action_selection_pdma.closing_reminder": (
+        "CIRISAgent#1007 — 'Recall CIRIS principles override personal preference' (axiotic) "
+        "sits in the same YAML scalar as the LANGUAGE RULES register doctrine (pragmatic) and "
+        "the JSON-key rule (structural). Splitting it is a corpus cut in 29 locales, not a "
+        "boundary the composer knows — but it is now a NAMED mixed block a regime can declare, "
+        "where before it was invisible inside an opaque 2,755 B system_message"
     ),
     "action_selection_pdma.context_integration.slots": (
         "CIRISAgent#997 — the ASPDMA user template delivers other PROMPT FIELDS "
@@ -358,3 +360,83 @@ def test_the_ratchet_carries_no_stale_entries() -> None:
 def test_every_parked_block_is_actually_annotated(block_id: str) -> None:
     """The ratchet must reference real blocks, or it silently protects nothing."""
     assert block_id in BLOCK_ANNOTATIONS, f"{block_id} is registered but has no annotation"
+
+
+def test_every_class_carries_a_disposition() -> None:
+    """A class the gate cannot disposition is a class the gate cannot apply.
+
+    Added when CC introduced `testimonial` as a twelfth class after the 2.9.10
+    cut: an enum member without a `CLASS_DEFAULT_DISPOSITION` entry would raise
+    at annotation time, or worse, be silently skipped. This is the cheap check
+    that a new dimension is wired rather than merely declared — the same defect
+    class the rest of this file exists for.
+    """
+    from ciris_engine.schemas.dma.compose import CLASS_DEFAULT_DISPOSITION
+
+    missing = sorted(c.value for c in BlockClass if c not in CLASS_DEFAULT_DISPOSITION)
+    assert not missing, f"classes with no default disposition: {missing}"
+
+
+def test_axiotic_is_still_the_only_varied_class() -> None:
+    """The campaign's load-bearing invariant, re-asserted whenever the class set
+    grows. `testimonial` defaults to hold PROVISIONALLY — if CC rules it varied,
+    this test is what makes that a deliberate, visible change rather than a
+    quiet one."""
+    from ciris_engine.schemas.dma.compose import CLASS_DEFAULT_DISPOSITION, BlockDisposition
+
+    varied = sorted(c.value for c, d in CLASS_DEFAULT_DISPOSITION.items() if d is BlockDisposition.VARY)
+    assert varied == ["axiotic"], f"varied classes are now {varied} — the independent variable changed"
+
+
+def test_a_frameless_testimonial_assignment_is_refused() -> None:
+    """`testimonial` is a RELATION (CIRISOntology#3/#1, CC-ratified).
+
+    Ontology's placement result — `repairable_does_not_factor` — says no
+    procedure reading only the artifact can compute repairability. So testimony
+    is a relation where the other eleven rows are properties: it is always some
+    source's, to some audience, and there is nothing in the block ALONE to read.
+
+    An annotation naming the class without naming the frame is therefore not a
+    weak annotation, it is an incomplete proposition. Defaulting the frame to
+    empty would let a block compose under a relation whose second argument
+    nobody supplied — which is why it refuses instead.
+    """
+    import pytest as _pytest
+
+    from ciris_engine.logic.utils.compose_dump import BlockAnnotation, _require_frame
+
+    with _pytest.raises(ValueError, match="RELATION"):
+        _require_frame("x.y", BlockAnnotation(BlockClass.TESTIMONIAL, None))
+
+    # with a frame it resolves
+    framed = BlockAnnotation(BlockClass.TESTIMONIAL, None, frame="accord:traditions->agent")
+    assert _require_frame("x.y", framed) is framed
+
+
+def test_only_testimonial_takes_a_frame() -> None:
+    """The other eleven are properties; a frame on one of them is a mislabel in
+    the other direction, and silently ignoring it would hide the confusion."""
+    import pytest as _pytest
+
+    from ciris_engine.logic.utils.compose_dump import BlockAnnotation, _require_frame
+
+    with _pytest.raises(ValueError, match="only `testimonial` takes one"):
+        _require_frame("x.y", BlockAnnotation(BlockClass.AXIOTIC, None, frame="whoever"))
+
+
+def test_the_accord_stays_axiotic() -> None:
+    """The thirteenth was REFUTED (CIRISOntology#3).
+
+    Vary the accord and the agent VALUES differently while the record still
+    proves exactly what happened — demonstrability untouched, outcomes re-ranked
+    with no act newly permitted, which is the axiotic test verbatim. Its
+    chorus-of-traditions design states where its authority COMES FROM, not what
+    breaks when it changes: testimonial PROVENANCE, axiotic CLASS. Provenance
+    declares in the TORQUE arm (RATCHET#18), not in the class.
+
+    Pinned because the accord is 56% of composed DMA prompt bytes and axiotic is
+    the only varied class — reclassifying it would empty the vary set and there
+    would be no experiment.
+    """
+    assert BLOCK_ANNOTATIONS["accord"].block_class is BlockClass.AXIOTIC
+    assert BLOCK_ANNOTATIONS["accord"].frame is None

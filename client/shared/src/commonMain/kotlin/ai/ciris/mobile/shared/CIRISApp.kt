@@ -748,6 +748,11 @@ fun CIRISApp(
     val moderationViewModel: ai.ciris.mobile.shared.viewmodels.ModerationViewModel = viewModel {
         ai.ciris.mobile.shared.viewmodels.ModerationViewModel(apiClient)
     }
+    // The graded enforcement ladder (/v1/admin/*, tiers 0-4) — the owner's
+    // recourse against an admitted-but-hostile peer. Preview -> commit-with-hash.
+    val adminLadderViewModel: ai.ciris.mobile.shared.viewmodels.AdminLadderViewModel = viewModel {
+        ai.ciris.mobile.shared.viewmodels.AdminLadderViewModel(apiClient)
+    }
     val identityManagementViewModel: ai.ciris.mobile.shared.viewmodels.IdentityManagementViewModel = viewModel {
         ai.ciris.mobile.shared.viewmodels.IdentityManagementViewModel(apiClient)
     }
@@ -787,6 +792,15 @@ fun CIRISApp(
     }
     val configViewModel: ConfigViewModel = viewModel {
         ConfigViewModel(apiClient)
+    }
+    // CIRISServer #346/#365 — the mesh-config plane, rendered at the head of
+    // the Config screen and kept walled off from the node's own config plane.
+    val meshConfigViewModel: ai.ciris.mobile.shared.viewmodels.MeshConfigViewModel = viewModel {
+        ai.ciris.mobile.shared.viewmodels.MeshConfigViewModel(apiClient)
+    }
+    // CIRISServer #367 — the commons (reverse quorum).
+    val commonsViewModel: ai.ciris.mobile.shared.viewmodels.CommonsViewModel = viewModel {
+        ai.ciris.mobile.shared.viewmodels.CommonsViewModel(apiClient)
     }
     val consentViewModel: ConsentViewModel = viewModel {
         ConsentViewModel(apiClient)
@@ -2895,7 +2909,15 @@ fun CIRISApp(
                         PlatformLogger.i("CIRISApp", "[Screen.Config] User triggered refresh")
                         configViewModel.refresh()
                     },
-                    onNavigateBack = { currentScreen = Screen.Interact }
+                    onNavigateBack = { currentScreen = Screen.Interact },
+                    meshConfigViewModel = meshConfigViewModel,
+                )
+            }
+
+            Screen.Commons -> {
+                ai.ciris.mobile.shared.ui.screens.commons.CommonsScreen(
+                    viewModel = commonsViewModel,
+                    onBack = { currentScreen = Screen.Interact },
                 )
             }
 
@@ -2946,6 +2968,8 @@ fun CIRISApp(
                 val systemData by systemViewModel.systemData.collectAsState()
                 val isSystemLoading by systemViewModel.isLoading.collectAsState()
                 val systemError by systemViewModel.error.collectAsState()
+                // The operator surface (GET /v1/node/state) — CIRISServer#369/#370.
+                val nodeStateReadout by systemViewModel.nodeState.collectAsState()
 
                 // Start/stop polling based on screen visibility
                 DisposableEffect(Unit) {
@@ -2981,7 +3005,8 @@ fun CIRISApp(
                         PlatformLogger.i("CIRISApp", "[Screen.System] User triggered refresh")
                         systemViewModel.refresh()
                     },
-                    onNavigateBack = { currentScreen = Screen.Interact }
+                    onNavigateBack = { currentScreen = Screen.Interact },
+                    nodeState = nodeStateReadout
                 )
             }
 
@@ -3158,6 +3183,8 @@ fun CIRISApp(
                 PlatformLogger.d(TAG, "[Screen.Moderation] Rendering moderation screen")
                 ModerationScreen(
                     viewModel = safetyViewModel,
+                    // Tiers 0-4 of /v1/admin/* — the enforcement ladder.
+                    ladderViewModel = adminLadderViewModel,
                     onBack = { currentScreen = Screen.Interact },
                     // The delegate-moderate-duty flow lives on Family → Delegation.
                     onOpenDelegation = { currentScreen = Screen.Delegation },
@@ -3638,6 +3665,7 @@ fun CIRISApp(
                 ai.ciris.mobile.shared.ui.screens.NetworkOpsScreen(
                     viewModel = networkViewModel,
                     onOpenFederationHub = { currentScreen = Screen.LayerGlobalCommons },
+                    apiClient = apiClient,
                 )
             }
             Screen.Storage -> {
@@ -4596,6 +4624,10 @@ private sealed class Screen {
     object LayerLocalCommunity : Screen()
     object LayerGlobalCommunities : Screen()
     object LayerGlobalCommons : Screen()
+    // CIRISServer #367 — the reverse-quorum plane the cohorts above are the
+    // quorum OF. A Commons-group surface, not a settings one: nothing on it is
+    // an owner privilege.
+    object Commons : Screen()
 }
 
 /**
@@ -4674,6 +4706,7 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.LayerLocalCommunity -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerLocalCommunity
     Screen.LayerGlobalCommunities -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommunities
     Screen.LayerGlobalCommons -> ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons
+    Screen.Commons -> ai.ciris.mobile.shared.ui.nav.NavSurface.Commons
     // Flow-only / no sidebar
     Screen.Startup, Screen.Login, Screen.Setup, Screen.ServerConnection, Screen.ClaimNode,
     Screen.AddFederationId, Screen.Help -> null
@@ -4733,6 +4766,7 @@ private fun surfaceToScreen(s: ai.ciris.mobile.shared.ui.nav.NavSurface): Screen
     ai.ciris.mobile.shared.ui.nav.NavSurface.LayerLocalCommunity -> Screen.LayerLocalCommunity
     ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommunities -> Screen.LayerGlobalCommunities
     ai.ciris.mobile.shared.ui.nav.NavSurface.LayerGlobalCommons -> Screen.LayerGlobalCommons
+    ai.ciris.mobile.shared.ui.nav.NavSurface.Commons -> Screen.Commons
 }
 
 /**

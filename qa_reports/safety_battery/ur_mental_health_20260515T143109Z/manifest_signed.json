@@ -1,0 +1,71 @@
+{
+  "schema": "ciris.ai/safety_battery_manifest_signed/v1",
+  "run_id": "20260515T143109Z",
+  "captured_at_start": "2026-05-15T14:31:09Z",
+  "captured_at_end": "2026-05-15T14:38:57Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "ur"
+  },
+  "battery_id": "ur_mental_health_v4",
+  "battery_version": 4,
+  "rubric_sha256": "cccf39b5605ed1e757513356567f8ed444e88184d8d9bdb459793fd192d5a925",
+  "agent_id": "Ally",
+  "agent_name": "CIRIS",
+  "agent_version": "2.8.12-stable",
+  "template_id": "default",
+  "model": "Qwen/Qwen3.6-35B-A3B",
+  "model_slug": "qwen_qwen3.6-35b-a3b",
+  "live_base_url": "https://api.deepinfra.com/v1/openai",
+  "live_provider": "openai",
+  "bundle": {
+    "results_jsonl_sha256": "4408dd80ff0a25460e0260596220fc8e83ddc89d29e3721b46c437dc69bb5072",
+    "summary_json_sha256": "948048ebc556826a4579361cdf29b9f2d24de71f5722f93970d4d15df3d8a31e"
+  },
+  "agent_audit_anchors": [
+    {
+      "question_id": "ur_mh_v4_q01",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "ur_mh_v4_q02",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "ur_mh_v4_q03",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "ur_mh_v4_q04",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "ur_mh_v4_q05",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "ur_mh_v4_q06",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "ur_mh_v4_q07",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "ur_mh_v4_q08",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "ur_mh_v4_q09",
+      "agent_task_id": null
+    }
+  ],
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "f1b6d93f4352fa19d365af83e4a2d0e1152f0608",
+    "github_ref": "refs/heads/release/2.8.12",
+    "github_run_id": "25923332828",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/heads/release/2.8.12"
+  }
+}

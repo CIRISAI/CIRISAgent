@@ -3,7 +3,6 @@
 [![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-STABLE-green.svg)](CHANGELOG.md)
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-CIRIS_Codebase-blue?logo=readthedocs)](https://deepwiki.com/CIRISAI/CIRISAgent)
-[![CIRIS Architecture](https://img.shields.io/badge/Paper-CIRIS_Architecture-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18137161)
 [![Coherence Ratchet](https://img.shields.io/badge/Paper-Coherence_Ratchet-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18142668)
 [![Accord](https://img.shields.io/badge/Ethical_Framework-The_Accord-purple)](https://ciris.ai/ciris_accord.pdf)
 
@@ -54,9 +53,8 @@ trail. Today CIRIS powers Discord community moderation in production at
 [agents.ciris.ai](https://agents.ciris.ai); the architecture is built to
 scale to settings like education and healthcare.
 
-The design is described in two papers — [CIRIS
-Architecture](https://doi.org/10.5281/zenodo.18137161) and the [Coherence
-Ratchet](https://doi.org/10.5281/zenodo.18142668).
+The design is described in the [Coherence
+Ratchet](https://doi.org/10.5281/zenodo.18142668) paper.
 
 ## Run it yourself
 

@@ -1,0 +1,47 @@
+{
+  "schema": "ciris.ai/safety_interpret_manifest_signed/v1",
+  "run_id": "20260512T004814Z",
+  "captured_at_start": "2026-05-12T00:48:14Z",
+  "captured_at_end": "2026-05-12T00:50:20Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "hi"
+  },
+  "battery_id": "hi_mental_health_v4",
+  "battery_version": 4,
+  "rubric_id": "hi_mh_v4_canonical_universal",
+  "rubric_version": 4,
+  "rubric_md_sha256": "4e1fca5abb8eb54c",
+  "judge": {
+    "model": "claude-opus-4-7",
+    "prompt_sha256": "d8283d8ff08a8aafb3e06363bdc07db8d6cad17ebf9567e6702193a6f3a5b5f5",
+    "provider": "anthropic",
+    "api_url": "https://api.anthropic.com/v1/messages",
+    "max_tokens": 200
+  },
+  "agent_under_test": {
+    "agent_id": "Ally",
+    "agent_version": "2.8.9-stable",
+    "template_id": "default",
+    "model": "google/gemma-4-31B-it",
+    "model_slug": "google_gemma-4-31b-it"
+  },
+  "capture_bundle": {
+    "capture_dir": "hi_mental_health_20260512T003113Z",
+    "capture_run_id": "20260512T003113Z",
+    "capture_results_jsonl_sha256": "0b68e14aa388147db6dccc808ae536a2757a72ba5c28ecfdbf04d09e59b87451",
+    "capture_manifest_sha256": "be1a2cc4c30a016ca77d3a29762783702b4f984bbc0ef37e36f5778d503d3822"
+  },
+  "bundle": {
+    "verdicts_jsonl_sha256": "d884b378d4afebc82743c729e9602d04939958968c1fc8005a4d9fb290d1ad8e",
+    "verdicts_summary_sha256": "0384e5e9d7180b7ed14fe55c1a082b451c7598c354b83489710ed45cfe367467"
+  },
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "81260673f5d442fb86405a26ef13acd6f12a16bc",
+    "github_ref": "refs/heads/release/2.8.9",
+    "github_run_id": "25705591081",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/heads/release/2.8.9"
+  }
+}

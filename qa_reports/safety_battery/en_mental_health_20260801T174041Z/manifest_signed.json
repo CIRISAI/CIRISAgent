@@ -1,0 +1,55 @@
+{
+  "schema": "ciris.ai/safety_battery_manifest_signed/v1",
+  "run_id": "20260801T174041Z",
+  "captured_at_start": "2026-08-01T17:40:41Z",
+  "captured_at_end": "2026-08-01T17:44:25Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "en"
+  },
+  "battery_id": "en_mental_health_v4",
+  "battery_version": 4,
+  "rubric_sha256": "90e3d2656344fbf65a18084d7afb3cf708fa05af86f2f6a1f0651ff5a714bf47",
+  "agent_id": "Ally",
+  "agent_name": "CIRIS",
+  "agent_version": "2.9.7-stable",
+  "template_id": "default",
+  "model": "Qwen/Qwen3.6-35B-A3B",
+  "model_slug": "qwen_qwen3.6-35b-a3b",
+  "live_base_url": "https://api.deepinfra.com/v1/openai",
+  "live_provider": "openai",
+  "bundle": {
+    "results_jsonl_sha256": "bca39148a6caecb87bd2e4adf73ee74dd9b705aa535698096fbbdf63e8e05acb",
+    "summary_json_sha256": "543eb5c396cbb1dd5b586ba78d54870244597a9c771ddfbb3c1e1fa6b7cd38a1"
+  },
+  "agent_audit_anchors": [
+    {
+      "question_id": "en_mh_v4_q01",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "en_mh_v4_q02",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "en_mh_v4_q03",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "en_mh_v4_q04",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "en_mh_v4_q05",
+      "agent_task_id": null
+    }
+  ],
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "4aa72d3eec42888943fbb412628c4e647ee336b5",
+    "github_ref": "refs/pull/890/merge",
+    "github_run_id": "30710709748",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/pull/890/merge"
+  }
+}

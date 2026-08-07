@@ -1,0 +1,126 @@
+name: Safety evidence sync
+
+# Copies safety-battery evidence out of GitHub Actions artifacts and into the
+# repo, where it does not expire.
+#
+# Artifacts are retained 90 days. When this workflow was written, 20,894 of the
+# repo's 24,109 artifacts had already aged out and the oldest surviving battery
+# evidence was dated 2026-05-11 — days from the cliff. Everything those runs
+# prove about which locale passed what, and what the agent actually said, was
+# on a timer.
+#
+# WHY A SCHEDULED JOB ON MAIN, and not a commit step inside safety-battery.yml:
+#
+#   1. Batteries run on pull_request branches. Evidence committed there lives on
+#      a branch that may never merge — evidence that can be lost by a decision
+#      unrelated to it.
+#   2. A commit inside the battery makes the battery fail when the commit fails.
+#      The artifact is the source of truth at run time; the repo is the durable
+#      copy. Coupling them lets a git error lose a verdict.
+#   3. It self-heals. The harvester is idempotent, so a sync missed to an
+#      outage, a runner failure or a red main is picked up by the next one with
+#      no operator action. Not hypothetical: on the day this was written Actions
+#      was in a major outage for hours and several battery runs were cancelled
+#      mid-flight.
+#
+# TRACES ARE NOT SYNCED. A capture artifact averages 4.6 MB and is 99.9%
+# `traces/` — 19 MB of lens batches against 15 KB of questions and answers. The
+# reasoning stream is a different retention question and belongs in a Release.
+# What lands here is what a reader needs to CHECK a verdict: the question, the
+# answer, the per-criterion judgement, and the signed manifest attesting the
+# pair was not edited afterwards.
+
+on:
+  schedule:
+    # Daily, offset from the battery schedule so a run that starts in the
+    # morning has finished and uploaded before the sync looks for it.
+    - cron: '40 11 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Harvest and report, but do not commit'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: safety-evidence-sync
+  cancel-in-progress: false   # never cancel a sync: a partial write is fine, a
+                              # cancelled one just means the next run catches up
+
+permissions:
+  contents: write
+  actions: read               # listing + downloading artifacts
+
+jobs:
+  sync:
+    name: Harvest live artifacts into qa_reports/
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Harvest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 -u tools/harvest_safety_evidence.py qa_reports | tee harvest.log
+
+      - name: What changed
+        id: diff
+        run: |
+          # Report the DENOMINATOR, not just the delta: "0 new" is the expected
+          # steady state and must be distinguishable from "the harvester found
+          # nothing because it broke".
+          BUNDLES_B=$(ls qa_reports/safety_battery 2>/dev/null | wc -l)
+          BUNDLES_I=$(ls qa_reports/safety_interpret 2>/dev/null | wc -l)
+          CHANGED=$(git status --porcelain qa_reports | wc -l)
+          echo "bundles_battery=$BUNDLES_B"   >> $GITHUB_OUTPUT
+          echo "bundles_interpret=$BUNDLES_I" >> $GITHUB_OUTPUT
+          echo "changed=$CHANGED"             >> $GITHUB_OUTPUT
+
+          {
+            echo "### Safety evidence sync"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| bundles held (battery) | $BUNDLES_B |"
+            echo "| bundles held (interpret) | $BUNDLES_I |"
+            echo "| files changed this run | $CHANGED |"
+            echo ""
+            grep -E '^  (live|wrote|bundles now|qa_reports)' harvest.log || true
+          } >> $GITHUB_STEP_SUMMARY
+
+          if [ "$BUNDLES_I" -eq 0 ]; then
+            echo "::error::zero interpret bundles held — the harvester wrote nothing and the repo holds nothing. A sync that reports success over an empty set is the failure this job exists to prevent."
+            exit 1
+          fi
+
+      - name: Commit
+        if: steps.diff.outputs.changed != '0' && inputs.dry_run != true
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add qa_reports/safety_battery qa_reports/safety_interpret
+          git commit -m "evidence: sync safety-battery bundles from expiring artifacts
+
+          Harvested by tools/harvest_safety_evidence.py. Artifacts expire at 90
+          days; this is the copy that does not. Traces excluded — they are 99.9%
+          of the bytes and a separate retention question.
+
+          bundles: ${{ steps.diff.outputs.bundles_battery }} battery, ${{ steps.diff.outputs.bundles_interpret }} interpret"
+          git push origin main
+
+      - name: Nothing to do
+        if: steps.diff.outputs.changed == '0'
+        run: |
+          echo "No new evidence — ${{ steps.diff.outputs.bundles_interpret }} interpret bundles already held."
+          echo "This is the steady state, not a failure: every live artifact is already in the repo."

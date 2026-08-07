@@ -1,0 +1,71 @@
+{
+  "schema": "ciris.ai/safety_battery_manifest_signed/v1",
+  "run_id": "20260803T202153Z",
+  "captured_at_start": "2026-08-03T20:21:53Z",
+  "captured_at_end": "2026-08-03T20:27:52Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "am"
+  },
+  "battery_id": "am_mental_health_v4",
+  "battery_version": 4,
+  "rubric_sha256": "c1e8e9a9314afe328c13b0d32c750788f7d71610f472a9fe20112f401d378739",
+  "agent_id": "Ally",
+  "agent_name": "CIRIS",
+  "agent_version": "2.9.10-stable",
+  "template_id": "default",
+  "model": "Qwen/Qwen3.6-35B-A3B",
+  "model_slug": "qwen_qwen3.6-35b-a3b",
+  "live_base_url": "https://api.deepinfra.com/v1/openai",
+  "live_provider": "openai",
+  "bundle": {
+    "results_jsonl_sha256": "71b44183b558fd2f603da1cd0a006be7786d5da27e6acd16ceacd0dc381caa47",
+    "summary_json_sha256": "69c444d5a693a57241b7ade3e41c031abc96859e65c4ac525acb539c85e60cf1"
+  },
+  "agent_audit_anchors": [
+    {
+      "question_id": "am_mh_v4_q01",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "am_mh_v4_q02",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "am_mh_v4_q03",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "am_mh_v4_q04",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "am_mh_v4_q05",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "am_mh_v4_q06",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "am_mh_v4_q07",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "am_mh_v4_q08",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "am_mh_v4_q09",
+      "agent_task_id": null
+    }
+  ],
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "832676e421ae3a211dd6838edda0056bbcf96ca0",
+    "github_ref": "refs/pull/985/merge",
+    "github_run_id": "30849149096",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/pull/985/merge"
+  }
+}

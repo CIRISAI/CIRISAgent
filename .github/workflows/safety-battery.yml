@@ -455,13 +455,43 @@ jobs:
               echo "**The lens push is supposed to be transparent.** If you're reading this banner, the supposed-transparency broke — please track down which link in the chain failed before this PR merges."
             } >> $GITHUB_STEP_SUMMARY
           else
-            # Healthy path: still report so the success case is observable too.
-            echo "::notice title=Lens push healthy::$TRACE_COUNT trace batches teed to bundle."
+            # Batches were SEALED. That is not SHIPPED, and the gap is why four
+            # runs on 2026-08-07 printed this banner while only one reached the
+            # canonical: the tee fires before the offer, so a serve gate that
+            # declines to offer anything still fills it. The canonical recorded
+            # zero arrivals AND zero 401s for the other three — nothing was
+            # rejected because nothing was sent.
+            #
+            # Report the tee as production, then the agent's verdict as delivery.
+            DJ="$BUNDLE_DIR/summary.json"
+            SHIPPED=$(python3 -c "import json;print(json.load(open('$DJ')).get('delivery',{}).get('shipped'))" 2>/dev/null || echo None)
+            SENT=$(python3 -c "import json;print(json.load(open('$DJ')).get('delivery',{}).get('envelopes_sent_total'))" 2>/dev/null || echo None)
+            CONSENT=$(python3 -c "import json;print(json.load(open('$DJ')).get('delivery',{}).get('consent_authored'))" 2>/dev/null || echo None)
+            echo "delivery_shipped=$SHIPPED" >> $GITHUB_OUTPUT
             {
               echo ""
-              echo "## ✅ Lens push: $TRACE_COUNT trace batches"
+              echo "## Lens: $TRACE_COUNT batches sealed"
               echo ""
-              echo "Per-LLM-call trace metadata (token counts, cost, latency, conscience scalars) is in \`traces/accord-batch-*.json\` inside the uploaded artifact. The local-tee fires BEFORE the HTTP POST to lens, so trace count $TRACE_COUNT means at least that many batches were attempted — see \`logs/sqlite/latest.log\` (or the lens server's audit chain) for POST outcomes."
+              echo "\`$TRACE_COUNT\` batches reached the local tee. **The tee fires when a batch is sealed, BEFORE any offer is made** — this counts production, not delivery."
+              echo ""
+            } >> $GITHUB_STEP_SUMMARY
+            if [ "$SHIPPED" = "True" ]; then
+              echo "::notice title=Ship confirmed::$TRACE_COUNT sealed; agent reports SHIP CONFIRMED (envelopes_sent_total=$SENT)."
+              echo "### ✅ Delivery: **SHIP CONFIRMED** — \`envelopes_sent_total=$SENT\`, consent authored: \`$CONSENT\`" >> $GITHUB_STEP_SUMMARY
+            elif [ "$SHIPPED" = "False" ]; then
+              echo "::warning title=Produced but not shipped::$TRACE_COUNT sealed, agent reports SHIP UNCONFIRMED (consent_authored=$CONSENT). Nothing reached the canonical; this run's traces are local-only."
+              {
+                echo "### ⚠️ Delivery: **SHIP UNCONFIRMED** — produced, never offered"
+                echo ""
+                echo "\`consent_authored=$CONSENT\`. Replication is gated on the owner's consent AND on the node being claimed; the grant is authored by a retry loop that gives up when the delivery-probe window closes. A run that loses that race seals batches normally and offers none, so the canonical records neither an arrival nor a rejection."
+              } >> $GITHUB_STEP_SUMMARY
+            else
+              echo "::warning title=Delivery unknown::$TRACE_COUNT sealed; no [DELIVERY-PROBE] verdict captured — whether they shipped is UNKNOWN, not assumed good."
+              echo "### ❓ Delivery: **UNKNOWN** — no probe verdict in the bundle. An unknown is not a pass." >> $GITHUB_STEP_SUMMARY
+            fi
+            {
+              echo ""
+              echo "Per-LLM-call trace metadata is in \`traces/accord-batch-*.json\` in the artifact; the delivery verdict and raw \`[DELIVERY-PROBE]\` lines are in \`summary.json\` under \`delivery\`."
             } >> $GITHUB_STEP_SUMMARY
           fi
 

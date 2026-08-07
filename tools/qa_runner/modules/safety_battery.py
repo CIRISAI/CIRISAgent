@@ -887,9 +887,80 @@ class SafetyBatteryTests:
             "total_duration_s": round(sum(r.duration_s for r in self._battery_results), 2),
             "results_jsonl": str(results_jsonl.relative_to(REPO_ROOT)),
         }
+        summary["delivery"] = self._collect_delivery_proof()
         with open(summary_path, "w", encoding="utf-8") as f:
             json.dump(summary, f, ensure_ascii=False, indent=2)
             f.write("\n")
+
+    def _collect_delivery_proof(self) -> Dict[str, Any]:
+        """Whether traces SHIPPED — from the agent's own probe, not the tee.
+
+        The workflow's "Lens push healthy" banner counts files in
+        CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR. That is the wrong side of the
+        boundary: the tee is written when a batch is SEALED, before any offer is
+        made, so a run whose serve gate declines to offer anything produces a
+        full tee and a green banner while the canonical receives nothing.
+
+        Observed 2026-08-07: four battery runs, same workflow, same commit,
+        minutes apart. One shipped; three produced well-formed batches that were
+        never offered. The canonical saw zero arrivals AND zero 401s — nothing
+        was rejected because nothing was sent — and all four printed the same
+        green banner. The distinguishing evidence existed the whole time, in the
+        agent's `[DELIVERY-PROBE]` lines, and died with the runner's log because
+        the bundle never carried it.
+
+        So the bundle now carries the verdict the agent already reached.
+        `shipped` is tri-state ON PURPOSE: `true` / `false` / `null` for "the
+        probe did not run or its log was unreadable". A missing probe must not
+        read as a failure to ship, and must certainly not read as success — an
+        unknown that renders as either is how a tee-counter passes for proof.
+        """
+        proof: Dict[str, Any] = {
+            "schema": "ciris.ai/safety_battery_delivery/v1",
+            "shipped": None,
+            "envelopes_sent_total": None,
+            "consent_authored": None,
+            "probe_lines": [],
+            "source": None,
+            "note": (
+                "From the agent's [DELIVERY-PROBE] output. The local tee counts sealed "
+                "batches, which is upstream of the offer — it cannot distinguish shipped "
+                "from produced-and-withheld."
+            ),
+        }
+        try:
+            candidates = sorted(
+                REPO_ROOT.glob("logs/*/latest.log"), key=lambda p: p.stat().st_mtime, reverse=True
+            )
+            if not candidates:
+                proof["note"] += " No logs/*/latest.log found."
+                return proof
+            log = candidates[0]
+            proof["source"] = str(log.relative_to(REPO_ROOT))
+            lines = [
+                ln.rstrip("\n")
+                for ln in log.read_text(encoding="utf-8", errors="replace").splitlines()
+                if "DELIVERY-PROBE" in ln or "DELIVERY-STATUS" in ln
+            ]
+            # Bound it: the probe logs on a cadence for the whole window, and the
+            # bundle must stay small enough to commit.
+            proof["probe_lines"] = lines[-40:]
+            joined = "\n".join(lines)
+            if "SHIP CONFIRMED" in joined:
+                proof["shipped"] = True
+            elif "SHIP UNCONFIRMED" in joined:
+                proof["shipped"] = False
+            if "owner consent AUTHORED" in joined:
+                proof["consent_authored"] = True
+            elif "consent not yet authorable" in joined:
+                proof["consent_authored"] = False
+            match = re.findall(r"envelopes_sent_total=(\d+)", joined)
+            if match:
+                proof["envelopes_sent_total"] = int(match[-1])
+        except Exception as exc:  # noqa: BLE001
+            # Never fail a capture over its own provenance record.
+            proof["note"] += f" Collection error: {type(exc).__name__}: {exc}"
+        return proof
 
     def _write_manifest_signed(self, manifest: Dict[str, Any], results_jsonl: Path) -> None:
         """Write manifest_signed.json per CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md §3.3.

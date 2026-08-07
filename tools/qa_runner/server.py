@@ -718,6 +718,39 @@ class APIServerManager:
                 except OSError:
                     pass  # Another parallel backend may have already removed it
 
+    def _probe_canonical_reachability(self, env: dict) -> None:
+        """Record whether this host can reach the canonical, before boot.
+
+        A KEX that never forms and an egress that never opens look the same from
+        the Python probe: `kex_present: false` either way. They are different
+        bugs with different owners, and the distinction is only observable from
+        the runner, at the time, so it is captured rather than inferred later.
+
+        Never raises and never blocks a run — the answer is evidence, not a gate.
+        """
+        import socket
+
+        target = self.config.canonical_peer
+        host, _, port = target.rpartition(":")
+        verdict, detail = "unknown", ""
+        try:
+            t0 = time.time()
+            with socket.create_connection((host, int(port)), timeout=8):
+                verdict, detail = "reachable", f"{(time.time() - t0) * 1000:.0f}ms"
+        except Exception as exc:  # noqa: BLE001
+            verdict, detail = "unreachable", f"{type(exc).__name__}: {exc}"
+
+        env["CIRIS_QA_CANONICAL_REACHABILITY"] = verdict
+        line = f"[CANONICAL-REACHABILITY] target={target} verdict={verdict} {detail}"
+        self.console.print(f"[{'green' if verdict == 'reachable' else 'red'}]🔌 {line}[/]")
+        try:
+            log_dir = Path(f"logs/{self.database_backend}")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            with open(log_dir / "canonical_reachability.log", "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now(timezone.utc).isoformat()} {line}\n")
+        except Exception:  # noqa: BLE001
+            pass
+
     def start(self) -> bool:
         """Start the API server."""
         # Check if server is already running
@@ -1104,6 +1137,33 @@ class APIServerManager:
         if self.config.federation_delivery:
             env["CIRIS_FEDERATION_DELIVERY"] = "true"
             env["CIRIS_EDGE_BOOTSTRAP_PEERS"] = self.config.canonical_peer
+
+            # TURN THE RUST LAYER UP. KEX happens inside ciris_edge / leviculum,
+            # not in Python, and at the default level those crates log almost
+            # nothing — so a run that sits at `kex_present: false` for 360s
+            # produces a Python-side probe verdict with no mechanism behind it.
+            #
+            # Observed 2026-08-07 (en, run 31218689164): ROOTED after ~10s, then
+            # `KEX still None` through 360s of repriming, with
+            # `peers=[{knows_peer: true, kex_present: false, deliverable: false}]`.
+            # The peer was known and the transport was up; the key exchange
+            # simply never formed, and nothing in any captured log said why. The
+            # `CIRISEdge#336 dial-cache` line the probe prints is a GUESS the code
+            # emits, not a diagnosis — the kind of plausible label that ends an
+            # investigation instead of starting one.
+            #
+            # Same levels the CIRISServer mesh-repro harness uses for this exact
+            # question. Operator-overridable: an explicit RUST_LOG wins.
+            env.setdefault("RUST_LOG", "info,ciris_edge=debug,leviculum_core=debug,leviculum_std=debug")
+
+            # Reachability, recorded BEFORE the agent starts. Whether a GitHub
+            # runner can open a socket to the canonical is a fact about the
+            # network, and it is unrecoverable after the fact — a failed KEX and
+            # a blocked egress look identical from the Python side. Cheap, and it
+            # separates "cannot connect" from "connected and KEX failed", which
+            # are different bugs with different owners.
+            self._probe_canonical_reachability(env)
+
             self.console.print(
                 f"[cyan]🛰️  Federation delivery ON → dialing canonical peer {self.config.canonical_peer} "
                 f"(will verify trace flow to canonical-server-1 after run)[/cyan]"

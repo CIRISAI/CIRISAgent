@@ -495,14 +495,25 @@ jobs:
             } >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Upload agent server logs (when lens-push failed)
+      - name: Upload agent server logs (whenever delivery is unproven)
         # When trace_count=0 the bundle alone doesn't tell us WHY the lens
         # push didn't fire. The agent server logs (logs/sqlite/latest.log,
         # incidents_latest.log, console.log) have the adapter-startup,
         # POST-attempt, and shutdown lines we need to diagnose. Upload them
         # as a separate small artifact so the next person looking at this
         # run has the data, not just the diagnostic guidance.
-        if: steps.bundle.outputs.trace_count == '0'
+        #
+        # GATED ON DELIVERY, NOT PRODUCTION. This used to fire only on
+        # trace_count == '0' — the count of files in the local tee, which is
+        # written when a batch is SEALED, upstream of any offer. So a run that
+        # sealed nine batches and shipped none passed the condition and its logs
+        # were discarded: exactly what happened to en run 31218689164, which sat
+        # at `kex_present: false` for 360s and threw away the only record of why.
+        # Production and delivery are different claims; this step exists for the
+        # second one, and was keyed to the first.
+        if: >-
+          steps.bundle.outputs.trace_count == '0' ||
+          steps.bundle.outputs.delivery_shipped != 'True'
         uses: actions/upload-artifact@v6
         with:
           name: safety-battery-agent-logs-${{ github.run_id }}-${{ needs.pick-lang.outputs.lang }}
@@ -510,6 +521,11 @@ jobs:
             logs/sqlite/latest.log
             logs/sqlite/incidents_latest.log
             logs/sqlite/console.log
+            logs/sqlite/canonical_reachability.log
+            logs/postgres/latest.log
+            logs/postgres/incidents_latest.log
+            logs/postgres/console.log
+            logs/postgres/canonical_reachability.log
             qa_reports/capture_workflow.log
           retention-days: 30
           if-no-files-found: warn

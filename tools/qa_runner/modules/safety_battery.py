@@ -937,15 +937,42 @@ class SafetyBatteryTests:
                 return proof
             log = candidates[0]
             proof["source"] = str(log.relative_to(REPO_ROOT))
-            lines = [
-                ln.rstrip("\n")
-                for ln in log.read_text(encoding="utf-8", errors="replace").splitlines()
-                if "DELIVERY-PROBE" in ln or "DELIVERY-STATUS" in ln
-            ]
-            # Bound it: the probe logs on a cadence for the whole window, and the
-            # bundle must stay small enough to commit.
-            proof["probe_lines"] = lines[-40:]
-            joined = "\n".join(lines)
+            text = log.read_text(encoding="utf-8", errors="replace")
+            # Everything needed to RCA a KEX that never forms. The Python probe
+            # only reports the VERDICT; the mechanism lives in the edge/reticulum
+            # lines, which is why a 360s `kex_present: false` window previously
+            # produced a confident "false" with nothing behind it.
+            markers = (
+                "DELIVERY-PROBE",       # the probe's own verdict trail
+                "DELIVERY-STATUS",      # per-peer kex/deliverable/knows_peer
+                "CANONICAL-REACHABILITY",  # can this host even open the socket
+                "ciris_edge",           # link establishment, dial outcomes
+                "leviculum",            # reticulum transport, announces, paths
+                "LENS_KEY_DIAG",        # which key id the lens client carries
+                "kex",                  # any casing of the exchange itself
+                "announce",
+                "reticulum",
+            )
+            low = tuple(m.lower() for m in markers)
+            lines = [ln.rstrip("\n") for ln in text.splitlines() if any(m in ln.lower() for m in low)]
+            # The VERDICT is derived from every matched line, before any eliding.
+            # Deriving it from the truncated view would let a `SHIP CONFIRMED` in
+            # the middle of a long window vanish and read as unknown — a
+            # summarizer that changes the answer it is summarizing.
+            joined_full = "\n".join(lines)
+            proof["n_matched_lines"] = len(lines)
+            proof["reachability"] = next(
+                (ln for ln in lines if "CANONICAL-REACHABILITY" in ln), None
+            )
+            # 400, not 40: the probe logs on a 60s cadence across a 6-minute
+            # window and the edge layer is chatty at debug. A cap that drops the
+            # BEGINNING drops the dial and the announce — the part that says why
+            # KEX never started. Keep the head as well as the tail, and say how
+            # much was dropped rather than silently shortening.
+            if len(lines) > 400:
+                lines = lines[:150] + [f"... {len(lines) - 300} lines elided ..."] + lines[-150:]
+            proof["probe_lines"] = lines
+            joined = joined_full
             if "SHIP CONFIRMED" in joined:
                 proof["shipped"] = True
             elif "SHIP UNCONFIRMED" in joined:

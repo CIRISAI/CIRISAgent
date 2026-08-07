@@ -2400,7 +2400,64 @@
     "tool_disclosure_params": "Agen mengisi: {params}",
     "tool_disclosure_summary": "Yang dapat dilakukan agen karena ini ({count} alat)",
     "tool_disclosure_summary_one": "Yang dapat dilakukan agen karena ini (1 alat)",
-    "tool_disclosure_unavailable": "Alat yang satu ini hanya dapat didaftar setelah ia dijalankan dengan kredensialnya sendiri. Mengaktifkannya berarti memberikan semua alat yang ia daftarkan saat itu."
+    "tool_disclosure_unavailable": "Alat yang satu ini hanya dapat didaftar setelah ia dijalankan dengan kredensialnya sendiri. Mengaktifkannya berarti memberikan semua alat yang ia daftarkan saat itu.",
+    "accord_bless_ci_desc": "Scrub sekaligus kunci CI worker substrat (pipeline build + steward agen) dalam satu upacara. Masing-masing adalah kunci node infra:attest — peran ditetapkan di sisi server, jadi tempelkan kunci publiknya saja. Kolom sudah terisi sebelumnya; tempelkan kunci publik ML-DSA-65 setiap repo dari artefak export-job-nya. Aplikasi tidak menyimpan kunci — sentuhan YubiKey adalah persetujuan Anda.",
+    "accord_bless_ci_ed25519_label": "Kunci publik Ed25519 (base64)",
+    "accord_bless_ci_mldsa_label": "Kunci publik ML-DSA-65 (base64) — tempelkan dari export job",
+    "accord_bless_ci_submit": "Restui CI worker — sentuh YubiKey Anda",
+    "accord_bless_ci_submit_busy": "Merestui — sentuh YubiKey Anda…",
+    "accord_bless_ci_title": "Restui CI worker",
+    "accord_new_bless_ci_workers": "Restui CI worker",
+    "accord_new_remint_trust_root": "Cetak ulang trust root yang ada",
+    "accord_remint_auth_tally": "{have} dari {needed} otorisasi.",
+    "accord_remint_back_btn": "Kembali",
+    "accord_remint_bundle_ready": "Seed portabel sudah siap — simpan atau salin (mesh-genesis.json):",
+    "accord_remint_canonical_select": "Pilih server kanonik untuk dicetak ulang…",
+    "accord_remint_close_btn": "Tutup",
+    "accord_remint_completed_label": "Rekaman lengkap (SignedKeyRecord JSON)",
+    "accord_remint_continue_btn": "Lanjut ke pengusulan",
+    "accord_remint_cosign_all_signed": "Setiap pemegang dalam daftar ini sudah mengotorisasi seed ini.",
+    "accord_remint_cosign_btn": "Tanda tangani bersama seed ini — sentuh YubiKey Anda",
+    "accord_remint_cosign_btn_busy": "Menandatangani bersama — sentuh YubiKey Anda…",
+    "accord_remint_cosign_desc": "Serahkan perangkat kepada pemegang berikutnya. Mereka mengotorisasi seed yang SAMA dengan YubiKey mereka sendiri dan PIN mereka sendiri. Ulangi sampai node melaporkan seed telah lengkap.",
+    "accord_remint_cosign_paste_label": "Berkas parsial untuk ditandatangani bersama (SignedKeyRecord JSON)",
+    "accord_remint_cosign_title": "Langkah 3 — Tanda tangan bersama (pemegang kedua)",
+    "accord_remint_desc": "Ubah daftar pemegang accord yang SUDAH ADA dan satu node serve kanonik menjadi seed trust-root yang portabel. Dua pemegang accord mengotorisasinya, masing-masing dengan satu YubiKey. Tidak ada yang perlu diketik ulang: daftar, kunci publik, dan alamat terisi otomatis dari node ini. Aplikasi tidak menyimpan kunci — sentuhan YubiKey adalah persetujuan Anda.",
+    "accord_remint_done_desc": "Simpan, jaga tetap offline, dan serahkan seperti Anda menyerahkan sebuah kunci — siapa pun yang memegangnya dapat mendirikan mesh di atas trust root ini.",
+    "accord_remint_done_family": "Kunci keluarga: {key}",
+    "accord_remint_done_fingerprint": "Sidik jari: {fingerprint}",
+    "accord_remint_done_fingerprint_caption": "Bandingkan sidik jari ini melalui jalur terpisah — secara langsung atau lewat panggilan yang kalian berdua kenali — sebelum ada yang memasang seed ini.",
+    "accord_remint_done_holders": "Pemegang yang dibawa: {count}",
+    "accord_remint_done_serve_nodes": "Node serve yang dibawa: {count}",
+    "accord_remint_done_title": "Seed telah diotorisasi",
+    "accord_remint_no_canonicals": "Tidak ada server kanonik dalam sumber cetak ulang.",
+    "accord_remint_produce_btn": "Hasilkan genesis portabel",
+    "accord_remint_produce_btn_busy": "Menghasilkan…",
+    "accord_remint_propose_btn": "Usulkan seed — sentuh YubiKey Anda",
+    "accord_remint_propose_btn_busy": "Mengusulkan — sentuh YubiKey Anda…",
+    "accord_remint_propose_desc": "Pemegang pertama mencetak dan menandatangani piagam serta hibah dari seed ini dengan YubiKey miliknya sendiri. Aplikasi tidak menyimpan kunci apa pun — sentuhan itulah persetujuannya.",
+    "accord_remint_propose_title": "Langkah 2 — Ajukan (pemegang pertama)",
+    "accord_remint_quorum_line": "Kuorum: {m} dari {n} pemegang accord harus mengotorisasi seed.",
+    "accord_remint_quorum_note": "Kuorum {quorum} — hanya dua pemegang yang perlu hadir; catatan pemegang ketiga ikut terbawa dalam daftar.",
+    "accord_remint_reblessed_note": "Upacara ini juga memberkati server canonical terpilih sebagai server trace (infra:serve) — sebelumnya ia tidak punya. Kini ia dipercaya secara bawaan untuk menerima trace; cabut berkatnya kapan saja dengan operasi penarikan canonical.",
+    "accord_remint_review_title": "Langkah 1 — Tinjau apa yang akan dibawa seed",
+    "accord_remint_roster_empty": "Belum ada pemegang accord di sumber pencetakan ulang.",
+    "accord_remint_roster_title": "Pemegang accord (seluruh daftar ikut terbawa dalam seed)",
+    "accord_remint_save_bundle": "Simpan bundel genesis",
+    "accord_remint_seed_scope": "Seed membawa trust root — seluruh daftar pemegang accord ini — dan node serve yang dipilih di bawah. Tidak ada yang ditandatangani pada langkah ini.",
+    "accord_remint_serve_missing": "belum diberkati untuk melayani — pencetakan ulang ini memperbaikinya",
+    "accord_remint_serve_node_line": "Node serve: {key}",
+    "accord_remint_serve_ok": "memberikan infra:serve ✓",
+    "accord_remint_start_over_btn": "Mulai seed lain",
+    "accord_remint_step1_desc": "Pemegang pertama menandatangani (scrub-sign) canonical yang dipilih (key_id + pubkey + alamat sudah terisi otomatis). Partial dengan 1 scrub belum memberikan apa pun — ia disebarkan ke pemegang lain untuk ditandatangani bersama.",
+    "accord_remint_step1_title": "Langkah 1 — Ajukan (A1)",
+    "accord_remint_step2_desc": "Partial disebarkan ke perangkat pemegang lain — pemegang kedua menandatanganinya bersama dari daftar Tanda tangan bersama tertunda (atau menempelkannya di bawah untuk menandatangani di perangkat ini). Saat kuorum family tercapai, catatan pun diberikan.",
+    "accord_remint_step2_title": "Langkah 2 — Tanda tangan bersama (B1)",
+    "accord_remint_step3_desc": "Tempelkan catatan yang sudah lengkap (ditandatangani bersama) — ia terbawa apa adanya, tidak pernah dikodekan ulang. Node menolak catatan yang tidak memberikan infra:serve.",
+    "accord_remint_step3_title": "Langkah 3 — Hasilkan genesis portabel",
+    "accord_remint_step_done": "Selesai — seed telah diotorisasi",
+    "accord_remint_step_of": "Langkah {step} dari {total}",
+    "accord_remint_title": "Cetak ulang trust root yang ada"
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",
@@ -3052,12 +3109,132 @@
       "nodes": "Node",
       "provision_accord_holder": "Provisi Pemegang",
       "safety": "Keselamatan",
-      "transport": "Transport"
+      "transport": "Transport",
+      "commons": "Ranah Bersama"
     }
   },
   "setup_validation_select_provider": "Pilih penyedia LLM",
   "network_ops": {
-    "open_federation_hub": "Buka pusat federasi →"
+    "open_federation_hub": "Buka pusat federasi →",
+    "reader": {
+      "advisory": "Penilaian yang diterbitkan bersifat anjuran bagi setiap pembaca. Memilih untuk tidak menghormatinya adalah hasil yang setara dan normal, bukan kesalahan: dua pembaca dengan kebijakan berbeda yang sampai pada keadaan berbeda namun sama-sama sah dari penilaian yang sama justru menunjukkan rancangan ini bekerja sebagaimana mestinya.",
+      "asserted": "Dinyatakan",
+      "decision": {
+        "declined": "Tidak dihormati oleh pembaca ini",
+        "honoured_by_subscription": "Dihormati berdasarkan langganan",
+        "honoured_explicit": "Dihormati — pembaca ini mengadopsinya",
+        "undecided_unsubscribed": "Belum ada keputusan",
+        "unknown": "Keputusan tidak dikenali"
+      },
+      "decision_recorded": "Keputusan tercatat",
+      "decision_refused": "Keputusan itu ditolak",
+      "decision_refused_body": "Tidak ada yang dicatat, dan kebijakan pembaca ini tidak berubah.",
+      "decision_unreachable_body": "Tidak diketahui apakah keputusan itu tercatat. Baca ulang fold begitu node menjawab.",
+      "decline": "Tidak menghormati",
+      "dialog": {
+        "decline_note": "Ini hasil yang normal. Tidak ada bagian dari penilaian itu yang dihapus atau digugat: ini mencatat bahwa pembaca INI tidak mengadopsinya.",
+        "decline_title": "Jangan hormati penilaian ini",
+        "honour_note": "Pembaca ini mengadopsi penilaian tersebut secara sengaja. Penanda tangannya tidak harus dilanggan.",
+        "honour_title": "Hormati penilaian ini"
+      },
+      "dimension": "Dimensi",
+      "fold": {
+        "agrees": "Keduanya sepakat.",
+        "diverges": "Keduanya berbeda — dan itulah pembaca yang sedang memutuskan. Keputusan untuk tidak menghormati dicatat dan dilaporkan; hal itu belum menghentikan node ini menahan baris-baris tersebut.",
+        "node": "Jalur penyajian node ini",
+        "reader": "Fold pembaca ini"
+      },
+      "held": "Penilaian yang dipegang",
+      "honour": "Hormati",
+      "judgement": "Penilaian",
+      "read": "Baca fold pembaca ini",
+      "reading": "Membaca…",
+      "refused_body": "Tidak ada yang dapat disimpulkan tentang apa yang dihormati pembaca ini.",
+      "refused_title": "Node menolak pembacaan ini",
+      "signer": "Ditandatangani oleh",
+      "standing": {
+        "decided": "Penilaian yang telah diklasifikasikan",
+        "none_held": "Tidak ada penilaian yang dipegang di sini",
+        "unknown": "Status tidak dikenali",
+        "unreadable": "Pembaca ini tidak dapat membaca keadaannya sendiri",
+        "unreadable_meaning": "BUKAN 'tidak ada penilaian' dan BUKAN 'tidak ada yang ditahan' — kebijakan yang tak terbaca lalu ditampilkan seolah kosong akan diam-diam menggugurkan setiap pembatasan yang dibawanya."
+      },
+      "subject_label": "Id kunci subjek",
+      "subscription": "Root yang dilanggan",
+      "subtitle": "Penilaian pihak lain, dan apa yang dibuat kebijakan pembaca node INI atas penilaian itu",
+      "title": "Apa yang dihormati pembaca ini (tier R)",
+      "unreachable_body": "Tier R membaca apa yang dipegang node ini, sehingga tidak ada yang dapat dikatakan tentang subjek sampai node menjawab. Berbeda dari tier S, anak tangga ini membutuhkan node.",
+      "unreachable_title": "Node ini tidak dapat dijangkau"
+    },
+    "self": {
+      "act_refused_body": "Tidak ada yang dicatat. Status di atas tidak berubah.",
+      "act_refused_title": "Tindakan itu ditolak",
+      "act_unreachable_body": "Tidak diketahui apakah tindakan itu tercatat. Baca ulang status begitu node menjawab.",
+      "act_unreachable_title": "Node ini tidak dapat dijangkau",
+      "axes_never_folded": "Tiga poros terpisah, tiga tindakan terpisah. Node yang MEMILIH untuk berhenti dan node yang DIPAKSA berhenti tampak sama dari luar tetapi bermakna berlawanan, sehingga keduanya tidak pernah dijadikan satu sakelar.",
+      "axis": {
+        "accepting": {
+          "declare": "Berhenti menerima",
+          "lift": "Terima lagi",
+          "question": "Apakah node ini MEMILIH untuk tidak menerima hal baru?",
+          "title": "Berhenti menerima"
+        },
+        "legal_compulsion": {
+          "declare": "Nyatakan paksaan",
+          "lift": "Paksaan telah berakhir",
+          "question": "Apakah ada paksaan yang diterapkan pada node ini dari luar mesh? Ini bukan pilihan, dan tidak pernah dicatat sebagai pilihan.",
+          "title": "Paksaan hukum"
+        },
+        "load_shed": {
+          "declare": "Lepas beban",
+          "lift": "Pikul beban penuh lagi",
+          "question": "Apakah node ini sengaja memikul lebih sedikit?",
+          "title": "Lepas beban"
+        }
+      },
+      "counts": "Dinyatakan {declarations}× · ditarik {lifts}×",
+      "delegation": "Di bawah delegasi",
+      "dialog": {
+        "cancel": "Batal",
+        "compelled_by_hint": "Hanya paksaan yang membawa isian ini. Biarkan kosong jika Anda tidak dapat menyebutkannya — 'dipaksa, tidak dapat menyebut oleh siapa' adalah jawaban yang sah, dan operator yang dibungkam pun masih dapat meninggalkan jejaknya.",
+        "compelled_by_label": "Dipaksa oleh (opsional)",
+        "confirm": "Catat",
+        "delegation_hint": "Id delegates_to milik pemilik itu sendiri. Tindakan yang diarahkan pada diri sendiri adalah milik pemilik node itu sendiri: pemberian hak penyajian dari pihak ketiga tidak mencukupi.",
+        "delegation_label": "Id delegasi pemilik",
+        "reason_hint": "Dicatat apa adanya dan tidak pernah ditafsirkan. Tindakan tanpa alasan yang tercatat tidak dapat dibedakan dari tindakan tanpa izin setelah pelakunya tiada.",
+        "reason_label": "Alasan (wajib)",
+        "working": "Mencatat…"
+      },
+      "event": "Peristiwa",
+      "lift_disabled_hint": "Belum ada yang dinyatakan pada poros ini, sehingga tidak ada yang bisa ditarik.",
+      "node_key": "Node ini",
+      "partition_only": "Satu-satunya anak tangga yang tetap bekerja saat terjadi partisi — setiap anak tangga lainnya harus menjangkau pihak lain.",
+      "reason_label": "Alasan yang tercatat",
+      "recorded_title": "Tercatat",
+      "records_only": "Setiap tindakan mencatat sebuah deklarasi beratribusi dan tidak lebih dari itu. Tidak ada loop pada node ini yang membacanya, sehingga tidak ada yang dibatasi lajunya, digerbangi, atau dihentikan oleh tindakan itu sendiri.",
+      "refresh": "Baca ulang status",
+      "refused_body": "Statusnya tidak diketahui. Pembacaan yang ditolak bukanlah pembacaan yang bersih.",
+      "refused_title": "Node menolak pembacaan ini",
+      "since": "Sejak",
+      "standing": {
+        "in_force": "Berlaku",
+        "in_force_meaning": "Node ini telah menyatakannya dan belum menariknya.",
+        "lifted": "Dinyatakan, lalu ditarik",
+        "lifted_meaning": "Tidak berlaku sekarang — dan itu bukan fakta yang sama dengan tidak pernah menyatakannya.",
+        "never_declared": "Tidak pernah dinyatakan",
+        "never_declared_meaning": "Tidak pernah ada tindakan pada poros ini yang tercatat di sini.",
+        "unknown": "Status tidak dikenali",
+        "unknown_meaning": "Node melaporkan status yang tidak dikenali aplikasi ini. Perlakukan sebagai tidak diketahui, jangan pernah sebagai bersih.",
+        "unreadable": "Status tidak diketahui — tidak dapat dibaca",
+        "unreadable_meaning": "Catatannya tidak dapat dibaca, sehingga node ini tidak mengetahui statusnya sendiri. Ini BUKAN 'tidak ada yang berlaku'."
+      },
+      "subtitle": "Bertindak pada node ini dan tidak pada siapa pun lain",
+      "title": "Diarahkan sendiri (tier S)",
+      "unreachable_body": "Ketiga status tidak diketahui — dan itu bukan berarti 'tidak ada yang berlaku'. Tindakan tier S bersifat lokal bagi node ini, sehingga semuanya tersedia kembali begitu node menjawab.",
+      "unreachable_title": "Node ini tidak dapat dijangkau",
+      "unreadable_axes_body": "Node menjawab, tetapi ia tidak dapat membaca poros-poros yang ditandai di bawah ini. Ia tidak mengetahui statusnya sendiri di sana — jangan membacanya sebagai bersih.",
+      "unreadable_axes_title": "Sebagian status tidak dapat dibaca"
+    }
   },
   "setup_validation_fedid_label_generic": "Pilih nama unik seperti namadepan-namabelakang-v1. Nama default generik tidak diperbolehkan.",
   "setup_validation_fedid_label_required": "Masukkan nama untuk ID federasi Anda agar dapat melanjutkan.",
@@ -3124,5 +3301,648 @@
   "approval_tool_capabilities": "Apa yang dapat dilakukan alat ini",
   "approval_tool_arguments": "Nilai yang hendak dikirim agen",
   "approval_tool_arguments_omitted": "Argumen agen terlalu besar untuk ditampilkan di sini.",
-  "approval_tool_scope_note": "Menyetujui berarti mengizinkan alat ini untuk tugas lanjutan, bukan untuk panggilan ini secara persis. Agen akan mempertimbangkan ulang tugas dari awal dan mungkin memakai nilai yang berbeda."
+  "approval_tool_scope_note": "Menyetujui berarti mengizinkan alat ini untuk tugas lanjutan, bukan untuk panggilan ini secara persis. Agen akan mempertimbangkan ulang tugas dari awal dan mungkin memakai nilai yang berbeda.",
+  "admin": {
+    "accept_writes": {
+      "not_reached": "Ini tidak memulihkan apa pun yang ditolak selama pencabutan penerimaan itu berlaku. Penulisan-penulisan tersebut ditolak di pintu dan tidak pernah mendarat di sini; jika peer masih memegangnya, ia harus mengirimkannya lagi. Tidak ada hal lain tentang kunci itu yang berubah.",
+      "not_refused": "Kunci ini tidak sedang dicabut penerimaannya di sini, jadi tidak ada yang bisa ditarik."
+    },
+    "admission": {
+      "standing": {
+        "admitted": "Tidak ada pencabutan penerimaan aktif yang ditulis node ini yang menyebut kunci ini, sehingga penulisannya diterima di sini. Ini tidak menyatakan apa pun tentang node lain: pencabutan penerimaan bersifat lokal bagi korpus yang menerbitkannya.",
+        "refused": "Node ini memegang pencabutan penerimaan aktif atas kunci ini yang ditulisnya sendiri, sehingga penulisan berikutnya dari kunci itu ke dalam korpus node ini ditolak di pintu substrat itu sendiri.",
+        "unreadable": "Node ini tidak dapat membaca status penerimaannya sendiri untuk kunci ini, sehingga ia tidak tahu apakah penulisan dari kunci itu ditolak. Ini BUKAN 'diterima' — jangan menampilkannya seperti itu."
+      }
+    },
+    "descend": {
+      "bounded_unsupported": "Penilaian yang dibatasi waktu tidak dapat memicu penghapusan tanpa batas. Satu-satunya penurunan berbasis kunci aktor pada substrat ini mencakup seluruh korpus, yang akan menghancurkan riwayat yang justru sengaja dibiarkan tetap berdiri oleh batas ini. Penghapusan berbatas waktu yang MEMANG diterapkan adalah pencabutan penerimaan dengan batas riwayat.",
+      "not_reached": "Baris atestasi yang dipilih itu sendiri tidak diturunkan. Setiap pembawa muatan pada substrat ini tersegel di dalam tanda tangannya sendiri, sehingga byte-nya tidak dapat dibuang tanpa membuat baris itu terbaca sebagai palsu; kemampuan penghapusan ditentukan pada saat pencetakan, dan tidak ada yang dicetak hari ini yang dapat dihapus."
+    },
+    "enforcement": {
+      "accept_writes": "Node ini berhenti menolak penulisan dari kunci-kunci yang disebutkan: pencabutan penerimaan yang ditulisnya ditarik kembali, dan substrat kembali menerima penulisan berikutnya dari mereka. Baik pencabutan penerimaan itu maupun penarikannya sama-sama tetap ada sebagai riwayat yang dapat dibaca.",
+      "annotate": "Penilaian bertanda tangan yang tidak berefek apa pun sampai ada pembaca yang menghormatinya. Tidak ada yang ditahan, dibatasi lajunya, atau dihapus.",
+      "deadmit": "Pencabutan bertanda tangan pada bidang append-only biasa. Ini adalah bukti yang dilipat oleh pembaca, bukan pintu yang dibanting: verifikasi tanda tangan, kursor replikasi, dan penerimaan baris semuanya sengaja tetap berjalan, karena menolak baris-baris lama dari kunci yang telah dikompromikan justru akan menghancurkan bukti yang dibutuhkan untuk mengadili kompromi itu.",
+      "descend": "Tidak dapat dibatalkan, sesuai rancangannya. Penurunan tidak pernah berakhir pada nol — hasil pengaburan dan tombstone tetap ada — tetapi apa yang telah dilepas tidak akan kembali.",
+      "quarantine": "Sebuah penanda bertanda tangan, bukan perintah: tidak ada yang dihapus dan tidak ada yang ditulis ulang. Jalur penyajian node ini berhenti menyerahkan baris dan blob milik kunci yang disebutkan kepada peer; peer yang melipatnya secara berbeda sekadar tidak menerima baris-baris itu dari kami.",
+      "re_admit": "Dicatat sebagai pembalikan yang beratribusi. Baris pencabutan tetap ada dan setiap pembaca masih melipatnya: pembatasan saling menumpuk sedangkan kelonggaran tidak, dan tidak ada lapisan substrat ini yang menyediakan pembatalan pencabutan.",
+      "refuse_writes": "Node ini menolak penulisan berikutnya dari kunci-kunci yang disebutkan ke dalam korpusnya sendiri, di pintu substrat itu sendiri dan sebelum gerbang mana pun lainnya berjalan. Sifatnya LOKAL sesuai rancangan: tidak ada node yang menetapkan himpunan penerimaan node lain, karena pencabutan penerimaan yang berlaku global akan menjadi senjata sensor tersendiri. Pengucilan pelaku pelanggaran yang sesungguhnya bersifat emergen — ia muncul ketika banyak node secara independen sampai pada kesimpulan yang sama — dan tidak pernah ditetapkan dari sini.",
+      "throttle": "Dicatat hanya sebagai penilaian yang beratribusi. Substrat ini tidak memiliki anggaran penerimaan per kunci yang ditetapkan oleh penerima: kuota tulis peer adalah pengaman tetap terhadap loop liar, bukan permukaan kebijakan yang dapat dijadikan acuan oleh pembatasan laju. Tidak ada yang berubah pada apa yang diterima node ini dari kunci-kunci yang disebutkan."
+    },
+    "preview": {
+      "note": "Inilah persis yang akan dikenai tindakan oleh commit. Sertakan hash seleksi bersama commit; jika seleksi telah berubah, commit akan menolak.",
+      "window_in_application": "Jendela waktu diterapkan oleh node ini, bukan oleh kueri substrat: pembacaan atestasi umum tidak menghormati sumbu jendela. Batas halaman diterapkan lebih dulu, sehingga seleksi berjendela dapat kembali dengan hasil yang kurang dari semestinya."
+    },
+    "quarantine": {
+      "not_withheld": "Kunci ini saat ini tidak sedang ditahan di sini, jadi tidak ada yang bisa dilepaskan."
+    },
+    "reader": {
+      "advisory": "Penilaian yang diterbitkan bersifat anjuran bagi setiap pembaca. `reader_fold` adalah hasil yang dibuat kebijakan pembaca INI atas apa yang dipegangnya; `node_fold` adalah apa yang dilakukan jalur penyajian node ini hari ini, yaitu menghormati setiap penanda yang diterima substrat. Keduanya bisa berbeda, dan ketika berbeda, selisih itulah celah substratnya: tidak ada kait kebijakan pembaca di dalam fold sisi penyajian, sehingga keputusan untuk tidak menghormati memang dicatat dan dilaporkan, tetapi belum menghentikan node ini menahan baris-baris itu.",
+      "decision": {
+        "declined": "Pembaca ini memilih untuk tidak menghormati penilaian ini. Ini hasil yang normal: penilaian yang diterbitkan bersifat anjuran bagi setiap pembaca, dan kemampuan untuk tidak menghormatinya justru merupakan sifat yang menjadi alasan keberadaan seluruh anak tangga ini.",
+        "honoured_by_subscription": "Tidak ada keputusan eksplisit yang tercatat; pembaca ini berlangganan pada penanda tangan, sehingga penilaian itu dihormati berdasarkan kebijakan.",
+        "honoured_explicit": "Pembaca ini mengadopsi penilaian ini secara sengaja.",
+        "undecided_unsubscribed": "Pembaca ini tidak berlangganan pada penanda tangan dan belum mencatat keputusan apa pun. Penilaian itu tidak dihormati, tetapi hal itu belum menjadi keputusan siapa pun — sebuah fakta yang berbeda dari pembaca yang memang telah memilih untuk tidak menghormatinya."
+      },
+      "standing": {
+        "decided": "Setiap penilaian yang dipegang node ini tentang subjek tersebut dicantumkan beserta apa yang dilakukan pembaca ini terhadapnya.",
+        "none_held": "Node ini tidak memegang penilaian apa pun tentang subjek tersebut. Di sini belum ada yang menilainya — hal ini tidak sama dengan node ini yang tidak mampu menyatakannya.",
+        "unreadable": "Pembaca ini tidak dapat membaca keadaannya sendiri, sehingga tidak dapat menyatakan apa yang dihormatinya. Ini BUKAN 'tidak ada penilaian' dan BUKAN 'tidak ada yang ditahan' — kebijakan yang tak terbaca lalu ditampilkan seolah kosong akan diam-diam menggugurkan setiap pembatasan yang dibawanya."
+      }
+    },
+    "refusal": {
+      "attribution_absent": "delegation_id wajib diisi. Tindakan yang tidak membawa kewenangannya sendiri tidak dapat dibedakan dari tindakan tanpa izin setelah pelakunya tiada.",
+      "authority_not_a_delegation": "delegation id yang disebutkan bukan baris delegates_to.",
+      "authority_not_the_owner": "Tindakan yang diarahkan pada diri sendiri adalah milik pemilik node itu sendiri. Delegasi yang disebutkan memang membawa cakupan yang tepat, tetapi tidak diterbitkan oleh pihak yang bertanggung jawab atas node ini, dan pemberian hak penyajian dari pihak ketiga bukanlah pemberian dari pemilik.",
+      "authority_not_to_actor": "Delegasi yang disebutkan tidak diberikan kepada node ini, sehingga node ini bukanlah pihak yang diberinya wewenang.",
+      "authority_scope_absent": "Delegasi yang disebutkan tidak membawa cakupan yang dibutuhkan operasi ini. Delegasi lain dari penerbit yang sama mungkin membawanya, tetapi tindakan itu lalu akan mencatat kewenangan yang bukan dasar pelaksanaannya.",
+      "authority_scope_unreachable": "Tidak ada rantai delegasi aktif yang membawa cakupan yang dibutuhkan operasi ini dan mencapai node ini dari penerbit tersebut. Kewenangan diturunkan ulang dari keadaan terverifikasi milik node ini sendiri, tidak pernah diambil dari permintaan.",
+      "authority_unresolved": "Delegasi yang disebutkan bukan baris yang dipegang node ini, sehingga cakupannya tidak dapat diperiksa. Node ini tidak bertindak atas kewenangan yang tidak dapat diverifikasinya.",
+      "bad_request": "Isi permintaan tidak dapat diurai.",
+      "community_absent": "community_id wajib diisi: karantina diajukan di bawah kewenangan sebuah komunitas, dan penanda yang tidak menyebut komunitas mana pun tidak menyebut kewenangan apa pun.",
+      "deadmission_gate_dormant": "Node ini belum menyatakan identitasnya sendiri kepada substrat, sehingga gerbang pencabutan penerimaan sedang tidak aktif: barisnya akan tertulis dan tidak akan menolak apa pun. Ditolak alih-alih dikembalikan sebagai selesai — gerbang sanksi yang diam-diam tidak melakukan apa-apa lebih buruk daripada tidak ada gerbang sama sekali, karena operator akan percaya bahwa pencabutan penerimaan itu bekerja. Ini adalah kesalahan konfigurasi node, bukan kesalahan permintaannya.",
+      "deadmission_gate_foreign_identity": "Identitas yang dipakai node ini untuk menandatangani dan identitas yang dijadikan pembanding para penulis oleh gerbang pencabutan penerimaan adalah dua kunci yang berbeda, sehingga pencabutan penerimaan yang ditandatangani di sini tidak akan pernah dilipat sebagai milik node ini sendiri dan tidak akan menolak apa pun. Ini adalah kesalahan konfigurasi node, bukan kesalahan permintaannya.",
+      "judgement_subjectless": "Penilaian itu tidak menyebut subjek apa pun, sehingga menghormati maupun tidak menghormatinya tidak akan mengubah apa pun tentang siapa pun. Node ini tidak mencatat keputusan yang tidak dapat diterapkannya.",
+      "judgement_unresolved": "Penilaian itu bukan baris yang dipegang node ini, sehingga tidak ada yang perlu diputuskan pembaca ini. Pembaca memutuskan tentang apa yang DIPEGANGNYA; ia tidak menolak lebih dahulu apa yang belum pernah dilihatnya.",
+      "node_unowned": "Node ini tidak memiliki pihak yang bertanggung jawab (owner-binding), sehingga tidak menjalankan operasi admin bertingkat atas nama siapa pun. Klaim kepemilikan terlebih dahulu.",
+      "not_a_judgement": "Baris itu bukan penilaian yang dapat diputuskan oleh anak tangga ini. Tier R adalah kebijakan pembaca atas PENILAIAN pihak lain, dan atestasi biasa bukanlah penilaian.",
+      "not_owner": "Operasi admin bertingkat memerlukan peran pemilik (SYSTEM_ADMIN).",
+      "preview_hash_mismatch": "Apa yang Anda pratinjau bukanlah apa yang akan dieksekusi — seleksi telah berubah sejak pratinjau. Jalankan ulang pratinjau dan sahkan hash yang baru.",
+      "quorum_insufficient": "Operasi ini tidak dapat dibatalkan dan memerlukan kuorum dari otoritas yang berbeda-beda, bukan satu rantai delegasi. Dua rantai dari akar yang sama adalah satu otoritas yang mengenakan dua topi.",
+      "reason_absent": "reason wajib diisi. Tindakan tanpa alasan yang tercatat tidak dapat dibedakan dari tindakan tanpa izin setelah pelakunya tiada.",
+      "selection_unpredicated": "Seleksi tidak membawa predikat sama sekali, yang berarti seluruh korpus. Sebutkan apa yang sedang Anda kenai tindakan.",
+      "session_absent": "Tidak ada token sesi yang diberikan. Operasi admin bertingkat hanya untuk pemilik.",
+      "session_invalid": "Sesi tersebut tidak valid atau telah kedaluwarsa.",
+      "store_unavailable": "Substrat tidak dapat dibaca.",
+      "subject_absent": "subject_key_id wajib diisi: fold pembaca menyangkut penilaian atas satu subjek, dan subjek yang tidak disebutkan berarti setiap subjek."
+    },
+    "refuse_writes": {
+      "already_refused": "Kunci ini sudah dicabut penerimaannya di sini, sehingga tidak ada yang ditulis dan statusnya tidak berubah.",
+      "not_reached": "Ini tidak membatalkan penulisan apa pun. Baris-baris yang sudah ditulis kunci-kunci ini di sini tidak tersentuh dan tetap dilayani — karantinalah operasi yang menghentikan pelayanannya. Baris yang sudah tereplikasi ke para peer tidak ditarik kembali dan memang tidak bisa. Kunci-kunci itu tidak dihapus, tanda tangannya tetap terverifikasi, dan mereka terus menulis ke setiap node lain, termasuk para peer node ini, sehingga baris-baris itu dapat tiba di sini lagi melalui replikasi. Satu pengecualian sengaja dipertahankan agar sebuah node selalu dapat menarik penolakannya sendiri, dan pengecualian itu tidak menanyakan siapa yang menulis: kunci yang telah dicabut penerimaannya tetap boleh menulis baris pencabutan penerimaan di sini (CIRISPersist#608).",
+      "reversal": "Dapat dibalik, dan pembalikannya benar-benar mencapai substrat alih-alih sekadar mencatat perubahan pikiran: POST /v1/admin/accept-writes menarik pencabutan penerimaan itu dan penulisan dari kunci tersebut kembali diterima di sini. Dua pembalikan pada anak tangga ini mencapai substrat — melepaskan karantina, yang memulihkan apa yang DILAYANI node ini, dan yang satu ini, yang memulihkan apa yang DITERIMANYA. Kedua barisnya tetap ada dan tetap dapat dibaca: 'ditolak lalu diterima kembali' bukanlah fakta yang sama dengan 'tidak pernah ditolak'."
+    },
+    "reversal": {
+      "evidence_only": "Baris aslinya tetap ada dan masih dilipat oleh setiap pembaca. Pembalikan ini adalah bukti yang tercatat, bukan pembatalan — substrat tidak menyediakan pembatalan pencabutan.",
+      "substrate": "Keadaan substrat dibalik: node ini berhenti menahan baris-baris milik kunci tersebut.",
+      "symmetric": "Tidak ada yang dibalik di dalam substrat karena tidak ada bagian substrat yang menegakkan penilaian aslinya. Kedua tindakan tercatat sebagai bukti."
+    },
+    "self": {
+      "distinct_zeroes": "Tiga dari empat status berupa nol dan artinya berbeda-beda: tidak pernah dinyatakan, pernah dinyatakan lalu ditarik, dan tidak dapat dibaca. Tampilkan ketiganya secara berbeda.",
+      "enforcement": {
+        "compelled": "Dicatat pada porosnya sendiri, sebagai tindakan tersendiri. Ini adalah pernyataan tentang paksaan yang diterapkan dari LUAR mesh, dan dengan sendirinya hal itu tidak mengubah apa pun yang dilakukan node ini — memang disengaja. Node yang dipaksa bisa saja diharuskan tetap melayani, berhenti, atau menyerahkan sesuatu; melipat salah satu dari itu menjadi 'node ini berhenti menerima' akan menghancurkan satu-satunya sinyal yang dimiliki pihak di hilir untuk membedakan pilihan sendiri dari paksaan.",
+        "shed": "Dicatat sebagai deklarasi beratribusi milik node ini sendiri, dan tidak lebih dari itu. Bidang mesh-config yang akan membawa batas beban ditulis oleh trust root, dan node ini belum menjalankan konsumen apa pun atas nilai-nilai hasil lipatan itu, sehingga tidak ada loop yang mengubah beban yang dipikulnya. Yang berubah adalah catatannya: seorang operator, sebuah peer, atau audit di kemudian hari dapat mengetahui bahwa node ini memilih memikul lebih sedikit, di bawah kewenangan siapa, dan kapan.",
+        "stop_accepting": "Dicatat sebagai deklarasi beratribusi milik node ini sendiri bahwa ia tidak lagi menerima hal baru. Tidak ada apa pun di substrat ini yang menegakkannya: bidang penerimaan bersifat buta-peer, dan kuota tulis per peer adalah pengaman tetap terhadap loop liar, bukan permukaan kebijakan yang dapat dijadikan acuan oleh sebuah penghentian. Deklarasi itulah artefaknya — dan itulah yang dibaca sebuah peer untuk berhenti menawarkan."
+      },
+      "lift": {
+        "compelled": "Dicatat sebagai tindakan tersendiri: paksaan yang telah BERAKHIR bukanlah paksaan yang tidak pernah terjadi. Deklarasi yang ditariknya tetap ada, dan keduanya tetap dapat dibaca.",
+        "voluntary": "Dicatat sebagai tindakan tersendiri. Deklarasi yang ditariknya tetap ada, dan keduanya tetap dapat dibaca — 'pernah dinyatakan lalu ditarik' bukanlah 'tidak pernah dinyatakan'."
+      },
+      "partition": "Setiap tindakan pada anak tangga ini bersifat lokal: penelusuran owner-binding, penulisan ke ledger, dan pembacaan ini semuanya hanya menyentuh basis data milik node ini sendiri dan tidak menyentuh yang lain. Inilah satu-satunya anak tangga yang tersedia saat terjadi partisi — setiap anak tangga lainnya harus menjangkau pihak lain.",
+      "standing": {
+        "in_force": "Node ini telah menyatakannya dan belum menariknya.",
+        "lifted": "Node ini telah menyatakannya lalu menariknya kembali. Itu bukan fakta yang sama dengan tidak pernah menyatakannya.",
+        "never_declared": "Node ini tidak pernah menyatakan hal ini. Itu bukan fakta yang sama dengan pernah menyatakannya lalu menariknya, dan bukan pula fakta yang sama dengan tidak mampu membacanya.",
+        "unreadable": "Catatannya tidak dapat dibaca, sehingga node ini tidak mengetahui statusnya sendiri pada poros ini. Ini BUKAN 'tidak ada yang berlaku' — jangan menampilkannya seperti itu."
+      }
+    }
+  },
+  "commons_surface": {
+    "asymmetry": "Satu anggota menarik rem; kohort harus sepakat untuk melepasnya. Menaikkan perlindungan bersifat tanpa syarat dan berbiaya satu tanda tangan saja; membatalkan perlindungan yang dinaikkan orang lain berbiaya ambang batas milik kohort itu sendiri, dan pembatalan yang tereskalasi tidak pernah boleh jatuh di bawah batas bawah mutlak yang tak boleh diturunkan oleh string kebijakan mana pun.",
+    "ballot": {
+      "admitted": "Suara ini sudah tercatat. Dengan sendirinya suara ini TIDAK memiliki daya paksa: harganya dibayar saat-baca terhadap penyebut yang belum ada ketika suara itu diberikan — apakah kolam responden pernah mencapai ambang batas eskalasi bergantung pada siapa lagi yang menjawab. Seorang anggota boleh berubah pikiran; suara yang terakhirlah yang berlaku."
+    },
+    "dismissal": {
+      "admitted": "Keberatan ini digugurkan untuk keperluan penghitungan. Ambang batas dihitung ulang dari roster milik node ini sendiri pada setiap pembacaan berikutnya, sehingga pengguguran yang tidak lagi memenuhi ambang pada roster yang bertambah besar berhenti menekan keberatan itu — dan perlindungan yang tadinya dihilangkan kembali berlaku."
+    },
+    "dry_run": "Tidak ada yang ditandatangani dan tidak ada yang dikirim. Ini adalah byte kanonis persis yang harus ditandatangani setiap co-signer agar scrub mereka dihitung pada pengiriman yang sebenarnya — m-dari-n dihitung atas byte ini dan bukan atas byte yang lain.",
+    "escalation": {
+      "awaiting": "Moderator yang ditunjuk masih boleh menjawab, atau mereka memang sudah memutuskan tepat waktu. Eskalasi belum terbuka.",
+      "not_adopted": "Komunitas ini tidak mendeklarasikan tingkat steward, sehingga tidak ada tenggat bagi moderator dan tidak ada eskalasi. Kebisuan tidak mengubah apa pun di sini.",
+      "nothing_to_escalate": "Tingkat steward telah dideklarasikan dan tidak ada keberatan aktif yang sedang menunggunya. Tidak ada yang membisu, karena tidak ada yang ditanyakan.",
+      "open": "Moderator yang ditunjuk tidak menjawab tepat waktu, dan keputusan telah berpindah kepada mereka yang menjawab. Ambang batas kini menghitung RESPONDEN alih-alih seluruh roster — itulah yang membuat komunitas yang sepi tetap dapat memutuskan — dengan batas bawah agar 'dapat dijangkau' tidak pernah merosot menjadi 'satu orang yang memutuskan'."
+    },
+    "objection": {
+      "admitted": "Keberatan ini sudah tercatat. Ini adalah PENANDA, bukan perintah: tidak ada yang berubah karena kedatangannya, dan ia direplikasi pada bidang atestasi biasa sehingga peer yang terpartisi selama jendela waktu tetap menghitungnya begitu keberatan itu sampai. Satu anggota saja sudah cukup untuk mengajukannya; menggugurkannya berbiaya ambang batas milik kohort itu sendiri."
+    },
+    "outcome": {
+      "dismissed": "Mereka yang menjawab memutuskan bahwa keberatan ini tidak berlaku, dan keberatan itu tidak diikutkan dalam penghitungan.",
+      "not_escalated": "Eskalasi tidak terbuka untuk keberatan ini.",
+      "unresolved": "Eskalasi terbuka dan belum diputuskan: terlalu sedikit yang menjawab, atau tidak ada satu pihak pun yang mencapai ambang batas. Tidak ada yang berubah — keberatan tetap berdiri persis seperti sebelumnya.",
+      "upheld": "Mereka yang menjawab memutuskan bahwa keberatan ini tetap berlaku."
+    },
+    "refusal": {
+      "action_absent": "action_id wajib diisi. Sebuah keberatan menyebut satu baris di dalam ranah bersama; keberatan yang tidak menyebut apa pun tidak akan pernah dapat dihitung.",
+      "action_unknown": "Node ini tidak memegang tindakan tersebut, sehingga baris yang menyebutnya akan diarsipkan di tempat yang tidak akan pernah dihitung oleh proses fold mana pun. Substrat menolak perkara yang sama di pintunya sendiri.",
+      "actor_recused": "Penulis tindakan tidak ikut memberikan suara atas keberatan terhadap perbuatannya sendiri.",
+      "bad_now": "Titik waktu saat-baca harus berupa stempel waktu RFC 3339.",
+      "ballot_predates_action": "Sebuah putusan tidak boleh lebih tua daripada hal yang diputuskannya.",
+      "canonicalize_failed": "Byte kanonis baris ini tidak dapat dihasilkan, sehingga tidak ada apa pun yang bisa ditandatangani oleh seorang co-signer.",
+      "cohort_absent": "cohort_key_id wajib diisi: ia menyebut roster siapa dan deklarasi siapa yang mengatur penghitungan.",
+      "cohort_not_a_commons": "Kohort `self` tidak memiliki roster yang bisa dijadikan dasar kuorum — anggotanya adalah perangkat-perangkat milik satu identitas yang sama — sehingga ia tidak memiliki ranah bersama untuk diawasi.",
+      "cohort_unknown": "Kohort itu tidak dapat diresolusi di node ini, sehingga tidak ada roster dan tidak ada deklarasi yang bisa dijadikan dasar penilaian. Otoritas harus berasal dari keadaan lokal yang terverifikasi.",
+      "cohort_unrecognized": "Itu bukan kohort yang memiliki roster. Keberatan hanya hidup di dalam keluarga, komunitas, atau grup afiliasi.",
+      "dimension_mismatch": "Baris itu diajukan di pintu yang keliru untuk muatan yang dibawanya.",
+      "dismissal_quorum_short": "Jumlah anggota roster terverifikasi yang berbeda-beda yang ikut menandatangani lebih sedikit daripada yang dituntut ambang batas kohort. Angka yang terhitung dan yang dibutuhkan tertera di samping pesan ini.",
+      "duplicate_objection": "Anda sudah memiliki keberatan aktif terhadap tindakan ini. Satu anggota berarti satu keberatan — jika tidak, satu anggota saja bisa mencapai ambang batas seorang diri.",
+      "grounds_absent": "grounds wajib diisi. Keberatan yang diajukan tanpa alasan yang tercatat tidak dapat dibedakan dari keberatan yang diajukan karena alasan yang buruk — dan alasan itu dicatat, tidak pernah ditafsirkan.",
+      "malformed_envelope": "Baris ini kehilangan sebuah rujukan yang dibutuhkan oleh penghitungan.",
+      "node_unowned": "Node ini tidak memiliki pihak yang bertanggung jawab (owner-binding), sehingga ia tidak membaca maupun berbicara di ranah bersama siapa pun atas nama mereka. Klaim kepemilikan terlebih dahulu.",
+      "not_a_cohort_member": "Hanya anggota kohort ini yang boleh berbicara di ranah bersamanya. Inilah satu-satunya uji yang diterapkan pada sisi pelindung — dan alasan mengapa keberatan dari orang asing tidak pernah menjadi penanda yang mungkin dihormati orang lain.",
+      "not_filed_against_actor": "Baris ini diarsipkan di tempat yang tidak dicari oleh proses fold, sehingga ia akan tersimpan, tahan lama, dan lembam selamanya. Penanda yang tidak dapat ditemukan siapa pun bukanlah penanda.",
+      "not_governed": "Komunitas ini tidak mendeklarasikan kebijakan kuorum terbalik, sehingga ia belum mengadopsi bidang keberatan. Ditolak alih-alih diberi nilai bawaan: mengarang sendiri jendela waktu dan ambang batas untuk kelompok yang tidak mendeklarasikan keduanya lebih buruk daripada mengatakan tidak.",
+      "not_owner": "Permukaan ranah bersama memerlukan peran pemilik (SYSTEM_ADMIN).",
+      "objection_absent": "objection_id wajib diisi: satu suara menjawab pertanyaan tentang SATU keberatan.",
+      "objection_unknown": "Keberatan yang disebutkan bukanlah keberatan yang dipegang node ini terhadap tindakan ini.",
+      "session_absent": "Tidak ada token sesi yang diberikan. Permukaan ranah bersama hanya untuk pemilik.",
+      "session_invalid": "Sesi tersebut tidak valid atau telah kedaluwarsa.",
+      "sign_failed": "Node ini tidak dapat menandatangani baris tersebut, sehingga tidak ada yang dikirim.",
+      "steward_tier_not_adopted": "Komunitas ini tidak mendeklarasikan tingkat steward, sehingga tidak ada tenggat yang bisa dilewati dengan membisu dan tidak ada kolam eskalasi. Suara di sini akan tersimpan dan tidak pernah dibaca.",
+      "store_unavailable": "Substrat tidak dapat dijangkau.",
+      "target_action_unknown": "Tindakan yang dikenai keberatan bukanlah baris yang dipegang node ini, sehingga keberatan itu tidak akan dapat dihitung dan jendela waktunya tidak akan dapat diselesaikan.",
+      "unverifiable_signature": "Tanda tangan baris ini tidak lolos verifikasi terhadap kunci penanda tangan sebagaimana terdaftar di node ini."
+    },
+    "standing": {
+      "action_unknown": "Node ini tidak memegang tindakan tersebut. Keberatan menyebut sebuah baris, dan di sini tidak ada baris untuk disebut.",
+      "cohort_unknown": "Kohort itu tidak dapat diresolusi di node ini, sehingga ia tidak memiliki roster dan tidak ada deklarasi yang dapat dibaca node ini. Otoritas harus berasal dari keadaan lokal yang terverifikasi.",
+      "not_governed": "Komunitas ini tidak mendeklarasikan kebijakan kuorum terbalik, sehingga bidang keberatan sama sekali tidak berlaku bagi ranah bersamanya. Itu berbeda dari keadaan tidak ada seorang pun yang mengajukan keberatan.",
+      "objected": "Setidaknya satu anggota telah mengajukan keberatan dan jendela waktunya masih terbuka. Untuk saat ini tindakan tetap berdiri; satu keberatan lagi mungkin sudah cukup.",
+      "quiet": "Bidang keberatan sudah dibaca dan tidak ada keberatan yang diajukan terhadap tindakan ini.",
+      "reversed": "Cukup banyak anggota berbeda yang mengajukan keberatan di dalam jendela waktu. Setiap node yang memegang baris-baris ini melipatnya menjadi jawaban yang sama, tanpa koordinasi apa pun.",
+      "stood": "Jendela waktu tertutup di bawah ambang batas pembalikan. Tindakan ini pernah dikenai keberatan dan tetap berdiri.",
+      "unreadable": "Bidang keberatan tidak dapat dibaca di sini. Ini BUKAN pernyataan bahwa tidak ada yang mengajukan keberatan — keberatan yang ada tidak diketahui, bukan tidak ada."
+    },
+    "steward": {
+      "awaiting": "Tenggat belum berlalu. Moderator yang ditunjuk masih boleh menjawab.",
+      "no_duty_holders": "Tingkat steward telah dideklarasikan dan node ini tidak meresolusi satu pun moderator yang ditunjuk untuknya. Tidak ada yang membisu, karena memang tidak ada siapa-siapa di sana.",
+      "not_adopted": "Tidak ada tingkat steward yang dideklarasikan, sehingga tidak ada tenggat moderator yang berlaku.",
+      "overruled": "Moderator yang ditunjuk memutuskan bahwa keberatan ini tidak berlaku — dan eskalasi tetap terbuka, karena pembatalan tidak pernah menjadi hak mereka seorang diri.",
+      "silent": "Tenggat berlalu tanpa putusan ke arah mana pun.",
+      "upheld": "Moderator yang ditunjuk memutuskan, tepat waktu, bahwa keberatan ini tetap berlaku. Perkara ini diadili oleh orang-orang yang disebutkan namanya, dan tercatat resmi."
+    }
+  },
+  "consent": {
+    "decline_analyze": {
+      "cost": {
+        "no_capability_services": "Anda tidak dapat menggunakan aliran atau layanan yang memerlukan atestasi kapabilitas pihak ketiga, karena Anda tidak akan memilikinya.",
+        "no_reputation": "Anda TIDAK membangun reputasi — setiap klaim capacity:* tentang Anda ditolak, sehingga tidak satu pun dapat ada.",
+        "peers_may_refuse": "Sebagian peer mungkin menolak berinteraksi dengan Anda sama sekali."
+      },
+      "summary": "Anda boleh mengirim jejak tanpa menyetujui untuk dianalisis. Jejak tetap akan mengalir."
+    },
+    "grant": {
+      "analyze": {
+        "permits": "Peer boleh MENILAI jejak Anda — inilah yang membangun reputasi.",
+        "title": "Dinilai"
+      },
+      "replication": {
+        "permits": "Peer boleh MENYIMPAN jejak Anda.",
+        "title": "Kirim jejak"
+      }
+    },
+    "grants": {
+      "independent": "Ini adalah dua persetujuan terpisah pada sisi yang berlawanan. Memberikan yang satu tidak berarti memberikan yang lain, dan masing-masing dapat ditarik tanpa yang lain."
+    },
+    "mesh_participation": {
+      "action": "Setujui Partisipasi dalam CIRIS Mesh"
+    }
+  },
+  "location": {
+    "cost": {
+      "no_regional_community": "Anda tidak dapat mengikuti komunitas regional mana pun. Keanggotaan ditentukan oleh apakah sel Anda berada di dalam wilayah komunitas itu sendiri, jadi tanpa sel tidak ada yang bisa dibandingkan.",
+      "no_regional_reporting": "Aktivitas Anda tidak dapat berkontribusi pada pelaporan pola regional."
+    },
+    "permits": "Melampirkan sel H3 kasar ke envelope Anda sehingga pola dapat dilaporkan lintas wilayah. Substrat menolak apa pun yang lebih halus dari resolusi 7, jadi ini hanya menunjukkan wilayah kasar — tidak pernah lokasi atau alamat spesifik Anda.",
+    "purpose": "Pelaporan pola regional, dan keikutsertaan dalam komunitas regional. Sebuah komunitas juga dapat menggunakannya sebagai gerbang visibilitas OPSIONAL, membatasi item yang ditujukan untuk komunitas tersebut hanya kepada anggota yang wilayahnya berada di dalamnya. Ini bukan pembatasan umum atas jejak Anda — hal itu ditentukan oleh persetujuan di atas.",
+    "title": "Bagikan perkiraan wilayah Anda"
+  },
+  "mesh": {
+    "announce_requirement": "Node yang tidak mengumumkan diri tidak mendapat akses layanan di mesh dan tidak mendapat layanan agen. Sakelar pemutus accord hanya bermakna terhadap node yang dapat dijangkaunya, jadi node yang tak terjangkau memang tidak pernah dilayani sejak awal."
+  },
+  "mesh_config": {
+    "consumption": {
+      "elsewhere": "Tidak ada loop dalam build ini yang membaca kunci ini — konsumennya berada di komponen lain. Baris yang disetel di sini diterima dan dilipat, dan tidak mengubah apa pun pada node ini.",
+      "unbuilt": "Konsumen untuk kunci ini belum dibangun di mana pun. Baris yang disetel di sini diterima dan dilipat, dan tidak mengubah apa pun.",
+      "unreachable": "Konsumen kunci ini berjalan di dalam proses ini, tetapi tidak ada yang membawa nilai dari bidang ini kepadanya: komponen pemilik setelan ini mengambil nilainya satu kali saja saat loop dirakit, dan tidak menyediakan cara untuk mengubahnya setelah itu. Baris yang disetel di sini diterima dan dilipat, dan tidak mengubah apa pun di mana pun.",
+      "wired": "Sebuah loop dalam build ini membaca kunci ini dan mengubah perilakunya. Nilai efektif di sebelahnya benar-benar berlaku pada node ini."
+    },
+    "dry_run": "Tidak ada yang ditandatangani dan tidak ada yang dikirim. Ini adalah byte kanonis persis yang harus ditandatangani seorang co-signer agar scrub mereka dihitung pada pengiriman yang sebenarnya.",
+    "durability": {
+      "substrate_decides": "Tindakan mana yang layak mendapat setelan tahan lama adalah keputusan substrat, dibaca ulang pada setiap panggilan dan dilaporkan lewat token penolakannya sendiri. Node ini tidak mengkodekan aturan ketahanan miliknya sendiri."
+    },
+    "emergency": {
+      "bound": "Kelonggaran darurat kedaluwarsa secara rancangan. Jendela maksimum adalah milik substrat, dibawa ke sini agar formulir dapat membatasi masukannya; substrat menolak apa pun yang lebih lama di pintunya sendiri."
+    },
+    "history": {
+      "empty": "Setiap root yang dilanggan telah dibaca dan tidak satu pun pernah mengajukan baris mesh-config.",
+      "no_subscription": "Node ini tidak memiliki edge trust-root yang aktif, sehingga tidak ada root yang pernah dapat mengajukan baris mesh-config di sini.",
+      "partial": "Sebagian root yang dilanggan tidak dapat dibaca, sehingga riwayat ini tidak lengkap. Root yang gagal dibaca disebutkan namanya.",
+      "present": "Setiap baris mesh-config yang dipegang node ini, terbaru lebih dulu.",
+      "truncated": "Halaman ini dipotong pada batasnya. Total di bawah menghitung setiap baris yang dibaca.",
+      "unreadable": "Riwayat mesh-config tidak dapat dibaca di sini. Ini BUKAN pernyataan bahwa tidak ada baris yang pernah diajukan."
+    },
+    "outcome": {
+      "admitted": "Substrat menerima baris ini. Ini adalah PENANDA, bukan perintah: tidak ada yang berubah karena kedatangannya, dan efeknya sepenuhnya adalah lipatan saat-baca yang boleh dihormati oleh konsumen."
+    },
+    "plane": {
+      "configured": "Setidaknya satu kunci digeser dari baseline pemilik oleh sebuah root yang dilanggan.",
+      "no_rows_held": "Node ini berlangganan setidaknya satu trust root dan tidak memegang baris mesh-config dari satu pun di antaranya. Setiap kunci berjalan pada baseline pemiliknya sendiri.",
+      "no_subscription": "Node ini tidak memiliki edge trust-root yang aktif, sehingga tidak ada root yang boleh mengonfigurasinya. Langganan ITULAH edge kepercayaan.",
+      "none_binding": "Baris mesh-config tersimpan, tetapi tidak ada satu pun yang mengikat: masing-masing sudah kedaluwarsa, dibatasi oleh persetujuan pemilik, atau meminta nilai baseline yang memang sudah berlaku.",
+      "unreadable": "Bidang mesh-config tidak dapat dibaca di sini. Ini BUKAN pernyataan bahwa tidak ada yang disetel — nilai di bawah ini tidak diketahui, bukan nilai bawaan."
+    },
+    "provenance": {
+      "baseline_not_moved": "Root yang dilanggan memiliki baris aktif untuk kunci ini dan tidak ada satu pun yang menggesernya: masing-masing dibatasi oleh persetujuan pemilik atau meminta nilai yang memang sudah berlaku.",
+      "baseline_unspoken": "Tidak ada root yang dilanggan yang memiliki baris aktif untuk kunci ini, sehingga node menjalankan nilai yang disetujui pemiliknya.",
+      "root": "Baris bertanda tangan dari sebuah root yang dilanggan menetapkan nilai ini. Baris tersebut, penulisnya, dan delegasi yang mendasarinya disebutkan di sampingnya."
+    },
+    "refusal": {
+      "attribution_absent": "delegation_id wajib diisi. Tindakan yang tidak membawa kewenangannya sendiri tidak dapat dibedakan dari tindakan tanpa izin setelah pelakunya tiada.",
+      "authority_not_a_delegation": "Id delegasi yang disebutkan bukanlah baris delegates_to.",
+      "authority_unresolved": "Delegasi yang disebutkan bukan baris yang dipegang node ini, sehingga kewenangan yang dicatatnya tidak akan menyebut apa pun. Apakah delegasi itu benar-benar memberi wewenang bagi tindakan ini adalah putusan substrat, yang dibuat di pintunya sendiri.",
+      "grounds_absent": "grounds wajib diisi. Sebuah setelan yang diubah tanpa alasan yang tercatat tidak dapat dibedakan dari setelan yang diubah karena alasan yang buruk.",
+      "node_unowned": "Node ini tidak memiliki pihak yang bertanggung jawab (owner-binding), sehingga ia tidak melaporkan maupun mengubah konfigurasi mesh atas nama siapa pun. Klaim kepemilikan terlebih dahulu.",
+      "not_owner": "Permukaan konfigurasi mesh memerlukan peran pemilik (SYSTEM_ADMIN).",
+      "root_absent": "root_ref wajib diisi: baris mesh-config diajukan di bawah sebuah trust root, dan baris yang tidak menyebut satu pun akan diarsipkan di tempat yang tidak akan pernah dihitung oleh proses fold mana pun.",
+      "session_absent": "Tidak ada token sesi yang disertakan. Permukaan konfigurasi mesh hanya untuk pemilik.",
+      "session_invalid": "Sesi tersebut tidak valid atau telah kedaluwarsa."
+    },
+    "ttl": {
+      "expired": "Jendela waktu baris ini telah tertutup. Proses fold membuang baris yang kedaluwarsa saat dibaca, sehingga tidak diperlukan pencabutan maupun penulis yang dapat dihubungi.",
+      "running": "Jendela waktu baris ini terbuka dan akan tertutup pada waktu yang disebutkan.",
+      "unbounded": "Baris ini tidak memiliki masa kedaluwarsa. Berlaku sampai digantikan."
+    }
+  },
+  "moderation": {
+    "ladder": {
+      "attestation_type_label": "Jenis atestasi (scores, delegates_to, …)",
+      "attesting_key_label": "Baris yang ditulis oleh kunci ini",
+      "attribution_hint": "Keduanya wajib diisi dan keduanya ditulis ke dalam tombstone bertanda tangan. Tindakan yang tidak membawa kewenangannya sendiri tidak dapat dibedakan dari tindakan tanpa izin setelah pelakunya tiada.",
+      "attribution_label": "Kewenangan dan alasan",
+      "cancel_button": "Batal",
+      "commit_blocked": "Id delegasi dan alasan wajib diisi; karantina juga memerlukan id komunitas.",
+      "commit_button": "Tandatangani {hash}",
+      "community_id_hint": "Karantina diajukan di bawah kewenangan sebuah komunitas, dan penanda yang tidak menyebut komunitas mana pun tidak menyebut kewenangan apa pun.",
+      "community_id_label": "Id komunitas — wajib",
+      "confirm_attribution": "Ditandatangani di bawah delegasi {delegation}, dengan alasan: {reason}",
+      "confirm_op": "{op} — tier {tier}",
+      "confirm_quorum": "{count} rantai otoritas disertakan; {min} akar yang berbeda-beda dibutuhkan.",
+      "confirm_revoked_after": "Pernyataan tetap didukung hingga {at}.",
+      "confirm_signing": "Seleksi yang dicakup tanda tangan ini",
+      "confirm_title": "Apa yang akan Anda tandatangani",
+      "delegation_id_label": "Id delegasi (delegates_to) — wajib",
+      "descend_ack_label": "Ketik {word} untuk mengonfirmasi",
+      "descend_ack_word": "TURUNKAN",
+      "descent_performed": "Penurunan muatan telah dilakukan.",
+      "descent_refused": "Penurunan muatan tidak berjalan: {token}",
+      "dimension_prefix_label": "Prefiks dimensi",
+      "gate_armed": "Gerbang pencabutan admisi sedang aktif: pencabutan admisi milik node ini sendirilah yang dijadikan pembanding para penulis oleh substrat.",
+      "gate_dormant": "Gerbang pencabutan admisi sedang TIDAK AKTIF. Node ini tidak menyatakan identitas apa pun kepada substrat, sehingga pencabutan admisi yang ditulis di sini tidak akan menolak apa pun.",
+      "gate_foreign_identity": "Gerbang pencabutan admisi membandingkan para penulis terhadap kunci yang BERBEDA dari kunci yang dipakai node ini untuk menandatangani, sehingga pencabutan admisi yang ditandatangani di sini tidak akan pernah dilipat sebagai milik node ini sendiri.",
+      "gate_unknown": "Node ini melaporkan keadaan gerbang pencabutan admisi yang tidak dikenali aplikasi ini.",
+      "hash_mismatch_hint": "Seleksi berubah antara pratinjau dan tanda tangan ini. Pratinjau yang berlaku saat ini telah dimuat di atas — bacalah sebelum menandatangani lagi.",
+      "intro": "Upaya pemulihan bergerbang-pemilik terhadap peer yang telah diterima, bertingkat dari tier 0 sampai 4. Setiap anak tangga dipratinjau lebih dulu, lalu Anda menandatangani hash yang dikembalikan pratinjau itu — apa yang ditampilkan kepada Anda itulah yang dieksekusi, dan seleksi yang berubah di antaranya akan ditolak. Setiap anak tangga menyatakan apa yang dicapainya DAN apa yang tidak dicapainya; bacalah keduanya sebelum menandatangani.",
+      "irreversible_banner": "TIDAK DAPAT DIBATALKAN",
+      "irreversible_flag": "Tidak dapat dibatalkan. Tidak ada operasi pembalikan untuk anak tangga ini.",
+      "limits_unavailable": "Aplikasi ini tidak dapat memuat pernyataan node itu sendiri tentang apa yang dicapai tindakan ini. Batasannya tetap berlaku — responsnyalah yang akan menyatakannya.",
+      "no_preview_no_commit": "Tidak ada yang dapat ditandatangani sebelum sebuah pratinjau dijalankan: commit menyertakan hash yang dikembalikan pratinjau itu.",
+      "not_reached_title": "Apa yang TIDAK dicapainya",
+      "op": {
+        "accept_writes": "Terima penulisan",
+        "annotate": "Beri anotasi",
+        "deadmit": "Cabut admisi",
+        "descend": "Paksa penurunan",
+        "quarantine": "Karantina",
+        "re_admit": "Pulihkan admisi",
+        "refuse_writes": "Tolak penulisan",
+        "throttle": "Batasi laju",
+        "un_quarantine": "Lepaskan karantina",
+        "un_throttle": "Cabut pembatasan laju"
+      },
+      "op_label": "Anak tangga yang mana",
+      "outcome_recorded": "tercatat",
+      "per_attester_more": "dan {count} kunci lagi",
+      "per_attester_row": "{key}: {rows} baris",
+      "preview_button": "Pratinjau radius dampaknya",
+      "preview_counts": "{rows} baris pada {targets} kunci",
+      "preview_empty": "Pratinjau berjalan dan tidak cocok dengan satu baris pun. Seleksi ini dapat dijawab dan hasilnya kosong — dan itu bukan fakta yang sama dengan tidak pernah menanyakannya.",
+      "preview_none": "Belum ada pratinjau yang dijalankan untuk seleksi ini.",
+      "preview_truncated": "Halaman terisi sampai batasnya, sehingga seleksi bisa jadi lebih besar daripada yang di-hash dan sebuah commit akan mengenai HALAMAN ini saja. Persempit seleksinya.",
+      "preview_unreadable": "Pratinjau tidak dapat dibaca: {detail}. Ini bukan seleksi yang kosong — pertanyaannya tidak pernah terjawab.",
+      "quorum_hint": "Anak tangga ini menuntut {min} akar otoritas yang berbeda-beda, bukan satu rantai delegasi. Dua rantai dari akar yang sama adalah satu otoritas yang mengenakan dua topi.",
+      "quorum_ids_label": "Id delegasi otoritas lain (dipisahkan koma)",
+      "quorum_shortfall": "{have} akar otoritas yang berbeda-beda mencapai node ini; {need} dibutuhkan.",
+      "reaches_title": "Apa yang dicapainya",
+      "reason_label": "Alasan — wajib",
+      "refused_title": "Ditolak: {token}",
+      "result_bounded": "Penilaian itu membawa batas waktu, sehingga kaki muatannya ditolak alih-alih mendorong penghapusan tanpa batas dari sebuah penilaian yang dibatasi.",
+      "result_quorum": "{roots} akar otoritas yang berbeda-beda, {required} dibutuhkan.",
+      "result_revoked_after": "Pernyataan didukung hingga {at}.",
+      "result_target": "{key} — {outcome}",
+      "result_title": "Commit selesai: {op} (tier {tier})",
+      "review_button": "Tinjau apa yang akan Anda tandatangani",
+      "revoked_after_hint": "Batas riwayat milik pencabutan itu sendiri. Ia bukan bagian dari seleksi, sehingga ia membatasi apa yang dicabut tanpa mengubah cakupan pratinjau maupun mengubah hash-nya.",
+      "revoked_after_label": "Tetap mendukung pernyataan hingga (RFC3339)",
+      "row_line": "{type} · {dimension} · {at}",
+      "row_more": "dan {count} baris lagi",
+      "row_no_dimension": "tanpa dimensi",
+      "section": "Tangga penegakan",
+      "selection_after_hint": "Batas ini merupakan bagian dari seleksi, sehingga mengubahnya akan mengubah hash dan menggugurkan pratinjau.",
+      "selection_after_label": "Hanya baris yang dinyatakan setelah (RFC3339)",
+      "selection_hash": "Hash seleksi {hash}",
+      "selection_label": "Apa yang sedang Anda kenai tindakan",
+      "standing_admitted": "diterima di sini",
+      "standing_after": "Penulisan sesudahnya: {standing}",
+      "standing_before": "Penulisan sebelumnya: {standing}",
+      "standing_refused": "ditolak di sini",
+      "standing_unknown": "dilaporkan dalam istilah yang tidak dikenali aplikasi ini",
+      "standing_unreadable": "tidak dapat dibaca — ini BUKAN 'diterima'",
+      "tier_and_scope": "Tier {tier} · memerlukan cakupan delegasi {scope}, yang diturunkan ulang dari keadaan terverifikasi milik node ini sendiri, bukan diambil dari permintaan.",
+      "transport_error": "Node tidak dapat dijangkau: {detail}",
+      "undone_by_reversal_op": "Anak tangga ini memiliki operasi pembalikan pada tangga penegakan. Kedua baris tetap ada sebagai riwayat yang dapat dibaca: 'dilakukan lalu dibatalkan' bukanlah fakta yang sama dengan 'tidak pernah dilakukan'.",
+      "undone_never": "Ini tidak dibatalkan. Penurunan tidak pernah berakhir pada nol — hasil pengaburan dan tombstone tetap ada — tetapi apa yang telah dilepas tidak akan kembali.",
+      "undone_title": "Bagaimana ini dibatalkan",
+      "unparsable_response": "Node menjawab dengan isi yang tidak dapat dibaca aplikasi ini.",
+      "window_application": "Jendela waktu diterapkan oleh node ini, bukan oleh kueri, sehingga batas halaman diterapkan pada himpunan yang lebih luas dan seleksi ini dapat kembali dengan hasil yang kurang dari semestinya.",
+      "window_substrate": "Jendela waktu ditegakkan oleh kueri substrat.",
+      "withdrew_row": "Menarik {id}"
+    }
+  },
+  "operator": {
+    "carriage": {
+      "idle": "Ronde-ronde replikasi telah selesai, dan node ini tidak melayani apa pun dan tidak menahan apa pun: ia tidak memegang sesuatu pun yang masih dibutuhkan para peer-nya.",
+      "moving": "Node ini melayani baris kepada para peer-nya dan tidak menahan satu pun.",
+      "not_exercised": "Belum ada ronde replikasi yang selesai pada proses ini, sehingga belum pernah ada gerbang jalur penyajian yang berjalan dan ledger penahanan belum pernah ditulisi. Nol ini belum teruji, bukan bersih.",
+      "unreadable": "Penghitung pengangkutan node ini tidak dapat dibaca, sehingga tidak ada apa pun di sini yang merupakan pernyataan tentang apa yang dilayaninya. Ini bukan 'tidak ada yang ditahan' — ini 'kami tidak dapat menanyakannya'.",
+      "withholding": "Node ini menolak melayani baris-baris yang dipegangnya. `withholds_by_reason` menyebut cabang mana yang menolak dan `recent_withholds` menyebut kepada siapa — node yang menganggur tidak melaporkan keduanya."
+    },
+    "consent_sla": {
+      "none_overdue": "Setiap pencabutan persetujuan yang dijanjikan node ini untuk dipromosikan masih berada dalam jendela SLA-nya.",
+      "overdue": "Node ini TERLAMBAT mempromosikan pencabutan persetujuan yang telah dijanjikannya. Id atestasi tercuplik di sampingnya adalah pegangan untuk membereskan kondisi ini.",
+      "unreadable": "Tunggakan SLA persetujuan tidak dapat dibaca. Itu bukan berarti 'tidak ada yang terlambat'."
+    },
+    "drill": {
+      "green": "Akar kepercayaan node ini membuktikan kill switch miliknya dalam 90 hari terakhir.",
+      "never_drilled": "Akar kepercayaan node ini BELUM PERNAH membuktikan kill switch miliknya. Ia berbagi pita merah dengan root yang sudah lama ditinggalkan, dan ketiadaan waktu latihan terakhir di sampingnyalah yang membedakan keduanya. Root itu tetap melayani: kesegaran latihan adalah sinyal kepercayaan, bukan gerbang.",
+      "no_root_walked": "Tidak ada akar kepercayaan yang ditelusuri, sehingga tidak ada apa pun yang bisa dikatakan belum dilatih. Ini bukan latihan yang basi — memang tidak ada subjek latihannya.",
+      "stale": "Akar kepercayaan node ini terakhir membuktikan kill switch miliknya lebih dari 180 hari yang lalu. Ia tetap melayani: kesegaran latihan adalah sinyal kepercayaan, bukan gerbang.",
+      "yellow": "Akar kepercayaan node ini terakhir membuktikan kill switch miliknya antara 90 dan 180 hari yang lalu."
+    },
+    "headline": {
+      "green": "Setiap sinyal yang dapat dihitung node ini terbaca sehat.",
+      "red": "Setidaknya satu sinyal terbaca tidak sehat. Baca juga daftar yang tidak diketahui: judul merah berperingkat lebih tinggi daripada yang tidak diketahui, dan karenanya ia dapat menyembunyikan salah satunya di baliknya.",
+      "unknown": "Satu atau lebih sinyal tidak dapat dihitung. Baca daftar yang tidak diketahui — sinyal yang tidak terhitung bukanlah sinyal yang sehat.",
+      "yellow": "Node ini sedang melayani, dan ada sesuatu di sini yang layak dilihat."
+    },
+    "ingest": {
+      "background": "Ada penolakan, tetapi tidak berlangsung terus-menerus dari himpunan identitas yang stabil: pemindaian biasa, klien usang, dan pergantian. Baca `distinct_signers` dan `unattributed_in_window` sebelum mengabaikannya — laju TINGGI yang tersebar pada himpunan identitas yang LUAS adalah pemindaian, sedangkan laju TINGGI yang nyaris tidak menyebut siapa pun adalah lalu lintas cacat bentuk bercampur klien usang. Keduanya bukan pergantian, dan keduanya tidak memiliki satu produsen yang bisa didatangi untuk diperbaiki — itulah sebabnya keduanya terbaca di sini, bukan sebagai produsen yang macet.",
+      "clean": "Batch-batch ditawarkan ke jalur ingest HTTP dan tidak satu pun ditolak di dalam jendela waktu ini. `refused_total` di sampingnya adalah hitungan seluruh proses: jendela yang bersih pada proses yang sebelumnya pernah menolak adalah pemulihan, bukan ketiadaan.",
+      "http_path_only": "Pembacaan ini hanya mencakup jalur ingest HTTP. Batch yang tiba lewat relay Reticulum diverifikasi oleh gerbang persist yang sama tetapi tidak dihitung di sini, sehingga pembacaan ingest yang bersih bukanlah pernyataan tentang setiap cara sebuah trace dapat ditawarkan kepada node ini.",
+      "not_exercised": "Belum ada apa pun yang ditawarkan ke jalur ingest HTTP pada proses ini — tidak ada batch yang diterima dan tidak ada yang ditolak. Nol ini belum teruji, bukan bersih.",
+      "stuck_producer": "Laju penolakan yang BERKELANJUTAN dari himpunan penanda tangan yang KECIL dan STABIL: sebuah produsen macet di dalam loop percobaan ulang dan tidak dapat mengoreksi dirinya sendiri. Setiap satu dari penolakan ini benar — gerbangnya bekerja — dan justru itulah sebabnya angka agregatnya memerlukan pembacaan tersendiri. `top_signers` menyebut siapa yang harus didatangi untuk diperbaiki.",
+      "unattributed": "Batch-batch ditolak dan TIDAK SATU PUN menyebut penanda tangan: semuanya gagal sebelum ada identitas yang bisa dicatat — byte yang cacat bentuk, tanda tangan yang buruk, versi skema yang tidak didukung. Tidak ada produsen yang bisa dihubungi, dan hal ini sengaja tidak dilaporkan sebagai produsen yang macet: nol penanda tangan yang berbeda bukanlah himpunan identitas kecil yang stabil.",
+      "unreadable": "Ledger penolakan ingest node ini tidak dapat dibaca, sehingga tidak ada apa pun di sini yang merupakan pernyataan tentang apa yang ditolaknya. Ini bukan 'tidak ada yang ditolak' — ini 'kami tidak dapat menanyakannya'."
+    },
+    "key_statements": {
+      "stands": "Tidak ada pencabutan yang dimiliki node ini yang mencakup pernyataan yang dibuat saat ini juga.",
+      "suspect_after_bound": "Sebuah pencabutan yang DIBATASI riwayat mencakup pernyataan yang dibuat saat ini juga: kunci ini dicabut penerimaannya terhitung sekarang, dan masa lalunya yang jujur tetap berdiri. Batas itu secara materiil lebih baik daripada pencabutan tanpa batas dan tidak terbaca sama.",
+      "suspect_unbounded": "Sebuah pencabutan TANPA BATAS mencakup kunci ini, sehingga segala sesuatu yang pernah dikatakannya menjadi diragukan — pencabutan itu menolak menyatakan sebaliknya.",
+      "unreadable": "Status kunci node ini tidak dapat dihitung. Itu bukan berarti 'tetap berlaku' — pertanyaan yang tidak diajukan tidak memiliki jawaban."
+    },
+    "peer_quota": {
+      "clean": "Kuota tulis peer telah dijalankan dan aritmetika penolakan slot-nya masih berlaku.",
+      "denials": "Kuota tulis peer mencatat adanya penolakan slot. Penurunan batas peer-terlacak tidak lagi berlaku pada build ini.",
+      "no_quota": "Backend ini tidak memiliki kuota tulis peer, sehingga kawat pemicunya tidak melaporkan apa pun. Itu bukan pembacaan yang bersih.",
+      "not_exercised": "Belum ada penulisan peer yang dibebankan pada kuota di proses ini, sehingga nolnya belum teruji, bukan bersih."
+    },
+    "quarantine": {
+      "not_quarantined": "Tidak pernah ada penanda karantina atas kunci node ini yang berlaku di sini.",
+      "released": "Kunci node ini pernah ditahan lalu dilepaskan. Sekarang ia melayani, dan dahulu tidak selalu begitu — sebuah fakta yang berbeda dari tidak pernah ditahan sama sekali.",
+      "unreadable": "Status karantina tidak dapat dibaca. Itu bukan berarti 'tidak dikarantina'.",
+      "withheld": "Kunci node ini ditahan dari pelayanan oleh sebuah penanda karantina."
+    },
+    "receive": {
+      "applying": "Baris-baris yang ditawarkan peer diterima di sini dan mengubah keadaan node ini, dan tidak ada satu pun yang ditolak. `applied_by_kind` menyebut bidang-bidang yang berubah; di sebelahnya `duplicate_total` menghitung baris yang ditawarkan yang memang sudah dipegang node ini.",
+      "converged": "Para peer menawarkan baris dan node ini sudah memegang setiap satu di antaranya, sehingga tidak ada yang berubah keadaannya dan tidak ada yang ditolak. Inilah anti-entropi dalam keadaan diam — lalu lintas tetap berdatangan dan tidak ada lagi yang bisa dipelajari darinya.",
+      "decided_denominator": "`decided_total` adalah setiap baris yang ditawarkan peer dan mencapai keputusan penerapan di sini: diterapkan ditambah duplikat ditambah ditolak. Byte yang tidak dapat didekode node ini tidak mencapai keputusan apa pun dan tidak dihitung di mana pun, sehingga byte itu absen dari total ini, bukan dilebur ke dalamnya.",
+      "idle": "Ronde replikasi selesai dan tidak ada peer yang menawarkan satu baris pun kepada node ini: tidak ada yang diterapkan, tidak ada yang terhitung sudah dipegang, tidak ada yang ditolak. Para peer-nya memang tidak punya apa pun untuknya, dan itu bukan fakta yang sama dengan telah menerapkan semua yang mereka kirim.",
+      "not_exercised": "Belum ada ronde replikasi yang selesai pada proses ini, sehingga belum ada apa pun yang ditawarkan ke jalur penerapan node ini. Nol ini belum teruji, bukan bersih.",
+      "refusing": "Node ini menolak baris-baris yang ditawarkan para peer-nya. `apply_refusals_by_kind` menyebut bidangnya; `key_apply_refusals_by_reason` menyebut token kebijakan yang menolak sebuah kunci.",
+      "unreadable": "Penghitung penerapan node ini tidak dapat dibaca, sehingga tidak ada apa pun di sini yang merupakan pernyataan tentang apa yang diterimanya. Ini bukan 'tidak ada yang ditolak' — ini 'kami tidak dapat menanyakannya'."
+    },
+    "source": {
+      "edge_metrics": {
+        "unavailable": "Penghitung pengangkutan node ini tidak dapat dibaca, sehingga tidak ada apa pun di sini yang menggambarkan apa yang dilayaninya, apa yang ditahannya, atau apa yang ditolaknya untuk diterapkan."
+      },
+      "ingest_refusals": {
+        "unavailable": "Ledger penolakan ingest node ini tidak dapat dibaca, sehingga tidak ada apa pun di sini yang menggambarkan apa yang ditolak gerbang penerimaan. Gerbang tanpa pembaca itulah yang membuat 8.631 penolakan yang benar per hari berjalan tanpa disadari selama 71 jam."
+      },
+      "node_state": {
+        "unavailable": "Sinyal keadaan node ini tidak dapat dibaca dari substrat, sehingga tidak ada apa pun di sini yang menggambarkan akar kepercayaannya, status kuncinya, karantinanya, SLA persetujuannya, atau kuota peer-nya. Tidak adanya kabar buruk dari sumber yang tidak terbaca bukanlah kabar baik."
+      },
+      "trace_corpus": {
+        "unavailable": "Korpus trace node ini tidak dapat dibaca, sehingga tidak ada apa pun di sini yang menggambarkan apa yang telah diterimanya. Tidak adanya kedatangan dari korpus yang tidak terbaca bukanlah tidak adanya kedatangan."
+      }
+    },
+    "trace_plane": {
+      "dark": "TIDAK ADA APA PUN YANG DITERIMA SELAMA LEBIH LAMA DARIPADA AMBANG BATAS MERAH NODE INI. Kedatangan adalah satu-satunya hal yang menjadi alasan keberadaan node ini. Baca pembacaan `ingest` di sampingnya: bidang gelap dengan laju penolakan yang berkelanjutan berarti ada produsen yang ditolak dengan benar, sedangkan bidang gelap tanpa penolakan sama sekali berarti tidak ada apa pun yang bahkan sampai ke node ini.",
+      "future_dated": "Trace terbaru di dalam korpus berstempel waktu MASA DEPAN. Stempel waktu itu berasal dari jam siar milik produsennya sendiri, sehingga ini adalah pernyataan tentang jam tersebut — dan hal ini disebutkan tersendiri alih-alih diberi pita warna, karena baris bertanggal masa depan akan mengunci pembacaan ini tetap hijau tanpa batas waktu dan akan menyembunyikan bidang yang sebenarnya sudah berhenti.",
+      "live": "Sebuah trace baru saja diterima: bidang yang menjadi alasan keberadaan node ini untuk menerima sedang mendapat pasokan.",
+      "never_admitted": "Korpus sudah dibaca dan tidak memegang satu pun trace: belum pernah ada apa pun yang diterima pada node ini. Tidak ada waktu kedatangan yang bisa diberi pita warna, sehingga ini adalah nol yang belum teruji, bukan nol yang sehat — dan pada node yang sudah melayani cukup lama, ini adalah kondisi yang sama dengan bidang yang gelap.",
+      "producer_asserted_ts": "`last_admitted_at` adalah MAX(trace_events.ts) — jam dinding siar milik trace itu sendiri, yang dinyatakan oleh produsennya. Substrat tidak menyimpan waktu penerimaan sisi server pada tabel ini, sehingga produsen dengan jam yang melenceng akan menggeser pembacaan ini; baris yang jauh di masa depan disebutkan tersendiri sebagai `future_dated` alih-alih diberi pita warna, tepat karena alasan itu.",
+      "quiet": "Sudah lebih lama dari yang diharapkan tanpa ada trace yang diterima, tetapi belum cukup lama untuk menyebut bidang ini gelap. Node yang memang benar-benar menganggur terbaca seperti ini; demikian pula paruh pertama sebuah gangguan produsen.",
+      "unreadable": "Korpus trace node ini tidak dapat dibaca, sehingga tidak ada apa pun di sini yang merupakan pernyataan tentang apa yang telah diterimanya. Ini bukan 'tidak ada trace yang tiba' — ini 'kami tidak dapat menanyakannya'."
+    },
+    "trust_root": {
+      "no_self_key": "Host tidak pernah menyatakan id kunci milik node ini sendiri, sehingga tidak ada yang bercakupan-diri yang dapat ditelusuri. Ini adalah pernyataan tentang pembacanya, bukan tentang node-nya: nyatakan kunci itu saat startup, dan setiap sinyal bercakupan-diri di bawah ini menjadi dapat dijawab.",
+      "no_trust_edges": "Node ini telah menyatakan dirinya dan tidak memegang satu pun edge kepercayaan yang aktif menuju root mana pun: ia tidak berakar pada apa pun. Ini keburukan yang diketahui, bukan pembacaan yang hilang.",
+      "no_valid_root": "Node ini memercayai satu atau lebih root dan tidak satu pun di antaranya lolos validasi. Putusan per-kaki di sampingnya menyebut kaki mana yang gagal.",
+      "unreadable": "Penelusuran akar kepercayaan tidak dapat dibaca. Direktori yang tidak terbaca bukanlah direktori yang tidak dipercaya — jangan membaca ini sebagai node yang tanpa akar.",
+      "valid": "Node ini berakar pada akar kepercayaan yang lolos pemeriksaan secara penuh: sebuah edge kepercayaan yang aktif, piagam yang menyatakan dirinya sendiri beserta komitmen pemulihan, dan tidak ada penghentian yang terkunci."
+    },
+    "volatility": {
+      "clock_dependent_local": "Pita ini dihitung pada NODE INI dari sebuah waktu tersimpan terhadap jam saat-baca, sehingga ia bergerak semata-mata karena waktu yang berlalu — tanpa perubahan keadaan, tanpa baris baru. Node yang berhenti menerima trace akan berjalan sendiri dari hijau ke kuning lalu ke merah, dan itulah maksudnya: ia menjadi merah tanpa ada seorang pun yang memintanya.",
+      "process_local": "Penghitung pengangkutan, penerimaan, dan ingest bersifat lokal-proses dan kumulatif sejak proses ini dimulai. Semuanya kembali nol saat restart, berbeda antar-proses yang melayani satu node yang sama, dan tidak disimpan di mana pun. Semuanya adalah pengukur proses ini, bukan ledger node ini."
+    },
+    "withhold_class": {
+      "fault": "Sebuah pembacaan atau langkah perakitan gagal dan jalur penyajian gagal dalam keadaan tertutup. Ini BUKAN putusan tentang peer-nya — ini kesalahan node ini sendiri yang harus diperbaiki node ini juga.",
+      "integrity": "Sebuah baris yang dipegang node ini sama sekali tidak dapat dilayani: ia tidak mau diserialisasi, hash tersimpannya tidak mau didekode, atau byte yang diiklankan tidak dapat diambil. Ini cacat pada keadaan lokal, bukan kebijakan.",
+      "policy": "Sebuah keputusan yang sengaja dibuat node ini — cakupan persetujuan, kemampuan penyajian yang tidak dimiliki peer, atau pembatasan dari produsennya sendiri. Bekerja sesuai konfigurasi: ubah konfigurasinya, bukan kodenya."
+    }
+  },
+  "operator_ui": {
+    "accepted_refused": "{a} diterima, {r} ditolak sejak proses ini dimulai",
+    "age": "Usia",
+    "age_days": "{d}h {h}j lalu",
+    "age_future": "{v} di masa depan",
+    "age_hours": "{h}j {m}mnt lalu",
+    "age_minutes": "{m}mnt lalu",
+    "age_seconds": "{s}dtk lalu",
+    "applied": "Diterapkan",
+    "apply_refusals": "Penolakan penerapan",
+    "as_of": "Dibaca pada {t}",
+    "carriage": "Melayani kepada peer",
+    "corpus_unread": "Korpus tidak dapat dibaca, sehingga tidak ada waktu kedatangan dan tidak ada jumlah yang bisa ditampilkan. Ini bukan korpus yang kosong — ini korpus yang tidak terbaca.",
+    "decided": "Baris yang mencapai keputusan",
+    "distinct_signers": "Penanda tangan yang berbeda-beda",
+    "duplicates": "Sudah dipegang",
+    "ingest": "Gerbang penerimaan",
+    "last_admitted": "Terakhir diterima",
+    "malformed_body": "Node ini menjawab dengan isi yang tidak dapat didekode aplikasi ini, kemungkinan besar karena node menjalankan permukaan operator yang lebih baru daripada yang dikenal aplikasi ini. Ini bukan pembacaan kesehatan, dan bukan pula ketiadaan pembacaan.",
+    "malformed_title": "Jawaban tidak dipahami",
+    "named_no_signer": "Penolakan yang tidak menyebut penanda tangan",
+    "no_arrival_instant": "Tidak ada waktu kedatangan: korpus telah dibaca dan sama sekali tidak memegang trace. Belum pernah ada apa pun yang diterima pada node ini.",
+    "node_signals": "Sinyal node",
+    "not_offered_body": "Node ini menjawab, dan ia sama sekali tidak melayani permukaan operator — ia menjalankan build dari masa sebelum pembacaan ini ada. Itu kesenjangan versi, bukan penolakan dan bukan pula kondisi yang buruk: node bisa saja sepenuhnya baik-baik saja, dan aplikasi ini sekadar tidak dapat menanyakannya.",
+    "not_offered_title": "Tidak ada permukaan operator",
+    "reading_absent": "Jawaban node ini sama sekali tidak membawa pembacaan tersebut. Itu bukan nol yang sehat — itu pembacaan yang tidak dapat ditemukan aplikasi ini di tempat yang diharapkannya.",
+    "reading_body": "Aplikasi ini belum menerima jawaban dari node. Tidak ada apa pun di sini yang merupakan pembacaan — pertanyaan yang masih dalam perjalanan bukanlah node yang sehat.",
+    "reading_title": "Masih bertanya",
+    "receive": "Menerapkan dari peer",
+    "refusals_per_hour": "Penolakan per jam",
+    "refused_body": "Node ini menjawab dan menolak pembacaan itu. Node sedang menyala; sesi ini tidak diizinkan membaca permukaan operatornya. Itu pernyataan tentang sesi ini, bukan tentang kesehatan node — masuklah sebagai pemilik untuk membacanya.",
+    "refused_title": "Pembacaan ditolak",
+    "rounds": "Ronde replikasi",
+    "served": "Dilayani",
+    "sources_absent": "Sumber yang tidak menyumbang apa pun",
+    "thresholds": "Hidup di bawah {green} jam, sepi di bawah {yellow} jam, gelap di atasnya",
+    "title": "Keadaan node",
+    "top_signers": "Siapa yang sedang ditolak",
+    "trace_plane": "Bidang trace",
+    "traces_held": "Trace yang dipegang",
+    "uncomputed": "Tidak dapat dihitung ({count})",
+    "unreachable_body": "Node ini sama sekali tidak menjawab, sehingga tidak ada pembacaan tentangnya di sini. Ini tidak sama dengan node yang tidak sehat: pita tidak sehat adalah jawaban sungguhan dari node yang merespons, sedangkan ini adalah tidak adanya jawaban. Pastikan node berjalan dan dapat dijangkau pada alamat yang dipakai aplikasi ini.",
+    "unreachable_title": "Tidak terjangkau",
+    "unrecognized_reading": "Aplikasi ini tidak mengenali pembacaan '{token}'. Node lebih baru daripada aplikasi ini: perlakukan sebagai belum terhitung, jangan pernah sebagai sehat.",
+    "window_floor": "Jendela penolakan terpotong: setiap angka di sini adalah batas bawah, bukan total.",
+    "withholds": "Ditahan"
+  },
+  "surfaces": {
+    "common": {
+      "duration_days": "{n}h",
+      "duration_hours": "{n}j",
+      "duration_minutes": "{n}mnt",
+      "duration_seconds": "{n}dtk",
+      "unknown": "tidak diketahui"
+    },
+    "commons": {
+      "action": "Id tindakan",
+      "action_asserted": "Tindakan dinyatakan pada",
+      "action_author": "Penulis tindakan",
+      "add_cosigner": "Tambah tanda tangan pendamping",
+      "admitted": "Diterima",
+      "asymmetry_title": "Menarik rem dan melepasnya bukanlah tindakan yang setara",
+      "ballot_title": "Jawab apa yang dibiarkan terbuka oleh para steward",
+      "cohort": "Kohort",
+      "cohort_key": "Id kunci kohort",
+      "cosigner_classical": "Tanda tangan Ed25519 (base64)",
+      "cosigner_key": "Id kunci co-signer",
+      "cosigner_pqc": "Tanda tangan ML-DSA (base64, opsional)",
+      "cosigners": "{n} terkumpul",
+      "counted": "Keberatan yang dihitung",
+      "counted_of_required": "{counted} dihitung dari {required} yang dibutuhkan · roster {roster}",
+      "dimensions": "Dimensi envelope",
+      "dismiss_gate": "Pengiriman tetap tertutup sampai sebuah uji coba menghasilkan byte persis yang harus ditandatangani setiap co-signer. Tanda tangan hanya dihitung atas byte tersebut.",
+      "dismiss_label": "Lepas rem",
+      "dismiss_price": "Berbiaya ambang batas milik kohort itu sendiri: {required} dari {roster}.",
+      "dismiss_price_unknown": "Berbiaya ambang batas milik kohort itu sendiri, berapa pun angka yang dihasilkan rosternya. Node ini belum membacanya.",
+      "dismiss_step1": "Langkah 1 · Uji coba",
+      "dismiss_step2": "Langkah 2 · Kumpulkan tanda tangan pendamping atas byte itu persis",
+      "dismiss_step3": "Langkah 3 · Kirim",
+      "dismiss_submit": "Kirim pengguguran",
+      "dismissed": "Digugurkan oleh kuorum kohort",
+      "dry_run": "Uji coba — dapatkan byte kanonisnya",
+      "duty_holders": "Moderator yang ditunjuk",
+      "escalated_dismissed": "Dibatalkan oleh kolam responden",
+      "escalation": "Eskalasi",
+      "floor": "Pembatalan yang tereskalasi tidak pernah boleh jatuh di bawah {floor} responden, apa pun yang dikatakan sebuah string kebijakan.",
+      "grounds": "Alasan — wajib, dicatat, tidak pernah ditafsirkan",
+      "no_reading": "Belum ada status yang dibaca. Sebutkan sebuah kohort dan sebuah tindakan di atas.",
+      "objection_id": "Id keberatan",
+      "objections": "Keberatan yang tercatat",
+      "objectors": "Pengaju keberatan yang berbeda-beda",
+      "overrule": "Batalkan",
+      "policy": "Kebijakan",
+      "quiet_body": "Bidangnya MEMANG sudah dibaca dan tidak ada keberatan yang diajukan terhadap tindakan ini.",
+      "quiet_title": "Tidak ada yang mengajukan keberatan",
+      "raise_action": "Ajukan keberatan",
+      "raise_label": "Tarik rem",
+      "raise_price": "Berbiaya {threshold} — satu anggota saja sudah cukup. Tidak ada mayoritas yang perlu dicapai dan tidak ada siapa pun yang perlu ditunggu.",
+      "raise_price_unread": "Berbiaya satu tanda tangan. Satu anggota saja sudah cukup; tidak ada mayoritas yang perlu dicapai.",
+      "read": "Baca statusnya",
+      "refused": "Ditolak",
+      "required": "Ambang batas pembalikan",
+      "respondents_note": "Setelah tenggat berlalu, ambang batas menghitung RESPONDEN, bukan seluruh roster — dan itulah yang membuat komunitas yang sepi tetap dapat memutuskan.",
+      "respondents_of_required": "{respondents} responden · {required} dibutuhkan",
+      "roster": "Roster aktif",
+      "standing": "jawaban dari proses fold",
+      "steward_deadline": "Tenggat moderator",
+      "subtitle": "Bagaimana sebuah komunitas mengawasi dirinya sendiri. Satu anggota menarik rem; kohort harus sepakat untuk melepasnya.",
+      "title": "Ranah bersama",
+      "unknown_body": "Ini BUKAN 'tidak ada yang mengajukan keberatan'. Tidak ada penghitungan yang terbaca, sehingga tidak ada yang ditampilkan — keberatan yang ada tidak diketahui, bukan tidak ada.",
+      "unknown_title": "Kami tidak dapat menanyakannya",
+      "uphold": "Kukuhkan",
+      "window": "Jendela waktu",
+      "window_closed": "tertutup",
+      "window_open": "terbuka"
+    },
+    "mesh_config": {
+      "admitted": "Diterima",
+      "asked": "Diminta",
+      "author": "Penulis",
+      "baseline": "Baseline pemilik",
+      "clamped": "dibatasi oleh persetujuan",
+      "clamped_roots": "Root yang dibatasi karena melampaui persetujuan",
+      "consumer": "Konsumen",
+      "consumption_blocker": "Terhalang oleh",
+      "consumption_effect": "Efek",
+      "consumption_owner": "Konsumen berada di",
+      "consumption_site": "Dibaca melalui",
+      "consumption_tracked_by": "Dilacak oleh",
+      "delegation": "Delegasi",
+      "domain": "Domain yang diperbolehkan",
+      "effective": "Efektif",
+      "emergency_bound": "Batas maksimum kelonggaran darurat",
+      "form_durable": "Tahan lama",
+      "form_emergency": "Darurat",
+      "grounds": "Alasan",
+      "hide_history": "Sembunyikan riwayat baris",
+      "history_binding": "mengikat",
+      "history_counted": "dihitung",
+      "history_total": "{shown} dari {total} baris",
+      "hours": "jam",
+      "in_force": "Berlaku — sebuah loop dalam build ini membaca nilai ini.",
+      "knob": "Setelan",
+      "node": "Node ini",
+      "not_in_force": "TIDAK berlaku pada node ini — nilainya diterima dan dilipat, dan tidak ada apa pun di sini yang bertindak atasnya.",
+      "payload_sha256": "payload_sha256 — byte persis yang ditandatangani seorang co-signer",
+      "per_root": "Jawaban setiap root",
+      "provenance": "Asal-usul",
+      "ratifies": "Meratifikasi",
+      "refused": "Ditolak",
+      "registry": "Kunci terdaftar",
+      "roots": "Trust root yang dilanggan",
+      "rows_held": "Baris mesh-config yang dipegang",
+      "scrubs": "Tanda tangan pendamping",
+      "self_plane_below": "Di bawah: konfigurasi node ini sendiri, yang disetel oleh pemiliknya.",
+      "show_history": "Tampilkan riwayat baris",
+      "subtitle": "Apa yang diminta sebuah trust root yang dilanggan dari node ini. Ini bidang yang terpisah dari konfigurasi node ini sendiri di bawah — keduanya tidak pernah menyatu.",
+      "title": "Konfigurasi mesh",
+      "ttl": "Masa kedaluwarsa",
+      "ttl_expired": "Kedaluwarsa",
+      "ttl_remaining": "Berakhir dalam",
+      "ttl_unbounded": "Tanpa masa kedaluwarsa — berlaku sampai digantikan",
+      "unknown_values": "Nilai-nilai di sini TIDAK DIKETAHUI, bukan nilai bawaan. Tidak ada satu pun di bawah ini yang merupakan nol — tidak ada yang dapat dibaca.",
+      "unreadable_roots": "Root yang tidak dapat dibaca",
+      "write_delegation": "Id delegasi",
+      "write_dry_run": "Uji coba",
+      "write_durable": "Kirim sebagai tahan lama",
+      "write_grounds": "Alasan — dicatat, tidak pernah ditafsirkan",
+      "write_key": "Kunci",
+      "write_ratifies": "Meratifikasi id baris (opsional)",
+      "write_relief": "Kirim sebagai kelonggaran darurat",
+      "write_root": "Trust root (root_ref)",
+      "write_title": "Ubah sebuah setelan mesh",
+      "write_ttl": "Kedaluwarsa setelah (jam)",
+      "write_value": "Nilai"
+    }
+  }
 }

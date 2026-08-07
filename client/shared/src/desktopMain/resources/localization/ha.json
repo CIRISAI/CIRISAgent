@@ -2400,7 +2400,64 @@
     "tool_disclosure_params": "Wakilin yana cika: {params}",
     "tool_disclosure_summary": "Abin da wannan ke ba wakilin damar yi (kayan aiki {count})",
     "tool_disclosure_summary_one": "Abin da wannan ke ba wakilin damar yi (kayan aiki 1)",
-    "tool_disclosure_unavailable": "Za a iya lissafa kayan aikin wannan sai bayan ya tashi da nasa bayanan shiga. Kunna shi yana ba da duk kayan aikin da zai yi rajista a lokacin."
+    "tool_disclosure_unavailable": "Za a iya lissafa kayan aikin wannan sai bayan ya tashi da nasa bayanan shiga. Kunna shi yana ba da duk kayan aikin da zai yi rajista a lokacin.",
+    "accord_bless_ci_desc": "Yi scrub ga maɓallan ma'aikatan CI na substrate (bututun ginawa + mai kula da wakilin) duka a biki guda. Kowanne maɓallin kumburi ne na infra:attest — ana saita matsayin a gefen uwar garke, don haka manna maɓallan jama'a kaɗai. An riga an cika filayen; manna maɓallin jama'a na ML-DSA-65 na kowane repo daga kayan aikin fitarwarsa. Manhajar ba ta riƙe wani maɓalli — taɓa YubiKey shi ne yarda.",
+    "accord_bless_ci_ed25519_label": "Maɓallin jama'a na Ed25519 (base64)",
+    "accord_bless_ci_mldsa_label": "Maɓallin jama'a na ML-DSA-65 (base64) — manna daga aikin fitarwa",
+    "accord_bless_ci_submit": "Albarkaci ma'aikatan CI — taɓa YubiKey ɗinka",
+    "accord_bless_ci_submit_busy": "Ana albarkatawa — taɓa YubiKey ɗinka…",
+    "accord_bless_ci_title": "Albarkaci ma'aikatan CI",
+    "accord_new_bless_ci_workers": "Albarkaci ma'aikatan CI",
+    "accord_new_remint_trust_root": "Sake ƙirƙira tushen amincewa da ke akwai",
+    "accord_remint_auth_tally": "Izini {have} daga cikin {needed}.",
+    "accord_remint_back_btn": "Koma baya",
+    "accord_remint_bundle_ready": "Irin mai ɗaukuwa a shirye yake — ajiye shi ko kwafa shi (mesh-genesis.json):",
+    "accord_remint_canonical_select": "Zaɓi uwar garken canonical da za a sake ƙirƙira…",
+    "accord_remint_close_btn": "Rufe",
+    "accord_remint_completed_label": "Cikakken rikodi (SignedKeyRecord JSON)",
+    "accord_remint_continue_btn": "Ci gaba zuwa gabatarwa",
+    "accord_remint_cosign_all_signed": "Kowane mai riƙe da ke cikin wannan jeri ya riga ya ba da izini ga wannan irin.",
+    "accord_remint_cosign_btn": "Haɗa sa hannu a kan irin — taɓa YubiKey ɗinka",
+    "accord_remint_cosign_btn_busy": "Ana haɗa sa hannu — taɓa YubiKey ɗinka…",
+    "accord_remint_cosign_desc": "Ba da na'urar ga mai riƙe na gaba. Zai ba da izini ga IRIN GUDA a kan YubiKey nasa, da PIN nasa. Ku maimaita har sai kumburin ya ba da rahoton cewa irin ya cika.",
+    "accord_remint_cosign_paste_label": "Sashen da za a haɗa sa hannu a kansa (SignedKeyRecord JSON)",
+    "accord_remint_cosign_title": "Mataki na 3 — Haɗa sa hannu (mai riƙe na biyu)",
+    "accord_remint_desc": "Mai da jerin masu riƙe yarjejeniya DA KE AKWAI tare da kumburin sabis na canonical guda ɗaya zuwa irin tushen amincewa mai ɗaukuwa. Masu riƙe yarjejeniya biyu ne ke ba da izini, kowanne da YubiKey guda. Ba a sake rubuta komai: jerin, maɓallan jama'a da adireshi suna cika kai tsaye daga wannan kumburi. Manhajar ba ta riƙe wani maɓalli — taɓa YubiKey shi ne yarda.",
+    "accord_remint_done_desc": "Ajiye shi, ka riƙe shi ba tare da haɗin yanar gizo ba, kuma ka mika shi kamar yadda za ka mika maɓalli — duk wanda ya riƙe shi zai iya kafa mesh a kan wannan tushen amincewa.",
+    "accord_remint_done_family": "Maɓallin iyali: {key}",
+    "accord_remint_done_fingerprint": "Alamar yatsa: {fingerprint}",
+    "accord_remint_done_fingerprint_caption": "Ku kwatanta wannan alamar yatsa ta wata hanya daban — fuska da fuska ko a kiran waya da ku biyu kuka san juna — kafin kowa ya haɗa wannan irin.",
+    "accord_remint_done_holders": "Masu riƙe da aka ɗauka: {count}",
+    "accord_remint_done_serve_nodes": "Kumburan sabis da aka ɗauka: {count}",
+    "accord_remint_done_title": "An ba da izini ga irin",
+    "accord_remint_no_canonicals": "Babu uwar garken canonical a tushen sake ƙirƙira.",
+    "accord_remint_produce_btn": "Samar da genesis mai ɗaukuwa",
+    "accord_remint_produce_btn_busy": "Ana samarwa…",
+    "accord_remint_propose_btn": "Gabatar da irin — taɓa YubiKey ɗinka",
+    "accord_remint_propose_btn_busy": "Ana gabatarwa — taɓa YubiKey ɗinka…",
+    "accord_remint_propose_desc": "Mai riƙe na farko yana ƙirƙira da sa hannu kan takardar kafuwa da izinin irin ta amfani da YubiKey nasa. Manhajar ba ta ajiye wani maɓalli — taɓawa ita ce yarda.",
+    "accord_remint_propose_title": "Mataki 2 — Gabatarwa (mai riƙe na farko)",
+    "accord_remint_quorum_line": "Adadin da ake buƙata: {m} daga cikin {n} masu riƙe yarjejeniya dole ne su ba da izinin irin.",
+    "accord_remint_quorum_note": "Adadin da ake buƙata {quorum} — masu riƙe biyu kaɗai ake buƙatar su kasance; rikodin na uku yana tafiya tare da jerin sunayen.",
+    "accord_remint_reblessed_note": "Wannan bikin ya kuma albarkaci sabar canonical da aka zaɓa a matsayin sabar trace (infra:serve) — ba ta da wannan a baya. Yanzu an amince da ita ta asali domin karɓar trace; za ka iya cire albarkar a kowane lokaci ta hanyar aikin janyewa na canonical.",
+    "accord_remint_review_title": "Mataki 1 — Duba abin da irin zai ɗauka",
+    "accord_remint_roster_empty": "Har yanzu babu masu riƙe yarjejeniya a tushen sake-ƙirƙirar.",
+    "accord_remint_roster_title": "Masu riƙe yarjejeniya (cikakken jerin sunayen yana tafiya tare da irin)",
+    "accord_remint_save_bundle": "Ajiye ƙunshin genesis",
+    "accord_remint_seed_scope": "Irin yana ɗauke da tushen amincewa — cikakken jerin masu riƙe wannan yarjejeniya — da kuma kumburin hidima da aka zaɓa a ƙasa. Ba a sa hannu kan komai a wannan matakin.",
+    "accord_remint_serve_missing": "ba a albarkace ta don yin hidima ba tukuna — wannan sake-ƙirƙirar yana gyara hakan",
+    "accord_remint_serve_node_line": "Kumburin hidima: {key}",
+    "accord_remint_serve_ok": "yana ba da infra:serve ✓",
+    "accord_remint_start_over_btn": "Fara wani irin",
+    "accord_remint_step1_desc": "Mai riƙe na farko yana yin scrub-sa hannu kan canonical da aka zaɓa (key_id + pubkeys + adireshi da aka riga aka cika). Sashen scrub guda ɗaya bai riga ya ba da izini ba — yana yaɗuwa zuwa sauran masu riƙe domin su haɗa sa hannu.",
+    "accord_remint_step1_title": "Mataki 1 — Gabatarwa (A1)",
+    "accord_remint_step2_desc": "Sashen yana yaɗuwa zuwa na'urorin sauran masu riƙe — mai riƙe na biyu yana haɗa sa hannu daga Haɗin sa hannu masu jira (ko ya liƙa shi a ƙasa don haɗa sa hannu a wannan na'urar). Idan aka cika adadin dangin, sai a ba da rikodin.",
+    "accord_remint_step2_title": "Mataki 2 — Haɗa sa hannu (B1)",
+    "accord_remint_step3_desc": "Liƙa rikodin da aka kammala (wanda aka haɗa sa hannu) — yana tafiya kalma-da-kalma, ba a taɓa sake sanya masa lamba ba. Kumburin yana ƙin rikodin da bai ba da infra:serve ba.",
+    "accord_remint_step3_title": "Mataki 3 — Samar da genesis mai ɗaukuwa",
+    "accord_remint_step_done": "An gama — an ba da izinin irin",
+    "accord_remint_step_of": "Mataki {step} na {total}",
+    "accord_remint_title": "Sake ƙirƙirar tushen amincewa da ke akwai"
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",
@@ -3052,12 +3109,132 @@
       "nodes": "Kumburori",
       "provision_accord_holder": "Tanadin Mai Riƙe",
       "safety": "Aminci",
-      "transport": "Sufuri"
+      "transport": "Sufuri",
+      "commons": "Filin Gama-gari"
     }
   },
   "setup_validation_select_provider": "Zaɓi mai bayar da LLM",
   "network_ops": {
-    "open_federation_hub": "Buɗe cibiyar tarayya →"
+    "open_federation_hub": "Buɗe cibiyar tarayya →",
+    "reader": {
+      "advisory": "Hukuncin da aka bayar shawara ce ga kowane mai karatu. Ƙin amincewa da shi sakamako ne cikakke na kansa, ba kuskure ba: masu karatu biyu masu manufofi daban-daban da suka kai ga yanayi daban-daban, duk biyun ingantattu, daga hukunci guda — wannan shi ne ƙirar tana aiki.",
+      "asserted": "An tabbatar",
+      "decision": {
+        "declined": "Wannan mai karatu bai amince da shi ba",
+        "honoured_by_subscription": "An girmama bisa rajista",
+        "honoured_explicit": "An girmama — wannan mai karatu ya karɓe shi",
+        "undecided_unsubscribed": "Babu shawara tukuna",
+        "unknown": "Shawara da ba a gane ta ba"
+      },
+      "decision_recorded": "An rubuta shawarar",
+      "decision_refused": "An ƙi shawarar",
+      "decision_refused_body": "Ba a rubuta komai ba, kuma manufar wannan mai karatu ba ta sauya ba.",
+      "decision_unreachable_body": "Ba a san ko an rubuta shawarar ba. Ka sake karanta naɗin idan kumburin ya amsa.",
+      "decline": "Ƙi amincewa",
+      "dialog": {
+        "decline_note": "Sakamako ne na yau da kullum. Ba a goge komai daga hukuncin ba kuma ba a yi masa jayayya ba: wannan yana rubuta cewa WANNAN mai karatu bai karɓe shi ba.",
+        "decline_title": "Ƙi amincewa da wannan hukunci",
+        "honour_note": "Wannan mai karatu yana karɓar hukuncin da gangan. Ba lallai ne mai sa hannun ya kasance an yi rajista da shi ba.",
+        "honour_title": "Girmama wannan hukunci"
+      },
+      "dimension": "Dimension",
+      "fold": {
+        "agrees": "Waɗannan sun yi daidai.",
+        "diverges": "Waɗannan sun bambanta — wanda hakan shi ne mai karatu yana yanke shawara. Ana rubuta ƙin amincewar kuma ana bayar da rahotonta; amma har yanzu ba ta sa wannan kumburi ya daina hanawa ba.",
+        "node": "Hanyoyin bayarwa na wannan kumburi",
+        "reader": "Naɗin wannan mai karatu"
+      },
+      "held": "Hukunce-hukuncen da ake riƙe",
+      "honour": "Girmama",
+      "judgement": "Hukunci",
+      "read": "Karanta naɗin wannan mai karatu",
+      "reading": "Ana karantawa…",
+      "refused_body": "Ba za a iya cimma wata matsaya ba game da abin da wannan mai karatu yake girmamawa.",
+      "refused_title": "Kumburin ya ƙi wannan karatu",
+      "signer": "Wanda ya sa hannu",
+      "standing": {
+        "decided": "An rarraba hukunce-hukuncen",
+        "none_held": "Ba a riƙe wani hukunci a nan ba",
+        "unknown": "Matsayi da ba a gane shi ba",
+        "unreadable": "Wannan mai karatu bai iya karanta yanayin kansa ba",
+        "unreadable_meaning": "BA «babu wani hukunci» ba ne kuma BA «ba a hana komai ba» ba ne — manufar da ba a iya karantawa, idan aka nuna ta kamar wadda babu komai a ciki, tana zubar da duk hane-hanen da take ɗauke da su a shiru."
+      },
+      "subject_label": "ID na maɓallin batun",
+      "subscription": "Tushen da aka yi rajista da su",
+      "subtitle": "Hukunce-hukuncen wasu ɓangarori, da abin da manufar mai karatu ta WANNAN kumburi ta yi da su",
+      "title": "Abin da wannan mai karatu yake girmamawa (mataki R)",
+      "unreachable_body": "Mataki R yana karanta abin da wannan kumburi yake riƙe, don haka ba za a iya cewa komai game da batun ba sai ya amsa. Ba kamar mataki S ba, wannan mataki yana buƙatar kumburin.",
+      "unreachable_title": "Ba a iya kaiwa ga wannan kumburi ba"
+    },
+    "self": {
+      "act_refused_body": "Ba a rubuta komai ba. Matsayin da ke sama ba su sauya ba.",
+      "act_refused_title": "An ƙi aikin",
+      "act_unreachable_body": "Ba a san ko an rubuta aikin ba. Ka sake karanta matsayin idan kumburin ya amsa.",
+      "act_unreachable_title": "Ba a iya kaiwa ga wannan kumburi ba",
+      "axes_never_folded": "Gindaye uku mabambanta, ayyuka uku mabambanta. Kumburin da YA ZAƁI ya tsaya da kumburin da AKA TILASTA masa ya tsaya abu ɗaya ne a gani amma ma'anarsu ta sāɓa wa juna, don haka ba a taɓa haɗa su cikin maɓalli ɗaya ba.",
+      "axis": {
+        "accepting": {
+          "declare": "Daina karɓa",
+          "lift": "Sake karɓa",
+          "question": "Shin wannan kumburi YA ZAƁI kada ya ɗauki wani sabon abu?",
+          "title": "Daina karɓa"
+        },
+        "legal_compulsion": {
+          "declare": "Ayyana tilastawa",
+          "lift": "Tilastawa ta ƙare",
+          "question": "Shin ana amfani da ƙarfi a kan wannan kumburi daga wajen mesh? Ba zaɓi ba ne, kuma ba a taɓa rubuta shi a matsayin zaɓi ba.",
+          "title": "Tilastawa ta doka"
+        },
+        "load_shed": {
+          "declare": "Rage nauyi",
+          "lift": "Sake ɗaukar cikakken nauyi",
+          "question": "Shin wannan kumburi yana ɗaukar ƙasa da haka da gangan?",
+          "title": "Rage nauyi"
+        }
+      },
+      "counts": "An ayyana sau {declarations} · an ɗage sau {lifts}",
+      "delegation": "A ƙarƙashin wakilci",
+      "dialog": {
+        "cancel": "Soke",
+        "compelled_by_hint": "Tilastawa kaɗai ce take ɗauke da wannan. Ka bar shi fanko idan ba za ka iya faɗa ba — «an tilasta mini, amma ba zan iya faɗin wa ya yi ba» amsa ce ta gaskiya, kuma mai gudanarwa da aka hana yin magana yana iya barin alamar duk da haka.",
+        "compelled_by_label": "Wanda ya tilasta (na zaɓi)",
+        "confirm": "Rubuta",
+        "delegation_hint": "ID ɗin delegates_to na mai shi da kansa. Aikin da kumburi ya yanke wa kansa na mai shi ne shi kaɗai: izinin bayarwa na wani ɓangare na uku ba zai isa ba.",
+        "delegation_label": "ID na wakilcin mai shi",
+        "reason_hint": "Ana rubuta shi kalma-da-kalma kuma ba a taɓa fassara shi ba. Aikin da ba shi da dalilin da aka rubuta ba shi da bambanci da aikin da ba shi da izini sa'ad da mai aikin ya tafi.",
+        "reason_label": "Dalili (wajibi)",
+        "working": "Ana rubutawa…"
+      },
+      "event": "Abin da ya faru",
+      "lift_disabled_hint": "Ba a ayyana komai a kan wannan gindi ba, don haka babu abin da za a ɗage.",
+      "node_key": "Wannan kumburi",
+      "partition_only": "Shi ne kaɗai matakin da yake ci gaba da aiki sa'ad da aka raba kumburin da hanyar sadarwa — kowane sauran mataki dole ne ya kai ga wani.",
+      "reason_label": "Dalilin da aka rubuta",
+      "recorded_title": "An rubuta",
+      "records_only": "Kowane aiki yana rubuta sanarwa mai ɗauke da sunan wanda ya yi ta, ba wani abu ba face haka. Babu wani madauki a kan wannan kumburi da yake karanta su, don haka aikin da kansa bai takura, bai toshe, kuma bai tsayar da komai ba.",
+      "refresh": "Sake karanta matsayin",
+      "refused_body": "Matsayin ba a san su ba. Karatun da aka ƙi ba karatu bayyananne ba ne.",
+      "refused_title": "Kumburin ya ƙi wannan karatu",
+      "since": "Tun",
+      "standing": {
+        "in_force": "Yana aiki",
+        "in_force_meaning": "Wannan kumburi ya ayyana shi kuma bai ɗage shi ba.",
+        "lifted": "An ayyana, sannan aka ɗage",
+        "lifted_meaning": "Ba ya aiki yanzu — kuma ba gaskiya ɗaya ba ce da rashin taɓa ayyana shi.",
+        "never_declared": "Ba a taɓa ayyanawa ba",
+        "never_declared_meaning": "Ba a taɓa rubuta wani aiki a kan wannan gindi a nan ba.",
+        "unknown": "Matsayi da ba a gane shi ba",
+        "unknown_meaning": "Kumburin ya bayar da rahoton matsayi da wannan manhaja ba ta gane ba. Ka ɗauke shi a matsayin wanda ba a sani ba, kada ka taɓa ɗaukarsa a matsayin bayyananne.",
+        "unreadable": "Ba a san matsayin ba — ba a iya karantawa ba",
+        "unreadable_meaning": "Ba a iya karanta rikodin ba, don haka wannan kumburi bai san matsayinsa na kansa ba. Wannan BA «babu abin da ke aiki» ba ne."
+      },
+      "subtitle": "Yana aiki a kan wannan kumburi kaɗai, ba a kan wani ba",
+      "title": "Wanda kumburi ya yanke wa kansa (mataki S)",
+      "unreachable_body": "Matsayin ukun ba a san su ba — wanda hakan ba yana nufin «babu abin da ke aiki» ba. Ayyukan mataki S na cikin gida ne ga wannan kumburi, don haka za a sake samun su nan take idan ya amsa.",
+      "unreachable_title": "Ba a iya kaiwa ga wannan kumburi ba",
+      "unreadable_axes_body": "Kumburin ya amsa, amma bai iya karanta gindayen da aka yi wa alama a ƙasa ba. Bai san matsayinsa na kansa a wurin ba — kada ka karanta hakan a matsayin «babu abin da ke aiki».",
+      "unreadable_axes_title": "Ba a iya karanta wasu matsayin ba"
+    }
   },
   "setup_validation_fedid_label_generic": "Zaɓi suna na musamman kamar sunanfarko-sunanƙarshe-v1. Ba a yarda da sunan gama-gari na asali ba.",
   "setup_validation_fedid_label_required": "Shigar da sunan ID ɗin tarayyarku don ci gaba.",
@@ -3124,5 +3301,648 @@
   "approval_tool_capabilities": "Abin da wannan kayan aikin zai iya yi",
   "approval_tool_arguments": "Ƙimomin da wakilin ke shirin turawa",
   "approval_tool_arguments_omitted": "Muhawwarorin wakilin sun yi girma da ba za a nuna su a nan ba.",
-  "approval_tool_scope_note": "Amincewa tana ba da izinin wannan kayan aikin don aiki na gaba, ba don wannan kiran daidai ba. Wakilin zai sake nazarin aikin daga farko kuma yana iya amfani da ƙimomi daban."
+  "approval_tool_scope_note": "Amincewa tana ba da izinin wannan kayan aikin don aiki na gaba, ba don wannan kiran daidai ba. Wakilin zai sake nazarin aikin daga farko kuma yana iya amfani da ƙimomi daban.",
+  "admin": {
+    "accept_writes": {
+      "not_reached": "Ba ya mayar da wani abu daga cikin abin da aka ƙi sa'ad da soke shigarwar take tsaye. An ƙi waɗancan rubuce-rubuce a ƙofa kuma ba su taɓa sauka a nan ba; idan takwarar tana riƙe da su har yanzu, sai ta sake aika su. Babu wani abu game da maɓallin da ya sauya.",
+      "not_refused": "Ba a soke shigarwar wannan maɓalli a nan ba, don haka babu abin da za a ɗage."
+    },
+    "admission": {
+      "standing": {
+        "admitted": "Babu wata soke shigarwa mai rai da wannan kumburi ya rubuta wadda ta ambaci wannan maɓalli, don haka ana karɓar rubuce-rubucensa a nan. Wannan bai faɗi komai game da kowane kumburi ba: soke shigarwa na cikin gida ne ga tarin da ya fitar da ita.",
+        "refused": "Wannan kumburi yana riƙe da soke shigarwa mai rai a kan wannan maɓalli wadda shi da kansa ya rubuta, don haka za a ƙi rubutun maɓallin na gaba cikin tarin wannan kumburi a ƙofar substrate da kansa.",
+        "unreadable": "Wannan kumburi bai iya karanta yanayin karɓarsa na kansa game da wannan maɓalli ba, don haka bai san ko an ƙi rubuce-rubucen maɓallin ba. Wannan BA «an karɓa» ba ne — kada ka nuna shi haka."
+      }
+    },
+    "descend": {
+      "bounded_unsupported": "Hukuncin da lokaci ya iyakance ba zai iya haddasa korar da ba ta da iyaka ba. Hanyar gangarowa ɗaya tilo da substrate ke bayarwa bisa maɓallin mai aiki tana daukar dukan tarin bayanai, wanda hakan zai lalata tarihin da wannan iyaka ta yi nufin barinsa a tsaye. Cirewar da lokaci ya iyakance wadda AKE aiwatarwa ita ce soke shigarwa tare da iyakar tarihi.",
+      "not_reached": "Layukan shaidar da aka zaba da kansu ba a gangara su ba. An rufe kowane mai dauke da bayanai a kan wannan substrate cikin sa hannunsa, don haka ba za a iya cire baitocinsa ba tare da sa layin ya karantu kamar an ƙirƙire shi ba; ana yanke shawarar yiwuwar gogewa a lokacin ƙirƙira, kuma babu abin da aka ƙirƙira yau da za a iya gogewa."
+    },
+    "enforcement": {
+      "accept_writes": "Wannan kumburi ya daina ƙin rubuce-rubucen maɓallan da aka ambata: an janye soke shigarwar da shi da kansa ya rubuta, kuma substrate ya sake karɓar rubutunsu na gaba. Soke shigarwar da wannan janyewa duka biyun suna nan a matsayin tarihi da ake iya karantawa.",
+      "annotate": "Hukunci da aka sa wa hannu wanda ba shi da wani tasiri sai mai karatu ya girmama shi. Ba a hana, takura ko cire komai ba.",
+      "deadmit": "Sokewa da aka sa wa hannu a kan filin ƙari-kawai na yau da kullum. Shaida ce da mai karatu yake hadawa, ba ƙofar da take rufewa da ƙarfi ba: tabbatar da sa hannu, alamun kwafi da shigar layuka duk suna ci gaba da aiki da gangan, domin kin tsofaffin layukan maɓalli da aka lalata zai lalata shaidar da ake buƙata don yanke hukunci a kan lalacewar.",
+      "descend": "An ƙera shi ba tare da yiwuwar mayarwa ba. Gangarowa ba ta taba karewa a sifili ba - rufaffiyar siga da alamar kabari suna nan - amma abin da aka zubar ba zai dawo ba.",
+      "quarantine": "Alama ce da aka sa wa hannu, ba umarni ba: ba a goge komai ba kuma ba a sake rubuta komai ba. Hanyoyin bayarwa na wannan kumburi za su daina mika layuka da fayilolin maɓallan da aka ambata ga takwarori; takwarar da take hadawa daban kawai ba za ta samu su daga gare mu ba.",
+      "re_admit": "An rubuta shi a matsayin mayarwa mai dauke da sunan wanda ya yi ta. Layin sokewa yana nan kuma kowane mai karatu yana ci gaba da hada shi: hane-hane suna taruwa amma sassauci ba ya taruwa, kuma babu wani sashe na wannan substrate da yake bude hanyar warware sokewa.",
+      "refuse_writes": "Wannan kumburi yana ƙin rubutun maɓallan da aka ambata na gaba cikin tarinsa na kansa, a ƙofar substrate da kansa kuma kafin kowace ƙofa ta gudana. NA CIKIN GIDA ne da gangan: babu kumburin da ke yanke wa wani kumburi hukuncin saitin karɓarsa, domin soke shigarwa mai tasiri a duk duniya da kanta makamin danniya ce. Ware mai zagi na gaskiya abu ne da yake kunno kai da kansa — yana zuwa ne sa'ad da kumburai da yawa suka cimma matsaya ɗaya kowanne da kansa — kuma ba a taɓa yanke shi daga nan ba.",
+      "throttle": "An rubuta shi a matsayin hukunci mai dauke da sunan wanda ya yi shi kadai. Wannan substrate ba shi da kasafin shigarwa na kowane maɓalli da mai karba ya rubuta: iyakar rubutun takwara kariya ce ta dindindin daga zagayowar da ta ɓalle, ba wurin manufa da takurawa za ta iya dogara a kai ba. Babu abin da ya sauya a cikin abin da wannan kumburi yake karba daga maɓallan da aka ambata."
+    },
+    "preview": {
+      "note": "Wannan shi ne ainihin abin da aiwatarwa za ta shafa. Ka gabatar da hash din zabin tare da aiwatarwar; idan zabin ya sauya, aiwatarwar za ta ki.",
+      "window_in_application": "Wannan kumburi ne yake aiwatar da tazarar lokaci, ba tambayar substrate ba: karatun shaida na gaba ɗaya ba ya girmama gindin tazarar lokaci. Ana aiwatar da iyakar shafi tukuna, don haka zabi mai tazarar lokaci na iya dawowa da ƙasa da ake tsammani."
+    },
+    "quarantine": {
+      "not_withheld": "Ba a hana wannan maɓalli a nan a halin yanzu ba, don haka babu abin da za a saki."
+    },
+    "reader": {
+      "advisory": "Hukuncin da aka bayar shawara ce ga kowane mai karatu. `reader_fold` shi ne abin da manufar WANNAN mai karatu ta yi da abin da yake riƙe; `node_fold` shi ne abin da hanyoyin bayarwa na wannan kumburi suke yi a yau, wato girmama kowace alama da substrate ya karɓa. Za su iya bambanta, kuma idan sun bambanta, bambancin shi ne gibin substrate: babu wurin da manufar mai karatu za ta shiga cikin haɗawar bangaren bayarwa, don haka ana rubuta rashin amincewa kuma ana ba da rahotonsa, amma har yanzu hakan ba ya sa wannan kumburi ya daina hanawa.",
+      "decision": {
+        "declined": "Wannan mai karatu bai amince da wannan hukunci ba. Sakamako ne na yau da kullum: hukuncin da aka bayar shawara ce ga kowane mai karatu, kuma rashin amincewa da shi shi ne ainihin halin da wannan mataki gaba ɗaya yake nan saboda shi.",
+        "honoured_by_subscription": "Ba a rubuta wata shawara a fili ba; wannan mai karatu ya yi rajista da mai sa hannun, don haka ana girmama hukuncin bisa manufa.",
+        "honoured_explicit": "Wannan mai karatu ya karɓi wannan hukunci da gangan.",
+        "undecided_unsubscribed": "Wannan mai karatu bai yi rajista da mai sa hannun ba kuma bai rubuta wata shawara ba. Ba a girmama hukuncin, kuma hakan ba shawarar kowa ba ce tukuna — wannan gaskiya ce ta daban da rashin amincewa da shi."
+      },
+      "standing": {
+        "decided": "An jera kowane hukunci da wannan kumburi ke riƙe game da wannan batu tare da abin da wannan mai karatu yake yi da shi.",
+        "none_held": "Wannan kumburi ba ya riƙe wani hukunci game da wannan batu. Babu wanda ya yi masa hukunci a nan — wanda hakan bai zama daidai da cewa wannan kumburi ya kasa faɗi ba.",
+        "unreadable": "Wannan mai karatu bai iya karanta yanayin kansa ba, don haka ba zai iya faɗin abin da yake girmamawa ba. Wannan BA «babu wani hukunci» ba ne kuma BA «ba a hana komai ba» ba ne — manufar da ba a iya karantawa, idan aka nuna ta kamar wadda babu komai a ciki, tana zubar da duk hane-hanen da take ɗauke da su a shiru."
+      }
+    },
+    "refusal": {
+      "attribution_absent": "Ana buƙatar delegation_id. Aikin da bai zo da ikonsa ba, ba za a iya bambanta shi da aikin da ba shi da izini ba sa'ad da mai aikin ya tafi.",
+      "authority_not_a_delegation": "Lambar wakilcin da aka ambata ba layin delegates_to ba ne.",
+      "authority_not_the_owner": "Aikin da kumburi ya yanke wa kansa na mai shi ne shi kaɗai. Wakilcin da aka ambata yana ɗauke da iyakar ikon da ya dace, amma ba wanda ke da alhakin wannan kumburi ne ya bayar da shi ba, kuma izinin bayarwa na wani ɓangare na uku ba na mai shi ba ne.",
+      "authority_not_to_actor": "Ba a bai wa wannan kumburi wakilcin da aka ambata ba, don haka wannan kumburi ba shi ne ɓangaren da wakilcin yake ba da izini gare shi ba.",
+      "authority_scope_absent": "Wakilcin da aka ambata bai ɗauke da iyakar ikon da wannan aiki ke buƙata ba. Wani wakilci daga wannan mai bayarwa na iya ɗauke da shi, amma a nan aikin zai rubuta ikon da ba a yi shi a ƙarƙashinsa ba.",
+      "authority_scope_unreachable": "Babu sarƙar wakilci mai rai da ke ɗauke da iyakar ikon da wannan aiki ke buƙata wadda ta kai ga wannan kumburi daga wannan mai bayarwa. Ana sake fitar da iko daga yanayin da wannan kumburi da kansa ya tabbatar, ba a taɓa ɗauko shi daga buƙatar ba.",
+      "authority_unresolved": "Wakilcin da aka ambata ba layi ba ne da wannan kumburi ke riƙe, don haka ba a iya duba iyakar ikonsa. Wannan kumburi ba ya aiki bisa ikon da ba zai iya tabbatarwa ba.",
+      "bad_request": "Ba a iya fahimtar jikin buƙatar ba.",
+      "community_absent": "Ana buƙatar community_id: ana shigar da keɓewa a ƙarƙashin ikon al'umma, kuma alamar da ba ta ambaci wata al'umma ba, ba ta ambaci wani iko ba.",
+      "deadmission_gate_dormant": "Wannan kumburi bai ayyana asalinsa na kansa ga substrate ba, don haka ƙofar soke shigarwa tana barci: za a rubuta layin kuma ba zai ƙi komai ba. An ƙi maimakon a mayar da shi kamar an gama — ƙofar hukunci da take shiru ba tare da yin komai ba ta fi rashin ƙofa muni, domin mai gudanarwa zai gaskata cewa soke shigarwa tana aiki. Wannan laifin saitin kumburi ne, ba laifin buƙatar ba.",
+      "deadmission_gate_foreign_identity": "Asalin da wannan kumburi yake sa wa hannu da shi da asalin da ƙofar soke shigarwa take gwada marubuta da shi maɓallai biyu ne mabambanta, don haka soke shigarwar da aka sa wa hannu a nan ba za a taɓa naɗe ta a matsayin ta wannan kumburi ba kuma ba za ta ƙi komai ba. Wannan laifin saitin kumburi ne, ba laifin buƙatar ba.",
+      "judgement_subjectless": "Wannan hukunci bai ambaci wani batu ba, don haka girmama shi ko rashin amincewa da shi ba zai canza komai ga kowa ba. Wannan kumburi ba ya rubuta shawarar da ba zai iya aiwatarwa ba.",
+      "judgement_unresolved": "Wannan hukunci ba layi ba ne da wannan kumburi ke riƙe, don haka wannan mai karatu ba shi da abin da zai yanke shawara a kansa. Mai karatu yana yanke shawara a kan abin da yake RIƘE; ba ya ƙin abin da bai taɓa gani ba tun kafin ya gan shi.",
+      "node_unowned": "Wannan kumburi ba shi da wanda ke da alhakinsa (haɗin mallaka), don haka ba ya gudanar da wani aikin gudanarwa mai matakai a madadin kowa. Ku nemi mallaka tukuna.",
+      "not_a_judgement": "Wannan layi ba hukunci ba ne da wannan mataki zai iya yanke shawara a kansa. Matakin R shi ne manufar mai karatu a kan HUKUNCE-HUKUNCEN wasu ɓangarori, kuma shaidar da aka saba da ita ba hukunci ba ce.",
+      "not_owner": "Ayyukan gudanarwa masu matakai suna buƙatar matsayin mai shi (SYSTEM_ADMIN).",
+      "preview_hash_mismatch": "Abin da ka duba a gaba ba shi ne abin da zai gudana ba - zabin ya sauya tun bayan dubawar. Sake gudanar da dubawar sannan ka amince da sabon hash.",
+      "quorum_insufficient": "Wannan aiki ba ya mayarwa kuma yana buƙatar quorum na hukumomi mabambanta, ba sarƙar wakilci ɗaya ba. Sarƙoƙi biyu daga tushe guda ɗaya hukuma ce ɗaya sanye da huluna biyu.",
+      "reason_absent": "Ana buƙatar dalili. Aikin da ba shi da dalilin da aka rubuta ba shi da bambanci da aikin da ba shi da izini sa'ad da mai aikin ya tafi.",
+      "selection_unpredicated": "Zabin bai ɗauke da wani sharaɗi ko kaɗan ba, wanda hakan yana nufin dukan tarin bayanai. Ka ambaci abin da kake aiki a kansa.",
+      "session_absent": "Ba a gabatar da token na zaman ba. Ayyukan gudanarwa masu matakai na mai shi kaɗai ne.",
+      "session_invalid": "Wannan zaman ba shi da inganci ko kuma ya ƙare.",
+      "store_unavailable": "Ba a iya karanta substrate ba.",
+      "subject_absent": "Ana buƙatar subject_key_id: haɗawar mai karatu tana game da hukunce-hukuncen batu guda ɗaya ne, kuma batun da ba a ambace shi ba shi ne kowane batu."
+    },
+    "refuse_writes": {
+      "already_refused": "An riga an soke shigarwar wannan maɓalli a nan, don haka ba a rubuta komai ba kuma matsayin bai sauya ba.",
+      "not_reached": "Ba ya share wani abu daga rikodin. Layukan da waɗannan maɓallan suka riga suka rubuta a nan ba a taɓa su ba kuma ana ci gaba da bayar da su — keɓewa ita ce aikin da yake dakatar da bayar da su. Layukan da suka riga suka kwafu zuwa takwarori ba a mayar da su ba kuma ba za a iya mayar da su ba. Ba a cire maɓallan ba, sa hannunsu yana ci gaba da tabbatuwa, kuma suna ci gaba da rubutawa a kowane kumburi, har da takwarorin wannan kumburi, waɗanda daga gare su waɗannan layuka za su iya sake iso nan ta hanyar kwafi. Keɓancewa guda ɗaya ta rage da gangan domin kumburi ya kasance koyaushe yana iya ɗage ƙinsa na kansa, kuma ba ta tambayar wa ke rubutawa: maɓallin da aka soke shigarwarsa yana iya rubuta layukan soke shigarwa a nan (CIRISPersist#608).",
+      "reversal": "Ana iya mayar da shi, kuma mayarwar tana kaiwa ga substrate maimakon kawai ta rubuta sauyin ra'ayi: POST /v1/admin/accept-writes yana janye soke shigarwar, kuma ana sake karɓar rubuce-rubucen maɓallin a nan. Biyu daga cikin mayarwar wannan mataki suna kaiwa ga substrate — sakin keɓewa, wanda yake mayar da abin da wannan kumburi yake BAYARWA, da kuma wannan, wanda yake mayar da abin da yake KARƁA. Layukan biyu suna nan a karantu: «an ƙi sannan aka sake karɓa» ba gaskiya ɗaya ba ce da «ba a taɓa ƙi ba»."
+    },
+    "reversal": {
+      "evidence_only": "Layin asali yana nan kuma kowane mai karatu yana ci gaba da hada shi. Wannan mayarwa shaida ce da aka rubuta, ba wargazawa ba - substrate ba ya bude hanyar warware sokewa.",
+      "substrate": "An mayar da yanayin substrate: wannan kumburi ya daina hana layukan maɓallin.",
+      "symmetric": "Ba a mayar da komai a cikin substrate ba domin babu abin da ya aiwatar da hukuncin asali a cikin substrate. Ayyukan biyu duk shaida ce da aka rubuta."
+    },
+    "self": {
+      "distinct_zeroes": "Uku daga cikin matsayi huɗu sifili ne kuma suna nufin abubuwa daban-daban: ba a taɓa ayyanawa ba, an ayyana sannan aka ɗage, da kuma ba a iya karantawa ba. Ka nuna su daban-daban.",
+      "enforcement": {
+        "compelled": "An rubuta shi a kan gindinsa na kansa, a matsayin aikinsa na kansa. Wannan magana ce game da ƙarfin da aka yi amfani da shi daga WAJEN mesh, kuma shi kaɗai ba ya canza komai a cikin abin da wannan kumburi yake yi — da gangan aka yi haka. Ana iya tilasta wa kumburin da aka tilasta wa ya ci gaba da bayarwa, ko ya tsaya, ko ya mika wani abu; haɗa kowanne daga cikin waɗannan cikin «wannan kumburi ya daina karɓa» zai lalata siginar guda tilo da wanda ke ƙasa da shi yake da ita don bambanta zaɓi da tilastawa.",
+        "shed": "An rubuta shi a matsayin sanarwar wannan kumburi da kansa mai ɗauke da sunansa, ba wani abu ba face haka. Tushen amincewa ne suke rubuta filin mesh-config wanda zai ɗauki iyakar nauyi, kuma wannan kumburi bai riga ya gudanar da wani mai amfani da ƙimomin da aka haɗa ba, don haka babu wata zagaye da take canza abin da yake ɗauka. Abin da ya canza shi ne abin da aka rubuta: mai gudanarwa, takwara ko binciken da zai zo daga baya na iya sanin cewa wannan kumburi ya zaɓi ya ɗauki ƙasa da haka, a ƙarƙashin ikon wa, da kuma yaushe.",
+        "stop_accepting": "An rubuta shi a matsayin sanarwar wannan kumburi da kansa mai ɗauke da sunansa cewa ba ya ɗaukar wani sabon abu. Babu abin da ke tilasta shi a wannan substrate: filin karɓa makaho ne ga takwarori, kuma kasafin rubutu na kowace takwara kariya ce ta dindindin daga zagayowar da ta ɓalle, ba wurin manufa da tsayarwa za ta iya dogara a kai ba. Sanarwar ita ce abin da aka samar — kuma ita ce abin da takwara take karantawa domin ta daina bayarwa."
+      },
+      "lift": {
+        "compelled": "An rubuta shi a matsayin aiki na daban: tilastawar da ta ƘARE ba tilastawa ce da ba ta taɓa faruwa ba. Sanarwar da ya ɗage tana nan, kuma duka biyun suna nan a karantu.",
+        "voluntary": "An rubuta shi a matsayin aiki na daban. Sanarwar da ya ɗage tana nan, kuma duka biyun suna nan a karantu — «an ayyana sannan aka ɗage» ba shi ne «ba a taɓa ayyanawa ba» ba."
+      },
+      "partition": "Kowane aiki a wannan mataki na cikin gida ne: bin haɗin mallaka, rubutawa a littafin rikodi da kuma wannan karatu duk suna taɓa bayanan wannan kumburi da kansa kawai. Shi ne kaɗai matakin da ake da shi sa'ad da aka raba kumburin da hanyar sadarwa — kowane sauran mataki dole ne ya kai ga wani.",
+      "standing": {
+        "in_force": "Wannan kumburi ya ayyana wannan kuma bai ɗage shi ba.",
+        "lifted": "Wannan kumburi ya ayyana wannan sannan ya sake ɗage shi. Wannan ba gaskiya ɗaya ba ce da rashin taɓa ayyana shi.",
+        "never_declared": "Wannan kumburi bai taɓa ayyana wannan ba. Wannan ba gaskiya ɗaya ba ce da ayyana shi sannan a ɗage shi, kuma ba gaskiya ɗaya ba ce da rashin iya karanta shi.",
+        "unreadable": "Ba a iya karanta rikodin ba, don haka wannan kumburi bai san matsayinsa a kan wannan gindi ba. Wannan BA «babu abin da ke aiki» ba ne — kada ka nuna shi haka."
+      }
+    }
+  },
+  "commons_surface": {
+    "asymmetry": "Memba ɗaya yana ɗaga birki; ƙungiya gaba ɗaya kuwa dole ta yarda kafin a saukar da shi. Ɗaga kariya ba shi da sharaɗi kuma sa hannu ɗaya ne farashinsa; wargaza na wani kuwa yana kashe ƙofar ƙungiyar da kanta, kuma wargazawa da aka ɗaukaka ba za ta taɓa sauka ƙasa da gindi tabbatacce wanda babu wata ka'ida da za ta iya rage shi ba.",
+    "ballot": {
+      "admitted": "An rubuta kuri'ar. Ita kaɗai BA TA DA wani ƙarfi: ana biyan farashinta ne a lokacin karatu bisa mai rabawa da bai wanzu ba tukuna a lokacin da aka kaɗa ta — ko tafkin zai taɓa kai ƙofar da aka ɗaukaka ya dogara ne ga wanda kuma ya amsa. Memba na iya sauya ra'ayinsa; kuri'a mafi sabo ce ke mulki."
+    },
+    "dismissal": {
+      "admitted": "An ɗage ƙorafin daga ƙidaya. Ana sake samo ƙofa daga jerin membobin wannan kumburi da kansa a kowane karatu na gaba, don haka kawarwar da ta daina cimma ƙofar jerin membobi bayan ya girma tana daina dakatarwa — kuma kariyar da ta cire tana dawowa."
+    },
+    "dry_run": "Ba a sa wa komai hannu ba kuma ba a mika komai ba. Waɗannan su ne ainihin baitocin canonical da kowane abokin sa hannu dole ne ya sa wa hannu domin scrub ɗinsa ya ƙidaya a mikawa ta gaskiya — m-cikin-n yana kan waɗannan baitoci ne kaɗai, ba wasu ba.",
+    "escalation": {
+      "awaiting": "Masu kula da aka naɗa na iya amsawa tukuna, ko kuma sun riga sun yanke hukunci cikin lokaci. Ɗaukakawa ba ta buɗe ba.",
+      "not_adopted": "Wannan al'umma ba ta ayyana matakin masu kula ba, don haka babu wa'adin masu kula kuma babu ɗaukakawa. Shiru ba ya canza komai a nan.",
+      "nothing_to_escalate": "An ayyana matakin masu kula kuma babu wani ƙorafi mai rai da ke jiransa. Ba wanda ya yi shiru, domin ba a tambayi kome ba.",
+      "open": "Masu kula da aka naɗa ba su amsa cikin lokaci ba, kuma hukuncin ya koma ga waɗanda suka amsa. Yanzu ƙofar tana ƙidaya WAƊANDA SUKA AMSA maimakon dukan jerin membobi — wanda hakan shi ne yake ba al'umma mai natsuwa damar warware al'amari duk da haka — an sa mata gindi domin «mai kaiwa» kada ya taɓa gangarawa zuwa «mutum ɗaya ne yake yanke hukunci»."
+    },
+    "objection": {
+      "admitted": "An rubuta ƙorafin. ALAMA ce, ba umarni ba: babu abin da ya sauya saboda zuwansa, kuma yana yaɗuwa a filin tabbatarwa na yau da kullum, don haka takwaran da aka raba shi da hanyar sadarwa a lokacin tagar zai ƙidaya shi sa'ad da ya iso gare shi. Memba ɗaya ya isa ya ɗaga shi; ɗage shi kuwa yana kashe ƙofar ƙungiyar da kanta."
+    },
+    "outcome": {
+      "dismissed": "Waɗanda suka amsa sun yanke hukuncin cewa wannan ƙorafi bai tsaya ba, kuma an dakatar da shi a ƙidaya.",
+      "not_escalated": "Ɗaukakawa ba ta buɗe ba ga wannan ƙorafi.",
+      "unresolved": "Ɗaukakawa a buɗe take kuma ba a yanke hukunci ba: masu amsawa sun yi kaɗan, ko kuma babu wani ɓangare da ya kai ƙofa. Babu abin da ya sauya — ƙorafin yana nan tsaye daidai yadda yake.",
+      "upheld": "Waɗanda suka amsa sun yanke hukuncin cewa wannan ƙorafi ya tsaya."
+    },
+    "refusal": {
+      "action_absent": "Ana buƙatar action_id. Ƙorafi yana ambaton layi a cikin filin gama-gari; wanda bai ambaci kome ba, ba za a taɓa ƙidaya shi ba.",
+      "action_unknown": "Wannan kumburi bai riƙe irin wannan aiki ba, don haka layin da ya ambace shi za a shigar da shi inda babu wani naɗi da zai taɓa ƙidaya shi. Substrate yana ƙin wannan lamari ɗaya a ƙofarsa da kansa.",
+      "actor_recused": "Marubucin aikin ba ya kaɗa kuri'a a kan ƙorafin da aka yi wa aikinsa.",
+      "bad_now": "Lokacin karatu dole ne ya zama alamar lokaci ta RFC 3339.",
+      "ballot_predates_action": "Hukunci ba zai iya girmi abin da yake hukunta ba.",
+      "canonicalize_failed": "Ba a iya samar da baitocin canonical na layin ba, don haka babu abin da abokin sa hannu zai sa wa hannu.",
+      "cohort_absent": "Ana buƙatar cohort_key_id: shi ne yake ambaton jerin membobin wa da kuma sanarwar wa ce take mulkin ƙidayar.",
+      "cohort_not_a_commons": "Ƙungiyar `self` ba ta da jerin membobi da za a yi quorum a kansa — membobinta na'urorin asali guda ɗaya ne — don haka ba ta da filin gama-gari da za ta yi wa sanya ido.",
+      "cohort_unknown": "Wannan ƙungiya ba ta warware a wannan kumburi ba, don haka babu jerin membobi kuma babu sanarwa da za a yi hukunci da ita. Dole ne iko ya fito daga yanayin gida da aka tabbatar.",
+      "cohort_unrecognized": "Wannan ba ƙungiya ce mai jerin membobi ba. Ƙorafe-ƙorafe suna zama ne a cikin iyali, a cikin al'umma ko a cikin ƙungiyar haɗin kai.",
+      "dimension_mismatch": "An gabatar da wannan layi a ƙofar da ba ta dace da abin da yake ɗauke da shi ba.",
+      "dismissal_quorum_short": "Membobin jerin da aka tabbatar kuma suka bambanta waɗanda suka sa hannu tare sun yi ƙasa da abin da ƙofar ƙungiyar ke buƙata. Adadin da aka ƙidaya da wanda ake buƙata suna gefen wannan saƙo.",
+      "duplicate_objection": "Kuna riƙe da ƙorafi mai rai a kan wannan aiki tuni. Memba ɗaya ƙorafi ɗaya — in ba haka ba, memba guda zai iya kai ƙofa shi kaɗai.",
+      "grounds_absent": "Ana buƙatar grounds. Ƙorafin da aka ɗaga ba tare da rubuta dalili ba, ba shi da bambanci da wanda aka ɗaga don mummunan dalili — kuma ana rubuta dalilai ne, ba a taɓa fassara su ba.",
+      "malformed_envelope": "Layin ya rasa madogarar da ƙidaya ke buƙata.",
+      "node_unowned": "Wannan kumburi ba shi da wanda ke da alhakinsa (haɗin mallaka), don haka ba ya karantawa a filin gama-garin kowa kuma ba ya magana a cikinsa a madadinsa. Ku nemi mallaka tukuna.",
+      "not_a_cohort_member": "Memba na wannan ƙungiya kaɗai ne zai iya magana a filin gama-garinta. Wannan ita ce kaɗai gwajin da ɓangaren kariya ke yi — kuma ita ce dalilin da ya sa ƙorafin baƙo ba ya taɓa zama alamar da wasu za su girmama.",
+      "not_filed_against_actor": "An shigar da layin inda naɗi ba ya nemansa, don haka za a ajiye shi, mai dorewa kuma marar aiki har abada. Alamar da ba wanda zai iya samu, ba alama ba ce.",
+      "not_governed": "Wannan al'umma ba ta ayyana wata ka'idar ƙididdigar yanke shawara ta juyawa (reverse-quorum) ba, don haka ba ta ɗauki filin ƙorafi ba. An ƙi maimakon a koma ga tsoho: ƙirƙira taga da ƙofa wa ƙungiyar da ba ta ayyana ko ɗaya daga cikinsu ba ya fi muni fiye da a ce a'a.",
+      "not_owner": "Fuskar filin gama-gari tana buƙatar matsayin mai shi (SYSTEM_ADMIN).",
+      "objection_absent": "Ana buƙatar objection_id: kuri'a tana amsa tambaya game da ƙorafi ƊAYA.",
+      "objection_unknown": "Ƙorafin da aka ambata ba ɗaya daga cikin waɗanda wannan kumburi ke riƙe da su a kan wannan aiki ba ne.",
+      "session_absent": "Ba a gabatar da token na zaman ba. Fuskar filin gama-gari ta mai shi kaɗai ce.",
+      "session_invalid": "Wannan zaman ba shi da inganci ko kuma ya ƙare.",
+      "sign_failed": "Wannan kumburi bai iya sa wa layin hannu ba, don haka ba a mika komai ba.",
+      "steward_tier_not_adopted": "Wannan al'umma ba ta ayyana matakin masu kula ba, don haka babu wa'adin da za a yi shiru har ya wuce kuma babu tafkin da aka ɗaukaka. Kuri'a a nan za a ajiye ta amma ba za a taɓa karanta ta ba.",
+      "store_unavailable": "Ba a iya kaiwa ga substrate ba.",
+      "target_action_unknown": "Aikin da aka yi wa ƙorafi ba layi ne da wannan kumburi ke riƙe da shi ba, don haka ba za a iya ƙidaya ƙorafin ba kuma ba za a iya warware tagarsa ba.",
+      "unverifiable_signature": "Sa hannun layin bai tabbata ba a kan maɓallan mai sa hannu kamar yadda aka yi rajista da su a wannan kumburi."
+    },
+    "standing": {
+      "action_unknown": "Wannan kumburi bai riƙe irin wannan aiki ba. Ƙorafi yana ambaton layi ne, kuma babu layin da za a ambata a nan.",
+      "cohort_unknown": "Wannan ƙungiya ba ta warware a wannan kumburi ba, don haka ba ta da jerin membobi kuma ba ta da sanarwa da wannan kumburi zai iya karantawa. Dole ne iko ya fito daga yanayin gida da aka tabbatar.",
+      "not_governed": "Wannan al'umma ba ta ayyana wata ka'idar ƙididdigar yanke shawara ta juyawa (reverse-quorum) ba, don haka filin ƙorafi bai shafi filin gama-garinta ko kaɗan ba. Wannan ya bambanta da cewa ba wanda ya yi ƙorafi.",
+      "objected": "Aƙalla memba ɗaya ya yi ƙorafi kuma tagar na nan a buɗe. Aikin yana tsaye a yanzu; ƙorafi ɗaya kuma na iya zama duk abin da ake buƙata.",
+      "quiet": "An karanta filin kuma ba a ɗaga wani ƙorafi a kan wannan aiki ba.",
+      "reversed": "Isassun membobi mabambanta sun yi ƙorafi cikin tagar. Kowane kumburi da ke riƙe da waɗannan layuka yana naɗewa zuwa amsa guda ɗaya, ba tare da wani haɗin kai ba.",
+      "stood": "Tagar ta rufe a ƙasa da ƙofar juyawa. An yi ƙorafi a kan wannan aiki kuma yana tsaye.",
+      "unreadable": "Ba a iya karanta filin ƙorafi a nan ba. Wannan BA yana nufin ba wanda ya yi ƙorafi ba ne — ƙorafe-ƙorafen ba a san su ba, ba cewa ba su nan ba."
+    },
+    "steward": {
+      "awaiting": "Wa'adin bai wuce ba. Masu kula da aka naɗa na iya amsawa tukuna.",
+      "no_duty_holders": "An ayyana matakin masu kula kuma wannan kumburi bai warware wani mai kula da aka naɗa gare shi ba. Ba wanda ya yi shiru, domin ba wanda yake nan.",
+      "not_adopted": "Ba a ayyana wani matakin masu kula ba, don haka babu wa'adin masu kula da ya shafi wannan.",
+      "overruled": "Masu kula da aka naɗa sun yanke hukuncin cewa wannan ƙorafi bai tsaya ba — duk da haka ɗaukakawa tana buɗewa, domin wargazawa ba ta taɓa zama tasu kaɗai ba.",
+      "silent": "Wa'adin ya wuce ba tare da an yanke wani hukunci ta kowane ɓangare ba.",
+      "upheld": "Masu kula da aka naɗa sun yanke hukunci, cikin lokaci, cewa wannan ƙorafi ya tsaya. Mutane da aka ambaci sunayensu ne suka yanke hukuncin wannan batu, kuma an rubuta shi."
+    }
+  },
+  "consent": {
+    "decline_analyze": {
+      "cost": {
+        "no_capability_services": "Ba za ka iya amfani da hanyoyi ko ayyukan da suke buƙatar shaidun ƙarfin aiki daga wani ɓangare na uku ba, saboda ba za ka sami ko ɗaya ba.",
+        "no_reputation": "BA ka gina wani suna ba - ana kin kowace da'awar capacity:* game da kai, don haka babu wadda za ta taba kasancewa.",
+        "peers_may_refuse": "Wasu takwarori na iya kin yin cudanya da kai gaba ɗaya."
+      },
+      "summary": "Za ka iya aika sawu ba tare da ka yarda a bincike su ba. Sawun za su ci gaba da gudana."
+    },
+    "grant": {
+      "analyze": {
+        "permits": "Takwarar na iya BA da maki ga sawunka - wannan shi ne abin da yake gina suna.",
+        "title": "A ba ka maki"
+      },
+      "replication": {
+        "permits": "Takwarar na iya RIƘE sawunka.",
+        "title": "Aika sawu"
+      }
+    },
+    "grants": {
+      "independent": "Wadannan yarda ne guda biyu daban-daban a kan gefuna masu adawa. Bayar da ɗaya ba ya nufin bayar da ɗayan, kuma ana iya janye kowanne ba tare da ɗayan ba."
+    },
+    "mesh_participation": {
+      "action": "Yarda da Shiga Cikin CIRIS Mesh"
+    }
+  },
+  "location": {
+    "cost": {
+      "no_regional_community": "Ba za ka iya shiga cikin kowace al'ummar yanki ba. Ana yanke shawarar zama memba ne bisa ko tantanin wurinka yana cikin yankin al'ummar, don haka ba tare da tantani ba babu abin da za a kwatanta.",
+      "no_regional_reporting": "Ayyukanka ba za su iya bayar da gudummawa ga rahoton yanayin yanki ba."
+    },
+    "permits": "Yana hada tantanin H3 mai fadi da ambulanka domin a iya bayar da rahoton yanayi tsakanin yankuna. Substrate yana kin duk wani abu da ya fi ƙudurin 7 daidaito, don haka yana nuna yanki mai fadi kawai - ba wurinka ko adireshinka na musamman ba.",
+    "purpose": "Rahoton yanayin yanki, da shiga cikin al'ummomin yanki. Al'umma kuma na iya amfani da shi a matsayin ƙofar gani na ZAƁI, wato taƙaita abubuwan da aka aika wa wannan al'umma ga membobin da yankinsu yake cikinta. Ba takunkumi ne na gaba ɗaya a kan sawunka ba - yardar da ke sama ce take yanke hakan.",
+    "title": "Raba yankinka a kimance"
+  },
+  "mesh": {
+    "announce_requirement": "Kumburin da bai sanar da kansa ba ba ya samun damar amfani da ayyuka a kan mesh kuma ba ya samun ayyukan wakili. Maɓallin kashewa na accord yana da ma'ana ne kawai a kan kumburin da zai iya kaiwa gare shi, don haka tun farko ba a taba bautar wa kumburin da ba a iya kaiwa gare shi ba."
+  },
+  "mesh_config": {
+    "consumption": {
+      "elsewhere": "Babu wani madauki a cikin wannan siga da yake karanta wannan maɓalli: mai amfani da shi yana cikin wani sashe na daban. Layin da aka sa a nan ana karbarsa kuma ana hada shi, amma ba ya sauya komai a kan wannan kumburi.",
+      "unbuilt": "Ba a gina mai amfani da wannan maɓalli ko'ina ba tukuna. Layin da aka sa a nan ana karbarsa kuma ana hada shi, amma ba ya sauya komai.",
+      "unreachable": "Mai amfani da wannan maɓalli yana gudana a cikin wannan tsari, amma babu abin da ke kai masa ƙima daga wannan filin: sashen da ke mallakar wannan saitin yana ɗaukar ƙimarsa sau ɗaya kaɗai lokacin da aka kafa madaukin, kuma daga baya ba ya ba da hanyar sauya ta. Layin da aka sa a nan ana karbarsa kuma ana hada shi, amma ba ya sauya komai ko'ina.",
+      "wired": "Wani madauki a cikin wannan sigar yana karanta wannan maɓalli kuma yana sauya abin da yake yi. Ƙimar da aka nuna a gefensa ita ce take aiki a kan wannan kumburi."
+    },
+    "dry_run": "Ba a sa wa komai hannu ba kuma ba a mika komai ba. Wadannan su ne ainihin baitocin canonical da abokin sa hannu dole ne ya sa wa hannu domin sa hannunsa ya ƙidaya a mikawa ta gaskiya.",
+    "durability": {
+      "substrate_decides": "Substrate ne ke yanke hukuncin wadanne ayyuka ne suke samun saitin dindindin, ana sake karanta shi a kowace kira kuma ana bayar da rahotonsa ta alamar ƙinsa. Wannan kumburi bai saka wata dokar dindindin ta kansa ba."
+    },
+    "emergency": {
+      "bound": "Sassaucin gaggawa yana karewa ta hanyar ƙirarsa. Iyakar tazarar lokaci ta substrate ce, an kawo ta nan domin fom din ya iya iyakance abin da aka shigar; substrate yana kin duk wani abu da ya fi haka tsawo a ƙofarsa."
+    },
+    "history": {
+      "empty": "An karanta kowane tushen da aka yi rajista da shi kuma babu ko ɗaya da ya taba shigar da layin mesh-config.",
+      "no_subscription": "Wannan kumburi ba shi da wani gefen tushen amincewa mai aiki, don haka babu wani tushe da ya taba iya shigar da layin mesh-config a nan.",
+      "partial": "Ba a iya karanta wasu daga cikin tushen da aka yi rajista da su ba, don haka wannan tarihi bai cika ba. An ambaci tushen da suka gaza.",
+      "present": "Kowane layin mesh-config da wannan kumburi yake riƙe da shi, mafi sabo na farko.",
+      "truncated": "An yanke wannan shafi a iyaka. Jimillar da ke ƙasa tana ƙidaya kowane layin da aka karanta.",
+      "unreadable": "Ba a iya karanta tarihin mesh-config a nan ba. Wannan BA yana nufin ba a taba shigar da wani layi ba."
+    },
+    "outcome": {
+      "admitted": "Substrate ya karbi wannan layi. ALAMA ce, ba umarni ba: babu abin da ya sauya saboda zuwansa, kuma tasirinsa gaba ɗaya shi ne hadawar lokacin karatu wadda mai amfani zai iya girmamawa."
+    },
+    "plane": {
+      "configured": "Aƙalla maɓalli ɗaya ne tushen da aka yi rajista da shi ya matsar daga ka'idar asali ta mai shi.",
+      "no_rows_held": "Wannan kumburi ya yi rajista da akalla tushen amincewa guda ɗaya kuma bai riƙe wani layin mesh-config daga ko ɗayansu ba. Kowane maɓalli yana aiki a ka'idar asali ta mai shi.",
+      "no_subscription": "Wannan kumburi ba shi da wani gefen tushen amincewa mai aiki, don haka babu tushen da zai iya saita shi. Rajistar ITA CE gefen amincewa.",
+      "none_binding": "Ana riƙe da layukan mesh-config amma babu ɗayansu da ke ɗaure: kowanne ya ƙare, an tsare shi bisa yardar mai shi, ko kuma yana neman ƙimar tushe da take aiki tuni.",
+      "unreadable": "Ba a iya karanta filin mesh-config a nan ba. Wannan BA yana nufin ba a saita komai ba ne — ƙimomin da ke ƙasa ba a san su ba, ba tsoffin ƙimomi ba ne."
+    },
+    "provenance": {
+      "baseline_not_moved": "Tushen da aka biyo suna riƙe da layuka masu aiki don wannan maɓalli amma babu ɗayansu da ya canza shi: an tsare kowanne bisa yardar mai shi ko kuma ya nemi ƙimar da take aiki tuni.",
+      "baseline_unspoken": "Babu wani tushe da aka biyo da ke riƙe da layi mai aiki don wannan maɓalli, don haka kumburin yana gudanar da ƙimar da mai shi ya yarda da ita.",
+      "root": "Layin da tushen da aka biyo ya sa hannu a kansa ne ya saita wannan ƙima. An ambaci layin, marubucinsa da wakilcin da aka yi shi a ƙarƙashinsa a gefensa."
+    },
+    "refusal": {
+      "attribution_absent": "Ana buƙatar delegation_id. Aikin da bai zo da ikonsa ba, ba za a iya bambanta shi da aikin da ba shi da izini ba sa'ad da mai aikin ya tafi.",
+      "authority_not_a_delegation": "ID ɗin wakilcin da aka ambata ba layin delegates_to ba ne.",
+      "authority_unresolved": "Wakilcin da aka ambata ba layi ba ne da wannan kumburi ke riƙe, don haka ikon da zai rubuta ba zai ambaci komai ba. Ko da gaske yana ba da izinin wannan aiki, hukuncin substrate ne, wanda yake yankewa a ƙofarsa da kansa.",
+      "grounds_absent": "Ana buƙatar grounds. Maɓallin da aka juya ba tare da rubuta dalili ba, ba shi da bambanci da wanda aka juya don mummunan dalili.",
+      "node_unowned": "Wannan kumburi ba shi da wanda ke da alhakinsa (haɗin mallaka), don haka ba ya bayar da rahoton saitin mesh kuma ba ya canza shi a madadin kowa. Ku nemi mallaka tukuna.",
+      "not_owner": "Fuskar saitin mesh tana buƙatar matsayin mai shi (SYSTEM_ADMIN).",
+      "root_absent": "Ana buƙatar root_ref: ana fitar da layin mesh-config a ƙarƙashin tushen amincewa, kuma layin da bai ambaci ko ɗaya ba, ana shigar da shi ne inda babu wani naɗi da zai taɓa ƙidaya shi.",
+      "session_absent": "Ba a gabatar da alamar zama ba. Fuskar saitin mesh ta mai shi ce kaɗai.",
+      "session_invalid": "Wannan zaman ba shi da inganci ko kuma ya ƙare."
+    },
+    "ttl": {
+      "expired": "Tagar wannan layi ta rufe. Naɗin yana yar da layin da ya ƙare a lokacin karatu, don haka ba ya buƙatar sokewa ko marubuci da za a iya kaiwa gare shi.",
+      "running": "Tagar wannan layi a buɗe take, kuma za ta rufe a daidai lokacin da aka ambata.",
+      "unbounded": "Wannan layi ba shi da ranar ƙarewa. Yana aiki har sai an maye gurbinsa."
+    }
+  },
+  "moderation": {
+    "ladder": {
+      "attestation_type_label": "Nau'in shaida (scores, delegates_to, …)",
+      "attesting_key_label": "Layukan da wannan maɓalli ya rubuta",
+      "attribution_hint": "Duka biyun wajibi ne kuma ana rubuta duka biyun a cikin alamar kabari da aka sa wa hannu. Aikin da bai zo da ikonsa ba, ba za a iya bambanta shi da aikin da ba shi da izini ba sa'ad da mai aikin ya tafi.",
+      "attribution_label": "Iko da dalili",
+      "cancel_button": "Soke",
+      "commit_blocked": "Ana buƙatar ID na wakilci da dalili; keɓewa kuma tana buƙatar ID na al'umma.",
+      "commit_button": "Sa wa {hash} hannu",
+      "community_id_hint": "Ana shigar da keɓewa a ƙarƙashin ikon al'umma, kuma alamar da ba ta ambaci wata al'umma ba, ba ta ambaci wani iko ba.",
+      "community_id_label": "ID na al'umma — wajibi",
+      "confirm_attribution": "An sa hannu a ƙarƙashin wakilci {delegation}, saboda: {reason}",
+      "confirm_op": "{op} — mataki {tier}",
+      "confirm_quorum": "An gabatar da sarƙoƙin iko {count}; ana buƙatar tushe {min} mabambanta.",
+      "confirm_revoked_after": "Ana tsayawa kan maganganun da aka faɗa har zuwa {at}.",
+      "confirm_signing": "Zaɓin da wannan sa hannu ya shafa",
+      "confirm_title": "Abin da za ka sa wa hannu",
+      "delegation_id_label": "ID na wakilci (delegates_to) — wajibi",
+      "descend_ack_label": "Ka rubuta {word} domin tabbatarwa",
+      "descend_ack_word": "DESCEND",
+      "descent_performed": "An aiwatar da gangarowar payload.",
+      "descent_refused": "Gangarowar payload ba ta gudana ba: {token}",
+      "dimension_prefix_label": "Farkon dimension",
+      "gate_armed": "Ƙofar soke shigarwa a shirye take: soke shigarwar da wannan kumburi da kansa ya yi ita ce abin da substrate yake gwada marubuta da ita.",
+      "gate_dormant": "Ƙofar soke shigarwa TANA BARCI. Wannan kumburi bai ayyana wani asali ga substrate ba, don haka soke shigarwar da aka rubuta a nan ba za ta ƙi komai ba.",
+      "gate_foreign_identity": "Ƙofar soke shigarwa tana gwada marubuta da maɓalli DABAN da wanda wannan kumburi yake sa wa hannu da shi, don haka soke shigarwar da aka sa wa hannu a nan ba za a taɓa naɗe ta a matsayin ta wannan kumburi ba.",
+      "gate_unknown": "Wannan kumburi ya bayar da rahoton yanayin ƙofar soke shigarwa da wannan manhaja ba ta gane ba.",
+      "hash_mismatch_hint": "Zaɓin ya sauya tsakanin dubawar da wannan sa hannu. An loda dubawar da take yanzu a sama — ka karanta ta kafin ka sake sa hannu.",
+      "intro": "Hanyar da mai shi kaɗai ke iya bi wajen ɗaukar mataki a kan takwaran da aka karɓa, an raba ta matakai daga 0 zuwa 4. Kowane mataki dubawa ne da farko, sannan ka sa wa hash ɗin da dubawar ta dawo da shi hannu — abin da aka nuna maka shi ne abin da zai gudana, kuma za a ƙi zaɓin da ya sauya a tsakani. Kowane mataki yana faɗin abin da yake kaiwa gare shi DA kuma abin da BAI kaiwa gare shi ba; ka karanta duka biyun kafin ka sa hannu.",
+      "irreversible_banner": "BA YA MAYARWA",
+      "irreversible_flag": "Ba ya mayarwa. Babu aikin mayarwa ga wannan mataki.",
+      "limits_unavailable": "Wannan manhaja ba ta iya loda bayanin kumburin na kansa game da abin da wannan yake kaiwa gare shi ba. Iyakar tana nan duk da haka — amsar za ta faɗe ta.",
+      "no_preview_no_commit": "Ba za a iya sa wa komai hannu ba sai an gudanar da dubawa: aiwatarwar tana gabatar da hash ɗin da dubawar ta dawo da shi.",
+      "not_reached_title": "Abin da wannan BAI kaiwa gare shi ba",
+      "op": {
+        "accept_writes": "Karɓar rubuce-rubuce",
+        "annotate": "Ƙara bayani",
+        "deadmit": "Soke shigarwa",
+        "descend": "Tilasta gangarowa",
+        "quarantine": "Keɓewa",
+        "re_admit": "Sake karɓa",
+        "refuse_writes": "Ƙin rubuce-rubuce",
+        "throttle": "Takurawa",
+        "un_quarantine": "Saki daga keɓewa",
+        "un_throttle": "Kawar da takurawa"
+      },
+      "op_label": "Wane mataki",
+      "outcome_recorded": "an rubuta",
+      "per_attester_more": "da wasu maɓallai {count}",
+      "per_attester_row": "{key}: layuka {rows}",
+      "preview_button": "Duba faɗin tasirin",
+      "preview_counts": "Layuka {rows} a kan maɓallai {targets}",
+      "preview_empty": "Dubawar ta gudana kuma ba ta samu wani layi ba. Ana iya amsa zaɓin kuma babu komai a ciki — wannan ba gaskiya ɗaya ba ce da rashin taɓa tambaya.",
+      "preview_none": "Ba a gudanar da wata dubawa ga wannan zaɓi ba tukuna.",
+      "preview_truncated": "Shafin ya cika har iyakarsa, don haka zaɓin na iya zama fiye da abin da aka yi wa hash, kuma aiwatarwa za ta shafi WANNAN SHAFI. Ka rage faɗin zaɓin.",
+      "preview_unreadable": "Ba a iya karanta dubawar ba: {detail}. Wannan ba zaɓi mara komai ba ne — ba a taɓa amsa tambayar ba.",
+      "quorum_hint": "Wannan mataki yana buƙatar tushen iko {min} mabambanta, ba sarƙar wakilci ɗaya ba. Sarƙoƙi biyu daga tushe guda ɗaya hukuma ce ɗaya sanye da huluna biyu.",
+      "quorum_ids_label": "ID na wakilcin sauran hukumomi (a raba su da waƙafi)",
+      "quorum_shortfall": "Tushen iko {have} mabambanta ne suka kai ga wannan kumburi; ana buƙatar {need}.",
+      "reaches_title": "Abin da wannan yake kaiwa gare shi",
+      "reason_label": "Dalili — wajibi",
+      "refused_title": "An ƙi: {token}",
+      "result_bounded": "Hukuncin ya ɗauko iyakar lokaci, don haka an ƙi ɓangaren payload maimakon a bar shi ya haddasa korar da ba ta da iyaka daga hukuncin da yake da iyaka.",
+      "result_quorum": "Tushen iko {roots} mabambanta, ana buƙatar {required}.",
+      "result_revoked_after": "An tsaya kan maganganun da aka faɗa har zuwa {at}.",
+      "result_target": "{key} — {outcome}",
+      "result_title": "An aiwatar: {op} (mataki {tier})",
+      "review_button": "Duba abin da za ka sa wa hannu",
+      "revoked_after_hint": "Iyakar tarihin sokewar da kanta. Ba wani ɓangare na zaɓin ba ne, don haka tana iyakance abin da aka soke ba tare da sake fasalin dubawar ko sauya hash ɗin ba.",
+      "revoked_after_label": "A tsaya kan maganganun da aka faɗa har zuwa (RFC3339)",
+      "row_line": "{type} · {dimension} · {at}",
+      "row_more": "da wasu layuka {count}",
+      "row_no_dimension": "babu dimension",
+      "section": "Matakan aiwatar da hukunci",
+      "selection_after_hint": "Wannan iyaka wani ɓangare ne na zaɓin, don haka sauya ta yana sauya hash ɗin kuma yana yar da dubawar.",
+      "selection_after_label": "Layukan da aka tabbatar bayan (RFC3339) kaɗai",
+      "selection_hash": "Hash ɗin zaɓi {hash}",
+      "selection_label": "Abin da kake aiki a kansa",
+      "standing_admitted": "an karɓa a nan",
+      "standing_after": "Rubuce-rubuce bayan: {standing}",
+      "standing_before": "Rubuce-rubuce kafin: {standing}",
+      "standing_refused": "an ƙi a nan",
+      "standing_unknown": "an bayar da rahotonsa a kalmomin da wannan manhaja ba ta gane ba",
+      "standing_unreadable": "ba a iya karantawa ba — wannan BA «an karɓa» ba ne",
+      "tier_and_scope": "Mataki {tier} · yana buƙatar iyakar wakilci ta {scope}, wadda ake sake fitar da ita daga yanayin da wannan kumburi da kansa ya tabbatar, ba a ɗauko ta daga buƙatar ba.",
+      "transport_error": "Ba a iya kaiwa ga kumburin ba: {detail}",
+      "undone_by_reversal_op": "Wannan mataki yana da aikin mayarwa a kan matakalar. Layukan biyu suna nan a matsayin tarihi da ake iya karantawa: «an yi sannan aka warware» ba gaskiya ɗaya ba ce da «ba a taɓa yi ba».",
+      "undone_never": "Ba a warware shi. Gangarowa ba ta taɓa ƙarewa a sifili ba — rufaffiyar siga da alamar kabari suna nan — amma abin da aka zubar ba zai dawo ba.",
+      "undone_title": "Yadda ake warware wannan",
+      "unparsable_response": "Kumburin ya amsa da jiki da wannan manhaja ba ta iya karantawa ba.",
+      "window_application": "Wannan kumburi ne ya aiwatar da tazarar lokaci, ba tambayar ba, don haka an aiwatar da iyakar shafi a kan saiti mafi faɗi kuma wannan zaɓi na iya dawowa da ƙasa da ake tsammani.",
+      "window_substrate": "Tambayar substrate ce ta aiwatar da tazarar lokaci.",
+      "withdrew_row": "An janye {id}"
+    }
+  },
+  "operator": {
+    "carriage": {
+      "idle": "Zagayen kwafi sun ƙare, kuma wannan kumburi bai bayar da komai ba kuma bai hana komai ba: ba shi da abin da takwarorinsa suke har yanzu suna buƙata.",
+      "moving": "Wannan kumburi ya bayar da layuka ga abokansa kuma bai hana ko ɗaya ba.",
+      "not_exercised": "Babu wani zagayen kwafi da ya ƙare a kan wannan process, don haka babu ƙofar hanyar bayarwa da ta taɓa gudana kuma ba a taɓa rubuta komai a littafin hanawa ba. Sifilin ba a gwada shi ba ne, ba mai tsabta ba.",
+      "unreadable": "Ba a iya karanta masu ƙidayar bayarwa na wannan kumburi ba, don haka babu abin da ke nan da yake magana a kan abin da ya bayar. Wannan ba «ba a hana komai ba» ba ne — «ba mu iya tambaya ba» ne.",
+      "withholding": "Wannan kumburi ya ƙi bayar da layukan da yake riƙe. `withholds_by_reason` yana ambaton reshen da ya ƙi, `recent_withholds` kuma yana ambaton ga wa — kumburin da babu abin da yake yi ba ya bayar da rahoton ko ɗaya daga cikinsu."
+    },
+    "consent_sla": {
+      "none_overdue": "Duk sokewar izinin da wannan kumburi ya yi alkawarin ɗaukakawa tana cikin tazarar SLA ɗinta.",
+      "overdue": "Wannan kumburi ya MAKARA wajen ɗaukaka sokewar izinin da ya yi alkawari. Lambobin shaidar da aka ɗiba a gefen wannan su ne hannayen da za su kawar da wannan yanayi.",
+      "unreadable": "Ba a iya karanta jerin jinkirin SLA na izini ba. Wannan ba «babu abin da ya makara» ba ne."
+    },
+    "drill": {
+      "green": "Tushen amincewar wannan kumburi ya tabbatar da maɓallin kashewarsa cikin kwanaki 90 da suka gabata.",
+      "never_drilled": "Tushen amincewar wannan kumburi BAI TAƁA tabbatar da maɓallin kashewarsa ba. Yana tarayya a rukunin ja tare da tushen da aka daɗe da yashewa, kuma rashin lokacin gwaji na ƙarshe a gefensa shi ne bambancin. Tushen yana ci gaba da bautarwa: sabuntar gwaji alamar amincewa ce, ba ƙofa ba.",
+      "no_root_walked": "Ba a bi wani tushen amincewa ba, don haka babu abin da za a ce ba a gwada shi ba. Wannan ba gwaji da ya tsufa ba ne — babu batun gwaji ko kaɗan.",
+      "stale": "Tushen amincewar wannan kumburi ya tabbatar da maɓallin kashewarsa a ƙarshe fiye da kwanaki 180 da suka wuce. Yana ci gaba da bautarwa: sabuntar gwaji alamar amincewa ce, ba ƙofa ba.",
+      "yellow": "Tushen amincewar wannan kumburi ya tabbatar da maɓallin kashewarsa a ƙarshe tsakanin kwanaki 90 zuwa 180 da suka wuce."
+    },
+    "headline": {
+      "green": "Duk alamar da wannan kumburi zai iya lissafawa tana karantuwa lafiyayye.",
+      "red": "Aƙalla alama ɗaya tana karantuwa mara lafiya. Ka karanta jerin waɗanda ba a sani ba shi ma: kanun ja yana sama da wanda ba a sani ba, kuma in ba haka ba zai iya ɓoye ɗaya a bayansa.",
+      "unknown": "Ba a iya lissafa alama ɗaya ko fiye ba. Ka karanta jerin waɗanda ba a sani ba — alamar da ba a lissafa ba, ba lafiyayya ba ce.",
+      "yellow": "Wannan kumburi yana bautarwa, kuma akwai wani abu a nan da ya cancanci a duba."
+    },
+    "ingest": {
+      "background": "Akwai ƙi amma ba mai dorewa daga tsayayyen saitin asali ba: binciken gwaji na yau da kullum, tsofaffin abokan haɗi da sauyawarsu. Ka karanta `distinct_signers` da `unattributed_in_window` kafin ka yi watsi da shi — yawan ƙi MAI YAWA da ya bazu kan saitin asali MAI FAɗI bincike ne, kuma yawan ƙi MAI YAWA da bai ambaci kusan kowa ba zirga-zirga ce mai ɓatattun baitoci da tsohon abokin haɗi a haɗe cikinta. Ba ɗayansu sauyawar abokan haɗi ba ne, kuma ba ɗayansu ke da mai samarwa guda ɗaya da za a je a gyara, wanda shi ne dalilin da ya sa suke karantuwa a nan maimakon a matsayin mai samarwa da ya makale.",
+      "clean": "An gabatar da kunshiyoyi ga hanyar shigarwa ta HTTP kuma ba a ƙi ko ɗaya a cikin tagar ba. `refused_total` da ke gefen wannan shi ne jimillar dukan process: taga mai tsabta a kan process da ya ƙi a baya farfaɗowa ce, ba rashin ƙi ba.",
+      "http_path_only": "Wannan karatu ya shafi hanyar shigarwa ta HTTP kaɗai. Kunshin da ya iso ta hanyar relay na Reticulum ana tabbatar da shi ta ƙofar persist ɗin nan ɗaya, amma ba a ƙidaya shi a nan ba, don haka karatun shigarwa mai tsabta ba magana ba ce a kan kowace hanyar da za a iya gabatar da trace ga wannan kumburi.",
+      "not_exercised": "Ba a gabatar da komai ga hanyar shigarwa ta HTTP a kan wannan process ba — ba a karɓi wani kunshi ba kuma ba a ƙi ko ɗaya ba. Sifilin ba a gwada shi ba ne, ba mai tsabta ba.",
+      "stuck_producer": "Yawan ƙi MAI DOREWA daga ƙarami, TSAYAYYEN saitin masu sa hannu: mai samarwa ya makale a cikin zagayen sake gwadawa kuma ba zai iya gyara kansa ba. Kowane ɗaya daga cikin waɗannan ƙi daidai ne — ƙofar tana aiki — wanda shi ne ainihin dalilin da ya sa jimillar take buƙatar karatunta na kanta. `top_signers` yana ambaton wanda za a je a gyara.",
+      "unattributed": "An ƙi kunshiyoyi kuma BABU KO ƊAYA da ya ambaci mai sa hannu: sun gaza kafin a sami asalin da za a rubuta — ɓatattun baitoci, sa hannu mara kyau, sigar schema da ba a goyi baya ba. Babu mai samarwa da za a kira, kuma da gangan ba a bayar da rahoton wannan a matsayin mai samarwa da ya makale ba: sifilin masu sa hannu mabambanta ba ƙaramin saitin asali tsayayye ba ne.",
+      "unreadable": "Ba a iya karanta littafin ƙin shigarwa na wannan kumburi ba, don haka babu abin da ke nan da yake magana a kan abin da ya ƙi. Wannan ba «ba a ƙi komai ba» ba ne — «ba mu iya tambaya ba» ne."
+    },
+    "key_statements": {
+      "stands": "Babu wata sokewa da wannan kumburi yake da ita da ta shafi maganar da aka faɗa a yanzu.",
+      "suspect_after_bound": "Sokewa da TARIHI YA IYAKANCE tana rufe maganar da aka faɗa yanzu haka: an soke shigarwar wannan maɓalli tun daga yanzu, kuma tarihinsa na gaskiya yana nan tsaye. Wannan iyaka ta fi sokewar da ba ta da iyaka kyau a zahiri kuma ba ta karantuwa iri ɗaya da ita.",
+      "suspect_unbounded": "Sokewa MARAR IYAKA tana rufe wannan maɓalli, don haka duk abin da ya taɓa faɗa yana cikin shakku — sokewar ta ƙi ta ce in ba haka ba.",
+      "unreadable": "Ba a iya lissafa matsayin maɓallin wannan kumburi ba. Wannan ba «yana tsaye» ba ne — tambayar da ba a yi ba, ba ta da amsa."
+    },
+    "peer_quota": {
+      "clean": "An gwada kasafin rubutun takwara kuma lissafin ƙin bayar da wurinsa yana nan daram.",
+      "denials": "Kasafin rubutun takwara ya rubuta ƙin bayar da wurare. Samo iyakar takwarorin da ake bibiya bai ƙara tsayawa a wannan sigar ba.",
+      "no_quota": "Wannan backend ba shi da kasafin rubutun takwara, don haka tarkon faɗakarwa bai bayar da rahoton komai ba. Wannan ba karatu mai tsabta ba ne.",
+      "not_exercised": "Ba a caje wani rubutun takwara a kan kasafin a kan wannan process ba, don haka sifilinsa ba a gwada shi ba ne maimakon mai tsabta."
+    },
+    "quarantine": {
+      "not_quarantined": "Babu alamar keɓewa game da maɓallin wannan kumburi da ta taɓa yin aiki a nan.",
+      "released": "An hana maɓallin wannan kumburi sannan aka sake shi. Yana bautarwa yanzu, kuma ba koyaushe yake haka ba — gaskiya ce ta daban da rashin taɓa hana shi.",
+      "unreadable": "Ba a iya karanta yanayin keɓewa ba. Wannan ba «ba a keɓe ba» ba ne.",
+      "withheld": "An hana maɓallin wannan kumburi daga bautarwa ta hanyar alamar keɓewa."
+    },
+    "receive": {
+      "applying": "An karɓi layukan da wani takwara ya gabatar a nan kuma sun canja yanayin wannan kumburi, kuma ba a ƙi ko ɗaya ba. `applied_by_kind` yana ambaton filayen da suka motsa; `duplicate_total` kusa da shi yana ƙidaya layukan da aka gabatar waɗanda wannan kumburi ya riga ya riƙe.",
+      "converged": "Takwarori sun gabatar da layuka kuma wannan kumburi ya riga ya riƙe kowanne ɗaya daga cikinsu, don haka babu yanayin da ya canja kuma ba a ƙi komai ba. Wannan anti-entropy ne a hutu — zirga-zirga na iso amma babu sauran abin da za a koya daga gare ta.",
+      "decided_denominator": "`decided_total` shi ne kowane layin da takwara ya gabatar wanda ya kai ga hukuncin aiwatarwa a nan: waɗanda aka aiwatar tare da waɗanda suka maimaita tare da waɗanda aka ƙi. Baitocin da wannan kumburi bai iya warwarewa ba ba sa kaiwa ga wani hukunci kuma ba a ƙidaya su ko'ina, don haka sun ɓace daga wannan jimlar maimakon a haɗa su cikinta.",
+      "idle": "Zagayen kwafi sun ƙare kuma babu wani takwara da ya gabatar wa wannan kumburi ko layi ɗaya: ba a aiwatar da komai ba, babu abin da aka riga aka riƙe, ba a ƙi komai ba. Takwarorinsa ba su da komai a gare shi, wanda ba abu ɗaya ba ne da cewa an aiwatar da duk abin da suka aika.",
+      "not_exercised": "Babu wani zagayen kwafi da ya ƙare a kan wannan process, don haka ba a gabatar da komai ga hanyar aiwatarwa ta wannan kumburi ba. Sifilin ba a gwada shi ba ne, ba mai tsabta ba.",
+      "refusing": "Wannan kumburi ya ƙi layukan da takwarorinsa suka gabatar. `apply_refusals_by_kind` yana ambaton filin; `key_apply_refusals_by_reason` yana ambaton alamar manufar da ta ƙi maɓalli.",
+      "unreadable": "Ba a iya karanta masu ƙidayar aiwatarwa na wannan kumburi ba, don haka babu abin da ke nan da yake magana a kan abin da ya karɓa. Wannan ba «ba a ƙi komai ba» ba ne — «ba mu iya tambaya ba» ne."
+    },
+    "source": {
+      "edge_metrics": {
+        "unavailable": "Ba a iya karanta masu ƙidayar bayarwa na wannan kumburi ba, don haka babu abin da ke nan da ke bayyana abin da ya bayar, abin da ya hana, ko abin da ya ƙi aiwatarwa."
+      },
+      "ingest_refusals": {
+        "unavailable": "Ba a iya karanta littafin ƙin shigarwa na wannan kumburi ba, don haka babu abin da ke nan da ke bayyana abin da ƙofar karɓa ta ƙi. Ƙofa marar mai karatu ita ce abin da ya sa ƙi 8,631 daidai a kowace rana suka shafe sa'o'i 71 ba a lura da su ba."
+      },
+      "node_state": {
+        "unavailable": "Ba a iya karanta alamun yanayin wannan kumburi daga substrate ba, don haka babu abin da ke nan da ke bayyana tushen amincewarsa, matsayin maɓallinsa, keɓewa, SLA na izini ko kasafin takwara. Rashin mummunan labari daga tushen da ba a karanta ba, ba labari mai daɗi ba ne."
+      },
+      "trace_corpus": {
+        "unavailable": "Ba a iya karanta tarin trace na wannan kumburi ba, don haka babu abin da ke nan da ke bayyana abin da ya karɓa. Rashin isowa daga tarin da ba a karanta ba, ba rashin isowa ba ne."
+      }
+    },
+    "trace_plane": {
+      "dark": "BABU ABIN DA AKA KARƁA FIYE DA ƘOFAR JA TA WANNAN KUMBURI. Isowa ita ce abu ɗaya tilo da wannan kumburi yake nan saboda shi. Ka karanta karatun `ingest` da ke gefen wannan: filin da ya yi duhu tare da yawan ƙi mai dorewa yana nufin ana ƙin mai samarwa daidai, kuma filin da ya yi duhu ba tare da wani ƙi ko kaɗan ba yana nufin babu abin da ma yake kaiwa ga wannan kumburi.",
+      "future_dated": "Trace mafi sabo a cikin tarin an sa masa alamar lokaci ta NAN GABA. Alamar lokacin agogon watsawa ne na mai samarwa da kansa, don haka wannan magana ce a kan wannan agogo — kuma an ware shi a fili maimakon a sanya shi cikin rukuni domin layin da aka sa masa kwanan wata na nan gaba yana ɗaure wannan karatu a kore har abada kuma zai ɓoye filin da a zahiri ya tsaya.",
+      "live": "An karɓi trace kwanan nan: ana ciyar da filin da wannan kumburi yake nan domin ya karɓa a kansa.",
+      "never_admitted": "An karanta tarin kuma bai riƙe wani trace ko kaɗan ba: ba a taɓa karɓar komai a kan wannan kumburi ba. Babu lokacin isowa da za a sanya wa rukuni, don haka wannan sifili ne da ba a gwada shi ba, ba lafiyayye ba — kuma a kan kumburin da ya daɗe yana bautarwa, yanayi ɗaya ne da filin da ya yi duhu.",
+      "producer_asserted_ts": "`last_admitted_at` shi ne MAX(trace_events.ts) — agogon bangon watsawa na trace ɗin da kansa, wanda mai samarwa ya tabbatar. Substrate ba ya adana lokacin karɓa na gefen sabar a kan wannan tebur, don haka mai samarwa mai agogo da ya karkace yana motsa wannan karatu; ana ware layin da ke da kwanan wata mai nisa a nan gaba a matsayin `future_dated` maimakon a sanya shi cikin rukuni saboda wannan dalili kaɗai.",
+      "quiet": "Ba a karɓi wani trace ba fiye da yadda ake tsammani, amma bai kai tsawon da za a ce filin ya yi duhu ba. Kumburin da a gaskiya babu abin da yake yi yana karantuwa haka; haka ma rabin farko na katsewar mai samarwa.",
+      "unreadable": "Ba a iya karanta tarin trace na wannan kumburi ba, don haka babu abin da ke nan da yake magana a kan abin da ya karɓa. Wannan ba «babu trace da ya iso» ba ne — «ba mu iya tambaya ba» ne."
+    },
+    "trust_root": {
+      "no_self_key": "Mai masaukin bai taɓa ayyana lambar maɓallin wannan kumburi ba, don haka babu abin da ya shafi kansa da za a iya bi. Wannan magana ce a kan mai karatu, ba a kan kumburin ba: ka ayyana maɓallin a lokacin tashi, kuma kowace alama mai shafar kanta da ke ƙasa za ta zama mai amsuwa.",
+      "no_trust_edges": "Wannan kumburi ya ayyana kansa kuma ba shi da wani gefen amincewa mai rai zuwa ga kowane tushe: bai kafu a kan komai ba. Mummunan abu da aka sani, ba karatun da ya ɓace ba.",
+      "no_valid_root": "Wannan kumburi yana amincewa da tushe ɗaya ko fiye kuma babu ko ɗaya daga cikinsu da ya tabbata. Hukuncin kowane sashe da ke gefen wannan yana ambaton sashen da ya gaza.",
+      "unreadable": "Ba a iya karanta binciken tushen amincewa ba. Jagorar da ba a iya karantawa ba, ba wadda ba a amince da ita ba ce — kada ka karanta wannan a matsayin kumburin da ba shi da tushe.",
+      "valid": "Wannan kumburi ya kafu a kan tushen amincewa da ya tabbata cikakke: gefen amincewa mai rai, charter mai ayyana kansa tare da alkawarin farfaɗowa, kuma babu dakatarwa da aka kulle."
+    },
+    "volatility": {
+      "clock_dependent_local": "Ana lissafa wannan rukuni a KAN WANNAN kumburi daga lokacin da aka adana idan aka auna shi da agogon karatu, don haka yana motsawa bisa lokacin da ya wuce kaɗai — babu sauyin yanayi, babu sabon layi. Kumburin da ya daina karɓar trace yana tafiya daga kore zuwa rawaya zuwa ja da kansa, wanda shi ne manufar: yana zama ja ba tare da wani ya nemi haka ba.",
+      "process_local": "Masu ƙidayar bayarwa, karɓa da shigarwa na wannan process ne kuma suna taruwa tun lokacin da process ɗin ya fara. Suna komawa sifili idan an sake tashi, sun bambanta tsakanin process ɗin da suke bauta wa kumburi ɗaya, kuma ba a adana su ko'ina. Ma'auni ne na wannan process, ba littafin rikodi na wannan kumburi ba."
+    },
+    "withhold_class": {
+      "fault": "Karatu ko wani matakin haɗawa ya gaza kuma hanyar bayarwa ta gaza a rufe. Wannan BA hukunci ba ne a kan takwarar — laifin wannan kumburi ne, kuma shi ne zai gyara shi.",
+      "integrity": "Layin da wannan kumburi yake riƙe ba a iya bayar da shi ko kaɗan ba: ba zai canza zuwa jerin baitoci ba, ko hash ɗinsa da aka adana ba ya buɗewa, ko kuma ba a iya samo baitocin da aka tallata ba. Aibi ne a yanayin gida, ba manufa ba.",
+      "policy": "Shawarar da wannan kumburi ya yanke da gangan — iyakar izini, ikon bayarwa da takwarar ba ta da shi, ko ƙuntatawar mai samarwa da kansa. Yana aiki kamar yadda aka saita: ka canza saitin, ba lambar ba."
+    }
+  },
+  "operator_ui": {
+    "accepted_refused": "An karɓa {a}, an ƙi {r} tun lokacin da wannan process ya fara",
+    "age": "Tsawon lokaci",
+    "age_days": "{d}d {h}h da suka wuce",
+    "age_future": "{v} a nan gaba",
+    "age_hours": "{h}h {m}m da suka wuce",
+    "age_minutes": "{m}m da suka wuce",
+    "age_seconds": "{s}s da suka wuce",
+    "applied": "An aiwatar",
+    "apply_refusals": "Ƙin aiwatarwa",
+    "as_of": "An karanta a {t}",
+    "carriage": "Bayarwa ga takwarori",
+    "corpus_unread": "Ba a iya karanta tarin ba, don haka babu lokacin isowa kuma babu adadin da za a nuna. Wannan ba tarin da babu komai a ciki ba ne — tarin da ba a karanta ba ne.",
+    "decided": "Layukan da aka yanke hukunci",
+    "distinct_signers": "Masu sa hannu mabambanta",
+    "duplicates": "An riga an riƙe",
+    "ingest": "Ƙofar karɓa",
+    "last_admitted": "Karɓa ta ƙarshe",
+    "malformed_body": "Wannan kumburi ya amsa da jiki da wannan manhaja ba ta iya buɗewa ba, mai yiwuwa saboda kumburin yana gudanar da fuskar mai gudanarwa da ta fi wadda wannan manhaja ta sani sabuwa. Ba karatun lafiya ba ne, kuma ba rashin karatu ba ne.",
+    "malformed_title": "Ba a fahimci amsar ba",
+    "named_no_signer": "Ƙi da ba su ambaci mai sa hannu ba",
+    "no_arrival_instant": "Babu lokacin isowa: an karanta tarin kuma bai riƙe wani trace ko kaɗan ba. Ba a taɓa karɓar komai a kan wannan kumburi ba.",
+    "node_signals": "Alamun kumburi",
+    "not_offered_body": "Wannan kumburi ya amsa, kuma bai bayar da wata fuskar mai gudanarwa ko kaɗan ba — yana gudanar da sigar da ta gabaci wanzuwar wannan karatu. Wannan gibin siga ne, ba ƙi ba kuma ba rashin lafiya ba: kumburin na iya zama lafiya ƙalau, kuma wannan manhaja kawai ba za ta iya tambayarsa ba.",
+    "not_offered_title": "Babu fuskar mai gudanarwa",
+    "reading_absent": "Amsar wannan kumburi ba ta ɗauko irin wannan karatu ko kaɗan ba. Wannan ba sifili lafiyayye ba ne — karatu ne da wannan manhaja ba ta iya samu inda take tsammani ba.",
+    "reading_body": "Wannan manhaja ba ta samu amsa daga kumburin ba tukuna. Babu abin da ke nan da ya zama karatu — tambayar da take kan hanya ba kumburi lafiyayye ba ce.",
+    "reading_title": "Har yanzu ana tambaya",
+    "receive": "Aiwatarwa daga takwarori",
+    "refusals_per_hour": "Ƙi a kowace sa'a",
+    "refused_body": "Wannan kumburi ya amsa kuma ya ƙi karatun. Kumburin yana aiki; wannan zaman ba shi da izinin karanta fuskar mai gudanarwa. Wannan magana ce a kan wannan zama, ba a kan lafiyar kumburin ba — ka shiga a matsayin mai shi domin ka karanta ta.",
+    "refused_title": "An ƙi karatun",
+    "rounds": "Zagayen kwafi",
+    "served": "An bayar",
+    "sources_absent": "Tushen da ba su ba da gudummawar komai ba",
+    "thresholds": "Mai rai ƙasa da sa'o'i {green}, natsattse ƙasa da sa'o'i {yellow}, duhu bayan haka",
+    "title": "Yanayin kumburi",
+    "top_signers": "Wa ake ƙi",
+    "trace_plane": "Filin trace",
+    "traces_held": "Trace ɗin da ake riƙe",
+    "uncomputed": "Ba a iya lissafawa ba ({count})",
+    "unreachable_body": "Wannan kumburi bai amsa ko kaɗan ba, don haka babu wani karatunsa a nan. Wannan ba daidai yake da kumburi mara lafiya ba: rukunin rashin lafiya amsa ce ta gaskiya daga kumburin da ya amsa, wannan kuwa babu amsa ko kaɗan. Ka duba ko kumburin yana gudana kuma ana iya kaiwa gare shi a adireshin da wannan manhaja take amfani da shi.",
+    "unreachable_title": "Ba a kai gare shi ba",
+    "unrecognized_reading": "Wannan manhaja ba ta gane karatun '{token}' ba. Kumburin ya fi wannan manhaja sabo: ka ɗauke shi a matsayin wanda ba a lissafa ba, kada ka taɓa ɗaukarsa a matsayin lafiyayye.",
+    "window_floor": "An yanke tagar ƙi: kowane adadi a nan gindi ne, ba jimilla ba.",
+    "withholds": "An hana"
+  },
+  "surfaces": {
+    "common": {
+      "duration_days": "{n}d",
+      "duration_hours": "{n}h",
+      "duration_minutes": "{n}m",
+      "duration_seconds": "{n}s",
+      "unknown": "ba a sani ba"
+    },
+    "commons": {
+      "action": "ID na aiki",
+      "action_asserted": "Lokacin da aka tabbatar da aikin",
+      "action_author": "Marubucin aikin",
+      "add_cosigner": "Ƙara haɗin sa hannu",
+      "admitted": "An karɓa",
+      "asymmetry_title": "Ɗagawa da saukarwa ba aiki ɗaya ba ne",
+      "ballot_title": "Ka amsa abin da masu kula suka bari a buɗe",
+      "cohort": "Ƙungiya",
+      "cohort_key": "ID na maɓallin ƙungiya",
+      "cosigner_classical": "Sa hannun Ed25519 (base64)",
+      "cosigner_key": "ID na maɓallin abokin sa hannu",
+      "cosigner_pqc": "Sa hannun ML-DSA (base64, na zaɓi)",
+      "cosigners": "An tattara {n}",
+      "counted": "Ƙorafe-ƙorafen da aka ƙidaya",
+      "counted_of_required": "An ƙidaya {counted} daga cikin {required} da ake buƙata · jerin membobi {roster}",
+      "dimensions": "Dimension na ambulan",
+      "dismiss_gate": "Mikawa tana nan a rufe sai gwajin gudanarwa ya samar da ainihin baitocin da kowane abokin sa hannu dole ne ya sa wa hannu. Sa hannun suna ƙidaya a kan waɗannan baitoci ne kaɗai.",
+      "dismiss_label": "Saukar da birki",
+      "dismiss_price": "Farashinsa ƙofar ƙungiyar da kanta: {required} daga cikin {roster}.",
+      "dismiss_price_unknown": "Farashinsa ƙofar ƙungiyar da kanta, duk abin da jerin membobinta ya sa ta zama. Wannan kumburi bai karanta ta ba.",
+      "dismiss_step1": "Mataki na 1 · Gwajin gudanarwa",
+      "dismiss_step2": "Mataki na 2 · Tattara haɗin sa hannu a kan waɗannan baitoci daidai",
+      "dismiss_step3": "Mataki na 3 · Mikawa",
+      "dismiss_submit": "Mika kawarwar",
+      "dismissed": "Quorum na ƙungiyar ya ɗage shi",
+      "dry_run": "Gwajin gudanarwa — samo baitocin canonical",
+      "duty_holders": "Masu kula da aka naɗa",
+      "escalated_dismissed": "Tafkin waɗanda suka amsa ya kifar da shi",
+      "escalation": "Ɗaukakawa",
+      "floor": "Wargazawa da aka ɗaukaka ba za ta taɓa sauka ƙasa da waɗanda suka amsa {floor} ba, duk abin da wata ka'ida ta faɗa.",
+      "grounds": "Dalilai — wajibi, ana rubuta su, ba a taɓa fassara su ba",
+      "no_reading": "Ba a karanta wani matsayi ba tukuna. Ka ambaci ƙungiya da aiki a sama.",
+      "objection_id": "ID na ƙorafi",
+      "objections": "Ƙorafe-ƙorafen da aka rubuta",
+      "objectors": "Masu ƙorafi mabambanta",
+      "overrule": "Kifar da ƙorafin",
+      "policy": "Ka'ida",
+      "quiet_body": "AN karanta filin kuma ba a ɗaga wani ƙorafi a kan wannan aiki ba.",
+      "quiet_title": "Ba wanda ya yi ƙorafi",
+      "raise_action": "Ɗaga ƙorafi",
+      "raise_label": "Ɗaga birki",
+      "raise_price": "Farashinsa {threshold} — memba ɗaya ya isa. Babu rinjayen da za a cimma kuma babu wanda za a jira.",
+      "raise_price_unread": "Farashinsa sa hannu ɗaya. Memba ɗaya ya isa; babu rinjayen da za a cimma.",
+      "read": "Karanta matsayin",
+      "refused": "An ƙi",
+      "required": "Ƙofar juyawa",
+      "respondents_note": "Bayan wa'adin, ƙofar tana ƙidaya WAƊANDA SUKA AMSA, ba jerin membobi ba — wanda hakan shi ne yake ba al'umma mai natsuwa damar warware al'amari duk da haka.",
+      "respondents_of_required": "Waɗanda suka amsa {respondents} · ana buƙatar {required}",
+      "roster": "Jerin membobi mai rai",
+      "standing": "amsar naɗin",
+      "steward_deadline": "Wa'adin masu kula",
+      "subtitle": "Yadda al'umma take sanya wa kanta ido. Memba ɗaya yana ɗaga birki; ƙungiya gaba ɗaya kuwa dole ta yarda kafin a saukar da shi.",
+      "title": "Filin Gama-gari",
+      "unknown_body": "Wannan BA «ba wanda ya yi ƙorafi» ba ne. Ba a karanta wani ƙidaya ba, don haka ba a nuna ko ɗaya — ƙorafe-ƙorafen ba a san su ba, ba cewa ba su nan ba.",
+      "unknown_title": "Ba mu iya tambaya ba",
+      "uphold": "Tabbatar da ƙorafin",
+      "window": "Taga",
+      "window_closed": "a rufe",
+      "window_open": "a buɗe"
+    },
+    "mesh_config": {
+      "admitted": "An karɓa",
+      "asked": "Abin da aka nema",
+      "author": "Marubuci",
+      "baseline": "Ka'idar asali ta mai shi",
+      "clamped": "an tsare shi bisa yarda",
+      "clamped_roots": "Tushen da aka tsare saboda faɗaɗa fiye da yarda",
+      "consumer": "Mai amfani",
+      "consumption_blocker": "Abin da ya toshe shi",
+      "consumption_effect": "Tasiri",
+      "consumption_owner": "Mai amfani yana cikin",
+      "consumption_site": "Inda ake karanta shi",
+      "consumption_tracked_by": "Ana bibiyarsa a",
+      "delegation": "Wakilci",
+      "domain": "Iyakar ƙimomin da aka yarda da su",
+      "effective": "Mai aiki",
+      "emergency_bound": "Iyakar sassaucin gaggawa",
+      "form_durable": "Mai dorewa",
+      "form_emergency": "Gaggawa",
+      "grounds": "Dalilai",
+      "hide_history": "Ɓoye tarihin layuka",
+      "history_binding": "yana ɗaure",
+      "history_counted": "an ƙidaya",
+      "history_total": "Layuka {shown} daga cikin {total}",
+      "hours": "sa'o'i",
+      "in_force": "Yana aiki — wani madauki a cikin wannan siga yana karanta wannan ƙima.",
+      "knob": "Maɓallin saiti",
+      "node": "Wannan kumburi",
+      "not_in_force": "BA ya aiki a kan wannan kumburi — ana karɓar ƙimar kuma ana naɗe ta, kuma babu abin da ke nan da yake aiki da ita.",
+      "payload_sha256": "payload_sha256 — ainihin baitocin da abokin sa hannu yake sa wa hannu",
+      "per_root": "Amsar kowane tushe",
+      "provenance": "Tushen samuwa",
+      "ratifies": "Yana amincewa da",
+      "refused": "An ƙi",
+      "registry": "Maɓallan da aka yi rajista da su",
+      "roots": "Tushen amincewa da aka yi rajista da su",
+      "rows_held": "Layukan mesh-config da ake riƙe",
+      "scrubs": "Haɗin sa hannu",
+      "self_plane_below": "A ƙasa: saitin wannan kumburi na kansa, wanda mai shi ya sa.",
+      "show_history": "Nuna tarihin layuka",
+      "subtitle": "Abin da tushen amincewa da aka yi rajista da shi yake nema daga wannan kumburi. Fili ne na daban da saitin wannan kumburi na kansa da ke ƙasa — su biyun ba sa taɓa haɗuwa.",
+      "title": "Saitin mesh",
+      "ttl": "Ƙarewa",
+      "ttl_expired": "Ya ƙare",
+      "ttl_remaining": "Zai ƙare cikin",
+      "ttl_unbounded": "Babu ranar ƙarewa — yana aiki har sai an maye gurbinsa",
+      "unknown_values": "Ƙimomin da ke nan BA A SAN SU BA, ba tsoffin ƙimomi ba ne. Babu abin da ke ƙasa da yake sifili — ba a iya karanta komai ba.",
+      "unreadable_roots": "Tushen da ba a iya karantawa ba",
+      "write_delegation": "ID na wakilci",
+      "write_dry_run": "Gwajin gudanarwa",
+      "write_durable": "Mika mai dorewa",
+      "write_grounds": "Dalilai — ana rubuta su, ba a taɓa fassara su ba",
+      "write_key": "Maɓalli",
+      "write_ratifies": "ID na layin da yake amincewa da shi (na zaɓi)",
+      "write_relief": "Mika sassaucin gaggawa",
+      "write_root": "Tushen amincewa (root_ref)",
+      "write_title": "Juya maɓallin saiti na mesh",
+      "write_ttl": "Zai ƙare bayan (sa'o'i)",
+      "write_value": "Ƙima"
+    }
+  }
 }

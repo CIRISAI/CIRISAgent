@@ -2284,7 +2284,64 @@
     "tool_disclosure_params": "Der Agent füllt aus: {params}",
     "tool_disclosure_summary": "Was der Agent dadurch tun kann ({count} Werkzeuge)",
     "tool_disclosure_summary_one": "Was der Agent dadurch tun kann (1 Werkzeug)",
-    "tool_disclosure_unavailable": "Die Werkzeuge hiervon lassen sich erst auflisten, nachdem es mit eigenen Anmeldedaten gestartet ist. Wenn Sie es aktivieren, gewähren Sie alle Werkzeuge, die es dann registriert."
+    "tool_disclosure_unavailable": "Die Werkzeuge hiervon lassen sich erst auflisten, nachdem es mit eigenen Anmeldedaten gestartet ist. Wenn Sie es aktivieren, gewähren Sie alle Werkzeuge, die es dann registriert.",
+    "accord_bless_ci_desc": "Scrub-signieren Sie die CI-Worker-Schlüssel des Substrats (Build-Pipelines + den Agent-Steward) gesammelt in einer Zeremonie. Jeder ist ein infra:attest-Knotenschlüssel — die Rollen werden serverseitig gesetzt, fügen Sie also nur die öffentlichen Schlüssel ein. Die Felder sind vorausgefüllt; fügen Sie den ML-DSA-65-Pubkey jedes Repos aus dessen Export-Job-Artefakt ein. Die App hält keine Schlüssel — die YubiKey-Berührung ist die Einwilligung.",
+    "accord_bless_ci_ed25519_label": "Ed25519-Pubkey (Base64)",
+    "accord_bless_ci_mldsa_label": "ML-DSA-65-Pubkey (Base64) — aus dem Export-Job einfügen",
+    "accord_bless_ci_submit": "CI-Worker segnen — YubiKey berühren",
+    "accord_bless_ci_submit_busy": "Wird gesegnet — YubiKey berühren…",
+    "accord_bless_ci_title": "CI-Worker segnen",
+    "accord_new_bless_ci_workers": "CI-Worker segnen",
+    "accord_new_remint_trust_root": "Bestehende Vertrauenswurzel neu prägen",
+    "accord_remint_auth_tally": "{have} von {needed} Autorisierungen.",
+    "accord_remint_back_btn": "Zurück",
+    "accord_remint_bundle_ready": "Der portable Seed ist bereit — speichern oder kopieren Sie ihn (mesh-genesis.json):",
+    "accord_remint_canonical_select": "Kanonischen Server zum Neuprägen auswählen…",
+    "accord_remint_close_btn": "Schließen",
+    "accord_remint_completed_label": "Vollständiger Datensatz (SignedKeyRecord-JSON)",
+    "accord_remint_continue_btn": "Weiter zum Vorschlag",
+    "accord_remint_cosign_all_signed": "Jeder Inhaber auf dieser Liste hat diesen Seed bereits autorisiert.",
+    "accord_remint_cosign_btn": "Seed mitsignieren — YubiKey berühren",
+    "accord_remint_cosign_btn_busy": "Wird mitsigniert — YubiKey berühren…",
+    "accord_remint_cosign_desc": "Geben Sie das Gerät an den nächsten Inhaber weiter. Er autorisiert DENSELBEN Seed auf seinem eigenen YubiKey, mit seiner eigenen PIN. Wiederholen Sie dies, bis der Knoten den Seed als vollständig meldet.",
+    "accord_remint_cosign_paste_label": "Zu mitsignierendes Teilstück (SignedKeyRecord-JSON)",
+    "accord_remint_cosign_title": "Schritt 3 — Mitsignieren (der zweite Inhaber)",
+    "accord_remint_desc": "Verwandeln Sie die BESTEHENDE Accord-Liste und einen kanonischen Serve-Knoten in einen portablen Vertrauenswurzel-Seed. Zwei Accord-Inhaber autorisieren ihn, je ein YubiKey. Nichts wird neu eingetippt: Liste, Pubkeys und Adresse werden von diesem Knoten vorausgefüllt. Die App hält keine Schlüssel — die YubiKey-Berührung ist die Einwilligung.",
+    "accord_remint_done_desc": "Speichern Sie ihn, bewahren Sie ihn offline auf und geben Sie ihn weiter wie einen Schlüssel — wer ihn besitzt, kann ein Mesh auf dieser Vertrauenswurzel errichten.",
+    "accord_remint_done_family": "Familienschlüssel: {key}",
+    "accord_remint_done_fingerprint": "Fingerabdruck: {fingerprint}",
+    "accord_remint_done_fingerprint_caption": "Vergleichen Sie diesen Fingerabdruck über einen separaten Kanal — persönlich oder in einem Gespräch, das Sie beide erkennen — bevor jemand diesen Seed anbindet.",
+    "accord_remint_done_holders": "Mitgeführte Inhaber: {count}",
+    "accord_remint_done_serve_nodes": "Mitgeführte Serve-Knoten: {count}",
+    "accord_remint_done_title": "Der Seed ist autorisiert",
+    "accord_remint_no_canonicals": "Keine kanonischen Server in der Neuprägungsquelle.",
+    "accord_remint_produce_btn": "Portables Genesis erzeugen",
+    "accord_remint_produce_btn_busy": "Wird erzeugt…",
+    "accord_remint_propose_btn": "Seed vorschlagen — YubiKey berühren",
+    "accord_remint_propose_btn_busy": "Wird vorgeschlagen — YubiKey berühren…",
+    "accord_remint_propose_desc": "Der erste Inhaber prägt und signiert die Charta und die Erteilung des Seeds auf seinem eigenen YubiKey. Die App hält keine Schlüssel – die Berührung ist die Einwilligung.",
+    "accord_remint_propose_title": "Schritt 2 – Vorschlagen (der erste Inhaber)",
+    "accord_remint_quorum_line": "Quorum: {m} von {n} Accord-Inhabern müssen den Seed autorisieren.",
+    "accord_remint_quorum_note": "Quorum {quorum} – nur zwei Inhaber müssen anwesend sein; der Eintrag des dritten wird in der Inhaberliste mitgeführt.",
+    "accord_remint_reblessed_note": "Diese Zeremonie hat den ausgewählten kanonischen Knoten zugleich als Trace-Server (infra:serve) gesegnet – er hatte diese Rolle bisher nicht. Er ist nun standardmäßig vertrauenswürdig für den Empfang von Traces; Sie können den Segen jederzeit mit der Rücknahme-Operation für kanonische Knoten wieder aufheben.",
+    "accord_remint_review_title": "Schritt 1 – Prüfen, was der Seed enthalten wird",
+    "accord_remint_roster_empty": "Noch keine Accord-Inhaber in der Quelle für die Neuprägung.",
+    "accord_remint_roster_title": "Accord-Inhaber (die vollständige Inhaberliste reist im Seed mit)",
+    "accord_remint_save_bundle": "Genesis-Bundle speichern",
+    "accord_remint_seed_scope": "Der Seed enthält die Vertrauenswurzel – die vollständige Inhaberliste dieses Accords – sowie den unten ausgewählten Serve-Knoten. In diesem Schritt wird nichts signiert.",
+    "accord_remint_serve_missing": "noch nicht zum Ausliefern gesegnet – diese Neuprägung behebt das",
+    "accord_remint_serve_node_line": "Serve-Knoten: {key}",
+    "accord_remint_serve_ok": "verleiht infra:serve ✓",
+    "accord_remint_start_over_btn": "Weiteren Seed erstellen",
+    "accord_remint_step1_desc": "Der erste Inhaber scrub-signiert den ausgewählten kanonischen Knoten (vorausgefüllte key_id + Public Keys + Adresse). Das Teilstück mit nur einem Scrub verleiht noch nichts – es wird per Gossip an die übrigen Inhaber zum Mitsignieren verteilt.",
+    "accord_remint_step1_title": "Schritt 1 – Vorschlagen (A1)",
+    "accord_remint_step2_desc": "Das Teilstück wird per Gossip an die Geräte der übrigen Inhaber verteilt – der zweite Inhaber signiert es unter „Ausstehende Mitsignaturen“ mit (oder fügt es unten ein, um auf diesem Gerät mitzusignieren). Beim Familien-Quorum wird der Datensatz verliehen.",
+    "accord_remint_step2_title": "Schritt 2 – Mitsignieren (B1)",
+    "accord_remint_step3_desc": "Fügen Sie den vollständigen (mitsignierten) Datensatz ein – er wird wortgetreu übernommen und niemals neu kodiert. Der Knoten weist einen Datensatz zurück, der infra:serve nicht verleiht.",
+    "accord_remint_step3_title": "Schritt 3 – Die portable Genesis erzeugen",
+    "accord_remint_step_done": "Fertig – der Seed ist autorisiert",
+    "accord_remint_step_of": "Schritt {step} von {total}",
+    "accord_remint_title": "Bestehende Vertrauenswurzel neu prägen"
   },
   "prompts": {
     "dma": {
@@ -3052,12 +3109,132 @@
       "nodes": "Knoten",
       "provision_accord_holder": "Inhaber provisionieren",
       "safety": "Sicherheit",
-      "transport": "Transport"
+      "transport": "Transport",
+      "commons": "Gemeingut"
     }
   },
   "setup_validation_select_provider": "LLM-Anbieter auswählen",
   "network_ops": {
-    "open_federation_hub": "Föderations-Hub öffnen →"
+    "open_federation_hub": "Föderations-Hub öffnen →",
+    "reader": {
+      "advisory": "Ein ergangenes Urteil ist für jeden Leser beratend. Eines abzulehnen ist ein vollwertiges Ergebnis und kein Fehler: Dass zwei Leser mit unterschiedlichen Richtlinien aus demselben Urteil zu unterschiedlichen, beide gültigen Zuständen kommen, ist der Entwurf bei der Arbeit.",
+      "asserted": "Behauptet am",
+      "decision": {
+        "declined": "Von diesem Leser abgelehnt",
+        "honoured_by_subscription": "Beachtet aufgrund des Abonnements",
+        "honoured_explicit": "Beachtet — dieser Leser hat es übernommen",
+        "undecided_unsubscribed": "Noch keine Entscheidung",
+        "unknown": "Nicht erkannte Entscheidung"
+      },
+      "decision_recorded": "Entscheidung erfasst",
+      "decision_refused": "Die Entscheidung wurde verweigert",
+      "decision_refused_body": "Es wurde nichts erfasst, und die Richtlinie dieses Lesers ist unverändert.",
+      "decision_unreachable_body": "Es ist nicht bekannt, ob die Entscheidung erfasst wurde. Lesen Sie die Faltung erneut, sobald der Knoten antwortet.",
+      "decline": "Ablehnen",
+      "dialog": {
+        "decline_note": "Ein normales Ergebnis. Am Urteil wird nichts gelöscht und nichts bestritten: Erfasst wird, dass DIESER Leser es nicht übernimmt.",
+        "decline_title": "Dieses Urteil ablehnen",
+        "honour_note": "Dieser Leser übernimmt das Urteil bewusst. Der Unterzeichner muss nicht abonniert sein.",
+        "honour_title": "Dieses Urteil beachten"
+      },
+      "dimension": "Dimension",
+      "fold": {
+        "agrees": "Diese stimmen überein.",
+        "diverges": "Diese weichen voneinander ab — genau darin entscheidet der Leser. Die Ablehnung wird erfasst und gemeldet; sie hält diesen Knoten noch nicht davon ab, weiter vorzuenthalten.",
+        "node": "Die Auslieferungspfade dieses Knotens",
+        "reader": "Die Faltung dieses Lesers"
+      },
+      "held": "Gehaltene Urteile",
+      "honour": "Beachten",
+      "judgement": "Urteil",
+      "read": "Faltung dieses Lesers lesen",
+      "reading": "Wird gelesen…",
+      "refused_body": "Über das, was dieser Leser beachtet, lässt sich nichts schließen.",
+      "refused_title": "Der Knoten hat diesen Lesevorgang verweigert",
+      "signer": "Signiert von",
+      "standing": {
+        "decided": "Urteile eingeordnet",
+        "none_held": "Hier wird kein Urteil gehalten",
+        "unknown": "Nicht erkannter Stand",
+        "unreadable": "Dieser Leser konnte seinen eigenen Zustand nicht lesen",
+        "unreadable_meaning": "NICHT „keine Urteile“ und NICHT „nichts vorenthalten“ — eine unlesbare Richtlinie, die als leere dargestellt wird, lässt stillschweigend jede Einschränkung fallen, die sie trug."
+      },
+      "subject_label": "Schlüssel-ID des Subjekts",
+      "subscription": "Abonnierte Wurzeln",
+      "subtitle": "Urteile anderer Parteien — und was die Leserrichtlinie DIESES Knotens daraus macht",
+      "title": "Was dieser Leser beachtet (Stufe R)",
+      "unreachable_body": "Stufe R liest, was dieser Knoten hält; über das Subjekt lässt sich daher nichts sagen, bis er antwortet. Anders als Stufe S braucht diese Sprosse den Knoten.",
+      "unreachable_title": "Dieser Knoten war nicht erreichbar"
+    },
+    "self": {
+      "act_refused_body": "Es wurde nichts erfasst. Die Stände oben sind unverändert.",
+      "act_refused_title": "Die Handlung wurde verweigert",
+      "act_unreachable_body": "Es ist nicht bekannt, ob die Handlung erfasst wurde. Lesen Sie die Stände erneut, sobald der Knoten antwortet.",
+      "act_unreachable_title": "Dieser Knoten war nicht erreichbar",
+      "axes_never_folded": "Drei getrennte Achsen, drei getrennte Handlungen. Ein Knoten, der sich zu stoppen ENTSCHIEDEN hat, und ein Knoten, der zum Stoppen GEZWUNGEN wurde, sind dieselbe Beobachtung mit entgegengesetzter Bedeutung — deshalb sind sie niemals ein einziger Schalter.",
+      "axis": {
+        "accepting": {
+          "declare": "Annahme einstellen",
+          "lift": "Wieder annehmen",
+          "question": "Hat sich dieser Knoten ENTSCHIEDEN, nichts Neues mehr aufzunehmen?",
+          "title": "Annahme einstellen"
+        },
+        "legal_compulsion": {
+          "declare": "Zwang erklären",
+          "lift": "Zwang beendet",
+          "question": "Wird von außerhalb des Mesh Zwang auf diesen Knoten ausgeübt? Keine Entscheidung — und wird nie als solche erfasst.",
+          "title": "Rechtlicher Zwang"
+        },
+        "load_shed": {
+          "declare": "Last abwerfen",
+          "lift": "Wieder volle Last tragen",
+          "question": "Trägt dieser Knoten absichtlich weniger?",
+          "title": "Last abwerfen"
+        }
+      },
+      "counts": "{declarations}× erklärt · {lifts}× aufgehoben",
+      "delegation": "Unter Delegation",
+      "dialog": {
+        "cancel": "Abbrechen",
+        "compelled_by_hint": "Nur der Zwang trägt diese Angabe. Lassen Sie sie leer, wenn Sie es nicht sagen können — „gezwungen, kann nicht sagen durch wen“ ist eine echte Antwort, und ein zum Schweigen verpflichteter Betreiber kann die Spur dennoch hinterlassen.",
+        "compelled_by_label": "Gezwungen durch (optional)",
+        "confirm": "Erfassen",
+        "delegation_hint": "Die eigene delegates_to-ID des Eigentümers. Eine selbstgerichtete Handlung ist die des Eigentümers selbst: Die Auslieferungsberechtigung eines Dritten genügt dafür nicht.",
+        "delegation_label": "Delegations-ID des Eigentümers",
+        "reason_hint": "Wird wortwörtlich erfasst und niemals ausgelegt. Eine Handlung ohne erfassten Grund ist, sobald der Handelnde fort ist, von einer unbefugten nicht zu unterscheiden.",
+        "reason_label": "Grund (erforderlich)",
+        "working": "Wird erfasst…"
+      },
+      "event": "Ereignis",
+      "lift_disabled_hint": "Auf dieser Achse wurde nichts erklärt, es gibt also nichts aufzuheben.",
+      "node_key": "Dieser Knoten",
+      "partition_only": "Die einzige Sprosse, die bei Netztrennung noch funktioniert — jede andere Sprosse muss jemanden erreichen.",
+      "reason_label": "Erfasster Grund",
+      "recorded_title": "Erfasst",
+      "records_only": "Jede Handlung erfasst eine zurechenbare Erklärung und nichts weiter. Keine Schleife auf diesem Knoten liest sie, also wird durch die Handlung selbst nichts gedrosselt, gesperrt oder gestoppt.",
+      "refresh": "Stände neu lesen",
+      "refused_body": "Die Stände sind unbekannt. Ein verweigerter Lesevorgang heißt nicht, dass nichts in Kraft ist.",
+      "refused_title": "Der Knoten hat diesen Lesevorgang verweigert",
+      "since": "Seit",
+      "standing": {
+        "in_force": "In Kraft",
+        "in_force_meaning": "Dieser Knoten hat es erklärt und nicht wieder aufgehoben.",
+        "lifted": "Erklärt, dann aufgehoben",
+        "lifted_meaning": "Jetzt nicht in Kraft — und nicht dieselbe Tatsache, wie es nie erklärt zu haben.",
+        "never_declared": "Nie erklärt",
+        "never_declared_meaning": "Auf dieser Achse wurde hier nie eine Handlung erfasst.",
+        "unknown": "Nicht erkannter Stand",
+        "unknown_meaning": "Der Knoten hat einen Stand gemeldet, den diese App nicht kennt. Behandeln Sie ihn als unbekannt, niemals als „nichts in Kraft“.",
+        "unreadable": "Stand unbekannt — nicht lesbar",
+        "unreadable_meaning": "Der Datensatz konnte nicht gelesen werden, dieser Knoten kennt daher seinen eigenen Stand nicht. Das heißt NICHT „nichts in Kraft“."
+      },
+      "subtitle": "Wirkt auf diesen Knoten und auf niemanden sonst",
+      "title": "Selbstgerichtet (Stufe S)",
+      "unreachable_body": "Die drei Stände sind unbekannt — was nicht „nichts in Kraft“ heißt. Handlungen der Stufe S sind lokal zu diesem Knoten und stehen wieder zur Verfügung, sobald er antwortet.",
+      "unreachable_title": "Dieser Knoten war nicht erreichbar",
+      "unreadable_axes_body": "Der Knoten hat geantwortet, konnte die unten markierten Achsen aber nicht lesen. Er kennt seinen eigenen Stand dort nicht — lesen Sie das nicht als „nichts in Kraft“.",
+      "unreadable_axes_title": "Einige Stände konnten nicht gelesen werden"
+    }
   },
   "setup_validation_fedid_label_generic": "Wählen Sie einen eindeutigen Namen wie vorname-nachname-v1. Der generische Standardname ist nicht erlaubt.",
   "setup_validation_fedid_label_required": "Geben Sie einen Namen für Ihre Föderations-ID ein, um fortzufahren.",
@@ -3124,5 +3301,648 @@
   "approval_tool_capabilities": "Was dieses Werkzeug tun kann",
   "approval_tool_arguments": "Werte, die der Agent übergeben will",
   "approval_tool_arguments_omitted": "Die Argumente des Agenten waren zu groß, um sie hier anzuzeigen.",
-  "approval_tool_scope_note": "Die Genehmigung autorisiert dieses Werkzeug für die Folgeaufgabe, nicht für genau diesen Aufruf. Der Agent überdenkt die Aufgabe von Anfang an und verwendet möglicherweise andere Werte."
+  "approval_tool_scope_note": "Die Genehmigung autorisiert dieses Werkzeug für die Folgeaufgabe, nicht für genau diesen Aufruf. Der Agent überdenkt die Aufgabe von Anfang an und verwendet möglicherweise andere Werte.",
+  "admin": {
+    "accept_writes": {
+      "not_reached": "Es stellt nichts wieder her, was während der bestehenden Aberkennung der Zulassung abgewiesen wurde. Jene Schreibvorgänge wurden an der Tür zurückgewiesen und sind hier nie angekommen; hält der Peer sie noch, muss er sie erneut senden. An diesem Schlüssel ändert sich sonst nichts.",
+      "not_refused": "Für diesen Schlüssel besteht hier keine Aberkennung der Zulassung, es gibt also nichts aufzuheben."
+    },
+    "admission": {
+      "standing": {
+        "admitted": "Keine aktive, von diesem Knoten verfasste Aberkennung der Zulassung benennt diesen Schlüssel, seine Schreibvorgänge sind hier also zugelassen. Über irgendeinen anderen Knoten sagt das nichts aus: Die Aberkennung der Zulassung gilt nur lokal für den Korpus, der sie ausspricht.",
+        "refused": "Dieser Knoten hält eine aktive, von ihm selbst verfasste Aberkennung der Zulassung dieses Schlüssels; der nächste Schreibvorgang des Schlüssels in den Korpus dieses Knotens wird daher an der Tür des Substrats selbst abgewiesen.",
+        "unreadable": "Dieser Knoten konnte seinen eigenen Zulassungszustand für diesen Schlüssel nicht lesen und weiß daher nicht, ob die Schreibvorgänge dieses Schlüssels abgewiesen werden. Das ist NICHT „zugelassen“ — stellen Sie es nicht als solches dar."
+      }
+    },
+    "descend": {
+      "bounded_unsupported": "Ein zeitlich begrenztes Urteil kann keine unbegrenzte Entfernung antreiben. Der einzige akteursbezogene Abstieg des Substrats erfasst den gesamten Korpus und würde damit genau die Historie zerstören, die diese Begrenzung bewusst bestehen lässt. Die zeitlich begrenzte Entfernung, die tatsächlich implementiert IST, ist die Aberkennung der Zulassung mit einer Historiengrenze.",
+      "not_reached": "Die ausgewählten Attestierungszeilen selbst werden nicht dem Abstieg unterzogen. Jeder Nutzdatenträger auf diesem Substrat ist in seine eigene Signatur eingesiegelt, seine Bytes können also nicht entfernt werden, ohne dass die Zeile als gefälscht gelesen wird; die Löschbarkeit wird beim Prägen entschieden, und nichts, was heute geprägt wird, ist löschbar."
+    },
+    "enforcement": {
+      "accept_writes": "Dieser Knoten weist die Schreibvorgänge der genannten Schlüssel nicht länger ab: Die von ihm verfasste Aberkennung der Zulassung wird zurückgenommen, und das Substrat lässt deren nächsten Schreibvorgang wieder zu. Sowohl die Aberkennung der Zulassung als auch diese Rücknahme bleiben als lesbare Historie bestehen.",
+      "annotate": "Ein signiertes Urteil ohne Wirkung, bis ein Leser es beachtet. Nichts wird vorenthalten, gedrosselt oder entfernt.",
+      "deadmit": "Ein signierter Widerruf auf der gewöhnlichen, nur anfügenden Ebene. Er ist ein Beweisstück, das ein Leser einfaltet, keine Tür, die zuschlägt: Signaturprüfung, Replikationszeiger und Zeilenaufnahme arbeiten bewusst weiter, denn ältere Zeilen eines kompromittierten Schlüssels abzuweisen würde genau die Beweise zerstören, die zur Beurteilung der Kompromittierung nötig sind.",
+      "descend": "Von Grund auf unumkehrbar. Der Abstieg endet nie bei null — die Unschärfe und der Grabstein bleiben bestehen —, aber was abgeworfen wurde, kommt nicht zurück.",
+      "quarantine": "Eine signierte Markierung, kein Befehl: Nichts wird gelöscht und nichts umgeschrieben. Die Auslieferungspfade dieses Knotens geben die Zeilen und Blobs der genannten Schlüssel nicht mehr an Peers weiter; ein Peer, der anders einfaltet, erhält sie von uns schlicht nicht.",
+      "re_admit": "Wird als zurechenbare Umkehrung erfasst. Die Widerrufszeile bleibt bestehen und jeder Leser faltet sie weiterhin ein: Einschränkungen setzen sich zusammen, Lockerungen nicht, und keine Schicht dieses Substrats bietet eine Aufhebung des Widerrufs.",
+      "refuse_writes": "Dieser Knoten weist den nächsten Schreibvorgang der genannten Schlüssel in seinen eigenen Korpus ab — an der Tür des Substrats selbst und bevor irgendein anderes Gate läuft. Er wirkt bewusst LOKAL: Kein Knoten verfügt über die Zulassungsmenge eines anderen Knotens, denn eine global wirksame Aberkennung der Zulassung wäre selbst eine Zensurwaffe. Die Isolation eines tatsächlichen Missbrauchers entsteht emergent — sie tritt ein, wenn viele Knoten unabhängig voneinander zum selben Schluss kommen — und wird niemals von hier aus verfügt.",
+      "throttle": "Wird nur als zurechenbares Urteil erfasst. Dieses Substrat kennt kein vom Empfänger verfasstes Zulassungsbudget je Schlüssel: Das Schreibkontingent für Peers ist eine feste Absicherung gegen Endlosschleifen, keine Richtlinienfläche, an der eine Drosselung ansetzen könnte. An dem, was dieser Knoten von den genannten Schlüsseln annimmt, ändert sich nichts."
+    },
+    "preview": {
+      "note": "Genau darauf wird ein Commit wirken. Übergeben Sie den Auswahl-Hash zusammen mit dem Commit; hat sich die Auswahl geändert, verweigert der Commit.",
+      "window_in_application": "Das Zeitfenster wird von diesem Knoten angewendet, nicht von der Substratabfrage: Der allgemeine Attestierungs-Lesevorgang beachtet die Zeitachse nicht. Die Seitengrenze wird zuerst angewendet, daher kann eine fenstergefilterte Auswahl zu klein zurückkommen."
+    },
+    "quarantine": {
+      "not_withheld": "Dieser Schlüssel wird hier derzeit nicht vorenthalten, es gibt also nichts freizugeben."
+    },
+    "reader": {
+      "advisory": "Ein ergangenes Urteil ist für jeden Leser beratend. `reader_fold` ist das, was die Richtlinie DIESES Lesers aus dem macht, was er hält; `node_fold` ist das, was die Auslieferungspfade dieses Knotens heute tun, nämlich jede Markierung zu beachten, die das Substrat zugelassen hat. Sie können voneinander abweichen, und wo sie es tun, ist die Differenz die Substratlücke: In der auslieferungsseitigen Faltung gibt es keinen Ansatzpunkt für die Leserrichtlinie, daher wird eine Ablehnung erfasst und gemeldet, hält diesen Knoten aber noch nicht davon ab, weiterhin vorzuenthalten.",
+      "decision": {
+        "declined": "Dieser Leser hat dieses Urteil abgelehnt. Ein normales Ergebnis: Ein ergangenes Urteil ist für jeden Leser beratend, und es abzulehnen ist genau die Eigenschaft, für die diese Sprosse überhaupt besteht.",
+        "honoured_by_subscription": "Es wurde keine ausdrückliche Entscheidung erfasst; dieser Leser hat den Unterzeichner abonniert, daher wird das Urteil richtliniengemäß beachtet.",
+        "honoured_explicit": "Dieser Leser hat dieses Urteil bewusst übernommen.",
+        "undecided_unsubscribed": "Dieser Leser hat den Unterzeichner nicht abonniert und keine Entscheidung erfasst. Das Urteil wird nicht beachtet, und das ist bislang niemandes Entscheidung — was eine andere Tatsache ist, als es abgelehnt zu haben."
+      },
+      "standing": {
+        "decided": "Jedes Urteil, das dieser Knoten über dieses Subjekt hält, ist aufgeführt, zusammen damit, was dieser Leser damit macht.",
+        "none_held": "Dieser Knoten hält kein Urteil über dieses Subjekt. Hier hat niemand darüber geurteilt — was nicht dasselbe ist, wie wenn dieser Knoten keine Auskunft geben könnte.",
+        "unreadable": "Dieser Leser konnte seinen eigenen Zustand nicht lesen und kann daher nicht sagen, was er beachtet. Das ist NICHT „keine Urteile“ und NICHT „nichts vorenthalten“ — eine unlesbare Richtlinie, die als leere dargestellt wird, lässt stillschweigend jede Einschränkung fallen, die sie trug."
+      }
+    },
+    "refusal": {
+      "attribution_absent": "delegation_id ist erforderlich. Eine Handlung, die ihre eigene Autorität nicht mitführt, lässt sich, sobald der Handelnde fort ist, nicht mehr von einer unbefugten unterscheiden.",
+      "authority_not_a_delegation": "Die genannte Delegations-ID ist keine delegates_to-Zeile.",
+      "authority_not_the_owner": "Eine selbstgerichtete Handlung ist die des Eigentümers selbst. Die genannte Delegation trägt zwar den richtigen Bereich, wurde aber nicht vom Verantwortlichen dieses Knotens erteilt, und die Auslieferungsberechtigung eines Dritten ist nicht die des Eigentümers.",
+      "authority_not_to_actor": "Die genannte Delegation wurde nicht diesem Knoten erteilt, dieser Knoten ist also nicht die Partei, die sie ermächtigt.",
+      "authority_scope_absent": "Die genannte Delegation trägt nicht den Bereich, den dieser Vorgang verlangt. Eine andere Delegation desselben Ausstellers könnte ihn tragen, doch die Handlung würde dann eine Autorität festhalten, unter der sie nicht vorgenommen wurde.",
+      "authority_scope_unreachable": "Von diesem Aussteller erreicht diesen Knoten keine lebende Delegationskette, die den von diesem Vorgang verlangten Bereich trägt. Autorität wird aus dem eigenen geprüften Zustand dieses Knotens neu abgeleitet und niemals der Anfrage entnommen.",
+      "authority_unresolved": "Die genannte Delegation ist keine Zeile, die dieser Knoten hält, ihr Bereich lässt sich daher nicht prüfen. Dieser Knoten handelt nicht auf eine Autorität hin, die er nicht überprüfen kann.",
+      "bad_request": "Der Anfragetext konnte nicht ausgewertet werden.",
+      "community_absent": "community_id ist erforderlich: Eine Quarantäne wird unter der Autorität einer Gemeinschaft eingereicht, und eine Markierung, die keine Gemeinschaft nennt, nennt keine Autorität.",
+      "deadmission_gate_dormant": "Dieser Knoten hat dem Substrat seine eigene Identität nicht erklärt, daher ruht das Gate für die Aberkennung der Zulassung: Die Zeile würde geschrieben und würde nichts abweisen. Abgelehnt, statt als erledigt zurückgemeldet — ein Sanktions-Gate, das stillschweigend nichts tut, ist schlimmer als gar kein Gate, denn ein Betreiber wird glauben, die Aberkennung der Zulassung wirke. Das ist ein Fehler in der Konfiguration dieses Knotens, kein Fehler der Anfrage.",
+      "deadmission_gate_foreign_identity": "Die Identität, unter der dieser Knoten signiert, und die Identität, gegen die das Gate für die Aberkennung der Zulassung die Schreibenden abgleicht, sind zwei verschiedene Schlüssel; eine hier signierte Aberkennung der Zulassung würde daher nie als die eigene dieses Knotens eingefaltet und würde nichts abweisen. Das ist ein Fehler in der Konfiguration dieses Knotens, kein Fehler der Anfrage.",
+      "judgement_subjectless": "Dieses Urteil nennt kein Subjekt, es zu beachten oder abzulehnen würde also an niemandem etwas ändern. Dieser Knoten erfasst keine Entscheidung, die er nicht anwenden kann.",
+      "judgement_unresolved": "Dieses Urteil ist keine Zeile, die dieser Knoten hält, dieser Leser hat also nichts, worüber er entscheiden könnte. Ein Leser entscheidet über das, was er HÄLT; er lehnt nicht im Voraus ab, was er nie gesehen hat.",
+      "node_unowned": "Dieser Knoten hat keinen Verantwortlichen (Eigentümerbindung) und führt daher keinen abgestuften Admin-Vorgang in irgendjemandes Namen aus. Beanspruchen Sie zuerst die Eigentümerschaft.",
+      "not_a_judgement": "Diese Zeile ist kein Urteil, über das diese Sprosse entscheiden kann. Stufe R ist die Richtlinie des Lesers über die URTEILE anderer Parteien, und eine gewöhnliche Attestierung ist keines.",
+      "not_owner": "Abgestufte Admin-Vorgänge erfordern die Eigentümerrolle (SYSTEM_ADMIN).",
+      "preview_hash_mismatch": "Was Sie in der Vorschau gesehen haben, ist nicht das, was ausgeführt würde — die Auswahl hat sich seit der Vorschau geändert. Führen Sie die Vorschau erneut aus und bestätigen Sie den neuen Hash.",
+      "quorum_insufficient": "Dieser Vorgang ist unumkehrbar und erfordert ein Quorum verschiedener Autoritäten, nicht eine einzelne Delegationskette. Zwei Ketten aus derselben Wurzel sind eine Autorität mit zwei Hüten.",
+      "reason_absent": "reason ist erforderlich. Eine Handlung ohne erfassten Grund ist, sobald der Handelnde fort ist, von einer unbefugten nicht zu unterscheiden.",
+      "selection_unpredicated": "Die Auswahl trägt überhaupt kein Prädikat, das bedeutet den gesamten Bestand. Benennen Sie, worauf Sie einwirken.",
+      "session_absent": "Es wurde kein Sitzungstoken vorgelegt. Abgestufte Admin-Vorgänge sind ausschließlich dem Eigentümer vorbehalten.",
+      "session_invalid": "Diese Sitzung ist ungültig oder abgelaufen.",
+      "store_unavailable": "Das Substrat konnte nicht gelesen werden.",
+      "subject_absent": "subject_key_id ist erforderlich: Eine Leserfaltung betrifft die Urteile über ein Subjekt, und ein ungenanntes Subjekt ist jedes Subjekt."
+    },
+    "refuse_writes": {
+      "already_refused": "Für diesen Schlüssel besteht hier bereits eine Aberkennung der Zulassung, es wurde also nichts geschrieben und der Zulassungsstand ist unverändert.",
+      "not_reached": "Es macht nichts ungeschrieben. Zeilen, die diese Schlüssel hier bereits geschrieben haben, bleiben unangetastet und werden weiterhin ausgeliefert — die Quarantäne ist der Vorgang, der das Ausliefern beendet. Zeilen, die bereits zu Peers repliziert sind, werden nicht zurückgerufen und können es auch nicht. Die Schlüssel werden nicht entfernt, ihre Signaturen verifizieren weiterhin, und sie schreiben auf jedem anderen Knoten weiter, auch auf den Peers dieses Knotens, von denen jene Zeilen durch Replikation erneut hier eintreffen können. Eine einzige Ausnahme besteht mit Absicht fort, damit ein Knoten seine eigene Verweigerung stets aufheben kann, und sie fragt nicht danach, wer schreibt: Ein nicht mehr zugelassener Schlüssel darf hier weiterhin Zeilen zur Aberkennung der Zulassung schreiben (CIRISPersist#608).",
+      "reversal": "Umkehrbar — und die Umkehrung erreicht das Substrat, statt bloß einen Sinneswandel zu protokollieren: POST /v1/admin/accept-writes nimmt die Aberkennung der Zulassung zurück, und die Schreibvorgänge des Schlüssels sind hier wieder zugelassen. Zwei Umkehrungen dieser Stufenleiter erreichen das Substrat — das Aufheben einer Quarantäne, das wiederherstellt, was dieser Knoten AUSLIEFERT, und diese hier, die wiederherstellt, was er ANNIMMT. Beide Zeilen bleiben bestehen und bleiben lesbar: „abgewiesen und danach wieder zugelassen“ ist nicht derselbe Sachverhalt wie „nie abgewiesen“."
+    },
+    "reversal": {
+      "evidence_only": "Die ursprüngliche Zeile bleibt bestehen und wird weiterhin von jedem Leser eingefaltet. Diese Umkehrung ist erfasstes Beweismaterial, kein Rückgängigmachen — das Substrat bietet keine Aufhebung des Widerrufs.",
+      "substrate": "Der Substratzustand ist umgekehrt: Dieser Knoten hält die Zeilen des Schlüssels nicht länger zurück.",
+      "symmetric": "Im Substrat wird nichts umgekehrt, weil im Substrat nichts das ursprüngliche Urteil durchgesetzt hat. Beide Handlungen sind erfasstes Beweismaterial."
+    },
+    "self": {
+      "distinct_zeroes": "Drei der vier Statusangaben sind Nullen und bedeuten Verschiedenes: nie erklärt, erklärt und wieder aufgehoben, und nicht lesbar. Stellen Sie sie unterschiedlich dar.",
+      "enforcement": {
+        "compelled": "Wird auf einer eigenen Achse erfasst, als eigenständige Handlung. Dies ist eine Aussage über Zwang, der von AUSSERHALB des Mesh ausgeübt wird, und für sich genommen ändert sie nichts an dem, was dieser Knoten tut — mit Absicht. Ein Knoten unter Zwang kann dazu gebracht werden, weiter auszuliefern, aufzuhören oder etwas herauszugeben; würde man eines davon in „dieser Knoten nimmt nichts mehr an“ einfalten, zerstörte das das einzige Signal, an dem eine nachgelagerte Partei eine Entscheidung von einem Zwang unterscheiden kann.",
+        "shed": "Wird als eigene zurechenbare Erklärung dieses Knotens erfasst, und als nichts weiter. Die Mesh-Config-Ebene, die eine Lastobergrenze tragen würde, wird von Vertrauenswurzeln verfasst, und dieser Knoten betreibt noch keinen Verbraucher der gefalteten Werte, also ändert keine Schleife, was er trägt. Was sich ändert, ist der Datensatz: Ein Betreiber, ein Peer oder ein späteres Audit kann erkennen, dass dieser Knoten sich entschieden hat, weniger zu tragen, unter wessen Autorität und wann.",
+        "stop_accepting": "Wird als eigene zurechenbare Erklärung dieses Knotens erfasst, dass er nichts Neues mehr aufnimmt. Nichts in diesem Substrat setzt das durch: Die Empfangsebene ist peer-blind, und das Schreibkontingent je Peer ist eine feste Absicherung gegen Endlosschleifen, keine Richtlinienfläche, an der ein Stopp ansetzen könnte. Die Erklärung ist das Artefakt — und sie ist es, die ein Peer liest, um nichts mehr anzubieten."
+      },
+      "lift": {
+        "compelled": "Wird als eigenständige Handlung erfasst: Ein Zwang, der GEENDET hat, ist kein Zwang, den es nie gab. Die Erklärung, die sie aufhebt, bleibt bestehen, und beide bleiben lesbar.",
+        "voluntary": "Wird als eigenständige Handlung erfasst. Die Erklärung, die sie aufhebt, bleibt bestehen, und beide bleiben lesbar — „erklärt und aufgehoben“ ist nicht „nie erklärt“."
+      },
+      "partition": "Jede Handlung auf dieser Sprosse ist lokal: der Durchlauf der Eigentümerbindung, der Schreibvorgang im Journal und dieser Lesevorgang berühren allesamt nur die eigene Datenbank dieses Knotens und nichts sonst. Es ist die einzige Sprosse, die bei Netztrennung zur Verfügung steht — jede andere Sprosse muss jemanden erreichen.",
+      "standing": {
+        "in_force": "Dieser Knoten hat dies erklärt und nicht wieder aufgehoben.",
+        "lifted": "Dieser Knoten hat dies erklärt und wieder aufgehoben. Das ist nicht dieselbe Tatsache, wie es nie erklärt zu haben.",
+        "never_declared": "Dieser Knoten hat dies nie erklärt. Das ist nicht dieselbe Tatsache, wie es erklärt und wieder aufgehoben zu haben, und auch nicht dieselbe, wie es nicht lesen zu können.",
+        "unreadable": "Der Datensatz konnte nicht gelesen werden, dieser Knoten kennt daher seinen eigenen Stand auf dieser Achse nicht. Das ist NICHT „nichts in Kraft“ — stellen Sie es nicht als solches dar."
+      }
+    }
+  },
+  "commons_surface": {
+    "asymmetry": "Ein einzelnes Mitglied zieht die Bremse; die Kohorte muss zustimmen, um sie zu lösen. Schutz zu erheben ist bedingungslos und kostet eine einzige Signatur; den Schutz eines anderen aufzuheben kostet die Schwelle der Kohorte selbst, und die eskalierte Aufhebung darf niemals unter eine absolute Untergrenze fallen, die keine Richtlinienangabe senken darf.",
+    "ballot": {
+      "admitted": "Die Stimmabgabe ist aktenkundig. Sie hat für sich genommen KEINE Wirkung: Ihr Preis wird zur Lesezeit gegen einen Nenner abgerechnet, der im Moment der Abgabe noch nicht existiert — ob der Pool je die eskalierte Schwelle erreicht, hängt davon ab, wer sonst noch antwortet. Ein Mitglied darf seine Meinung ändern; es gilt die jüngste Stimmabgabe."
+    },
+    "dismissal": {
+      "admitted": "Der Einspruch ist für die Zählung aufgehoben. Die Schwelle wird bei jedem späteren Lesen neu aus der Mitgliederliste dieses Knotens abgeleitet; eine Zurückweisung, die eine gewachsene Mitgliederliste nicht mehr überschreitet, unterdrückt nicht länger — und der Schutz, den sie entfernt hat, kehrt zurück."
+    },
+    "dry_run": "Es wurde nichts signiert und nichts eingereicht. Dies sind exakt die kanonischen Bytes, die jeder Mitunterzeichner signieren muss, damit sein Scrub bei der echten Einreichung zählt — das m-von-n bezieht sich auf genau diese Bytes und auf keine anderen.",
+    "escalation": {
+      "awaiting": "Die bestellten Moderatoren können noch antworten, oder sie haben bereits rechtzeitig entschieden. Die Eskalation ist nicht eröffnet.",
+      "not_adopted": "Diese Gemeinschaft hat keine Steward-Stufe erklärt, daher gibt es keine Moderatorenfrist und keine Eskalation. Schweigen ändert hier nichts.",
+      "nothing_to_escalate": "Eine Steward-Stufe ist erklärt, und kein aktiver Einspruch wartet auf sie. Niemand hat geschwiegen, denn es wurde nichts gefragt.",
+      "open": "Die bestellten Moderatoren haben nicht rechtzeitig geantwortet, und die Entscheidung ist an diejenigen übergegangen, die geantwortet haben. Die Schwelle zählt nun die ANTWORTENDEN statt der gesamten Mitgliederliste — genau das lässt eine stille Gemeinschaft dennoch zu einem Ergebnis kommen — und ist mit einer Untergrenze versehen, damit „erreichbar“ niemals zu „eine einzelne Person entscheidet“ verkommt."
+    },
+    "objection": {
+      "admitted": "Der Einspruch ist aktenkundig. Er ist eine MARKIERUNG, kein Befehl: Durch sein Eintreffen wurde nichts verändert, und er repliziert auf der gewöhnlichen Attestierungsebene, sodass ein Peer, der während des Fensters vom Netz getrennt war, ihn beim Eintreffen dennoch mitzählt. Ein einzelnes Mitglied genügt, um ihn zu erheben; ihn aufzuheben kostet die Schwelle der Kohorte selbst."
+    },
+    "outcome": {
+      "dismissed": "Die Antwortenden haben entschieden, dass dieser Einspruch nicht besteht; er ist für die Zählung unterdrückt.",
+      "not_escalated": "Für diesen Einspruch wurde keine Eskalation eröffnet.",
+      "unresolved": "Die Eskalation ist eröffnet und unentschieden: Zu wenige haben geantwortet, oder keine Seite hat die Schwelle erreicht. Nichts ändert sich — der Einspruch besteht genau wie zuvor.",
+      "upheld": "Die Antwortenden haben entschieden, dass dieser Einspruch besteht."
+    },
+    "refusal": {
+      "action_absent": "action_id ist erforderlich. Ein Einspruch benennt eine Zeile im Gemeingut; einer, der nichts benennt, kann nie gezählt werden.",
+      "action_unknown": "Dieser Knoten hält keine solche Handlung; eine Zeile, die sie benennt, würde daher dort abgelegt, wo keine Faltung sie je zählen wird. Das Substrat weist denselben Fall an seiner eigenen Tür ab.",
+      "actor_recused": "Der Urheber einer Handlung stimmt nicht über den Einspruch gegen das eigene Handeln ab.",
+      "bad_now": "Der Lesezeitpunkt muss ein Zeitstempel nach RFC 3339 sein.",
+      "ballot_predates_action": "Ein Urteil kann nicht älter sein als das, worüber es urteilt.",
+      "canonicalize_failed": "Die kanonischen Bytes der Zeile konnten nicht erzeugt werden, daher gibt es nichts, was ein Mitunterzeichner signieren könnte.",
+      "cohort_absent": "cohort_key_id ist erforderlich: Sie benennt, wessen Mitgliederliste und wessen Erklärung die Zählung bestimmen.",
+      "cohort_not_a_commons": "Die Kohorte `self` hat keine Mitgliederliste, über der ein Quorum gebildet werden könnte — ihre Mitglieder sind die eigenen Geräte einer einzigen Identität —, sie hat also kein Gemeingut, über das zu wachen wäre.",
+      "cohort_unknown": "Diese Kohorte lässt sich auf diesem Knoten nicht auflösen, daher gibt es weder eine Mitgliederliste noch eine Erklärung, an der dies zu messen wäre. Autorität muss aus lokal verifiziertem Zustand stammen.",
+      "cohort_unrecognized": "Das ist keine Kohorte mit Mitgliederliste. Einsprüche leben in einer Familie, einer Gemeinschaft oder einer Affiliationsgruppe.",
+      "dimension_mismatch": "Diese Zeile wurde für das, was sie trägt, an der falschen Tür vorgelegt.",
+      "dismissal_quorum_short": "Es haben weniger verschiedene verifizierte Mitglieder der Mitgliederliste mitsigniert, als die Schwelle der Kohorte verlangt. Die gezählte und die geforderte Zahl stehen neben dieser Meldung.",
+      "duplicate_objection": "Sie halten bereits einen aktiven Einspruch gegen diese Handlung. Ein Mitglied ist ein Einspruch — sonst könnte ein einzelnes Mitglied die Schwelle allein erreichen.",
+      "grounds_absent": "grounds ist erforderlich. Ein Einspruch, der ohne erfassten Grund erhoben wird, ist von einem aus schlechtem Grund erhobenen nicht zu unterscheiden — und Gründe werden erfasst, niemals ausgelegt.",
+      "malformed_envelope": "Der Zeile fehlt ein Verweis, den die Zählung benötigt.",
+      "node_unowned": "Dieser Knoten hat keinen Verantwortlichen (Eigentümerbindung) und liest daher weder in irgendjemandes Gemeingut, noch spricht er dort in dessen Namen. Beanspruchen Sie zuerst die Eigentümerschaft.",
+      "not_a_cohort_member": "Nur ein Mitglied dieser Kohorte darf in ihrem Gemeingut sprechen. Das ist die einzige Prüfung, die die schützende Seite anwendet — und der Grund, warum der Einspruch eines Fremden nie zu einer Markierung wird, die andere beachten könnten.",
+      "not_filed_against_actor": "Die Zeile ist dort abgelegt, wo die Faltung nicht nach ihr sucht; sie wäre gespeichert, dauerhaft und für immer wirkungslos. Eine Markierung, die niemand finden kann, ist keine Markierung.",
+      "not_governed": "Diese Gemeinschaft erklärt keine Richtlinie für ein umgekehrtes Quorum, hat die Einspruchsebene also nicht übernommen. Abgelehnt statt mit Standardwerten belegt: Für eine Gruppe, die weder Fenster noch Schwelle erklärt hat, beides zu erfinden, ist schlimmer als ein Nein.",
+      "not_owner": "Die Gemeingut-Oberfläche erfordert die Eigentümerrolle (SYSTEM_ADMIN).",
+      "objection_absent": "objection_id ist erforderlich: Eine Stimmabgabe beantwortet eine Frage zu EINEM Einspruch.",
+      "objection_unknown": "Der benannte Einspruch ist keiner, den dieser Knoten gegen diese Handlung hält.",
+      "session_absent": "Es wurde kein Sitzungstoken vorgelegt. Die Gemeingut-Oberfläche ist ausschließlich dem Eigentümer vorbehalten.",
+      "session_invalid": "Diese Sitzung ist ungültig oder abgelaufen.",
+      "sign_failed": "Dieser Knoten konnte die Zeile nicht signieren, daher wurde nichts eingereicht.",
+      "steward_tier_not_adopted": "Diese Gemeinschaft hat keine Steward-Stufe erklärt, daher gibt es keine Frist, über die hinaus geschwiegen werden könnte, und keinen eskalierten Pool. Eine Stimmabgabe würde hier gespeichert und nie gelesen.",
+      "store_unavailable": "Das Substrat war nicht erreichbar.",
+      "target_action_unknown": "Die beanstandete Handlung ist keine Zeile, die dieser Knoten hält, daher wäre der Einspruch nicht zählbar und sein Fenster nicht auflösbar.",
+      "unverifiable_signature": "Die Signatur der Zeile ließ sich nicht gegen die auf diesem Knoten registrierten Schlüssel des Unterzeichners verifizieren."
+    },
+    "standing": {
+      "action_unknown": "Dieser Knoten hält keine solche Handlung. Ein Einspruch benennt eine Zeile, und hier gibt es keine Zeile, die benannt werden könnte.",
+      "cohort_unknown": "Diese Kohorte lässt sich auf diesem Knoten nicht auflösen, daher hat sie weder eine Mitgliederliste noch eine Erklärung, die dieser Knoten lesen könnte. Autorität muss aus lokal verifiziertem Zustand stammen.",
+      "not_governed": "Diese Gemeinschaft erklärt keine Richtlinie für ein umgekehrtes Quorum, daher gilt die Einspruchsebene für ihr Gemeingut überhaupt nicht. Das ist etwas anderes, als wenn niemand Einspruch erhoben hätte.",
+      "objected": "Mindestens ein Mitglied hat Einspruch erhoben, und das Fenster ist noch offen. Die Handlung besteht vorerst; ein weiterer Einspruch kann bereits genügen.",
+      "quiet": "Die Ebene wurde gelesen, und gegen diese Handlung wurde kein Einspruch erhoben.",
+      "reversed": "Genügend verschiedene Mitglieder haben innerhalb des Fensters Einspruch erhoben. Jeder Knoten, der diese Zeilen hält, faltet ohne jede Koordination zur selben Antwort.",
+      "stood": "Das Fenster schloss unterhalb der Umkehrschwelle. Gegen diese Handlung wurde Einspruch erhoben, und sie besteht.",
+      "unreadable": "Die Einspruchsebene konnte hier nicht gelesen werden. Das ist KEINE Aussage darüber, dass niemand Einspruch erhoben hat — die Einsprüche sind unbekannt, nicht etwa ausgeblieben."
+    },
+    "steward": {
+      "awaiting": "Die Frist ist noch nicht verstrichen. Die bestellten Moderatoren können noch antworten.",
+      "no_duty_holders": "Eine Steward-Stufe ist erklärt, und dieser Knoten löst dafür keinen bestellten Moderator auf. Niemand hat geschwiegen, denn es war niemand da.",
+      "not_adopted": "Es wurde keine Steward-Stufe erklärt, daher gilt keine Moderatorenfrist.",
+      "overruled": "Die bestellten Moderatoren haben entschieden, dass dieser Einspruch nicht besteht — und die Eskalation wird dennoch eröffnet, denn eine Aufhebung steht ihnen niemals allein zu.",
+      "silent": "Die Frist verstrich ohne Entscheidung in die eine oder andere Richtung.",
+      "upheld": "Die bestellten Moderatoren haben rechtzeitig entschieden, dass dieser Einspruch besteht. Die Sache wurde von namentlich benannten Personen entschieden und ist aktenkundig."
+    }
+  },
+  "consent": {
+    "decline_analyze": {
+      "cost": {
+        "no_capability_services": "Sie können keine Streams oder Dienste nutzen, die Fähigkeitsattestierungen Dritter voraussetzen, weil Sie keine haben werden.",
+        "no_reputation": "Sie bauen KEINE Reputation auf — jede capacity:*-Aussage über Sie wird abgewiesen, es kann also nie eine geben.",
+        "peers_may_refuse": "Manche Peers verweigern möglicherweise jede Interaktion mit Ihnen."
+      },
+      "summary": "Sie dürfen Traces senden, ohne einer Analyse zuzustimmen. Traces fließen weiterhin."
+    },
+    "grant": {
+      "analyze": {
+        "permits": "Der Peer darf Ihre Traces BEWERTEN — das ist es, was Reputation aufbaut.",
+        "title": "Bewertet werden"
+      },
+      "replication": {
+        "permits": "Der Peer darf Ihre Traces VORHALTEN.",
+        "title": "Traces senden"
+      }
+    },
+    "grants": {
+      "independent": "Dies sind getrennte Einwilligungen an entgegengesetzten Kanten. Die eine zu erteilen erteilt nicht die andere, und jede kann unabhängig von der anderen widerrufen werden."
+    },
+    "mesh_participation": {
+      "action": "Der Teilnahme am CIRIS Mesh zustimmen"
+    }
+  },
+  "location": {
+    "cost": {
+      "no_regional_community": "Sie können an keiner regionalen Gemeinschaft teilnehmen. Die Mitgliedschaft entscheidet sich daran, ob Ihre Zelle in die eigene Region der Gemeinschaft fällt — ohne Zelle gibt es also nichts zu vergleichen.",
+      "no_regional_reporting": "Ihre Aktivität kann nicht zur regionalen Musterberichterstattung beitragen."
+    },
+    "permits": "Hängt eine grobe H3-Zelle an Ihren Umschlag an, damit Muster über Regionen hinweg berichtet werden können. Das Substrat weist alles Feinere als Auflösung 7 zurück, es benennt also eine ungefähre Region — niemals Ihren konkreten Ort oder Ihre Adresse.",
+    "purpose": "Regionale Musterberichterstattung und die Teilnahme an regionalen Gemeinschaften. Eine Gemeinschaft kann sie außerdem als OPTIONALES Sichtbarkeitsgatter nutzen und Inhalte, die für diese Gemeinschaft bestimmt sind, auf Mitglieder beschränken, deren Region darin liegt. Es ist keine allgemeine Einschränkung Ihrer Traces — das entscheiden die Einwilligungen oben.",
+    "title": "Ihre ungefähre Region teilen"
+  },
+  "mesh": {
+    "announce_requirement": "Ein Knoten, der sich nicht ankündigt, erhält im Mesh keinen Dienstzugang und keine Agentendienste. Der Not-Aus-Schalter des Accords ist nur gegenüber einem Knoten wirksam, den er erreichen kann — ein nicht erreichbarer Knoten wird deshalb von vornherein nicht bedient."
+  },
+  "mesh_config": {
+    "consumption": {
+      "elsewhere": "Keine Schleife in diesem Build liest diesen Schlüssel — sein Konsument liegt in einer anderen Komponente. Eine hier gesetzte Zeile wird zugelassen und gefaltet und ändert auf diesem Knoten nichts.",
+      "unbuilt": "Der Konsument dieses Schlüssels wurde noch nirgends gebaut. Eine hier gesetzte Zeile wird zugelassen und gefaltet und ändert nichts.",
+      "unreachable": "Der Konsument dieses Schlüssels läuft in diesem Prozess, aber nichts trägt einen Wert von dieser Ebene zu ihm hin: die Komponente, der dieser Regler gehört, nimmt ihn ein einziges Mal entgegen, wenn die Schleife zusammengesetzt wird, und bietet danach keine Möglichkeit mehr, ihn zu ändern. Eine hier gesetzte Zeile wird zugelassen und gefaltet und ändert nirgends etwas.",
+      "wired": "Eine Schleife in diesem Build liest diesen Schlüssel und ändert daraufhin ihr Verhalten. Der daneben genannte wirksame Wert gilt auf diesem Knoten."
+    },
+    "dry_run": "Es wurde nichts signiert und nichts eingereicht. Dies sind exakt die kanonischen Bytes, die ein Mitunterzeichner signieren muss, damit sein Scrub bei der echten Einreichung zählt.",
+    "durability": {
+      "substrate_decides": "Welche Handlungen eine dauerhafte Einstellung verdienen, entscheidet das Substrat; dies wird bei jedem Aufruf neu gelesen und über sein eigenes Ablehnungstoken gemeldet. Dieser Knoten kodiert keine eigene Dauerhaftigkeitsregel."
+    },
+    "emergency": {
+      "bound": "Notfallentlastung läuft konstruktionsbedingt ab. Das maximale Fenster stammt vom Substrat und wird hier mitgeführt, damit ein Formular seine Eingabe begrenzen kann; alles Längere weist das Substrat an seiner eigenen Tür ab."
+    },
+    "history": {
+      "empty": "Jede abonnierte Wurzel wurde gelesen, und keine hat je eine Mesh-Config-Zeile eingereicht.",
+      "no_subscription": "Dieser Knoten hält keine aktive Vertrauenswurzel-Kante, daher konnte hier nie eine Wurzel eine Mesh-Config-Zeile einreichen.",
+      "partial": "Einige abonnierte Wurzeln konnten nicht gelesen werden, daher ist diese Historie unvollständig. Die fehlgeschlagenen Wurzeln sind benannt.",
+      "present": "Jede Mesh-Config-Zeile, die dieser Knoten hält, neueste zuerst.",
+      "truncated": "Diese Seite wurde am Limit abgeschnitten. Die Gesamtzahl unten zählt jede gelesene Zeile.",
+      "unreadable": "Die Mesh-Config-Historie konnte hier nicht gelesen werden. Das ist KEINE Aussage darüber, dass nie eine Zeile eingereicht wurde."
+    },
+    "outcome": {
+      "admitted": "Das Substrat hat diese Zeile zugelassen. Sie ist eine MARKIERUNG, kein Befehl: Durch ihr Eintreffen wurde nichts verändert, und ihre Wirkung besteht ausschließlich in der Lesezeit-Faltung, die ein Konsument beachten kann."
+    },
+    "plane": {
+      "configured": "Mindestens ein Schlüssel wird durch eine abonnierte Wurzel von der Grundeinstellung des Eigentümers wegbewegt.",
+      "no_rows_held": "Dieser Knoten abonniert mindestens eine Vertrauenswurzel und hält von keiner von ihnen eine Mesh-Config-Zeile. Jeder Schlüssel läuft auf der eigenen Grundeinstellung des Eigentümers.",
+      "no_subscription": "Dieser Knoten hält keine aktive Vertrauenswurzel-Kante, daher darf ihn keine Wurzel konfigurieren. Das Abonnement IST die Vertrauenskante.",
+      "none_binding": "Es liegen Mesh-Config-Zeilen vor, aber keine davon bindet: jede ist abgelaufen, auf die Einwilligung des Inhabers begrenzt oder fordert den bereits geltenden Basiswert.",
+      "unreadable": "Die Mesh-Config-Ebene konnte hier nicht gelesen werden. Das ist KEINE Aussage darüber, dass nichts gesetzt ist — die Werte unten sind unbekannt, nicht Standardwerte."
+    },
+    "provenance": {
+      "baseline_not_moved": "Abonnierte Roots halten aktive Zeilen für diesen Schlüssel, und keine davon hat ihn verändert: jede wurde auf die Einwilligung des Inhabers begrenzt oder forderte den bereits geltenden Wert.",
+      "baseline_unspoken": "Kein abonnierter Root hält eine aktive Zeile für diesen Schlüssel, daher verwendet der Knoten den Wert, dem sein Inhaber zugestimmt hat.",
+      "root": "Die signierte Zeile eines abonnierten Roots hat diesen Wert gesetzt. Die Zeile, ihr Urheber und die Delegation, unter der sie erfolgte, sind daneben benannt."
+    },
+    "refusal": {
+      "attribution_absent": "delegation_id ist erforderlich. Eine Handlung, die ihre eigene Autorität nicht mitführt, lässt sich, sobald der Handelnde fort ist, nicht mehr von einer unbefugten unterscheiden.",
+      "authority_not_a_delegation": "Die genannte Delegations-ID ist keine delegates_to-Zeile.",
+      "authority_unresolved": "Die genannte Delegation ist keine Zeile, die dieser Knoten hält, die darin festgehaltene Autorität würde also nichts benennen. Ob sie diese Handlung tatsächlich autorisiert, entscheidet das Substrat an seiner eigenen Tür.",
+      "grounds_absent": "grounds ist erforderlich. Ein Regler, der ohne festgehaltenen Grund verstellt wird, ist von einem aus schlechtem Grund verstellten nicht zu unterscheiden.",
+      "node_unowned": "Dieser Knoten hat keinen Verantwortlichen (Eigentümerbindung), daher meldet er die Mesh-Konfiguration weder in irgendjemandes Namen, noch ändert er sie. Beanspruchen Sie zuerst die Eigentümerschaft.",
+      "not_owner": "Die Mesh-Konfigurations-Oberfläche erfordert die Eigentümerrolle (SYSTEM_ADMIN).",
+      "root_absent": "root_ref ist erforderlich: Eine Mesh-Config-Zeile wird unter einer Vertrauenswurzel ausgestellt, und eine Zeile, die keine nennt, wird dort abgelegt, wo keine Faltung sie je mitzählt.",
+      "session_absent": "Es wurde kein Sitzungstoken vorgelegt. Die Mesh-Konfigurations-Oberfläche ist ausschließlich dem Eigentümer vorbehalten.",
+      "session_invalid": "Diese Sitzung ist ungültig oder abgelaufen."
+    },
+    "ttl": {
+      "expired": "Das Zeitfenster dieser Zeile ist geschlossen. Die Faltung verwirft eine abgelaufene Zeile beim Lesen, daher braucht sie weder einen Widerruf noch einen erreichbaren Urheber.",
+      "running": "Das Zeitfenster dieser Zeile ist offen und schließt zum genannten Zeitpunkt.",
+      "unbounded": "Diese Zeile trägt kein Ablaufdatum. Sie gilt, bis sie abgelöst wird."
+    }
+  },
+  "moderation": {
+    "ladder": {
+      "attestation_type_label": "Attestierungstyp (scores, delegates_to, …)",
+      "attesting_key_label": "Zeilen, die dieser Schlüssel verfasst hat",
+      "attribution_hint": "Beides ist verpflichtend und beides wird in den signierten Grabstein geschrieben. Eine Handlung, die ihre eigene Autorität nicht mitführt, lässt sich, sobald der Handelnde fort ist, nicht mehr von einer unbefugten unterscheiden.",
+      "attribution_label": "Autorität und Grund",
+      "cancel_button": "Abbrechen",
+      "commit_blocked": "Eine Delegations-ID und ein Grund sind erforderlich; eine Quarantäne braucht zusätzlich eine Gemeinschafts-ID.",
+      "commit_button": "{hash} signieren",
+      "community_id_hint": "Eine Quarantäne wird unter der Autorität einer Gemeinschaft eingereicht, und eine Markierung, die keine Gemeinschaft nennt, nennt keine Autorität.",
+      "community_id_label": "Gemeinschafts-ID — erforderlich",
+      "confirm_attribution": "Signiert unter der Delegation {delegation}, aus diesem Grund: {reason}",
+      "confirm_op": "{op} — Stufe {tier}",
+      "confirm_quorum": "{count} Autoritätsketten vorgelegt; {min} verschiedene Wurzeln sind erforderlich.",
+      "confirm_revoked_after": "Für Aussagen bis {at} wird eingestanden.",
+      "confirm_signing": "Die Auswahl, die diese Signatur abdeckt",
+      "confirm_title": "Was Sie gleich signieren",
+      "delegation_id_label": "Delegations-ID (delegates_to) — erforderlich",
+      "descend_ack_label": "Zur Bestätigung {word} eingeben",
+      "descend_ack_word": "ABSTIEG",
+      "descent_performed": "Der Abstieg der Nutzdaten wurde durchgeführt.",
+      "descent_refused": "Der Abstieg der Nutzdaten ist nicht gelaufen: {token}",
+      "dimension_prefix_label": "Dimensionspräfix",
+      "gate_armed": "Das Gate für die Aberkennung der Zulassung ist scharf: Die eigenen Aberkennungen dieses Knotens sind das, womit das Substrat die Schreibenden abgleicht.",
+      "gate_dormant": "Das Gate für die Aberkennung der Zulassung RUHT. Dieser Knoten hat dem Substrat keine Identität erklärt, eine hier geschriebene Aberkennung der Zulassung würde daher nichts abweisen.",
+      "gate_foreign_identity": "Das Gate für die Aberkennung der Zulassung gleicht die Schreibenden gegen einen ANDEREN Schlüssel ab als den, mit dem dieser Knoten signiert; eine hier signierte Aberkennung der Zulassung würde daher nie als die eigene dieses Knotens eingefaltet.",
+      "gate_unknown": "Dieser Knoten hat für das Gate der Aberkennung der Zulassung einen Zustand gemeldet, den diese App nicht kennt.",
+      "hash_mismatch_hint": "Die Auswahl hat sich zwischen der Vorschau und dieser Signatur geändert. Die aktuelle Vorschau wurde oben geladen — lesen Sie sie, bevor Sie erneut signieren.",
+      "intro": "Der eigentümergebundene Rechtsbehelf gegen einen zugelassenen Peer, abgestuft über die Stufen 0 bis 4. Jede Sprosse ist zuerst Vorschau, dann signieren Sie den Hash, den die Vorschau zurückgegeben hat — was Ihnen gezeigt wurde, ist das, was ausgeführt wird, und eine zwischenzeitlich geänderte Auswahl wird verweigert. Jede Sprosse nennt, was sie erreicht UND was sie nicht erreicht; lesen Sie beides, bevor Sie signieren.",
+      "irreversible_banner": "UNUMKEHRBAR",
+      "irreversible_flag": "Unumkehrbar. Für diese Sprosse gibt es keinen Umkehrvorgang.",
+      "limits_unavailable": "Diese App konnte die eigene Aussage des Knotens darüber, was diese Sprosse erreicht, nicht laden. Die Grenze gilt dennoch — die Antwort wird sie nennen.",
+      "no_preview_no_commit": "Es kann nichts signiert werden, bevor eine Vorschau gelaufen ist: Der Commit legt den Hash vor, den die Vorschau zurückgegeben hat.",
+      "not_reached_title": "Was dies NICHT erreicht",
+      "op": {
+        "accept_writes": "Schreibvorgänge zulassen",
+        "annotate": "Vermerken",
+        "deadmit": "Zulassung aberkennen",
+        "descend": "Abstieg erzwingen",
+        "quarantine": "Quarantäne verhängen",
+        "re_admit": "Zulassung wieder erteilen",
+        "refuse_writes": "Schreibvorgänge abweisen",
+        "throttle": "Drosseln",
+        "un_quarantine": "Quarantäne aufheben",
+        "un_throttle": "Drosselung aufheben"
+      },
+      "op_label": "Welche Sprosse",
+      "outcome_recorded": "erfasst",
+      "per_attester_more": "und {count} weitere Schlüssel",
+      "per_attester_row": "{key}: {rows} Zeilen",
+      "preview_button": "Wirkungsradius in der Vorschau prüfen",
+      "preview_counts": "{rows} Zeilen über {targets} Schlüssel",
+      "preview_empty": "Die Vorschau ist gelaufen und hat keine Zeile erfasst. Die Auswahl ist beantwortbar und leer — was nicht dieselbe Tatsache ist, wie nie gefragt zu haben.",
+      "preview_none": "Für diese Auswahl ist noch keine Vorschau gelaufen.",
+      "preview_truncated": "Die Seite ist bis an ihr Limit gefüllt, die Auswahl kann also größer sein als das, was gehasht wurde, und ein Commit würde auf DIESE SEITE wirken. Grenzen Sie die Auswahl enger ein.",
+      "preview_unreadable": "Die Vorschau konnte nicht gelesen werden: {detail}. Das ist keine leere Auswahl — die Frage wurde nie beantwortet.",
+      "quorum_hint": "Diese Sprosse verlangt {min} verschiedene Autoritätswurzeln, nicht eine einzelne Delegationskette. Zwei Ketten aus derselben Wurzel sind eine Autorität mit zwei Hüten.",
+      "quorum_ids_label": "Delegations-IDs der anderen Autoritäten (kommagetrennt)",
+      "quorum_shortfall": "{have} verschiedene Autoritätswurzeln haben diesen Knoten erreicht; {need} sind erforderlich.",
+      "reaches_title": "Was dies erreicht",
+      "reason_label": "Grund — erforderlich",
+      "refused_title": "Verweigert: {token}",
+      "result_bounded": "Das Urteil trug eine Zeitgrenze; die Nutzdaten-Teilstrecke wurde daher verweigert, statt aus einem begrenzten Urteil eine unbegrenzte Entfernung anzutreiben.",
+      "result_quorum": "{roots} verschiedene Autoritätswurzeln, {required} erforderlich.",
+      "result_revoked_after": "Für Aussagen bis {at} wurde eingestanden.",
+      "result_target": "{key} — {outcome}",
+      "result_title": "Ausgeführt: {op} (Stufe {tier})",
+      "review_button": "Prüfen, was Sie signieren würden",
+      "revoked_after_hint": "Die eigene Historiengrenze des Widerrufs. Sie gehört nicht zur Auswahl und begrenzt daher, was widerrufen wird, ohne die Vorschau neu einzugrenzen oder den Hash zu ändern.",
+      "revoked_after_label": "Für Aussagen einstehen bis (RFC3339)",
+      "row_line": "{type} · {dimension} · {at}",
+      "row_more": "und {count} weitere Zeilen",
+      "row_no_dimension": "keine Dimension",
+      "section": "Stufenleiter der Durchsetzung",
+      "selection_after_hint": "Diese Grenze gehört zur Auswahl: Ändern Sie sie, ändert sich der Hash und die Vorschau verfällt.",
+      "selection_after_label": "Nur Zeilen, die nach diesem Zeitpunkt behauptet wurden (RFC3339)",
+      "selection_hash": "Auswahl-Hash {hash}",
+      "selection_label": "Worauf Sie einwirken",
+      "standing_admitted": "hier zugelassen",
+      "standing_after": "Schreibvorgänge nachher: {standing}",
+      "standing_before": "Schreibvorgänge vorher: {standing}",
+      "standing_refused": "hier abgewiesen",
+      "standing_unknown": "in Begriffen gemeldet, die diese App nicht kennt",
+      "standing_unreadable": "nicht lesbar — das heißt NICHT „zugelassen“",
+      "tier_and_scope": "Stufe {tier} · erfordert den Delegationsbereich {scope}, der aus dem eigenen geprüften Zustand dieses Knotens neu abgeleitet und nicht der Anfrage entnommen wird.",
+      "transport_error": "Der Knoten war nicht erreichbar: {detail}",
+      "undone_by_reversal_op": "Für diese Sprosse gibt es einen Umkehrvorgang auf der Stufenleiter. Beide Zeilen bleiben als lesbare Historie bestehen: „getan und danach rückgängig gemacht“ ist nicht derselbe Sachverhalt wie „nie getan“.",
+      "undone_never": "Es wird nicht rückgängig gemacht. Der Abstieg endet nie bei null — die Unschärfe und der Grabstein bleiben bestehen —, aber was abgeworfen wurde, kommt nicht zurück.",
+      "undone_title": "Wie dies rückgängig gemacht wird",
+      "unparsable_response": "Der Knoten hat mit einem Text geantwortet, den diese App nicht lesen konnte.",
+      "window_application": "Das Zeitfenster wurde von diesem Knoten angewendet und nicht von der Abfrage; die Seitengrenze wurde daher auf eine größere Menge angewendet, und diese Auswahl kann zu klein zurückkommen.",
+      "window_substrate": "Das Zeitfenster wurde von der Substratabfrage durchgesetzt.",
+      "withdrew_row": "{id} zurückgezogen"
+    }
+  },
+  "operator": {
+    "carriage": {
+      "idle": "Replikationsrunden sind abgeschlossen, und dieser Knoten hat nichts ausgeliefert und nichts vorenthalten: Er hatte nichts, was seine Peers noch brauchten.",
+      "moving": "Dieser Knoten hat seinen Peers Zeilen ausgeliefert und keine vorenthalten.",
+      "not_exercised": "In diesem Prozess ist keine Replikationsrunde abgeschlossen worden, also ist nie ein Gate des Auslieferungspfads gelaufen und in das Vorenthaltungs-Register wurde nie geschrieben. Die Null ist ungeprüft, nicht sauber.",
+      "unreadable": "Die Beförderungszähler dieses Knotens konnten nicht gelesen werden, daher ist hier nichts eine Aussage darüber, was er ausgeliefert hat. Das heißt nicht „nichts wurde vorenthalten“ — es heißt „wir konnten nicht fragen“.",
+      "withholding": "Dieser Knoten hat es abgelehnt, Zeilen auszuliefern, die er hielt. `withholds_by_reason` benennt den Zweig, der abgelehnt hat, und `recent_withholds` benennt, gegenüber wem — ein untätiger Knoten meldet beides nicht."
+    },
+    "consent_sla": {
+      "none_overdue": "Jeder Zustimmungswiderruf, dessen Weitergabe dieser Knoten zugesagt hat, liegt innerhalb seines SLA-Fensters.",
+      "overdue": "Dieser Knoten ist mit der Weitergabe von Zustimmungswiderrufen, zu denen er sich verpflichtet hat, ÜBERFÄLLIG. Die daneben genannten Stichproben-Attestierungs-IDs sind die Handles, mit denen sich dieser Zustand beheben lässt.",
+      "unreadable": "Der Zustimmungs-SLA-Rückstand konnte nicht gelesen werden. Das heißt nicht „nichts ist überfällig“."
+    },
+    "drill": {
+      "green": "Die Vertrauenswurzel dieses Knotens hat ihren Kill-Switch innerhalb der letzten 90 Tage nachgewiesen.",
+      "never_drilled": "Die Vertrauenswurzel dieses Knotens hat ihren Kill-Switch NIE nachgewiesen. Sie teilt sich die rote Stufe mit einer längst aufgegebenen Wurzel; der fehlende Zeitpunkt der letzten Übung daneben ist der Unterschied. Die Wurzel dient weiterhin: Die Aktualität der Übung ist ein Vertrauenssignal, niemals ein Gate.",
+      "no_root_walked": "Es wurde keine Vertrauenswurzel durchlaufen, es gibt also nichts, was ungeübt sein könnte. Das ist keine veraltete Übung — es gibt gar kein Subjekt für eine Übung.",
+      "stale": "Die Vertrauenswurzel dieses Knotens hat ihren Kill-Switch zuletzt vor mehr als 180 Tagen nachgewiesen. Sie dient weiterhin: Die Aktualität der Übung ist ein Vertrauenssignal, niemals ein Gate.",
+      "yellow": "Die Vertrauenswurzel dieses Knotens hat ihren Kill-Switch zuletzt vor 90 bis 180 Tagen nachgewiesen."
+    },
+    "headline": {
+      "green": "Jedes Signal, das dieser Knoten berechnen kann, zeigt gesund an.",
+      "red": "Mindestens ein Signal zeigt ungesund an. Lesen Sie auch die Unbekannt-Liste: Eine rote Gesamtanzeige rangiert über einem Unbekannt und kann sonst eines hinter sich verbergen.",
+      "unknown": "Ein oder mehrere Signale konnten nicht berechnet werden. Lesen Sie die Unbekannt-Liste — ein nicht berechnetes Signal ist kein gesundes.",
+      "yellow": "Dieser Knoten ist in Betrieb, und etwas hier verdient einen Blick."
+    },
+    "ingest": {
+      "background": "Es liegen Ablehnungen vor, aber nicht anhaltend aus einer stabilen Identitätsmenge: gewöhnliche Sonden, veraltete Clients und Fluktuation. Lesen Sie `distinct_signers` und `unattributed_in_window`, bevor Sie das abtun — eine HOHE Rate, verteilt über eine BREITE Identitätsmenge, ist eine Sonde, und eine HOHE Rate, die fast niemanden benannt hat, ist fehlerhafter Verkehr mit einem veralteten Client darin. Keines von beidem ist Fluktuation, und keines hat einen einzelnen Produzenten, den man beheben könnte — genau deshalb erscheinen sie hier und nicht als feststeckender Produzent.",
+      "clean": "Dem HTTP-Ingest-Pfad wurden Batches angeboten, und innerhalb des Fensters wurde keiner abgelehnt. `refused_total` daneben ist der Zählwert des gesamten Prozesses: Ein sauberes Fenster auf einem Prozess, der zuvor abgelehnt hat, ist eine Erholung, keine Abwesenheit.",
+      "http_path_only": "Diese Anzeige erfasst ausschließlich den HTTP-Ingest-Pfad. Ein Batch, der über das Reticulum-Relay eintrifft, wird vom selben Persist-Gate geprüft, hier aber nicht mitgezählt; eine saubere Ingest-Anzeige ist daher keine Aussage über jeden Weg, auf dem diesem Knoten ein Trace angeboten werden kann.",
+      "not_exercised": "Dem HTTP-Ingest-Pfad wurde in diesem Prozess nichts angeboten — kein Batch angenommen und keiner abgelehnt. Die Null ist ungeprüft, nicht sauber.",
+      "stuck_producer": "Eine ANHALTENDE Ablehnungsrate aus einer KLEINEN, STABILEN Menge von Unterzeichnern: Ein Produzent steckt in einer Wiederholungsschleife fest und kann sich nicht selbst korrigieren. Jede einzelne dieser Ablehnungen ist richtig — das Gate arbeitet — und genau deshalb braucht die Summe eine eigene Anzeige. `top_signers` benennt, wen man beheben muss.",
+      "unattributed": "Batches wurden abgelehnt, und NICHT EIN EINZIGER hat einen Unterzeichner benannt: Sie sind gescheitert, bevor es überhaupt eine Identität zu erfassen gab — fehlerhafte Bytes, eine falsche Signatur, eine nicht unterstützte Schemaversion. Es gibt keinen Produzenten, den man anrufen könnte, und dies wird bewusst nicht als feststeckender Produzent gemeldet: null verschiedene Unterzeichner sind keine kleine, stabile Identitätsmenge.",
+      "unreadable": "Das Ingest-Ablehnungsregister dieses Knotens konnte nicht gelesen werden, daher ist hier nichts eine Aussage darüber, was er abgelehnt hat. Das heißt nicht „nichts wurde abgelehnt“ — es heißt „wir konnten nicht fragen“."
+    },
+    "key_statements": {
+      "stands": "Kein Widerruf, den dieser Knoten hält, erfasst eine Aussage, die jetzt gerade gemacht wird.",
+      "suspect_after_bound": "Ein historisch BEGRENZTER Widerruf erfasst eine Aussage, die jetzt gerade gemacht wird: Dieser Schlüssel ist ab jetzt nicht mehr zugelassen, und seine ehrliche Vergangenheit hat weiterhin Bestand. Diese Begrenzung ist wesentlich besser als ein unbegrenzter Widerruf und liest sich nicht gleich.",
+      "suspect_unbounded": "Ein UNBEGRENZTER Widerruf erfasst diesen Schlüssel, daher steht alles, was er je gesagt hat, in Zweifel — der Widerruf hat es abgelehnt, etwas anderes zu sagen.",
+      "unreadable": "Der Stand des Schlüssels dieses Knotens konnte nicht berechnet werden. Das heißt nicht „hat Bestand“ — eine nicht gestellte Frage hat keine Antwort."
+    },
+    "peer_quota": {
+      "clean": "Das Peer-Schreibkontingent wurde beansprucht, und seine Slot-Verweigerungsarithmetik gilt weiterhin.",
+      "denials": "Das Peer-Schreibkontingent hat Slot-Verweigerungen erfasst. Die Herleitung der Obergrenze für verfolgte Peers gilt in diesem Build nicht mehr.",
+      "no_quota": "Dieses Backend hält kein Peer-Schreibkontingent, daher meldet der Stolperdraht nichts. Das ist keine saubere Anzeige.",
+      "not_exercised": "In diesem Prozess wurde noch kein Peer-Schreibvorgang dem Kontingent angerechnet, seine Null ist daher ungeprüft statt sauber."
+    },
+    "quarantine": {
+      "not_quarantined": "Keine Quarantäne-Markierung zum Schlüssel dieses Knotens ist hier je wirksam geworden.",
+      "released": "Der Schlüssel dieses Knotens wurde vorenthalten und dann freigegeben. Er dient jetzt, und er hat es nicht immer getan — eine andere Tatsache als die, nie vorenthalten worden zu sein.",
+      "unreadable": "Der Quarantänezustand konnte nicht gelesen werden. Das heißt nicht „nicht unter Quarantäne“.",
+      "withheld": "Der Schlüssel dieses Knotens wird durch eine Quarantäne-Markierung von der Auslieferung zurückgehalten."
+    },
+    "receive": {
+      "applying": "Zeilen, die ein Peer angeboten hat, wurden hier zugelassen und haben den Zustand dieses Knotens verändert, und keine wurde abgelehnt. `applied_by_kind` benennt die Ebenen, die sich bewegt haben; `duplicate_total` daneben zählt die angebotenen Zeilen, die dieser Knoten bereits hielt.",
+      "converged": "Peers haben Zeilen angeboten, und dieser Knoten hielt bereits jede einzelne davon; deshalb hat sich kein Zustand geändert und nichts wurde abgelehnt. Das ist Anti-Entropie im Ruhezustand — es kommt Verkehr an, und daraus ist nichts mehr zu lernen.",
+      "decided_denominator": "`decided_total` ist jede von einem Peer angebotene Zeile, die hier zu einer Anwendungsentscheidung gelangt ist: angewendet plus Duplikat plus abgelehnt. Bytes, die dieser Knoten nicht dekodieren konnte, gelangen zu keiner Entscheidung und werden nirgends gezählt; sie fehlen daher in dieser Summe, statt in ihr aufzugehen.",
+      "idle": "Replikationsrunden sind abgeschlossen, und kein Peer hat diesem Knoten auch nur eine einzige Zeile angeboten: Es wurde nichts angewendet, nichts war bereits vorhanden, nichts wurde abgelehnt. Seine Peers hatten nichts für ihn — das ist eine andere Tatsache, als alles angewendet zu haben, was sie geschickt haben.",
+      "not_exercised": "In diesem Prozess ist keine Replikationsrunde abgeschlossen worden, dem Anwendungspfad dieses Knotens wurde also nichts angeboten. Die Null ist ungeprüft, nicht sauber.",
+      "refusing": "Dieser Knoten hat Zeilen abgelehnt, die seine Peers angeboten haben. `apply_refusals_by_kind` benennt die Ebene; `key_apply_refusals_by_reason` benennt das Richtlinien-Token, das einen Schlüssel abgelehnt hat.",
+      "unreadable": "Die Anwendungszähler dieses Knotens konnten nicht gelesen werden, daher ist hier nichts eine Aussage darüber, was er angenommen hat. Das heißt nicht „nichts wurde abgelehnt“ — es heißt „wir konnten nicht fragen“."
+    },
+    "source": {
+      "edge_metrics": {
+        "unavailable": "Die Beförderungszähler dieses Knotens konnten nicht gelesen werden, daher beschreibt hier nichts, was er ausgeliefert, vorenthalten oder anzuwenden abgelehnt hat."
+      },
+      "ingest_refusals": {
+        "unavailable": "Das Ingest-Ablehnungsregister dieses Knotens konnte nicht gelesen werden, daher beschreibt hier nichts, was das Zulassungs-Gate abgelehnt hat. Ein Gate ohne Leser ist das, was 8.631 richtige Ablehnungen pro Tag 71 Stunden lang unbemerkt laufen ließ."
+      },
+      "node_state": {
+        "unavailable": "Die Zustandssignale dieses Knotens konnten nicht aus dem Substrat gelesen werden, daher beschreibt hier nichts seine Vertrauenswurzel, seinen Schlüsselstand, seine Quarantäne, sein Zustimmungs-SLA oder sein Peer-Kontingent. Das Ausbleiben schlechter Nachrichten aus einer ungelesenen Quelle ist keine gute Nachricht."
+      },
+      "trace_corpus": {
+        "unavailable": "Der Trace-Korpus dieses Knotens konnte nicht gelesen werden, daher beschreibt hier nichts, was er zugelassen hat. Das Ausbleiben von Eingängen aus einem ungelesenen Korpus ist kein Ausbleiben von Eingängen."
+      }
+    },
+    "trace_plane": {
+      "dark": "SEIT LÄNGER ALS DER ROTEN SCHWELLE DIESES KNOTENS WURDE NICHTS ZUGELASSEN. Der Eingang ist das Einzige, wofür dieser Knoten existiert. Lesen Sie die `ingest`-Anzeige daneben: Eine dunkle Ebene mit anhaltender Ablehnungsrate ist ein Produzent, der korrekt zurückgewiesen wird, und eine dunkle Ebene ganz ohne Ablehnungen bedeutet, dass diesen Knoten überhaupt nichts erreicht.",
+      "future_dated": "Der neueste Trace im Korpus ist in der ZUKUNFT gestempelt. Der Zeitstempel ist die eigene Sendeuhr des Produzenten, dies ist also eine Aussage über diese Uhr — und es wird hervorgehoben statt eingestuft, weil eine zukunftsdatierte Zeile diese Anzeige unbegrenzt auf Grün festnagelt und eine Ebene verbergen würde, die tatsächlich stehen geblieben ist.",
+      "live": "Kürzlich wurde ein Trace zugelassen: Die Ebene, für deren Empfang dieser Knoten existiert, wird gespeist.",
+      "never_admitted": "Der Korpus wurde gelesen und enthält überhaupt keinen Trace: Auf diesem Knoten wurde nie etwas zugelassen. Es gibt keinen Eingangszeitpunkt, den man einstufen könnte, dies ist also eine ungeprüfte Null, keine gesunde — und auf einem Knoten, der schon eine Weile in Betrieb ist, ist es derselbe Zustand wie eine dunkle Ebene.",
+      "producer_asserted_ts": "`last_admitted_at` ist MAX(trace_events.ts) — die eigene Sende-Wanduhrzeit des Traces, vom Produzenten behauptet. Das Substrat speichert zu dieser Tabelle keinen serverseitigen Zulassungszeitpunkt, ein Produzent mit verstellter Uhr verschiebt daher diese Anzeige; eine weit in der Zukunft liegende Zeile wird genau aus diesem Grund als `future_dated` hervorgehoben statt eingestuft.",
+      "quiet": "Seit länger als erwartet wurde kein Trace zugelassen, aber noch nicht lange genug, um die Ebene als dunkel zu bezeichnen. Ein wirklich untätiger Knoten liest sich so; die erste Hälfte eines Produzentenausfalls ebenso.",
+      "unreadable": "Der Trace-Korpus dieses Knotens konnte nicht gelesen werden, daher ist hier nichts eine Aussage darüber, was er zugelassen hat. Das heißt nicht „es ist kein Trace eingetroffen“ — es heißt „wir konnten nicht fragen“."
+    },
+    "trust_root": {
+      "no_self_key": "Der Host hat die eigene Schlüssel-ID dieses Knotens nie deklariert, daher konnte nichts Selbstbezogenes durchlaufen werden. Das ist eine Aussage über den Leser, nicht über den Knoten: Deklarieren Sie den Schlüssel beim Start, und jedes selbstbezogene Signal unten wird beantwortbar.",
+      "no_trust_edges": "Dieser Knoten hat sich selbst deklariert und hält keine aktive Vertrauenskante zu irgendeiner Wurzel: Er wurzelt in nichts. Ein bekannter Missstand, keine fehlende Anzeige.",
+      "no_valid_root": "Dieser Knoten vertraut einer oder mehreren Wurzeln, und keine davon validiert. Das Urteil je Teilstrecke daneben benennt, welche Teilstrecke fehlgeschlagen ist.",
+      "unreadable": "Der Vertrauenswurzel-Durchlauf konnte nicht gelesen werden. Ein unlesbares Verzeichnis ist kein nicht vertrauenswürdiges — lesen Sie dies nicht als wurzellosen Knoten.",
+      "valid": "Dieser Knoten wurzelt in einer Vertrauenswurzel, die in vollem Umfang standhält: eine aktive Vertrauenskante, eine selbstdeklarierende Charta mit einer Wiederherstellungszusage und kein eingerasteter Halt."
+    },
+    "volatility": {
+      "clock_dependent_local": "Diese Stufe wird auf DIESEM Knoten aus einem gespeicherten Zeitpunkt gegen die Leseuhr berechnet, sie bewegt sich also allein durch verstreichende Zeit — keine Zustandsänderung, keine neue Zeile. Ein Knoten, der keine Traces mehr zulässt, wandert von selbst von Grün über Gelb nach Rot, und das ist der Sinn: Er wird rot, ohne dass ihn jemand darum bittet.",
+      "process_local": "Die Zähler für Beförderung, Empfang und Ingest sind prozesslokal und kumulativ seit dem Start dieses Prozesses. Sie werden beim Neustart zurückgesetzt, unterscheiden sich zwischen Prozessen, die einen Knoten bedienen, und werden nirgends gespeichert. Sie sind ein Messwert dieses Prozesses, kein Register dieses Knotens."
+    },
+    "withhold_class": {
+      "fault": "Ein Lesevorgang oder ein Verdrahtungsschritt ist fehlgeschlagen, und der Auslieferungspfad ist geschlossen ausgefallen. Das ist KEIN Urteil über den Peer — es ist der Fehler dieses Knotens, den er beheben muss.",
+      "integrity": "Eine Zeile, die dieser Knoten hält, konnte überhaupt nicht ausgeliefert werden: Sie ließ sich nicht serialisieren, ihr gespeicherter Hash ließ sich nicht dekodieren, oder angekündigte Bytes waren nicht abrufbar. Ein Defekt im lokalen Zustand, keine Richtlinie.",
+      "policy": "Eine Entscheidung, die dieser Knoten absichtlich getroffen hat — Zustimmungsbereich, eine Auslieferungsfähigkeit, die der Peer nicht besitzt, oder die eigene Beschränkung des Produzenten. Funktioniert wie konfiguriert: Ändern Sie die Konfiguration, nicht den Code."
+    }
+  },
+  "operator_ui": {
+    "accepted_refused": "{a} angenommen, {r} abgelehnt seit dem Start dieses Prozesses",
+    "age": "Alter",
+    "age_days": "vor {d} d {h} h",
+    "age_future": "{v} in der Zukunft",
+    "age_hours": "vor {h} h {m} min",
+    "age_minutes": "vor {m} min",
+    "age_seconds": "vor {s} s",
+    "applied": "Angewendet",
+    "apply_refusals": "Anwendungs-Ablehnungen",
+    "as_of": "Gelesen um {t}",
+    "carriage": "Auslieferung an Peers",
+    "corpus_unread": "Der Korpus konnte nicht gelesen werden, daher gibt es weder einen Eingangszeitpunkt noch eine Anzahl zu zeigen. Das ist kein leerer Korpus — es ist ein ungelesener.",
+    "decided": "Entschiedene Zeilen",
+    "distinct_signers": "Verschiedene Unterzeichner",
+    "duplicates": "Bereits vorhanden",
+    "ingest": "Zulassungs-Gate",
+    "last_admitted": "Zuletzt zugelassen",
+    "malformed_body": "Dieser Knoten hat mit einem Text geantwortet, den diese App nicht dekodieren konnte — höchstwahrscheinlich, weil der Knoten eine neuere Betreiber-Oberfläche bedient, als diese App kennt. Kein Gesundheitsmesswert, und auch nicht dessen Fehlen.",
+    "malformed_title": "Antwort nicht verstanden",
+    "named_no_signer": "Ablehnungen ohne benannten Unterzeichner",
+    "no_arrival_instant": "Es gibt keinen Eingangszeitpunkt: Der Korpus wurde gelesen und enthält überhaupt keinen Trace. Auf diesem Knoten wurde nie etwas zugelassen.",
+    "node_signals": "Knotensignale",
+    "not_offered_body": "Dieser Knoten hat geantwortet, und er bedient überhaupt keine Betreiber-Oberfläche — er läuft mit einem Build aus der Zeit vor diesem Messwert. Das ist eine Versionslücke, keine Verweigerung und kein schlechter Zustand: Dem Knoten kann es bestens gehen, und diese App kann ihn schlicht nicht fragen.",
+    "not_offered_title": "Keine Betreiber-Oberfläche",
+    "reading_absent": "Die Antwort dieses Knotens trug diesen Messwert überhaupt nicht. Das ist keine gesunde Null — es ist ein Messwert, den diese App dort nicht gefunden hat, wo sie ihn erwartet hat.",
+    "reading_body": "Diese App hat vom Knoten noch keine Antwort erhalten. Nichts hier ist ein Messwert — eine noch offene Frage ist kein gesunder Knoten.",
+    "reading_title": "Die Frage läuft noch",
+    "receive": "Anwendung von Peers",
+    "refusals_per_hour": "Ablehnungen pro Stunde",
+    "refused_body": "Dieser Knoten hat geantwortet und den Lesevorgang verweigert. Der Knoten ist in Betrieb; diese Sitzung darf seine Betreiber-Oberfläche nicht lesen. Das ist eine Aussage über diese Sitzung, nicht über die Gesundheit des Knotens — melden Sie sich als Eigentümer an, um sie zu lesen.",
+    "refused_title": "Lesevorgang verweigert",
+    "rounds": "Replikationsrunden",
+    "served": "Ausgeliefert",
+    "sources_absent": "Quellen, die nichts beigetragen haben",
+    "thresholds": "Lebendig unter {green} h, still unter {yellow} h, darüber dunkel",
+    "title": "Knotenzustand",
+    "top_signers": "Wer abgelehnt wird",
+    "trace_plane": "Trace-Ebene",
+    "traces_held": "Gehaltene Traces",
+    "uncomputed": "Nicht berechenbar ({count})",
+    "unreachable_body": "Dieser Knoten hat überhaupt nicht geantwortet, es gibt hier also keinen Messwert zu ihm. Das ist nicht dasselbe wie ein ungesunder Knoten: Eine ungesunde Einstufung ist eine echte Antwort eines Knotens, der geantwortet hat, und dies ist gar keine Antwort. Prüfen Sie, ob der Knoten läuft und unter der Adresse erreichbar ist, die diese App verwendet.",
+    "unreachable_title": "Nicht erreicht",
+    "unrecognized_reading": "Diese App kennt den Messwert „{token}“ nicht. Der Knoten ist neuer als diese App: Behandeln Sie ihn als nicht berechnet, niemals als gesund.",
+    "window_floor": "Das Ablehnungsfenster wurde abgeschnitten: Jede Zahl hier ist eine Untergrenze, keine Gesamtzahl.",
+    "withholds": "Vorenthalten"
+  },
+  "surfaces": {
+    "common": {
+      "duration_days": "{n} d",
+      "duration_hours": "{n} h",
+      "duration_minutes": "{n} min",
+      "duration_seconds": "{n} s",
+      "unknown": "unbekannt"
+    },
+    "commons": {
+      "action": "Handlungs-ID",
+      "action_asserted": "Handlung behauptet am",
+      "action_author": "Urheber der Handlung",
+      "add_cosigner": "Mitsignatur hinzufügen",
+      "admitted": "Zugelassen",
+      "asymmetry_title": "Ziehen und Lösen sind nicht dieselbe Handlung",
+      "ballot_title": "Beantworten, was die bestellten Moderatoren offengelassen haben",
+      "cohort": "Kohorte",
+      "cohort_key": "Schlüssel-ID der Kohorte",
+      "cosigner_classical": "Ed25519-Signatur (base64)",
+      "cosigner_key": "Schlüssel-ID des Mitunterzeichners",
+      "cosigner_pqc": "ML-DSA-Signatur (base64, optional)",
+      "cosigners": "{n} gesammelt",
+      "counted": "Gezählte Einsprüche",
+      "counted_of_required": "{counted} gezählt von {required} erforderlich · Mitgliederliste {roster}",
+      "dimensions": "Envelope-Dimensionen",
+      "dismiss_gate": "Das Einreichen bleibt gesperrt, bis ein Probelauf genau die Bytes erzeugt hat, die jeder Mitunterzeichner signieren muss. Die Signaturen zählen nur über genau diese Bytes.",
+      "dismiss_label": "Die Bremse lösen",
+      "dismiss_price": "Kostet die Schwelle der Kohorte selbst: {required} von {roster}.",
+      "dismiss_price_unknown": "Kostet die Schwelle der Kohorte selbst, was immer ihre Mitgliederliste daraus macht. Dieser Knoten hat sie nicht gelesen.",
+      "dismiss_step1": "Schritt 1 · Probelauf",
+      "dismiss_step2": "Schritt 2 · Mitsignaturen über genau diese Bytes sammeln",
+      "dismiss_step3": "Schritt 3 · Einreichen",
+      "dismiss_submit": "Die Zurückweisung einreichen",
+      "dismissed": "Vom Quorum der Kohorte aufgehoben",
+      "dry_run": "Probelauf — die kanonischen Bytes abrufen",
+      "duty_holders": "Bestellte Moderatoren",
+      "escalated_dismissed": "Von den Antwortenden aufgehoben",
+      "escalation": "Eskalation",
+      "floor": "Die eskalierte Aufhebung darf niemals unter {floor} Antwortende fallen, was immer eine Richtlinienangabe sagt.",
+      "grounds": "Grund — verpflichtend, wird erfasst, niemals ausgelegt",
+      "no_reading": "Es wurde noch kein Stand gelesen. Benennen Sie oben eine Kohorte und eine Handlung.",
+      "objection_id": "Einspruchs-ID",
+      "objections": "Aktenkundige Einsprüche",
+      "objectors": "Verschiedene Einsprechende",
+      "overrule": "Aufheben",
+      "policy": "Richtlinie",
+      "quiet_body": "Die Ebene WURDE gelesen, und gegen diese Handlung wurde kein Einspruch erhoben.",
+      "quiet_title": "Niemand hat Einspruch erhoben",
+      "raise_action": "Einspruch erheben",
+      "raise_label": "Die Bremse ziehen",
+      "raise_price": "Kostet {threshold} — ein einzelnes Mitglied genügt. Es gibt keine Mehrheit zu erreichen und niemanden, auf den zu warten wäre.",
+      "raise_price_unread": "Kostet eine einzige Signatur. Ein einzelnes Mitglied genügt; es gibt keine Mehrheit zu erreichen.",
+      "read": "Den Stand lesen",
+      "refused": "Abgewiesen",
+      "required": "Umkehrschwelle",
+      "respondents_note": "Nach Ablauf der Frist zählt die Schwelle die ANTWORTENDEN, nicht die Mitgliederliste — genau das lässt eine stille Gemeinschaft dennoch zu einem Ergebnis kommen.",
+      "respondents_of_required": "{respondents} Antwortende · {required} erforderlich",
+      "roster": "Aktuelle Mitgliederliste",
+      "standing": "die Antwort der Faltung",
+      "steward_deadline": "Moderatorenfrist",
+      "subtitle": "Wie eine Gemeinschaft sich selbst überwacht. Ein einzelnes Mitglied zieht die Bremse; die Kohorte muss zustimmen, um sie zu lösen.",
+      "title": "Gemeingut",
+      "unknown_body": "Das heißt NICHT „niemand hat Einspruch erhoben“. Es wurde keine Zählung gelesen, daher wird auch keine gezeigt — die Einsprüche sind unbekannt, nicht etwa ausgeblieben.",
+      "unknown_title": "Wir konnten nicht fragen",
+      "uphold": "Aufrechterhalten",
+      "window": "Fenster",
+      "window_closed": "geschlossen",
+      "window_open": "offen"
+    },
+    "mesh_config": {
+      "admitted": "Zugelassen",
+      "asked": "Gefordert",
+      "author": "Urheber",
+      "baseline": "Grundeinstellung des Eigentümers",
+      "clamped": "auf die Einwilligung begrenzt",
+      "clamped_roots": "Wurzeln, die begrenzt wurden, weil sie über die Einwilligung hinausgingen",
+      "consumer": "Konsument",
+      "consumption_blocker": "Blockiert durch",
+      "consumption_effect": "Wirkung",
+      "consumption_owner": "Konsument liegt in",
+      "consumption_site": "Gelesen über",
+      "consumption_tracked_by": "Verfolgt unter",
+      "delegation": "Delegation",
+      "domain": "Zulässiger Wertebereich",
+      "effective": "Wirksam",
+      "emergency_bound": "Maximum der Notfallentlastung",
+      "form_durable": "Dauerhaft",
+      "form_emergency": "Notfall",
+      "grounds": "Grund",
+      "hide_history": "Zeilenhistorie ausblenden",
+      "history_binding": "bindend",
+      "history_counted": "gezählt",
+      "history_total": "{shown} von {total} Zeilen",
+      "hours": "Stunden",
+      "in_force": "In Kraft — eine Schleife in diesem Build liest diesen Wert.",
+      "knob": "Regler",
+      "node": "Dieser Knoten",
+      "not_in_force": "NICHT in Kraft auf diesem Knoten — der Wert wird zugelassen und gefaltet, und nichts hier richtet sich danach.",
+      "payload_sha256": "payload_sha256 — genau die Bytes, die ein Mitunterzeichner signiert",
+      "per_root": "Die Antwort jeder Wurzel",
+      "provenance": "Herkunft",
+      "ratifies": "Ratifiziert",
+      "refused": "Abgewiesen",
+      "registry": "Registrierte Schlüssel",
+      "roots": "Abonnierte Vertrauenswurzeln",
+      "rows_held": "Gehaltene Mesh-Config-Zeilen",
+      "scrubs": "Mitsignaturen",
+      "self_plane_below": "Unten: die eigene Konfiguration dieses Knotens, gesetzt von seinem Eigentümer.",
+      "show_history": "Zeilenhistorie anzeigen",
+      "subtitle": "Was eine abonnierte Vertrauenswurzel von diesem Knoten verlangt. Eine eigene Ebene, getrennt von der Konfiguration dieses Knotens weiter unten — die beiden verschmelzen nie.",
+      "title": "Mesh-Konfiguration",
+      "ttl": "Ablauf",
+      "ttl_expired": "Abgelaufen",
+      "ttl_remaining": "Läuft ab in",
+      "ttl_unbounded": "Kein Ablauf — gilt, bis die Zeile abgelöst wird",
+      "unknown_values": "Die Werte hier sind UNBEKANNT, keine Standardwerte. Nichts unten ist eine Null — es konnte nichts gelesen werden.",
+      "unreadable_roots": "Wurzeln, die nicht gelesen werden konnten",
+      "write_delegation": "Delegations-ID",
+      "write_dry_run": "Probelauf",
+      "write_durable": "Dauerhaft einreichen",
+      "write_grounds": "Grund — wird erfasst, niemals ausgelegt",
+      "write_key": "Schlüssel",
+      "write_ratifies": "Ratifiziert Zeilen-ID (optional)",
+      "write_relief": "Notfallentlastung einreichen",
+      "write_root": "Vertrauenswurzel (root_ref)",
+      "write_title": "Einen Mesh-Regler verstellen",
+      "write_ttl": "Läuft ab nach (Stunden)",
+      "write_value": "Wert"
+    }
+  }
 }

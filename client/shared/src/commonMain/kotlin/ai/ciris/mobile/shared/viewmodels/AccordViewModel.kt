@@ -6,7 +6,11 @@ import ai.ciris.mobile.shared.models.federation.AccordFamilyDto
 import ai.ciris.mobile.shared.models.federation.AccordHolderDto
 import ai.ciris.mobile.shared.models.federation.AccordHaltStatusResponse
 import ai.ciris.mobile.shared.models.federation.AccordInvocationDto
+import ai.ciris.mobile.shared.models.federation.CiKeyTargetInput
+import ai.ciris.mobile.shared.models.federation.GenesisSeedState
 import ai.ciris.mobile.shared.models.federation.PendingCoscrubDto
+import ai.ciris.mobile.shared.models.federation.RemintSourceDto
+import ai.ciris.mobile.shared.models.federation.genesisSeedDisplay
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -372,9 +376,12 @@ class AccordViewModel(
      * **Admit a node to the trust root** (CIRISServer#140 / CIRISVerify#162). The
      * local accord holder RE-OPENS their YubiKey + USB-wrapped ML-DSA and
      * scrub-signs the target node's registration (+ emits their own
-     * `steward,accord_holder` anchor); the node writes the genesis **seed object**
-     * to a predictable outbox path (surfaced as [admitSavedTo]) the operator hands
-     * to CIRISPersist to bake. The app sends NO crypto — the YubiKey touch IS consent.
+     * `steward,accord_holder` anchor); the node writes the **admission records** to
+     * a predictable outbox path (surfaced as [admitSavedTo]) so they can travel to a
+     * REMOTE target, which adopts them itself. They are **not** the seed and must not
+     * be handed to persist as one — the seed is the `GenesisBundle` the genesis
+     * ceremony writes to `<home>/mesh-genesis.json`.
+     * The app sends NO crypto — the YubiKey touch IS consent.
      */
     fun admitNode(
         holderKeyId: String,
@@ -403,7 +410,7 @@ class AccordViewModel(
                 )
                 _admitSavedTo.value = res.savedTo
                 _notice.value =
-                    "Admitted $targetKeyId — seed saved to ${res.savedTo}. Hand it to persist to bake."
+                    "Admitted $targetKeyId — admission records saved to ${res.savedTo}."
                 refresh()
             } catch (e: Exception) {
                 PlatformLogger.w(TAG, "[admitNode] ${e.message}")
@@ -598,9 +605,12 @@ class AccordViewModel(
     /**
      * **Add a canonical server** (CIRISServer#164). The local accord holder RE-OPENS
      * their YubiKey + USB-wrapped ML-DSA and scrub-signs the target node's
-     * registration, ALSO flagging it `canonical` so it becomes a mesh-seed anchor;
-     * the node writes the genesis **seed object** to a predictable outbox path
-     * (surfaced as [canonicalSavedTo]) the operator hands to CIRISPersist to bake.
+     * registration, ALSO flagging it `canonical` so it becomes a mesh anchor; the
+     * node writes the holder-signed **admission records** to a predictable outbox
+     * path (surfaced as [canonicalSavedTo]) — the transport for a REMOTE target,
+     * which adopts them itself. Those records are **not** the seed and must not be
+     * handed to persist as one: the seed is the `GenesisBundle` the genesis
+     * ceremony writes to `<home>/mesh-genesis.json`.
      * An OPTIONAL bootstrap transport ([transportKind] + [destination]) is recorded
      * as the canonical server's address. The app sends NO crypto — the touch IS consent.
      */
@@ -633,10 +643,14 @@ class AccordViewModel(
                     destination = destination?.takeIf { it.isNotBlank() },
                     modulePath = modulePath,
                 )
-                _canonicalSavedTo.value = res.seedSavedTo
+                // NOT the seed — these are the holder-signed admission records, the
+                // transport for a remote target. The seed is the GenesisBundle the
+                // ceremony writes to <home>/mesh-genesis.json. Telling the operator
+                // to "hand it to persist to bake" here pointed at the wrong file.
+                _canonicalSavedTo.value = res.admissionRecordsPath
                 _notice.value =
                     "Added canonical server ${res.canonicalKeyId}" +
-                        (res.seedSavedTo?.let { " — seed saved to $it. Hand it to persist to bake." } ?: ".")
+                        (res.admissionRecordsPath?.let { " — admission records saved to $it." } ?: ".")
                 refresh()
                 loadCanonicalServers()
             } catch (e: Exception) {
@@ -785,51 +799,47 @@ class AccordViewModel(
     }
 
     /**
-     * **Approve a CI runner (co-scrub scrub #1)** (CIRISVerify#185). The local accord
-     * holder RE-OPENS their YubiKey + USB-wrapped ML-DSA and scrub-signs the CI
-     * build-signing pipeline key with `roles: ["infra:attest"]`; the 1-scrub partial
-     * does NOT yet bless the runner (m-of-n). The node saves + gossips it — hand /
-     * gossip it to the next holder to [cosignCiKey]. At the family quorum the pipeline
-     * key becomes an accord-co-scrubbed `KeyRecord` carrying `infra:attest`, a blessed
-     * build-manifest signer. Same co-scrub lane as [proposeCanonical]. If the node's
-     * substrate is too old to serve `/v1/accord/ci-key/…` it 404s — surfaced as a
-     * graceful "needs a newer substrate" notice.
+     * **Bless a batch of CI-worker keys (co-scrub scrub #1)**. The BATCH twin of
+     * [proposeCanonical]: the local accord holder RE-OPENS their YubiKey + USB-wrapped
+     * ML-DSA and scrub-signs EVERY [targets] node key in one ceremony (roles are set
+     * `infra:attest` server-side — the app sends no roles). Each 1-scrub partial gossips
+     * to the other holders' devices to cosign toward the family m-of-n. Refreshes the
+     * canonical roster + pending list after. The app holds NO keys — the touch is consent.
      */
-    fun proposeCiKey(
+    fun proposeCiKeys(
         holderKeyId: String,
         mldsaUsbPath: String,
-        ciKeyId: String,
-        ciEd25519Base64: String,
-        ciMlDsa65Base64: String,
         userPin: String?,
+        targets: List<CiKeyTargetInput>,
         modulePath: String? = null,
     ) {
         if (_busy.value) return
+        if (targets.isEmpty()) {
+            _error.value = "Paste at least one CI worker's ed25519 + ML-DSA pubkeys first."
+            return
+        }
         _busy.value = true
         _error.value = null
         _notice.value = null
         _canonicalSavedTo.value = null
         viewModelScope.launch {
             try {
-                val res = apiClient.proposeCiKey(
-                    holderKeyId = holderKeyId,
-                    mldsaUsbPath = mldsaUsbPath,
-                    ciKeyId = ciKeyId,
-                    ciEd25519Base64 = ciEd25519Base64,
-                    ciMlDsa65Base64 = ciMlDsa65Base64,
-                    userPin = userPin,
-                    modulePath = modulePath,
-                )
-                _canonicalSavedTo.value = res.savedTo
-                _lastCoscrubJson.value = prettyCoscrub(res.partial)
+                val res = apiClient.proposeCiKeys(holderKeyId, mldsaUsbPath, userPin, targets, modulePath = modulePath)
                 _notice.value =
-                    "Approved CI runner ${res.targetKeyId} (${res.distinctScrubCount} scrub, infra:attest) — " +
-                        "gossiped to ${res.gossipedTo} peer(s). Hand / gossip the partial to the next holder to cosign."
+                    "Proposed co-scrubs for ${res.results.size} CI worker key(s). " +
+                        "Hand / gossip the partials to the next holder to cosign."
                 loadCanonicalServers()
                 loadPendingCoscrubs()
             } catch (e: Exception) {
-                PlatformLogger.w(TAG, "[proposeCiKey] ${e.message}")
-                _error.value = ciKeyErrorFor(e, "approve the CI runner")
+                PlatformLogger.w(TAG, "[proposeCiKeys] ${e.message}")
+                val msg = e.message.orEmpty()
+                _error.value = when {
+                    msg.contains("401") || msg.contains("403") ->
+                        "Sign in as the owner on this node first."
+                    msg.contains("501") || msg.contains("NotSupported", ignoreCase = true) ->
+                        "This build lacks pkcs11 — propose needs the YubiKey signer."
+                    else -> "Couldn't propose the CI worker keys: ${e.message}"
+                }
             } finally {
                 _busy.value = false
             }
@@ -837,75 +847,50 @@ class AccordViewModel(
     }
 
     /**
-     * **Cosign a CI-runner co-scrub** (CIRISVerify#185). THIS holder RE-OPENS their
-     * YubiKey + USB ML-DSA and appends their scrub to [partial] over the BYTE-IDENTICAL
-     * envelope (roles preserved). [partial] MUST be the verbatim `SignedKeyRecord` from
-     * a [proposeCiKey] / prior cosign (a pasted partial) — submitted UNCHANGED so the
-     * co-scrub bytes match. At the family m-of-n the pipeline key is blessed
-     * (`conferred`); else the advanced partial is surfaced for the next holder.
+     * **Cosign a batch of CI-worker co-scrubs**. The BATCH twin of [cosignCanonical]:
+     * THIS holder RE-OPENS their YubiKey + USB ML-DSA and appends their scrub to EVERY
+     * [partials] `SignedKeyRecord` over the BYTE-IDENTICAL envelope. Each partial MUST be
+     * verbatim (a pending entry's `partial` or a pasted one) — submitted UNCHANGED so the
+     * canonical bytes match. At the family m-of-n each record is conferred. Refreshes.
      */
-    fun cosignCiKey(
+    fun cosignCiKeys(
         holderKeyId: String,
         mldsaUsbPath: String,
         userPin: String?,
-        partial: kotlinx.serialization.json.JsonElement,
+        partials: List<JsonElement>,
         modulePath: String? = null,
     ) {
         if (_busy.value) return
+        if (partials.isEmpty()) {
+            _error.value = "No co-scrub partials to cosign."
+            return
+        }
         _busy.value = true
         _error.value = null
         _notice.value = null
         _canonicalSavedTo.value = null
         viewModelScope.launch {
             try {
-                val res = apiClient.cosignCiKey(
-                    holderKeyId = holderKeyId,
-                    mldsaUsbPath = mldsaUsbPath,
-                    partial = partial,
-                    userPin = userPin,
-                    modulePath = modulePath,
-                )
-                _canonicalSavedTo.value = res.savedTo
-                _lastCoscrubJson.value = if (res.conferred) null else prettyCoscrub(res.advanced)
-                _notice.value = if (res.conferred) {
-                    "Cosigned — CI runner ${res.targetKeyId} BLESSED (infra:attest) at the family quorum (${res.distinctScrubCount} scrubs)."
-                } else {
-                    "Cosigned CI runner ${res.targetKeyId} (${res.distinctScrubCount} scrubs) — still short of the family quorum. " +
-                        "Gossiped to ${res.gossipedTo} peer(s); hand / gossip it to the next holder."
-                }
+                val res = apiClient.cosignCiKeys(holderKeyId, mldsaUsbPath, userPin, partials, modulePath = modulePath)
+                val conferred = res.results.count { it.conferred }
+                _notice.value =
+                    "Cosigned ${res.results.size} CI worker key(s) — $conferred conferred at the family quorum."
                 loadCanonicalServers()
                 loadPendingCoscrubs()
                 refresh()
             } catch (e: Exception) {
-                PlatformLogger.w(TAG, "[cosignCiKey] ${e.message}")
+                PlatformLogger.w(TAG, "[cosignCiKeys] ${e.message}")
+                val msg = e.message.orEmpty()
                 _error.value = when {
-                    e.message.orEmpty().contains("already signed", ignoreCase = true) ->
-                        "This holder has already scrubbed this record — a distinct holder must cosign."
-                    else -> ciKeyErrorFor(e, "cosign the CI-runner co-scrub")
+                    msg.contains("401") || msg.contains("403") ->
+                        "Sign in as the owner on this node first."
+                    msg.contains("501") || msg.contains("NotSupported", ignoreCase = true) ->
+                        "This build lacks pkcs11 — cosign needs the YubiKey signer."
+                    else -> "Couldn't cosign the CI worker keys: ${e.message}"
                 }
             } finally {
                 _busy.value = false
             }
-        }
-    }
-
-    /**
-     * Map a ci-key co-scrub failure to a user-facing message. A 404 (or 501 /
-     * NotSupported) means this node's substrate predates the `/v1/accord/ci-key/…`
-     * serve leg (CIRISServer#192/#193) — surface a graceful "needs a newer substrate"
-     * degrade rather than a raw error.
-     */
-    private fun ciKeyErrorFor(e: Exception, verb: String): String {
-        val msg = e.message.orEmpty()
-        return when {
-            msg.contains("401") || msg.contains("403") ->
-                "Sign in as the owner on this node first."
-            msg.contains("404") ->
-                "This node's ciris-server doesn't serve the CI-runner co-scrub endpoints yet — " +
-                    "approving a CI runner needs a newer substrate (the /v1/accord/ci-key serve leg)."
-            msg.contains("501") || msg.contains("NotSupported", ignoreCase = true) ->
-                "This build lacks pkcs11 — the CI-runner co-scrub needs the YubiKey signer."
-            else -> "Couldn't $verb: ${e.message}"
         }
     }
 
@@ -945,6 +930,173 @@ class AccordViewModel(
                     msg.contains("401") || msg.contains("403") ->
                         "Sign in as the owner on this node first."
                     else -> "Couldn't supersede the canonical server: ${e.message}"
+                }
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    // ── Re-mint existing trust root → portable genesis (FSD/MESH_GENESIS.md) ──
+    // Steps 1–2 reuse [proposeCanonical] / [cosignCanonical] (the same m-of-n
+    // co-scrub, pre-filled from the remint source); only the pre-fill roster and
+    // the final produce are new.
+
+    /** The re-mint pre-fill (holders + canonicals + quorum) — [loadRemintSource]. */
+    private val _remintSource = MutableStateFlow<RemintSourceDto?>(null)
+    val remintSource: StateFlow<RemintSourceDto?> = _remintSource.asStateFlow()
+
+
+    /**
+     * Load the re-mint pre-fill roster (called on sheet open): the full accord
+     * holder roster (A1/B1/C1) + the existing canonical server(s) with their
+     * `confers_infra_serve` state. C1 need not be present — its record rides here.
+     */
+    fun loadRemintSource() {
+        viewModelScope.launch {
+            try {
+                _remintSource.value = apiClient.getGenesisRemintSource()
+            } catch (e: Exception) {
+                PlatformLogger.w(TAG, "[loadRemintSource] ${e.message}")
+                _error.value = "Couldn't load the re-mint source: ${e.message}"
+            }
+        }
+    }
+
+    // ── The portable mesh-genesis SEED ceremony (propose → cosign) ────────────
+    // Two accord holders — one YubiKey each — authorize ONE bundle. The bundle is
+    // held VERBATIM as a raw JsonElement between the calls (never re-serialized
+    // through a typed model), so unknown server fields survive the round-trip and
+    // the authorized bytes stay byte-identical.
+
+    /** The live seed ceremony — null until the first holder proposes. */
+    private val _genesisSeed = MutableStateFlow<GenesisSeedState?>(null)
+    val genesisSeed: StateFlow<GenesisSeedState?> = _genesisSeed.asStateFlow()
+
+    /** Drop the ceremony state (sheet closed / a fresh seed started). */
+    fun clearGenesisSeed() {
+        _genesisSeed.value = null
+    }
+
+    /**
+     * Fold one propose / cosign response into the resumable ceremony state, unioning
+     * the holder who just signed with whoever the bundle itself declares as having
+     * authorized (so a bundle carried in from another device still hides its own
+     * signers from the cosign picker).
+     */
+    private fun applyGenesisSeed(
+        res: ai.ciris.mobile.shared.models.federation.GenesisSeedResponse,
+        signedBy: String,
+    ) {
+        val fromBundle = genesisSeedDisplay(res.bundle).authorizedKeyIds
+        val previous = _genesisSeed.value?.authorizedKeyIds.orEmpty()
+        _genesisSeed.value = GenesisSeedState(
+            bundle = res.bundle,
+            prettyJson = prettyCoscrub(res.bundle) ?: res.bundle.toString(),
+            authorizationsHave = res.authorizationsHave,
+            authorizationsNeeded = res.authorizationsNeeded,
+            complete = res.complete,
+            authorizedKeyIds = (previous + fromBundle + signedBy.trim())
+                .filter { it.isNotBlank() }
+                .distinct(),
+            // Sticky: once any step re-blessed the canonical, the whole ceremony did.
+            serveNodeReblessed = res.serveNodeReblessed ||
+                (_genesisSeed.value?.serveNodeReblessed ?: false),
+        )
+    }
+
+    /**
+     * **Propose the portable seed** (ceremony step 2 — the FIRST holder). The holder
+     * RE-OPENS their YubiKey + USB-wrapped ML-DSA; the node mints and signs the seed's
+     * charter + grant over the existing roster and the [serveKeyId] canonical node.
+     * The returned bundle is held VERBATIM for [cosignGenesis]. The app holds NO keys.
+     */
+    fun proposeGenesis(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        userPin: String?,
+        serveKeyId: String,
+        ip: String? = null,
+        modulePath: String? = null,
+    ) {
+        if (_busy.value) return
+        if (serveKeyId.isBlank()) {
+            _error.value = "Select the canonical serve node the seed will carry first."
+            return
+        }
+        _busy.value = true
+        _error.value = null
+        _notice.value = null
+        viewModelScope.launch {
+            try {
+                val res = apiClient.proposeGenesis(
+                    holderKeyId, mldsaUsbPath, userPin, serveKeyId, ip, modulePath = modulePath,
+                )
+                applyGenesisSeed(res, holderKeyId)
+                _notice.value =
+                    "Proposed the seed — ${res.authorizationsHave} of ${res.authorizationsNeeded} " +
+                        "authorization(s). Hand the device to the next holder to cosign."
+            } catch (e: Exception) {
+                PlatformLogger.w(TAG, "[proposeGenesis] ${e.message}")
+                val msg = e.message.orEmpty()
+                _error.value = when {
+                    msg.contains("401") || msg.contains("403") ->
+                        "Sign in as the owner on this node first."
+                    msg.contains("501") || msg.contains("NotSupported", ignoreCase = true) ->
+                        "This build lacks pkcs11 — propose needs the YubiKey signer."
+                    else -> "Couldn't propose the seed: ${e.message}"
+                }
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    /**
+     * **Cosign the portable seed** (ceremony step 3 — the SECOND holder). Authorizes
+     * the SAME held bundle on a DISTINCT holder's YubiKey; the bundle is submitted
+     * verbatim. Repeat until the server reports `complete`. The node REJECTS a holder
+     * who has already authorized this bundle — the picker never offers one.
+     */
+    fun cosignGenesis(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        userPin: String?,
+        modulePath: String? = null,
+    ) {
+        if (_busy.value) return
+        val seed = _genesisSeed.value
+        if (seed == null) {
+            _error.value = "Propose the seed with the first holder before cosigning."
+            return
+        }
+        _busy.value = true
+        _error.value = null
+        _notice.value = null
+        viewModelScope.launch {
+            try {
+                val res = apiClient.cosignGenesis(
+                    holderKeyId, mldsaUsbPath, userPin, seed.bundle, modulePath = modulePath,
+                )
+                applyGenesisSeed(res, holderKeyId)
+                _notice.value = if (res.complete) {
+                    "The seed is authorized (${res.authorizationsHave} of ${res.authorizationsNeeded}) — " +
+                        "save it, then compare the fingerprint out of band before anyone attaches it."
+                } else {
+                    "Cosigned the seed — ${res.authorizationsHave} of ${res.authorizationsNeeded} " +
+                        "authorization(s). Another holder must still authorize."
+                }
+            } catch (e: Exception) {
+                PlatformLogger.w(TAG, "[cosignGenesis] ${e.message}")
+                val msg = e.message.orEmpty()
+                _error.value = when {
+                    msg.contains("401") || msg.contains("403") ->
+                        "Sign in as the owner on this node first."
+                    msg.contains("501") || msg.contains("NotSupported", ignoreCase = true) ->
+                        "This build lacks pkcs11 — cosign needs the YubiKey signer."
+                    msg.contains("already", ignoreCase = true) ->
+                        "That holder has already authorized this seed — a DISTINCT holder must cosign."
+                    else -> "Couldn't cosign the seed: ${e.message}"
                 }
             } finally {
                 _busy.value = false

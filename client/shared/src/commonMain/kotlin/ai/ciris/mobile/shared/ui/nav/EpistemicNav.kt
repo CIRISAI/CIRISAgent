@@ -332,6 +332,21 @@ sealed class NavSurface(
         labelKey = "commons.federation.constitutional.title",
     )
 
+    /**
+     * **Commons** — the reverse-quorum plane a community polices itself with
+     * (CIRISServer#367, `src/commons_surface.rs`): raise an objection, see the
+     * fold's standing on one action, ballot on what the stewards left open, and
+     * dismiss at the cohort's own m-of-n.
+     *
+     * It sits in the COMMONS group and NOT under Settings/Config, because that
+     * is where its authority comes from. The `/v1/admin` routes and `/v1/mesh-config`
+     * are authority acting ON a node; this is the commons acting on itself, and
+     * one member is enough to raise a brake. The cohorts whose rosters supply
+     * the quorum are the layers beside it. Live (no gate).
+     */
+    object Commons : NavSurface("commons", "Commons", CIRISIcons.handler,
+        labelKey = "nav.surface.commons",)
+
     /** Other CIRIS occurrences sharing the operator's identity. */
     object LayerFamily : NavSurface(
         id = "layer-family", label = "Family", icon = CIRISIcons.home,
@@ -569,6 +584,8 @@ val COMMONS_GROUP = NavGroup(
         add(NavSurface.LayerLocalCommunity)
         add(NavSurface.LayerGlobalCommunities)
         add(NavSurface.LayerGlobalCommons)
+        // The reverse-quorum plane those rosters are the quorum OF.
+        add(NavSurface.Commons)
     },
         labelKey = "nav.group.commons_layers",)
 

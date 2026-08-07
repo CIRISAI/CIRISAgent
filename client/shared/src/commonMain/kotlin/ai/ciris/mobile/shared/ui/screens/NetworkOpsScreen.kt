@@ -25,12 +25,23 @@ import androidx.compose.ui.unit.dp
  * federation experience (mode switching, peers, trust graph, transport tiles)
  * lives in the Commons → Global Commons hub, reached via the button below. This
  * is the operator-infra slice; the Commons hub is the social/federation view.
+ *
+ * It also hosts the two admin rungs that act on NOBODY else
+ * ([SelfAndReaderOpsSection], `CIRISServer/src/admin_ops.rs`): **tier S**, this
+ * node's own three standings, and **tier R**, this node's own reader policy over
+ * other parties' judgements. They live here rather than on the runtime screen
+ * because both are facts about THIS node's local ledger — the same subject as
+ * the signer key and the agent mode above — while `RuntimeScreen` is the
+ * agent's H3ERE pipeline debugger (pause / single-step / queue depth), a
+ * different object entirely. The enforcement ladder that acts on OTHERS lives on
+ * the moderation surface, deliberately not here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NetworkOpsScreen(
     viewModel: NetworkViewModel,
     onOpenFederationHub: () -> Unit,
+    apiClient: ai.ciris.mobile.shared.api.CIRISApiClient,
     modifier: Modifier = Modifier,
 ) {
     val status by viewModel.status.collectAsState()
@@ -99,6 +110,10 @@ fun NetworkOpsScreen(
         ) {
             Text(localizedString("network_ops.open_federation_hub").ifEmpty { "Open federation hub →" })
         }
+
+        // The two rungs that act on nobody else: this node's own standings
+        // (tier S) and this node's own reader policy (tier R).
+        SelfAndReaderOpsSection(apiClient = apiClient)
     }
     }
 }
@@ -135,7 +150,11 @@ private fun OpsPathRow(label: String, value: String, testTag: String) {
 @Composable
 private fun OpsRow(label: String, value: String, testTag: String, mono: Boolean = false) {
     Row(
-        modifier = Modifier.fillMaxWidth().testable(testTag),
+        // The VALUE is published to the automation tree, not just the row's
+        // existence: "a mode row rendered" is true whether it shows a real
+        // reading or a ViewModel default, and telling those apart is the whole
+        // point of walking this surface.
+        modifier = Modifier.fillMaxWidth().testable(testTag, value),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -58,9 +58,12 @@ import kotlinx.serialization.json.JsonElement
  * YubiKey touch is the human consent.
  */
 
-/** The holder-picker + USB-picker + PIN inputs every signing sub-flow needs. */
+/** The holder-picker + USB-picker + PIN inputs every signing sub-flow needs.
+ *  Shared beyond this file: the multi-step Re-mint sheet embeds it directly
+ *  (its step buttons live inline, so [HardwareScrubSheet]'s single submit
+ *  doesn't fit). */
 @Composable
-private fun ColumnScope.HolderSignInputs(
+fun ColumnScope.HolderSignInputs(
     holders: List<AccordHolderDto>,
     holderKeyId: String,
     onHolder: (String) -> Unit,

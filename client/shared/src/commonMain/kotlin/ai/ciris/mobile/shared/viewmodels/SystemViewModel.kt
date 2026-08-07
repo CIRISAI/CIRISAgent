@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.models.NodeStateReadout
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.screens.SystemChannelInfo
 import ai.ciris.mobile.shared.ui.screens.SystemScreenData
@@ -32,6 +33,9 @@ class SystemViewModel(
     companion object {
         private const val TAG = "SystemViewModel"
         private const val REFRESH_INTERVAL_MS = 5000L
+
+        /** Take the node-state read every Nth telemetry tick (~15 s). */
+        private const val NODE_STATE_EVERY_N_POLLS = 3
     }
 
     private fun log(level: String, method: String, message: String) {
@@ -65,6 +69,24 @@ class SystemViewModel(
     // Success message
     private val _successMessage = MutableStateFlow<String?>(null)
     val successMessage: StateFlow<String?> = _successMessage.asStateFlow()
+
+    // ── The operator surface — GET /v1/node/state (CIRISServer#356/#369/#370) ──
+    //
+    // Held as its own StateFlow rather than folded into SystemScreenData: this
+    // reading has FIVE outcomes (loading / unreachable / refused / malformed /
+    // present) and only the last carries a band. Flattening it into the
+    // telemetry blob would give an unreachable node a fabricated healthy zero —
+    // the exact collapse FSD/RCA_INGEST_REJECTION_2026-08-05.md is about.
+    private val _nodeState = MutableStateFlow<NodeStateReadout>(NodeStateReadout.Loading)
+    val nodeState: StateFlow<NodeStateReadout> = _nodeState.asStateFlow()
+
+    /**
+     * The node-state read is a corpus aggregate, so it is NOT taken on every
+     * 5 s telemetry tick — every [NODE_STATE_EVERY_N_POLLS]th one, and always
+     * on an explicit refresh. The trace-plane band moves on elapsed HOURS; a
+     * ~15 s cadence is orders of magnitude finer than the signal.
+     */
+    private var pollTick = 0
 
     // Auto-refresh job
     private var refreshJob: Job? = null
@@ -183,6 +205,42 @@ class SystemViewModel(
     }
 
     /**
+     * Read the composed operator surface — `GET /v1/node/state`.
+     *
+     * Deliberately does NOT touch [_error]: a node that refuses or cannot be
+     * reached is a STATE this screen renders, not a toast that replaces it.
+     * Routing it through the error banner would once again turn "we could not
+     * ask" into a transient nothing.
+     */
+    fun loadNodeState() {
+        val method = "loadNodeState"
+        viewModelScope.launch {
+            val readout = apiClient.getNodeOperatorState()
+            _nodeState.value = readout
+            when (readout) {
+                is NodeStateReadout.Present -> logInfo(
+                    method,
+                    "band=${readout.state.band} " +
+                        "trace_plane=${readout.state.tracePlane?.standing} " +
+                        "ingest=${readout.state.ingest?.standing} " +
+                        "unknown=${readout.state.unknown.size}"
+                )
+                is NodeStateReadout.Unreachable -> logWarn(method, "unreachable: ${readout.detail}")
+                is NodeStateReadout.Refused -> logWarn(
+                    method,
+                    "refused: HTTP ${readout.status} ${readout.detail}"
+                )
+                is NodeStateReadout.NotOffered -> logWarn(
+                    method,
+                    "not offered: this node mounts no /v1/node/state surface"
+                )
+                is NodeStateReadout.Malformed -> logWarn(method, "malformed: ${readout.detail}")
+                is NodeStateReadout.Loading -> Unit
+            }
+        }
+    }
+
+    /**
      * Pause the runtime
      */
     fun pauseRuntime() {
@@ -247,12 +305,20 @@ class SystemViewModel(
 
         // Fetch initial data
         loadSystemData()
+        // The operator surface on the FIRST tick, not on the third: an operator
+        // opening this screen must not wait 15 s to learn the plane is dark.
+        pollTick = 0
+        loadNodeState()
 
         refreshJob = viewModelScope.launch {
             while (isActive) {
                 delay(REFRESH_INTERVAL_MS)
                 try {
                     loadSystemData()
+                    pollTick += 1
+                    if (pollTick % NODE_STATE_EVERY_N_POLLS == 0) {
+                        loadNodeState()
+                    }
                 } catch (e: Exception) {
                     logError(method, "Error during auto-refresh: ${e.message}")
                 }
@@ -272,10 +338,12 @@ class SystemViewModel(
     }
 
     /**
-     * Refresh system data
+     * Refresh system data — including the operator surface. An explicit refresh
+     * is a human asking "how is this node RIGHT NOW", so it always re-reads it.
      */
     fun refresh() {
         loadSystemData()
+        loadNodeState()
     }
 
     /**

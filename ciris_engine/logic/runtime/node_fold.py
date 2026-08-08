@@ -31,23 +31,38 @@ _node_error: Optional[str] = None
 
 
 def _resolve_home() -> str:
-    """The node's home (config + data root) — the agent's CIRIS_HOME."""
-    return os.environ.get("CIRIS_HOME") or os.environ.get("CIRIS_DATA_DIR") or os.getcwd()
+    """The node's home (config + data root) — the agent's CIRIS_HOME.
+
+    This exact string is handed to ``serve_with_python_adapter``, and the node
+    derives BOTH ``<home>/identity`` and ``<home>/data`` from it. The persist
+    Engine must resolve its federation identity from the same home, so this
+    defers to ``get_ciris_home()`` — the one resolver that already knows about
+    managed/Android/iOS layouts. It previously returned ``os.getcwd()``, which
+    agreed with ``get_data_dir()`` only in development mode; anywhere else the
+    node and the Engine would have resolved two different identity dirs.
+    """
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+    return str(get_ciris_home())
 
 
 def _resolve_key_id() -> Optional[str]:
-    """Federation key_id for the node config — the embedded edge's signer.
+    """Federation keystore alias for the node — the SAME alias the Engine uses.
 
-    The node reuses ``current_edge()`` so this only tags config; align it to the
-    edge's signer so the node's identity matches the agent's. None ⇒ the wheel's
-    DEFAULT_KEY_ID.
+    This must match ``Engine(..., keystore_alias=...)`` exactly: the sealed
+    keystore keys off (identity_dir, alias), so two spellings are two keys, and
+    CIRISServer 0.5.160+ refuses to boot on the mismatch (CIRISServer#380).
+
+    This used to return ``get_edge().signer_key_id()`` — the *derived* id
+    ``<alias>-<fingerprint>`` — to "align the node to the edge's signer". That
+    alignment was attempted at the wrong layer and was self-feeding: the derived
+    id became the next boot's alias, minting a fresh sealed key each time. The
+    edge derives its id from the Engine's signer anyway, so unifying on the base
+    alias aligns all three by construction.
     """
-    try:
-        from ciris_engine.logic.runtime.edge_runtime import get_edge
+    from ciris_engine.logic.utils.path_resolution import get_federation_alias
 
-        return str(get_edge().signer_key_id())
-    except Exception:  # noqa: BLE001 — edge may be degraded; fall back to default
-        return None
+    return get_federation_alias()
 
 
 def _surface_first_run_claim_pin() -> None:

@@ -144,9 +144,23 @@ class TestHE300BenchmarkConfig:
 
                 env = mock_popen.call_args.kwargs.get("env", {})
 
-                # Should NOT have benchmark mode set
+                # Benchmark mode must still be absent — that is the safety half.
                 assert "CIRIS_BENCHMARK_MODE" not in env
-                assert "CIRIS_TEMPLATE" not in env
+
+                # CIRIS_TEMPLATE is now exported on EVERY run, carrying the
+                # resolved template. It used to be set only for HE300, which is
+                # exactly how `--<module>-template` reached the setup wizard but
+                # never the agent: the agent booted on the default template's
+                # behaviour config while the run reported the requested name.
+                #
+                # Exporting "default" explicitly is a verified no-op — the value
+                # unset and the value "default" are indistinguishable to all
+                # three consumers (EssentialConfig.default_template already
+                # defaults to "default"; deployment.resolve_template() does
+                # `env_template or "default"`; component_builder compares against
+                # "he-300-benchmark"). What it buys is that the template in
+                # effect is always visible instead of implied.
+                assert env["CIRIS_TEMPLATE"] == "default"
         finally:
             # Restore environment
             os.environ.update(env_backup)

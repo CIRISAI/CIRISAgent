@@ -552,13 +552,40 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     identity_dir = get_identity_dir()
     identity_dir.mkdir(parents=True, exist_ok=True)
 
-    # The PQC half still matters for the same reason it always did: persist's
-    # `sign_hybrid` (used by `audit_record_entry` for the Merkle chain) refuses
-    # to sign without a local PQC key, and without it the agent can't write the
-    # audit chain — cascading into "Hash chain data not generated" and missing
-    # ACTION_RESULT events. We no longer mint it: the Engine reads the node's
-    # own `<identity_dir>/ml_dsa_65.seed`, adopting or minting it there, so the
-    # audit chain and the federation wire sign with the same key.
+    # The PQC half must EXIST BEFORE the Engine is constructed.
+    #
+    # `create_identity_if_missing=True` mints only the CLASSICAL half — on a
+    # virgin identity dir it writes `<alias>.ed25519.seed.blob` + `.master.key`
+    # and nothing else. Verified against 0.5.161:
+    #
+    #     Engine(..., identity_dir=<fresh>, create_identity_if_missing=True)
+    #     -> ciris-agent-bootstrap.ed25519.seed.blob   (60 B)
+    #        ciris-agent-bootstrap.master.key          (32 B)
+    #        ml_dsa_65.seed                            ABSENT
+    #
+    # Without the PQC half, persist's `sign_hybrid` — which `audit_record_entry`
+    # uses for the Merkle chain — refuses to sign. The agent then cannot write
+    # the audit chain, which cascades exactly as it always did: "Failed to add
+    # to persist audit chain" -> "Hash chain data not generated for action
+    # speak" -> no ACTION_RESULT events -> no traces captured at all.
+    #
+    # That cascade is invisible on any machine that has booted before, because
+    # the node's compose adopts (and on its own path creates) this seed — so a
+    # developer's identity dir already has it while a fresh CI checkout does
+    # not. It cost a green local run and a red CI.
+    #
+    # Minting it here is not a second identity: the PQC half is bare BY DESIGN
+    # (no TPM does ML-DSA), it lives at the conventional path the node's compose
+    # reads, and compose logs `adopted existing ML-DSA-65 federation seed` from
+    # exactly this file. One key, written by whichever half starts first.
+    pqc_seed_path = identity_dir / "ml_dsa_65.seed"
+    if not pqc_seed_path.exists():
+        pqc_seed_path.write_bytes(os.urandom(32))
+        try:
+            pqc_seed_path.chmod(0o600)
+        except OSError as e:  # noqa: BLE001 - chmod is best-effort (Windows)
+            logger.debug("Could not chmod PQC seed (non-fatal): %s", e)
+        logger.info("Minted the node's ML-DSA-65 federation seed at %s", pqc_seed_path)
 
     # Test isolation only: under pytest, fixtures routinely bootstrap a
     # fresh per-test engine, and a single test may invoke more than one

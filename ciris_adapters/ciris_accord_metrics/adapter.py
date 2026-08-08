@@ -230,13 +230,26 @@ class AccordMetricsAdapter(Service):
 
         if self._consent_given:
             try:
-                from ciris_engine.logic.services.governance.consent.attestation import (
-                    emit_community_consent_grant,
+                from ciris_engine.logic.services.governance.consent.trace_sharing import (
+                    grant_trace_sharing,
                 )
+                from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
 
-                attestation_id = emit_community_consent_grant(granted_at=self._consent_timestamp)
-                if attestation_id:
-                    logger.info(f"   consent-CEG migration: community grant upserted ({attestation_id})")
+                # require_opt_in=False: self._consent_given IS the resolved
+                # opt-in, derived above from the legacy env/config sources or a
+                # standing CEG grant — re-reading the env var here would miss
+                # the post-migration case where it has already been purged.
+                result = grant_trace_sharing(
+                    TraceConsentSource.LEGACY_MIGRATION,
+                    granted_at=self._consent_timestamp,
+                    require_opt_in=False,
+                )
+                if result.capture_grant_id:
+                    logger.info(f"   consent-CEG migration: community grant upserted ({result.capture_grant_id})")
+                    # Purge keyed on the CAPTURE grant only. The ship grant needs
+                    # a rooted canonical peer, which does not exist at adapter
+                    # start — gating the purge on it would strand the legacy
+                    # sources forever. The probe authors ship later.
                     self._purge_legacy_consent_sources()
                 else:
                     logger.info("   consent-CEG migration: emit no-op (engine/key unavailable or kill-switch)")

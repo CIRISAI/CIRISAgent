@@ -7,6 +7,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from ciris_engine.schemas.consent.trace_sharing import (
+    TraceConsentSource,
+    TraceSharingGrantResult,
+)
+
 from ciris_engine.logic.adapters.api.routes.setup.complete import (
     _emit_accord_metrics_consent,
     _write_adapter_specific_config,
@@ -51,21 +56,36 @@ class TestWriteAccordMetricsConfig:
         mock_emit.assert_not_called()
 
     def test_emits_ceg_grant_when_adapter_enabled(self) -> None:
-        """2.9.6 contract: opt-in emits the consent:community_trust:v1 CEG
-        grant and writes NO consent env vars (adapter is bootstrap-required;
-        consent gates sharing via the wire artifact, not config)."""
+        """Opt-in grants trace sharing COMPLETELY, through the one handle.
+
+        2.9.6 contract: writes NO consent env vars (adapter is bootstrap-required;
+        consent gates sharing via the wire artifact, not config).
+
+        2.9.12: the wizard must grant the SHIP gate too, not just capture. It
+        previously emitted `consent:community_trust:v1` alone, which left traces
+        sealing locally forever while setup reported sharing as enabled — so this
+        asserts the routing, and `require_opt_in=False` because the checkbox IS
+        the owner's act and the env var is not written yet at this point.
+        """
         f = StringIO()
         setup = _create_mock_setup(enabled_adapters=["ciris_accord_metrics"])
 
         with patch(
-            "ciris_engine.logic.services.governance.consent.attestation.emit_community_consent_grant",
-            return_value="att-123",
-        ) as mock_emit:
+            "ciris_engine.logic.services.governance.consent.trace_sharing.grant_trace_sharing"
+        ) as mock_grant:
+            mock_grant.return_value = TraceSharingGrantResult(
+                source=TraceConsentSource.SETUP_WIZARD,
+                opted_in=True,
+                capture_grant_id="att-123",
+                peers_authored=["canonical-1"],
+            )
             _emit_accord_metrics_consent(setup)
 
         assert f.getvalue() == ""
         assert "CIRIS_ACCORD_METRICS_CONSENT" not in f.getvalue()
-        mock_emit.assert_called_once_with()
+        mock_grant.assert_called_once()
+        assert mock_grant.call_args.args[0] is TraceConsentSource.SETUP_WIZARD
+        assert mock_grant.call_args.kwargs["require_opt_in"] is False
 
     def test_grant_emit_failure_never_breaks_setup(self) -> None:
         """A failed CEG emit is logged and swallowed — setup must complete."""

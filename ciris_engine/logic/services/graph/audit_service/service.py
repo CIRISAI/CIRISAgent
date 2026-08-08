@@ -1360,8 +1360,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         # `classical_sig` is the same 64-byte Ed25519 signature `local_sign`
         # returned, so the chain's wire shape is unchanged — this swaps how the
         # signature is obtained, not what is written.
-        hybrid_sig = engine.local_sign_hybrid(sign_bytes)
-        signature_b64 = base64.b64encode(hybrid_sig["classical_sig"]).decode()
+        from ciris_engine.logic.utils import substrate_signing
+
+        signature_b64 = base64.b64encode(substrate_signing.sign_classical(engine, sign_bytes)).decode()
         persist_entry["signature"] = signature_b64
 
         engine.audit_record_entry(json.dumps(persist_entry))

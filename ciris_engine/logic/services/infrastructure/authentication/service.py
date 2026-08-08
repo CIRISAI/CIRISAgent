@@ -1549,18 +1549,19 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         canonical = self._deferral_canonical_bytes(deferral_id, response, signed_at)
         signing_key_id = engine.local_derived_key_id()
 
-        try:
-            signatures = engine.local_sign_hybrid(canonical)
-            classical = base64.b64encode(bytes(signatures["classical_sig"])).decode("ascii")
-            pqc: Optional[str] = base64.b64encode(bytes(signatures["pqc_sig"])).decode("ascii")
-        except ValueError:
-            # No PQC signer wired (CLIENT-mode deployments are expected to lack
-            # one). Hybrid-pending is a state the substrate models rather than
-            # an error; record the classical half and leave the PQC half null,
-            # exactly as a hybrid-pending CEG row does.
+        # Hybrid-pending is still a state the substrate models, but it is now read
+        # off the RESULT instead of caught as an exception and served by a second
+        # verb. The old fallback called `local_sign` when no PQC signer was wired
+        # — locally reasonable, and permanently broken once the classical key is
+        # sealed (0.5.162 refuses it outright). It would have failed in exactly
+        # the deployments it was written to help.
+        from ciris_engine.logic.utils import substrate_signing
+
+        classical_sig, pqc_sig = substrate_signing.sign_hybrid(engine, canonical)
+        classical = base64.b64encode(classical_sig).decode("ascii")
+        pqc: Optional[str] = base64.b64encode(pqc_sig).decode("ascii") if pqc_sig else None
+        if pqc is None:
             logger.info("Signing deferral resolution %s hybrid-pending (no PQC signer)", deferral_id)
-            classical = base64.b64encode(bytes(engine.local_sign(canonical))).decode("ascii")
-            pqc = None
 
         return response.model_copy(
             update={

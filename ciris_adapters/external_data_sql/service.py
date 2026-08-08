@@ -1036,8 +1036,14 @@ class SQLToolService(BaseService, ToolService):
                         data_hash = hashlib.sha256(verification_data.encode("utf-8")).digest()
 
                         # Sign the hash via the persist Engine's local signer
-                        # (2.9.7: the ONE federation-registered signer identity)
-                        signature_bytes = bytes(self._signer.local_sign(data_hash))
+                        # (2.9.7: the ONE federation-registered signer identity).
+                        # Through substrate_signing because that ONE identity's
+                        # classical half is keystore-sealed, and the sync verb
+                        # refuses a sealed key permanently. Same 64 Ed25519 bytes,
+                        # so the `ed25519:<key_id>:<sig>` proof format is unchanged.
+                        from ciris_engine.logic.utils import substrate_signing
+
+                        signature_bytes = substrate_signing.sign_classical(self._signer, data_hash)
                         import base64 as _b64
 
                         signature_b64 = _b64.b64encode(signature_bytes).decode("ascii")

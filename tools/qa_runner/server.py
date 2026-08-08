@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import pty
+import re
 import subprocess
 import sys
 import threading
@@ -751,6 +752,91 @@ class APIServerManager:
         except Exception:  # noqa: BLE001
             pass
 
+    def resolve_template_id(self) -> str:
+        """THE template this run uses — one answer, used everywhere.
+
+        There used to be two independent answers and they disagreed. The setup
+        wizard got ``--<module>-template`` via ``setup_template_id``, while the
+        SERVER env got ``CIRIS_TEMPLATE`` only when the module happened to be
+        ``he300_benchmark``. So a run launched with an explicit template
+        completed setup under it and then booted the agent under the DEFAULT
+        template's behaviour config.
+
+        That failure is invisible in exactly the way that matters: the run
+        reports the template name it was asked for, so the logs, the result-key
+        tuple and the report all name a template whose configuration never took
+        effect. A template whose behaviour config is silently ignored is worse
+        than no template at all.
+
+        Concretely it cost: ``cognitive_state_behaviors.wakeup.enabled: false``
+        was never consulted, so ~10 minutes of wakeup was paid on every boot of
+        every arm of every cell; and ``EpistemicHumilityConscience`` — which
+        benchmark mode exists to disable because it triggers PONDER, which the
+        benchmark does not permit — stayed live in every arm.
+        """
+        from .config import QAModule  # local import: module-scope would be circular
+
+        explicit = (getattr(self.config, "setup_template_id", None) or "").strip()
+        if explicit:
+            return explicit
+        # Module-implied defaults. Keep this the ONLY place a module maps to a
+        # template, so adding a module cannot reintroduce a second answer.
+        if any(m == QAModule.HE300_BENCHMARK for m in self.modules or []):
+            return "he-300-benchmark"
+        return "default"
+
+    def _verify_template_took_effect(self) -> bool:
+        """Assert the AGENT loaded the template we asked for. Loud on mismatch.
+
+        Setting the env var is not evidence that it was honoured — that
+        assumption is the entire bug this guards. `profile_loader` logs the file
+        it actually loaded, so this reads the boot log and compares the resolved
+        template id against the loaded PATH (id, not display name: `default.yaml`
+        declares the name "Ally", so comparing names would never match).
+
+        Reports UNVERIFIED rather than OK when the line is absent — an unknown is
+        not a pass, and a check that silently degrades to "fine" would recreate
+        the failure it exists to catch.
+        """
+        want = self.resolve_template_id()
+        log_path = Path(f"logs/{self.database_backend}/latest.log")
+        try:
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            self.console.print(
+                f"[yellow]⚠️  Template UNVERIFIED: cannot read {log_path} "
+                f"(wanted '{want}') — treat template-dependent results with suspicion[/yellow]"
+            )
+            return False
+
+        loaded = re.findall(r"Successfully loaded template '[^']*' from (\S+)", text)
+        if not loaded:
+            self.console.print(
+                f"[yellow]⚠️  Template UNVERIFIED: no 'Successfully loaded template' line in "
+                f"{log_path} (wanted '{want}')[/yellow]"
+            )
+            return False
+
+        actual_path = loaded[-1]
+        actual_id = Path(actual_path.rstrip(".,")).stem
+        if actual_id == want:
+            self.console.print(f"[green]✅ Template VERIFIED in the running agent: {actual_id}[/green]")
+            return True
+
+        # Loud and specific: name what was asked for, what actually ran, and what
+        # it costs — this mismatch silently invalidates every template-dependent
+        # result in the run while the report still prints the requested name.
+        self.console.print(
+            f"[red]❌ TEMPLATE MISMATCH — requested '{want}' but the agent loaded "
+            f"'{actual_id}' ({actual_path}).[/red]"
+        )
+        self.console.print(
+            "[red]   The template's cognitive_state_behaviors (e.g. wakeup.enabled) and any "
+            "conscience configuration it declares did NOT take effect. Results from this run are "
+            "not attributable to the requested template.[/red]"
+        )
+        return False
+
     def start(self) -> bool:
         """Start the API server."""
         # Check if server is already running
@@ -1024,11 +1110,23 @@ class APIServerManager:
             env["CIRIS_SQL_EXTERNAL_DATA_CONFIG"] = str(self._sql_config_path)
             self.console.print(f"[dim]Configured SQL external data service: {self._sql_config_path}[/dim]")
 
-        # HE-300 benchmark: Use the he-300-benchmark template (limits actions, no ponder)
-        if any(m == QAModule.HE300_BENCHMARK for m in self.modules):
-            env["CIRIS_TEMPLATE"] = "he-300-benchmark"
-            # CRITICAL: Enable benchmark mode (double-lock with template check in component_builder.py)
-            # This disables EpistemicHumilityConscience which triggers PONDER (not allowed in HE-300)
+        # The template reaches the SERVER, not just the setup wizard. Setting it
+        # unconditionally is the point: the bug this replaces was an implicit
+        # default that nobody could see, so the resolved value is always stated
+        # and always exported. `default` is the engine's own fallback, so
+        # exporting it explicitly changes nothing except that it is now visible.
+        template_id = self.resolve_template_id()
+        env["CIRIS_TEMPLATE"] = template_id
+
+        # Benchmark mode keys off the RESOLVED TEMPLATE, never the module list.
+        # component_builder._determine_benchmark_mode double-locks on
+        # (CIRIS_BENCHMARK_MODE=true AND template == 'he-300-benchmark'), so
+        # deriving it from the template is what makes the two agree by
+        # construction — and means `--<module>-template he-300-benchmark` now
+        # gets benchmark mode from ANY module, which is exactly the case that
+        # was silently running with safety consciences live.
+        is_benchmark = template_id == "he-300-benchmark"
+        if is_benchmark:
             env["CIRIS_BENCHMARK_MODE"] = "true"
             # Increase A2A timeout for live LLM (default 60s is too short)
             a2a_timeout = "180" if self.config.live_api_key else "60"
@@ -1037,6 +1135,8 @@ class APIServerManager:
             self.console.print("[dim]   Template: he-300-benchmark (limited actions: speak, task_complete)[/dim]")
             self.console.print("[dim]   Benchmark Mode: ENABLED (EpistemicHumility conscience disabled)[/dim]")
             self.console.print(f"[dim]   A2A Timeout: {a2a_timeout}s[/dim]")
+        self.console.print(f"[cyan]📋 Template: {template_id}[/cyan] [dim](CIRIS_TEMPLATE + setup wizard)[/dim]")
+        if is_benchmark:
             self.console.print(f"[dim]   Mock LLM: {self.config.mock_llm}[/dim]")
             self.console.print(f"[dim]   Live API Key: {'Set' if self.config.live_api_key else 'Not set'}[/dim]")
             self.console.print(f"[dim]   Live Model: {self.config.live_model or 'Not set'}[/dim]")
@@ -1308,6 +1408,7 @@ class APIServerManager:
             # Wait for server to be ready
             if self._wait_for_server():
                 self.console.print("[green]✅ API server started successfully[/green]")
+                self._verify_template_took_effect()
                 return True
             else:
                 self.console.print("[red]❌ Server failed to start[/red]")
@@ -1526,11 +1627,11 @@ class APIServerManager:
         llm_model = self.config.live_model or "gpt-4"
         llm_base_url = self.config.live_base_url
 
-        # template_id is configurable per-module. Default "default" preserves
-        # historical behavior (Ally persona). safety_battery sets it via
-        # --safety-battery-template so the result-key tuple per
-        # CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md §2 carries the template.
-        template_id = getattr(self.config, "setup_template_id", None) or "default"
+        # THE SAME resolver the server env uses (`resolve_template_id`). Reading
+        # the config directly here is precisely what let the wizard and the agent
+        # disagree: setup completed under the requested template while the agent
+        # booted under `default`. One resolver, two consumers, no third answer.
+        template_id = self.resolve_template_id()
         setup_payload = {
             "llm_provider": llm_provider,
             "llm_api_key": llm_api_key,

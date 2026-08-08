@@ -22,7 +22,7 @@ import logging
 import os
 import threading
 import time
-from typing import List, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -31,23 +31,38 @@ _node_error: Optional[str] = None
 
 
 def _resolve_home() -> str:
-    """The node's home (config + data root) — the agent's CIRIS_HOME."""
-    return os.environ.get("CIRIS_HOME") or os.environ.get("CIRIS_DATA_DIR") or os.getcwd()
+    """The node's home (config + data root) — the agent's CIRIS_HOME.
+
+    This exact string is handed to ``serve_with_python_adapter``, and the node
+    derives BOTH ``<home>/identity`` and ``<home>/data`` from it. The persist
+    Engine must resolve its federation identity from the same home, so this
+    defers to ``get_ciris_home()`` — the one resolver that already knows about
+    managed/Android/iOS layouts. It previously returned ``os.getcwd()``, which
+    agreed with ``get_data_dir()`` only in development mode; anywhere else the
+    node and the Engine would have resolved two different identity dirs.
+    """
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+    return str(get_ciris_home())
 
 
 def _resolve_key_id() -> Optional[str]:
-    """Federation key_id for the node config — the embedded edge's signer.
+    """Federation keystore alias for the node — the SAME alias the Engine uses.
 
-    The node reuses ``current_edge()`` so this only tags config; align it to the
-    edge's signer so the node's identity matches the agent's. None ⇒ the wheel's
-    DEFAULT_KEY_ID.
+    This must match ``Engine(..., keystore_alias=...)`` exactly: the sealed
+    keystore keys off (identity_dir, alias), so two spellings are two keys, and
+    CIRISServer 0.5.160+ refuses to boot on the mismatch (CIRISServer#380).
+
+    This used to return ``get_edge().signer_key_id()`` — the *derived* id
+    ``<alias>-<fingerprint>`` — to "align the node to the edge's signer". That
+    alignment was attempted at the wrong layer and was self-feeding: the derived
+    id became the next boot's alias, minting a fresh sealed key each time. The
+    edge derives its id from the Engine's signer anyway, so unifying on the base
+    alias aligns all three by construction.
     """
-    try:
-        from ciris_engine.logic.runtime.edge_runtime import get_edge
+    from ciris_engine.logic.utils.path_resolution import get_federation_alias
 
-        return str(get_edge().signer_key_id())
-    except Exception:  # noqa: BLE001 — edge may be degraded; fall back to default
-        return None
+    return get_federation_alias()
 
 
 def _surface_first_run_claim_pin() -> None:
@@ -140,81 +155,20 @@ def _author_federation_consent(path: str) -> None:
     # substrate stopped boot-authoring in 0.5.146 for exactly this reason;
     # authoring here without the opt-in would reintroduce it one layer up.
     #
-    # CIRIS_ACCORD_METRICS_CONSENT is where the wizard's "Send traces" choice
-    # lands, and it is what the QA runner sets for a consented live capture —
-    # so the legacy env route IS the import path into CEG consent state.
-    # Fails CLOSED: unreadable => no consent authored.
-    if os.environ.get("CIRIS_ACCORD_METRICS_CONSENT", "").lower() != "true":
-        logger.info(
-            "Node fold: owner has not opted into trace replication "
-            "(CIRIS_ACCORD_METRICS_CONSENT != true) — no consent authored (%s). "
-            "Traces will seal locally and stay at (self, local), which is correct.",
-            path,
-        )
-        return
+    # So this path REPLAYS an opt-in the owner already gave — it never
+    # originates one. `require_opt_in=True` (the default) makes the helper check
+    # the signal and fail CLOSED when it cannot be read.
+    from ciris_engine.logic.services.governance.consent.trace_sharing import grant_trace_sharing
+    from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
 
-    try:
-        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
-
-        author = getattr(ciris_server, "author_federation_consent", None)
-        defaults = getattr(ciris_server, "default_attestation_prefixes", None)
-        if author is None or defaults is None:
-            logger.info(
-                "Node fold: author_federation_consent unavailable (wheel <0.5.147) — "
-                "no owner consent grant; sealed traces will stay at (self, local) and never ship (%s)",
-                path,
-            )
-            return
-
-        # Discover the canonical from the live delivery status rather than a
-        # constant: CIRIS_CANONICAL_BOOTSTRAP_PEERS is empty by default, and a
-        # hardcoded key_id is one more copy to drift.
-        targets: List[str] = []
-        ds = getattr(ciris_server, "delivery_status", None)
-        if ds is not None:
-            try:
-                status = ds()
-                if isinstance(status, str):
-                    import json as _json
-
-                    status = _json.loads(status)
-                targets = list((status or {}).get("canonical_targets") or [])
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Node fold: delivery_status unreadable for consent (%s): %s", path, exc)
-
-        if not targets:
-            logger.warning(
-                "Node fold: no canonical delivery target yet — owner consent NOT authored (%s). "
-                "Traces will seal and stay at (self, local) until a grant covering trace: exists.",
-                path,
-            )
-            return
-
-        prefixes = list(defaults())  # read for the log only; the CALL passes None
-        for peer in targets:
-            try:
-                # prefixes=None -> the build's own default (never restated);
-                # analyze=True -> the consent to BE SCORED, without which the
-                # grant is incomplete and the peer builds no reputation.
-                author(peer, None, True)
-                logger.info(
-                    "Node fold: owner consent authored → peer=%s prefixes=%s (%s)",
-                    peer,
-                    prefixes,
-                    path,
-                )
-            except Exception as exc:  # noqa: BLE001
-                # Loud: this is the difference between traces shipping and
-                # stranding, and it failed silently for a full day.
-                logger.warning(
-                    "Node fold: author_federation_consent(%s) FAILED (%s): %s — "
-                    "sealed traces will NOT replicate (no grant covers trace:)",
-                    peer,
-                    path,
-                    exc,
-                )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Node fold: owner consent authoring failed (non-fatal, %s): %s", path, exc)
+    result = grant_trace_sharing(TraceConsentSource.NODE_FOLD)
+    logger.info(
+        "Node fold: trace-sharing consent (%s): opted_in=%s capture=%s ship=%s",
+        path,
+        result.opted_in,
+        result.capture_grant_id or "none",
+        result.peers_authored or "none",
+    )
 
 
 def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Optional[str] = None) -> None:

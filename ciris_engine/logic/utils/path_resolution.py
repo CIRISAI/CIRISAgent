@@ -428,6 +428,39 @@ def get_data_dir() -> Path:
     return get_ciris_home() / "data"
 
 
+def get_identity_dir() -> Path:
+    """Get the node's federation identity directory (CIRIS_HOME/identity/).
+
+    This mirrors ciris-server's own convention exactly — `ServerConfig::from_home`
+    does `home.join("identity")` beside `home.join("data")`, with no env var of its
+    own. Both must resolve to the SAME directory: the sealed classical keystore and
+    the bare `ml_dsa_65.seed` live here, and the persist Engine and the node's
+    compose each resolve their federation identity from this dir plus a shared
+    alias (see `get_federation_alias`).
+
+    Returns:
+        Path to identity directory (CIRIS_HOME/identity/)
+    """
+    return get_ciris_home() / "identity"
+
+
+def get_federation_alias() -> str:
+    """The keystore alias under which this node's ONE federation identity lives.
+
+    Passed both to `Engine(..., keystore_alias=...)` and to the node's
+    `serve_with_python_adapter(..., key_id)`. Because the sealed keystore keys off
+    (identity_dir, alias), the two halves resolve to the same Ed25519 key only if
+    both strings match — and CIRISServer 0.5.160+ refuses to boot when they don't
+    (CIRISServer#380 / CIRISPersist#616).
+
+    This must stay a plain, stable label. It must NOT be the *derived* federation
+    id (`<alias>-<fingerprint>`): feeding a derived id back in as the next boot's
+    alias mints a fresh sealed key every time, which is what left 61 orphaned
+    `.ed25519.seed.blob` files on the reporting node.
+    """
+    return os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
+
+
 def get_logs_dir() -> Path:
     """Get the logs directory path.
 

@@ -111,7 +111,13 @@ def sign_deletion_proof(
     deleted_at_iso = deleted_at.isoformat()
     canonical = _canonical_proof_bytes(deletion_id, user_identifier, sources_deleted, deleted_at_iso)
     try:
-        signature_bytes = engine.local_sign(canonical)
+        # sign_classical, not engine.local_sign: the classical key is sealed on
+        # any node with one federation identity, and the sync verb refuses it
+        # permanently. Same 64 Ed25519 bytes, so DeletionProof's wire shape is
+        # unchanged.
+        from ciris_engine.logic.utils import substrate_signing
+
+        signature_bytes = substrate_signing.sign_classical(engine, canonical)
         public_key_id = engine.local_derived_key_id()
     except ValueError as e:
         raise HTTPException(

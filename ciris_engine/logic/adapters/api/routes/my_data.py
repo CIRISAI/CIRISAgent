@@ -685,20 +685,25 @@ def _apply_consent_change(adapter: Any, consent_given: bool) -> None:
     except Exception as e:
         logger.warning(f"Failed to persist consent to .env: {e}")
 
+    # The post-wizard opt-in goes through the one trace-sharing handle, so this
+    # card grants BOTH the capture gate and the ship gate. It used to emit the
+    # community-trust grant alone, which left traces sealing locally forever
+    # while the card reported sharing as on.
+    #
+    # require_opt_in=False: the toggle IS the owner's act, and _update_env_consent
+    # above has already written it — but the grant must not depend on that write
+    # having succeeded (it is best-effort and logs its own failure).
     try:
-        from ciris_engine.logic.services.governance.consent.attestation import (
-            RevocationIntent,
-            current_community_grant_id,
-            emit_community_consent_grant,
-            emit_community_consent_revocation,
+        from ciris_engine.logic.services.governance.consent.trace_sharing import (
+            grant_trace_sharing,
+            revoke_trace_sharing,
         )
+        from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
 
         if consent_given:
-            emit_community_consent_grant()
+            grant_trace_sharing(TraceConsentSource.DATA_CARD, require_opt_in=False)
         else:
-            target = current_community_grant_id()
-            if target:
-                emit_community_consent_revocation(RevocationIntent.WITHDRAW, target)
+            revoke_trace_sharing(TraceConsentSource.DATA_CARD)
     except Exception as e:
         logger.debug(f"consent-CEG: accord-settings emit skipped: {e}")
 

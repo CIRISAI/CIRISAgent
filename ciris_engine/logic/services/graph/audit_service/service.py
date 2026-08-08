@@ -1343,7 +1343,26 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
 
         sign_canon = engine.audit_canonicalize_for_signing(json.dumps(persist_entry))
         sign_bytes = sign_canon if isinstance(sign_canon, bytes) else sign_canon.encode()
-        signature_b64 = base64.b64encode(engine.local_sign(sign_bytes)).decode()
+        # `local_sign` is unusable once the node's classical key is custodied in
+        # the sealed keystore rather than held as a bare seed: that signer's
+        # `HardwareSigner::sign` is async, so persist refuses the synchronous
+        # verb outright —
+        #
+        #   RuntimeError: classical (Ed25519) sign: synchronous sign_ed25519 is
+        #   unavailable for a hardware-custodied classical key ...; use sign_hybrid
+        #
+        # and the whole audit chain fails closed behind it: "Failed to add to
+        # persist audit chain" -> "Hash chain data not generated for action
+        # speak" -> no ACTION_RESULT events -> no traces captured.
+        #
+        # `local_sign_hybrid` is persist's SINGLE hybrid-sign verb (v17.7.0 /
+        # CIRISPersist#470) and works for both custody models. Its
+        # `classical_sig` is the same 64-byte Ed25519 signature `local_sign`
+        # returned, so the chain's wire shape is unchanged — this swaps how the
+        # signature is obtained, not what is written.
+        from ciris_engine.logic.utils import substrate_signing
+
+        signature_b64 = base64.b64encode(substrate_signing.sign_classical(engine, sign_bytes)).decode()
         persist_entry["signature"] = signature_b64
 
         engine.audit_record_entry(json.dumps(persist_entry))

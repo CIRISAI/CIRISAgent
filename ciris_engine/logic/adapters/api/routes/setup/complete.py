@@ -653,22 +653,38 @@ def _emit_accord_metrics_consent(setup: SetupCompleteRequest) -> None:
     Best-effort: a failed emit must never break setup completion — the
     user can re-grant from Data & Privacy settings (the accord-settings
     PUT emits the identical artifact).
+
+    Goes through the one trace-sharing handle so the wizard grants the
+    SHIP gate too. Granting capture alone was the silent failure: traces
+    sealed, the node reported healthy, and nothing ever left it because
+    no ``consent:replication`` grant named the canonical.
+
+    ``require_opt_in=False``: the checkbox IS the owner's act (this only
+    runs when the user selected it), and the env var it normally lands in
+    has not been written yet at this point in completion.
     """
     if "ciris_accord_metrics" not in setup.enabled_adapters:
         return
     try:
-        from ciris_engine.logic.services.governance.consent.attestation import (
-            emit_community_consent_grant,
+        from ciris_engine.logic.services.governance.consent.trace_sharing import (
+            grant_trace_sharing,
         )
+        from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
 
-        attestation_id = emit_community_consent_grant()
-        if attestation_id:
-            logger.info(f"[SETUP] Accord-traces CEG consent grant written: {attestation_id}")
+        result = grant_trace_sharing(TraceConsentSource.SETUP_WIZARD, require_opt_in=False)
+        if result.complete:
+            logger.info(
+                f"[SETUP] Accord-traces consent granted: capture={result.capture_grant_id} "
+                f"ship={result.peers_authored}"
+            )
         else:
+            # Not necessarily wrong: pre-root there is no canonical peer to name
+            # yet, and the delivery probe retries the ship grant after the claim.
             logger.warning(
-                "[SETUP] Accord-traces opt-in: CEG grant emit returned None "
-                "(engine/federation key not ready?) — user can re-grant from "
-                "Data & Privacy settings"
+                f"[SETUP] Accord-traces opt-in INCOMPLETE: capture="
+                f"{result.capture_grant_id or 'MISSING'} ship={result.peers_authored or 'MISSING'} "
+                f"errors={result.errors} — the delivery probe retries the ship grant once a "
+                f"canonical peer roots; user can also re-grant from Data & Privacy settings"
             )
     except Exception as e:
         logger.warning(f"[SETUP] Accord-traces CEG grant emit failed (non-fatal): {e}")

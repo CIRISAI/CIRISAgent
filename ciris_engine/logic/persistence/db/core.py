@@ -504,7 +504,11 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     # as a filesystem path.
     dsn, sentinel_dir = _persist_dsn_and_sentinel(db_path)
 
-    signing_key_id = os.environ.get("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
+    # Shared with node_fold's `_resolve_key_id()` — this same string is the
+    # node's `keystore_alias`, and the sealed keystore keys off (dir, alias).
+    from ciris_engine.logic.utils.path_resolution import get_federation_alias
+
+    signing_key_id = get_federation_alias()
 
     # #937 — safety net. `setup_basic_logging` normally installs this, but
     # not every entry point (tests, tooling, embedded hosts) goes through it,
@@ -522,58 +526,66 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         )
         return
 
-    # Local signing seed for the persist Engine. Per persist 3.0 CHANGELOG
-    # #112 ("Engine::sign_hybrid facade + cohabitation propagation fix"),
-    # `local_key_id` + `local_key_path` configure a LocalSigner so the
-    # agent can call `Engine::sign_hybrid` directly. The seed file holds
-    # 32 raw Ed25519 bytes mode 0o600, persisted under the data dir so the
-    # local identity is stable across restarts.
+    # ONE federation identity per node (CIRISServer#380 / CIRISPersist#616).
     #
-    # NOTE — this alone does NOT close the Edge cohabitation pubkey-shape
-    # mismatch (CIRISEdge#43): persist 3.0 exposes the LocalSigner's 32-
-    # byte Ed25519 surface via `local_public_key_b64()` (correct), but
-    # `keyring_signer_capsule()` — which Edge's ReticulumTransport reads —
-    # still returns the hardware-rooted hybrid signer whose `public_key()`
-    # is 65 bytes. Edge then refuses with "federation Ed25519 pubkey must
-    # be 32 bytes, got 65". Tracked upstream; agent-side config below is
-    # the correct shape regardless.
-    from ciris_engine.logic.utils.path_resolution import get_data_dir
+    # We used to mint our own bare Ed25519 + ML-DSA-65 pair under the data dir
+    # and hand the paths to `local_key_path` / `local_pqc_key_path`. That was
+    # the only shape the Python constructor accepted — and it was a second
+    # identity. The node's compose resolves its federation key from the sealed
+    # keystore at `<home>/identity`, so the Engine signed as one key while the
+    # node published as another: the self identity-occurrence failed its own
+    # scrub-signature, no peer could seal to us, KEX never became authoritative,
+    # and traces were produced perfectly and delivered nowhere — with ZERO
+    # arrivals and ZERO rejections upstream, because nothing was attributable.
+    #
+    # ciris-server 0.5.161 (persist v30.4.1) closes it: pass `identity_dir` +
+    # `keystore_alias` and the Engine resolves the node's own identity — sealed
+    # classical half via the keystore, bare `ml_dsa_65.seed` for the PQC half
+    # (no TPM does ML-DSA). We hand over no key material at all. The alias must
+    # match what node_fold passes to `serve_with_python_adapter`; both read
+    # `get_federation_alias()` so they cannot drift.
+    #
+    # `local_*_path` still exists for tests and harnesses. It must not be used
+    # here: 0.5.160+ refuses to boot when the two halves are different keys.
+    from ciris_engine.logic.utils.path_resolution import get_identity_dir
 
-    data_dir = get_data_dir()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    local_seed_path = data_dir / "local_signing.seed"
-    if not local_seed_path.exists():
-        # Bootstrap a fresh Ed25519 seed. Persist's LocalSigner reads 32
-        # raw bytes from this path; matching shape is the entire interface.
-        local_seed_path.write_bytes(os.urandom(32))
-        try:
-            local_seed_path.chmod(0o600)
-        except (
-            OSError
-        ) as e:  # noqa: BLE001 - chmod is best-effort on platforms (Windows)
-            logger.debug("Could not chmod local signing seed (non-fatal): %s", e)
-        logger.info("Bootstrapped local signing seed at %s", local_seed_path)
+    identity_dir = get_identity_dir()
+    identity_dir.mkdir(parents=True, exist_ok=True)
 
-    # PQC (post-quantum) seed for hybrid signing. Persist 3.x's
-    # `Engine::sign_hybrid` (used by `audit_record_entry` on Postgres for
-    # the Merkle chain) refuses to sign without a local PQC key — the
-    # Ed25519-only path SQLite uses doesn't suffice. The Postgres backend
-    # raises `ciris_persist.Permanent: merkle: sign_hybrid: PQC local not
-    # configured (set pqc_key_id + pqc_key_path)` and the agent then can't
-    # write to the audit chain, which cascades into "Hash chain data not
-    # generated" handler errors and missing ACTION_RESULT events. Bootstrap
-    # a 32-byte seed matching the LocalSigner contract so the persist 3.x
-    # hybrid path has a key to sign with on both backends.
-    local_pqc_seed_path = data_dir / "local_pqc_signing.seed"
-    if not local_pqc_seed_path.exists():
-        local_pqc_seed_path.write_bytes(os.urandom(32))
+    # The PQC half must EXIST BEFORE the Engine is constructed.
+    #
+    # `create_identity_if_missing=True` mints only the CLASSICAL half — on a
+    # virgin identity dir it writes `<alias>.ed25519.seed.blob` + `.master.key`
+    # and nothing else. Verified against 0.5.161:
+    #
+    #     Engine(..., identity_dir=<fresh>, create_identity_if_missing=True)
+    #     -> ciris-agent-bootstrap.ed25519.seed.blob   (60 B)
+    #        ciris-agent-bootstrap.master.key          (32 B)
+    #        ml_dsa_65.seed                            ABSENT
+    #
+    # Without the PQC half, persist's `sign_hybrid` — which `audit_record_entry`
+    # uses for the Merkle chain — refuses to sign. The agent then cannot write
+    # the audit chain, which cascades exactly as it always did: "Failed to add
+    # to persist audit chain" -> "Hash chain data not generated for action
+    # speak" -> no ACTION_RESULT events -> no traces captured at all.
+    #
+    # That cascade is invisible on any machine that has booted before, because
+    # the node's compose adopts (and on its own path creates) this seed — so a
+    # developer's identity dir already has it while a fresh CI checkout does
+    # not. It cost a green local run and a red CI.
+    #
+    # Minting it here is not a second identity: the PQC half is bare BY DESIGN
+    # (no TPM does ML-DSA), it lives at the conventional path the node's compose
+    # reads, and compose logs `adopted existing ML-DSA-65 federation seed` from
+    # exactly this file. One key, written by whichever half starts first.
+    pqc_seed_path = identity_dir / "ml_dsa_65.seed"
+    if not pqc_seed_path.exists():
+        pqc_seed_path.write_bytes(os.urandom(32))
         try:
-            local_pqc_seed_path.chmod(0o600)
-        except (
-            OSError
-        ) as e:  # noqa: BLE001 - chmod is best-effort on platforms (Windows)
-            logger.debug("Could not chmod local PQC signing seed (non-fatal): %s", e)
-        logger.info("Bootstrapped local PQC signing seed at %s", local_pqc_seed_path)
+            pqc_seed_path.chmod(0o600)
+        except OSError as e:  # noqa: BLE001 - chmod is best-effort (Windows)
+            logger.debug("Could not chmod PQC seed (non-fatal): %s", e)
+        logger.info("Minted the node's ML-DSA-65 federation seed at %s", pqc_seed_path)
 
     # Test isolation only: under pytest, fixtures routinely bootstrap a
     # fresh per-test engine, and a single test may invoke more than one
@@ -614,10 +626,26 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         return Engine(
             dsn,
             signing_key_id,
-            local_key_id=signing_key_id,
-            local_key_path=str(local_seed_path),
-            local_pqc_key_id=signing_key_id,
-            local_pqc_key_path=str(local_pqc_seed_path),
+            identity_dir=str(identity_dir),
+            keystore_alias=signing_key_id,
+            # First provisioning mints the node's ONE identity. persist warns
+            # that this flag is how CIRISAgent#1009 happened, so it is worth
+            # being explicit about why it is safe *here* and not there:
+            #
+            #  - #1009 minted a SECOND identity beside an existing one, because
+            #    the Engine and the node resolved different key material. Now
+            #    both resolve the same (identity_dir, alias) — from
+            #    get_identity_dir() / get_federation_alias() — so a mint can
+            #    only ever produce the identity the node itself will then open.
+            #  - We are the node. The Engine is constructed before the node's
+            #    compose runs, so on a genuinely unprovisioned home nothing else
+            #    can create it first; without this the first boot cannot start.
+            #  - If the home moves, both halves move together: the node gets a
+            #    new identity, not a split one, and the mesh re-roots it.
+            #
+            # The two-identity case this cannot cause is still covered by the
+            # 0.5.160 boot gate, which compares public key bytes.
+            create_identity_if_missing=True,
         )
 
     try:

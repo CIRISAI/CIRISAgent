@@ -325,75 +325,51 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
     def _user_opted_into_traces() -> bool:
         """Did the OWNER opt in to trace replication? Consent is theirs to give.
 
-        Returns False when the signal cannot be read, so the failure mode is
-        "no consent authored" rather than "consented on the user's behalf".
+        One reader of the opt-in signal, shared with every other consent path.
         """
-        try:
-            from ciris_engine.logic.config.env_utils import get_env_var  # noqa: PLC0415
+        from ciris_engine.logic.services.governance.consent.trace_sharing import (
+            owner_opted_into_trace_sharing,
+        )
 
-            if str(get_env_var("CIRIS_ACCORD_METRICS_CONSENT", "")).lower() == "true":
-                return True
-        except Exception:  # noqa: BLE001
-            pass
-        import os
-
-        return os.environ.get("CIRIS_ACCORD_METRICS_CONSENT", "").lower() == "true"
+        return owner_opted_into_trace_sharing()
 
     def _try_author_consent(peer_key_id: str) -> bool:
-        """Author the owner's replication consent; True once it lands.
+        """Author the owner's trace-sharing consent; True once it lands.
 
         Refuses until the node is claimed, which is expected for the whole
-        pre-claim part of the window — logged at debug so the retry loop does
-        not shout every 15s, then once at info when it succeeds.
+        pre-claim part of the window — the claim happens later in the wizard, so
+        a fixed-point attempt at boot is guaranteed to fail. Hence the retry.
+
+        Goes through the one trace-sharing handle, so this authors the CAPTURE
+        gate as well as the ship gate. Authoring only the latter was half the
+        split that left `capture=True, replication=False` nodes sealing traces
+        that never moved.
         """
-        try:
-            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+        from ciris_engine.logic.services.governance.consent.trace_sharing import (
+            grant_trace_sharing,
+        )
+        from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
 
-            author = getattr(ciris_server, "author_federation_consent", None)
-            defaults = getattr(ciris_server, "default_attestation_prefixes", None)
-            if author is None or defaults is None:
-                return False
-            # prefixes=None: the build supplies its own default. Restating the
-            # list is what hid a dead trace plane for eight releases — a harness
-            # passed ["capacity:"] explicitly and never exercised the default,
-            # while its log printed a hardcoded "trace:,capacity:".
-            #
-            # analyze=True (0.5.151) is not optional decoration: without it the
-            # grant is incomplete. It is the consent to BE SCORED, and a peer
-            # that skips it builds no reputation and may be refused outright.
-            author(peer_key_id, None, True)
-
-            # ASSERT THE STANCE, NOT THE CALL. A consent row can EXIST and still
-            # fold to `unspecified` — which reads as consented to anything
-            # counting rows, while the serve gate goes on refusing. That is the
-            # state ~240 nodes are already in, and it is invisible from the
-            # authoring side. Returning True here on a successful call alone
-            # would reproduce exactly that.
-            stance = None
-            probe = getattr(ciris_server, "analyze_consent_stance", None)
-            if probe is not None:
-                try:
-                    stance = probe(peer_key_id)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("[DELIVERY-PROBE] consent stance unreadable for %s: %s", peer_key_id, exc)
-            if stance is not None and stance != "granted":
-                logger.warning(
-                    "[DELIVERY-PROBE] consent authored for %s but stance is %r, not 'granted' — "
-                    "the row exists and the gate will still refuse; traces will not promote",
-                    peer_key_id,
-                    stance,
-                )
-                return False
+        # require_opt_in=False: the caller already checked _user_opted_into_traces()
+        # before reaching here, and both read the same signal.
+        result = grant_trace_sharing(TraceConsentSource.DELIVERY_PROBE, require_opt_in=False)
+        if result.complete:
             logger.info(
-                "[DELIVERY-PROBE] owner consent AUTHORED for %s (analyze=True, build-default prefixes), "
-                "stance=%s — sealed traces can now promote",
+                "[DELIVERY-PROBE] owner consent AUTHORED for %s (capture=%s, ship=%s) — "
+                "sealed traces can now promote",
                 peer_key_id,
-                stance or "unverified(pre-0.5.151)",
+                result.capture_grant_id,
+                result.peers_authored,
             )
             return True
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("[DELIVERY-PROBE] consent not yet authorable for %s: %s", peer_key_id, exc)
-            return False
+        logger.debug(
+            "[DELIVERY-PROBE] consent not yet complete for %s (capture=%s ship=%s errors=%s) — retrying",
+            peer_key_id,
+            result.capture_grant_id or "none",
+            result.peers_authored or "none",
+            result.errors,
+        )
+        return False
 
     def _envelopes_sent_total() -> Optional[int]:
         """Read round_diagnostics.envelopes_sent_total from delivery_status()

@@ -662,9 +662,15 @@ def main():
         safety_interpret_criteria_file=args.safety_interpret_criteria_file,
         safety_interpret_openrouter_key_file=args.safety_interpret_openrouter_key_file,
         safety_interpret_judge_model=args.safety_interpret_judge_model,
+        # An explicitly-requested template applies to WHATEVER module is running.
+        # This used to be gated on `safety_battery`, so `--safety-battery-template`
+        # was accepted, echoed in the report, and silently ignored by every other
+        # module — and even for safety_battery it reached only the setup wizard,
+        # never the server. `None` here means "no explicit request"; the server's
+        # resolve_template_id() then applies module-implied defaults.
         setup_template_id=(
             args.safety_battery_template
-            if any(m.value == "safety_battery" for m in modules)
+            if args.safety_battery_template and args.safety_battery_template != "default"
             else None
         ),
     )

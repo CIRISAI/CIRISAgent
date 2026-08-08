@@ -31,7 +31,7 @@ from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 from ciris_engine.schemas.processors.results import DreamResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus, ThoughtType
-from ciris_engine.schemas.runtime.models import Task, Thought
+from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought
 
 if TYPE_CHECKING:
     from ciris_engine.logic.infrastructure.handlers.action_dispatcher import ActionDispatcher
@@ -207,6 +207,19 @@ class MinimalDreamProcessor(BaseProcessor):
             task_id=f"task_{session_id}",
             description="Consolidate memories and evolve toward aspirations",
             channel_id="dream",
+            # context is REQUIRED, not decoration: build_dispatch_context reads
+            # ONLY `task.context.channel_id` and never the top-level field, so a
+            # seed task with context=None falls through to "No channel context
+            # found for thought ..." and raises — killing the dream session at
+            # its first thought. Mirrors task_manager.py, which sets the channel
+            # in both places for exactly this reason.
+            context=TaskContext(
+                channel_id="dream",
+                user_id=None,
+                correlation_id=session_id,
+                parent_task_id=None,
+                agent_occurrence_id=self.agent_occurrence_id,
+            ),
             priority=10,
             status=TaskStatus.ACTIVE,
             created_at=now_iso,

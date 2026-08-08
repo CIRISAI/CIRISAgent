@@ -276,3 +276,65 @@ class TestMinimalDreamProcessor:
         # Verify PONDER passed through unchanged
         assert result.final_action.selected_action == HandlerActionType.PONDER
         assert result.overridden is False
+
+
+class TestDreamSeedTaskChannelContext:
+    """The dream seed Task must carry a RESOLVABLE channel context (#1004).
+
+    `build_dispatch_context` reads only `task.context.channel_id` — never the
+    top-level `task.channel_id`. A seed task built with `context=None` therefore
+    fell through to "No channel context found for thought ..." and raised,
+    killing the dream session at its very first thought. Setting the channel in
+    one of the two places it is read from is indistinguishable from setting it
+    in neither.
+    """
+
+    def _seed_task_source(self) -> str:
+        import inspect
+
+        from ciris_engine.logic.processors.states import minimal_dream_processor
+
+        return inspect.getsource(minimal_dream_processor)
+
+    def test_seed_task_sets_task_context(self) -> None:
+        src = self._seed_task_source()
+        assert "context=TaskContext(" in src, (
+            "dream seed Task must populate `context=TaskContext(...)`; the "
+            "top-level channel_id alone is invisible to build_dispatch_context"
+        )
+
+    def test_task_context_is_what_context_utils_reads(self) -> None:
+        """Lock the actual read path, not just the presence of the kwarg."""
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+        from ciris_engine.schemas.runtime.models import Task, TaskContext
+
+        def build(context: object) -> Task:
+            return Task(
+                task_id="task_s1",
+                description="Consolidate memories and evolve toward aspirations",
+                channel_id="dream",
+                context=context,
+                priority=10,
+                status=TaskStatus.ACTIVE,
+                created_at="2026-01-01T00:00:00Z",
+                updated_at="2026-01-01T00:00:00Z",
+                agent_occurrence_id="default",
+            )
+
+        def resolves(task: Task) -> bool:
+            # Mirrors context_utils.build_dispatch_context's lookup exactly.
+            return hasattr(task.context, "channel_id") and bool(getattr(task.context, "channel_id", None))
+
+        assert resolves(build(None)) is False, "regression guard is inert if this passes"
+        assert (
+            resolves(
+                build(
+                    TaskContext(
+                        channel_id="dream",
+                        correlation_id="s1",
+                        agent_occurrence_id="default",
+                    )
+                )
+            )
+            is True
+        )

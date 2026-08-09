@@ -662,6 +662,10 @@ def _emit_accord_metrics_consent(setup: SetupCompleteRequest) -> None:
     ``require_opt_in=False``: the checkbox IS the owner's act (this only
     runs when the user selected it), and the env var it normally lands in
     has not been written yet at this point in completion.
+
+    ``analyze`` is the wizard's own toggle, not a constant. The substrate
+    marks the be-scored dimension ``required: false`` with named costs;
+    hardcoding it True granted a dimension the owner was never asked about.
     """
     if "ciris_accord_metrics" not in setup.enabled_adapters:
         return
@@ -671,7 +675,11 @@ def _emit_accord_metrics_consent(setup: SetupCompleteRequest) -> None:
         )
         from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
 
-        result = grant_trace_sharing(TraceConsentSource.SETUP_WIZARD, require_opt_in=False)
+        result = grant_trace_sharing(
+            TraceConsentSource.SETUP_WIZARD,
+            require_opt_in=False,
+            analyze=setup.trace_analyze,
+        )
         if result.complete:
             logger.info(
                 f"[SETUP] Accord-traces consent granted: capture={result.capture_grant_id} "
@@ -688,6 +696,58 @@ def _emit_accord_metrics_consent(setup: SetupCompleteRequest) -> None:
             )
     except Exception as e:
         logger.warning(f"[SETUP] Accord-traces CEG grant emit failed (non-fatal): {e}")
+
+
+#: Providers that run without an API key — on-device inference and local
+#: inference servers. Mirrors the wizard's own keyless whitelist
+#: (``SetupState.canProceedFromCurrentStep``); a provider outside this set with
+#: an empty key is not a configuration, it is an unfinished one.
+KEYLESS_LLM_PROVIDERS = frozenset({"local", "localai", "local_inference", "mobile_local"})
+
+
+def _has_usable_llm_provider(setup: SetupCompleteRequest) -> bool:
+    """Will this configuration produce a working LLM?
+
+    Not a style check — a false answer here is the difference between an agent
+    that degrades and one that refuses to boot. ``llm_service`` is optional only
+    on the first run; on the NEXT boot ``is_first_run()`` is False, so
+    ``verify_core_services`` promotes it to critical and initialization ABORTS.
+    The untouched wizard default (``provider="OpenAI"``, ``key=""``) lands
+    exactly there.
+    """
+    if setup.run_without_ai:
+        return False
+    provider = (setup.llm_provider or "").strip().lower()
+    if not provider or provider == "none":
+        return False
+    if provider in KEYLESS_LLM_PROVIDERS:
+        return True
+    return bool((setup.llm_api_key or "").strip())
+
+
+def _write_llm_availability_config(f: Any, setup: SetupCompleteRequest) -> None:
+    """Write ``CIRIS_SERVICES_DISABLED=true`` when no usable provider was chosen.
+
+    This is the existing, shipped mechanism — the same state
+    ``POST /v1/system/llm/ciris-services/disable`` produces — and it is what
+    keeps ``llm_service`` optional at boot. It is written for the explicit
+    "run without AI" choice AND for any path that ends without a usable
+    provider, because those two are the same runtime state and only one of
+    them used to be handled.
+    """
+    if _has_usable_llm_provider(setup):
+        return
+    _write_section_header(f, "AI disabled (no usable LLM provider configured)")
+    f.write("CIRIS_SERVICES_DISABLED=true\n")
+    if setup.run_without_ai:
+        logger.info("[SETUP] Owner chose to run without AI — CIRIS_SERVICES_DISABLED=true")
+    else:
+        logger.warning(
+            "[SETUP] No usable LLM provider (provider=%r, key_set=%s) — writing "
+            "CIRIS_SERVICES_DISABLED=true so the next boot degrades instead of aborting",
+            setup.llm_provider,
+            bool((setup.llm_api_key or "").strip()),
+        )
 
 
 def _write_mobile_local_llm_config(f: Any, setup: SetupCompleteRequest) -> None:
@@ -781,6 +841,7 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
 
         # Write adapter-specific configs using helper functions
         _emit_accord_metrics_consent(setup)
+        _write_llm_availability_config(f, setup)
         _write_mobile_local_llm_config(f, setup)
         _write_adapter_specific_config(f, setup)
 

@@ -423,6 +423,26 @@ class SetupCompleteRequest(BaseModel):
         default=False,
         description="Whether user consents to include location data in anonymized telemetry traces",
     )
+    trace_analyze: bool = Field(
+        default=True,
+        description=(
+            "CC#46 'be scored': whether shipped traces may be analyzed to build this node's "
+            "reputation. The substrate marks this required=false with named costs, so it is a "
+            "real choice the wizard collects — not a constant. Only consulted when "
+            "'ciris_accord_metrics' is in enabled_adapters (i.e. the owner opted into sharing)."
+        ),
+    )
+
+    # Run without AI
+    run_without_ai: bool = Field(
+        default=False,
+        description=(
+            "The owner chose to run with no LLM. Writes CIRIS_SERVICES_DISABLED=true, which is "
+            "what keeps llm_service optional. Without it, the NEXT boot has is_first_run()==False, "
+            "verify_core_services makes llm_service critical, and initialization ABORTS rather "
+            "than degrading."
+        ),
+    )
 
     # Node Connection (set by "Connect to Node" device auth flow)
     node_url: Optional[str] = Field(None, description="CIRISNode URL (e.g., https://node.ciris.ai)")

@@ -526,8 +526,18 @@ class QARunner:
         # Final incidents reminder - CANNOT be missed
         if has_incidents:
             self.console.print("\n" + "=" * 60)
-            self.console.print("[bold red]🚨 CRITICAL: INCIDENTS DETECTED DURING TESTING! 🚨[/bold red]")
-            self.console.print("[bold red]REVIEW THE INCIDENTS LOG ABOVE IMMEDIATELY![/bold red]")
+            if getattr(self, "_incidents_unverifiable", False):
+                # NOT the same failure as "incidents found". This one means the gate
+                # could not look at all — which used to silently PASS, making every
+                # green run only as trustworthy as the log file having existed.
+                self.console.print("[bold red]🚨 RUN NOT CERTIFIED: THE INCIDENTS GATE COULD NOT RUN 🚨[/bold red]")
+                self.console.print(
+                    "[bold red]No incidents were found because none could be looked for. "
+                    "See the CANNOT CERTIFY block above for the expected path.[/bold red]"
+                )
+            else:
+                self.console.print("[bold red]🚨 CRITICAL: INCIDENTS DETECTED DURING TESTING! 🚨[/bold red]")
+                self.console.print("[bold red]REVIEW THE INCIDENTS LOG ABOVE IMMEDIATELY![/bold red]")
             self.console.print("=" * 60)
             return False  # Force failure if incidents occurred
         else:
@@ -813,11 +823,44 @@ class QARunner:
             self._startup_incidents_position = 0
 
     def _has_incidents_occurred(self) -> bool:
-        """Check if any NEW incidents occurred during testing."""
+        """Check if any NEW incidents occurred during testing.
+
+        FAILS CLOSED when the log is missing. A gate that cannot look must not
+        report clean.
+
+        This used to `return False` — no log, therefore no incidents, therefore
+        PASS. That made the whole gate a coin flip, and it was observed twice: on
+        2.9.13's main run the sqlite leg found the log and failed while postgres
+        printed "NO INCIDENTS LOG FOUND" and passed; on the re-run the two legs
+        SWAPPED. Both runs had 100% test success on both backends and identical
+        expected, test-induced errors. Which leg failed depended only on which
+        one's file existed.
+
+        The consequence is worse than a flaky red: a leg that passes because the
+        log is absent certifies a run nobody checked. Every green Staged QA in
+        this repo's history is therefore only as trustworthy as the file having
+        been there, and we cannot tell after the fact which ones were.
+        """
         incidents_log = self._incidents_log_path()
 
         if not incidents_log.exists():
-            return False
+            self.console.print(
+                "\n[bold red]❌ CANNOT CERTIFY THIS RUN — the incidents log does not exist.[/bold red]"
+            )
+            self.console.print(
+                f"[red]   expected : {incidents_log.resolve()}[/red]\n"
+                f"[red]   backend  : {getattr(getattr(self, 'server_manager', None), 'database_backend', '<unknown>')}[/red]\n"
+                "[red]   WHY: this gate reads that file to decide whether the agent raised "
+                "ERROR/CRITICAL during testing. With no file there is nothing to read, so a "
+                "'pass' would mean 'not checked', not 'clean'.[/red]\n"
+                "[red]   FIX: confirm the server started and configured file logging for this "
+                "backend (logs/<backend>/incidents_latest.log is created at startup). A run that "
+                "cannot be checked is a failed run, not a clean one.[/red]"
+            )
+            # Distinguish "could not check" from "checked and found incidents" —
+            # they need different debugging and must not read alike.
+            self._incidents_unverifiable = True
+            return True  # fail closed
 
         # Only check for new content added since startup
         try:

@@ -387,6 +387,41 @@ def _click_or_tap(client: TestServerClient, adb: ADBHelper, test_tag: str) -> bo
     return False
 
 
+def _wizard_entered(adb: ADBHelper, config: dict, ui: UIAutomator, timeout: float = 15.0) -> bool:
+    """Did sign-in land us on the first-run wizard?
+
+    Asserted on the wizard's own testTags, not on prose. The previous check
+    looked for the literal words "Setup" / "LLM" / "Provider", which was true of
+    the pre-2.9.14 wizard whose first screen was the LLM step. The redesign
+    opens on YOU ("Create your federation ID") and moves LLM to screen 3, so
+    that check failed against a wizard that was rendering perfectly — it
+    reported "Setup screen not found" while dumping the new screen's full text.
+
+    Prose was the wrong anchor for a second reason: the screen is localized into
+    29 languages, and an emulator whose locale is not English fails a
+    English-substring match no matter which wizard is on screen. testTags are
+    stable across both redesigns and locales.
+    """
+    deadline = time.time() + timeout
+    client = connect_test_server(adb, config, launch_if_needed=False, clear_data=False)
+    if client is not None:
+        # Screen 1 of the wizard, by tag. `input_fedid_label` is the required
+        # fed-ID name field; `step_indicator` is the 1-2-3 chrome.
+        while time.time() < deadline:
+            tags = client.tags()
+            if any(t in tags for t in ("input_fedid_label", "step_indicator", "btn_next")):
+                return True
+            time.sleep(0.5)
+        return False
+
+    # No test server (non-test build): fall back to text, but to text the CURRENT
+    # wizard actually renders. English-only by nature — see the docstring.
+    return bool(
+        ui.wait_for_text("federation ID", timeout=timeout)
+        or ui.wait_for_text("Welcome to CIRIS", timeout=3)
+    )
+
+
 def connect_test_server(
     adb: ADBHelper,
     config: dict,
@@ -739,9 +774,7 @@ def test_google_signin(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRep
         # After Google sign-in, app should navigate to Setup wizard
         # Look for setup-related UI elements
         setup_visible = (
-            ui.wait_for_text("Setup", timeout=10)  # Generic setup text
-            or ui.wait_for_text("LLM", timeout=5)  # LLM provider selection in setup
-            or ui.wait_for_text("Provider", timeout=5)
+            _wizard_entered(adb, config, ui)
         )
 
         if setup_visible:
@@ -817,7 +850,7 @@ def test_local_login(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepor
         print(f"  [2/2] Verifying navigation to Setup screen...")
 
         # Should navigate directly to Setup
-        setup_visible = ui.wait_for_text("Setup", timeout=10) or ui.wait_for_text("LLM", timeout=5)
+        setup_visible = _wizard_entered(adb, config, ui)
 
         if setup_visible:
             return TestReport(
@@ -1819,6 +1852,19 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
                 time.sleep(1)
                 result = test_local_login(adb, ui, config)
                 results.append(result)
+                if result.result == TestResult.PASSED:
+                    # This run is now a LOCAL run, and later steps must know.
+                    # The wizard ends at Login by design — completing setup
+                    # reloads the runtime, which invalidates the setup token
+                    # ("Node back + CLAIMED after reconfigure → Login",
+                    # CIRISApp.kt) — so the chat step re-signs-in with the
+                    # account the wizard just created. That re-login is gated on
+                    # login_mode == "local"; without this the fallback kept the
+                    # mode at "google", the re-login was skipped, and the run sat
+                    # on the Login screen until the Interact wait timed out,
+                    # reporting "never reached Interact" as though the agent had
+                    # failed to start.
+                    config["login_mode"] = "local"
                 if result.result != TestResult.PASSED:
                     return TestReport(
                         name="test_full_flow",

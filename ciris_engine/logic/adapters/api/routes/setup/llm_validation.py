@@ -15,10 +15,18 @@ from .models import ListModelsResponse, LiveModelInfo, LLMProvider, LLMValidatio
 logger = logging.getLogger(__name__)
 
 # Constants for live model listing
+# This table is not only for listing models: `_get_provider_base_url` reads it
+# when the wizard finishes, and whatever it returns is what lands in .env as
+# OPENAI_API_BASE (routes/setup/config.py:442). A provider the wizard offers but
+# this table does not name therefore writes OPENAI_API_BASE="" — and an empty
+# base URL is not an error, it is the OpenAI default, so the agent silently
+# sends that provider's key to api.openai.com. Any id added to the client's
+# provider dropdown must appear here too.
 _PROVIDER_BASE_URLS: Dict[str, str] = {
     "openrouter": "https://openrouter.ai/api/v1",
     "groq": "https://api.groq.com/openai/v1",
     "together": "https://api.together.xyz/v1",
+    "deepinfra": "https://api.deepinfra.com/v1/openai",
 }
 
 _LIST_MODELS_TIMEOUT = 10.0  # seconds
@@ -101,6 +109,20 @@ def _get_llm_providers() -> List[LLMProvider]:
             examples=[
                 "Llama 3.3 70B Turbo",
                 "Llama Vision Free",
+            ],
+        ),
+        LLMProvider(
+            id="deepinfra",
+            name="DeepInfra",
+            description="vLLM-backed open models (Qwen, DeepSeek, Llama)",
+            requires_api_key=True,
+            requires_base_url=False,
+            requires_model=True,
+            default_base_url="https://api.deepinfra.com/v1/openai",
+            default_model="Qwen/Qwen3.6-35B-A3B",
+            examples=[
+                "Qwen3.6 35B A3B",
+                "DeepSeek V3",
             ],
         ),
         LLMProvider(

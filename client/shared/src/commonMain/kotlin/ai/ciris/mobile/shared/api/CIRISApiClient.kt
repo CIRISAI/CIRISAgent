@@ -4385,9 +4385,15 @@ class CIRISApiClient(
      * re-POST is a no-op.
      *
      * When [peerKeyId] is null, the method resolves the canonical the node is
-     * rooted to via `GET {localNodeUrl}/v1/accord/canonical-servers` (first
+     * rooted to via `GET {localNodeUrl}/v1/accord/canonical/servers` (first
      * entry). [attestationPrefixes] is the explicit scope the user consented
      * to (empty ⇒ the node 400s — pass what was actually consented).
+     *
+     * [analyze] is CC#46's be-scored dimension and is the OWNER'S ANSWER —
+     * pass what they chose. The substrate marks it `required: false` with named
+     * costs, so a caller that always sends true grants a dimension the user was
+     * never asked about. The default exists only for callers acting on a
+     * standing opt-in with no fresh answer to hand.
      *
      * @return the raw response body (carries `grant_attestation_id`).
      */
@@ -4402,12 +4408,25 @@ class CIRISApiClient(
         val client = federationHttpClient()
         return try {
             val peer = peerKeyId ?: run {
-                val resp = client.get("$localNodeUrl/v1/accord/canonical-servers") {
+                // `canonical/servers`, NOT `canonical-servers`. The route is
+                // `/v1/accord/canonical/servers` (accord_provision.rs:3458); the
+                // hyphenated spelling 404s and there is no redirect. Verified live:
+                //   :4243 /v1/accord/canonical-servers  -> 404
+                //   :4243 /v1/accord/canonical/servers  -> 200 {"servers":[...]}
+                //
+                // The cost of the typo was the whole trace plane. Consent WAS
+                // requested and the owner session WAS valid; this lookup threw, the
+                // catch is non-fatal by design, and setup completed reporting
+                // success while `consent:replication` was never authored — so
+                // sealed traces strand at (self, local) forever. A first-run wizard
+                // that says it consented and did not is exactly the failure the
+                // [ORDER] saga logging exists to make visible.
+                val resp = client.get("$localNodeUrl/v1/accord/canonical/servers") {
                     token?.let { header("Authorization", "Bearer $it") }
                 }
                 val raw = resp.bodyAsText()
                 if (!resp.status.isSuccess()) {
-                    throw RuntimeException("canonical-servers failed: ${resp.status}: ${raw.take(200)}")
+                    throw RuntimeException("canonical/servers failed: ${resp.status}: ${raw.take(200)}")
                 }
                 // Envelope-tolerant first-key extraction: [{"key_id": ...}] or {"data":[...]}
                 Regex("\"key_id\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.get(1)

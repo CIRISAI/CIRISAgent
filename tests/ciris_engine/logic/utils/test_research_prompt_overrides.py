@@ -501,8 +501,43 @@ class TestFailLoudOnPartialApplication:
             assert "artefactual" in str(exc.value)
 
     def test_template_override_conflict_refuses_rather_than_picking_a_winner(self, monkeypatch, tmp_path):
-        """``AgentTemplate.pdma_overrides`` is ungated and is consulted BEFORE
-        the prompt loader, so a leftover value silently beats the manifest."""
+        """A GENUINE replacement is still refused rather than silently won.
+
+        CSDMA's ``system_prompt`` override really does replace the
+        ``system_guidance_header`` FIELD (``REPLACEABLE_FIELDS``), so a manifest
+        naming that key would be beaten with no signal. That is the case the gate
+        exists for, and it must keep failing loudly.
+        """
+        from ciris_engine.schemas.config.agent import AgentTemplate, CSDMAOverrides
+
+        _activate(
+            monkeypatch,
+            _valid_manifest(tmp_path, dma_prompt={"csdma_common_sense.system_guidance_header": "x"}),
+        )
+        template = AgentTemplate(
+            name="t",
+            description="d",
+            role_description="r",
+            csdma_overrides=CSDMAOverrides(system_prompt="leftover from an earlier run"),
+        )
+        with pytest.raises(ResearchOverrideError) as exc:
+            ro.assert_no_template_conflict(template)
+        assert "precedence conflict" in str(exc.value)
+        assert "csdma_common_sense.system_guidance_header" in str(exc.value)
+
+    def test_pdma_system_prompt_is_additive_so_it_does_not_conflict(self, monkeypatch, tmp_path):
+        """The regression that blocked a live campaign.
+
+        This test previously asserted the opposite, on the premise that
+        ``pdma_overrides`` is "consulted BEFORE the prompt loader, so a leftover
+        value silently beats the manifest". #996 ended that: ``pdma.py`` calls
+        ``get_system_message()`` and composes the override ADDITIVELY, precisely
+        because ``pdma_ethical.system_guidance_header`` carries
+        ``{full_context_str}`` and replacing it would drop the caller's context.
+
+        So the manifest is not beaten, and refusing here blocked a campaign from
+        varying the one key it was designed to vary.
+        """
         from ciris_engine.schemas.config.agent import AgentTemplate, PDMAOverrides
 
         _activate(
@@ -513,12 +548,9 @@ class TestFailLoudOnPartialApplication:
             name="t",
             description="d",
             role_description="r",
-            pdma_overrides=PDMAOverrides(system_prompt="leftover from an earlier run"),
+            pdma_overrides=PDMAOverrides(system_prompt="an additive framing, not a replacement"),
         )
-        with pytest.raises(ResearchOverrideError) as exc:
-            ro.assert_no_template_conflict(template)
-        assert "precedence conflict" in str(exc.value)
-        assert "pdma_ethical.system_guidance_header" in str(exc.value)
+        ro.assert_no_template_conflict(template)  # must not raise
 
     def test_no_conflict_when_template_overrides_are_clear(self, monkeypatch, tmp_path):
         from ciris_engine.schemas.config.agent import AgentTemplate

@@ -170,6 +170,11 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info("Starting database cleanup")
         self.archive_dir.mkdir(parents=True, exist_ok=True)
 
+        # --- Reclaim thoughts left PROCESSING by a dead process (#1018) ---
+        # FIRST, deliberately: every later step reads thought status, and a
+        # stranded PROCESSING row is what makes the rest of them wrong.
+        await self._reclaim_orphaned_processing_thoughts()
+
         # --- Clean up thoughts with invalid/malformed context ---
         await self._cleanup_invalid_thoughts()
 
@@ -306,6 +311,78 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         logger.info(f"Archival: {archived_tasks_count} tasks, {archived_thoughts_count} thoughts archived and removed.")
         logger.info("Database cleanup completed")
+
+    async def _reclaim_orphaned_processing_thoughts(self) -> None:
+        """Fail thoughts this occurrence left PROCESSING when it died (#1018).
+
+        A process that is starting up cannot have anything genuinely in flight,
+        so every ``PROCESSING`` row owned by THIS occurrence is by definition
+        orphaned. Nothing reclaimed them before, and the consequence compounds:
+
+          * The parent task stays ``ACTIVE`` forever.
+          * ``get_tasks_needing_recovery_thought`` only recovers tasks with NO
+            pending/processing thoughts — so the stuck row *suppresses the very
+            recovery that would fix it*. A permanently-stuck thought is
+            indistinguishable from a healthy in-flight one, and the longer it
+            sits the healthier it looks.
+
+        Of the shutdown seed thoughts in the reporting database, exactly one had
+        ever reached ``completed``; every interrupted shutdown since January left
+        a permanent artifact.
+
+        FAILED, not PENDING. The thought died at an unknown point with unknown
+        side effects already committed, so re-running it can duplicate them — and
+        for a ``SHUTDOWN_SHARED_*`` seed that means re-executing a shutdown the
+        operator asked for days ago. Failing states the outcome plainly and, by
+        clearing the pending/processing set, restores the task's eligibility for
+        the normal recovery path.
+
+        SCOPED TO THIS OCCURRENCE. Another occurrence's ``PROCESSING`` rows may be
+        genuinely in flight right now; reclaiming those would abort live work on
+        a peer. This is the one claim a booting process can make safely, and it
+        makes it only about itself.
+        """
+        from ciris_engine.logic.persistence.models.thoughts import (
+            get_thoughts_by_status,
+            update_thought_status,
+        )
+        from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+        from ciris_engine.schemas.runtime.enums import ThoughtStatus
+
+        try:
+            occurrence_id = get_current_occurrence_id()
+            stranded = get_thoughts_by_status(ThoughtStatus.PROCESSING, occurrence_id)
+            if not stranded:
+                logger.info(
+                    "Orphan reclaim: no PROCESSING thoughts held by occurrence %r at startup.", occurrence_id
+                )
+                return
+
+            reclaimed = 0
+            for thought in stranded:
+                try:
+                    if update_thought_status(thought.thought_id, ThoughtStatus.FAILED, occurrence_id):
+                        reclaimed += 1
+                        logger.warning(
+                            "Orphan reclaim: thought %s (task %s) was left PROCESSING by a dead process "
+                            "-> FAILED. It cannot have been in flight: this process is still starting.",
+                            thought.thought_id,
+                            thought.source_task_id,
+                        )
+                except Exception as e:  # noqa: BLE001 - one bad row must not block boot
+                    logger.error("Orphan reclaim: could not fail thought %s: %s", thought.thought_id, e)
+
+            # Loud, with the denominator. "0 reclaimed" over 7 stranded rows is a
+            # different fact from "0 stranded", and the two must not read alike.
+            logger.warning(
+                "Orphan reclaim: %d/%d stranded PROCESSING thoughts failed for occurrence %r. "
+                "Their tasks are now eligible for recovery again.",
+                reclaimed,
+                len(stranded),
+                occurrence_id,
+            )
+        except Exception as e:  # noqa: BLE001 - diagnostics must never block startup
+            logger.error("Orphan reclaim failed (non-fatal, startup continues): %s", e)
 
     async def _cleanup_invalid_thoughts(self) -> None:
         """Clean up thoughts with invalid or malformed context.

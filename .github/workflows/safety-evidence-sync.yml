@@ -51,6 +51,7 @@ concurrency:
 permissions:
   contents: write
   actions: read               # listing + downloading artifacts
+  pull-requests: write        # main's ruleset requires a PR; this job opens one
 
 jobs:
   sync:
@@ -104,11 +105,25 @@ jobs:
             exit 1
           fi
 
-      - name: Commit
+      # Opens a PR rather than pushing to main. main carries a ruleset —
+      # "Changes must be made through a pull request" — so the original
+      # `git push origin main` was rejected with GH013 *after* harvesting
+      # correctly. The evidence was gathered and then thrown away on every run.
+      #
+      # A fixed branch name (not one per run) means repeated syncs update the
+      # SAME open PR instead of accumulating a pile of them; force-push is safe
+      # because the branch is rebuilt from main each time and belongs solely to
+      # this job.
+      - name: Commit and open PR
         if: steps.diff.outputs.changed != '0' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+          BRANCH="evidence/safety-sync"
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add qa_reports/safety_battery qa_reports/safety_interpret
           git commit -m "evidence: sync safety-battery bundles from expiring artifacts
 
@@ -117,7 +132,22 @@ jobs:
           of the bytes and a separate retention question.
 
           bundles: ${{ steps.diff.outputs.bundles_battery }} battery, ${{ steps.diff.outputs.bundles_interpret }} interpret"
-          git push origin main
+          git push --force origin "$BRANCH"
+
+          # Reuse the open PR if there is one; `gh pr create` errors when a PR
+          # already exists for the branch, and that must not fail the job.
+          if gh pr view "$BRANCH" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            echo "Updated the existing evidence PR."
+          else
+            gh pr create \
+              --base main --head "$BRANCH" \
+              --title "evidence: sync safety-battery bundles (${{ steps.diff.outputs.bundles_interpret }} interpret)" \
+              --body "Automated by \`safety-evidence-sync\`. Artifacts expire at 90 days; this is the copy that does not.
+
+          Harvested by \`tools/harvest_safety_evidence.py\`. Traces excluded — 99.9% of the bytes, and a separate retention question.
+
+          bundles: ${{ steps.diff.outputs.bundles_battery }} battery, ${{ steps.diff.outputs.bundles_interpret }} interpret"
+          fi
 
       - name: Nothing to do
         if: steps.diff.outputs.changed == '0'

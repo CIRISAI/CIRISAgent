@@ -4,6 +4,16 @@
 #   PROVIDER=openrouter API_KEY=sk-... MODEL=meta-llama/llama-4-scout \
 #     ./tools/research/capture_traces.sh
 #
+# MODULE selects which qa_runner module produces the traces (default model_eval):
+#
+#   MODULE=safety_battery LANGUAGES=en BATTERY_TEMPLATE=he-300-benchmark \
+#     API_KEY=sk-... ./tools/research/capture_traces.sh
+#
+# Per-module flags are not interchangeable — `--model-eval-*` does not exist for
+# safety_battery — so they are selected by module. An unknown MODULE is refused
+# rather than run with another experiment's defaults, because a run with the
+# wrong knobs still emits traces and nothing downstream can tell.
+#
 # Everything is an env var with a sane default; the only required one is API_KEY.
 # Run it directly on a dev box, or via docker/docker-compose.research.yml to get
 # an isolated database and port (recommended when sharing a machine).
@@ -21,9 +31,20 @@ set -euo pipefail
 
 PROVIDER="${PROVIDER:-openrouter}"
 MODEL="${MODEL:-meta-llama/llama-4-scout}"
+# Which qa_runner module produces the traces. `model_eval` was hardcoded, so the
+# research container could capture sealed traces but could not be pointed at the
+# module whose scoreable `results.jsonl` a campaign needs — the only way through
+# was to patch this file locally, which is exactly the un-audited edit the
+# OVERRIDES note below warns against.
+MODULE="${MODULE:-model_eval}"
 LANGUAGES="${LANGUAGES:-en}"
 CONCURRENCY="${CONCURRENCY:-1}"
 QUESTIONS_FILE="${QUESTIONS_FILE:-}"
+# safety_battery knobs. Ignored by other modules; the flags are module-scoped and
+# passing a foreign one is an argparse error, not a silent no-op.
+BATTERY_TEMPLATE="${BATTERY_TEMPLATE:-}"
+BATTERY_LIMIT="${BATTERY_LIMIT:-}"
+BATTERY_DOMAIN="${BATTERY_DOMAIN:-}"
 OUT_DIR="${OUT_DIR:-/out}"
 BASE_URL="${BASE_URL:-}"
 API_KEY="${API_KEY:-}"
@@ -130,10 +151,35 @@ export CIRIS_ACCORD_METRICS_CEG_SEAL_TEE="true"
 
 BEFORE=$(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null | wc -l)
 
-ARGS=(model_eval --live --live-key-file "$KEYFILE" --live-model "$MODEL"
-      --live-base-url "$BASE_URL" --live-provider openai
-      --model-eval-languages "$LANGUAGES" --model-eval-concurrency "$CONCURRENCY" --verbose)
-[ -n "$QUESTIONS_FILE" ] && ARGS+=(--model-eval-questions-file "$QUESTIONS_FILE")
+# Common to every module. The per-module flags below are NOT interchangeable:
+# `--model-eval-languages` does not exist for safety_battery and vice versa, so
+# they are selected by module rather than passed unconditionally.
+ARGS=("$MODULE" --live --live-key-file "$KEYFILE" --live-model "$MODEL"
+      --live-base-url "$BASE_URL" --live-provider openai --verbose)
+
+case "$MODULE" in
+  model_eval)
+    ARGS+=(--model-eval-languages "$LANGUAGES" --model-eval-concurrency "$CONCURRENCY")
+    [ -n "$QUESTIONS_FILE" ] && ARGS+=(--model-eval-questions-file "$QUESTIONS_FILE")
+    ;;
+  safety_battery)
+    # LANGUAGES is singular here — the battery takes one locale per run.
+    ARGS+=(--safety-battery-lang "$LANGUAGES")
+    [ -n "$BATTERY_TEMPLATE" ] && ARGS+=(--safety-battery-template "$BATTERY_TEMPLATE")
+    [ -n "$BATTERY_LIMIT" ]    && ARGS+=(--safety-battery-limit "$BATTERY_LIMIT")
+    [ -n "$BATTERY_DOMAIN" ]   && ARGS+=(--safety-battery-domain "$BATTERY_DOMAIN")
+    ;;
+  *)
+    # Refuse rather than guess. A module whose flags we do not know would run
+    # with the defaults of a different experiment and still emit traces, so the
+    # run would look successful and mean something else.
+    echo "  FAIL: MODULE='$MODULE' has no flag mapping in this script."
+    echo "  -> known: model_eval, safety_battery. Add a case arm rather than"
+    echo "     relying on defaults: a run with the wrong knobs still produces"
+    echo "     traces, and nothing downstream can tell."
+    exit 4
+    ;;
+esac
 
 echo "── run ───────────────────────────────────────────────────"
 echo "  languages=$LANGUAGES concurrency=$CONCURRENCY out=$OUT_DIR"

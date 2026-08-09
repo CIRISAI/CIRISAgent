@@ -1186,54 +1186,45 @@ def overrides_are_active() -> bool:
 # Precedence (§3.3) — AgentTemplate already carries UNGATED prompt overrides
 # --------------------------------------------------------------------------
 
-#: Which base DMA template each ``AgentTemplate.*_overrides`` block shadows, and
-#: which PromptCollection fields it beats. ``pdma.py:_build_system_message_text``
-#: returns the template's ``system_prompt`` and never calls the prompt loader at
-#: all, so a leftover template override silently beats a manifest entry.
-_TEMPLATE_OVERRIDE_SHADOWS: Dict[str, Tuple[str, Dict[str, Tuple[str, ...]]]] = {
-    "pdma_overrides": (
-        "pdma_ethical",
-        {
-            "system_prompt": (
-                "system_guidance_header",
-                "domain_principles",
-                "evaluation_steps",
-                "evaluation_criteria",
-                "response_format",
-                "response_guidance",
-            ),
-            "user_prompt_template": ("context_integration",),
-        },
-    ),
-    "csdma_overrides": (
-        "csdma_common_sense",
-        {
-            "system_prompt": (
-                "system_guidance_header",
-                "domain_principles",
-                "evaluation_steps",
-                "evaluation_criteria",
-                "response_format",
-                "response_guidance",
-            ),
-            "user_prompt_template": ("context_integration",),
-        },
-    ),
-    "action_selection_pdma_overrides": (
-        "action_selection_pdma",
-        {
-            "system_prompt": (
-                "system_guidance_header",
-                "domain_principles",
-                "evaluation_steps",
-                "evaluation_criteria",
-                "response_format",
-                "response_guidance",
-            ),
-            "user_prompt_template": ("context_integration",),
-        },
-    ),
+#: Which base DMA template each ``AgentTemplate.*_overrides`` block belongs to.
+_TEMPLATE_OVERRIDE_BASE: Dict[str, str] = {
+    "pdma_overrides": "pdma_ethical",
+    "csdma_overrides": "csdma_common_sense",
+    "action_selection_pdma_overrides": "action_selection_pdma",
 }
+
+
+def _template_override_shadows() -> Dict[str, Tuple[str, Dict[str, Tuple[str, ...]]]]:
+    """What each ``*_overrides`` block ACTUALLY shadows — derived, never restated.
+
+    This was a hand-written table claiming each ``system_prompt`` beat all six
+    composed fields and each ``user_prompt_template`` beat ``context_integration``.
+    That described the world before #996, when the DMAs returned the override in
+    place of ``get_system_message()``. #996 made overrides FIELD-scoped: a
+    ``system_prompt`` replaces exactly one static field, and everything that
+    carries live slots takes an *additive* override instead, which cannot disable
+    anything by construction.
+
+    The table was never updated, so the gate refused configurations that are
+    provably safe — including, decisively, ``pdma_ethical.system_guidance_header``,
+    which PDMA composes ADDITIVELY (it carries ``{full_context_str}``; replacing it
+    would drop the caller's context). A campaign varying that key was told its
+    manifest conflicted with a template that does not in fact beat it.
+
+    So the answer is derived from ``REPLACEABLE_FIELDS`` — the map the DMAs
+    themselves consult — and a shadow exists only where a replacement really
+    happens. ``user_prompt_template`` appears nowhere: all three
+    ``context_integration`` fields carry live slots and are additive.
+    """
+    from ciris_engine.logic.dma.template_overrides import REPLACEABLE_FIELDS
+
+    shadows: Dict[str, Tuple[str, Dict[str, Tuple[str, ...]]]] = {}
+    for attr, base in _TEMPLATE_OVERRIDE_BASE.items():
+        replaced = REPLACEABLE_FIELDS.get(base)
+        # No entry in REPLACEABLE_FIELDS => the override is additive => it shadows
+        # nothing, and there is no conflict to refuse.
+        shadows[attr] = (base, {"system_prompt": (replaced,)} if replaced else {})
+    return shadows
 
 
 def assert_no_template_conflict(template: Any) -> None:
@@ -1247,7 +1238,7 @@ def assert_no_template_conflict(template: Any) -> None:
         return
 
     conflicts: List[str] = []
-    for attr, (base_template, field_map) in _TEMPLATE_OVERRIDE_SHADOWS.items():
+    for attr, (base_template, field_map) in _template_override_shadows().items():
         block = getattr(template, attr, None)
         if block is None:
             continue

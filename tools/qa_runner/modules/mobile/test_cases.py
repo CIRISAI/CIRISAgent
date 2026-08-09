@@ -1056,13 +1056,37 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
         time.sleep(0.5)
 
         # ── Screen 3: AI (agent build only; the FINAL step there) ─────────
-        if client.wait_for_element("input_llm_provider", timeout=6):
+        #
+        # Detect the SCREEN, not one widget on it. This used to be gated on
+        # `input_llm_provider`, which exists only on the BYOK variant. On the
+        # Google/OAuth path the screen instead reads "Free AI Access Ready" and
+        # composes `toggle_run_without_ai` + `btn_switch_to_byok` — no provider
+        # field — so the whole block was skipped INCLUDING its `btn_next` click,
+        # and the run sat on a fully-ready "Finish Setup" button until the
+        # downstream wait timed out. The AI step is not optional on an agent
+        # build; only its CONTENTS vary:
+        #
+        #   free-AI ready (OAuth)  — nothing to enter, just finish
+        #   btn_use_free_ai        — offered as a choice, take it
+        #   BYOK                   — provider + key + model
+        #   node-client build      — no AI screen at all
+        on_ai_screen = client.wait_for_element("input_llm_provider", timeout=6) or client.is_visible(
+            "toggle_run_without_ai"
+        )
+        if on_ai_screen:
+            has_byok_fields = client.is_visible("input_llm_provider")
             print(f"  [6/6] AI: provider={llm_provider!r}, key={'set' if llm_api_key else 'none'}")
             if client.is_visible("btn_use_free_ai"):
                 # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
                 if not _click_or_tap(client, adb, "btn_use_free_ai"):
                     return fail("llm", "failed to click btn_use_free_ai on the AI screen")
                 time.sleep(0.3)
+            elif not has_byok_fields:
+                # OAuth path with free access already provisioned: the screen is
+                # informational and Finish Setup is enabled on arrival. Entering
+                # LLM details here is not just unnecessary, it is impossible —
+                # there are no fields.
+                print("      free AI access already provisioned (OAuth) — nothing to enter")
             elif llm_api_key:
                 # BYOK: pick the configured provider from the dropdown, then key.
                 if not _click_or_tap(client, adb, "input_llm_provider"):
@@ -1114,6 +1138,20 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
             time.sleep(0.5)
         else:
             print("  [6/6] AI screen not present (node-client build) — finishing")
+
+        # The AI screen is the last one on an agent build, so leaving it is the
+        # observable proof the click landed. Staying put is the symptom this
+        # whole branch exists to prevent, and it is worth naming precisely
+        # rather than letting the generic COMPLETE wait report it as a timeout.
+        if on_ai_screen and client.is_visible("toggle_run_without_ai"):
+            time.sleep(2.0)
+            if client.is_visible("toggle_run_without_ai"):
+                return fail(
+                    "llm",
+                    "still on the AI screen after clicking Finish Setup — the wizard "
+                    "did not advance (check whether Finish is disabled by an "
+                    "incomplete field this run did not fill)",
+                )
 
         # ── Step 5: COMPLETE — leave the wizard or reach the terminal step ─
         # 150s: setup-complete now wires the persist engine (keyring genesis:

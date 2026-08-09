@@ -16,6 +16,15 @@ repos:
         verbose: true
         stages: [pre-commit]
 
+      # Node key material, by PATH. detect-private-key below cannot see it: it
+      # matches PEM armor, and a CIRIS master.key is 32 raw bytes with no
+      # header. 124 such files were tracked before this hook existed.
+      - id: no-key-material
+        name: Block node key material (identity/, keys/, *.master.key)
+        entry: python tools/dev/check_no_key_material.py
+        language: python
+        stages: [pre-commit]
+
   # Formatters - Always run, auto-fix
   - repo: https://github.com/psf/black
     rev: 24.4.2

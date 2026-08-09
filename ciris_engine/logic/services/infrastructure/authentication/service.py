@@ -85,6 +85,14 @@ SYSTEM_WA_KEY_FILENAME = "system_wa.key"
 # BUDGET_SECONDS lets those builds tolerate the slow degrade (paired with
 # CIRIS_ATTESTATION_SKIP_REGISTRY, which removes the block entirely on verify
 # that accepts it). Default unchanged → production still enforces 20s.
+#
+# READ AT CALL TIME. This used to be a module-level constant evaluated at
+# import, which silently discarded every override that arrived later:
+# mobile_main sets CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS=45 during startup,
+# but authentication.service had already been imported, so the value stayed
+# 20.0 and the Android log read "exceeded the 20s budget" on a runtime that had
+# explicitly asked for 45. An env var that only works if it is set before an
+# unrelated import is not a knob, it is a coin flip.
 def _startup_attestation_budget() -> float:
     raw = os.environ.get("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "").strip()
     if raw:
@@ -95,6 +103,9 @@ def _startup_attestation_budget() -> float:
     return 20.0
 
 
+# Kept for the import-time default and for callers that only want a number to
+# print. Anything ENFORCING the budget must call _startup_attestation_budget()
+# so a late override is honoured.
 STARTUP_ATTESTATION_BUDGET_SECONDS = _startup_attestation_budget()
 
 
@@ -2377,7 +2388,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def await_attestation_ready(
         self,
-        budget_seconds: float = STARTUP_ATTESTATION_BUDGET_SECONDS,
+        budget_seconds: Optional[float] = None,
     ) -> None:
         """Block until the startup attestation task has completed.
 
@@ -2408,6 +2419,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
           - If task raised: the exception is re-raised so the caller
             fails loudly. We do not swallow attestation failures.
         """
+        # Resolve at CALL time. As a default argument this was evaluated at
+        # import, so a runtime override (mobile_main sets 45) was discarded and
+        # the frozen 20.0 was enforced instead — the Android log said "20s
+        # budget" on a runtime that had asked for 45.
+        if budget_seconds is None:
+            budget_seconds = _startup_attestation_budget()
+
         if self._attestation_task is None:
             raise RuntimeError(
                 "AuthenticationService.start() has not been called — "
@@ -2614,13 +2632,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "max_level": result.max_level,
                 "level_pending": result.level_pending,
             }
-            if elapsed > STARTUP_ATTESTATION_BUDGET_SECONDS:
+            if elapsed > _startup_attestation_budget():
                 logger.warning(
                     "[attestation] Startup attestation exceeded the %.0fs budget: "
                     "took %.2fs. Per-bool: binary=%s functions=%s python=%s "
                     "registry=%s audit=%s. Investigate the verifier — do not "
                     "raise the budget.",
-                    STARTUP_ATTESTATION_BUDGET_SECONDS,
+                    _startup_attestation_budget(),
                     elapsed,
                     result.binary_ok,
                     result.function_integrity,

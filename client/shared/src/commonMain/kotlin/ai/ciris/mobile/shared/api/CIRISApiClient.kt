@@ -5569,6 +5569,52 @@ class CIRISApiClient(
      * Not part of the generated SDK surface, so this uses a direct request in the
      * same idiom as getAgentMode().
      */
+    /**
+     * The substrate's OWN consent copy for the wizard's federation screen —
+     * `GET {apiBaseUrl}/v1/setup/consent-disclosure`, which serves
+     * `ciris_server.consent_disclosure()` unedited.
+     *
+     * THROWS rather than returning a default. There is no honest fallback: the
+     * screen exists to render the substrate's words, and inventing a substitute
+     * is exactly the drift the export was written to prevent.
+     */
+    suspend fun getConsentDisclosure(): ai.ciris.mobile.shared.models.ConsentDisclosure {
+        val method = "getConsentDisclosure"
+        logDebug(method, "Fetching consent disclosure from $baseUrl/v1/setup/consent-disclosure")
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 5000
+            }
+        }
+        return try {
+            val response = client.get("$baseUrl/v1/setup/consent-disclosure") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Consent disclosure fetch failed: ${response.status}")
+            }
+            val root = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            val data = root["data"] ?: throw RuntimeException("Consent disclosure response has no data")
+            val disclosure = Json { ignoreUnknownKeys = true }.decodeFromJsonElement(
+                ai.ciris.mobile.shared.models.ConsentDisclosure.serializer(),
+                data,
+            )
+            logInfo(
+                method,
+                "Fetched consent disclosure: ${disclosure.grants.size} grants, " +
+                    "location max_resolution=${disclosure.location.maxResolution}, " +
+                    "locale=${disclosure.sourceLocale}",
+            )
+            disclosure
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
     suspend fun getSetupToolDisclosure(): ToolDisclosureReport {
         val method = "getSetupToolDisclosure"
         logDebug(method, "Fetching tool disclosure from $baseUrl/v1/setup/tool-disclosure")

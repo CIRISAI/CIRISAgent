@@ -30,82 +30,86 @@ import kotlinx.serialization.json.JsonElement
  */
 enum class SetupStep {
     /**
-     * Step 1: Welcome screen with introduction.
-     * In node flow, includes "Connect to Node" option.
-     */
-    WELCOME,
-
-    /**
-     * Step 1b (Node flow only): Device auth with CIRISPortal.
-     * Agent polls while user authenticates in browser and selects template.
-     */
-    NODE_AUTH,
-
-    /**
-     * Quick Setup: Single-screen setup for OAuth users.
-     * Combines language, LLM, location, services, and adapters.
-     * Shows collapsible cards with "Start Now" button at bottom.
-     */
-    QUICK_SETUP,
-
-    /**
-     * Step 2: Language and location preferences.
-     * Helps CIRIS communicate in the user's preferred language.
-     * Location is optional and provides contextual awareness.
-     */
-    PREFERENCES,
-
-    /**
-     * Step 3: LLM mode selection (CIRIS_PROXY vs BYOK) and configuration.
-     */
-    LLM_CONFIGURATION,
-
-    /**
-     * Step 3: Optional features - Accord Metrics opt-in for AI alignment research.
-     */
-    OPTIONAL_FEATURES,
-
-    /**
-     * Account creation (for non-Google users) and confirmation.
+     * Screen 1 — **You**. One question: who are you?
      *
-     * NODE-CLIENT first-run: this is now step 2 (account-first) — the robust,
-     * existing local-account creation step runs BEFORE the federation ID so the
-     * fed-ID and node ownership are associated to the just-created user. Declared
-     * here (ahead of FEDERATION_IDENTITY_SETUP / AGE_RANGE) so the ordinal order
-     * used by the step indicator matches the visual flow.
+     * Merges the former WELCOME, ACCOUNT_AND_CONFIRMATION,
+     * FEDERATION_IDENTITY_SETUP and AGE_RANGE. Those were four screens asking
+     * the same question in four vocabularies: WELCOME collected nothing (169
+     * lines, no interactive elements), the fed-ID copy already says "your
+     * portable digital identity — how the network knows it is you", and the age
+     * band is a property of the same person. The mint carries no reference to
+     * the local account and its ordering is not enforced, so there is no reason
+     * to ask twice.
+     *
+     * Collects: fed-ID name (required), username + password (required), device
+     * name (optional), age range (optional, declining sets the protective
+     * default). The fed-ID mint keeps its OWN button — it is an apex act with a
+     * hardware ceremony, and hiding it behind Next would strand the user with no
+     * legible cause when it fails.
      */
-    ACCOUNT_AND_CONFIRMATION,
+    YOU,
 
     /**
-     * Step (after ACCOUNT_AND_CONFIRMATION): Federation identity setup.
-     * Roots a federation identity in a hardware key (WebAuthn/FIDO2/Secure
-     * Enclave) and performs the CEG self-at-login ceremony via
-     * POST /v1/self/login. Optional — can be skipped on platforms without a
-     * usable hardware authenticator.
+     * Screen 2 — **Join the federation**. One question: do you join?
+     *
+     * The consent decision, rendered from `ciris_server.consent_disclosure()`
+     * rather than composed here. Announce is the FLOOR for service (a node that
+     * does not announce gets no service access), sending traces and being scored
+     * are two separate grants, and rough location is optional with named costs.
+     *
+     * The wizard only COLLECTS this. `author_consent_embedded` refuses on an
+     * unclaimed node ("there is no owner on whose behalf to consent"), so
+     * completion performs it after the claim. That is a substrate constraint,
+     * not a design choice.
      */
-    FEDERATION_IDENTITY_SETUP,
+    JOIN_FEDERATION,
 
     /**
-     * Step (after FEDERATION_IDENTITY_SETUP): **state your age range** — the
-     * foundational protective gate. Now that you have a federation ID, you
-     * self-declare an age band (`minor` / `adult`) which the local node records
-     * as a subject-signed `age_assurance` (self level). This sets protective
-     * defaults FIRST, ahead of any content: minors are gated out of adult
-     * content. Drives `POST /v1/safety/age-assurance` against the local node.
-     * Misdeclaration NEVER slashes — the subject controls their own band.
+     * Screen 3 — **AI**. One question: what powers it?
+     *
+     * Agent builds only ([CIRISBuild.HAS_AGENT]); the node client has no brain
+     * to configure. Arrives pre-answered for almost everyone — the CIRIS proxy
+     * on OAuth mobile, on-device inference on capable desktops — and every
+     * keyless option is listed ahead of the ones that need a key.
+     *
+     * This step CANNOT simply be skipped. Any path that ends without a usable
+     * provider must write `CIRIS_SERVICES_DISABLED=true`, or the NEXT boot makes
+     * `llm_service` critical and initialization aborts instead of degrading.
      */
-    AGE_RANGE,
-
-    /**
-     * Step 4b (Node flow only): Optional CIRISVerify download and configuration.
-     */
-    VERIFY_SETUP,
+    AI,
 
     /**
      * Final step: Setup is complete.
      */
     COMPLETE
 }
+
+/**
+ * The ONE forward transition. Not two branches — the old `isNodeFlow` fork
+ * produced byte-identical transitions on both sides, which is a duplicate
+ * pretending to be a choice.
+ *
+ * @param hasAgent [CIRISBuild.HAS_AGENT] — the node client has no brain, so it
+ *        has no AI screen to show.
+ */
+fun nextSetupStep(current: SetupStep, hasAgent: Boolean): SetupStep = when (current) {
+    SetupStep.YOU -> SetupStep.JOIN_FEDERATION
+    SetupStep.JOIN_FEDERATION -> if (hasAgent) SetupStep.AI else SetupStep.COMPLETE
+    SetupStep.AI -> SetupStep.COMPLETE
+    SetupStep.COMPLETE -> SetupStep.COMPLETE
+}
+
+/** The exact mirror of [nextSetupStep]. */
+fun previousSetupStep(current: SetupStep, hasAgent: Boolean): SetupStep = when (current) {
+    SetupStep.YOU -> SetupStep.YOU
+    SetupStep.JOIN_FEDERATION -> SetupStep.YOU
+    SetupStep.AI -> SetupStep.JOIN_FEDERATION
+    SetupStep.COMPLETE -> if (hasAgent) SetupStep.AI else SetupStep.JOIN_FEDERATION
+}
+
+/** Is [step] the last one the user acts on before the wizard completes? */
+fun isFinalSetupStep(step: SetupStep, hasAgent: Boolean): Boolean =
+    step == (if (hasAgent) SetupStep.AI else SetupStep.JOIN_FEDERATION)
 
 /**
  * Device auth state for the "Connect to Node" flow.
@@ -445,14 +449,9 @@ data class NodeOwnershipClaimState(
 @Serializable
 data class SetupFormState(
     // Current step in the wizard
-    val currentStep: SetupStep = SetupStep.WELCOME,
-
-    // Node flow flag: when true, step sequence is modified
-    // WELCOME → NODE_AUTH → LLM_CONFIGURATION → OPTIONAL_FEATURES → COMPLETE
-    val isNodeFlow: Boolean = false,
+    val currentStep: SetupStep = SetupStep.YOU,
 
     // Home Assistant addon mode: skips login and user creation
-    // Flow: WELCOME → PREFERENCES → LLM_CONFIGURATION → OPTIONAL_FEATURES → COMPLETE
     val isHAAddonMode: Boolean = false,
 
     // Device auth state (Connect to Node flow)
@@ -461,10 +460,10 @@ data class SetupFormState(
     // CIRISVerify setup state (node flow only)
     val verifySetup: VerifySetupState = VerifySetupState(),
 
-    // Federation identity setup state (FEDERATION_IDENTITY_SETUP step)
+    // Federation identity setup state (the mint card on screen 1)
     val federationIdentity: FederationIdentitySetupState = FederationIdentitySetupState(),
 
-    // Age-range step state (AGE_RANGE step — the foundational protective gate)
+    // Age-range state (the foundational protective gate, on screen 1)
     val ageRange: AgeRangeSetupState = AgeRangeSetupState(),
 
     // Under-18 stewardship request state (CC 0.5.1 §2580). Populated only when
@@ -482,7 +481,7 @@ data class SetupFormState(
     val googleUserId: String? = null,
     val oauthProvider: String = "google", // "google" or "apple"
 
-    // Language and location preferences (from PREFERENCES step)
+    // Language and location preferences
     // Mirrors CLI wizard fields from wizard.py:324-395
     val preferredLanguage: String = "en",  // ISO 639-1 code
     val locationGranularity: LocationGranularity = LocationGranularity.NONE,
@@ -545,20 +544,49 @@ data class SetupFormState(
     val secureWith2FA: Boolean = false,
 
     /**
-     * Opt IN to ANNOUNCING this owner to the federation. Defaults OFF
-     * (privacy-first): ownership is self-scoped — full personal/self-family use,
-     * the owner's nodes sync across their own devices, invisible to the
-     * federation. Turning this ON promotes the owner-binding self→FEDERATION and
-     * enables the node's identity announce (POST /v1/federation/announce) so the
-     * community can find and federate with this node. Takes effect on next boot;
-     * applied best-effort post-claim (see [SetupViewModel.claimLocalNodeOwnership]).
+     * ANNOUNCE this owner to the federation — `POST /v1/federation/announce`.
+     * Promotes the owner-binding self→FEDERATION and enables the node's identity
+     * announce so the community can find and federate with this node. Takes
+     * effect on next boot; applied best-effort post-claim (see
+     * [SetupViewModel.claimLocalNodeOwnership]).
+     *
+     * ON by default, and this is NOT a privacy default being overridden — it is
+     * the FLOOR for service. The substrate is unambiguous: "a node that does not
+     * announce gets no service access on the mesh and no agent services",
+     * because the accord's kill switch is only meaningful against a node it can
+     * reach. Turning it off leaves a working private node with no federation;
+     * defaulting it off silently disabled the product while calling itself
+     * "recommended".
      */
-    val announceOwnership: Boolean = false,
+    val announceOwnership: Boolean = true,
 
-    // Accord Metrics opt-in (for AI alignment research)
-    // Data shared: reasoning scores, decision patterns, LLM provider/API base URL
-    // No message content or PII is ever sent
-    val accordMetricsConsent: Boolean = false,
+    /**
+     * **Send traces** — `consent:replication:v1`. The peer may HOLD your traces.
+     * ON by default: this is the primary action of screen 2 and the substrate
+     * marks the grant `required: true` within a mesh participation consent.
+     */
+    val accordMetricsConsent: Boolean = true,
+
+    /**
+     * **Be scored** — CC#46 `analyze`. The peer may SCORE your traces, which is
+     * what builds reputation. A SEPARATE grant on the opposite edge: granting
+     * one does not grant the other. ON by default, but genuinely declinable —
+     * the substrate publishes three named costs and says in as many words that
+     * marking it required "misrepresents a legitimate choice as a
+     * misconfiguration". It shipped hardcoded true with no UI until 2.9.14.
+     */
+    val traceAnalyze: Boolean = true,
+
+    /**
+     * **Run without AI** — writes `CIRIS_SERVICES_DISABLED=true`, the same state
+     * `POST /v1/system/llm/ciris-services/disable` produces, which is what keeps
+     * `llm_service` optional at boot.
+     *
+     * NEVER a default. Defaulting it on would disable a working agent on capable
+     * hardware and turn off CIRIS services on the platforms where they are the
+     * entire point.
+     */
+    val runWithoutAi: Boolean = false,
 
     // Public API Services (Navigation & Weather)
     // Email included in User-Agent header for Nominatim (OSM) and weather.gov (NOAA)
@@ -649,156 +677,73 @@ data class SetupFormState(
     }
 
     /**
+     * The keyless LLM providers — on-device inference and local inference
+     * servers. Mirrors the backend's own whitelist (`KEYLESS_LLM_PROVIDERS` in
+     * `routes/setup/complete.py`); a provider outside this set with no key is
+     * not a configuration, it is an unfinished one.
+     */
+    fun isKeylessLlmProvider(): Boolean {
+        val p = llmProvider.lowercase()
+        return p == "localai" || p == "local" || p == "local_inference" ||
+            p == "mobile_local" || p.startsWith("mobile local") || p.startsWith("local inference")
+    }
+
+    /**
+     * Does the AI screen currently describe something that will actually run?
+     *
+     * "Run without AI" counts — it is an explicit, complete answer that writes
+     * `CIRIS_SERVICES_DISABLED=true`. The untouched default (provider "OpenAI",
+     * no key) does not.
+     */
+    fun hasUsableLlmChoice(): Boolean = when {
+        runWithoutAi -> true
+        setupMode == SetupMode.CIRIS_PROXY -> isGoogleAuth && googleIdToken != null
+        llmProvider.isEmpty() -> false
+        isKeylessLlmProvider() -> true
+        else -> llmApiKey.isNotEmpty()
+    }
+
+    /**
      * Check if current step is valid and can proceed to next.
-     * Source: SetupWizardActivity.kt:209-286
      */
-    fun canProceedFromCurrentStep(): Boolean {
-        return when (currentStep) {
-            SetupStep.WELCOME -> true
-
-            SetupStep.NODE_AUTH -> {
-                // Can proceed when device auth is complete
-                deviceAuth.status == DeviceAuthStatus.COMPLETE
-            }
-
-            SetupStep.PREFERENCES -> {
-                // Language has a default, location is optional - always valid
+    fun canProceedFromCurrentStep(): Boolean = when (currentStep) {
+        // Screen 1 asks four things; three of them can block. The fed-ID needs a
+        // valid, non-generic name (or an already-minted identity), the local
+        // account needs a matching password pair, and a self-declared MINOR must
+        // have generated a stewardship request first — that last one is
+        // fail-secure (CC 0.5.1 §2580): an under-18 founder must not self-claim.
+        // The age band itself is optional; declining sets the protective default.
+        SetupStep.YOU -> {
+            val fedIdOk = federationIdentity.minted ||
+                federationIdentity.admitted ||
+                federationIdentity.isLabelValid()
+            val accountOk = if (showLocalUserFields()) {
+                username.isNotEmpty() && userPassword.length >= 8 &&
+                    userPassword == userPasswordConfirm
+            } else {
                 true
             }
-
-            SetupStep.LLM_CONFIGURATION -> {
-                if (setupMode == SetupMode.CIRIS_PROXY) {
-                    // CIRIS proxy mode - need Google auth token
-                    googleIdToken != null
-                } else if (setupMode == SetupMode.BYOK) {
-                    // BYOK mode - need provider and API key unless the provider is keyless.
-                    // Keyless providers: local inference servers (Ollama, llama.cpp),
-                    // discovered local servers, or on-device mobile_local adapter.
-                    val providerLower = llmProvider.lowercase()
-                    val isKeyless = providerLower == "localai" ||
-                        providerLower == "local" ||
-                        providerLower == "local_inference" ||
-                        providerLower == "mobile_local" ||
-                        providerLower.startsWith("mobile local") ||
-                        providerLower.startsWith("local inference")
-                    isKeyless || llmApiKey.isNotEmpty()
-                } else if (setupMode == SetupMode.LOCAL_ON_DEVICE) {
-                    // LOCAL_ON_DEVICE is ALSO the node-client *default* mode (the
-                    // node client never renders this step, so the default was
-                    // harmless there). On the agent build the step is a real
-                    // choice: proceed key-free only when the on-device provider
-                    // (or a keyless local server) was actually selected — any
-                    // other provider here is effectively BYOK and follows the
-                    // keyless-or-key rule. Prevents the untouched default
-                    // (provider "OpenAI", no key) from shipping a broken agent
-                    // LLM config ("Agent processor not initialized").
-                    val providerLower = llmProvider.lowercase()
-                    val isOnDevice = providerLower == "mobile_local" ||
-                        providerLower.startsWith("mobile local")
-                    val isKeyless = providerLower == "localai" ||
-                        providerLower == "local" ||
-                        providerLower == "local_inference" ||
-                        providerLower.startsWith("local inference")
-                    isOnDevice || isKeyless || llmApiKey.isNotEmpty()
-                } else {
-                    false // No mode selected
-                }
-            }
-
-            SetupStep.OPTIONAL_FEATURES -> {
-                // Optional features step - always valid (consent is optional)
-                true
-            }
-
-            SetupStep.FEDERATION_IDENTITY_SETUP -> {
-                // The federation identity is the ONE canonical "you" established at
-                // wizard time, so a meaningful, UNIQUE name is now REQUIRED before
-                // proceeding (an empty name made the node fall back to the generic
-                // `ciris-client-user`, colliding two machines under one alias).
-                // An already-minted/associated identity (which carries its own
-                // label/key) may proceed regardless.
-                federationIdentity.minted ||
-                    federationIdentity.admitted ||
-                    federationIdentity.isLabelValid()
-            }
-
-            SetupStep.AGE_RANGE -> {
-                // The foundational protective gate. ADULTS proceed freely —
-                // declining to state resolves to the PROTECTIVE default and a
-                // band can be (re)stated later from the Safety surface; a failed
-                // record (node offline) must never trap the user.
-                //
-                // MINORS are fail-secure (CC 0.5.1 §2580): an under-18 user MUST
-                // NOT self-claim ownership, so finishing requires that a
-                // stewardship request has been generated to hand to an adult.
-                if (isMinorBand()) minorStewardship.requested else true
-            }
-
-            SetupStep.ACCOUNT_AND_CONFIRMATION -> {
-                if (isGoogleAuth) {
-                    // Google user - no account creation needed
-                    true
-                } else {
-                    // Local user - validate username/password (+ confirmation match)
-                    username.isNotEmpty() && userPassword.length >= 8 &&
-                        userPassword == userPasswordConfirm
-                }
-            }
-
-            SetupStep.VERIFY_SETUP -> {
-                // CIRISVerify setup is optional — always can proceed
-                true
-            }
-
-            SetupStep.QUICK_SETUP -> {
-                // Quick setup can proceed if:
-                // - BYOK/HA addon mode: LLM provider is selected (validation handles API key)
-                // - CIRIS Proxy mode: Google/Apple auth is present
-                val providerLower = llmProvider.lowercase()
-                val isKeylessProvider = providerLower == "localai" ||
-                    providerLower == "local" ||
-                    providerLower == "mobile_local" ||
-                    providerLower.startsWith("mobile local")
-
-                when {
-                    isHAAddonMode || setupMode == SetupMode.BYOK -> {
-                        // BYOK mode: need provider selected, and API key if not keyless
-                        llmProvider.isNotEmpty() && (isKeylessProvider || llmApiKey.isNotEmpty())
-                    }
-                    setupMode == SetupMode.CIRIS_PROXY -> {
-                        // CIRIS Proxy: need Google/Apple auth
-                        isGoogleAuth && googleIdToken != null
-                    }
-                    else -> false
-                }
-            }
-
-            SetupStep.COMPLETE -> true
+            val stewardshipOk = !isMinorBand() || minorStewardship.requested
+            fedIdOk && accountOk && stewardshipOk
         }
+
+        // Every consent here is a real choice with a stated default, including
+        // declining all of them. Nothing to block on.
+        SetupStep.JOIN_FEDERATION -> true
+
+        SetupStep.AI -> hasUsableLlmChoice()
+
+        SetupStep.COMPLETE -> true
     }
 
     /**
-     * Check if user is eligible for quick setup flow.
-     * Only Google/Apple sign-in users on mobile get access to CIRIS LLM services
-     * and can skip manual LLM configuration.
-     */
-    fun isQuickSetupEligible(): Boolean {
-        return isGoogleAuth && googleIdToken != null
-    }
-
-    /**
-     * Does this setup require an explicit local-admin account creation step?
+     * Does this setup create a local admin account?
      *
-     * Quick Setup itself only collects LLM config + adapters. For OAuth users
-     * (Google/Apple) the WA identity comes from the OAuth provider, and HA
-     * addon mode authenticates via SUPERVISOR_TOKEN — both bypass local
-     * username/password. Everyone else (BYOK with no OAuth, local-on-device
-     * with no OAuth) needs to create the first human user before COMPLETE,
-     * or the wizard ships an empty `admin_password` to /v1/setup/complete
-     * and the desktop login fails.
-     *
-     * Source: 2.7.5 desktop install incident — Quick Setup → COMPLETE
-     * skipped admin-user creation for non-OAuth installs.
+     * For OAuth users (Google/Apple) the WA identity comes from the provider,
+     * and HA addon mode authenticates via SUPERVISOR_TOKEN — both bypass local
+     * username/password. Everyone else needs the first human user created
+     * before COMPLETE, or the wizard ships an empty `admin_password` to
+     * /v1/setup/complete and the desktop login fails (the 2.7.5 incident).
      */
     fun needsLocalAccountStep(): Boolean {
         if (isGoogleAuth) return false
@@ -810,136 +755,54 @@ data class SetupFormState(
     }
 
     /**
-     * Get validation error for current step.
-     * Source: SetupWizardActivity.kt:209-286
+     * Get validation error for current step — the reason Next is disabled.
      */
-    fun getStepValidationError(): String? {
-        return when (currentStep) {
-            SetupStep.WELCOME -> null
-
-            SetupStep.NODE_AUTH -> {
-                when (deviceAuth.status) {
-                    DeviceAuthStatus.ERROR -> deviceAuth.error ?: LocalizationHelper.getString("setup_validation_device_failed")
-                    DeviceAuthStatus.IDLE -> LocalizationHelper.getString("setup_validation_node_url")
-                    DeviceAuthStatus.CONNECTING -> LocalizationHelper.getString("setup_validation_node_connecting")
-                    DeviceAuthStatus.WAITING -> LocalizationHelper.getString("setup_validation_node_waiting")
-                    DeviceAuthStatus.COMPLETE -> null
-                }
-            }
-
-            SetupStep.PREFERENCES -> {
-                // Preferences are optional - no validation errors
+    fun getStepValidationError(): String? = when (currentStep) {
+        SetupStep.YOU -> {
+            val fedIdError = if (federationIdentity.minted || federationIdentity.admitted) {
                 null
-            }
-
-            SetupStep.LLM_CONFIGURATION -> {
-                // Keyless providers skip the API-key requirement: LocalAI
-                // (Ollama) and on-device Gemma 4 via the Mobile Local LLM
-                // adapter (`mobile_local`).
-                val providerLower = llmProvider.lowercase()
-                val isKeylessProvider = providerLower == "localai" ||
-                    providerLower == "local" ||
-                    providerLower == "local_inference" ||
-                    providerLower.startsWith("local inference") ||
-                    providerLower == "mobile_local" ||
-                    providerLower.startsWith("mobile local")
+            } else {
+                val trimmed = federationIdentity.label.trim()
                 when {
-                    setupMode == null -> LocalizationHelper.getString("setup_validation_select_mode")
-                    setupMode == SetupMode.CIRIS_PROXY && googleIdToken == null ->
-                        LocalizationHelper.getString("setup_validation_google_required")
-                    setupMode == SetupMode.BYOK && !isKeylessProvider && llmApiKey.isEmpty() ->
-                        LocalizationHelper.getString("setup_validation_api_key_required")
-                    // LOCAL_ON_DEVICE is the node-client default mode; on the agent
-                    // build a non-local provider without a key is an incomplete BYOK
-                    // config (mirrors canProceedFromCurrentStep).
-                    setupMode == SetupMode.LOCAL_ON_DEVICE && !isKeylessProvider && llmApiKey.isEmpty() ->
-                        LocalizationHelper.getString("setup_validation_api_key_required")
+                    trimmed.isEmpty() ->
+                        LocalizationHelper.getString("setup_validation_fedid_label_required")
+                    trimmed.lowercase() in FederationIdentitySetupState.REJECTED_GENERIC_LABELS ->
+                        LocalizationHelper.getString("setup_validation_fedid_label_generic")
                     else -> null
                 }
             }
-
-            SetupStep.OPTIONAL_FEATURES -> {
-                // Optional features - no validation required (consent is optional)
+            val accountError = if (showLocalUserFields()) {
+                when {
+                    username.isEmpty() -> LocalizationHelper.getString("setup_validation_username_required")
+                    userPassword.isEmpty() -> LocalizationHelper.getString("setup_validation_password_required")
+                    userPassword.length < 8 -> LocalizationHelper.getString("setup_validation_password_length")
+                    userPassword != userPasswordConfirm -> LocalizationHelper.getString("setup_validation_password_mismatch")
+                    else -> null
+                }
+            } else {
                 null
             }
-
-            SetupStep.FEDERATION_IDENTITY_SETUP -> {
-                // A unique, meaningful identity name is required (unless an
-                // identity was already minted/associated this session).
-                if (federationIdentity.minted || federationIdentity.admitted) {
-                    null
-                } else {
-                    val trimmed = federationIdentity.label.trim()
-                    when {
-                        trimmed.isEmpty() ->
-                            LocalizationHelper.getString("setup_validation_fedid_label_required")
-                        trimmed.lowercase() in FederationIdentitySetupState.REJECTED_GENERIC_LABELS ->
-                            LocalizationHelper.getString("setup_validation_fedid_label_generic")
-                        else -> null
-                    }
-                }
+            val stewardshipError = if (isMinorBand() && !minorStewardship.requested) {
+                LocalizationHelper.getString("setup_validation_minor_steward_required")
+            } else {
+                null
             }
-
-            SetupStep.AGE_RANGE -> {
-                // Adults: never blocked. Minors: must generate a stewardship
-                // request (fail-secure, CC 0.5.1 §2580) before finishing.
-                if (isMinorBand() && !minorStewardship.requested) {
-                    LocalizationHelper.getString("setup_validation_minor_steward_required")
-                } else {
-                    null
-                }
-            }
-
-            SetupStep.ACCOUNT_AND_CONFIRMATION -> {
-                if (!isGoogleAuth) {
-                    when {
-                        username.isEmpty() -> LocalizationHelper.getString("setup_validation_username_required")
-                        userPassword.isEmpty() -> LocalizationHelper.getString("setup_validation_password_required")
-                        userPassword.length < 8 -> LocalizationHelper.getString("setup_validation_password_length")
-                        userPassword != userPasswordConfirm -> LocalizationHelper.getString("setup_validation_password_mismatch")
-                        else -> null
-                    }
-                } else {
-                    null
-                }
-            }
-
-            SetupStep.QUICK_SETUP -> {
-                // Quick setup validation depends on setup mode:
-                // - CIRIS_PROXY: requires Google/Apple OAuth
-                // - BYOK (HA addon, local): requires LLM configuration
-                val providerLower = llmProvider.lowercase()
-                val isKeylessProvider = providerLower == "localai" ||
-                    providerLower == "local" ||
-                    providerLower == "mobile_local" ||
-                    providerLower.startsWith("mobile local")
-
-                when {
-                    // HA addon mode or BYOK mode: validate LLM config
-                    isHAAddonMode || setupMode == SetupMode.BYOK -> {
-                        when {
-                            llmProvider.isEmpty() -> LocalizationHelper.getString("setup_validation_select_provider")
-                            !isKeylessProvider && llmApiKey.isEmpty() -> LocalizationHelper.getString("setup_validation_api_key_required")
-                            else -> null
-                        }
-                    }
-                    // CIRIS Proxy mode: requires Google/Apple auth
-                    setupMode == SetupMode.CIRIS_PROXY -> {
-                        if (!isGoogleAuth || googleIdToken == null) {
-                            LocalizationHelper.getString("setup_validation_google_required")
-                        } else {
-                            null
-                        }
-                    }
-                    // No mode selected yet
-                    else -> LocalizationHelper.getString("setup_validation_select_mode")
-                }
-            }
-
-            SetupStep.VERIFY_SETUP -> null
-
-            SetupStep.COMPLETE -> null
+            fedIdError ?: accountError ?: stewardshipError
         }
+
+        SetupStep.JOIN_FEDERATION -> null
+
+        SetupStep.AI -> when {
+            runWithoutAi -> null
+            setupMode == SetupMode.CIRIS_PROXY && googleIdToken == null ->
+                LocalizationHelper.getString("setup_validation_google_required")
+            llmProvider.isEmpty() -> LocalizationHelper.getString("setup_validation_select_provider")
+            !isKeylessLlmProvider() && llmApiKey.isEmpty() ->
+                LocalizationHelper.getString("setup_validation_api_key_required")
+            else -> null
+        }
+
+        SetupStep.COMPLETE -> null
     }
 }
 

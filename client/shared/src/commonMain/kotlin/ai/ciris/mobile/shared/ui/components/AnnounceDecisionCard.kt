@@ -37,8 +37,10 @@ import androidx.compose.ui.unit.sp
  * = traces stay local-tier and never federate. So the trace opt-in is literally
  * *unlocked by* announcing, and this card presents that coupling directly:
  *
- *  - a prominent, deliberate announce switch (default OFF — privacy-first), with
- *    distinct copy for OFF (private, recommended) vs ON (join the community), then
+ *  - a prominent, deliberate announce switch (default ON — announcing is the FLOOR
+ *    for service, not a preference: `peer.rs` "a node that does not announce gets
+ *    no service access on the mesh and no agent services"), with distinct copy for
+ *    OFF (self-scoped, unserved) vs ON (join the community), then
  *  - the trace opt-in, GATED on announce: shown/enabled only when announce is ON;
  *    when OFF, a one-line "announce to enable" note in its place.
  *
@@ -46,8 +48,8 @@ import androidx.compose.ui.unit.sp
  * any specific ViewModel (SetupViewModel in first-run, NodeSwitcherViewModel in
  * catch-up). The app performs NO crypto; the local node owns the announce.
  *
- * NOTE: this is the richer replacement for the low-key `AnnounceOwnershipCard`
- * toggle in SetupScreen; that composable is kept intact for signature stability.
+ * NOTE: this replaced the low-key `AnnounceOwnershipCard` toggle in SetupScreen,
+ * which was defined and never called and was deleted in 2.9.14.
  */
 /**
  * Localized string with a hardcoded fallback for keys not yet in the manifest.
@@ -73,7 +75,7 @@ fun AnnounceDecisionCard(
 ) {
     val scheme = MaterialTheme.colorScheme
     // Emphasise the ON choice: primaryContainer when opting in, the calmer
-    // surfaceVariant when staying private (the recommended default).
+    // surfaceVariant when self-scoped.
     val containerColor = if (announce) scheme.primaryContainer else scheme.surfaceVariant
     val onContainer = if (announce) scheme.onPrimaryContainer else scheme.onSurfaceVariant
 
@@ -108,10 +110,11 @@ fun AnnounceDecisionCard(
                 } else {
                     l10nOr(
                         "mobile.announce_decision_body_off",
-                        "OFF (recommended): fully private. Your node stays self-scoped — " +
-                            "everything works locally and syncs across your own devices, but the " +
-                            "community can't see or reach it. Turn this on to send traces and join " +
-                            "communities.",
+                        "OFF: your node stays self-scoped. Everything works locally and syncs " +
+                            "across your own devices, but a node that does not announce gets no " +
+                            "service access on the mesh and no agent services — the accord's kill " +
+                            "switch is only meaningful against a node it can reach, so an " +
+                            "unreachable node is never served in the first place.",
                     )
                 },
                 color = onContainer,

@@ -4,6 +4,7 @@ This module provides endpoints to list available LLM providers,
 agent templates, and adapters during setup.
 """
 
+import json
 import logging
 from typing import Any, Dict, List
 
@@ -11,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 
 from ciris_engine.schemas.adapters.tools import ToolDisclosureReport
 from ciris_engine.schemas.api.responses import SuccessResponse
+from ciris_engine.schemas.consent.disclosure import ConsentDisclosure
 
 from .dependencies import SetupOnlyDep
 from .helpers import _get_agent_templates, _get_available_adapters
@@ -78,6 +80,34 @@ async def list_tool_disclosure(include_discovered: bool = True) -> SuccessRespon
     except Exception as e:
         logger.error(f"Error building tool disclosure: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/consent-disclosure", dependencies=[SetupOnlyDep])
+async def get_consent_disclosure() -> SuccessResponse[ConsentDisclosure]:
+    """The substrate's OWN consent copy, for the wizard to render verbatim.
+
+    ``ciris_server.consent_disclosure()`` exists so the wizard does not compose
+    this paragraph itself: a wizard that writes its own version drifts from the
+    substrate the moment either changes. Every string arrives with a stable id
+    into the 29-locale catalogue, so the client renders the localized text and
+    falls back to the substrate's wording.
+
+    This carries no owner data and gates nothing — it is the disclosure that
+    makes the consent informed, so it is available without authentication during
+    setup, like the other disclosure endpoints here.
+    """
+    import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+    try:
+        raw = ciris_server.consent_disclosure()
+        payload = json.loads(raw) if isinstance(raw, str) else raw
+        return SuccessResponse(data=ConsentDisclosure.model_validate(payload))
+    except Exception as e:
+        # Fail LOUD. Rendering a hand-written substitute is precisely the drift
+        # the export exists to prevent, so the screen must show an error rather
+        # than invent the words.
+        logger.error(f"Error reading substrate consent disclosure: {e}")
+        raise HTTPException(status_code=503, detail=f"consent disclosure unavailable: {e}")
 
 
 @router.get(

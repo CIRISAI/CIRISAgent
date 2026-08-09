@@ -306,6 +306,21 @@ data class CompleteSetupRequest(
     val timezone: String? = null,              // IANA timezone (from selected location)
     val share_location_in_traces: Boolean = false,  // Consent to include location in telemetry
 
+    /**
+     * CC#46 "be scored" — whether shipped traces may be ANALYZED to build this
+     * node's reputation. A separate grant from sending them, `required: false`
+     * with named costs, so it carries the owner's toggle. Only consulted when
+     * `ciris_accord_metrics` is in [enabled_adapters].
+     */
+    val trace_analyze: Boolean = true,
+
+    /**
+     * The owner chose to run with no LLM. Makes the backend write
+     * `CIRIS_SERVICES_DISABLED=true`, which keeps `llm_service` optional on the
+     * next boot instead of aborting initialization.
+     */
+    val run_without_ai: Boolean = false,
+
     // Node flow fields (Connect to Node / Portal provisioning)
     val node_url: String? = null,                      // Portal URL from node flow
     val identity_template: String? = null,             // Portal-assigned template

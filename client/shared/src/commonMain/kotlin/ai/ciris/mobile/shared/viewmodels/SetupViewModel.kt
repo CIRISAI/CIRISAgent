@@ -55,7 +55,18 @@ class SetupViewModel(
     private var locationSearchJob: Job? = null
 
     // Available LLM providers for BYOK mode
+    /**
+     * LLM providers, **keyless first**.
+     *
+     * The two that need no API key used to sit at positions 12 and 13 of a
+     * 15-item dropdown, under a default (`OpenAI`) that disables Next with "API
+     * key is required" and signposts nothing. A user with no key had three
+     * working paths and no way to find them. Ordering is the whole fix — the
+     * list is otherwise unchanged.
+     */
     val availableProviders = listOf(
+        "local_inference" to "Local Inference Server",
+        "local" to "Local (Ollama)",
         "openai" to "OpenAI",
         "anthropic" to "Anthropic",
         "google" to "Google AI",
@@ -67,8 +78,6 @@ class SetupViewModel(
         "deepseek" to "DeepSeek",
         "xai" to "xAI (Grok)",
         "azure" to "Azure OpenAI",
-        "local_inference" to "Local Inference Server",
-        "local" to "Local (Ollama)",
         "openai_compatible" to "OpenAI Compatible",
         "other" to "Other"
     )
@@ -113,12 +122,12 @@ class SetupViewModel(
                 isCirisEligible -> SetupMode.CIRIS_PROXY
                 else -> SetupMode.BYOK
             },
-            // Skip Welcome step for authenticated users - go directly to Quick Setup
-            currentStep = if (isAuth && _state.value.currentStep == SetupStep.WELCOME) {
-                SetupStep.QUICK_SETUP
-            } else {
-                _state.value.currentStep
-            }
+            // OAuth no longer forks the flow. QUICK_SETUP existed to let an
+            // authenticated user skip a welcome screen that collected nothing;
+            // with WELCOME merged into screen 1 there is nothing to skip, and
+            // the fork was what made the trace-consent checkbox unreachable on
+            // the non-OAuth path while showing a disabled one on the OAuth path.
+            currentStep = _state.value.currentStep
         )
     }
 
@@ -279,6 +288,9 @@ class SetupViewModel(
         val isLocalOllama = provider in LOCAL_OLLAMA_PROVIDER_IDS
         _state.value = current.copy(
             llmProvider = provider,
+            // Picking a provider IS the answer to "what powers it" — the two
+            // choices are mutually exclusive, so selecting one clears the other.
+            runWithoutAi = false,
             llmBaseUrl = if (isLocalOllama && current.llmBaseUrl.isEmpty()) {
                 LOCAL_OLLAMA_BASE_URL
             } else {
@@ -520,122 +532,26 @@ class SetupViewModel(
      */
     fun nextStep(): Boolean {
         val currentState = _state.value
-
         if (!currentState.canProceedFromCurrentStep()) {
             return false
         }
-
-        // NODE CLIENT first-run flow (drives a local ciris-server, NOT the agent).
-        // USER CREATION LEADS: a fresh run creates the founder's local account
-        // FIRST (ACCOUNT_AND_CONFIRMATION — the robust, existing creation step),
-        // THEN mints the founder's hardware-rooted federation ID (now associated to
-        // that just-created user), THEN states the protective age-range gate, then
-        // completes (and on COMPLETE the local node is self-claimed for that user).
-        // The agent setup steps (NODE_AUTH / PREFERENCES / LLM_CONFIGURATION /
-        // OPTIONAL_FEATURES / QUICK_SETUP) are dropped from the node-client path.
-        // BOTH the advanced (isNodeFlow) and the unified branch funnel through the
-        // same account-first sequence:
-        //   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP →
-        //   AGE_RANGE → COMPLETE
-        //
-        // AGENT BUILD (CIRISBuild.HAS_AGENT): the brain needs an LLM, so the
-        // LLM_CONFIGURATION step (CIRIS proxy vs BYOK provider/key) is inserted
-        // after the fed-ID:
-        //   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP →
-        //   LLM_CONFIGURATION → AGE_RANGE → COMPLETE
-        // Gated with the flag (not a forked when) so this file stays mergeable
-        // with the upstream node client.
-        val nextStep = if (currentState.isNodeFlow) {
-            when (currentState.currentStep) {
-                SetupStep.WELCOME -> SetupStep.ACCOUNT_AND_CONFIRMATION
-                // Account created — now MINT YOUR FEDERATION ID (associated to the
-                // just-created user).
-                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.FEDERATION_IDENTITY_SETUP
-                // You have an ID — agent builds configure the brain's LLM next;
-                // the node client goes straight to the protective age gate.
-                SetupStep.FEDERATION_IDENTITY_SETUP ->
-                    if (CIRISBuild.HAS_AGENT) SetupStep.LLM_CONFIGURATION else SetupStep.AGE_RANGE
-                // Now STATE YOUR AGE RANGE (the foundational protective gate),
-                // THEN you're on the fabric.
-                SetupStep.LLM_CONFIGURATION -> SetupStep.AGE_RANGE
-                SetupStep.AGE_RANGE -> SetupStep.COMPLETE
-                else -> SetupStep.COMPLETE
-            }
-        } else {
-            // Unified branch — same account-first node-client flow.
-            when (currentState.currentStep) {
-                SetupStep.WELCOME -> SetupStep.ACCOUNT_AND_CONFIRMATION
-                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.FEDERATION_IDENTITY_SETUP
-                SetupStep.FEDERATION_IDENTITY_SETUP ->
-                    if (CIRISBuild.HAS_AGENT) SetupStep.LLM_CONFIGURATION else SetupStep.AGE_RANGE
-                SetupStep.LLM_CONFIGURATION -> SetupStep.AGE_RANGE
-                SetupStep.AGE_RANGE -> SetupStep.COMPLETE
-                else -> SetupStep.COMPLETE
-            }
-        }
-
-        _state.value = currentState.copy(currentStep = nextStep)
+        _state.value = currentState.copy(
+            currentStep = nextSetupStep(currentState.currentStep, CIRISBuild.HAS_AGENT),
+        )
         return true
     }
 
     /**
      * Move to the previous setup step.
-     *
-     * IMPORTANT: When going back from NODE_AUTH to WELCOME, we must reset isNodeFlow
-     * so that the user can choose to NOT register this time.
      */
     fun previousStep() {
         val currentState = _state.value
-
-        // Node-client back-button mirrors the account-first forward path:
-        //   COMPLETE → AGE_RANGE → FEDERATION_IDENTITY_SETUP →
-        //   ACCOUNT_AND_CONFIRMATION → WELCOME
-        // Agent build (CIRISBuild.HAS_AGENT) inserts LLM_CONFIGURATION between
-        // AGE_RANGE and FEDERATION_IDENTITY_SETUP, mirroring nextStep().
-        val prevStep = if (currentState.isNodeFlow) {
-            when (currentState.currentStep) {
-                SetupStep.WELCOME -> SetupStep.WELCOME
-                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.WELCOME
-                SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.ACCOUNT_AND_CONFIRMATION
-                SetupStep.LLM_CONFIGURATION -> SetupStep.FEDERATION_IDENTITY_SETUP
-                SetupStep.AGE_RANGE ->
-                    if (CIRISBuild.HAS_AGENT) SetupStep.LLM_CONFIGURATION else SetupStep.FEDERATION_IDENTITY_SETUP
-                SetupStep.COMPLETE -> SetupStep.AGE_RANGE
-                else -> SetupStep.WELCOME
-            }
-        } else {
-            when (currentState.currentStep) {
-                SetupStep.WELCOME -> SetupStep.WELCOME
-                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.WELCOME
-                SetupStep.FEDERATION_IDENTITY_SETUP -> SetupStep.ACCOUNT_AND_CONFIRMATION
-                SetupStep.LLM_CONFIGURATION -> SetupStep.FEDERATION_IDENTITY_SETUP
-                SetupStep.AGE_RANGE ->
-                    if (CIRISBuild.HAS_AGENT) SetupStep.LLM_CONFIGURATION else SetupStep.FEDERATION_IDENTITY_SETUP
-                SetupStep.COMPLETE -> SetupStep.AGE_RANGE
-                else -> SetupStep.WELCOME
-            }
-        }
-
-        // When going back from NODE_AUTH to WELCOME, reset isNodeFlow so user can
-        // choose NOT to register this time (fixes bug where back->continue still went to NODE_AUTH)
-        val shouldResetNodeFlow = currentState.isNodeFlow &&
-            currentState.currentStep == SetupStep.NODE_AUTH &&
-            prevStep == SetupStep.WELCOME
-
         _state.value = currentState.copy(
-            currentStep = prevStep,
-            isNodeFlow = if (shouldResetNodeFlow) false else currentState.isNodeFlow
+            currentStep = previousSetupStep(currentState.currentStep, CIRISBuild.HAS_AGENT),
         )
-
-        // Also reset device auth state when backing out of NODE_AUTH to clear any
-        // stale/error/timeout state. This ensures a clean slate for retry.
-        if (shouldResetNodeFlow) {
-            PlatformLogger.i(TAG, "previousStep: Backing out of NODE_AUTH, resetting device auth state")
-            resetDeviceAuth()
-        }
     }
 
-    // ========== Federation Identity (FEDERATION_IDENTITY_SETUP) ==========
+    // ========== Federation Identity (the mint card on screen 1) ==========
 
     /**
      * Probe the LOCAL node for the owner's federation identity.
@@ -1444,6 +1360,25 @@ class SetupViewModel(
         _state.value = _state.value.copy(accordMetricsConsent = consent)
     }
 
+    /**
+     * Set the CC#46 "be scored" grant — whether shipped traces may be ANALYZED.
+     *
+     * A SEPARATE consent from sending them, on the opposite edge. The substrate
+     * marks it `required: false` and publishes what declining costs, so this is
+     * the owner's answer arriving; it used to be a hardcoded `true`.
+     */
+    fun setTraceAnalyze(analyze: Boolean) {
+        _state.value = _state.value.copy(traceAnalyze = analyze)
+    }
+
+    /**
+     * Choose to run with NO LLM. Selecting a provider clears the choice, so the
+     * two cannot both be true.
+     */
+    fun setRunWithoutAi(runWithout: Boolean) {
+        _state.value = _state.value.copy(runWithoutAi = runWithout)
+    }
+
     // ========== Public API Services (Navigation & Weather) ==========
 
     /**
@@ -2064,10 +1999,10 @@ class SetupViewModel(
     }
 
     /**
-     * Reset to welcome step.
+     * Reset to the first step.
      */
     fun resetToWelcome() {
-        _state.value = _state.value.copy(currentStep = SetupStep.WELCOME)
+        _state.value = _state.value.copy(currentStep = SetupStep.YOU)
     }
 
     // ========== Connect to Node (Device Auth Flow) ==========
@@ -2078,17 +2013,6 @@ class SetupViewModel(
     fun updateNodeUrl(url: String) {
         _state.value = _state.value.copy(
             deviceAuth = _state.value.deviceAuth.copy(nodeUrl = url)
-        )
-    }
-
-    /**
-     * Enter the node flow from the WELCOME step.
-     * Sets isNodeFlow=true and transitions to NODE_AUTH step.
-     */
-    fun enterNodeFlow() {
-        _state.value = _state.value.copy(
-            isNodeFlow = true,
-            currentStep = SetupStep.NODE_AUTH
         )
     }
 
@@ -2339,9 +2263,6 @@ class SetupViewModel(
         val currentState = _state.value
         val useCirisProxy = currentState.useCirisProxy()
 
-        // Debug logging for node flow
-        PlatformLogger.i(TAG, "buildSetupRequest: isNodeFlow=${currentState.isNodeFlow}, deviceAuth.status=${currentState.deviceAuth.status}")
-        PlatformLogger.i(TAG, "buildSetupRequest: deviceAuth.keyId=${currentState.deviceAuth.keyId}, signingKeyB64=${currentState.deviceAuth.signingKeyB64?.take(20)}...")
 
         // Auto-generate admin password (32 chars)
         // Source: SetupViewModel.kt:141-146
@@ -2397,10 +2318,13 @@ class SetupViewModel(
             }
         }
 
-        // Node flow fields (if provisioned via Portal)
-        val nodeFlowData = if (currentState.isNodeFlow && currentState.deviceAuth.status == DeviceAuthStatus.COMPLETE) {
+        // Portal-provisioned node-flow fields. The wizard no longer has a route
+        // into device auth (the NODE_AUTH step's only entry point had no
+        // callers), so these are populated only when a device-auth session
+        // completed out-of-band. Nothing in first-run sets them today.
+        val nodeFlowData = if (currentState.deviceAuth.status == DeviceAuthStatus.COMPLETE) {
             val da = currentState.deviceAuth
-            PlatformLogger.i(TAG, "Node flow COMPLETE - extracting NodeFlowData: keyId=${da.keyId}, signingKeyB64=${da.signingKeyB64?.take(20)}...")
+            PlatformLogger.i(TAG, "Device auth COMPLETE - extracting NodeFlowData: keyId=${da.keyId}")
             NodeFlowData(
                 nodeUrl = da.nodeUrl.takeIf { it.isNotEmpty() },
                 identityTemplate = da.provisionedTemplate,
@@ -2412,7 +2336,6 @@ class SetupViewModel(
                 keyId = da.keyId
             )
         } else {
-            PlatformLogger.w(TAG, "Node flow NOT complete or not in node flow - nodeFlowData will be null (isNodeFlow=${currentState.isNodeFlow}, status=${currentState.deviceAuth.status})")
             null
         }
 
@@ -2454,6 +2377,8 @@ class SetupViewModel(
                 location_longitude = currentState.selectedLocation?.longitude,
                 timezone = currentState.selectedLocation?.timezone,
                 share_location_in_traces = currentState.shareLocationInTraces,
+                trace_analyze = currentState.traceAnalyze,
+                run_without_ai = currentState.runWithoutAi,
 
                 // Node flow fields
                 node_url = nodeFlowData?.nodeUrl,
@@ -2534,6 +2459,8 @@ class SetupViewModel(
                 location_longitude = currentState.selectedLocation?.longitude,
                 timezone = currentState.selectedLocation?.timezone,
                 share_location_in_traces = currentState.shareLocationInTraces,
+                trace_analyze = currentState.traceAnalyze,
+                run_without_ai = currentState.runWithoutAi,
 
                 // Node flow fields
                 node_url = nodeFlowData?.nodeUrl,

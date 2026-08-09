@@ -4,6 +4,10 @@ import ai.ciris.mobile.shared.CIRISBuild
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
 import androidx.compose.foundation.layout.imePadding
+import ai.ciris.mobile.shared.models.ConsentDisclosure
+import ai.ciris.mobile.shared.models.ConsentGrantDisclosure
+import ai.ciris.mobile.shared.models.DecliningDisclosure
+import ai.ciris.mobile.shared.models.DisclosureString
 import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.safety.AgeBand
@@ -36,6 +40,7 @@ import ai.ciris.mobile.shared.viewmodels.FederationIdentitySetupState
 import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
 import ai.ciris.mobile.shared.viewmodels.ModelInfo
 import ai.ciris.mobile.shared.viewmodels.SetupStep
+import ai.ciris.mobile.shared.viewmodels.isFinalSetupStep
 import ai.ciris.mobile.shared.viewmodels.SetupFormState
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
 import ai.ciris.mobile.shared.viewmodels.SUPPORTED_LANGUAGES
@@ -150,16 +155,6 @@ private object SetupColors {
     val Primary = Color(0xFF667eea)
 }
 
-/**
- * Format population number for display (e.g., 12,691,836 -> "12.7M")
- */
-private fun formatPopulation(pop: Int): String {
-    return when {
-        pop >= 1_000_000 -> "${(pop / 100_000) / 10.0}M"
-        pop >= 1_000 -> "${(pop / 100) / 10.0}K"
-        else -> pop.toString()
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -296,44 +291,6 @@ fun SetupScreen(
         })
     }
 
-    // Load adapters and templates when entering OPTIONAL_FEATURES step
-    LaunchedEffect(state.currentStep) {
-        if (state.currentStep == SetupStep.OPTIONAL_FEATURES) {
-            // Load adapters if not already loaded
-            if (state.availableAdapters.isEmpty()) {
-                // Fetch all adapters from server, then filter client-side based on platform
-                // This approach works for both iOS and Android (KMP)
-                viewModel.loadAvailableAdapters {
-                    val allAdapters = apiClient.getSetupAdapters()
-                    val currentPlatform = when (getPlatform()) {
-                        ai.ciris.mobile.shared.platform.Platform.IOS -> Platform.IOS
-                        ai.ciris.mobile.shared.platform.Platform.ANDROID -> Platform.ANDROID
-                        ai.ciris.mobile.shared.platform.Platform.DESKTOP -> Platform.DESKTOP
-                        ai.ciris.mobile.shared.platform.Platform.WEB -> Platform.DESKTOP // Web treated as desktop
-                    }
-                    filterAdaptersForPlatform(
-                        adapters = allAdapters,
-                        platform = currentPlatform,
-                        useCirisServices = state.useCirisProxy()
-                    )
-                }
-            }
-            // Load templates if not already loaded
-            if (state.availableTemplates.isEmpty()) {
-                viewModel.loadAvailableTemplates {
-                    apiClient.getSetupTemplates()
-                }
-            }
-            // Load the generated tool disclosure (#941) so the operator can see
-            // exactly what each of these enabled-by-default choices grants.
-            if (state.toolDisclosure == null && !state.toolDisclosureLoading) {
-                viewModel.loadToolDisclosure {
-                    apiClient.getSetupToolDisclosure()
-                }
-            }
-        }
-    }
-
     // Adapter Wizard Dialog (shown when configuring adapters that require setup)
     if (state.showAdapterWizard) {
         // Create a minimal LoadableAdaptersData for the dialog to show wizard steps
@@ -392,7 +349,6 @@ fun SetupScreen(
             // Step indicators at top
             StepIndicators(
                 currentStep = state.currentStep,
-                isNodeFlow = state.isNodeFlow,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 16.dp, horizontal = 24.dp)
@@ -405,24 +361,9 @@ fun SetupScreen(
                     .fillMaxWidth()
             ) {
                 when (state.currentStep) {
-                    SetupStep.WELCOME -> WelcomeStep(
-                        viewModel = viewModel,
-                        state = state,
-                        apiClient = apiClient
-                    )
-                    SetupStep.NODE_AUTH -> NodeAuthStep(viewModel, state, apiClient)
-                    SetupStep.QUICK_SETUP -> QuickSetupStep(
-                        viewModel = viewModel,
-                        state = state,
-                        apiClient = apiClient
-                    )
-                    SetupStep.PREFERENCES -> PreferencesStep(viewModel, state)
-                    SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state, apiClient)
-                    SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
-                    SetupStep.FEDERATION_IDENTITY_SETUP -> FederationIdentityStep(viewModel, state)
-                    SetupStep.AGE_RANGE -> AgeRangeStep(viewModel, state)
-                    SetupStep.ACCOUNT_AND_CONFIRMATION -> AccountConfirmationStep(viewModel, state)
-                    SetupStep.VERIFY_SETUP -> OptionalFeaturesStep(viewModel, state) // Legacy - redirects to OPTIONAL_FEATURES
+                    SetupStep.YOU -> YouStep(viewModel, state)
+                    SetupStep.JOIN_FEDERATION -> JoinFederationStep(viewModel, state, apiClient)
+                    SetupStep.AI -> AiStep(viewModel, state, apiClient)
                     SetupStep.COMPLETE -> CompleteStep(onSetupComplete, state.ownershipClaim)
                 }
             }
@@ -514,21 +455,13 @@ fun SetupScreen(
                 canProceed = state.canProceedFromCurrentStep(),
                 validationError = state.getStepValidationError(),
                 isSubmitting = state.isSubmitting,
-                isNodeFlow = state.isNodeFlow,
                 onNext = {
-                    PlatformLogger.i(TAG, " onNext clicked, currentStep=${state.currentStep}, canProceed=${state.canProceedFromCurrentStep()}, isNodeFlow=${state.isNodeFlow}")
-                    // Determine if this is the final step before COMPLETE.
-                    // NODE-CLIENT first-run flow (account-first): the order is now
-                    //   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP
-                    //   → AGE_RANGE → COMPLETE
-                    // so AGE_RANGE is the final step (account creation now happens
-                    // EARLIER, ahead of the fed-ID, so it is no longer the final
-                    // step). On COMPLETE we ALSO self-claim ownership of the local
-                    // node for the just-created user.
-                    // Legacy/non-node branches retained for the other flows.
-                    val isFinalStep = state.currentStep == SetupStep.AGE_RANGE ||
-                        (state.isNodeFlow && state.currentStep == SetupStep.OPTIONAL_FEATURES) ||
-                        (state.currentStep == SetupStep.QUICK_SETUP && !state.needsLocalAccountStep())
+                    PlatformLogger.i(TAG, " onNext clicked, currentStep=${state.currentStep}, canProceed=${state.canProceedFromCurrentStep()}")
+                    // YOU → JOIN_FEDERATION → [AI] → COMPLETE. The final step is
+                    // AI on the agent build and JOIN_FEDERATION on the node
+                    // client; on COMPLETE we ALSO self-claim ownership of the
+                    // local node for the just-created user.
+                    val isFinalStep = isFinalSetupStep(state.currentStep, CIRISBuild.HAS_AGENT)
 
                     if (isFinalStep && !CIRISBuild.HAS_AGENT) {
                         // NODE CLIENT final step: there is NO agent /v1/setup/complete
@@ -614,7 +547,7 @@ fun SetupScreen(
                         // surfaces on this step; the claim also mints-if-absent as a
                         // backstop. An association-in-progress is left alone.
                         val fed = state.federationIdentity
-                        if (state.currentStep == SetupStep.FEDERATION_IDENTITY_SETUP &&
+                        if (state.currentStep == SetupStep.YOU &&
                             !fed.minted && !fed.admitted && !fed.inProgress &&
                             fed.isLabelValid()
                         ) {
@@ -625,20 +558,7 @@ fun SetupScreen(
                         viewModel.nextStep()
                     }
                 },
-                onBack = {
-                    // If backing out of NODE_AUTH, also reset server-side device auth state
-                    if (state.isNodeFlow && state.currentStep == SetupStep.NODE_AUTH) {
-                        PlatformLogger.i(TAG, "Backing out of NODE_AUTH - resetting server device auth state")
-                        coroutineScope.launch(Dispatchers.Default) {
-                            try {
-                                apiClient.resetDeviceAuthOnServer()
-                            } catch (e: Exception) {
-                                PlatformLogger.w(TAG, "Failed to reset device auth on server: ${e.message}")
-                            }
-                        }
-                    }
-                    viewModel.previousStep()
-                },
+                onBack = { viewModel.previousStep() },
                 onBackToLogin = onBackToLogin,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -653,34 +573,14 @@ fun SetupScreen(
 @Composable
 private fun StepIndicators(
     currentStep: SetupStep,
-    isNodeFlow: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    // Node-client first-run flow (both branches): account-first 4-step path
-    //   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP →
-    //   AGE_RANGE  (→ COMPLETE)
-    // Agent build (CIRISBuild.HAS_AGENT): LLM_CONFIGURATION is inserted after
-    // the fed-ID (5-step path). NOTE: the visual order here does NOT match the
-    // SetupStep enum's ordinal order (LLM_CONFIGURATION is declared before
-    // ACCOUNT_AND_CONFIRMATION), so active/complete state is computed from the
-    // POSITION in this list when the current step is one of the listed steps;
-    // ordinal comparison is kept as the fallback for off-path steps (COMPLETE,
-    // legacy NODE_AUTH/QUICK_SETUP flows).
+    // Three screens: You → Join the federation → AI. The node client has no
+    // brain to configure, so it shows two.
     val steps = if (CIRISBuild.HAS_AGENT) {
-        listOf(
-            SetupStep.WELCOME to "1",
-            SetupStep.ACCOUNT_AND_CONFIRMATION to "2",
-            SetupStep.FEDERATION_IDENTITY_SETUP to "3",
-            SetupStep.LLM_CONFIGURATION to "4",
-            SetupStep.AGE_RANGE to "5"
-        )
+        listOf(SetupStep.YOU to "1", SetupStep.JOIN_FEDERATION to "2", SetupStep.AI to "3")
     } else {
-        listOf(
-            SetupStep.WELCOME to "1",
-            SetupStep.ACCOUNT_AND_CONFIRMATION to "2",
-            SetupStep.FEDERATION_IDENTITY_SETUP to "3",
-            SetupStep.AGE_RANGE to "4"
-        )
+        listOf(SetupStep.YOU to "1", SetupStep.JOIN_FEDERATION to "2")
     }
     val currentFlowIndex = steps.indexOfFirst { it.first == currentStep }
 
@@ -726,576 +626,370 @@ private fun StepIndicators(
     }
 }
 
-// ========== Welcome Step (fragment_setup_welcome.xml) ==========
-// NOTE: Google sign-in button is NOT here - it's in LoginScreen.kt
-// This screen shows different cards based on whether user already signed in with Google
+
+
+/**
+ * Localized string with an English fallback for keys not yet in the 29-locale
+ * manifest. [localizedString] returns the KEY itself when a key is absent (not
+ * ""), so treat "blank OR equal to the key" as missing and render [fallback].
+ * Same pattern as `AnnounceDecisionCard.l10nOr` — it lets new UI ship before the
+ * catalogue catches up, without machine-translating 29 locales badly.
+ */
 @Composable
-private fun WelcomeStep(
-    viewModel: SetupViewModel,
-    state: SetupFormState,
-    apiClient: CIRISApiClient,
-    modifier: Modifier = Modifier
-) {
-    // Use setupMode as single source of truth for CIRIS vs BYOK display
-    val isCirisMode = state.setupMode == SetupMode.CIRIS_PROXY
-    val scrollState = rememberScrollState()
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(scrollState),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Welcome Title
-        Text(
-            text = localizedString("setup.welcome_title"),
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = SetupColors.TextPrimary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        // Badge: "✓ 100% Free & Open Source"
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = SetupColors.SuccessLight,
-            modifier = Modifier.padding(bottom = 24.dp)
-        ) {
-            Text(
-                text = "✓ ${localizedString("mobile.setup_free_badge")}",
-                color = SetupColors.SuccessText,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-        }
-
-        // Main description — the node client is AI-free; only the agent build
-        // (CIRISBuild.HAS_AGENT) describes CIRIS as an AI assistant.
-        Text(
-            text = if (CIRISBuild.HAS_AGENT) localizedString("setup.welcome_desc")
-                   else localizedString("mobile.setup_welcome_desc_node"),
-            color = SetupColors.TextSecondary,
-            fontSize = 16.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 24.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
-        )
-
-        // Status card based on setup mode (CIRIS_PROXY vs BYOK) — agent-only.
-        // The node client has no LLM, so the AI/key-config card is hidden.
-        if (CIRISBuild.HAS_AGENT) {
-        if (isCirisMode) {
-            // CIRIS Mode - Google/Apple OAuth signed in
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = SetupColors.SuccessLight,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = CIRISIcons.checkCircle,
-                        contentDescription = null,
-                        tint = SetupColors.SuccessDark,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = localizedString("mobile.setup_google_ready"),
-                            color = SetupColors.SuccessDark,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = localizedString("setup.ciris_mode_desc"),
-                            color = SetupColors.SuccessText,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-            }
-        } else {
-            // BYOK Mode - need to configure LLM
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = SetupColors.InfoLight,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = CIRISIcons.info,
-                        contentDescription = null,
-                        tint = SetupColors.InfoDark,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = localizedString("setup.byok_mode_title"),
-                            color = SetupColors.InfoDark,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = localizedString("setup.byok_mode_desc"),
-                            color = SetupColors.InfoText,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-            }
-        }
-        } // end CIRISBuild.HAS_AGENT (AI/key-config status card)
-
-        // What is CIRIS?
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = SetupColors.GrayLight,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    Icon(
-                        imageVector = CIRISIcons.info,
-                        contentDescription = null,
-                        tint = SetupColors.Primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = localizedString("mobile.setup_what_ciris"),
-                        color = SetupColors.TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Text(
-                    text = if (CIRISBuild.HAS_AGENT) localizedString("mobile.setup_what_ciris_desc")
-                           else localizedString("mobile.setup_what_ciris_desc_node"),
-                    color = SetupColors.TextSecondary,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
-                )
-            }
-        }
-
-        // Bottom padding
-        Spacer(modifier = Modifier.height(80.dp))
-    }
+private fun l10nOr(key: String, fallback: String): String {
+    val v = localizedString(key)
+    return if (v.isBlank() || v == key) fallback else v
 }
 
-// ========== License Auth Step (Device Authorization via Portal/Registry) ==========
+// ========== Screen 1 — You ==========
+
+/**
+ * **Who are you?** One screen, one question.
+ *
+ * WELCOME, ACCOUNT_AND_CONFIRMATION, FEDERATION_IDENTITY_SETUP and AGE_RANGE all
+ * asked it, in four vocabularies, on four consecutive screens. WELCOME collected
+ * nothing at all — 169 lines with no interactive element — and its "what CIRIS
+ * is" paragraph is this screen's header. The rest are sections of one form.
+ *
+ * The fed-ID mint keeps its OWN button inside its card: it is an apex act with a
+ * hardware ceremony (TPM / Secure Enclave / StrongBox), and folding it into Next
+ * would strand the user mid-screen with no legible cause when the ceremony
+ * fails.
+ */
 @Composable
-private fun NodeAuthStep(
+private fun YouStep(
     viewModel: SetupViewModel,
     state: SetupFormState,
-    apiClient: CIRISApiClient,
     modifier: Modifier = Modifier
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val deviceAuth = state.deviceAuth
-    val clipboardManager = LocalClipboardManager.current
-    var showCopiedToast by remember { mutableStateOf(false) }
-
-    // Start connection when entering this step if not yet started
-    LaunchedEffect(Unit) {
-        if (deviceAuth.status == DeviceAuthStatus.IDLE) {
-            // TODO: Wire to actual API call via apiClient.
-            // MVP: The startNodeConnection method accepts a lambda for platform-specific HTTP.
-            viewModel.startNodeConnection { nodeUrl ->
-                apiClient.connectToNode(nodeUrl)
-            }
-        }
-    }
-
-    // Manual polling triggered by "All Done!" button instead of automatic polling
-    // This prevents "unable to resolve localhost" when app returns from browser
-    var isChecking by remember { mutableStateOf(false) }
-    var checkError by remember { mutableStateOf<String?>(null) }
-
+    // ONE scroll for the whole screen — the sections below deliberately do not
+    // scroll themselves (nesting two vertical scrolls is a Compose crash).
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .verticalScroll(rememberScrollState())
     ) {
         Text(
-            text = localizedString("mobile.setup_node_register"),
+            text = localizedString("setup.welcome_title"),
             color = SetupColors.TextPrimary,
-            fontSize = 20.sp,
+            fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-
         Text(
-            text = localizedString("mobile.setup_registering").replace("{url}", deviceAuth.nodeUrl),
+            text = if (CIRISBuild.HAS_AGENT) {
+                localizedString("setup.welcome_desc")
+            } else {
+                localizedString("mobile.setup_welcome_desc_node")
+            },
             color = SetupColors.TextSecondary,
             fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 16.dp)
+            lineHeight = 20.sp,
+            modifier = Modifier.padding(bottom = 20.dp)
         )
 
-        // Self-custody explanation card
+        FederationIdentitySection(viewModel = viewModel, state = state)
+        Spacer(modifier = Modifier.height(24.dp))
+        AccountSection(viewModel = viewModel, state = state)
+        Spacer(modifier = Modifier.height(24.dp))
+        AgeRangeSection(viewModel = viewModel, state = state)
+    }
+}
+
+// ========== Screen 2 — Join the federation ==========
+
+/**
+ * **Do you join?** The consent decision, RENDERED from
+ * `ciris_server.consent_disclosure()`.
+ *
+ * Not composed here, deliberately: the export exists so the wizard shows the
+ * substrate's own words, because "a wizard that writes its own version of that
+ * paragraph drifts from the substrate the moment either changes". Every string
+ * arrives with a catalogue key, so [disclosureText] renders the user's locale
+ * and falls back to the substrate's wording rather than to a raw key.
+ *
+ * Announce is stated as the FLOOR for service, not offered as a preference. The
+ * two grants are separate toggles on opposite edges — sending traces and being
+ * scored — and location leads with what it is FOR, because "presented first as a
+ * restriction mechanism it reads as a pure cost, and an operator declines it".
+ */
+@Composable
+private fun JoinFederationStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    apiClient: CIRISApiClient,
+    modifier: Modifier = Modifier
+) {
+    var disclosure by remember { mutableStateOf<ConsentDisclosure?>(null) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var expanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        try {
+            disclosure = apiClient.getConsentDisclosure()
+        } catch (e: Exception) {
+            PlatformLogger.w(TAG, "consent disclosure unavailable: ${e.message}")
+            loadError = e.message ?: "unavailable"
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        val d = disclosure
+        if (d == null) {
+            // No hand-written substitute. Rendering our own version of this copy
+            // is the exact drift the disclosure export prevents, so an
+            // unreachable node shows why, not an invented paragraph.
+            Text(
+                text = l10nOr("setup.federation_title", "Join the federation"),
+                color = SetupColors.TextPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            Text(
+                text = loadError ?: l10nOr("mobile.status_loading", "Loading…"),
+                color = if (loadError != null) SetupColors.ErrorText else SetupColors.TextSecondary,
+                fontSize = 14.sp,
+            )
+            return@Column
+        }
+
+        // ── The primary action ──────────────────────────────────────────────
+        Text(
+            text = disclosureText(d.primaryAction),
+            color = SetupColors.TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        // ── Announce: a REQUIREMENT, stated as one ──────────────────────────
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = SetupColors.SuccessLight.copy(alpha = 0.3f),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp)
+            color = SetupColors.InfoLight,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    Text(
-                        text = "🔐",
-                        fontSize = 18.sp,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text(
-                        text = localizedString("mobile.setup_node_self_custody_title"),
-                        color = SetupColors.SuccessDark,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = localizedString("mobile.setup_node_self_custody_desc"),
-                    color = SetupColors.TextSecondary,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp
+                    text = disclosureText(d.announceRequirement),
+                    color = SetupColors.InfoText,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                ConsentToggleRow(
+                    label = localizedString("mobile.announce_decision_toggle_label"),
+                    checked = state.announceOwnership,
+                    onCheckedChange = { viewModel.setAnnounceOwnership(it) },
+                    testTag = "toggle_announce_ownership",
                 )
             }
         }
 
-        when (deviceAuth.status) {
-            DeviceAuthStatus.IDLE, DeviceAuthStatus.CONNECTING -> {
-                CircularProgressIndicator(
-                    color = SetupColors.Primary,
-                    modifier = Modifier.padding(16.dp)
+        TextButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.testableClickable("btn_consent_details") { expanded = !expanded }
+        ) {
+            Text(
+                text = if (expanded) "▾ " + l10nOr("mobile.setup_hide_details", "Hide details")
+                       else "▸ " + l10nOr("mobile.setup_show_details", "Show details"),
+                color = SetupColors.Primary,
+                fontSize = 14.sp,
+            )
+        }
+
+        // ── The two grants: separate consents on opposite edges ─────────────
+        d.grant("replication")?.let { g ->
+            ConsentGrantRow(
+                grant = g,
+                checked = state.accordMetricsConsent,
+                onCheckedChange = { viewModel.setAccordMetricsConsent(it) },
+                testTag = "toggle_trace_opt_in",
+                showDetail = expanded,
+                declining = null,
+            )
+        }
+        d.grant("analyze")?.let { g ->
+            ConsentGrantRow(
+                grant = g,
+                checked = state.traceAnalyze,
+                onCheckedChange = { viewModel.setTraceAnalyze(it) },
+                testTag = "toggle_trace_analyze",
+                showDetail = expanded,
+                declining = d.decliningAnalyze,
+            )
+        }
+
+        if (expanded) {
+            Text(
+                text = disclosureText(d.independent),
+                color = SetupColors.TextSecondary,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+            )
+        }
+
+        // ── Location: purpose FIRST, then the bound ─────────────────────────
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.GrayLight,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                ConsentToggleRow(
+                    label = disclosureText(d.location.title),
+                    checked = state.shareLocationInTraces,
+                    onCheckedChange = { viewModel.setShareLocationInTraces(it) },
+                    testTag = "toggle_share_location",
                 )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = localizedString("mobile.setup_node_connecting"),
+                    text = disclosureText(d.location.purpose),
                     color = SetupColors.TextSecondary,
-                    fontSize = 14.sp
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
                 )
-            }
-
-            DeviceAuthStatus.WAITING -> {
-                // Use verification URL as provided by server (includes device code)
-                val fullVerificationUrl = deviceAuth.verificationUri
-
-                // Verification URL card
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SetupColors.InfoLight,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = localizedString("mobile.setup_node_open_browser"),
-                            color = SetupColors.InfoDark,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-
-                        // Clickable URL
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.White,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    openUrlInBrowser(fullVerificationUrl)
-                                }
-                        ) {
-                            Text(
-                                text = fullVerificationUrl,
-                                color = SetupColors.Primary,
-                                fontSize = 14.sp,
-                                textAlign = TextAlign.Center,
-                                textDecoration = TextDecoration.Underline,
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Action buttons row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Open in browser button
-                            Button(
-                                onClick = { openUrlInBrowser(fullVerificationUrl) },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = SetupColors.Primary
-                                ),
-                                modifier = Modifier.weight(1f).testableClickable("btn_open_browser") {
-                                    openUrlInBrowser(fullVerificationUrl)
-                                }
-                            ) {
-                                Text(localizedString("mobile.setup_node_open"), fontSize = 13.sp)
-                            }
-
-                            // Copy to clipboard button
-                            OutlinedButton(
-                                onClick = {
-                                    clipboardManager.setText(AnnotatedString(fullVerificationUrl))
-                                    showCopiedToast = true
-                                    coroutineScope.launch {
-                                        delay(2000)
-                                        showCopiedToast = false
-                                    }
-                                },
-                                modifier = Modifier.weight(1f).testableClickable("btn_copy_url") {
-                                    clipboardManager.setText(AnnotatedString(fullVerificationUrl))
-                                    showCopiedToast = true
-                                    coroutineScope.launch {
-                                        delay(2000)
-                                        showCopiedToast = false
-                                    }
-                                }
-                            ) {
-                                Text(
-                                    if (showCopiedToast) localizedString("mobile.setup_node_copied") else localizedString("mobile.setup_node_copy"),
-                                    fontSize = 13.sp
-                                )
-                            }
-                        }
-
-                        if (deviceAuth.userCode.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = localizedString("mobile.setup_code").replace("{code}", deviceAuth.userCode),
-                                color = SetupColors.InfoDark,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // "All Done!" button for manual check after returning from browser
-                if (isChecking) {
-                    CircularProgressIndicator(
-                        color = SetupColors.Primary,
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
+                if (expanded) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = localizedString("mobile.setup_node_checking"),
+                        text = disclosureText(d.location.permits),
                         color = SetupColors.TextSecondary,
-                        fontSize = 14.sp
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
                     )
-                } else {
-                    Text(
-                        text = localizedString("mobile.setup_node_after_auth"),
-                        color = SetupColors.TextSecondary,
-                        fontSize = 14.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
-                    Button(
-                        onClick = {
-                            PlatformLogger.i("SetupScreen", "[ALL_DONE] ========== BUTTON CLICKED ==========")
-                            PlatformLogger.i("SetupScreen", "[ALL_DONE] Current deviceAuth status: ${viewModel.state.value.deviceAuth.status}")
-                            PlatformLogger.i("SetupScreen", "[ALL_DONE] deviceCode: ${viewModel.state.value.deviceAuth.deviceCode.take(16)}...")
-                            PlatformLogger.i("SetupScreen", "[ALL_DONE] portalUrl: ${viewModel.state.value.deviceAuth.portalUrl}")
-                            isChecking = true
-                            checkError = null
-                            coroutineScope.launch {
-                                try {
-                                    PlatformLogger.i("SetupScreen", "[ALL_DONE] Calling viewModel.pollNodeAuthStatus...")
-                                    viewModel.pollNodeAuthStatus { deviceCode, portalUrl ->
-                                        PlatformLogger.i("SetupScreen", "[ALL_DONE] Poll lambda invoked: deviceCode=${deviceCode.take(16)}..., portalUrl=$portalUrl")
-                                        PlatformLogger.i("SetupScreen", "[ALL_DONE] Calling apiClient.pollNodeAuthStatus...")
-                                        val result = apiClient.pollNodeAuthStatus(deviceCode, portalUrl)
-                                        PlatformLogger.i("SetupScreen", "[ALL_DONE] API call returned: status=${result.status}, keyId=${result.keyId}, error=${result.error}")
-                                        result
-                                    }
-                                    PlatformLogger.i("SetupScreen", "[ALL_DONE] Poll complete, final status: ${viewModel.state.value.deviceAuth.status}")
-                                } catch (e: Exception) {
-                                    PlatformLogger.e("SetupScreen", "[ALL_DONE] Poll EXCEPTION: ${e.message}")
-                                    PlatformLogger.e("SetupScreen", "[ALL_DONE] Exception type: ${e::class.simpleName}")
-                                    checkError = e.message ?: "Check failed"
-                                } finally {
-                                    isChecking = false
-                                    PlatformLogger.i("SetupScreen", "[ALL_DONE] ========== BUTTON HANDLER COMPLETE ==========")
-                                }
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SetupColors.SuccessDark
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .testable("btn_all_done")
-                    ) {
+                    d.location.declining.costs.forEach { cost ->
                         Text(
-                            localizedString("mobile.setup_node_all_done"),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    checkError?.let { error ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = error,
-                            color = Color.Red,
+                            text = "• ${disclosureText(cost)}",
+                            color = SetupColors.TextSecondary,
                             fontSize = 12.sp,
-                            textAlign = TextAlign.Center
+                            lineHeight = 17.sp,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
-                }
-            }
-
-            DeviceAuthStatus.COMPLETE -> {
-                // Success card
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SetupColors.SuccessLight,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text(
-                            text = "✓ ${localizedString("mobile.setup_node_authorized")}",
-                            color = SetupColors.SuccessDark,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-
-                        // Self-custody key bound indicator
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        ) {
-                            Text(
-                                text = "🔐",
-                                fontSize = 14.sp,
-                                modifier = Modifier.padding(end = 6.dp)
-                            )
-                            Text(
-                                text = localizedString("mobile.setup_node_key_bound"),
-                                color = SetupColors.SuccessText,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-
-                        deviceAuth.provisionedTemplate?.let {
-                            Text(
-                                text = localizedString("mobile.setup_template").replace("{name}", it),
-                                color = SetupColors.SuccessText,
-                                fontSize = 14.sp
-                            )
-                        }
-                        if (deviceAuth.provisionedAdapters.isNotEmpty()) {
-                            Text(
-                                text = localizedString("mobile.setup_adapters_list").replace("{list}", deviceAuth.provisionedAdapters.joinToString(", ")),
-                                color = SetupColors.SuccessText,
-                                fontSize = 14.sp
-                            )
-                        }
-                        deviceAuth.orgId?.let {
-                            Text(
-                                text = localizedString("mobile.setup_organization").replace("{org}", it),
-                                color = SetupColors.SuccessText,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = localizedString("mobile.setup_node_next_hint"),
-                    color = SetupColors.TextSecondary,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            DeviceAuthStatus.ERROR -> {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SetupColors.ErrorLight,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text(
-                            text = localizedString("mobile.setup_node_failed"),
-                            color = SetupColors.ErrorDark,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        Text(
-                            text = deviceAuth.error ?: "Unknown error",
-                            color = SetupColors.ErrorText,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            viewModel.startNodeConnection { nodeUrl ->
-                                apiClient.connectToNode(nodeUrl)
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SetupColors.Primary),
-                    modifier = Modifier.testableClickable("btn_retry_connection") {
-                        coroutineScope.launch {
-                            viewModel.startNodeConnection { nodeUrl ->
-                                apiClient.connectToNode(nodeUrl)
-                            }
-                        }
-                    }
-                ) {
-                    Text(localizedString("startup.startup_retry"))
                 }
             }
         }
     }
 }
 
-// ========== LLM Configuration Step (fragment_setup_llm.xml) ==========
+/**
+ * Render a substrate string in the user's language.
+ *
+ * [DisclosureString.id] is a dot-notation key into the 29-locale catalogue and
+ * [DisclosureString.text] is the substrate's own wording. `localizedString`
+ * returns the KEY when it has no entry, so treat that as "missing" and fall back
+ * to the substrate — a locale that has not caught up degrades to correct English
+ * rather than to a raw identifier.
+ */
+@Composable
+private fun disclosureText(s: DisclosureString): String {
+    val localized = localizedString(s.id)
+    return if (localized.isBlank() || localized == s.id) s.text else localized
+}
+
+@Composable
+private fun ConsentToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    testTag: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = SetupColors.TextPrimary,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.testableClickable(testTag) { onCheckedChange(!checked) },
+        )
+    }
+}
+
+/**
+ * One consent grant. [declining] is rendered when the substrate says the grant
+ * may be declined and names what declining costs — the operator is entitled to
+ * both halves before answering.
+ */
+@Composable
+private fun ConsentGrantRow(
+    grant: ConsentGrantDisclosure,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    testTag: String,
+    showDetail: Boolean,
+    declining: DecliningDisclosure?,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        ConsentToggleRow(
+            label = disclosureText(grant.title),
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            testTag = testTag,
+        )
+        Text(
+            text = disclosureText(grant.permits),
+            color = SetupColors.TextSecondary,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        if (showDetail && declining?.allowed == true) {
+            declining.summary?.let {
+                Text(
+                    text = disclosureText(it),
+                    color = SetupColors.TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+            declining.costs.forEach { cost ->
+                Text(
+                    text = "• ${disclosureText(cost)}",
+                    color = SetupColors.TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+    }
+}
+
+// ========== Screen 3 — AI ==========
+/**
+ * **What powers it?** Arrives pre-answered for almost everyone.
+ *
+ * The old default was `OpenAI` with an empty key: Next disabled, "API key is
+ * required", and nothing signposting the way out — while three keyless paths
+ * existed, two of them buried at positions 12 and 13 of a 15-item dropdown. So
+ * the platform picks the default it can actually run: the CIRIS proxy where an
+ * OAuth token is the credential, on-device inference where the hardware allows
+ * it, and otherwise the keyless-first provider list.
+ *
+ * "Run without AI" is offered LAST and is never a default — defaulting it would
+ * disable a working agent on capable hardware. It is also not a no-op: it writes
+ * `CIRIS_SERVICES_DISABLED=true`, without which the next boot makes
+ * `llm_service` critical and initialization aborts instead of degrading.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LlmConfigurationStep(
+private fun AiStep(
     viewModel: SetupViewModel,
     state: SetupFormState,
     apiClient: CIRISApiClient,
@@ -1313,6 +1007,22 @@ private fun LlmConfigurationStep(
     // Probe on-device inference capability (checks if system CAN run local inference)
     // Cheap: ActivityManager/NSProcessInfo call + disk check
     val localInference: LocalInferenceCapability = remember { probeLocalInferenceCapability() }
+
+    // Platform default, applied ONCE and only while the provider is still the
+    // untouched `OpenAI` — never overwrite a choice the user has made.
+    //
+    // The CIRIS proxy is deliberately NOT offered on desktop: it is gated on
+    // `isGoogleAuth`, which desktop first-run never sets, and the OAuth ID token
+    // IS the credential. Showing the card there would offer a login that cannot
+    // authenticate.
+    LaunchedEffect(localInference.isReady) {
+        val untouched = state.llmProvider.equals("OpenAI", ignoreCase = true) &&
+            state.llmApiKey.isEmpty() && !state.runWithoutAi
+        if (untouched && !state.isGoogleAuth && localInference.isReady) {
+            PlatformLogger.i(TAG, "[AI] defaulting to on-device inference (device is capable)")
+            viewModel.setLlmProvider(SetupViewModel.LOCAL_ON_DEVICE_PROVIDER_ID)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -1334,6 +1044,54 @@ private fun LlmConfigurationStep(
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 24.dp)
         )
+
+        // ── Run without AI ───────────────────────────────────────────────────
+        // An option, never a default. Selected, it writes
+        // CIRIS_SERVICES_DISABLED=true; picking any provider clears it.
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (state.runWithoutAi) SetupColors.InfoLight else SetupColors.GrayLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+                .testableClickable("toggle_run_without_ai") {
+                    viewModel.setRunWithoutAi(!state.runWithoutAi)
+                }
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = l10nOr("setup.llm_run_without_ai_title", "Run without AI"),
+                        color = SetupColors.TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = l10nOr(
+                            "setup.llm_run_without_ai_desc",
+                            "The node runs on its own — federation, consent and your own data all " +
+                                "work. You can add an AI provider later from Settings.",
+                        ),
+                        color = SetupColors.TextSecondary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                Switch(
+                    checked = state.runWithoutAi,
+                    onCheckedChange = { viewModel.setRunWithoutAi(it) },
+                )
+            }
+        }
+
+        if (state.runWithoutAi) {
+            // The rest of the screen configures a provider that will not be used.
+            return@Column
+        }
 
         // CIRIS Proxy card (for Google users in CIRIS_PROXY mode)
         if (state.isGoogleAuth && state.setupMode == SetupMode.CIRIS_PROXY) {
@@ -1954,477 +1712,6 @@ private fun LlmConfigurationStep(
     }
 }
 
-// ========== Optional Features Step ==========
-@Composable
-private fun OptionalFeaturesStep(
-    viewModel: SetupViewModel,
-    state: SetupFormState,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        Text(
-            text = localizedString("mobile.setup_optional_title"),
-            color = SetupColors.TextPrimary,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        Text(
-            text = localizedString("mobile.setup_optional_desc"),
-            color = SetupColors.TextSecondary,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
-        )
-
-        // Accord Metrics Consent Card
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = SetupColors.InfoLight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    Text(
-                        text = "📊",
-                        fontSize = 20.sp,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text(
-                        text = localizedString("mobile.setup_alignment_title"),
-                        color = SetupColors.InfoDark,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Text(
-                    text = localizedString("mobile.setup_alignment_desc"),
-                    color = SetupColors.InfoText,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-
-                Text(
-                    text = localizedString("mobile.setup_data_shared"),
-                    color = SetupColors.InfoDark,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-
-                Column(modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)) {
-                    DataPointRow("Reasoning quality scores", SetupColors.InfoText)
-                    DataPointRow("Decision patterns (no message content)", SetupColors.InfoText)
-                    DataPointRow("LLM provider and API base URL", SetupColors.InfoText)
-                    DataPointRow("Performance metrics", SetupColors.InfoText)
-                }
-
-                // Trace opt-in is GATED on announcing: un-announced nodes are
-                // self-scoped and never federate their traces, so the opt-in is only
-                // meaningful once the owner has announced (set on the fed-ID step).
-                if (state.announceOwnership) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.testableClickable("item_accord_metrics_consent") {
-                            viewModel.setAccordMetricsConsent(!state.accordMetricsConsent)
-                        }
-                    ) {
-                        Checkbox(
-                            checked = state.accordMetricsConsent,
-                            onCheckedChange = { viewModel.setAccordMetricsConsent(it) },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = SetupColors.Primary,
-                                uncheckedColor = SetupColors.TextSecondary
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = localizedString("mobile.setup_alignment_agree"),
-                            color = SetupColors.InfoDark,
-                            fontSize = 14.sp
-                        )
-                    }
-                } else {
-                    Text(
-                        // New key (not yet in en.json): localizedString returns the
-                        // key itself when absent, so guard on "blank or == key".
-                        text = localizedString("mobile.announce_decision_trace_locked").let {
-                            if (it.isBlank() || it == "mobile.announce_decision_trace_locked") {
-                                "Turn on announcing above to enable sending reasoning traces and " +
-                                    "joining communities."
-                            } else {
-                                it
-                            }
-                        },
-                        color = SetupColors.TextSecondary,
-                        fontSize = 13.sp,
-                    )
-                }
-
-                // Optional: Include location in traces (only show if city selected and metrics consent given)
-                AnimatedVisibility(visible = state.accordMetricsConsent && state.city.isNotEmpty()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .padding(top = 8.dp)
-                            .testableClickable("item_share_location_traces") {
-                                viewModel.setShareLocationInTraces(!state.shareLocationInTraces)
-                            }
-                    ) {
-                        Checkbox(
-                            checked = state.shareLocationInTraces,
-                            onCheckedChange = { viewModel.setShareLocationInTraces(it) },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = SetupColors.Primary,
-                                uncheckedColor = SetupColors.TextSecondary
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = localizedString("mobile.setup_include_location"),
-                            color = SetupColors.InfoDark,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        // Navigation & Weather Services Card
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = SetupColors.SuccessLight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    Text(
-                        text = "🌍",
-                        fontSize = 20.sp,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text(
-                        text = localizedString("mobile.setup_nav_weather_title"),
-                        color = SetupColors.SuccessDark,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Text(
-                    text = localizedString("mobile.setup_nav_weather_desc"),
-                    color = SetupColors.SuccessText,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-
-                Text(
-                    text = localizedString("mobile.setup_nav_features"),
-                    color = SetupColors.SuccessDark,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-
-                Column(modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)) {
-                    DataPointRow("Convert addresses to coordinates", SetupColors.SuccessText)
-                    DataPointRow("Get current weather by location name", SetupColors.SuccessText)
-                    DataPointRow("Calculate routes and distances", SetupColors.SuccessText)
-                    DataPointRow("Weather forecasts (US locations)", SetupColors.SuccessText)
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.testableClickable("item_public_api_services") {
-                        viewModel.setPublicApiServicesEnabled(!state.publicApiServicesEnabled)
-                    }
-                ) {
-                    Checkbox(
-                        checked = state.publicApiServicesEnabled,
-                        onCheckedChange = { viewModel.setPublicApiServicesEnabled(it) },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = SetupColors.Primary,
-                            uncheckedColor = SetupColors.TextSecondary
-                        )
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = localizedString("mobile.setup_nav_enable"),
-                        color = SetupColors.SuccessDark,
-                        fontSize = 14.sp
-                    )
-                }
-
-                // Email input (shown when enabled)
-                AnimatedVisibility(visible = state.publicApiServicesEnabled) {
-                    Column(modifier = Modifier.padding(top = 12.dp)) {
-                        Text(
-                            text = localizedString("mobile.setup_contact_email"),
-                            color = SetupColors.SuccessDark,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                        OutlinedTextField(
-                            value = state.publicApiEmail,
-                            onValueChange = { viewModel.setPublicApiEmail(it) },
-                            placeholder = { Text("your@email.com", color = SetupColors.TextSecondary) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testable("input_public_api_email"),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = SetupColors.TextPrimary,
-                                unfocusedTextColor = SetupColors.TextPrimary,
-                                cursorColor = SetupColors.Primary,
-                                focusedBorderColor = SetupColors.Primary,
-                                unfocusedBorderColor = SetupColors.SuccessBorder
-                            )
-                        )
-                        Text(
-                            text = localizedString("mobile.setup_contact_hint"),
-                            color = SetupColors.SuccessText,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        // Adapters Section
-        Text(
-            text = localizedString("mobile.setup_adapters_title"),
-            color = SetupColors.TextPrimary,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
-        )
-
-        Text(
-            text = localizedString("mobile.setup_adapters_desc"),
-            color = SetupColors.TextSecondary,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-
-        if (state.adaptersLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = SetupColors.Primary)
-            }
-        } else if (state.availableAdapters.isEmpty()) {
-            // Show default adapters when API hasn't loaded them
-            AdapterToggleItem(
-                name = "REST API",
-                description = "RESTful API server with built-in web interface",
-                isEnabled = true,
-                isRequired = true,
-                requiresConfig = false,
-                isConfigured = false,
-                onToggle = {},
-                onConfigure = null
-            )
-            // The api adapter is on regardless, so disclose what it grants even
-            // when the adapter list itself could not be fetched.
-            AdapterToolDisclosure(
-                adapterId = "api",
-                disclosure = state.toolDisclosure?.forAdapter("api"),
-                expanded = "api" in state.expandedToolDisclosureIds,
-                onToggle = { viewModel.toggleToolDisclosureExpanded("api") },
-                loading = state.toolDisclosureLoading
-            )
-        } else {
-            state.availableAdapters.forEach { adapter ->
-                val isEnabled = state.enabledAdapterIds.contains(adapter.id)
-                val isRequired = adapter.id == "api"
-                val isConfigured = state.configuredAdapterData.containsKey(adapter.id)
-
-                AdapterToggleItem(
-                    name = adapter.name,
-                    description = adapter.description,
-                    isEnabled = isEnabled,
-                    isRequired = isRequired,
-                    requiresConfig = adapter.requires_config,
-                    isConfigured = isConfigured,
-                    configFields = adapter.config_fields,
-                    onToggle = { enabled ->
-                        if (!isRequired) {
-                            if (enabled && adapter.requires_config && !isConfigured) {
-                                // Launch the wizard for adapters that require configuration
-                                viewModel.startAdapterWizard(adapter.id)
-                            } else {
-                                viewModel.toggleAdapter(adapter.id, enabled)
-                            }
-                        }
-                    },
-                    onConfigure = {
-                        // Allow re-configuration of already configured adapters
-                        viewModel.startAdapterWizard(adapter.id)
-                    }
-                )
-
-                // #941: what this choice actually grants the agent. Disclosure
-                // only -- expanding it changes nothing, and the toggle above
-                // keeps whatever default it had.
-                AdapterToolDisclosure(
-                    adapterId = adapter.id,
-                    disclosure = state.toolDisclosure?.forAdapter(adapter.id),
-                    expanded = adapter.id in state.expandedToolDisclosureIds,
-                    onToggle = { viewModel.toggleToolDisclosureExpanded(adapter.id) },
-                    loading = state.toolDisclosureLoading
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-        }
-
-        // #941: tools registered regardless of every choice above. They appear in
-        // no other list in this wizard and cannot be declined, so say so.
-        Spacer(modifier = Modifier.height(12.dp))
-        AlwaysOnToolDisclosure(
-            groups = state.toolDisclosure?.always_on ?: emptyList(),
-            expanded = ALWAYS_ON_DISCLOSURE_ID in state.expandedToolDisclosureIds,
-            onToggle = { viewModel.toggleToolDisclosureExpanded(ALWAYS_ON_DISCLOSURE_ID) }
-        )
-
-        // Section 3: Advanced Settings (collapsible)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = SetupColors.GrayLight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testableClickable("item_toggle_advanced_settings") {
-                    viewModel.setShowAdvancedSettings(!state.showAdvancedSettings)
-                }
-        ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (state.showAdvancedSettings) "▼" else "▶",
-                    color = SetupColors.TextSecondary,
-                    fontSize = 14.sp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = localizedString("mobile.setup_advanced"),
-                    color = SetupColors.TextPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-
-        AnimatedVisibility(visible = state.showAdvancedSettings) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = Color.White,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .border(1.dp, SetupColors.GrayLight, RoundedCornerShape(8.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = localizedString("mobile.setup_template_title"),
-                        color = SetupColors.TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                    Text(
-                        text = localizedString("mobile.setup_template_desc"),
-                        color = SetupColors.TextSecondary,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    if (state.templatesLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = SetupColors.Primary
-                        )
-                    } else if (state.availableTemplates.isEmpty()) {
-                        Text(
-                            text = localizedString("mobile.setup_template_default"),
-                            color = SetupColors.TextSecondary,
-                            fontSize = 13.sp
-                        )
-                    } else {
-                        state.availableTemplates.forEach { template ->
-                            val isSelected = template.id == state.selectedTemplateId
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) SetupColors.Primary.copy(alpha = 0.1f) else Color.Transparent,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .clickable { viewModel.setSelectedTemplate(template.id) }
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.dp,
-                                        color = if (isSelected) SetupColors.Primary else SetupColors.GrayLight,
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = template.name,
-                                            color = if (isSelected) SetupColors.Primary else SetupColors.TextPrimary,
-                                            fontSize = 14.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                        )
-                                        if (template.id == "default" || template.id == "ally") {
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = "(" + localizedString("mobile.setup_configured") + ")",
-                                                color = SetupColors.SuccessText,
-                                                fontSize = 11.sp
-                                            )
-                                        }
-                                    }
-                                    Text(
-                                        text = template.description,
-                                        color = SetupColors.TextSecondary,
-                                        fontSize = 12.sp,
-                                        modifier = Modifier.padding(top = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 // ========== Federation Identity Step (Create your federation ID) ==========
 //
@@ -2435,7 +1722,7 @@ private fun OptionalFeaturesStep(
 // signs nothing — it only POSTs the mint and surfaces the public result (the
 // CIRIS-V2-… fedcode + key_id + hardware tier).
 @Composable
-private fun FederationIdentityStep(
+private fun FederationIdentitySection(
     viewModel: SetupViewModel,
     state: SetupFormState,
     modifier: Modifier = Modifier
@@ -2458,12 +1745,7 @@ private fun FederationIdentityStep(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = localizedString("mobile.federation_create_title"),
             color = SetupColors.TextPrimary,
@@ -2860,19 +2142,14 @@ private fun FederationIdentityStep(
  * never traps the user — the protective default is `minor`.
  */
 @Composable
-private fun AgeRangeStep(
+private fun AgeRangeSection(
     viewModel: SetupViewModel,
     state: SetupFormState,
     modifier: Modifier = Modifier
 ) {
     val age = state.ageRange
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = localizedString("mobile.age_range_title"),
             color = SetupColors.TextPrimary,
@@ -3207,189 +2484,17 @@ private fun MinorStewardshipCard(
     }
 }
 
-@Composable
-private fun DataPointRow(text: String, color: Color) {
-    Row(modifier = Modifier.padding(vertical = 2.dp)) {
-        Text("•", color = color, fontSize = 14.sp)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(text, color = color, fontSize = 13.sp)
-    }
-}
-
-@Composable
-private fun BenefitRow(text: String) {
-    Row(
-        modifier = Modifier.padding(vertical = 2.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Icon(CIRISIcons.check, contentDescription = null, tint = SetupColors.SuccessDark, modifier = Modifier.size(14.dp))
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = text,
-            color = SetupColors.SuccessText,
-            fontSize = 12.sp,
-            lineHeight = 16.sp
-        )
-    }
-}
-
-@Composable
-private fun AdapterToggleItem(
-    name: String,
-    description: String,
-    isEnabled: Boolean,
-    isRequired: Boolean,
-    requiresConfig: Boolean,
-    isConfigured: Boolean = false,
-    configFields: List<String> = emptyList(),
-    onToggle: (Boolean) -> Unit,
-    onConfigure: (() -> Unit)? = null
-) {
-    val semantic = SemanticColors.forTheme(ColorTheme.DEFAULT, isDark = false)
-
-    val adapterTag = name.lowercase().replace(" ", "_")
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = if (isEnabled) SetupColors.SuccessLight else SetupColors.GrayLight,
-        modifier = Modifier
-            .fillMaxWidth()
-            .testableClickable("adapter_toggle_$adapterTag") {
-                if (!isRequired) onToggle(!isEnabled)
-            }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = name,
-                        color = SetupColors.TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    if (isRequired) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = SetupColors.Primary.copy(alpha = 0.2f)
-                        ) {
-                            Text(
-                                text = localizedString("mobile.common_required"),
-                                color = SetupColors.Primary,
-                                fontSize = 10.sp,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                    if (requiresConfig && isEnabled) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        if (isConfigured) {
-                            // Show configured badge (green)
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = semantic.surfaceSuccess
-                            ) {
-                                Text(
-                                    text = localizedString("mobile.setup_configured"),
-                                    color = semantic.onSuccess,
-                                    fontSize = 10.sp,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        } else {
-                            // Show needs config badge (warning)
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = semantic.surfaceWarning
-                            ) {
-                                Text(
-                                    text = localizedString("mobile.setup_needs_config"),
-                                    color = semantic.onWarning,
-                                    fontSize = 10.sp,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-                Text(
-                    text = description,
-                    color = SetupColors.TextSecondary,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-
-                // Show configure button for configurable adapters
-                if (requiresConfig && isEnabled && onConfigure != null) {
-                    TextButton(
-                        onClick = onConfigure,
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .testableClickable("btn_configure_${name.lowercase().replace(" ", "_")}") { onConfigure() }
-                    ) {
-                        Text(
-                            text = if (isConfigured) "Reconfigure" else "Configure Now",
-                            color = SetupColors.Primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                } else if (requiresConfig && configFields.isNotEmpty() && isEnabled && !isConfigured) {
-                    Text(
-                        text = localizedString("mobile.setup_required_fields").replace("{fields}", configFields.joinToString(", ")),
-                        color = semantic.onWarning,
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
-
-            Switch(
-                checked = isEnabled,
-                onCheckedChange = onToggle,
-                enabled = !isRequired,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = SetupColors.Primary,
-                    uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = SetupColors.TextSecondary.copy(alpha = 0.5f)
-                )
-            )
-        }
-    }
-}
 
 // ========== Account & Confirmation Step ==========
 @Composable
-private fun AccountConfirmationStep(
+private fun AccountSection(
     viewModel: SetupViewModel,
     state: SetupFormState,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        Text(
-            text = localizedString("setup.confirm_title"),
-            color = SetupColors.TextPrimary,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        Text(
-            text = localizedString("setup.confirm_desc"),
-            color = SetupColors.TextSecondary,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
-        )
+    // No "Confirm Setup — review your configuration and complete setup" title:
+    // this is screen 1 of 3 and nothing has been configured yet.
+    Column(modifier = modifier.fillMaxWidth()) {
 
         // Google Connected card (for Google users)
         if (state.isGoogleAuth) {
@@ -3420,39 +2525,6 @@ private fun AccountConfirmationStep(
                         fontSize = 13.sp,
                         lineHeight = 18.sp
                     )
-                }
-            }
-        }
-
-        // Setup Summary — the AI/assistant rows are agent-only (node client is AI-free).
-        // Gated on CIRISBuild.HAS_AGENT so the agent team surfaces it with one flag flip.
-        if (CIRISBuild.HAS_AGENT || state.isGoogleAuth) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = SetupColors.GrayLight,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = localizedString("mobile.setup_summary"),
-                        color = SetupColors.TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    if (CIRISBuild.HAS_AGENT) {
-                        SummaryRow(
-                            label = "AI",
-                            value = if (state.useCirisProxy()) "Free AI Access (via ${getOAuthProviderName()})" else state.llmProvider
-                        )
-                        SummaryRow(label = "Assistant", value = viewModel.getSelectedTemplateName())
-                    }
-                    if (state.isGoogleAuth) {
-                        SummaryRow(label = "Sign-in", value = "${getOAuthProviderName()} Account")
-                    }
                 }
             }
         }
@@ -3609,985 +2681,9 @@ private fun SecureWith2FACard(
     }
 }
 
-/**
- * The "Announce yourself to the federation" opt-in — rendered on the
- * FEDERATION-IDENTITY step alongside the other fed-ID custody choices. Default
- * OFF (privacy-first): ownership is SELF-SCOPED (private) — full personal use, the
- * owner's nodes sync across their own devices but are invisible to the federation.
- * Turning it ON, after a successful claim, promotes the owner-binding
- * self→FEDERATION and enables the node's identity announce so the community can
- * find and federate with this node. Takes effect on the node's next launch.
- */
-@Composable
-private fun AnnounceOwnershipCard(
-    state: SetupFormState,
-    viewModel: SetupViewModel,
-) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = SetupColors.GrayLight,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = localizedString("mobile.setup_announce_title"),
-                    color = SetupColors.TextPrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    // Make the tradeoff clear: distinct copy for OFF (private,
-                    // recommended) vs ON (join the community, effective next launch).
-                    text = if (state.announceOwnership) {
-                        localizedString("mobile.setup_announce_desc_on")
-                    } else {
-                        localizedString("mobile.setup_announce_desc_off")
-                    },
-                    color = SetupColors.TextSecondary,
-                    fontSize = 13.sp
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Switch(
-                checked = state.announceOwnership,
-                onCheckedChange = { viewModel.setAnnounceOwnership(it) },
-                modifier = Modifier.testableClickable("toggle_announce_ownership") {
-                    viewModel.setAnnounceOwnership(!state.announceOwnership)
-                }
-            )
-        }
-    }
-}
 
-@Composable
-private fun SummaryRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = label,
-            color = SetupColors.TextSecondary,
-            fontSize = 14.sp
-        )
-        Text(
-            text = value,
-            color = SetupColors.TextPrimary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
 
-// ========== Quick Setup Step ==========
-/**
- * Single-screen setup for Google/Apple Sign-in users.
- *
- * These users get CIRIS LLM services via their OAuth token automatically,
- * so they don't need to configure an LLM provider.
- *
- * This step provides:
- * - Language selection (expanded by default)
- * - Location settings (optional, collapsed)
- * - Local LLM discovery (optional, collapsed - if user wants to add local server)
- * - Services toggle (navigation, weather - collapsed)
- * - Adapters note (collapsed)
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun QuickSetupStep(
-    viewModel: SetupViewModel,
-    state: SetupFormState,
-    apiClient: CIRISApiClient,
-    modifier: Modifier = Modifier
-) {
-    val scrollState = rememberScrollState()
-    val coroutineScope = rememberCoroutineScope()
 
-    // Section expansion state - location and services expanded by default (important for UX)
-    var languageExpanded by remember { mutableStateOf(true) }
-    var locationExpanded by remember { mutableStateOf(true) }
-    var servicesExpanded by remember { mutableStateOf(true) }
-    var tracesExpanded by remember { mutableStateOf(true) }
-    // LLM config defaults to collapsed in CIRIS_PROXY mode — operators using
-    // the hosted proxy don't need to touch provider/key/base-URL fields and
-    // surfacing them open by default makes the wizard look more complex than
-    // it is. BYOK keeps the section expanded since the user MUST fill it in.
-    var llmConfigExpanded by remember { mutableStateOf(state.setupMode != SetupMode.CIRIS_PROXY) }
-    var adaptersExpanded by remember { mutableStateOf(false) }
-
-    // Local LLM discovery
-    val discoveryState = rememberLocalLlmDiscoveryState()
-    val localInferenceCapability = remember { probeLocalInferenceCapability() }
-
-    // LLM connection testing state
-    var isTesting by remember { mutableStateOf(false) }
-    var testResult by remember { mutableStateOf<LlmValidationResult?>(null) }
-    var availableModels by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
-
-    // Determine if this is BYOK mode - use same logic as WelcomeStep for consistency
-    // Anything that is NOT explicitly CIRIS_PROXY is treated as BYOK mode
-    val isCirisMode = state.setupMode == SetupMode.CIRIS_PROXY
-    val isBYOKMode = !isCirisMode
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Header - mode-appropriate badge
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = if (isBYOKMode) SetupColors.InfoLight else SetupColors.SuccessLight,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Icon(
-                    imageVector = if (isBYOKMode) CIRISIcons.settings else CIRISIcons.checkCircle,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark
-                )
-                Text(
-                    text = if (isBYOKMode) {
-                        localizedString("mobile.setup_byok_badge")
-                    } else {
-                        localizedString("mobile.setup_free_badge")
-                    },
-                    color = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-
-        // Provider-specific description
-        val providerName = when {
-            state.isGoogleAuth && state.oauthProvider == "apple" -> "Apple"
-            state.isGoogleAuth -> "Google"
-            else -> "OAuth"
-        }
-        Text(
-            text = if (isBYOKMode) {
-                localizedString("setup.quick_byok_desc")
-            } else {
-                localizedString("setup.quick_desc").replace("{provider}", providerName)
-            },
-            fontSize = 14.sp,
-            color = SetupColors.TextSecondary
-        )
-
-        // Mode info card - CIRIS Proxy (green) or BYOK (blue)
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = if (isBYOKMode) SetupColors.InfoLight else SetupColors.SuccessLight,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = if (isBYOKMode) CIRISIcons.settings else CIRISIcons.checkCircle,
-                    contentDescription = null,
-                    tint = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = if (isBYOKMode) {
-                            localizedString("setup.quick_byok_active")
-                        } else {
-                            localizedString("setup.quick_ciris_active")
-                        },
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark
-                    )
-                    Text(
-                        text = if (isBYOKMode) {
-                            localizedString("setup.quick_byok_card_desc")
-                        } else {
-                            localizedString("setup.quick_ciris_desc")
-                        },
-                        fontSize = 12.sp,
-                        color = if (isBYOKMode) SetupColors.InfoDark.copy(alpha = 0.8f) else SetupColors.SuccessDark.copy(alpha = 0.8f)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Language Section
-        SetupCollapsibleSection(
-            title = localizedString("setup.prefs_language_label"),
-            subtitle = SUPPORTED_LANGUAGES.find { it.code == state.preferredLanguage }?.nativeName ?: "English",
-            icon = CIRISMaterialIcons.Filled.Language,
-            expanded = languageExpanded,
-            onToggle = { languageExpanded = !languageExpanded }
-        ) {
-            LanguageSelector(
-                compact = false,
-                onLanguageChanged = { code ->
-                    viewModel.setPreferredLanguage(code)
-                }
-            )
-        }
-
-        // Location Section (optional)
-        SetupCollapsibleSection(
-            title = localizedString("mobile.settings_location"),
-            subtitle = when (state.locationGranularity) {
-                LocationGranularity.NONE -> localizedString("setup.optional")
-                LocationGranularity.COUNTRY -> state.country.ifEmpty { localizedString("setup.location_enabled") }
-                LocationGranularity.REGION -> "${state.region}, ${state.country}".ifEmpty { localizedString("setup.location_enabled") }
-                LocationGranularity.CITY -> state.city.ifEmpty { localizedString("setup.location_enabled") }
-            },
-            icon = CIRISIcons.location,
-            expanded = locationExpanded,
-            onToggle = { locationExpanded = !locationExpanded }
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = localizedString("setup.location_desc"),
-                    fontSize = 13.sp,
-                    color = SetupColors.TextSecondary
-                )
-
-                // Location search (uses ViewModel's search functionality)
-                OutlinedTextField(
-                    value = state.locationSearchQuery,
-                    onValueChange = { query ->
-                        viewModel.searchLocations(query)
-                    },
-                    label = { Text(localizedString("mobile.settings_search_city")) },
-                    placeholder = { Text(localizedString("mobile.settings_search_city_hint")) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    trailingIcon = {
-                        if (state.locationSearchLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else if (state.locationSearchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.clearLocationSearch() }) {
-                                Icon(
-                                    imageVector = CIRISIcons.clear,
-                                    contentDescription = "Clear"
-                                )
-                            }
-                        }
-                    }
-                )
-
-                // Show search results
-                state.locationSearchResults.take(5).forEach { result ->
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = SetupColors.GrayLight,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                viewModel.selectLocation(result)
-                            }
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = result.displayName,
-                                color = SetupColors.TextPrimary
-                            )
-                            if (result.population > 0) {
-                                Text(
-                                    text = "Pop. ${formatNumber(result.population)}",
-                                    fontSize = 12.sp,
-                                    color = SetupColors.TextSecondary
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Show selected location
-                if (state.city.isNotEmpty()) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = SetupColors.SuccessLight,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = CIRISIcons.checkCircle,
-                                contentDescription = null,
-                                tint = SetupColors.SuccessDark,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "${state.city}, ${state.country}",
-                                color = SetupColors.SuccessDark
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Services Section (nav/weather) - combined toggle - IMPORTANT: shown expanded by default
-        SetupCollapsibleSection(
-            title = localizedString("setup.services_title"),
-            subtitle = if (state.publicApiServicesEnabled)
-                localizedString("setup.location_enabled")
-            else
-                localizedString("setup.location_disabled"),
-            icon = CIRISIcons.info,
-            expanded = servicesExpanded,
-            onToggle = { servicesExpanded = !servicesExpanded }
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = localizedString("setup.services_info"),
-                    fontSize = 13.sp,
-                    color = SetupColors.TextSecondary
-                )
-
-                // Combined services toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = localizedString("setup.navigation_weather"),
-                            color = SetupColors.TextPrimary
-                        )
-                        Text(
-                            text = localizedString("setup.services_desc"),
-                            fontSize = 12.sp,
-                            color = SetupColors.TextSecondary
-                        )
-                    }
-                    Switch(
-                        checked = state.publicApiServicesEnabled,
-                        onCheckedChange = { enabled ->
-                            viewModel.setPublicApiServicesEnabled(enabled)
-                        },
-                        modifier = Modifier.testable("switch_services_enabled")
-                    )
-                }
-            }
-        }
-
-        // Traces / Telemetry Section - ACCORD alignment data sharing
-        SetupCollapsibleSection(
-            title = localizedString("mobile.setup_alignment_title"),
-            subtitle = if (state.accordMetricsConsent)
-                localizedString("setup.location_enabled")
-            else
-                localizedString("setup.location_disabled"),
-            icon = CIRISMaterialIcons.Filled.Analytics,
-            expanded = tracesExpanded,
-            onToggle = { tracesExpanded = !tracesExpanded }
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = localizedString("mobile.setup_alignment_desc"),
-                    fontSize = 13.sp,
-                    color = SetupColors.TextSecondary
-                )
-
-                // Data shared explanation
-                Text(
-                    text = localizedString("mobile.setup_data_shared"),
-                    color = SetupColors.InfoDark,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-
-                Column(modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)) {
-                    DataPointRow("Reasoning quality scores", SetupColors.InfoText)
-                    DataPointRow("Decision patterns (no message content)", SetupColors.InfoText)
-                    DataPointRow("LLM provider and API base URL", SetupColors.InfoText)
-                    DataPointRow("Performance metrics", SetupColors.InfoText)
-                }
-
-                // Public dataset link — the traces feed the CIRISAI Hugging
-                // Face org's public datasets. Surfacing the destination here
-                // makes the consent material rather than abstract: the user
-                // can see *exactly* what their data joins before they tick
-                // the box. URL validated 2026-05-10.
-                val tracesUriHandler = LocalUriHandler.current
-                TextButton(
-                    onClick = { tracesUriHandler.openUri("https://huggingface.co/CIRISAI") },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    modifier = Modifier
-                        .padding(bottom = 8.dp)
-                        .testable("btn_traces_view_dataset_quick"),
-                ) {
-                    Text(
-                        text = "View public dataset on Hugging Face: CIRISAI",
-                        fontSize = 12.sp,
-                        color = SetupColors.Primary,
-                    )
-                }
-
-                // Accord metrics consent checkbox — GATED on announcing (un-announced
-                // nodes never federate their traces, so the opt-in is only meaningful
-                // once the owner has announced).
-                if (state.announceOwnership) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.testableClickable("item_accord_metrics_consent_quick") {
-                            viewModel.setAccordMetricsConsent(!state.accordMetricsConsent)
-                        }
-                    ) {
-                        Checkbox(
-                            checked = state.accordMetricsConsent,
-                            onCheckedChange = { viewModel.setAccordMetricsConsent(it) },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = SetupColors.Primary,
-                                uncheckedColor = SetupColors.TextSecondary
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = localizedString("mobile.setup_alignment_agree"),
-                            color = SetupColors.InfoDark,
-                            fontSize = 14.sp
-                        )
-                    }
-                } else {
-                    Text(
-                        // New key (not yet in en.json): localizedString returns the
-                        // key itself when absent, so guard on "blank or == key".
-                        text = localizedString("mobile.announce_decision_trace_locked").let {
-                            if (it.isBlank() || it == "mobile.announce_decision_trace_locked") {
-                                "Turn on announcing above to enable sending reasoning traces and " +
-                                    "joining communities."
-                            } else {
-                                it
-                            }
-                        },
-                        color = SetupColors.TextSecondary,
-                        fontSize = 13.sp,
-                    )
-                }
-
-                // Optional: Include location in traces (only show if city selected and metrics consent given)
-                AnimatedVisibility(visible = state.accordMetricsConsent && state.city.isNotEmpty()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .padding(top = 8.dp)
-                            .testableClickable("item_share_location_traces_quick") {
-                                viewModel.setShareLocationInTraces(!state.shareLocationInTraces)
-                            }
-                    ) {
-                        Checkbox(
-                            checked = state.shareLocationInTraces,
-                            onCheckedChange = { viewModel.setShareLocationInTraces(it) },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = SetupColors.Primary,
-                                uncheckedColor = SetupColors.TextSecondary
-                            )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = localizedString("mobile.setup_include_location"),
-                            color = SetupColors.InfoDark,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        // LLM Configuration Section (always shown, required in BYOK mode, optional in CIRIS Proxy mode)
-        SetupCollapsibleSection(
-            title = localizedString("setup.llm_config_title"),
-            subtitle = when {
-                state.llmProvider.isNotEmpty() && (testResult?.valid == true || state.llmApiKey.isNotEmpty()) ->
-                    localizedString("setup.llm_config_subtitle_configured")
-                isBYOKMode -> localizedString("setup.llm_config_subtitle_required")
-                else -> localizedString("setup.llm_config_subtitle_optional")
-            },
-            icon = CIRISIcons.settings,
-            expanded = llmConfigExpanded,
-            onToggle = { llmConfigExpanded = !llmConfigExpanded }
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Mode-specific description
-                Text(
-                    text = if (isBYOKMode) {
-                        localizedString("mobile.setup_byok_llm_desc")
-                    } else {
-                        localizedString("mobile.setup_ciris_llm_desc")
-                    },
-                    fontSize = 13.sp,
-                    color = SetupColors.TextSecondary
-                )
-
-                // Provider selection dropdown
-                var providerExpanded by remember { mutableStateOf(false) }
-                val providers = viewModel.availableProviders
-                val currentProviderDisplay = providers.find { it.first == state.llmProvider }?.second ?: state.llmProvider
-
-                Text(
-                    text = localizedString("mobile.setup_provider"),
-                    color = SetupColors.TextPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-
-                ExposedDropdownMenuBox(
-                    expanded = providerExpanded,
-                    onExpandedChange = { providerExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = currentProviderDisplay.ifEmpty { localizedString("mobile.setup_select_provider") },
-                        onValueChange = {},
-                        readOnly = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
-                            .testableClickable("quick_input_llm_provider") { providerExpanded = !providerExpanded },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = SetupColors.TextPrimary,
-                            unfocusedTextColor = SetupColors.TextPrimary,
-                            focusedBorderColor = SetupColors.Primary,
-                            unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
-                            cursorColor = SetupColors.Primary
-                        )
-                    )
-
-                    ExposedDropdownMenu(
-                        expanded = providerExpanded,
-                        onDismissRequest = { providerExpanded = false }
-                    ) {
-                        providers.forEach { (key, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = {
-                                    viewModel.setLlmProvider(key)
-                                    providerExpanded = false
-                                    testResult = null
-                                    availableModels = emptyList()
-                                },
-                                modifier = Modifier.testableClickable("quick_menu_provider_$key") {
-                                    viewModel.setLlmProvider(key)
-                                    providerExpanded = false
-                                }
-                            )
-                        }
-
-                        // On-device option if capable
-                        val showOnDeviceProvider = localInferenceCapability.isReady || localInferenceCapability.isComingSoon
-                        if (showOnDeviceProvider) {
-                            val isStub = localInferenceCapability.isComingSoon
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(
-                                            text = if (isStub) {
-                                                "${SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME} — Coming Soon"
-                                            } else {
-                                                SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME
-                                            },
-                                            color = if (isStub) SetupColors.TextSecondary else SetupColors.TextPrimary,
-                                        )
-                                        Text(
-                                            text = localInferenceCapability.reason,
-                                            color = SetupColors.TextSecondary,
-                                            fontSize = 11.sp,
-                                        )
-                                    }
-                                },
-                                enabled = !isStub,
-                                onClick = {
-                                    viewModel.selectLocalOnDeviceProvider()
-                                    providerExpanded = false
-                                },
-                                modifier = Modifier.testableClickable("quick_menu_provider_mobile_local") {
-                                    if (!isStub) {
-                                        viewModel.selectLocalOnDeviceProvider()
-                                        providerExpanded = false
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Local LLM Server Discovery (always shown - users can discover local servers in any mode)
-                LocalLlmServerDiscovery(
-                    state = discoveryState,
-                    apiClient = apiClient,
-                    onServerSelected = { server ->
-                        val baseUrl = "${server.url}/v1"
-                        viewModel.setLlmBaseUrl(baseUrl)
-                        if (server.models.isNotEmpty()) {
-                            availableModels = server.models.map { modelId ->
-                                ModelInfo(
-                                    id = modelId,
-                                    displayName = modelId,
-                                    contextWindow = null,
-                                    cirisCompatible = true,
-                                    cirisRecommended = false
-                                )
-                            }
-                            viewModel.setLlmModel(server.models.first())
-                        }
-                    },
-                    localInferenceCapability = localInferenceCapability,
-                    primaryColor = SetupColors.Primary,
-                    surfaceColor = SetupColors.GrayLight,
-                    textColor = SetupColors.TextPrimary,
-                    secondaryTextColor = SetupColors.TextSecondary
-                )
-
-                // Base URL input for local / OpenAI-compatible servers (Ollama,
-                // LAN inference boxes). Pre-filled with the canonical local
-                // default by setLlmProvider(); editable + automatable via the
-                // quick_input_llm_base_url test tag.
-                val showsBaseUrl = state.llmProvider in
-                    listOf("local", "local_inference", "openai_compatible", "other")
-                if (showsBaseUrl) {
-                    Text(
-                        text = "Endpoint URL (optional)",
-                        color = SetupColors.TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    OutlinedTextField(
-                        value = state.llmBaseUrl,
-                        onValueChange = { viewModel.setLlmBaseUrl(it) },
-                        modifier = Modifier.fillMaxWidth().testable("quick_input_llm_base_url"),
-                        placeholder = {
-                            Text(
-                                SetupViewModel.LOCAL_OLLAMA_BASE_URL,
-                                color = SetupColors.TextSecondary
-                            )
-                        },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = SetupColors.TextPrimary,
-                            unfocusedTextColor = SetupColors.TextPrimary,
-                            focusedBorderColor = SetupColors.Primary,
-                            unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
-                            cursorColor = SetupColors.Primary
-                        )
-                    )
-                }
-
-                // API Key input (skip for keyless providers)
-                val isKeylessProvider = state.llmProvider in listOf("local", "local_inference", "LocalAI")
-                val isMobileLocalProvider = state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_PROVIDER_ID ||
-                    state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME
-
-                if (state.llmProvider.isNotEmpty() && !isKeylessProvider && !isMobileLocalProvider) {
-                    val apiKeyLabel = if (state.llmProvider == "OpenAI Compatible") {
-                        "API Key (optional)"
-                    } else {
-                        localizedString("mobile.setup_api_key_label")
-                    }
-
-                    Text(
-                        text = apiKeyLabel,
-                        color = SetupColors.TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    var showApiKey by remember { mutableStateOf(false) }
-
-                    OutlinedTextField(
-                        value = state.llmApiKey,
-                        onValueChange = { viewModel.setLlmApiKey(it) },
-                        modifier = Modifier.fillMaxWidth().testable("quick_input_api_key"),
-                        placeholder = { Text("sk-...", color = SetupColors.TextSecondary) },
-                        visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            TextButton(
-                                onClick = { showApiKey = !showApiKey },
-                                modifier = Modifier.testableClickable("quick_btn_toggle_api_key") { showApiKey = !showApiKey }
-                            ) {
-                                Text(
-                                    text = if (showApiKey) "Hide" else "Show",
-                                    color = SetupColors.Primary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = SetupColors.TextPrimary,
-                            unfocusedTextColor = SetupColors.TextPrimary,
-                            focusedBorderColor = SetupColors.Primary,
-                            unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
-                            cursorColor = SetupColors.Primary
-                        ),
-                        singleLine = true
-                    )
-                }
-
-                // Model selection
-                if (state.llmProvider.isNotEmpty()) {
-                    Text(
-                        text = if (availableModels.isNotEmpty()) "Model" else "Model (optional)",
-                        color = SetupColors.TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    if (availableModels.isNotEmpty()) {
-                        // Dropdown with available models
-                        var modelExpanded by remember { mutableStateOf(false) }
-                        val selectedModel = availableModels.find { it.id == state.llmModel }
-
-                        ExposedDropdownMenuBox(
-                            expanded = modelExpanded,
-                            onExpandedChange = { modelExpanded = it }
-                        ) {
-                            OutlinedTextField(
-                                value = selectedModel?.displayName ?: state.llmModel.ifEmpty { "Select a model" },
-                                onValueChange = {},
-                                readOnly = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor()
-                                    .testableClickable("quick_input_llm_model") { modelExpanded = !modelExpanded },
-                                trailingIcon = {
-                                    if (selectedModel?.cirisRecommended == true) {
-                                        Icon(CIRISIcons.star, contentDescription = "Recommended", tint = SetupColors.Primary, modifier = Modifier.size(16.dp))
-                                    }
-                                },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = SetupColors.TextPrimary,
-                                    unfocusedTextColor = SetupColors.TextPrimary,
-                                    focusedBorderColor = SetupColors.Primary,
-                                    unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f)
-                                )
-                            )
-
-                            ExposedDropdownMenu(
-                                expanded = modelExpanded,
-                                onDismissRequest = { modelExpanded = false }
-                            ) {
-                                val sortedModels = availableModels.sortedByDescending {
-                                    when {
-                                        it.cirisRecommended -> 2
-                                        it.cirisCompatible -> 1
-                                        else -> 0
-                                    }
-                                }
-                                sortedModels.forEach { model ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column {
-                                                Text(
-                                                    text = model.displayName,
-                                                    fontWeight = if (model.cirisRecommended) FontWeight.Bold else FontWeight.Normal
-                                                )
-                                                if (model.contextWindow != null) {
-                                                    Text(
-                                                        text = "${model.contextWindow / 1000}K context",
-                                                        fontSize = 11.sp,
-                                                        color = SetupColors.TextSecondary
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        onClick = {
-                                            viewModel.setLlmModel(model.id)
-                                            modelExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        // Text input for model
-                        OutlinedTextField(
-                            value = state.llmModel,
-                            onValueChange = { viewModel.setLlmModel(it) },
-                            modifier = Modifier.fillMaxWidth().testable("quick_input_llm_model_text"),
-                            placeholder = {
-                                Text(
-                                    text = when (state.llmProvider) {
-                                        "openai" -> "gpt-4o"
-                                        "anthropic" -> "claude-sonnet-4-5-20250514"
-                                        "google" -> "gemini-2.0-flash"
-                                        "openrouter" -> "anthropic/claude-sonnet-4"
-                                        "groq" -> "llama-3.3-70b-versatile"
-                                        "together" -> "meta-llama/Llama-3.3-70B-Instruct-Turbo"
-                                        "local", "local_inference" -> "llama3.2"
-                                        else -> "model-name"
-                                    },
-                                    color = SetupColors.TextSecondary
-                                )
-                            },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = SetupColors.TextPrimary,
-                                unfocusedTextColor = SetupColors.TextPrimary,
-                                focusedBorderColor = SetupColors.Primary,
-                                unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f)
-                            ),
-                            singleLine = true
-                        )
-                    }
-                }
-
-                // Test Connection button
-                if (state.llmProvider.isNotEmpty()) {
-                    val isLocalProvider = state.llmProvider in listOf("local", "local_inference", "openai_compatible", "other")
-                    OutlinedButton(
-                        onClick = {
-                            if (!isTesting) {
-                                isTesting = true
-                                testResult = null
-                                coroutineScope.launch(Dispatchers.Default) {
-                                    try {
-                                        val result = apiClient.validateLlmConfiguration(
-                                            provider = state.llmProvider,
-                                            apiKey = state.llmApiKey,
-                                            baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() },
-                                            model = state.llmModel.takeIf { it.isNotEmpty() }
-                                        )
-
-                                        val models = if (result.valid) {
-                                            apiClient.listModels(
-                                                provider = state.llmProvider,
-                                                apiKey = state.llmApiKey,
-                                                baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() }
-                                            )
-                                        } else emptyList()
-
-                                        withContext(Dispatchers.Main) {
-                                            testResult = result
-                                            availableModels = models
-                                            isTesting = false
-
-                                            if (models.isNotEmpty() && state.llmModel.isEmpty()) {
-                                                val bestModel = models.firstOrNull { it.cirisRecommended }
-                                                    ?: models.firstOrNull { it.cirisCompatible }
-                                                    ?: models.first()
-                                                viewModel.setLlmModel(bestModel.id)
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        withContext(Dispatchers.Main) {
-                                            testResult = LlmValidationResult(
-                                                valid = false,
-                                                message = "Connection failed",
-                                                error = e.message ?: "Unknown error"
-                                            )
-                                            isTesting = false
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().testable("quick_btn_test_connection"),
-                        enabled = !isTesting && (isLocalProvider || isMobileLocalProvider || state.llmApiKey.isNotEmpty()),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SetupColors.Primary)
-                    ) {
-                        if (isTesting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = SetupColors.Primary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(localizedString("mobile.setup_testing"))
-                        } else {
-                            Text(localizedString("mobile.setup_test_connection"))
-                        }
-                    }
-
-                    // Show test result
-                    testResult?.let { result ->
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (result.valid) SetupColors.SuccessLight else SetupColors.ErrorLight,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (result.valid) "✓" else "✗",
-                                    color = if (result.valid) SetupColors.SuccessDark else SetupColors.ErrorText,
-                                    fontSize = 18.sp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = result.message,
-                                        color = if (result.valid) SetupColors.SuccessDark else SetupColors.ErrorText,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    result.error?.let { error ->
-                                        Text(
-                                            text = error,
-                                            fontSize = 12.sp,
-                                            color = SetupColors.ErrorText.copy(alpha = 0.8f)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Adapters Section (informational)
-        SetupCollapsibleSection(
-            title = localizedString("setup.adapters_title"),
-            subtitle = localizedString("setup.adapters_later"),
-            icon = CIRISMaterialIcons.Filled.Extension,
-            expanded = adaptersExpanded,
-            onToggle = { adaptersExpanded = !adaptersExpanded }
-        ) {
-            Text(
-                text = localizedString("setup.adapters_info"),
-                fontSize = 13.sp,
-                color = SetupColors.TextSecondary
-            )
-        }
-
-        // Bottom spacer for navigation buttons
-        Spacer(modifier = Modifier.height(80.dp))
-    }
-}
-
-// Helper function to format large numbers
-private fun formatNumber(num: Int): String {
-    return when {
-        num >= 1_000_000 -> "${num / 1_000_000}M"
-        num >= 1_000 -> "${num / 1_000}K"
-        else -> num.toString()
-    }
-}
 
 // ========== Complete Step ==========
 @Composable
@@ -4688,7 +2784,6 @@ private fun NavigationButtons(
     canProceed: Boolean,
     validationError: String?,
     isSubmitting: Boolean,
-    isNodeFlow: Boolean,
     onNext: () -> Unit,
     onBack: () -> Unit,
     onBackToLogin: (() -> Unit)? = null,  // Optional callback to return to login screen
@@ -4717,9 +2812,9 @@ private fun NavigationButtons(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // No back button on WELCOME: this is first-run, there is no prior
-            // login/account to return to (the account is created in the next step).
-            if (currentStep != SetupStep.WELCOME && currentStep != SetupStep.COMPLETE) {
+            // No back button on the first screen: this is first-run, there is
+            // no prior login/account to return to (it is created right here).
+            if (currentStep != SetupStep.YOU && currentStep != SetupStep.COMPLETE) {
                 OutlinedButton(
                     onClick = onBack,
                     enabled = !isSubmitting,
@@ -4737,9 +2832,9 @@ private fun NavigationButtons(
                 Button(
                     onClick = onNext,
                     enabled = canProceed && !isSubmitting,
-                    // Use equal weights if back button is visible, otherwise double width on WELCOME
+                    // Equal weights when Back is visible; full width when it is not.
                     modifier = Modifier
-                        .weight(if (currentStep == SetupStep.WELCOME) 2f else 1f)
+                        .weight(if (currentStep == SetupStep.YOU) 2f else 1f)
                         .testableClickable("btn_next") { onNext() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SetupColors.Primary,
@@ -4753,15 +2848,11 @@ private fun NavigationButtons(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        // Determine button text based on step and flow type.
-                        // Account-first node flow: AGE_RANGE is the final step.
-                        val isFinalStep = currentStep == SetupStep.AGE_RANGE ||
-                            (isNodeFlow && currentStep == SetupStep.OPTIONAL_FEATURES)
                         Text(
-                            when {
-                                currentStep == SetupStep.WELCOME -> "${localizedString("setup.continue")} →"
-                                isFinalStep -> localizedString("setup.finish")
-                                else -> localizedString("setup.next")
+                            if (isFinalSetupStep(currentStep, CIRISBuild.HAS_AGENT)) {
+                                localizedString("setup.finish")
+                            } else {
+                                localizedString("setup.next")
                             }
                         )
                     }
@@ -4771,248 +2862,3 @@ private fun NavigationButtons(
     }
 }
 
-/**
- * Preferences Step - Language and Location selection
- * Mirrors the CLI wizard's language/location prompts (wizard.py:324-395)
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PreferencesStep(
-    viewModel: SetupViewModel,
-    state: SetupFormState,
-    modifier: Modifier = Modifier
-) {
-    val scrollState = rememberScrollState()
-    var showLanguageDropdown by remember { mutableStateOf(false) }
-    val focusManager = LocalFocusManager.current
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        // Header
-        Text(
-            text = localizedString("setup.prefs_title"),
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = SetupColors.TextPrimary
-        )
-
-        Text(
-            text = localizedString("setup.prefs_desc"),
-            fontSize = 14.sp,
-            color = SetupColors.TextSecondary
-        )
-
-        // Language Selection
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = SetupColors.GrayLight,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = localizedString("setup.prefs_language_label"),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    color = SetupColors.TextPrimary
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Language dropdown
-                Box {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color.White,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showLanguageDropdown = true }
-                            .border(1.dp, SetupColors.TextSecondary.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val selectedLang = SUPPORTED_LANGUAGES.find { it.code == state.preferredLanguage }
-                            Text(
-                                text = selectedLang?.let { "${it.nativeName} (${it.englishName})" } ?: "English",
-                                color = SetupColors.TextPrimary
-                            )
-                            Text(text = "▼", color = SetupColors.TextSecondary)
-                        }
-                    }
-
-                    DropdownMenu(
-                        expanded = showLanguageDropdown,
-                        onDismissRequest = { showLanguageDropdown = false }
-                    ) {
-                        SUPPORTED_LANGUAGES.forEach { lang ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text("${lang.nativeName} (${lang.englishName})")
-                                },
-                                onClick = {
-                                    viewModel.setPreferredLanguage(lang.code)
-                                    showLanguageDropdown = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Location Selection - Simple city text entry with typeahead
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = SetupColors.GrayLight,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                // Use ExposedDropdownMenuBox for proper dropdown positioning (shows above keyboard)
-                ExposedDropdownMenuBox(
-                    expanded = state.locationSearchResults.isNotEmpty(),
-                    onExpandedChange = { /* Controlled by search results */ }
-                ) {
-                    OutlinedTextField(
-                        value = state.locationSearchQuery,
-                        onValueChange = { viewModel.searchLocations(it) },
-                        label = { Text(localizedString("setup.prefs_city_label"), color = SetupColors.TextPrimary) },
-                        placeholder = { Text(localizedString("setup.prefs_city_hint"), color = SetupColors.TextSecondary) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor().testable("input_location_search"),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = SetupColors.TextPrimary,
-                            unfocusedTextColor = SetupColors.TextPrimary,
-                            focusedBorderColor = SetupColors.Primary,
-                            unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
-                            focusedLabelColor = SetupColors.Primary,
-                            unfocusedLabelColor = SetupColors.TextSecondary,
-                            cursorColor = SetupColors.Primary
-                        ),
-                        trailingIcon = {
-                            if (state.locationSearchLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else if (state.locationSearchQuery.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.clearLocationSearch() }) {
-                                    Icon(CIRISIcons.clear, contentDescription = "Clear", tint = SetupColors.TextSecondary)
-                                }
-                            } else {
-                                Icon(CIRISIcons.location, contentDescription = null, tint = SetupColors.TextSecondary)
-                            }
-                        }
-                    )
-
-                    // Dropdown menu - will automatically position above if no space below
-                    ExposedDropdownMenu(
-                        expanded = state.locationSearchResults.isNotEmpty(),
-                        onDismissRequest = { viewModel.clearLocationSearch() },
-                        modifier = Modifier.background(Color.White)
-                    ) {
-                        state.locationSearchResults.forEach { result ->
-                            DropdownMenuItem(
-                                text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            CIRISIcons.location,
-                                            contentDescription = null,
-                                            tint = Color(0xFF666666),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column {
-                                            Text(
-                                                text = result.displayName,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF1A1A1A)
-                                            )
-                                            if (result.population > 0) {
-                                                Text(
-                                                    text = localizedString("setup.prefs_location_pop", "pop", formatPopulation(result.population)),
-                                                    fontSize = 11.sp,
-                                                    color = Color(0xFF666666)
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.selectLocation(result)
-                                    focusManager.clearFocus()
-                                },
-                                modifier = Modifier.background(Color.White).testableClickable("location_result_${result.displayName.lowercase().replace(" ", "_").replace(",", "").take(40)}") {
-                                    viewModel.selectLocation(result)
-                                    focusManager.clearFocus()
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Show selected location
-                if (state.selectedLocation != null) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = SetupColors.SuccessLight,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                CIRISIcons.checkCircle,
-                                contentDescription = null,
-                                tint = SetupColors.SuccessDark,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = state.selectedLocation!!.displayName,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = SetupColors.TextPrimary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Privacy note
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = SetupColors.InfoLight,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = CIRISIcons.info,
-                    contentDescription = null,
-                    tint = SetupColors.InfoDark,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = localizedString("mobile.setup_location_note"),
-                    fontSize = 12.sp,
-                    color = SetupColors.InfoText
-                )
-            }
-        }
-    }
-}

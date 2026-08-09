@@ -492,16 +492,34 @@ class TestLLMPricingCalculatorComprehensive:
             assert any("Calculated usage for" in record.message for record in debug_logs)
 
     def test_logging_fallback_warning(self, caplog):
-        """Test warning logging for fallback pricing."""
+        """An unpriced model warns ONCE, and the warning is actionable (#935).
+
+        The condition is a data gap that cannot resolve on its own, so it must be
+        reported — but it was reported on every cost calculation (64 identical lines
+        in a 31-minute window on datum). Once per model, with the RCA.
+        """
         with caplog.at_level(logging.WARNING):
             calculator = LLMPricingCalculator(pricing_config=self.mock_pricing_config)
 
-            # Use unknown model to trigger fallback
-            calculator.calculate_cost_and_impact("unknown-model", 1000, 500)
+            # Use unknown model to trigger fallback, repeatedly.
+            for _ in range(20):
+                calculator.calculate_cost_and_impact("unknown-model", 1000, 500)
 
-            # Check warning logs
-            warning_logs = [record for record in caplog.records if record.levelno == logging.WARNING]
-            assert any("No pricing found for model unknown-model" in record.message for record in warning_logs)
+            warning_logs = [r for r in caplog.records if r.levelno == logging.WARNING]
+
+            # Reported, and reported once — not twenty times.
+            assert len(warning_logs) == 1, (
+                f"{len(warning_logs)} warnings for one unpriced model across 20 "
+                "calculations; whether a model has an entry is static"
+            )
+
+            msg = warning_logs[0].getMessage()
+            assert "unknown-model" in msg, "must name the model"
+            assert "PRICING_DATA.json" in msg, "must name the file to edit"
+            assert "FIX:" in msg, "must state the remedy"
+            # Costs derived from a fallback are estimates; downstream billing needs
+            # to know that, not just that a lookup missed.
+            assert "ESTIMATED" in msg or "estimate" in msg.lower()
 
     def test_edge_case_zero_tokens(self):
         """Test calculation with zero tokens."""

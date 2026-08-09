@@ -142,12 +142,39 @@ echo "  OK: $PROVIDER / $MODEL"
 
 mkdir -p "$OUT_DIR"
 export CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR="$OUT_DIR"
-# The ceg-seal-*.json carriers ARE the product of this script, and only this
-# script asks for them. The tee reads the live persist DB through a second
-# SQLite handle, which is unsafe alongside the Rust writer on a WAL database
-# (it took the staged-QA sqlite leg down), so it is off by default and opted
-# into here rather than riding along on LOCAL_COPY_DIR.
-export CIRIS_ACCORD_METRICS_CEG_SEAL_TEE="true"
+
+# CEG SEAL TEE — OPT-IN, because it costs completed turns.
+#
+# The tee reads the live persist DB through a SECOND SQLite handle while the
+# Rust writer holds the WAL. This script's own comment already recorded that
+# this "took the staged-QA sqlite leg down" — and it was then exported
+# unconditionally anyway, on every run, which is the contradiction this fixes.
+#
+# Measured cost with it on: 4/10 turns completed. With it off: 10/10. So the
+# default was losing well over half the turns of a run that had already been
+# paid for, in order to collect a by-product most runs never look at.
+#
+# The ceg-seal-*.json carriers are a real artifact and worth having when you
+# want them, so the switch stays — it just stops being the default:
+#
+#   SEAL_TEE=1 ./tools/research/capture_traces.sh
+#
+# Only enable it on a run whose seal carriers you actually intend to read, and
+# prefer it on Postgres, where the second handle is not contending for a WAL.
+SEAL_TEE="${SEAL_TEE:-0}"
+case "$SEAL_TEE" in
+  1|true|yes|on)
+    export CIRIS_ACCORD_METRICS_CEG_SEAL_TEE="true"
+    echo "── seal tee ──────────────────────────────────────────────"
+    echo "  ENABLED. Expect turn loss on SQLite: measured 4/10 completed"
+    echo "  with the tee on vs 10/10 with it off. Unset SEAL_TEE to disable."
+    ;;
+  *)
+    # Explicitly false, not merely unset — so a stale value in the environment
+    # cannot silently re-enable it.
+    export CIRIS_ACCORD_METRICS_CEG_SEAL_TEE="false"
+    ;;
+esac
 
 BEFORE=$(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null | wc -l)
 

@@ -1073,6 +1073,17 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
         on_ai_screen = client.wait_for_element("input_llm_provider", timeout=6) or client.is_visible(
             "toggle_run_without_ai"
         )
+        # Read once, up here: the Step-6 device-config verification below uses
+        # llm_model too, and binding it only inside the BYOK branch made it
+        # unbound on every path that does not enter that branch.
+        llm_model = config.get("llm_model") or ""
+        # Whether this run actually TYPED a provider/key/model into the wizard.
+        # The Step-6 device-config assertion below is only meaningful if it did:
+        # on the OAuth path the wizard provisions CIRIS-hosted AI and there are
+        # no fields, so --llm-provider/--llm-model describe a BYOK run that never
+        # happened. Asserting them there fails a correct device for having the
+        # right answer (llm01.ciris-services-1.ai) instead of the requested one.
+        byok_applied = False
         if on_ai_screen:
             has_byok_fields = client.is_visible("input_llm_provider")
             print(f"  [6/6] AI: provider={llm_provider!r}, key={'set' if llm_api_key else 'none'}")
@@ -1089,6 +1100,7 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                 print("      free AI access already provisioned (OAuth) — nothing to enter")
             elif llm_api_key:
                 # BYOK: pick the configured provider from the dropdown, then key.
+                byok_applied = True
                 if not _click_or_tap(client, adb, "input_llm_provider"):
                     return fail("llm", "failed to open LLM provider dropdown")
                 menu_tag = f"menu_provider_{llm_provider}"
@@ -1106,7 +1118,6 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                 # else a plain text field (input_llm_model_text) before/without
                 # validation. Set it via whichever composed; tolerate absence
                 # only when no model was requested (provider default).
-                llm_model = config.get("llm_model") or ""
                 if llm_model:
                     sanitized = llm_model.replace("/", "_").replace(":", "_")
                     menu_model_tag = f"menu_model_{sanitized}"
@@ -1186,7 +1197,13 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
         # nothing checked. The preflight validated a provider the agent never used.
         #
         # So: read the persisted .env back and refuse to continue on a mismatch.
-        if llm_api_key and llm_model:
+        #
+        # Gated on byok_applied, not just on the flags being present: on the OAuth
+        # path the wizard provisions CIRIS-hosted AI and offers no fields, so the
+        # flags describe a BYOK run that never happened and the device is
+        # CORRECTLY on llm01.ciris-services-1.ai. Asserting there failed a
+        # correct device and blamed uncleared app data for it.
+        if byok_applied and llm_api_key and llm_model:
             expected_base = PROVIDER_BASE_URLS.get(llm_provider.lower(), "")
             env = adb.shell(f"run-as {CIRISAppConfig.PACKAGE} cat files/ciris/.env") or ""
             got_base = _env_value(env, "OPENAI_API_BASE")
@@ -1398,6 +1415,79 @@ def test_catchup_add_fedid(adb: ADBHelper, ui: UIAutomator, config: dict) -> Tes
             message=f"Error: {str(e)}",
             screenshots=screenshots,
         )
+
+
+def _google_relogin_if_needed(adb: ADBHelper, ui: UIAutomator, config: dict) -> tuple:
+    """The OAuth twin of _local_login_if_needed.
+
+    Setup-complete restarts the runtime and invalidates the setup token on BOTH
+    login paths — the wizard's last act is always a bounce to Login. Only the
+    local path had a re-login, so an OAuth run finished the wizard correctly and
+    then sat on Login until the Interact wait timed out, reporting "never
+    reached Interact" as though the agent had failed to start.
+
+    There is no password to type: the account is already on the device, so this
+    is btn_google_signin followed by one tap on the account row in Google's
+    native chooser. Verified by hand against ciristest1@gmail.com — the app
+    reached Interact ~5s after the tap.
+
+    Returns (ok, detail).
+    """
+    account = config.get("google_account", "")
+
+    client = None
+    for _ in range(15):
+        client = connect_test_server(adb, config, launch_if_needed=False, clear_data=False)
+        if client is not None:
+            break
+        time.sleep(2)
+    if client is None:
+        return False, "test server unreachable for Google re-login (app not running?)"
+
+    # Wait for the app to SETTLE before deciding whether a re-login is needed.
+    # Checking once, immediately, saw "Setup" — the reconfigure hold is still up
+    # for several seconds after completeSetup returns — and concluded no
+    # re-login was needed. The bounce to Login then happened anyway and the run
+    # sat there until the Interact wait timed out.
+    settle = time.time() + 180
+    screen = client.screen()
+    while time.time() < settle and screen in ("Setup", None, "", "Startup"):
+        time.sleep(2)
+        screen = client.screen()
+
+    if screen != "Login":
+        return True, f"no re-login needed (settled on screen={screen!r})"
+
+    if not _click_or_tap(client, adb, "btn_google_signin"):
+        return False, "failed to click btn_google_signin on the post-setup Login screen"
+
+    # Google's chooser is a native overlay — outside Compose, so testTags cannot
+    # reach it and this is the one step that must go through UI Automator text.
+    deadline = time.time() + 60
+    tapped = False
+    while time.time() < deadline:
+        texts = ui.dump_screen_info().get("texts", [])
+        candidates = [t for t in texts if "@" in t and "." in t]
+        if account and account in texts:
+            tapped = ui.click_by_text(account)
+        elif candidates:
+            tapped = ui.click_by_text(candidates[0])
+            account = candidates[0]
+        if tapped:
+            break
+        time.sleep(2)
+
+    if not tapped:
+        return False, "Google account chooser never offered an account row to tap"
+
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        screen = client.screen()
+        if screen and screen != "Login":
+            return True, f"signed back in as {account or 'the device account'} → {screen}"
+        time.sleep(2)
+
+    return False, f"still on Login 90s after choosing {account or 'the device account'}"
 
 
 def _local_login_if_needed(adb: ADBHelper, config: dict) -> tuple:
@@ -1636,17 +1726,24 @@ def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> Test
     try:
         # [0/5] Post-setup re-login (local mode) — sign back in with the creds
         # created in the wizard so the chat runs on a live session.
+        # BOTH paths need this: setup-complete reloads the runtime and drops the
+        # session, so the wizard's last act is always a bounce to Login. Only
+        # local was handled, so OAuth runs sat there until the Interact wait
+        # timed out and blamed the agent.
         if config.get("login_mode", "google") == "local":
             print("  [0/5] Post-setup local re-login...")
             ok, detail = _local_login_if_needed(adb, config)
-            print(f"    {detail}")
-            if not ok:
-                return TestReport(
-                    name="test_chat_interaction",
-                    result=TestResult.FAILED,
-                    duration=time.time() - start_time,
-                    message=f"Post-setup re-login failed: {detail}",
-                )
+        else:
+            print("  [0/5] Post-setup Google re-login...")
+            ok, detail = _google_relogin_if_needed(adb, ui, config)
+        print(f"    {detail}")
+        if not ok:
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Post-setup re-login failed: {detail}",
+            )
 
         client = connect_test_server(adb, config, launch_if_needed=True, clear_data=False)
         if client is None:

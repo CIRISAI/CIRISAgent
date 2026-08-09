@@ -849,34 +849,41 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
     Test: Complete the NODE-CLIENT first-run setup wizard.
 
     Drives the app through the in-app test-automation HTTP server (Compose
-    testTags — UIAutomator does not reliably see them). Node-client first-run
-    order (SetupViewModel / SetupScreen, matches the desktop QA runner's
+    testTags — UIAutomator does not reliably see them). First-run order
+    (SetupState.nextSetupStep, matches the desktop QA runner's
     test_setup_wizard_flow):
 
-        WELCOME → ACCOUNT_AND_CONFIRMATION (username/password/confirm)
-        → FEDERATION_IDENTITY_SETUP → [LLM_CONFIGURATION] → AGE_RANGE → COMPLETE
+        YOU (fed-ID label + username/password/confirm + age band)
+        → JOIN_FEDERATION (consent) → [AI] → COMPLETE
 
-    LLM_CONFIGURATION appears only on AGENT builds (CIRISBuild.HAS_AGENT):
-    the step is probed for after the fed-ID step and handled when present —
-    prefer the CIRIS-hosted option if rendered (OAuth path), else BYOK with
-    the configured provider+key (llm_provider/llm_api_key), else the keyless
-    "local" (Ollama) provider so the wizard can proceed without a real key.
-    Node-client builds skip straight to AGE_RANGE. The federation-identity
-    step hosts the AnnounceDecisionCard:
-      - input_fedid_label          — REQUIRED, non-generic fed-ID name
-      - toggle_announce_ownership  — the pivotal announce switch
-      - toggle_trace_opt_in        — trace opt-in, GATED: composed ONLY while
-                                     announce is ON (asserted both ways below)
+    The AI screen appears only on AGENT builds (CIRISBuild.HAS_AGENT) and is
+    the final step there — prefer the CIRIS-hosted option if rendered (OAuth
+    path), else BYOK with the configured provider+key (llm_provider/
+    llm_api_key), else the keyless "local" (Ollama) provider so the wizard can
+    proceed without a real key. Node-client builds finish at JOIN_FEDERATION.
+
+    Screen 1 (YOU) carries what used to be four screens:
+      - input_fedid_label   — REQUIRED, non-generic fed-ID name
+      - input_username / input_password / input_password_confirm
+      - age_band_*          — optional; declining sets the protective default
+    Screen 2 (JOIN_FEDERATION) carries the consent toggles, REACHABLE on every
+    path (through 2.9.13 the trace checkbox lived on a step nothing routed to,
+    so no production node could express trace consent at all):
+      - toggle_announce_ownership  — announce, ON by default (floor for service)
+      - toggle_trace_opt_in        — send traces (consent:replication:v1)
+      - toggle_trace_analyze       — be scored (CC#46 analyze)
+      - toggle_share_location      — rough location, OFF by default
 
     Config options:
     - setup_username / setup_password: local account (default admin/qa_test_password_12345)
     - fed_label: federation-ID label (default: generated unique qa-node-<ts>)
-    - announce: flip the announce switch ON (default True)
-    - trace_opt_in: tick the trace checkbox after announcing (default True)
+    - announce: leave the announce switch ON (default True; both this and
+      trace_opt_in default ON in the wizard, so False means "click it off")
+    - trace_opt_in: leave the trace toggle ON (default True)
     - age_band: "adult" | "minor" (default "adult")
-    - llm_provider / llm_api_key: BYOK provider+key for the agent build's
-      LLM_CONFIGURATION step (default groq / key from ~/.groq_key when the
-      runner found one; keyless "local" fallback when no key)
+    - llm_provider / llm_api_key: BYOK provider+key for the agent build's AI
+      screen (default groq / key from ~/.groq_key when the runner found one;
+      keyless "local" fallback when no key)
     - clear_data: clear app data if the app must be (re)launched (default True)
 
     Standalone-safe: if the app/test server isn't up it launches the app
@@ -939,88 +946,89 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                     )
                 return fail("login", f"did not reach Setup wizard (screen={client.screen()!r})")
 
-        # ── Step 1: WELCOME → Continue ────────────────────────────────────
-        print("  [3/7] WELCOME → btn_next")
-        if not client.wait_for_element("btn_next", timeout=15):
-            return fail("welcome", "btn_next not found on WELCOME step")
-        if not _click_or_tap(client, adb, "btn_next"):
-            return fail("welcome", "failed to click btn_next on WELCOME")
+        # ── Screen 1: YOU — fed-ID name + local account + age band ────────
+        print(f"  [3/6] YOU: fed-ID={fed_label!r}, user={username}, band={age_band}")
+        if not client.wait_for_element("input_fedid_label", timeout=15):
+            return fail("you", "input_fedid_label not found on screen 1 (YOU)")
+        if not client.input("input_fedid_label", fed_label):
+            return fail("you", "failed to input federation-ID label")
         time.sleep(0.5)
 
-        # ── Step 2: ACCOUNT_AND_CONFIRMATION ──────────────────────────────
-        # Two shapes of this step, gated on SetupScreen's `!state.isGoogleAuth`:
+        # Two shapes of the account section, gated on `showLocalUserFields()`:
         #  - LOCAL login → username/password/confirm inputs (input_username).
         #  - GOOGLE sign-in (full_flow's google_signin ran first) → the account
-        #    is the Google identity; the step is a CONFIRMATION SUMMARY with NO
-        #    local-account inputs, so just confirm. Probe for input_username to
-        #    tell them apart instead of assuming the local path.
+        #    IS the Google identity and there are no local inputs.
+        # Small settles between inputs: the Kotlin side consumes ONE pending
+        # TextInputRequest via a StateFlow slot — back-to-back requests can
+        # overwrite each other before recomposition applies them.
         if client.wait_for_element("input_username", timeout=10):
-            print(f"  [4/7] ACCOUNT (local): {username} / ******** (+ confirm)")
-            # Small settles between inputs: the Kotlin side consumes ONE pending
-            # TextInputRequest via a StateFlow slot — back-to-back requests can
-            # overwrite each other before recomposition applies them.
+            print(f"  [4/6] ACCOUNT (local): {username} / ******** (+ confirm)")
             if not client.input("input_username", username):
-                return fail("account", "failed to input username")
+                return fail("you", "failed to input username")
             time.sleep(0.5)
             if not client.input("input_password", password):
-                return fail("account", "failed to input password")
+                return fail("you", "failed to input password")
             time.sleep(0.5)
             if not client.input("input_password_confirm", password):
-                return fail("account", "failed to input password confirmation")
+                return fail("you", "failed to input password confirmation")
             time.sleep(0.5)
         else:
-            # Google-auth path: no local inputs — the step is the confirmation
-            # summary. btn_next confirms the Google-provisioned account.
-            print("  [4/7] ACCOUNT (google): confirmation summary — no local inputs, confirming")
-        if not _click_or_tap(client, adb, "btn_next"):
-            return fail("account", "failed to click btn_next on account step")
-        time.sleep(0.5)
+            print("  [4/6] ACCOUNT (google): no local inputs on this path")
 
-        # ── Step 3: FEDERATION_IDENTITY_SETUP + announce-gate assertions ──
-        print(f"  [5/7] FED-ID: label={fed_label!r}, announce={announce}, trace={trace_opt_in}")
-        if not client.wait_for_element("input_fedid_label", timeout=10):
-            return fail("fedid", "input_fedid_label not found on federation-identity step")
+        band_tag = f"age_band_{age_band}"
+        if client.is_visible(band_tag):
+            if not _click_or_tap(client, adb, band_tag):
+                return fail("you", f"failed to click {band_tag}")
+            time.sleep(0.3)
 
-        # GATING (OFF): trace opt-in must NOT be composed while announce is OFF.
-        if client.is_visible("toggle_trace_opt_in"):
-            return fail("fedid_gate_off", "toggle_trace_opt_in visible BEFORE announce is ON (gating broken)")
-        print("      gate check OK: toggle_trace_opt_in absent while announce OFF")
-
-        if not client.input("input_fedid_label", fed_label):
-            return fail("fedid", "failed to input federation-ID label")
-        time.sleep(0.3)
-
-        if announce:
-            if not _click_or_tap(client, adb, "toggle_announce_ownership"):
-                return fail("fedid", "failed to click toggle_announce_ownership")
-            # GATING (ON): trace opt-in must appear once announce is ON.
-            if not client.wait_for_element("toggle_trace_opt_in", timeout=5):
-                return fail("fedid_gate_on", "toggle_trace_opt_in did NOT appear after announce ON (gating broken)")
-            print("      gate check OK: toggle_trace_opt_in appeared after announce ON")
-
-            if trace_opt_in:
-                if not _click_or_tap(client, adb, "toggle_trace_opt_in"):
-                    return fail("fedid", "failed to click toggle_trace_opt_in")
-                time.sleep(0.3)
-
-        screenshot_path = f"/tmp/ciris_setup_fedid_{int(time.time())}.png"
+        screenshot_path = f"/tmp/ciris_setup_you_{int(time.time())}.png"
         adb.screenshot(screenshot_path)
         screenshots.append(screenshot_path)
 
         if not _click_or_tap(client, adb, "btn_next"):
-            return fail("fedid", "failed to click btn_next on federation-identity step")
+            return fail("you", "failed to click btn_next on screen 1 (YOU)")
         time.sleep(0.5)
 
-        # ── Step 3.5: LLM_CONFIGURATION (agent build only) ─────────────────
-        # Agent builds (CIRISBuild.HAS_AGENT) insert the LLM step after the
-        # fed-ID; node-client builds go straight to AGE_RANGE. Probe for the
-        # provider dropdown and handle the step only when it composed.
+        # ── Screen 2: JOIN_FEDERATION — the consent decision ──────────────
+        # The regression this guards: through 2.9.13 NO path reached a trace
+        # consent control, so `grant_trace_sharing` never fired from the wizard
+        # and no production node could ever ship a trace.
+        print(f"  [5/6] JOIN_FEDERATION: announce={announce}, traces={trace_opt_in}")
+        if not client.wait_for_element("toggle_announce_ownership", timeout=15):
+            return fail("consent", "toggle_announce_ownership not found on the consent screen")
+        if not client.is_visible("toggle_trace_opt_in"):
+            return fail(
+                "consent_reachable",
+                "toggle_trace_opt_in is NOT reachable on the consent screen — this is "
+                "the 2.9.13 sealed-consent regression (no node could ship a trace)",
+            )
+        print("      reachability OK: trace consent is on the path")
+
+        # Both default ON; click only to turn a choice OFF.
+        if not announce:
+            if not _click_or_tap(client, adb, "toggle_announce_ownership"):
+                return fail("consent", "failed to click toggle_announce_ownership")
+            time.sleep(0.3)
+        if not trace_opt_in:
+            if not _click_or_tap(client, adb, "toggle_trace_opt_in"):
+                return fail("consent", "failed to click toggle_trace_opt_in")
+            time.sleep(0.3)
+
+        screenshot_path = f"/tmp/ciris_setup_consent_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        if not _click_or_tap(client, adb, "btn_next"):
+            return fail("consent", "failed to click btn_next on screen 2 (JOIN_FEDERATION)")
+        time.sleep(0.5)
+
+        # ── Screen 3: AI (agent build only; the FINAL step there) ─────────
         if client.wait_for_element("input_llm_provider", timeout=6):
-            print(f"  [6/7] LLM_CONFIGURATION: provider={llm_provider!r}, key={'set' if llm_api_key else 'none'}")
+            print(f"  [6/6] AI: provider={llm_provider!r}, key={'set' if llm_api_key else 'none'}")
             if client.is_visible("btn_use_free_ai"):
                 # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
                 if not _click_or_tap(client, adb, "btn_use_free_ai"):
-                    return fail("llm", "failed to click btn_use_free_ai on LLM step")
+                    return fail("llm", "failed to click btn_use_free_ai on the AI screen")
                 time.sleep(0.3)
             elif llm_api_key:
                 # BYOK: pick the configured provider from the dropdown, then key.
@@ -1069,21 +1077,10 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                     return fail("llm", "failed to click menu_provider_local")
                 time.sleep(0.5)
             if not _click_or_tap(client, adb, "btn_next"):
-                return fail("llm", "failed to click btn_next on LLM step")
+                return fail("llm", "failed to click btn_next (finish) on the AI screen")
             time.sleep(0.5)
         else:
-            print("  [6/7] LLM_CONFIGURATION not present (node-client build) — continuing")
-
-        # ── Step 4: AGE_RANGE (final step → COMPLETE) ─────────────────────
-        band_tag = f"age_band_{age_band}"
-        print(f"  [7/7] AGE_RANGE: {band_tag} → finish")
-        if not client.wait_for_element(band_tag, timeout=10):
-            return fail("age_range", f"{band_tag} not found on age-range step")
-        if not _click_or_tap(client, adb, band_tag):
-            return fail("age_range", f"failed to click {band_tag}")
-        time.sleep(0.3)
-        if not _click_or_tap(client, adb, "btn_next"):
-            return fail("age_range", "failed to click btn_next (finish) on age-range step")
+            print("  [6/6] AI screen not present (node-client build) — finishing")
 
         # ── Step 5: COMPLETE — leave the wizard or reach the terminal step ─
         # 150s: setup-complete now wires the persist engine (keyring genesis:
@@ -1137,15 +1134,15 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                     f"device model mismatch: asked {llm_model!r}, device has {got_model!r}. "
                     f"The chat step would exercise a model this run never validated.",
                 )
-            print(f"  [7/7] verified device LLM config: {got_base} / {got_model}")
+            print(f"  [6/6] verified device LLM config: {got_base} / {got_model}")
 
         return TestReport(
             name="test_setup_wizard",
             result=TestResult.PASSED,
             duration=time.time() - start_time,
             message=(
-                "First-run wizard completed (WELCOME → ACCOUNT → FED-ID → [LLM] → AGE_RANGE); "
-                f"announce-gate verified both ways; {completed_via}"
+                "First-run wizard completed (YOU → JOIN_FEDERATION → [AI]); "
+                f"trace consent reachable on the path; {completed_via}"
             ),
             screenshots=screenshots,
         )

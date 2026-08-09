@@ -2,10 +2,40 @@
 Centralized utilities for thought management.
 """
 
+import re
 import uuid
 from typing import Optional
 
 from ciris_engine.schemas.runtime.enums import ThoughtType
+
+# Every id this module mints starts `th_<type>_`. Stripping it is what makes the
+# REST of the id the identifying part.
+_TYPE_PREFIX = re.compile(r"^th_[a-z]+_")
+
+
+def _parent_discriminator(parent_thought_id: str) -> str:
+    """The identifying bits of a parent id, for embedding in a child's id.
+
+    `parent_thought_id[:8]` was used here directly, and for a seed parent it
+    returned the literal string "th_seed_" — exactly 8 characters of type
+    prefix and ZERO identity. Every follow-up of every seed was therefore named
+    `th_followup_th_seed__<uuid12>` (note the double underscore: an empty field
+    between two separators), so the id said only "the parent was a seed" and
+    could not name WHICH seed.
+
+    The seed branch uses the same `[:8]` idiom on `task_id`, which is a bare
+    UUID with no prefix, so it is correct there. Same operation, two
+    differently-shaped inputs — right for one, vacuous for the other.
+
+    Nothing broke: linkage rides on `task_id`, which is intact, so the causal
+    graph in the data is complete. What broke is reading it — searching the
+    canonical for a follow-up by its parent's id can never match, because the
+    parent's id is not in there.
+    """
+    stripped = _TYPE_PREFIX.sub("", parent_thought_id, count=1)
+    # A parent id that is nothing but a type prefix would put us right back to an
+    # empty discriminator; prefer the raw id over silently emitting nothing.
+    return (stripped or parent_thought_id)[:8]
 
 
 def generate_thought_id(
@@ -23,7 +53,10 @@ def generate_thought_id(
     Format:
     - STANDARD (seed): th_seed_{task_id[:8]}_{uuid[:12]}
     - STANDARD (regular): th_std_{uuid}
-    - FOLLOW_UP: th_followup_{parent_id[:8]}_{uuid[:12]}
+    - FOLLOW_UP: th_followup_{parent_discriminator}_{uuid[:12]}
+      where parent_discriminator is 8 chars of the parent id AFTER its
+      `th_<type>_` prefix — see _parent_discriminator for why the prefix must
+      go first.
     - PONDER: th_ponder_{uuid}
     - DEFERRED: th_defer_{uuid}
     - OBSERVATION: th_obs_{uuid}
@@ -38,7 +71,7 @@ def generate_thought_id(
         return f"th_seed_{task_id[:8]}_{unique_part[:12]}"
     elif thought_type == ThoughtType.FOLLOW_UP and parent_thought_id:
         # Use 12 characters from UUID to avoid collisions
-        return f"th_followup_{parent_thought_id[:8]}_{unique_part[:12]}"
+        return f"th_followup_{_parent_discriminator(parent_thought_id)}_{unique_part[:12]}"
     elif thought_type == ThoughtType.PONDER:
         return f"th_ponder_{unique_part}"
     elif thought_type == ThoughtType.DEFERRED:

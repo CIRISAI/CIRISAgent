@@ -76,6 +76,7 @@ class SetupViewModel(
         "mistral" to "Mistral",
         "cohere" to "Cohere",
         "deepseek" to "DeepSeek",
+        "deepinfra" to "DeepInfra",
         "xai" to "xAI (Grok)",
         "azure" to "Azure OpenAI",
         "openai_compatible" to "OpenAI Compatible",

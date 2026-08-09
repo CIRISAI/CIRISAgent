@@ -657,6 +657,11 @@ class LLMSettingsViewModel(
                     "deepseek" -> "https://api.deepseek.com/v1"
                     "together" -> "https://api.together.xyz/v1"
                     "groq" -> "https://api.groq.com/openai/v1"
+                    // vLLM-backed. The engine already knows this endpoint and
+                    // sends `chat_template_kwargs.enable_thinking=false` for it
+                    // (llm_service/service.py); without that, thinking-mode
+                    // models burn max_tokens before emitting visible output.
+                    "deepinfra" -> "https://api.deepinfra.com/v1/openai"
                     else -> ""
                 }
 

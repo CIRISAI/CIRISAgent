@@ -24,6 +24,12 @@ from .schemas import RuntimeControlResponse, ServiceStatus
 
 logger = logging.getLogger(__name__)
 
+#: (service_type, provider class name) pairs already reported as having no
+#: is_healthy(). Module-level because the defect is a property of the CLASS, not of
+#: any request — the same provider is re-examined on every health poll, and a
+#: per-request scope would report it every time (#935).
+_REPORTED_UNHEALTHCHECKABLE: set[tuple[str, str]] = set()
+
 
 # ============================================================================
 # Time and Uptime Helpers
@@ -174,13 +180,45 @@ async def collect_service_health(request: Request) -> Dict[str, Dict[str, int]]:
                     else:
                         # Unknown stays in `available` but never in `healthy`, so it
                         # drags the ratio toward degraded instead of padding it (#943).
-                        # Warning, not debug: every service inheriting base_service
-                        # has is_healthy(), so this is a registration defect and the
-                        # operator should see it rather than read a quiet 100%.
-                        logger.warning(
-                            f"Provider for {service_type.value} exposes no is_healthy() — counted as NOT healthy. "
-                            f"Provider type: {type(provider).__name__}"
-                        )
+                        #
+                        # WARNING, not debug: every service inheriting base_service has
+                        # is_healthy(), so this is a registration defect and the operator
+                        # should see it rather than read a quiet 100%.
+                        #
+                        # ONCE PER DEFECT, not once per poll (#935). Whether a class
+                        # implements a method is STATIC — it cannot change between polls
+                        # — but this runs on every /v1/system/health check. On datum that
+                        # was 292 identical lines for `tool` and 146 for `wise_authority`
+                        # in a 31-minute window, and the incident log rotated faster than
+                        # the soak it exists to document. The defect identity is
+                        # (service_type, provider class); anything beyond the first
+                        # occurrence of that pair reports a fact already reported.
+                        defect = (service_type.value, type(provider).__name__)
+                        if defect not in _REPORTED_UNHEALTHCHECKABLE:
+                            _REPORTED_UNHEALTHCHECKABLE.add(defect)
+                            logger.warning(
+                                "PROVIDER CANNOT BE HEALTH-CHECKED AND NEVER WILL BE — %s is registered "
+                                "for %s but exposes no is_healthy(), so it is counted as NOT healthy on "
+                                "every check and permanently drags this service's health ratio toward "
+                                "degraded.\n"
+                                "  WHY: every service inheriting base_service implements is_healthy(). A "
+                                "provider without it was registered without going through that base, so "
+                                "this is a registration defect, not a runtime condition.\n"
+                                "  FIX: have %s inherit base_service (or implement is_healthy()), or stop "
+                                "registering it as a %s provider.\n"
+                                "  (Reported once per provider class: the answer is static, and this check "
+                                "runs on every health poll. Repeats: debug.)",
+                                type(provider).__name__,
+                                service_type.value,
+                                type(provider).__name__,
+                                service_type.value,
+                            )
+                        else:
+                            logger.debug(
+                                "Provider %s for %s still exposes no is_healthy()",
+                                type(provider).__name__,
+                                service_type.value,
+                            )
                 services[service_type.value] = {"available": len(providers), "healthy": healthy_count}
     except Exception as e:
         logger.error(f"Error checking service health: {e}")

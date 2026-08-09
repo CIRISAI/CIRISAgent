@@ -1497,15 +1497,16 @@ class CIRISApiClient(
      */
     suspend fun selfLogin(
         request: SelfLoginRequest,
+        nodeUrl: String = LOCAL_NODE_URL,
     ): SelfLoginResponse {
         val method = "selfLogin"
-        logInfo(method, "POST $baseUrl/v1/self/login identityKey=${request.identityKeyId.take(16)}… occurrences=${request.occurrences.map { it.kind }}")
+        logInfo(method, "POST $nodeUrl/v1/self/login identityKey=${request.identityKeyId.take(16)}… occurrences=${request.occurrences.map { it.kind }}")
         val client = federationHttpClient()
         return try {
             // Plain unsigned POST to the LOCAL node. Any federation signing the
             // ceremony needs is performed by the node's substrate, not the app.
             val bodyText = jsonConfig.encodeToString(SelfLoginRequest.serializer(), request)
-            val response = client.post("$baseUrl/v1/self/login") {
+            val response = client.post("$nodeUrl/v1/self/login") {
                 contentType(ContentType.Application.Json)
                 setBody(bodyText)
             }
@@ -1516,7 +1517,7 @@ class CIRISApiClient(
             parsed.accessToken?.let { setAccessToken(it) }
             parsed
         } catch (e: Exception) {
-            logException(method, e, "url=$baseUrl")
+            logException(method, e, "url=$nodeUrl")
             throw e
         } finally {
             client.close()
@@ -1537,9 +1538,13 @@ class CIRISApiClient(
      * Fetch a node's own [SignedKeyRecord].
      *
      * Hits ``GET {nodeUrl}/v1/federation/self-key-record``.
+     *
+     * `/v1/federation` is a SUBSTRATE prefix — served natively by the NODE and
+     * never proxied from the brain — so [nodeUrl] defaults to [LOCAL_NODE_URL],
+     * not to this client's [baseUrl] (which addresses the Python brain).
      */
     suspend fun getSelfKeyRecord(
-        nodeUrl: String = baseUrl,
+        nodeUrl: String = LOCAL_NODE_URL,
         token: String? = accessToken,
     ): SignedKeyRecord {
         val method = "getSelfKeyRecord"
@@ -5086,10 +5091,15 @@ class CIRISApiClient(
      * the version-mismatch banner: the node `version`, its `role`
      * (`"fabric-node"` for a bare node), and the optional `cognitive_state` (present
      * only when an agent enriches the endpoint).
+     *
+     * `/v1/health` is a SUBSTRATE prefix — served natively by the NODE on :4243 and
+     * never proxied from the brain, and the Python brain on :8080 does not serve it
+     * at all. Callers must therefore pass the NODE base URL; the [baseUrl] default
+     * is kept only for clients already constructed against the node.
      */
-    suspend fun getNodeHealth(): NodeHealth {
+    suspend fun getNodeHealth(nodeUrl: String = baseUrl): NodeHealth {
         val method = "getNodeHealth"
-        logDebug(method, "Probing node health at $baseUrl/v1/health")
+        logDebug(method, "Probing node health at $nodeUrl/v1/health")
 
         val client = io.ktor.client.HttpClient {
             install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
@@ -5100,7 +5110,7 @@ class CIRISApiClient(
         }
 
         return try {
-            val response = client.get("$baseUrl/v1/health") {
+            val response = client.get("$nodeUrl/v1/health") {
                 authHeader()?.let { header("Authorization", it) }
             }
 
@@ -5202,8 +5212,9 @@ class CIRISApiClient(
         }
     }
 
-    override suspend fun getOwnerHint(): OwnerHint? {
+    override suspend fun getOwnerHint(nodeUrl: String?): OwnerHint? {
         val method = "getOwnerHint"
+        val hintUrl = nodeUrl ?: baseUrl
         // Personal-install-only endpoint shipped in 2.9.2. On a server
         // install the backend returns 404 and we render an empty hint —
         // never throw, never block the Login UI on a slow / offline
@@ -5218,7 +5229,7 @@ class CIRISApiClient(
                 }
             }
             try {
-                val response: HttpResponse = client.get("$baseUrl/v1/auth/owner-hint")
+                val response: HttpResponse = client.get("$hintUrl/v1/auth/owner-hint")
                 if (response.status.value == 404) {
                     logDebug(method, "owner-hint endpoint returned 404 (multi-tenant server or pre-2.9.2 backend)")
                     return null

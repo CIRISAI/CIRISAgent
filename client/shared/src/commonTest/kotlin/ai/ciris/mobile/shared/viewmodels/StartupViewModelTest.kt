@@ -315,7 +315,7 @@ class FakeCIRISApiClient : CIRISApiClientProtocol {
         this.token = token
     }
 
-    override suspend fun getOwnerHint(): ai.ciris.mobile.shared.models.OwnerHint? = null
+    override suspend fun getOwnerHint(nodeUrl: String?): ai.ciris.mobile.shared.models.OwnerHint? = null
 
     override suspend fun sendMessage(
         message: String,

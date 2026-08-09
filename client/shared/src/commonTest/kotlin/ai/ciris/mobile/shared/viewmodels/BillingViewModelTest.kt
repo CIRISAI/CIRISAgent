@@ -444,7 +444,7 @@ class FakeCIRISApiClientForBilling(
     }
 
     // Stub implementations — not used by BillingViewModel
-    override suspend fun getOwnerHint(): ai.ciris.mobile.shared.models.OwnerHint? = null
+    override suspend fun getOwnerHint(nodeUrl: String?): ai.ciris.mobile.shared.models.OwnerHint? = null
     override fun setAccessToken(token: String) {}
     override suspend fun sendMessage(message: String, channelId: String, images: List<ImagePayload>?, documents: List<DocumentPayload>?): InteractResponse =
         InteractResponse(response = "", message_id = "")

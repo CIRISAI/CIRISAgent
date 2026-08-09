@@ -19,7 +19,10 @@ fun main() {
     ) {
         CIRISApp(
             accessToken = "",
-            baseUrl = getBaseUrl(),
+            // Browser build: one origin serves both surfaces (or the HA
+            // ingress proxies them), so brain and node share a base URL.
+            apiBaseUrl = getBaseUrl(),
+            nodeBaseUrl = getBaseUrl(),
             googleSignInCallback = null,
             isHAAddonMode = isHAMode
         )

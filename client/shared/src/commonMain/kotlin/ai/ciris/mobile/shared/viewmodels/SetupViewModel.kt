@@ -1255,13 +1255,20 @@ class SetupViewModel(
                     if (ownerLoginOk && _state.value.accordMetricsConsent) {
                         try {
                             PlatformLogger.i(TAG, "[ORDER] federation_consent begin (session=$sessionKind)")
+                            // `analyze` is the owner's OWN answer from the
+                            // consent screen, not a constant. The substrate
+                            // marks the be-scored dimension required:false with
+                            // named costs; sending true regardless granted a
+                            // dimension the user was never asked about.
                             val consentRaw = client.authorFederationConsent(
+                                analyze = _state.value.traceAnalyze,
                                 localNodeUrl = CIRISApiClient.LOCAL_NODE_URL,
                             )
                             PlatformLogger.i(
                                 TAG,
                                 "[ORDER] federation_consent authored (scope=" +
                                     "${FederationConsentScopes.describe(FederationConsentScopes.TO_CANONICAL)} " +
+                                    "analyze=${_state.value.traceAnalyze} " +
                                     "session=$sessionKind): ${consentRaw.take(200)}",
                             )
                         } catch (e: Exception) {

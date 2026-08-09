@@ -102,6 +102,38 @@ class TestClientServiceSplit:
             f"{dead_path} 404s on both ports — use {live_path}. Called from: {offenders}"
         )
 
+    def test_no_node_endpoint_is_addressed_via_the_brain_url(self) -> None:
+        """Node-native routes must never be built from the client's own baseUrl.
+
+        The shared `CIRISApiClient` is constructed against `apiBaseUrl` (the
+        Python brain), so `"$baseUrl/v1/self/..."` inside it means "ask the brain
+        for a route only the node serves" — a 404, and the 2.9.13 loop. Node
+        routes take an explicit node URL parameter instead.
+        """
+        # Substrate prefixes (brain_adapter._SUBSTRATE_PREFIXES) plus the node's
+        # half of the split /v1/setup surface (FSD §2). /v1/auth and /v1/config
+        # are excluded: the Python brain serves its own, and the client's
+        # login/config calls legitimately go there.
+        node_only = [
+            "/v1/federation",
+            "/v1/self",
+            "/v1/accord",
+            "/v1/health",
+            "/v1/setup/root",
+            "/v1/setup/owned-nodes",
+            "/v1/setup/claim-remote",
+        ]
+        src = API_CLIENT.read_text(encoding="utf-8")
+        offenders = [
+            line.strip()
+            for line in src.splitlines()
+            if "$baseUrl" in line and any(p in line for p in node_only)
+        ]
+        assert not offenders, (
+            "these node-native routes are addressed via the client's baseUrl (the brain) "
+            f"instead of an explicit node URL: {offenders}"
+        )
+
     def test_owner_hint_gates_nothing(self) -> None:
         """`/v1/auth/owner-hint` is a masked login-screen string, not a predicate.
 

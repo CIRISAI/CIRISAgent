@@ -34,7 +34,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "CIRIS"
-            packageVersion = "2.9.13"
+            packageVersion = "2.9.14"
             description = "CIRIS Agent Desktop Application"
             vendor = "CIRIS L3C"
 

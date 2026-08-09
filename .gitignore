@@ -222,3 +222,26 @@ local_fixtures/
 
 # Orphaned dev-only demo-capture tool (no .gitmodules URL) — not part of any build
 tools/SwiftCapture/
+
+# Node identity and key material — NEVER commit this.
+#
+# `identity/` holds this node's federation keys: sealed classical Ed25519 seed
+# blobs (`<alias>.ed25519.seed.blob`), their 32-byte master keys
+# (`<alias>.master.key`), the TPM seal, and the bare ML-DSA-65 PQC seed. Every
+# boot of a checkout mints another set, so the directory accumulates silently —
+# 124 of these files were tracked before this rule existed, and 122 reached
+# main.
+#
+# A committed private key is compromised the moment it is pushed, and it stays
+# in history after the file is deleted. The matching rule already exists in
+# .dockerignore for the same reason (key material must not ride inside an image
+# layer either); git needed its own.
+#
+# A node MINTS its identity — persist's create_identity_if_missing does it at
+# boot. There is no case where a checkout should carry one.
+identity/
+keys/
+
+# First-run node state produced by running a node from the checkout.
+ceg/
+claim_pin

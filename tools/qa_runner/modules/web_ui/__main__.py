@@ -831,7 +831,7 @@ Examples:
 def _apply_platform_defaults(args: argparse.Namespace) -> None:
     """Fill in port defaults that depend on the target platform.
 
-    - desktop (default): test-server :8091, API :8080
+    - desktop (default): test-server :9091 (bound DIRECTLY), API :8080
     - --android:          test-server :8091 forwards to device :9091; API :8080→8080
     - --ios:              test-server :18091→9091; API :18080→8080 (iproxy convention)
 
@@ -845,6 +845,20 @@ def _apply_platform_defaults(args: argparse.Namespace) -> None:
             args.desktop_port = 18091
         if args.api_port is None:
             args.api_port = 18080
+    elif not getattr(args, "android", False):
+        # DESKTOP binds 9091 DIRECTLY — TestAutomationServer.kt:39
+        # (`private val port: Int = 9091`). Android and iOS reach it through a
+        # forward (adb 8091->9091, iproxy 18091->9091), which is why the shared
+        # 8091 default is correct for them; on desktop there is no forward to
+        # translate it, so 8091 hits nothing.
+        #
+        # The effect was that EVERY desktop test aborted with "CIRIS Desktop app
+        # is not running with test mode enabled" while the app was running and
+        # answering `{"status":"ok","testMode":true}` on 9091. The failure names
+        # the wrong cause — it reads as an app/config problem, so the operator
+        # goes and checks CIRIS_TEST_MODE instead of the port.
+        if args.desktop_port == 8091:
+            args.desktop_port = 9091
     if args.api_port is None:
         args.api_port = 8080
 

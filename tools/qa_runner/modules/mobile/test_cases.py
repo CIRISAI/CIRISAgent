@@ -1652,7 +1652,26 @@ def _capture_speak_evidence(adb: ADBHelper, package: str = "ai.ciris.mobile.debu
             ev["llm_called"] = True
             keep.append(ln)
         # LLM failure signatures.
-        if any(k in ln for k in ("model_not_available", "401 ", "403 ", "404 ", "429 ", "invalid_request", "RateLimit", "APIError")):
+        #
+        # HTTP codes are matched with a lookbehind/lookahead that refuses digits
+        # and dots on either side, and only on non-INFO lines. Both guards are
+        # load-bearing, and this exact line is why:
+        #
+        #   2026-08-09 20:18:10.429 - …llm_service - INFO - [LLM_REQUEST]
+        #                          ^^^ the millisecond field
+        #
+        # The old check was `"429 " in ln`, so a TIMESTAMP ending in .429 read as
+        # an HTTP 429 rate-limit. That failed a run in which the agent called the
+        # LLM, produced a SPEAK, and sealed two traces — the harness reported "LLM
+        # call failed" about a conversation that completed. An instrument that
+        # reports failure for work that WAS performed is as damaging as one that
+        # reports success for work that was not; it sends you debugging a healthy
+        # system, and here it very nearly got a correct history fix reverted.
+        if _re.search(r"(?<![\d.])(401|403|404|429)(?![\d.])", ln) and "INFO" not in ln:
+            if "llm" in low or "openai" in low or "openrouter" in low or "completion" in low:
+                ev["llm_error"] = ln.strip()[:300]
+                keep.append(ln)
+        elif any(k in ln for k in ("model_not_available", "invalid_request", "RateLimit", "APIError")):
             if "llm" in low or "openai" in low or "openrouter" in low or "completion" in low:
                 ev["llm_error"] = ln.strip()[:300]
                 keep.append(ln)

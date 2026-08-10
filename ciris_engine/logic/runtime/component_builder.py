@@ -21,6 +21,7 @@ from ciris_engine.logic.context.builder import ContextBuilder
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
 from ciris_engine.logic.dma.csdma import CSDMAEvaluator
 from ciris_engine.logic.dma.dsaspdma import DSASPDMAEvaluator
+from ciris_engine.logic.dma.msaspdma import MSASPDMAEvaluator
 from ciris_engine.logic.dma.factory import create_dsdma_from_identity
 from ciris_engine.logic.dma.idma import IDMAEvaluator
 from ciris_engine.logic.dma.pdma import EthicalPDMAEvaluator
@@ -155,7 +156,7 @@ class ComponentBuilder:
         """Build all DMA evaluators.
 
         Returns:
-            Tuple of (ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma, dsaspdma)
+            Tuple of (ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma, dsaspdma, msaspdma)
         """
         from ciris_engine.schemas.config.agent import AgentTemplate, DSDMAConfiguration
 
@@ -207,8 +208,9 @@ class ComponentBuilder:
         idma = IDMAEvaluator(**common_args)
         tsaspdma = TSASPDMAEvaluator(**common_args)
         dsaspdma = DSASPDMAEvaluator(**common_args)
+        msaspdma = MSASPDMAEvaluator(**common_args)
 
-        return ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma, dsaspdma
+        return ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma, dsaspdma, msaspdma
 
     async def build_all_components(self) -> AgentProcessor:
         """Build all processing components and return the agent processor."""
@@ -222,7 +224,7 @@ class ComponentBuilder:
         config = self.runtime._ensure_config()
 
         # Build DMA evaluators
-        ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma, dsaspdma = self._build_dma_evaluators(config)
+        ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma, dsaspdma, msaspdma = self._build_dma_evaluators(config)
 
         # Get time service and build conscience registry
         time_service = getattr(self.runtime.service_initializer, "time_service", None)
@@ -252,6 +254,7 @@ class ComponentBuilder:
             idma_evaluator=idma,  # CCA epistemic diversity monitoring
             tsaspdma_evaluator=tsaspdma,  # Tool-specific action selection
             dsaspdma_evaluator=dsaspdma,  # Deferral-specific action selection
+            msaspdma_evaluator=msaspdma,  # Memorize-specific action selection (#1027)
         )
 
         context_builder = ContextBuilder(

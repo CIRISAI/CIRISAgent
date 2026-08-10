@@ -1,0 +1,142 @@
+component_name: msaspdma
+description: "Memorize-specific action selection — a full guide to writing to the graph, applied to one proposed MEMORIZE"
+version: "1.0"
+accord_header: true
+
+memory_guide: |
+  === HOW MEMORY WORKS IN CIRIS ===
+
+  NODES vs EDGES — read this first, it is the most common mistake.
+
+    A MEMORIZE action writes ONE NODE. It cannot create an edge: the action
+    carries a single `node` and nothing else. So the question is never "should
+    this be a node or an edge" — you have only one option.
+
+      * A FACT ABOUT A THING is an attribute on that thing's node.
+        "their favorite color is chartreuse" -> attribute on the user's node.
+
+      * A RELATIONSHIP BETWEEN THINGS is an edge, and edges are woven during
+        DREAM consolidation, not by you now. You do not need to create one, and
+        you cannot. Store the fact; the relationships form later.
+
+    So: pick the right node, put the fact on it as an attribute. That is the
+    whole operation.
+
+  ADDRESSING — which node to write to.
+
+    Node ids follow `prefix/{identifier}`. The prefix is not decoration; it is
+    how the system finds the node again:
+
+      user/{user_id}          facts about a person
+      channel/{channel_id}    facts about a place of conversation
+      consent/{user_id}       consent state (system-managed — do not write)
+      preferences/{user_id}   user preference records
+
+    NEVER invent a UUID or a random id. A node whose id does not match the
+    convention is never queried by anything, so writing to it succeeds and then
+    the information is gone forever — you will not be able to recall it, and you
+    will believe you never learned it.
+
+    The nodes that already exist for THIS conversation are listed below under
+    CANDIDATE NODES. Prefer one of them. If none fits, construct an id using the
+    conventions above — not a random one.
+
+  ATTRIBUTES — what to put on the node.
+
+    Any attribute you write that is not system-owned comes back to you later in
+    the user's profile as `memorized_attributes`. That is the mechanism by which
+    you remember things about someone. Use plain, stable names:
+
+      favorite_color: "chartreuse"        good — you will recognise it later
+      fact_2026_08_09_1: "likes green"    bad  — you will not
+
+    SYSTEM-OWNED ATTRIBUTES are listed below. They are maintained by services
+    (authentication, the adaptive filter, consent) and writing them is refused.
+    If a recall handed you a node and you are writing it back, DROP them from
+    what you send — carrying them along unchanged is fine, but changing one is
+    refused and you will loop.
+
+  SCOPE.
+
+    local        the default for facts about users and channels
+    identity     the agent's own identity — requires Wise Authority approval
+    environment  deployment-level facts — requires Wise Authority approval
+    community    shared community knowledge
+
+    Use `local` unless you have a specific reason and the authority for more.
+
+  WHEN NOT TO MEMORIZE AT ALL.
+
+    * The information is already in your conversation history — you can simply
+      read it. Memory is for what must survive beyond this conversation.
+    * You are unsure the user wants it retained. Ask (SPEAK) rather than store.
+    * It is a system-managed fact (consent, trust, OAuth identity). Those are
+      maintained for you.
+
+system_guidance_header: |
+  You have selected MEMORIZE. Before it executes you are being shown the graph's
+  conventions and the nodes that already exist, so you can check the write is
+  addressed correctly.
+
+  This is a second look, not a correction: nothing has been changed for you. If
+  the node you chose is wrong, say what it should be. If you should not be
+  storing this at all, switch action.
+
+evaluation_steps: |
+  Work through these in order:
+
+  1. SHOULD this be stored? If the answer lives in the conversation you are
+     already having, or the user has not indicated they want it remembered,
+     choose PONDER or SPEAK instead of storing.
+
+  2. WHICH NODE? Compare your proposed node id against CANDIDATE NODES and the
+     addressing conventions. If your id is a UUID or does not follow
+     `prefix/{identifier}`, it is wrong — the write would be unreadable.
+
+  3. WHICH ATTRIBUTES? Remove anything in SYSTEM-OWNED ATTRIBUTES. Give the rest
+     names you will recognise when they come back to you.
+
+  4. SCOPE. `local` unless you have authority for more.
+
+  5. Decide: MEMORIZE (with the corrected node), SPEAK (ask the user), or
+     PONDER (reconsider).
+
+context_integration: |
+  Original thought:
+  {original_thought_content}
+
+  Your reasoning for memorizing:
+  {aspdma_reasoning}
+
+  === WHAT YOU PROPOSED ===
+  node id:     {proposed_node_id}
+  node type:   {proposed_node_type}
+  scope:       {proposed_node_scope}
+  attributes:  {proposed_attributes}
+
+  === CANDIDATE NODES (these already exist) ===
+  {candidate_nodes}
+
+  === SYSTEM-OWNED ATTRIBUTES (writing these is refused) ===
+  {system_owned_attributes}
+
+  {memory_guide}
+
+response_format: |
+  Respond with JSON:
+
+  {
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "the node id to write to (required when MEMORIZE)",
+    "node_type": "node type (required when MEMORIZE)",
+    "node_scope": "graph scope (required when MEMORIZE)",
+    "attributes": {"name": "value"},
+    "message": "what to say (required when SPEAK)",
+    "questions": ["what to reconsider (required when PONDER)"],
+    "reasoning": "why this addressing is correct, or why you switched"
+  }
+
+closing_reminder: |
+  A write to the wrong node is worse than no write: it succeeds, so nothing
+  alerts you, and the information is silently unreachable forever. Getting the
+  address right is the whole point of this step.

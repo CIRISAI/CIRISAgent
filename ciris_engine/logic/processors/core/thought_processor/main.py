@@ -25,7 +25,7 @@ from ciris_engine.logic.utils.channel_utils import create_channel_context
 from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams, ToolParams
+from ciris_engine.schemas.actions.parameters import DeferParams, MemorizeParams, PonderParams, ToolParams
 from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import EpistemicData
@@ -276,8 +276,7 @@ class ThoughtProcessor(
         # - Confirm TOOL action (possibly with refined parameters)
         # - Switch to SPEAK for user clarification
         # - Switch to PONDER to reconsider approach
-        action_result = await self._maybe_run_tsaspdma(thought_item, action_result, thought_context)
-        action_result = await self._maybe_run_dsaspdma(thought_item, action_result, thought_context)
+        action_result = await self._run_verb_second_pass(thought_item, action_result, thought_context)
 
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
         conscience_result = await self._conscience_execution_step(
@@ -404,6 +403,36 @@ class ThoughtProcessor(
                 )
         else:
             logger.error(f"ThoughtProcessor: No action result for thought {thought.thought_id}")
+
+    async def _run_verb_second_pass(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
+    ) -> ActionSelectionDMAResult:
+        """Dispatch the second-pass evaluator registered for the selected verb.
+
+        ASPDMA picks a verb without the domain knowledge needed to fill that
+        verb's parameters — a TOOL without its documentation, a MEMORIZE without
+        the graph's addressing conventions. The second pass supplies that
+        knowledge and lets the agent re-decide before execution.
+
+        Registry-driven rather than a chain of `_maybe_run_<verb>` calls, so
+        adding a verb is one table entry instead of an edit to this method plus a
+        new near-duplicate of the one above it. VerbSecondPassResultEvent already
+        anticipated this ("Future verbs that gain a second-pass evaluator drop
+        into this event without schema changes") — the dispatch is now the same
+        shape as the event.
+
+        Coverage today is asserted by
+        tests/.../test_verb_second_pass_registry.py, which fails if a verb is
+        neither registered nor explicitly listed as not needing one — so a gap
+        shows up in CI rather than in a production PONDER loop (#1027).
+        """
+        handler = self._VERB_SECOND_PASS.get(action_result.selected_action)
+        if handler is None:
+            return action_result
+        return await handler(self, thought_item, action_result, thought_context)
 
     async def _maybe_run_tsaspdma(
         self,
@@ -695,6 +724,85 @@ class ThoughtProcessor(
         except Exception as e:
             logger.error("DSASPDMA: Failed for thought %s: %s", thought_item.thought_id, e, exc_info=True)
             return action_result
+
+    async def _maybe_run_msaspdma(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
+    ) -> ActionSelectionDMAResult:
+        """Run MSASPDMA when ASPDMA selected MEMORIZE.
+
+        The agent gets the graph's addressing conventions and the nodes that
+        already exist, then re-decides. Nothing is rewritten for it — see
+        schemas/dma/msaspdma.py for why healing was rejected.
+        """
+        if action_result.selected_action != HandlerActionType.MEMORIZE:
+            return action_result
+
+        if not isinstance(action_result.action_parameters, MemorizeParams):
+            logger.warning(
+                "MSASPDMA-SKIP: MEMORIZE action has invalid parameters type: %s",
+                type(action_result.action_parameters),
+            )
+            return action_result
+
+        evaluator = getattr(self.dma_orchestrator, "msaspdma_evaluator", None)
+        if not evaluator:
+            logger.warning("MSASPDMA-SKIP: No MSASPDMA evaluator configured")
+            return action_result
+
+        try:
+            from ciris_engine.logic.dma.dma_executor import run_msaspdma
+
+            msaspdma_result = await run_msaspdma(
+                evaluator=evaluator,
+                aspdma_result=action_result,
+                original_thought=thought_item,
+                context=thought_context,
+                time_service=self._time_service,
+            )
+
+            await self._emit_verb_second_pass_result_event(
+                thought_item=thought_item,
+                verb="memorize",
+                original_action=HandlerActionType.MEMORIZE.value,
+                original_reasoning=action_result.rationale or "",
+                second_pass_result=msaspdma_result,
+                verb_specific_data=self._build_memorize_verb_specific_data(
+                    original_result=action_result,
+                    msaspdma_result=msaspdma_result,
+                ),
+            )
+
+            return msaspdma_result
+        except Exception as e:
+            logger.error("MSASPDMA: Failed for thought %s: %s", thought_item.thought_id, e, exc_info=True)
+            return action_result
+
+    @staticmethod
+    def _build_memorize_verb_specific_data(
+        original_result: ActionSelectionDMAResult,
+        msaspdma_result: ActionSelectionDMAResult,
+    ) -> Dict[str, Any]:
+        """Verb-specific payload for VERB_SECOND_PASS_RESULT.
+
+        Carries the addressing decision, which is the thing that goes wrong: a
+        node id that changed between passes is the second pass doing its job.
+        """
+
+        def _node_of(result: ActionSelectionDMAResult) -> Optional[Any]:
+            params = result.action_parameters
+            return getattr(params, "node", None) if isinstance(params, MemorizeParams) else None
+
+        before, after = _node_of(original_result), _node_of(msaspdma_result)
+        data: Dict[str, Any] = {
+            "original_node_id": getattr(before, "id", None),
+            "final_node_id": getattr(after, "id", None),
+        }
+        if before is not None and after is not None:
+            data["node_id_corrected"] = before.id != after.id
+        return data
 
     async def _emit_tsaspdma_result_event(
         self,
@@ -1801,3 +1909,25 @@ class ThoughtProcessor(
         # Return the full ConscienceApplicationResult to preserve all conscience data
         # The full result includes epistemic_data, override_reason, etc.
         return conscience_result
+
+    # ------------------------------------------------------------------
+    # Verb second-pass registry
+    #
+    # ASPDMA selects a verb without the domain knowledge needed to fill that
+    # verb's parameters. A second pass supplies that knowledge and lets the agent
+    # re-decide before execution — TOOL gets its documentation, DEFER the rights
+    # taxonomy, MEMORIZE the graph's addressing conventions.
+    #
+    # Declared at class scope so coverage is INSPECTABLE: a test can read this
+    # table and assert every verb is either registered here or listed as not
+    # needing one. That is what turns "8 of 10 verbs silently have no second
+    # pass" (#1027) from something rediscovered in a production loop into a CI
+    # failure.
+    #
+    # To add a verb: write the evaluator, add one entry. No edit to
+    # _run_verb_second_pass, and no new near-duplicate dispatch method.
+    _VERB_SECOND_PASS: Dict[HandlerActionType, Callable[..., Any]] = {
+        HandlerActionType.TOOL: _maybe_run_tsaspdma,
+        HandlerActionType.DEFER: _maybe_run_dsaspdma,
+        HandlerActionType.MEMORIZE: _maybe_run_msaspdma,
+    }

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
 from ciris_engine.logic.dma.csdma import CSDMAEvaluator
 from ciris_engine.logic.dma.dsaspdma import DSASPDMAEvaluator
+from ciris_engine.logic.dma.msaspdma import MSASPDMAEvaluator
 from ciris_engine.logic.dma.dma_executor import (
     run_action_selection_pdma,
     run_csdma,
@@ -63,6 +64,7 @@ class DMAOrchestrator:
         idma_evaluator: Optional[IDMAEvaluator] = None,
         tsaspdma_evaluator: Optional[TSASPDMAEvaluator] = None,
         dsaspdma_evaluator: Optional[DSASPDMAEvaluator] = None,
+        msaspdma_evaluator: Optional[MSASPDMAEvaluator] = None,
     ) -> None:
         self.ethical_pdma_evaluator = ethical_pdma_evaluator
         self.csdma_evaluator = csdma_evaluator
@@ -71,6 +73,7 @@ class DMAOrchestrator:
         self.idma_evaluator = idma_evaluator
         self.tsaspdma_evaluator = tsaspdma_evaluator
         self.dsaspdma_evaluator = dsaspdma_evaluator
+        self.msaspdma_evaluator = msaspdma_evaluator
         self.time_service = time_service
         self.app_config = app_config
         self.llm_service = llm_service

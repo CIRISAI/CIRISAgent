@@ -79,6 +79,20 @@ class PromptCollection(BaseModel):
     tool_selection_guidance: Optional[str] = Field(None, description="Tool-selection guard for the TOOL action")
     csdma_ambiguity_alignment_example: Optional[str] = Field(None, description="CSDMA ambiguity alignment example")
     taxonomy_text: Optional[str] = Field(None, description="Rights/needs deferral taxonomy (DSASPDMA)")
+
+    # MSASPDMA's graph-writing guide, split by epistemic class (#1027). Declared
+    # so the compose gate's key space — which IS this schema — can address them:
+    # a block that is not a field is never counted as an override key, and a
+    # regime could vary it while the gate still reported GATE: PASS.
+    #
+    # Declaring these was impossible until `get_prompt` stopped letting a
+    # declared-but-unset field shadow `custom_prompts` (same commit): adding the
+    # fields used to blank all five blocks silently.
+    memory_model: Optional[str] = Field(None, description="What the graph is: nodes, edges, DREAM (MSASPDMA)")
+    addressing_convention: Optional[str] = Field(None, description="Node id conventions (MSASPDMA)")
+    attribute_convention: Optional[str] = Field(None, description="Attribute naming (MSASPDMA)")
+    scope_convention: Optional[str] = Field(None, description="Graph scope table (MSASPDMA)")
+    memory_prohibitions: Optional[str] = Field(None, description="What must not be written (MSASPDMA)")
     tool_correction_section: Optional[str] = Field(None, description="Tool correction-mode guidance (TSASPDMA)")
 
     # Context integration
@@ -103,9 +117,22 @@ class PromptCollection(BaseModel):
             if agent_key in self.agent_variations:
                 return self.agent_variations[agent_key]
 
-        # Try direct attribute
-        if hasattr(self, key):
-            return getattr(self, key)  # type: ignore[no-any-return]  # Dynamic attribute lookup
+        # Try direct attribute — but only if it actually HOLDS something.
+        #
+        # `hasattr` is True for every declared field, including one the loader
+        # never populated, so an unset field returned its None default and the
+        # `custom_prompts` fallback below was never reached. That makes
+        # declaring a field for a YAML key actively destructive: the key loads
+        # into custom_prompts and works, and the moment someone adds a matching
+        # field the block silently becomes empty. Observed while adding the
+        # MSASPDMA blocks — declaring the fields blanked five working prompt
+        # sections, with no error, because "declared" outranked "present".
+        #
+        # A field that holds a value still wins, which is what the ordering is
+        # for; a field that holds nothing is not an answer.
+        value = getattr(self, key, None)
+        if value is not None:
+            return value  # type: ignore[no-any-return]  # Dynamic attribute lookup
 
         # Try custom prompts
         if key in self.custom_prompts:

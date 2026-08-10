@@ -245,3 +245,16 @@ keys/
 # First-run node state produced by running a node from the checkout.
 ceg/
 claim_pin
+
+# iOS native substrate payload — FETCHED, not tracked.
+#
+# tools/update_substrate_libs.py downloads the ciris-server wheel and stages
+# `_native.abi3.so` here (75 MB) on the way to building Resources.zip. Its
+# siblings (aiohttp, cryptography, pydantic_core) are tracked for historical
+# reasons; this one is not, because a build artifact a script fetches on demand
+# does not belong in git — the same rule that keeps pre-built binaries out (see
+# tools/update_ciris_verify.py for the canonical fetch-on-install pattern).
+#
+# Run the updater to populate it:
+#   python -m tools.update_substrate_libs --platform ios --lib server <version>
+client/iosApp/app_packages_native/ciris_server/

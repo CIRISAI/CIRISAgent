@@ -898,6 +898,24 @@ class AccordMetricsService:
 
         self._sweep_task = asyncio.create_task(self._periodic_sweep())
 
+    async def is_healthy(self) -> bool:
+        """Whether trace capture is operating.
+
+        Every registered service must be health-checkable. Without this the API
+        health check cannot ask, `check_provider_health` returns None, and the
+        provider counts as NOT healthy on every poll (#943) — four adapter
+        services lacking it held a working agent at 15/19 and reported
+        "critical" purely from missing methods.
+
+        Reports the real capability: a lens client. Capture is this service's
+        whole job and it needs that client to ship anything, so its presence is
+        the honest signal. Note this service is registered as a `wise_authority`
+        provider, which is itself questionable (see the registration warning in
+        routes/system/helpers.py) — but while it IS registered there, it must be
+        askable like everything else.
+        """
+        return self._lens is not None
+
     async def stop(self) -> None:
         """Stop the service: final sweep + stats."""
         logger.info("=" * 70)

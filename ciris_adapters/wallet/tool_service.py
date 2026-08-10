@@ -576,6 +576,23 @@ Only request details when needed.
         self._started = True
         logger.info("WalletToolService started")
 
+    async def is_healthy(self) -> bool:
+        """Whether this service can serve tool calls.
+
+        Every registered service must be health-checkable. Without this method
+        the API health check cannot ask, and `check_provider_health` returns
+        None — which counts as NOT healthy on every poll (#943, deliberately: an
+        unaskable provider must not be able to manufacture a 100% score). Four
+        adapter services lacked it, which held a working agent at 15/19 and
+        reported "critical" purely from missing methods.
+
+        Reports real state, not a constant: started, with at least one provider
+        that came up. `start()` tolerates individual provider failures so a dead
+        wallet backend does not block boot — so "started" alone would be a lie
+        if every provider failed.
+        """
+        return self._started and bool(self._providers)
+
     async def stop(self) -> None:
         """Stop the tool service and cleanup providers."""
         logger.info("Stopping WalletToolService")

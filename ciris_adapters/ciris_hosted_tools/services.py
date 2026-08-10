@@ -142,6 +142,20 @@ class CIRISHostedToolService:
         """Start the service."""
         logger.info("CIRISHostedToolService started")
 
+    async def is_healthy(self) -> bool:
+        """Whether this service can serve tool calls.
+
+        Every registered service must be health-checkable. Without this the API
+        health check cannot ask, `check_provider_health` returns None, and the
+        provider counts as NOT healthy on every poll (#943) — four adapter
+        services lacking it held a working agent at 15/19 and reported
+        "critical" purely from missing methods.
+
+        Reports the real precondition: these tools are proxied, so without a
+        proxy URL there is nothing this service can do.
+        """
+        return bool(self._proxy_url)
+
     async def stop(self) -> None:
         """Stop the service."""
         logger.info("CIRISHostedToolService stopped")

@@ -91,6 +91,11 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: naming them — #995 P1-6). The denominator moved, so the floor below is
 #: re-derived rather than silently passed.
 #:
+#: ``dma_prompt`` 40 -> 45 in 2.9.14: MSASPDMA, the memorize second pass (#1027),
+#: added a sixth prompt template. Its six blocks are annotated in
+#: ``compose_dump`` and gated, so the numerator moves with the denominator — the
+#: floor below is raised in the same commit that earns it, per the ratchet rule.
+#:
 #: ``string`` 46 -> 75 in 2.9.10: #997 split ``prompts.language_guidance`` into
 #: 29 single-class parts in the corpus. The parent key stays (it is what the 24
 #: unsplit locales resolve through, and a manifest naming it still replaces the
@@ -98,7 +103,7 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: above — the denominator moved, so the floors are re-derived.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
-    "dma_prompt": 40,
+    "dma_prompt": 45,
     "string": 133,
     "conscience_prompt": 12,
     "template": 3,
@@ -165,7 +170,7 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
 #:   a ``domain``, so the field reaches no prompt at runtime.
 GATED_FLOOR: Dict[str, int] = {
     "corpus": 4,
-    "dma_prompt": 39,
+    "dma_prompt": 44,
     # 71/75 -> 76/132 in 2.9.10. The count went UP and the FRACTION went down,
     # and that is the honest number: #991 wired 57 `prompts.formatters.*` keys
     # that had 1,653 translations and no reader, and the probe fixture cannot

@@ -152,7 +152,7 @@ class ComponentBuilder:
         registry.register_conscience("optimization_veto", OptimizationVetoConscience(*conscience_args), priority=2)
         registry.register_conscience("epistemic_humility", EpistemicHumilityConscience(*conscience_args), priority=3)
 
-    def _build_dma_evaluators(self, config: Any) -> Tuple[Any, Any, Any, Any, Any, Any, Any]:
+    def _build_dma_evaluators(self, config: Any) -> Tuple[Any, Any, Any, Any, Any, Any, Any, Any]:
         """Build all DMA evaluators.
 
         Returns:

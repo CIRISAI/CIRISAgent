@@ -95,20 +95,44 @@ def test_system_owned_attributes_come_from_the_guard_itself() -> None:
 
 
 def test_the_guide_states_the_rules_the_agent_got_wrong() -> None:
-    """The prompt is the deliverable; assert it says the load-bearing things."""
+    """The prompt is the deliverable; assert it says the load-bearing things.
+
+    Read across the split blocks, not one body — the guide is deliberately
+    partitioned by class so a regime can vary one without moving the others.
+    """
     import pathlib
 
     import yaml
 
-    guide = yaml.safe_load(
-        pathlib.Path("ciris_engine/logic/dma/prompts/msaspdma.yml").read_text()
-    )["memory_guide"]
+    y = yaml.safe_load(pathlib.Path("ciris_engine/logic/dma/prompts/msaspdma.yml").read_text())
 
-    assert "user/{user_id}" in guide, "must state the addressing convention"
-    assert "UUID" in guide, "must warn against the exact mistake that was made"
-    assert "cannot create an edge" in guide, "must resolve nodes-vs-edges"
-    assert "DREAM" in guide, "must say where edges actually come from"
-    assert "memorized_attributes" in guide, "must say how a stored fact comes back"
+    assert "user/{user_id}" in y["addressing_convention"], "must state the addressing convention"
+    assert "cannot create an edge" in y["memory_model"], "must resolve nodes-vs-edges"
+    assert "DREAM" in y["memory_model"], "must say where edges actually come from"
+    assert "memorized_attributes" in y["memory_model"], "must say how a stored fact comes back"
+    assert "invent a node id" in y["memory_prohibitions"], "must forbid the exact mistake made"
+    assert "unreachable" in y["memory_prohibitions"], "must say WHY it is forbidden"
+
+
+def test_each_guide_block_stays_single_class() -> None:
+    """The split is load-bearing: mixing a class back in re-breaks the gate.
+
+    Crude but targeted — prohibitions ("do not", "must not") belong in the
+    deontic block, and finding them in a procedural one means the classes have
+    started leaking back together.
+    """
+    import pathlib
+
+    import yaml
+
+    y = yaml.safe_load(pathlib.Path("ciris_engine/logic/dma/prompts/msaspdma.yml").read_text())
+
+    for block in ("memory_model", "addressing_convention", "attribute_convention", "scope_convention"):
+        body = y[block].lower()
+        assert "do not " not in body and "must not " not in body and "never " not in body, (
+            f"{block} carries a prohibition — that is deontic content and belongs in "
+            f"memory_prohibitions, or the compose gate will refuse the block as mixed"
+        )
 
 
 # ------------------------------------------------------------------- no healing

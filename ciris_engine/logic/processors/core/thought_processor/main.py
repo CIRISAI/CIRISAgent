@@ -5,7 +5,7 @@ Main coordinator that executes the 7 phases of ethical reasoning.
 
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -1926,7 +1926,9 @@ class ThoughtProcessor(
     #
     # To add a verb: write the evaluator, add one entry. No edit to
     # _run_verb_second_pass, and no new near-duplicate dispatch method.
-    _VERB_SECOND_PASS: Dict[HandlerActionType, Callable[..., Any]] = {
+    # Typed with the real return so the dispatch does not leak Any: the value
+    # is what the pipeline assigns to action_result.
+    _VERB_SECOND_PASS: Dict[HandlerActionType, Callable[..., Awaitable[ActionSelectionDMAResult]]] = {
         HandlerActionType.TOOL: _maybe_run_tsaspdma,
         HandlerActionType.DEFER: _maybe_run_dsaspdma,
         HandlerActionType.MEMORIZE: _maybe_run_msaspdma,

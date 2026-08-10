@@ -152,25 +152,6 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             self._explicit_language = new_language
             logger.debug(f"DSASPDMA: Synced prompt language to {new_language}")
 
-    def _get_prompt_value(self, key: str) -> Optional[str]:
-        """Read a prompt block from PromptCollection or dict overrides."""
-
-        template = self.prompt_template_data
-        if isinstance(template, PromptCollection):
-            return template.get_prompt(key)
-        if isinstance(template, dict):
-            value = template.get(key)
-            return str(value) if isinstance(value, str) else None
-        return None
-
-    def _require_prompt_value(self, key: str) -> str:
-        """Read a required prompt block or fail loudly during prompt construction."""
-
-        value = self._get_prompt_value(key)
-        if value is None:
-            raise ValueError(f"DSASPDMA prompt template missing required key: {key}")
-        return value
-
     def _format_original_context(self, params: DeferParams) -> str:
         """Render the provisional deferral context for prompt inclusion."""
 

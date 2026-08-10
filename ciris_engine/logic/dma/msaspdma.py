@@ -182,12 +182,33 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         node = params.node
         attrs = node.attributes if isinstance(node.attributes, dict) else {}
 
-        system_message = format_system_prompt_blocks(
-            self._require_prompt_value("system_guidance_header"),
-            self._require_prompt_value("evaluation_steps"),
-            self._require_prompt_value("response_format"),
-            self._require_prompt_value("closing_reminder"),
-        )
+        # Each block is composed as its OWN message so it stays single-class on
+        # the wire. Bundling them back into one system string would recreate the
+        # mixed block the split exists to remove — the gate would see one body
+        # carrying ontological, procedural, deontic and pragmatic content.
+        # ONE system message, joined the way format_system_prompt_blocks joins
+        # (\n\n, stripped). That formatter takes a fixed 4-6 canonical blocks and
+        # this guide has nine, so the join is explicit — but the SHAPE is what
+        # matters: the dump splits a joined system message back into its recorded
+        # parts, so every block stays individually labelled and annotated.
+        # Composing them as separate messages instead left them unmatched, and
+        # the gate saw one mixed body it had no disposition for.
+        system_message = "\n\n".join(
+            filter(
+                None,
+                (
+                    self._require_prompt_value("system_guidance_header"),
+                    self._require_prompt_value("memory_model"),
+                    self._require_prompt_value("addressing_convention"),
+                    self._require_prompt_value("attribute_convention"),
+                    self._require_prompt_value("scope_convention"),
+                    self._require_prompt_value("memory_prohibitions"),
+                    self._require_prompt_value("evaluation_steps"),
+                    self._require_prompt_value("response_format"),
+                    self._require_prompt_value("closing_reminder"),
+                ),
+            )
+        ).strip()
 
         original_thought_content = getattr(getattr(original_thought, "content", None), "text", "") or ""
         candidates = self.candidate_nodes_from_context(context)
@@ -202,7 +223,6 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             proposed_attributes=", ".join(sorted(attrs)) or "(none)",
             candidate_nodes=self._format_candidates(candidates),
             system_owned_attributes=self._format_system_owned(self.system_owned_attributes()),
-            memory_guide=self._require_prompt_value("memory_guide"),
         )
 
         self.last_system_prompt = system_message

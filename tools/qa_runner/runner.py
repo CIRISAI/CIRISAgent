@@ -29,6 +29,105 @@ from .status_tracker import update_module_status
 logger = logging.getLogger(__name__)
 
 
+# Incident-log lines that are EXPECTED during a QA run and must not fail it.
+#
+# ONE list, used by all three readers (the WARNING-flood detector, the
+# per-backend surfacer, and the incidents gate). It was three separate
+# literals that had drifted to 26 / 14 / 27 entries — and the 14-entry copy
+# was the one the GATE used, so the gate failed on exactly the lines the
+# other two knew to ignore: qa_manifest_test_, Invalid target state,
+# 'Config validation failed: Configuration is empty', the forced WORK->WORK
+# transition, and the Reddit-credentials probe. A QA suite whose own
+# negative tests fail the run is a suite that cannot be trusted either way.
+#
+# Every entry names the module that drives it. Add one only with that
+# reason attached — an unexplained entry here is a silenced defect.
+EXPECTED_QA_INCIDENT_PATTERNS = [
+        "MOCK_MODULE_LOADED",
+        "MOCK LLM",
+        "RUNTIME SHUTDOWN",
+        "SYSTEM SHUTDOWN",
+        "GRACEFUL SHUTDOWN",
+        "[SIGNAL]",  # signal-handler lines (e.g. SIGTERM to stop the QA server)
+        "Edge already exists",
+        "duplicate edge",
+        "TSDB consolidation",
+        # The setup module deliberately validates bad LLM endpoints —
+        # the agent correctly logs the validation failure.
+        "[VALIDATE_LLM]",
+        # ciris_verify logs ERROR for an offline build-registry; in QA
+        # there is no registry and L4 file integrity is legitimately
+        # skipped — an environmental degradation, not a test failure.
+        "MANIFEST_CACHE MISS",
+        # CIRISVerify's file-integrity periodic re-check fails in CI
+        # because CI runs against the working tree, not a registry-
+        # published build. The re-check fires every ~3 minutes and on
+        # 2026-05-28 (run 26608575466) the SQLite-vs-Postgres timing
+        # diff made the third re-check land inside the SQLite test
+        # window while Postgres just missed it — flaking the SQLite
+        # backend. Both backends always produce ≥2 of these per run.
+        # Environmental; tracked at CIRISAgent#836.
+        "check_full: manifest integrity verification FAILED",
+        # QA/CI hosts have no TPM and no hardware Ed25519 key, so the
+        # CIRISVerify FFI key probe + TPM TCTI context creation log
+        # ERROR and fall back to software — expected, not a failure.
+        "get_ed25519_public_key: no key loaded",
+        "Error when creating a TCTI context",
+        "TPM: failed to create context",
+        # QA modules that DELIBERATELY exercise error / edge paths —
+        # the agent correctly logs the rejection; the ERROR line is
+        # the expected test outcome, not an incident (cf. VALIDATE_LLM):
+        #  - state_transitions test submits an invalid target state
+        "Invalid target state",
+        #  - adapter_manifest test unloads its scratch adapters, some
+        #    of which were never loaded
+        "qa_manifest_test_",
+        #  - adapter_manifest probes every ciris_adapters/* dir; the
+        #    shared MCP library `mcp_common` is not a loadable adapter
+        #    (no Adapter class — by design), and the loader correctly
+        #    says so. Expected probe noise, not an incident.
+        "ciris_adapters.mcp_common' has no attribute 'Adapter'",
+        #  - dsar_multi_source exercises the DSAR path for a test user
+        #    that has no consent record; the orchestrator correctly
+        #    reports the absence (the test asserts that behaviour).
+        "No consent found for user user_dsar",
+        #  - accord_metrics ships WBD deferrals to the lens; the QA
+        #    mock lens does not implement /accord/wbd/deferrals, so the
+        #    adapter correctly logs the 404 it received. Mock gap.
+        "WBD deferral rejected: Status 404",
+        #  - CIRISVerify's attestation probe reaches for the registry
+        #    over the network; CI has no route to it, so it correctly
+        #    logs a timeout and falls back to software. Environmental.
+        "ciris_verify_run_attestation: TIMEOUT",
+        #  - accord_metrics trace-signing is briefly blocked while an
+        #    attestation is in progress; the adapter retries (~500ms).
+        #    A transient, self-recovering condition, not a fault.
+        "Attestation in progress - sign_ed25519 blocked",
+        #  - adapter_config test submits an empty config to verify
+        #    validation rejects it
+        "Config validation failed: Configuration is empty",
+        #  - cognitive-state tests force unnatural WORK/DREAM
+        #    transitions; a force-transitioned DREAM seed thought has
+        #    no originating adapter channel. (Tracked as a follow-up:
+        #    DREAM seed thoughts should carry a synthetic channel.)
+        "No channel context found for thought thought_dream_",
+        "Failed to transition from AgentState.WORK to AgentState.WORK",
+        # High-frequency BENIGN warnings — routine per-thought / per-
+        # cache-gen chatter, not systemic malfunctions. Excluded so the
+        # WARNING-flood detector below isn't tripped by normal noise:
+        #  - the mock LLM's own diagnostic (QA fixture only — never
+        #    emitted in production, there is no mock LLM there)
+        "[MOCK_LLM] No user_input found in context",
+        #  - the tool-cache generator noting CIRISVerifyService is not
+        #    a tool-enumeration provider (true by design — it is a
+        #    verification service, not a tool service)
+        "[TOOL_CACHE] CIRISVerifyService: No get_all_tool_info",
+    # - reddit adapter probe: QA has no Reddit credentials, so the adapter
+    #   correctly refuses to load. Environmental, not a fault.
+    "Reddit credentials are not configured",
+]
+
+
 def _expand_module_aggregates(modules: List[QAModule]) -> List[QAModule]:
     """Expand QAModule.ALL / ALL_1 / ALL_2 into their constituent modules.
 
@@ -572,45 +671,9 @@ class QARunner:
         # Kept in sync with the comprehensive list in `_has_incidents_occurred`
         # below — both filter against the same incidents log and the same
         # categories of expected / environmental / test-induced ERRORs.
-        ignore_patterns = [
-            "MOCK_MODULE_LOADED",
-            "MOCK LLM",
-            "RUNTIME SHUTDOWN",
-            "SYSTEM SHUTDOWN",
-            "GRACEFUL SHUTDOWN",
-            "Edge already exists",
-            "duplicate edge",
-            "TSDB consolidation",
-            "[SIGNAL]",
-            "[VALIDATE_LLM]",
-            "MANIFEST_CACHE MISS",
-            # QA/CI has no TPM / hardware key — CIRISVerify probes log ERROR
-            # and fall back to software; environmental, not a test failure.
-            "get_ed25519_public_key: no key loaded",
-            "Error when creating a TCTI context",
-            "TPM: failed to create context",
-            # CIRISVerify file-integrity periodically re-checks the working
-            # tree against the registry-published manifest. CI runs against
-            # an unregistered working tree so this always fails — the
-            # CI-vs-prod ground truth is set up that way deliberately. The
-            # SQLite-vs-Postgres CI flake on 2026-05-28 was caused by this
-            # periodic re-check landing inside the SQLite test window (and
-            # not the Postgres one). See run 26608575466 + CIRISAgent#836.
-            "check_full: manifest integrity verification FAILED",
-            # Same shape as the patterns in _has_incidents_occurred below —
-            # see comments there for the test-module that drives each:
-            "qa_manifest_test_",
-            "Invalid target state",
-            "Config validation failed: Configuration is empty",
-            "No channel context found for thought thought_dream_",
-            "Failed to transition from AgentState.WORK to AgentState.WORK",
-            "ciris_adapters.mcp_common' has no attribute 'Adapter'",
-            "No consent found for user user_dsar",
-            "WBD deferral rejected: Status 404",
-            "ciris_verify_run_attestation: TIMEOUT",
-            "Attestation in progress - sign_ed25519 blocked",
-            "Reddit credentials are not configured",
-        ]
+        # The single source of truth — see EXPECTED_QA_INCIDENT_PATTERNS.
+        # These three readers used to keep three drifting copies.
+        ignore_patterns = EXPECTED_QA_INCIDENT_PATTERNS
 
         critical_errors = []
 
@@ -713,24 +776,9 @@ class QARunner:
             return
 
         # Patterns to ignore (non-critical)
-        ignore_patterns = [
-            "MOCK_MODULE_LOADED",
-            "MOCK LLM",
-            "RUNTIME SHUTDOWN",
-            "SYSTEM SHUTDOWN",
-            "GRACEFUL SHUTDOWN",
-            "Edge already exists",
-            "duplicate edge",
-            "TSDB consolidation",
-            "[SIGNAL]",
-            "[VALIDATE_LLM]",
-            "MANIFEST_CACHE MISS",
-            # QA/CI has no TPM / hardware key — CIRISVerify probes log ERROR
-            # and fall back to software; environmental, not a test failure.
-            "get_ed25519_public_key: no key loaded",
-            "Error when creating a TCTI context",
-            "TPM: failed to create context",
-        ]
+        # The single source of truth — see EXPECTED_QA_INCIDENT_PATTERNS.
+        # These three readers used to keep three drifting copies.
+        ignore_patterns = EXPECTED_QA_INCIDENT_PATTERNS
 
         critical_errors = []
         warning_count = 0
@@ -869,87 +917,9 @@ class QARunner:
                 return False  # No new content
 
             # Check only the new content
-            ignore_patterns = [
-                "MOCK_MODULE_LOADED",
-                "MOCK LLM",
-                "RUNTIME SHUTDOWN",
-                "SYSTEM SHUTDOWN",
-                "GRACEFUL SHUTDOWN",
-                "[SIGNAL]",  # signal-handler lines (e.g. SIGTERM to stop the QA server)
-                "Edge already exists",
-                "duplicate edge",
-                "TSDB consolidation",
-                # The setup module deliberately validates bad LLM endpoints —
-                # the agent correctly logs the validation failure.
-                "[VALIDATE_LLM]",
-                # ciris_verify logs ERROR for an offline build-registry; in QA
-                # there is no registry and L4 file integrity is legitimately
-                # skipped — an environmental degradation, not a test failure.
-                "MANIFEST_CACHE MISS",
-                # CIRISVerify's file-integrity periodic re-check fails in CI
-                # because CI runs against the working tree, not a registry-
-                # published build. The re-check fires every ~3 minutes and on
-                # 2026-05-28 (run 26608575466) the SQLite-vs-Postgres timing
-                # diff made the third re-check land inside the SQLite test
-                # window while Postgres just missed it — flaking the SQLite
-                # backend. Both backends always produce ≥2 of these per run.
-                # Environmental; tracked at CIRISAgent#836.
-                "check_full: manifest integrity verification FAILED",
-                # QA/CI hosts have no TPM and no hardware Ed25519 key, so the
-                # CIRISVerify FFI key probe + TPM TCTI context creation log
-                # ERROR and fall back to software — expected, not a failure.
-                "get_ed25519_public_key: no key loaded",
-                "Error when creating a TCTI context",
-                "TPM: failed to create context",
-                # QA modules that DELIBERATELY exercise error / edge paths —
-                # the agent correctly logs the rejection; the ERROR line is
-                # the expected test outcome, not an incident (cf. VALIDATE_LLM):
-                #  - state_transitions test submits an invalid target state
-                "Invalid target state",
-                #  - adapter_manifest test unloads its scratch adapters, some
-                #    of which were never loaded
-                "qa_manifest_test_",
-                #  - adapter_manifest probes every ciris_adapters/* dir; the
-                #    shared MCP library `mcp_common` is not a loadable adapter
-                #    (no Adapter class — by design), and the loader correctly
-                #    says so. Expected probe noise, not an incident.
-                "ciris_adapters.mcp_common' has no attribute 'Adapter'",
-                #  - dsar_multi_source exercises the DSAR path for a test user
-                #    that has no consent record; the orchestrator correctly
-                #    reports the absence (the test asserts that behaviour).
-                "No consent found for user user_dsar",
-                #  - accord_metrics ships WBD deferrals to the lens; the QA
-                #    mock lens does not implement /accord/wbd/deferrals, so the
-                #    adapter correctly logs the 404 it received. Mock gap.
-                "WBD deferral rejected: Status 404",
-                #  - CIRISVerify's attestation probe reaches for the registry
-                #    over the network; CI has no route to it, so it correctly
-                #    logs a timeout and falls back to software. Environmental.
-                "ciris_verify_run_attestation: TIMEOUT",
-                #  - accord_metrics trace-signing is briefly blocked while an
-                #    attestation is in progress; the adapter retries (~500ms).
-                #    A transient, self-recovering condition, not a fault.
-                "Attestation in progress - sign_ed25519 blocked",
-                #  - adapter_config test submits an empty config to verify
-                #    validation rejects it
-                "Config validation failed: Configuration is empty",
-                #  - cognitive-state tests force unnatural WORK/DREAM
-                #    transitions; a force-transitioned DREAM seed thought has
-                #    no originating adapter channel. (Tracked as a follow-up:
-                #    DREAM seed thoughts should carry a synthetic channel.)
-                "No channel context found for thought thought_dream_",
-                "Failed to transition from AgentState.WORK to AgentState.WORK",
-                # High-frequency BENIGN warnings — routine per-thought / per-
-                # cache-gen chatter, not systemic malfunctions. Excluded so the
-                # WARNING-flood detector below isn't tripped by normal noise:
-                #  - the mock LLM's own diagnostic (QA fixture only — never
-                #    emitted in production, there is no mock LLM there)
-                "[MOCK_LLM] No user_input found in context",
-                #  - the tool-cache generator noting CIRISVerifyService is not
-                #    a tool-enumeration provider (true by design — it is a
-                #    verification service, not a tool service)
-                "[TOOL_CACHE] CIRISVerifyService: No get_all_tool_info",
-            ]
+            # The single source of truth — see EXPECTED_QA_INCIDENT_PATTERNS.
+            # These three readers used to keep three drifting copies.
+            ignore_patterns = EXPECTED_QA_INCIDENT_PATTERNS
 
             # A single WARNING is noise; the same WARNING repeated dozens of
             # times is a systemic malfunction (e.g. 352× "[STORE_RESPONSE] No

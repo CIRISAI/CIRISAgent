@@ -64,6 +64,11 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         "dsdma",
         "aspdma",
         "dsaspdma",
+            # #1027: the memorize second pass. Sits with the other verb-specific
+            # second passes because that is what it is — ASPDMA picks MEMORIZE
+            # without the graph conventions needed to address the write, exactly
+            # as it picks TOOL without the tool's documentation.
+            "msaspdma",
         "tsaspdma",
         "tsaspdma_correction",
         # #986: the second composition a thought gets when a conscience

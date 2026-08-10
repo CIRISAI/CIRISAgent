@@ -816,7 +816,18 @@ class TestDriftGuard:
         # rather than folded into 26 so that replacing the cross-cluster block
         # cannot silently take the directional guard with it — the #996 rule
         # that replacing one field must never disable another.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 192
+        #
+        # 192 -> 197: the five MSASPDMA guide blocks (#1027). The memorize second
+        # pass ships its graph-writing guidance split by epistemic class —
+        # memory_model (ontological), addressing_convention,
+        # attribute_convention, scope_convention (procedural) and
+        # memory_prohibitions (deontic) — rather than as one mixed block the
+        # compose gate would refuse. Each is separately addressable ON PURPOSE:
+        # a regime varying one class must be able to move it without dragging
+        # the addressing rules it depends on, which is precisely what a single
+        # `memory_guide` key would have forced. Coverage going UP, five keys, one
+        # per class.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 197
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

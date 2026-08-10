@@ -161,6 +161,13 @@ fun InteractScreen(
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
+
+    // Deduplicated ONCE, here, and used for BOTH the rendered list and the
+    // "Showing last N messages" counter. LazyColumn crashes on a duplicate key
+    // so the dedupe cannot be dropped — but when the two disagreed, the screen
+    // reported 2 messages above a single bubble and the user's own question was
+    // the one discarded. Whatever we count is now exactly what we draw.
+    val visibleMessages = remember(messages) { messages.distinctBy { it.id } }
     val inputText by viewModel.inputText.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
     val agentStatus by viewModel.agentStatus.collectAsState()
@@ -595,7 +602,7 @@ fun InteractScreen(
                     )
                 } else {
                     ChatMessageList(
-                        messages = messages,
+                        messages = visibleMessages,
                         transparentBackground = liveBackgroundEnabled,
                         // Only expose the moderation affordance when a VM is wired.
                         onModerate = if (moderationViewModel != null) {
@@ -639,7 +646,7 @@ fun InteractScreen(
         // Message count indicator (from fragment_interact.xml:192-200)
         if (messages.isNotEmpty()) {
             Text(
-                text = localizedString("mobile.interact_showing_messages", mapOf("count" to messages.size.toString())),
+                text = localizedString("mobile.interact_showing_messages", mapOf("count" to visibleMessages.size.toString())),
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(theme.messageCountBackground)
@@ -1749,8 +1756,15 @@ private fun ChatMessageList(
             reverseLayout = true,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Use distinctBy to prevent duplicate key crashes if same ID appears twice
-            items(messages.reversed().distinctBy { it.id }, key = { it.id }) { message ->
+            // distinctBy is required: LazyColumn CRASHES on a duplicate key, so it
+            // must stay. But it silently DROPS the loser, and that is not a
+            // cosmetic outcome — when the agent reply was minted with the same id
+            // as the user's own message, this line is what made the user's
+            // question disappear from their transcript while the reply remained.
+            // Nothing anywhere said so; the count below simply disagreed.
+            // Deduplicating ONCE here and counting the same list is what keeps the
+            // two honest with each other.
+            items(messages.reversed(), key = { it.id }) { message ->
                 when (message.type) {
                     MessageType.USER -> UserChatBubble(message, bubbleMaxWidth = bubbleMaxWidth, onModerate = onModerate)
                     MessageType.AGENT -> AgentChatBubble(message, bubbleMaxWidth = bubbleMaxWidth, onModerate = onModerate)

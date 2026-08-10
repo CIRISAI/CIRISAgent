@@ -1,0 +1,161 @@
+component_name: msaspdma
+description: "Chọn hành động chuyên biệt cho ghi nhớ — hướng dẫn viết biểu đồ, áp dụng cho một MEMORIZE được đề xuất"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# SINGLE-CLASS BLOCKS.
+#
+# The guide was originally one `memory_guide` block. That block was MIXED — it
+# carried what the graph IS (ontological), how to address it (procedural) and
+# what must never be written (deontic) in one body — and the compose gate
+# refuses a mixed block with no per-block disposition (§10.2.1). Declaring a
+# disposition would have been the cheap fix; splitting is the honest one,
+# because a research regime that varies, say, the value ordering must be able to
+# move the axiotic content WITHOUT also moving the addressing rules it depends
+# on. A mixed block makes that impossible to do cleanly.
+#
+# Each block below is one class. Keep it that way when editing: if a sentence
+# does not belong to the block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# ONTOLOGICAL — what memory IS. No instructions, no prohibitions.
+memory_model: |
+  === GHI NHỚ LÀ CÁI GÌ ===
+
+  Biểu đồ chứa các NODE và EDGE.
+
+  Node là một thứ — một người, một kênh, một khái niệm — và các sự kiện về
+  thứ đó là các thuộc tính trên nó.
+
+  Một edge là một mối quan hệ giữa hai thứ. Edge được dệt trong quá trình DREAM
+  consolidation, từ các mẫu trên nhiều ký ức.
+
+  Một hành động MEMORIZE ghi một NODE duy nhất. Hành động mang một `node` duy nhất
+  và không gì khác, vì vậy một ghi nhớ không thể tạo ra edge.
+
+  Một thuộc tính mà bạn ghi không thuộc hệ thống sẽ trở lại với bạn sau này
+  trong hồ sơ của người dùng đó, dưới dạng `memorized_attributes`. Đường dẫn
+  trả lại này là những gì biến một sự kiện được viết thành một sự kiện được nhớ.
+
+# PROCEDURAL — how to construct and choose a node id.
+addressing_convention: |
+  === ĐỊA CHỈ ===
+
+  Node id tuân theo `prefix/{identifier}`:
+
+    user/{user_id}          sự kiện về một người
+    channel/{channel_id}    sự kiện về một nơi trò chuyện
+    consent/{user_id}       trạng thái đồng ý
+    preferences/{user_id}   bản ghi tùa chọn người dùng
+
+  Tiền tố là cách hệ thống tìm lại node. Tìm kiếm theo id chính xác:
+  bối cảnh người dùng được lắp ráp bằng cách truy vấn `user/{user_id}`, vì vậy
+  một sự kiện về một người chỉ có thể truy cập được nếu nó nằm trên node chính xác đó.
+
+  Các node đã tồn tại cho cuộc trò chuyện này được liệt kê trong CANDIDATE NODES.
+  Ưu tiên một trong những cái đó; chỉ xây dựng một id từ bảng trên khi không có
+  cái nào phù hợp.
+
+# PROCEDURAL — how to name what you store.
+attribute_convention: |
+  === TÊN THUỘC TÍNH ===
+
+  Sử dụng tên rõ ràng, ổn định mà bạn sẽ nhận ra khi chúng trở lại với bạn:
+
+    favorite_color: "chartreuse"        nhận ra được sau này
+    fact_2026_08_09_1: "likes green"    không nhận ra được sau này
+
+  Khi bạn viết trở lại một node mà lệnh gọi đã gửi cho bạn, các thuộc tính
+  thuộc hệ thống của nó có thể được mang theo không thay đổi; chúng được liệt kê
+  trong bối cảnh dưới đây.
+
+# PROCEDURAL — the scope table.
+scope_convention: |
+  === PHẠM VI ===
+
+    local        sự kiện về người dùng và kênh
+    identity     danh tính riêng của chính tác nhân
+    environment  sự kiện ở cấp triển khai
+    community    kiến thức cộng đồng được chia sẻ
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === ĐIỀU PHẢI KHÔNG XẢY RA ===
+
+  Không bịa node id. Một node có id không tuân theo quy ước không bao giờ được
+  truy vấn, vì vậy việc ghi thành công và thông tin không thể truy cập được
+  mãi mãi — bạn sẽ không nhớ lại nó và bạn sẽ tin rằng bạn không bao giờ
+  học được nó. Một lần ghi vào node sai còn tệ hơn không ghi, bởi vì không
+  có gì nói cho bạn biết.
+
+  Không viết một thuộc tính thuộc hệ thống. Chúng được duy trì bởi các dịch vụ
+  và việc ghi được từ chối. Thay đổi một cái sẽ làm bạn mất toàn bộ ghi nhớ.
+
+  Không ghi vào phạm vi `identity` hoặc `environment` mà không được Wise Authority
+  phê duyệt.
+
+  Không lưu trữ những gì bạn không được yêu cầu giữ lại. Nếu thông tin đã tồn
+  tại trong cuộc trò chuyện bạn đang có, hãy đọc nó ở đó. Nếu bạn không chắc
+  rằng người đó muốn giữ lại nó, hãy hỏi thay vì lưu trữ.
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Bạn đã chọn MEMORIZE. Trước khi nó thực thi, bạn sẽ thấy quy ước của biểu đồ
+  và các node đã tồn tại, vì vậy bạn có thể kiểm tra việc ghi được giải quyết
+  một cách chính xác.
+
+  Đây là một cái nhìn thứ hai, không phải một sự sửa chữa: không có gì được
+  thay đổi cho bạn. Nếu node bạn chọn sai, hãy nói nó phải là gì. Nếu bạn
+  không nên lưu trữ điều này cùng một lúc, hãy chuyển đổi hành động.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Thực hiện các bước này theo thứ tự:
+
+  1. CÓ NÊN lưu trữ cái này không?
+  2. NODE NÀO? So sánh id được đề xuất của bạn với CANDIDATE NODES và quy ước
+     ĐỊA CHỈ.
+  3. THUỘC TÍNH NÀO? Đặt tên cho chúng để bạn nhận ra chúng sau này.
+  4. PHẠM VI.
+  5. Quyết định: MEMORIZE với node bạn đã kiểm tra, SPEAK để hỏi, hoặc PONDER
+     để cân nhắc lại.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Suy nghĩ ban đầu:
+  {original_thought_content}
+
+  Lý do của bạn để ghi nhớ:
+  {aspdma_reasoning}
+
+  === NHỮNG GÌ BẠN ĐỀ XUẤT ===
+  node id:     {proposed_node_id}
+  node type:   {proposed_node_type}
+  scope:       {proposed_node_scope}
+  attributes:  {proposed_attributes}
+
+  === CANDIDATE NODES (những cái này đã tồn tại) ===
+  {candidate_nodes}
+
+  === SYSTEM-OWNED ATTRIBUTES (hiện diện trên node này, được duy trì bởi dịch vụ) ===
+  {system_owned_attributes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Trả lời bằng JSON:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "node id để ghi vào (bắt buộc khi MEMORIZE)",
+    "node_type": "loại node (bắt buộc khi MEMORIZE)",
+    "node_scope": "graph scope (bắt buộc khi MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "điều để nói (bắt buộc khi SPEAK)",
+    "questions": ["điều để cân nhắc lại (bắt buộc khi PONDER)"],
+    "reasoning": "tại sao ĐỊA CHỈ này là chính xác, hoặc tại sao bạn chuyển đổi"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Lấy địa chỉ đúng là toàn bộ ý tưởng của bước này.

@@ -1,0 +1,163 @@
+component_name: msaspdma
+description: "Sélection d'action spécifique à la mémorisation — le guide d'écriture de graphe, appliqué à une MEMORIZE proposée"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# BLOCS MONOCLASSES.
+#
+# Le guide était à l'origine un bloc `memory_guide`. Ce bloc était MIXTE — il
+# portait ce que le graphe EST (ontologique), comment l'adresser (procédural) et ce
+# qui ne doit jamais être écrit (déontique) dans un seul corps — et la porte compose
+# refuse un bloc mixte sans disposition par bloc (§10.2.1). Déclarer une disposition
+# aurait été la solution facile ; se diviser est l'honnête, car un régime de
+# recherche qui fait varier, disons, l'ordre des valeurs doit être capable de mover
+# le contenu axiomatique SANS AUSSI déplacer les règles d'adressage qu'il dépend.
+# Un bloc mixte rend cela impossible à faire proprement.
+#
+# Chaque bloc ci-dessous est une classe. Gardez-le ainsi lors de l'édition : si une
+# phrase n'appartient pas à la classe du bloc, elle appartient dans un autre bloc.
+# ---------------------------------------------------------------------------
+
+# ONTOLOGIQUE — ce qu'est la mémoire. Pas d'instructions, pas d'interdictions.
+memory_model: |
+  === CE QU'EST LA MÉMOIRE ===
+
+  Le graphe contient des NŒUDS et des ARÊTES.
+
+  Un nœud est une chose — une personne, un canal, un concept — et les faits sur
+  cette chose sont des attributs sur celui-ci.
+
+  Une arête est une relation entre deux choses. Les arêtes sont tissées lors de la
+  consolidation DREAM, à partir de motifs sur de nombreux souvenirs.
+
+  Une action MEMORIZE écrit UN NŒUD. L'action porte un seul `node` et rien d'autre,
+  donc une mémorisation ne peut pas créer d'arête.
+
+  Un attribut que vous écrivez qui n'est pas la propriété du système vous est
+  renvoyé plus tard dans le profil de cet utilisateur, comme `memorized_attributes`.
+  Ce chemin de retour est ce qui rend un fait écrit un fait mémorisé.
+
+# PROCÉDURAL — comment construire et choisir un identifiant de nœud.
+addressing_convention: |
+  === ADRESSAGE ===
+
+  Les identifiants de nœud suivent `prefix/{identifier}`:
+
+    user/{user_id}          faits sur une personne
+    channel/{channel_id}    faits sur un lieu de conversation
+    consent/{user_id}       état de consentement
+    preferences/{user_id}   enregistrements de préférences utilisateur
+
+  Le préfixe indique comment le système trouve à nouveau le nœud. Les recherches
+  se font par id exact : le contexte utilisateur est assemblé en interrogeant
+  `user/{user_id}`, donc un fait sur une personne est accessible seulement s'il se
+  trouve sur ce nœud exact.
+
+  Les nœuds qui existent déjà pour cette conversation sont énumérés comme NŒUDS
+  CANDIDATS. Préférez l'un d'eux ; construisez un id à partir du tableau ci-dessus
+  seulement si aucun ne convient.
+
+# PROCÉDURAL — comment nommer ce que vous stockez.
+attribute_convention: |
+  === NOMS D'ATTRIBUTS ===
+
+  Utilisez des noms simples et stables que vous reconnaîtrez quand ils vous
+  reviendront :
+
+    favorite_color: "chartreuse"        reconnaissable plus tard
+    fact_2026_08_09_1: "likes green"    non reconnaissable plus tard
+
+  Lorsque vous écrivez un nœud qu'un recall vous a remis, ses attributs
+  la propriété du système peuvent être reportés sans modification ; ils sont
+  énumérés dans le contexte ci-dessous.
+
+# PROCÉDURAL — la table de portée.
+scope_convention: |
+  === PORTÉE ===
+
+    local        faits sur les utilisateurs et les canaux
+    identity     l'identité propre de l'agent
+    environment  faits au niveau du déploiement
+    community    connaissance communautaire partagée
+
+# DÉONTIQUE — ce qui ne doit pas arriver. Catégorique et révisable à la sécurité.
+memory_prohibitions: |
+  === CE QUI NE DOIT PAS ARRIVER ===
+
+  N'inventez pas d'identifiant de nœud. Un nœud dont l'id ne suit pas la
+  convention n'est jamais interrogé, donc l'écriture réussit et l'information est
+  inaccessible pour toujours — vous ne la mémoriserez pas, et vous croirez ne l'avoir
+  jamais apprise. Une écriture au mauvais nœud est pire que pas d'écriture, car
+  rien ne vous le dit.
+
+  N'écrivez pas un attribut la propriété du système. Ils sont maintenus par des
+  services et l'écriture est refusée. Modifier un coûte la mémorisation entière.
+
+  N'écrivez pas à portée `identity` ou `environment` sans approbation de Wise
+  Authority.
+
+  Ne stockez pas ce qu'on ne vous a pas demandé de conserver. Si l'information vit
+  déjà dans la conversation que vous menez, lisez-la là. Si vous n'êtes pas sûr que
+  la personne souhaite qu'elle soit conservée, demandez plutôt que de stocker.
+
+# PROCÉDURAL — ce qu'est cette étape.
+system_guidance_header: |
+  Vous avez sélectionné MEMORIZE. Avant son exécution, vous êtes montré les
+  conventions du graphe et les nœuds qui existent déjà, pour que vous puissiez
+  vérifier que l'écriture est adressée correctement.
+
+  C'est un second coup d'œil, pas une correction : rien n'a été changé pour vous.
+  Si le nœud que vous avez choisi est faux, dites ce qu'il devrait être. Si vous ne
+  devriez pas stocker ceci du tout, changez d'action.
+
+# PROCÉDURAL — la méthode.
+evaluation_steps: |
+  Travaillez à travers ceux-ci dans l'ordre :
+
+  1. DEVRAIT-CE être stocké?
+  2. QUEL NŒUD? Comparez votre id proposé par rapport aux NŒUDS CANDIDATS et à la
+     convention d'adressage.
+  3. QUELS ATTRIBUTS? Nommez-les pour que vous les reconnaîtrez plus tard.
+  4. PORTÉE.
+  5. Décidez : MEMORIZE avec le nœud que vous avez vérifiée, SPEAK pour demander,
+     ou PONDER pour reconsidérer.
+
+# CONTINGENT — valeurs d'exécution uniquement. Pas de guide, pas d'interdictions.
+context_integration: |
+  Pensée originale :
+  {original_thought_content}
+
+  Votre raison de mémoriser :
+  {aspdma_reasoning}
+
+  === CE QUE VOUS AVEZ PROPOSÉ ===
+  identifiant de nœud :  {proposed_node_id}
+  type de nœud :         {proposed_node_type}
+  portée :               {proposed_node_scope}
+  attributs :            {proposed_attributes}
+
+  === NŒUDS CANDIDATS (ceux-ci existent déjà) ===
+  {candidate_nodes}
+
+  === ATTRIBUTS LA PROPRIÉTÉ DU SYSTÈME (présents sur ce nœud, maintenus par des services) ===
+  {system_owned_attributes}
+
+# PRAGMATIQUE — le contrat de câble.
+response_format: |
+  Répondez avec JSON :
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "l'identifiant de nœud à écrire (obligatoire lors de MEMORIZE)",
+    "node_type": "type de nœud (obligatoire lors de MEMORIZE)",
+    "node_scope": "portée du graphe (obligatoire lors de MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "ce à dire (obligatoire lors de SPEAK)",
+    "questions": ["ce à reconsidérer (obligatoire lors de PONDER)"],
+    "reasoning": "pourquoi cet adressage est correct, ou pourquoi vous avez changé"
+  }}
+
+# DÉONTIQUE — la catégorique de fermeture.
+closing_reminder: |
+  Bien faire l'adresse est tout l'intérêt de cette étape.

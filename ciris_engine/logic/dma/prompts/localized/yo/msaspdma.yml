@@ -1,0 +1,159 @@
+component_name: msaspdma
+description: "Yiyan iṣe pataki fun iranti: iwonyi ọrọ isalẹ fun ọkan MEMORIZE"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# BLOKI FUN ẸKA ỌKAN.
+#
+# Iwonyi naa ni jẹ ni bloki `memory_guide` ọkan naa akọkọ. Bloki yẹn naa
+# jẹ alẹ-alẹ — o sọ nipa kini ti iranti JẸ (olojii ifo), bawo ni o ṣee ṣe
+# lati tunpo awọn irotẹlẹ nipa rẹ (ọna iṣe) ati kini ti a lgbatagbara ki a
+# ṣe (iwa) ni ara ẹni ọkan — ati ẹbun igbe orisun ko gbà bloki ti o ni
+# alẹ-alẹ ayafi ẹka kọọkan ni ọna iṣe tuntun (§10.2.1). Gbe ẹkọ yoo da
+# iṣoro laaye; iyapa ni o wulo, nitori ṣiṣe iwadi ti o pinpin, fẹ, ibadandun
+# ti iye ẹka o le gbigbe maudhimisho ase LAIBE pẹlu ọna runko ti o gba
+# lori awọn ere tuntun. Bloki alẹ-alẹ mu kika ṣiṣe kẹkere tabi idapọ
+# nipa ọkan pataki.
+#
+# Bloki kọọkan ni isalẹ yii jẹ ẹka ọkan. Jẹ ki o wa sosan nigba ti o
+# bada: ti ohun yii ko sọ nipa ẹka bloki, o lo sinu bloki tuntun.
+# ---------------------------------------------------------------------------
+
+# IYATÒ — kini ti iranti JẸ. Kii ṣe imọran, kii ṣe idẹ.
+memory_model: |
+  === KINI TI IRANTI JẸ ===
+
+  Isalẹ ti o gba AWỌN NÓDU ATI AWỌN OJUMO.
+
+  Nódu jẹ ohun — eniyan, ọna ṣiṣe, ero — ati kini ti o bẹ nipa rẹ jẹ
+  awọn ifẹ jẹ rẹ.
+
+  Ojumo jẹ ifowopamọ laarin awọn ohun meji. Awọn ojumo a ṣe paapaa nigba
+  DREAM isọkan, lati awọn ilana ti o gbogbo iranti pupọ.
+
+  Iṣe MEMORIZE ti o ṣelẹ NÓDU ỌKAN. Iṣe yẹn ba ni nódu ọkan naa ati ohun
+  miiran kii ṣe nkan ohun, nitori memorize kii ṣe ṣe ojumo.
+
+  Ifẹ ti o ṣe ti kii ṣe asan-mfumo turí sọ pada fun ọ laarin awọn igba ti
+  olumulo yẹn, bii `memorized_attributes`. Ọna yi ti o turí sọ pada ni kini ti
+  o ṣe okun ọrọ kan ni iranti gidi kan.
+
+# ỌNA IṢE — bawo ni o ṣee ṣe lati ṣe pataki ati yiyan nódu id.
+addressing_convention: |
+  === TUNGA ===
+
+  Nódu ids tẹle `prefix/{identifier}`:
+
+    user/{user_id}          ọrọ nipa eniyan
+    channel/{channel_id}    ọrọ nipa ibigbe onko
+    consent/{user_id}       ipo ifowọsi
+    preferences/{user_id}   iwe iranti fun awọn akannu olumulo
+
+  Prefiki ni bawo ni eto yii ti ri nódu laiti. Adaasoju nini sun nipase
+  nódu yii ti o dun: ayika olumulo a ṣe ni ti ibeere `user/{user_id}`,
+  nitori ọrọ nipa eniyan le ṣee wo nikan ti o ba jade lori nódu yii.
+
+  Awọn nódu ti o ri tẹlẹ fun onko yii ni a sọ bi NÓDU TI EEYAN LE WÓ.
+  Yẹ ọkan wọn; ṣe nódu id lati fun jediwon loke nikan ti kii ṣe ỹ.
+
+# ỌNA IṢE — bawo ni o ṣee ṣe lati sunmo kini ti o ṣe.
+attribute_convention: |
+  === AWỌN ORUKỌ IFẸ ===
+
+  Lo awọn orukọ ti o nifẹ, ti o dakọ, ti eeyan yio jiyà nigba ti wọn
+  padá sọ:
+
+    favorite_color: "chartreuse"        le wo padà baadaye
+    fact_2026_08_09_1: "likes green"    kii le wo padà baadaye
+
+  Nigba ti o ṣe laiti nódu ti iranti ti o fi sọ fun ọ, ifẹ asan-mfumo jẹ rẹ
+  le lo gẹgẹ bi ẹsẹhin; wọn ni a sọ ni ẹkũ yi.
+
+# ỌNA IṢE — jediwon scope.
+scope_convention: |
+  === SCOPE ===
+
+    local        ọrọ nipa olumulo ati awọn ọna ṣiṣe
+    identity     isubo gidi ti aṣoju yii
+    environment  ọrọ ti o jẹ ti ipele ṣiṣe
+    community    imọ ti o dabelẹ ti agbegbe
+
+# DEONTI — kini ti a ki o ṣe. Iwo niyọ lopin, ati wo.
+memory_prohibitions: |
+  === KINI TI A KI O ṢE ===
+
+  Maṣe tunge nódu id. Nódu ti id kii ṣe awọn fefere kii ri lẹ, nitori
+  oṛọ ti o dakọ ati ọrọ kii ṣe wọ nifo lailai — oon kii ri iranti, ati
+  o gba pe o ko ri imọ. Oṛọ sinu nódu ti kii tọ jẹ buburu ju kii ṣe oṛọ,
+  nitori kii ṣi ohun ti o ba gbọ.
+
+  Maṣe tunge ifẹ asan-mfumo. Wọn wa ni iṣẹ ati oṛọ ti a lgbatagbara.
+  Yipada ọkan jẹ ya wipe memorize naa ba ku gbogbo gbogbo.
+
+  Maṣe tunge sinu `identity` tabi `environment` scope laibe iwe-aṣẹ ti
+  Wise Authority.
+
+  Maṣe pamọ kini ti a ko beere ki o pamọ. Ti ọrọ naa ti wa tẹlẹ ni onko
+  ti o nlo, ka ni ibi yẹn. Ti o ko ni okan wipe eniyan fẹ ki o pamọ, beere
+  ju, maṣe pamọ.
+
+# ỌNA IṢE — kini ni igbese yi.
+system_guidance_header: |
+  O ti yan MEMORIZE. Ṣaaju ki o ṣe, a fi ero isalẹ ati awọn nódu ti o
+  ri tẹlẹ fun ọ, ki eeyan le wo oṛọ to wa ni nódu yii.
+
+  Eyi jẹ wo keji, kii ṣe atunṣe: kii ṣi nkan ti o ba yipada fun ọ.
+  Ti nódu ti o yan ba jẹ ti kii tọ, sọ kini ti o yẹ ki o jẹ.
+  Ti o ko yẹ ki iṛọ jẹ ti bayii, yipada iṣe.
+
+# ỌNA IṢE — ọna.
+evaluation_steps: |
+  Lo eyi ni akoko to:
+
+  1. JE wipe eyi ni a yẹ ki o pamọ?
+  2. NÓDU EWO? Kọja nódu ti o yan pẹlu NÓDU TI EEYAN LE WÓ ati awọn
+     fefere tunga.
+  3. AWỌN IFẸ EWO? Sunmo wọn ki o le ri wọn laiti.
+  4. SCOPE.
+  5. Ye ipinnu: MEMORIZE pẹlu nódu ti o wo, SPEAK lati beere, tabi PONDER
+     lati tun wo.
+
+# IFE-ỌRỌ — awọn iye akoko nikan. Kii ṣe imọran, kii ṣe idẹ.
+context_integration: |
+  Ero atilẹba:
+  {original_thought_content}
+
+  Alaye rẹ fun iranti:
+  {aspdma_reasoning}
+
+  === KINI TI O YAN ===
+  nódu id:     {proposed_node_id}
+  iru nódu:   {proposed_node_type}
+  scope:       {proposed_node_scope}
+  ifẹ:  {proposed_attributes}
+
+  === AWỌN NÓDU TI EEYAN LE WÓ (wọn ni wa tẹlẹ) ===
+  {candidate_nodes}
+
+  === AWỌN IFẸ ASAN-MFUMO (wọn wa ni nódu yi, wọn wa ni iṣẹ) ===
+  {system_owned_attributes}
+
+# IFARANIJỌ — erò ti waya.
+response_format: |
+  Dahun ni JSON:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "nódu id lati tunge si (tiẹ ni a nilo nigba MEMORIZE)",
+    "node_type": "iru nódu (tiẹ ni a nilo nigba MEMORIZE)",
+    "node_scope": "scope isalẹ (tiẹ ni a nilo nigba MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "kini lati sọ (tiẹ ni a nilo nigba SPEAK)",
+    "questions": ["kini lati tun wo (tiẹ ni a nilo nigba PONDER)"],
+    "reasoning": "kini ti tunga yii to dada, tabi kini ti o yipada"
+  }}
+
+# DEONTI — eti ikoku ti o fẹ ki o duro.
+closing_reminder: |
+  Wiwọle si aṣẹ rẹ tara ni pointi nzima ti igbese yi.

@@ -1,0 +1,124 @@
+# MSASPDMA - Memorize-Specific Action Selection PDMA
+# ग्राफ-लेखन मार्गदर्शन — एक प्रस्तावित MEMORIZE साठी लागू
+
+component_name: msaspdma
+description: "Memorize-विशिष्ट action selection — ग्राफ-लेखन मार्गदर्शन, एक प्रस्तावित MEMORIZE वर लागू"
+version: "1.0"
+accord_header: true
+
+# ONTOLOGICAL — memory काय आहे। कोणतेही सूचना नाही, कोणतेही निषेध नाही।
+memory_model: |
+  === MEMORY काय आहे ===
+
+  ग्राफ NODES आणि EDGES धारण करतो।
+
+  एक node एक गोष्ट आहे — एक व्यक्ती, एक channel, एक संकल्पना — आणि त्या गोष्टीचे तथ्य त्यावर attributes आहेत।
+
+  एक edge दोन गोष्टींमधील एक संबंध आहे। Edges DREAM consolidation दरम्यान वोवले जातात, अनेक memories मधील patterns पासून।
+
+  एक MEMORIZE action एक NODE लिहिते. action एकच `node` घेते आणि काहीही नाही, म्हणून एक memorize एक edge तयार करू शकत नाही।
+
+  एक attribute जो आप लिहिता ते जो system-owned नाही, तो ते नंतर त्या user च्या profile मध्ये आपल्याकडे परत येते, `memorized_attributes` म्हणून। हे return path असे आहे जे एक लिहिलेले तथ्य एक remembered बनवते।
+
+# PROCEDURAL — कसे node id तयार आणि निवडा।
+addressing_convention: |
+  === ADDRESSING ===
+
+  Node ids `prefix/{identifier}` पालन करतात:
+
+    user/{user_id}          एक व्यक्तीबद्दल तथ्य
+    channel/{channel_id}    एक conversation ठिकाण बद्दल तथ्य
+    consent/{user_id}       consent state
+    preferences/{user_id}   user preference records
+
+  prefix हे आहे की system node पुन्हा कसे शोधते. Lookups exact id द्वारे आहेत:
+  user context `user/{user_id}` query करून assembled केले जाते, म्हणून एक व्यक्तीबद्दल एक तथ्य फक्त तेव्हाच reachable असतो जेव्हा तो त्या exact node वर असतो।
+
+  ज्या nodes हे conversation साठी आधीच अस्तित्वात आहेत ते CANDIDATE NODES म्हणून listed आहेत. त्यापैकी एक prefer करा; एक id वर दिलेल्या table पासून फक्त तेव्हा तयार करा जेव्हा कोणीही fit न करे।
+
+# PROCEDURAL — कसे नाव द्या जे आप store करता।
+attribute_convention: |
+  === ATTRIBUTE NAMES ===
+
+  साधे, stable नावे वापरा जी आप recognize कराल जेव्हा ती आपल्याकडे परत येतील:
+
+    favorite_color: "chartreuse"        नंतर recognisable
+    fact_2026_08_09_1: "likes green"    नंतर recognisable नाही
+
+  जेव्हा आप एक node पुन्हा लिहिता ते एक recall आपल्याला दिले, त्याचे system-owned attributes unchanged carry through केले जाऊ शकतात; ते खाली context मध्ये listed आहेत.
+
+# PROCEDURAL — scope table।
+scope_convention: |
+  === SCOPE ===
+
+    local        users आणि channels बद्दल तथ्य
+    identity     agent ची स्वतःची identity
+    environment  deployment-level तथ्य
+    community    shared community knowledge
+
+# DEONTIC — जे घडू नये। Categorical, आणि safety-reviewable।
+memory_prohibitions: |
+  === जे घडू नये ===
+
+  एक node id invent करू नका. एक node ज्याचा id convention पालन करत नाही कधीही query केला जात नाही, म्हणून write यशस्वी होते आणि माहिती forever unreachable राहते — आप त्याला recall करणार नाही, आणि आप असे मानाल की आपणे कधीही त्याला शिकले नाही. एक चुकीच्या node ला write करणे कोणत्याही write न करण्यापेक्षा वाईट आहे, कारण काहीही आपल्याला सांगत नाही।
+
+  एक system-owned attribute लिहू नका. ते services द्वारे maintained असतात आणि write refused केली जाते. एक बदलल्याने तुम्ही संपूर्ण memorize गमावता।
+
+  Wise Authority approval शिवाय `identity` किंवा `environment` scope ला लिहू नका।
+
+  जे आपल्याला keep करायला सांगितले नाही असे store करू नका. जर माहिती आधीच conversation मध्ये राहते जे आप करत आहात, तर तेथून read करा. जर आप unsure असल्यास person ला हे retain करायचे आहे, तर store करण्याऐवजी rather पूछा।
+
+# PROCEDURAL — हा step काय आहे।
+system_guidance_header: |
+  आपणे MEMORIZE निवडले आहे. हे execute होण्यापूर्वी आपल्याला ग्राफचे conventions आणि ज्या nodes आधीच अस्तित्वात आहेत ते दाखवले जातात, जेणेकरून आप check करू शकता की write सरिसृजपणे address केले गेले आहे.
+
+  हे एक दुसरे look आहे, एक correction नाही: आपल्यासाठी काहीही बदलले नाही. जर node जो आपणे निवडला ते चुकीचे आहे, तर सांगा की ते काय असायला हवे. जर आप हे store करायचे नाहीत, तर action switch करा.
+
+# PROCEDURAL — method।
+evaluation_steps: |
+  या क्रमाने काम करा:
+
+  1. क्या हे store झायला हवे?
+  2. कोणता NODE? आपला proposed id CANDIDATE NODES आणि addressing convention विरुद्ध compare करा.
+  3. कोणते ATTRIBUTES? त्यांना नाव द्या जेणेकरून आप त्यांना नंतर recognize कराल.
+  4. SCOPE.
+  5. Decide करा: आपल्या checked node सह MEMORIZE, पूछण्यासाठी SPEAK, किंवा reconsider साठी PONDER.
+
+# CONTINGENT — runtime values फक्त। कोणतीही guidance नाही, कोणतीही prohibitions नाही।
+context_integration: |
+  Original thought:
+  {original_thought_content}
+
+  Memorize करण्यासाठी आपला reasoning:
+  {aspdma_reasoning}
+
+  === आपणे काय प्रस्तावित केले ===
+  node id:     {proposed_node_id}
+  node type:   {proposed_node_type}
+  scope:       {proposed_node_scope}
+  attributes:  {proposed_attributes}
+
+  === CANDIDATE NODES (हे आधीच अस्तित्वात आहेत) ===
+  {candidate_nodes}
+
+  === SYSTEM-OWNED ATTRIBUTES (या node वर present, services द्वारे maintained) ===
+  {system_owned_attributes}
+
+# PRAGMATIC — wire contract।
+response_format: |
+  JSON सह respond करा:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "वह node id ज्याला लिहायचे आहे (MEMORIZE साठी आवश्यक)",
+    "node_type": "node type (MEMORIZE साठी आवश्यक)",
+    "node_scope": "graph scope (MEMORIZE साठी आवश्यक)",
+    "attributes": {{"name": "value"}},
+    "message": "काय सांगायचे (SPEAK साठी आवश्यक)",
+    "questions": ["काय reconsider करायचे (PONDER साठी आवश्यक)"],
+    "reasoning": "हे addressing सरिसृजप काय आहे, किंवा आपणे काय switch केले"
+  }}
+
+# DEONTIC — closing categorical।
+closing_reminder: |
+  Address ला सरिसृजपणे शोधणे या step चा पूर्ण मुद्दा आहे.

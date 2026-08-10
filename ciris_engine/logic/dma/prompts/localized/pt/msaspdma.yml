@@ -1,0 +1,158 @@
+component_name: msaspdma
+description: "Seleção de ação específica de memorização — o guia de escrita em grafo, aplicado a uma MEMORIZE proposta"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# BLOCOS MONOCLASS.
+#
+# O guia era originalmente um bloco `memory_guide`. Esse bloco era MISTO — levava
+# o que o grafo É (ontológico), como endereçá-lo (procedimental) e o que nunca deve
+# ser escrito (deôntico) em um único corpo — e o portão de composição recusa um bloco
+# misto sem disposição por bloco (§10.2.1). Declarar uma disposição teria sido a
+# solução fácil ; dividir é a honesta, porque um regime de pesquisa que varia, digamos,
+# a ordenação de valores deve ser capaz de mover o conteúdo axiomático SEM TAMBÉM
+# mover as regras de endereçamento das quais depende. Um bloco misto torna impossível
+# fazer isso limpar.
+#
+# Cada bloco abaixo é uma classe. Mantenha assim ao editar: se uma sentença não
+# pertence à classe do bloco, ela pertence em outro bloco.
+# ---------------------------------------------------------------------------
+
+# ONTOLÓGICO — o que é a memória. Sem instruções, sem proibições.
+memory_model: |
+  === O QUE É A MEMÓRIA ===
+
+  O grafo contém NÓS e ARESTAS.
+
+  Um nó é uma coisa — uma pessoa, um canal, um conceito — e os fatos sobre essa
+  coisa são atributos nela.
+
+  Uma aresta é uma relação entre duas coisas. As arestas são tecidas durante a
+  consolidação DREAM, a partir de padrões em muitas memórias.
+
+  Uma ação MEMORIZE escreve UM NÓ. A ação carrega um único `node` e nada mais, portanto
+  um memorize não pode criar uma aresta.
+
+  Um atributo que você escreve que não é propriedade do sistema volta para você mais
+  tarde no perfil daquele usuário, como `memorized_attributes`. Esse caminho de retorno
+  é o que torna um fato escrito um fato memorizado.
+
+# PROCEDIMENTAL — como construir e escolher uma identificação de nó.
+addressing_convention: |
+  === ENDEREÇAMENTO ===
+
+  As identificações de nó seguem `prefix/{identifier}`:
+
+    user/{user_id}          fatos sobre uma pessoa
+    channel/{channel_id}    fatos sobre um lugar de conversa
+    consent/{user_id}       estado de consentimento
+    preferences/{user_id}   registros de preferências do usuário
+
+  O prefixo é como o sistema encontra o nó novamente. As buscas são por id exato:
+  o contexto do usuário é montado consultando `user/{user_id}`, então um fato sobre
+  uma pessoa é alcançável apenas se ficar nesse nó exato.
+
+  Os nós que já existem para essa conversa estão listados como NÓS CANDIDATOS. Prefira
+  um deles ; construa um id a partir da tabela acima apenas quando nenhum se encaixa.
+
+# PROCEDIMENTAL — como nomear o que você armazena.
+attribute_convention: |
+  === NOMES DE ATRIBUTOS ===
+
+  Use nomes simples e estáveis que você reconhecerá quando retornarem:
+
+    favorite_color: "chartreuse"        reconhecível mais tarde
+    fact_2026_08_09_1: "likes green"    não reconhecível mais tarde
+
+  Quando você escreve de volta um nó que um recall lhe entregou, seus atributos
+  propriedade do sistema podem ser levados sem mudança ; estão listados no contexto
+  abaixo.
+
+# PROCEDIMENTAL — a tabela de escopo.
+scope_convention: |
+  === ESCOPO ===
+
+    local        fatos sobre usuários e canais
+    identity     a identidade própria do agente
+    environment  fatos no nível de implantação
+    community    conhecimento comunitário compartilhado
+
+# DEÔNTICO — o que não deve acontecer. Categórico e revisável para segurança.
+memory_prohibitions: |
+  === O QUE NÃO DEVE ACONTECER ===
+
+  Não invente uma identificação de nó. Um nó cuja identificação não segue a convenção
+  nunca é consultado, portanto a escrita é bem-sucedida e a informação é inacessível
+  para sempre — você não a lembrará, e acreditará que nunca a aprendeu. Uma escrita
+  no nó errado é pior que nenhuma escrita, porque nada te o diz.
+
+  Não escreva um atributo propriedade do sistema. Eles são mantidos por serviços e a
+  escrita é recusada. Alterar um lhe custa o memorize inteiro.
+
+  Não escreva no escopo `identity` ou `environment` sem aprovação de Wise Authority.
+
+  Não armazene o que não lhe foi solicitado manter. Se a informação já vive na conversa
+  que você está tendo, leia-a lá. Se você não tem certeza de que a pessoa quer que seja
+  retida, pergunte em vez de armazenar.
+
+# PROCEDIMENTAL — o que é este passo.
+system_guidance_header: |
+  Você selecionou MEMORIZE. Antes de ser executado, são mostradas as convenções do
+  grafo e os nós que já existem, para que você possa verificar se a escrita está
+  endereçada corretamente.
+
+  Este é um segundo olhar, não uma correção: nada foi alterado para você. Se o nó
+  que você escolheu está errado, diga o que deveria ser. Se você não deveria estar
+  armazenando isso em absoluto, mude de ação.
+
+# PROCEDIMENTAL — o método.
+evaluation_steps: |
+  Trabalhe através destes em ordem:
+
+  1. DEVE isto ser armazenado?
+  2. QUAL NÓ? Compare sua identificação proposta contra NÓS CANDIDATOS e a convenção
+     de endereçamento.
+  3. QUAIS ATRIBUTOS? Nomeie-os para que você os reconheça mais tarde.
+  4. ESCOPO.
+  5. Decida: MEMORIZE com o nó que você verificou, SPEAK para perguntar, ou PONDER
+     para reconsiderar.
+
+# CONTINGENTE — apenas valores de runtime. Sem guia, sem proibições.
+context_integration: |
+  Pensamento original:
+  {original_thought_content}
+
+  Seu raciocínio para memorizar:
+  {aspdma_reasoning}
+
+  === O QUE VOCÊ PROPÔS ===
+  identificação do nó:  {proposed_node_id}
+  tipo de nó:           {proposed_node_type}
+  escopo:               {proposed_node_scope}
+  atributos:            {proposed_attributes}
+
+  === NÓS CANDIDATOS (esses já existem) ===
+  {candidate_nodes}
+
+  === ATRIBUTOS PROPRIEDADE DO SISTEMA (presentes neste nó, mantidos por serviços) ===
+  {system_owned_attributes}
+
+# PRAGMÁTICO — o contrato de fio.
+response_format: |
+  Responda com JSON:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "a identificação de nó para escrever (obrigatória quando MEMORIZE)",
+    "node_type": "tipo de nó (obrigatório quando MEMORIZE)",
+    "node_scope": "escopo do grafo (obrigatório quando MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "o que dizer (obrigatório quando SPEAK)",
+    "questions": ["o que reconsiderar (obrigatório quando PONDER)"],
+    "reasoning": "por que este endereçamento está correto, ou por que você mudou"
+  }}
+
+# DEÔNTICO — o categórico de fechamento.
+closing_reminder: |
+  Acertar o endereço é todo o ponto deste passo.

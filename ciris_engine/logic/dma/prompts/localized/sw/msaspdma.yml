@@ -1,0 +1,159 @@
+component_name: msaspdma
+description: "Uchaguzi wa hatua maalum kwa kukariri — mwongozo wa uandishi wa grafu, unaotumiwa kwa MEMORIZE moja"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# BLOKI ZA DARASA MOJA.
+#
+# Mwongozo ulikuwa hapo awali katika bloki moja tu ya `memory_guide`. Bloki
+# hiyo lilikuwa na mchanganyiko — lilishughulikia kile grafu NCHO (ontolojia),
+# jinsi ya kutunga habari kuhusu ilo (taratibu) na kile kilichozuiwa kabisa
+# (deonti) katika mwili mmoja — na mlangani wa kutunga unakataa bloki
+# iliyomchanganyika isipokuwa kila bloki ina njia ya kutengenezwa (§10.2.1).
+# Kujifanya ni lilikuwa suluhisho rahisi; kugawanya ni lingine lenye haki,
+# kwa sababu utaratibu wa utafiti unayotofautiana, sema, mpangilio wa thamani
+# lazima uweze kuhamisha maudhimisho ya ulizo BILA pia kuhamisha sheria za
+# kutunga ambazo hutegemea. Bloki iliyomchanganyika hufanya kupiga upinde
+# hadhaini au kuainisha kadhaa.
+#
+# Kila bloki hapa chini ni darasa moja. Endelea hivyo unaposasisha: kama
+# sentensi haisemi kwa darasa la bloki, labda ni bloki tofauti.
+# ---------------------------------------------------------------------------
+
+# ONTOLOJIA — kile kumbukumbu NCHO. Hakuna maagizo, hakuna maadhimisho.
+memory_model: |
+  === KILE KUMBUKUMBU NCHO ===
+
+  Grafu inahifadhi NODI na USHIRIKIANO.
+
+  Nodi ni kitu — mtu, kituo, wazo — na kile kilicho juu yake ni sifa juu yake.
+
+  Ushirikiano ni uhusiano kati ya kitu mbili. Ushirikiano hulishwa wakati wa
+  DREAM kuunganisha, kutokana na mifumo kote kumbukumbu nyingi.
+
+  Hatua ya MEMORIZE inaandika NODI MOJA. Hatua inahusiana na nodi moja tu na
+  kitu kingine kimoja hakitakachokuwa, kwa hivyo kukariri hakuwezi kutengeneza
+  ushirikiano.
+
+  Sifa unayoandika isiyo ya mfumo-milikwa hurudi kwako baadaye katika wasifu wa
+  mtumiaji huyo, kama `memorized_attributes`. Njia hii ya kurudi ndilo linalotengeneza
+  ukweli ulioandikwa kuwa ukweli uliogeuzwa.
+
+# TARATIBU — jinsi ya kutengeneza na kuchagua kile nodi id.
+addressing_convention: |
+  === TUNGA ===
+
+  Nodi ids zinafuata `prefix/{identifier}`:
+
+    user/{user_id}          ukweli kuhusu mtu
+    channel/{channel_id}    ukweli kuhusu mahali pa mazungumzo
+    consent/{user_id}       hali ya makubaliano
+    preferences/{user_id}   kumbukumbu za mapendeleo ya mtumiaji
+
+  Prefiki ndiyo jinsi mfumo unavyopata nodi tena. Kila kitu kinachochimbwa ni kwa
+  nodi hasa: muktadha wa mtumiaji unajenga kwa kutafuta `user/{user_id}`, kwa hivyo
+  ukweli kuhusu mtu unaweza kupatikana nikiwa umeketi nodi hasa.
+
+  Nodi ambazo tayari zipo kwa mazungumzo haya zimeorodheshwa kama NODI AMBAZO
+  INAWEZA KUZINGATIWA. Zidi moja yao; tengeneza nodi id kutokana na jedwali
+  hapo juu nikiwa hakuna inayofanana.
+
+# TARATIBU — jinsi ya kunganisha kile unachoandika.
+attribute_convention: |
+  === MAJINA YA SIFA ===
+
+  Tumia majina ya wazi, endelevu unayoyatamatamata unapozirudi:
+
+    favorite_color: "chartreuse"        linazingatiwa baadaye
+    fact_2026_08_09_1: "likes green"    halinazingatiwa baadaye
+
+  Unapoandika tena nodi kukumbuka iliyokugeuza, sifatahe zake zisizosiimiki
+  zinaweza kuambatanisha kama kawaida; zimeoorodheshwa katika muktadha hapo
+  chini.
+
+# TARATIBU — jedwali la uwanja.
+scope_convention: |
+  === UWANJA ===
+
+    local        ukweli kuhusu watumiaji na vituo
+    identity     utambulisho wa wakala yenyewe
+    environment  ukweli wa ngazi ya kutengeneza
+    community    maarifa ya jamii ya pamoja
+
+# DEONTI — kile kilichozuiwa kabisa. Kundi, na inayobuniwa salama.
+memory_prohibitions: |
+  === KILE KILICHOZUIWA KABISA ===
+
+  Usitunge nodi id. Nodi ambayo id haisemi kawaida hainukuziwi, kwa hivyo
+  andiko linafanikiwa na habari haiwezi kupatikana hata milele — hautakumbuka,
+  na utaambojua hauajifunza kumbe. Andiko kwa nodi machafu ni mbaya zaidi kuliko
+  hakuna andiko, kwa sababu kitu hakitakuambia.
+
+  Usitunge sifa ya mfumo-milikwa. Wanatiwa kwa huduma za wazimu na andiko
+  linalaaniwa. Kubadilisha moja juu yake kulazimisha kufa memorize nzima.
+
+  Usitunge kwa `identity` au `environment` uwanja bila idhini ya Wise Authority.
+
+  Usistore kile usichokouliziwa kuwa akifanya. Kama habari tayari inalishi katika
+  mazungumzo unayoyafanya, soma huko. Kama hausi na moyo mtu ataka kuakejelea,
+  taka haraka kuliko kuandika.
+
+# TARATIBU — kile hatua hii ni.
+system_guidance_header: |
+  Umechagua MEMORIZE. Kabla haifanyi, unaonekwa mikazo ya grafu na nodi ambazo
+  tayari zipo, kwa hivyo unaweza kuangalia andiko linalitolewa kwa usahihi.
+
+  Hii ni mtazamo wa pili, si kuwa na mabadiliko: hakuna kilicho kibadiliwa kwa
+  ajili yako. Kama nodi uliyochagua ni machafu, sema kile kilichokuwa. Kama haipaswi
+  kuwa ukiandika hii kabisa, badilisha hatua.
+
+# TARATIBU — njia.
+evaluation_steps: |
+  Fanya kila moja kwa mpangilio:
+
+  1. JE kile hii inapaswa kuandikwa?
+  2. NODI IPI? Linganisha nodi ulichopendelea dhidi ya NODI AMBAZO
+     INAWEZA KUZINGATIWA na kawaida ya kunganisha.
+  3. SIFA ZIPI? Zanganisha zikiwa utazijua tena.
+  4. UWANJA.
+  5. Amua: MEMORIZE na nodi uliyoangalia, SPEAK kuomba, au PONDER kukariri.
+
+# KITENGO — thamani za muda tu. Hakuna mwongozo, hakuna maadhimisho.
+context_integration: |
+  Fikra ya awali:
+  {original_thought_content}
+
+  Sababu yako ya kukariri:
+  {aspdma_reasoning}
+
+  === KILE ULICHOPENDELEA ===
+  nodi id:     {proposed_node_id}
+  aina ya nodi:   {proposed_node_type}
+  uwanja:       {proposed_node_scope}
+  sifa:  {proposed_attributes}
+
+  === NODI AMBAZO INAWEZA KUZINGATIWA (zinaposini, tayari zipo) ===
+  {candidate_nodes}
+
+  === SIFA ZA MFUMO-MILIKWA (zinaposini nodi hii, zinatiwa kwa huduma) ===
+  {system_owned_attributes}
+
+# VITENDO — muktadha wa waya.
+response_format: |
+  Jibu na JSON:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "nodi id kuandika kwa (inayohitajika wakati MEMORIZE)",
+    "node_type": "aina ya nodi (inayohitajika wakati MEMORIZE)",
+    "node_scope": "uwanja wa grafu (inayohitajika wakati MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "kile kusema (kinachohitajika wakati SPEAK)",
+    "questions": ["kile kukariri (kinachohitajika wakati PONDER)"],
+    "reasoning": "kwa nini tunga hii ni sahihi, au kwa nini ulibadilisha"
+  }}
+
+# DEONTI — kile kikatazo kinachofunga.
+closing_reminder: |
+  Kupata anuani kwa usahihi ndiyo pointi nzima ya hatua hii.

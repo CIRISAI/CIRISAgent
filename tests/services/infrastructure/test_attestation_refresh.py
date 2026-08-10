@@ -990,8 +990,16 @@ class TestStartupAttestationReceipts:
 
         from ciris_engine.logic.services.infrastructure.authentication import service as svc_mod
 
+        # Patch the FUNCTION, not the module constant. The budget used to be a
+        # module-level constant read at import, which silently discarded any
+        # override set later (mobile_main asked for 45 and got 20). Enforcement
+        # now calls _startup_attestation_budget() so a late override is honoured,
+        # which makes the function the control point this test has to move.
+        # The env var cannot express it: that path floors at 1.0s, and this test
+        # needs a budget below the 0.02s verifier to provoke the overshoot
+        # without sleeping for a real second.
         with caplog.at_level("WARNING"):
-            with patch.object(svc_mod, "STARTUP_ATTESTATION_BUDGET_SECONDS", 0.01):
+            with patch.object(svc_mod, "_startup_attestation_budget", lambda: 0.01):
                 await svc.run_startup_attestation()
 
         # Warning fires, names the budget, names the elapsed time

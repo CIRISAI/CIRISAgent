@@ -945,7 +945,22 @@ class InteractViewModel(
                     _lastSystemStatus = status
                     recomputeLocalScore()
                     val wasConnected = _isConnected.value
-                    _isConnected.value = status.status == "healthy"
+                    // "Can the user type?", not "is every subsystem nominal?".
+                    //
+                    // This was `status == "healthy"`, a single exact-string match
+                    // that gates the entire composer — text field, attach and send.
+                    // The agent reported "initializing" forever (a public method
+                    // the health check probed for did not exist), so the field,
+                    // attach and send buttons were all dead on an agent that was
+                    // in WORK, answering messages and sealing traces. Nothing on
+                    // screen said why; the user simply could not type.
+                    //
+                    // A reachable agent that reports a cognitive state is talking
+                    // to us and can accept input. Degraded is not offline, and
+                    // "some subsystem is unhappy" is not a reason to take away
+                    // someone's keyboard — if a send then fails, the send path
+                    // surfaces that error, which is where it belongs.
+                    _isConnected.value = status.status == "healthy" || status.cognitive_state != null
 
                     // Check if we got a real cognitive state
                     val cognitiveState = status.cognitive_state

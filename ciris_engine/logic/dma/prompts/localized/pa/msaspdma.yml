@@ -51,10 +51,10 @@ attribute_convention: |
 scope_convention: |
   === SCOPE ===
 
-    local        users ਅਤੇ channels ਬਾਰੇ ਤੱਥ
-    identity     agent ਦੀ ਆਪਣੀ identity
-    environment  deployment-level ਤੱਥ
-    community    shared community knowledge
+    local        ਵਰਤੋਂਕਾਰਾਂ ਅਤੇ ਚੈਨਲਾਂ ਬਾਰੇ ਤੱਥ
+    identity     ਏਜੰਟ ਦੀ ਆਪਣੀ ਪਛਾਣ
+    environment  ਤੈਨਾਤੀ-ਪੱਧਰ ਦੇ ਤੱਥ
+    community    ਸਾਂਝਾ ਭਾਈਚਾਰਕ ਗਿਆਨ
 
 # DEONTIC — ਜੋ ਨਹੀਂ ਹੋਣਾ ਚਾਹੀਦਾ। Categorical, ਅਤੇ safety-reviewable।
 memory_prohibitions: |
@@ -86,17 +86,17 @@ evaluation_steps: |
 
 # CONTINGENT — runtime values ਸਿਰਫ। ਕੋਈ guidance ਨਹੀਂ, ਕੋਈ prohibitions ਨਹੀਂ।
 context_integration: |
-  Original thought:
+  ਮੂਲ ਵਿਚਾਰ:
   {original_thought_content}
 
-  Memorize ਕਰਨ ਲਈ ਆਪਣਾ reasoning:
+  ਯਾਦ ਰੱਖਣ ਲਈ ਤੁਹਾਡਾ ਤਰਕ:
   {aspdma_reasoning}
 
   === ਤੁਸੀਂ ਕੀ propose ਕੀਤਾ ===
-  node id:     {proposed_node_id}
-  node type:   {proposed_node_type}
-  scope:       {proposed_node_scope}
-  attributes:  {proposed_attributes}
+  ਨੋਡ ID:      {proposed_node_id}
+  ਨੋਡ ਦੀ ਕਿਸਮ:  {proposed_node_type}
+  ਸਕੋਪ:        {proposed_node_scope}
+  ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ:  {proposed_attributes}
 
   === CANDIDATE NODES (ਇਹ ਪਹਿਲਾਂ ਤੋਂ ਮੌਜੂਦ ਹਨ) ===
   {candidate_nodes}

@@ -32,6 +32,7 @@ Usage:  python3 -m tools.dev.check_msaspdma_localization
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -57,7 +58,26 @@ PLACEHOLDERS = [
 CODE_TOKENS = ["user/", "channel/", "MEMORIZE", "SPEAK", "PONDER", "memorized_attributes", "DREAM"]
 
 # JSON field names inside response_format.
+LATIN_SCRIPT_LOCALES = {"de","es","fr","it","pt","id","sw","tr","vi","yo","ha"}
+
 JSON_FIELDS = ["final_action", "node_id", "node_type", "node_scope", "attributes", "reasoning"]
+
+
+def _labels_of(text: str) -> List[str]:
+    """The `Label:` texts in a context block, as written in English.
+
+    Mirrors the rule the CI chain tests apply (_locale_chain_helpers): a
+    Title-Case English phrase followed by `:` and a placeholder on the same
+    line. Deliberately the SAME rule — a local checker that is stricter than CI
+    reports findings nobody will act on, and one that is looser lets the push
+    fail. Lowercase field labels like `node id:` are out of scope for both.
+    """
+    out = []
+    for line in text.splitlines():
+        m = re.match(r"^\s*([A-Z][A-Za-z]*(?: [A-Za-z]+){0,3})\s*:\s*\{", line)
+        if m and len(m.group(1)) <= 40:
+            out.append(m.group(1).strip())
+    return out
 
 
 def _load(path: Path) -> Tuple[dict | None, str]:
@@ -107,6 +127,32 @@ def audit(code: str, src: dict) -> List[str]:
     for token in CODE_TOKENS:
         if token not in body:
             problems.append(f"code identifier {token!r} missing — likely translated as prose")
+
+    # Untranslated English prose left inside the target script. The per-locale
+    # chain tests catch this (script-ratio + label-line checks) but only AFTER a
+    # push, and only for the locales that have a chain test. Catching it here
+    # means the fan-out is auditable before CI runs, which is the whole point of
+    # this script. Both defects below were real, in 4 of 28 locales.
+    if code not in LATIN_SCRIPT_LOCALES:
+        scope = str(doc.get("scope_convention") or "")
+        # The four scope tokens are meant to stay English; anything ELSE Latin in
+        # this block is untranslated prose.
+        residue = scope
+        for token in ("local", "identity", "environment", "community", "==="," SCOPE "):
+            residue = residue.replace(token, " ")
+        stray = [w for w in re.findall(r"[A-Za-z][A-Za-z-]{2,}", residue)]
+        if len(stray) >= 3:
+            problems.append(f"scope_convention keeps English prose untranslated: {stray[:6]}")
+
+    # A label is untranslated when it still reads as the ENGLISH label. Matching
+    # "any Latin label:" was wrong — it flagged correctly-translated German
+    # ("Knotenkennzeichnung:") and Spanish ("Pensamiento original:") too, which
+    # would have trained everyone to ignore this output.
+    ctx = str(doc.get("context_integration") or "")
+    english_labels = _labels_of(str(src.get("context_integration") or ""))
+    kept = [lbl for lbl in english_labels if re.search(rf"(?m)^\s*{re.escape(lbl)}\s*:", ctx)]
+    if kept:
+        problems.append(f"context_integration keeps the ENGLISH labels: {kept[:5]}")
 
     for key in ("memory_model", "addressing_convention", "memory_prohibitions", "evaluation_steps"):
         s, g = str(src.get(key) or ""), str(doc.get(key) or "")

@@ -256,30 +256,57 @@ def get_node_attributes_dict(node: GraphNode) -> Dict[str, Any]:
     return {}
 
 
-def check_managed_attributes(node: GraphNode) -> Optional[str]:
-    """Check if node tries to modify managed attributes.
+def check_managed_attributes(node: GraphNode, existing: Optional[GraphNode] = None) -> Optional[str]:
+    """Check if node tries to MODIFY managed attributes.
+
+    Modification, not presence. The distinction is the whole point:
+
+    Recall-modify-write-back is the natural way to add a fact about a user, and
+    the node that comes back from a recall already carries every managed
+    attribute the system has set on it — `last_seen`, `oauth_email`,
+    `trust_level`, and the rest. A presence check therefore refuses the write
+    because of fields the agent never touched and only carried along, so adding
+    one new fact to a user node was structurally impossible.
+
+    Observed live: the agent was told "my favorite color is chartreuse", replied
+    "Noted: your favorite color is chartreuse", and its MEMORIZE was blocked. One
+    turn later it answered "I do not have that information stored yet" — truthful
+    and caused entirely by this guard.
+
+    So: compare against what is stored. An unchanged managed attribute passes; a
+    changed one is refused, which is the rule the guard was written to enforce.
+    With no stored node to compare against, presence is still refused — there the
+    agent really is authoring a managed attribute from nothing.
 
     Args:
-        node: Graph node to check
+        node: Graph node the agent wants to write
+        existing: the currently-stored node, when available
 
     Returns:
-        Error message if managed attribute found, None otherwise
+        Error message if a managed attribute is being modified, None otherwise
     """
     if not is_user_node(node):
         return None
 
     attrs_to_check = get_node_attributes_dict(node)
+    stored = get_node_attributes_dict(existing) if existing is not None else None
 
     for attr_name, rationale in MANAGED_USER_ATTRIBUTES.items():
-        if attr_name in attrs_to_check:
-            return (
-                f"MEMORIZE BLOCKED: Attempt to modify managed user attribute '{attr_name}'. "
-                f"\n\nRationale: {rationale}"
-                f"\n\nAttempted operation: Set '{attr_name}' to '{attrs_to_check[attr_name]}' for user node '{node.id}'."
-                f"\n\nGuidance: If this information needs correction, please use DEFER action to request "
-                f"Wise Authority assistance. They can help determine the proper way to update this information "
-                f"through the appropriate system channels."
-            )
+        if attr_name not in attrs_to_check:
+            continue
+        incoming = attrs_to_check[attr_name]
+        if stored is not None and attr_name in stored and stored[attr_name] == incoming:
+            continue  # carried through unchanged — not a modification
+        was = f"'{stored[attr_name]}'" if stored is not None and attr_name in stored else "unset"
+        return (
+            f"MEMORIZE BLOCKED: Attempt to modify managed user attribute '{attr_name}'. "
+            f"\n\nRationale: {rationale}"
+            f"\n\nAttempted operation: Set '{attr_name}' to '{incoming}' (currently {was}) "
+            f"for user node '{node.id}'."
+            f"\n\nGuidance: If this information needs correction, please use DEFER action to request "
+            f"Wise Authority assistance. They can help determine the proper way to update this information "
+            f"through the appropriate system channels."
+        )
 
     return None
 

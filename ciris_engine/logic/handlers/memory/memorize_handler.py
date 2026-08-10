@@ -137,10 +137,17 @@ class MemorizeHandler(BaseActionHandler):
                     status=ThoughtStatus.FAILED,
                 )
 
-        # Check managed attributes
-        managed_error = check_managed_attributes(node)
+        # Check managed attributes against what is STORED, so a managed field
+        # carried through unchanged by a recall-modify-write-back does not read
+        # as an attempt to modify it. Best-effort: if the lookup fails we fall
+        # back to the presence check, which is the conservative direction.
+        existing = await self._fetch_existing_node(node)
+        managed_error = check_managed_attributes(node, existing)
         if managed_error:
-            logger.warning(f"Blocked memorize attempt on managed attribute for node '{node.id}'")
+            # Name the attribute. The old line said only "a managed attribute",
+            # so diagnosing a block meant reading the follow-up sent to the agent.
+            first_line = managed_error.split("\n", 1)[0]
+            logger.warning(f"Blocked memorize on node '{node.id}': {first_line}")
             return self.complete_thought_and_create_followup(
                 thought=thought,
                 follow_up_content=managed_error,
@@ -149,6 +156,26 @@ class MemorizeHandler(BaseActionHandler):
             )
 
         return None
+
+    async def _fetch_existing_node(self, node: GraphNode) -> Optional[GraphNode]:
+        """The currently-stored version of `node`, or None.
+
+        Used to tell "carried this managed attribute through unchanged" apart
+        from "tried to change it". Best-effort by design: a recall failure must
+        not block a memorize, so on any error we return None and the caller
+        falls back to the stricter presence check.
+        """
+        try:
+            from ciris_engine.schemas.services.operations import MemoryQuery
+
+            found = await self.bus_manager.memory.recall(
+                recall_query=MemoryQuery(node_id=node.id, scope=node.scope, type=node.type),
+                handler_name=self.__class__.__name__,
+            )
+            return found[0] if found else None
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Could not fetch existing node '{node.id}' for managed-attribute diff: {e}")
+            return None
 
     def _handle_config_node(
         self, node: GraphNode, thought: Thought, result: ActionSelectionDMAResult

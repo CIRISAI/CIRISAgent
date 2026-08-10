@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.adapters.base_observer import BaseObserver
 from ciris_engine.logic.adapters.discord.discord_vision_helper import DiscordVisionHelper
@@ -32,6 +32,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         memory_service: Optional[Any] = None,
         agent_id: Optional[str] = None,
         bus_manager: Optional[BusManager] = None,
+        bus_manager_provider: Optional[Callable[[], Optional[BusManager]]] = None,
         filter_service: Optional[Any] = None,
         secrets_service: Optional[SecretsService] = None,
         communication_service: Optional[Any] = None,
@@ -40,6 +41,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         super().__init__(
             on_observe=lambda _: asyncio.sleep(0),
             bus_manager=bus_manager,
+            bus_manager_provider=bus_manager_provider,
             memory_service=memory_service,
             agent_id=agent_id,
             filter_service=filter_service,

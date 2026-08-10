@@ -323,7 +323,10 @@ class DiscordPlatform(Service):
             wa_user_ids=self.config.admin_user_ids,
             memory_service=getattr(self.runtime, "memory_service", None),
             agent_id=getattr(self.runtime, "agent_id", None),
-            bus_manager=getattr(self.runtime, "bus_manager", None),
+            # LATE-BOUND: the observer is built in start(), before the
+            # ServiceInitializer creates the BusManager, so passing the
+            # value here captured None forever and killed channel history.
+            bus_manager_provider=lambda: getattr(self.runtime, "bus_manager", None),
             filter_service=getattr(self.runtime, "adaptive_filter_service", None),
             secrets_service=secrets_service,
             communication_service=self.discord_adapter,

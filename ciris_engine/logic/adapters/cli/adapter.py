@@ -70,7 +70,7 @@ class CliPlatform(Service):
             runtime=runtime,
             interactive=self.config.interactive,
             on_message=self._handle_incoming_message,
-            bus_manager=getattr(runtime, "bus_manager", None),
+                bus_manager=getattr(runtime, "bus_manager", None),
             config=self.config,
         )
         logger.info(f"CliPlatform created CLIAdapter instance: {id(self.cli_adapter)}")
@@ -137,7 +137,9 @@ class CliPlatform(Service):
             if service_initializer:
                 self.cli_observer = CLIObserver(
                     on_observe=self.on_observe,  # type: ignore[arg-type]
-                    bus_manager=self.bus_manager,
+                    # LATE-BOUND: self.bus_manager was snapshotted in __init__,
+                    # before the ServiceInitializer built the BusManager.
+                    bus_manager_provider=lambda: getattr(self.runtime, "bus_manager", None),
                     memory_service=getattr(service_initializer, "memory_service", None),
                     agent_id=getattr(self.runtime, "agent_id", None),
                     filter_service=getattr(service_initializer, "filter_service", None),

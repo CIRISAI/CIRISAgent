@@ -1,4 +1,5 @@
 package ai.ciris.mobile.shared
+import ai.ciris.mobile.shared.platform.openUrlInBrowser
 import ai.ciris.mobile.shared.platform.PlatformBackHandler
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.TestAutomation
@@ -1589,11 +1590,94 @@ fun CIRISApp(
                                     }
                                 }
                             }
-                        } else {
-                            // No callback provided - show error
-                            platformLog(TAG, "[ERROR][onGoogleSignIn] googleSignInCallback is NULL - cannot invoke native sign-in!")
-                            loginErrorMessage = "${getOAuthProviderName()} Sign-In not available"
+                    } else {
+                        // DESKTOP: no native Google SDK, so sign in through the
+                        // BROWSER against this node's OAuth front door. Until the
+                        // node minted a session on callback there was nothing for
+                        // this process to hold, so desktop offered local login
+                        // only and this branch just said "not available".
+                        //
+                        // Two processes, one sign-in: we generate a nonce, open the
+                        // browser with it, and poll until the node hands the bearer
+                        // over. 204 means NOT YET, which is why the loop keeps
+                        // going instead of treating a quiet answer as failure.
+                        platformLog(TAG, "[INFO][onGoogleSignIn] desktop browser flow (no native SDK)")
+                        isLoginLoading = true
+                        loginErrorMessage = null
+                        loginStatusMessage = LocalizationHelper.getString("auth.browser_signin.waiting")
+                        val nonce = buildString {
+                            val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+                            repeat(32) { append(alphabet[kotlin.random.Random.nextInt(alphabet.length)]) }
                         }
+                        val signInUrl = apiClient.oauthBrowserLoginUrl("google", nonce, nodeBaseUrl)
+                        // Log the URL we hand the browser. A sign-in completed in
+                        // some OTHER tab — one opened earlier at the plain
+                        // /login URL — carries no app_nonce, parks nothing, and
+                        // leaves this poll waiting forever while the node reports
+                        // a perfectly successful sign-in. Without this line the
+                        // two are indistinguishable from the client side.
+                        platformLog(TAG, "[INFO][onGoogleSignIn] opening browser: $signInUrl")
+                        openUrlInBrowser(signInUrl)
+                        coroutineScope.launch {
+                            // ~3 minutes: long enough for a real sign-in with a
+                            // password manager and 2FA, short enough that an
+                            // abandoned attempt does not spin forever.
+                            var token: ai.ciris.mobile.shared.models.OAuthHandoff? = null
+                            var attempts = 0
+                            while (token == null && attempts < 90) {
+                                kotlinx.coroutines.delay(2000)
+                                attempts++
+                                // After ~20s our own tab has had its chance;
+                                // accept a sign-in that completed in a stray
+                                // tab rather than spin while the node holds a
+                                // perfectly good session.
+                                token = apiClient.collectOAuthHandoff(
+                                    nonce,
+                                    nodeBaseUrl,
+                                    allowUnbound = attempts > 10,
+                                )
+                                // Heartbeat every ~20s: "still waiting" must be
+                                // visible, or a stalled flow looks like a crashed one.
+                                if (token == null && attempts % 10 == 0) {
+                                    platformLog(TAG, "[INFO][onGoogleSignIn] still waiting for the browser (${attempts * 2}s)")
+                                }
+                            }
+                            isLoginLoading = false
+                            loginStatusMessage = null
+                            val collected = token
+                            if (collected == null) {
+                                // Say WHICH failure this is. "Sign-in failed" would
+                                // cover both "you closed the tab" and "the node is
+                                // broken", and only one of those is the user's to fix.
+                                loginErrorMessage =
+                                    LocalizationHelper.getString("auth.browser_signin.timed_out")
+                                platformLog(TAG, "[WARN][onGoogleSignIn] no hand-off after ${attempts * 2}s. If you signed in successfully, the browser tab was probably an OLD one opened without ?app_nonce= — close stray CIRIS sign-in tabs and use the button again.")
+                            } else {
+                                platformLog(TAG, "[INFO][onGoogleSignIn] desktop browser sign-in collected a session")
+                                currentAccessToken = collected.accessToken
+                                apiClient.setAccessToken(collected.accessToken)
+                                secureStorage.saveAccessToken(collected.accessToken)
+                                onTokenUpdated?.invoke(collected.accessToken)
+                                if (isFirstRun == true) {
+                                    // Hand the identity to the wizard: it derives the
+                                    // federation-ID name from <provider>-<subject>, so
+                                    // arriving with only a bearer would put the user
+                                    // back to inventing a unique name by hand.
+                                    setupViewModel.setGoogleAuthState(
+                                        isAuth = true,
+                                        idToken = null,
+                                        email = collected.email,
+                                        userId = collected.externalId,
+                                        provider = collected.provider,
+                                    )
+                                    currentScreen = Screen.Setup
+                                } else {
+                                    interactViewModel.startPolling()
+                                    currentScreen = HOME_SCREEN
+                                }
+                            }
+                        }
+                    }
                     },
                     onLocalLogin = {
                         // First run - go to setup wizard for BYOK setup

@@ -1590,6 +1590,57 @@ class CIRISApiClient(
      * returns false. Used by startup to degrade gracefully when richer endpoints
      * (e.g. /v1/setup/status) are unavailable on a node that is otherwise up.
      */
+    // ---- Desktop browser sign-in (ported from ciris-server 0.5.165) --------
+    // The node serves the browser flow because desktop has no native Google
+    // SDK; the app polls for the result. Ported rather than copied wholesale:
+    // the server's client tree does NOT carry the 2.9.14 three-step wizard, so
+    // replacing our tree with theirs would have deleted it.
+    /**
+     * **Desktop browser sign-in: start it, then collect the session.**
+     *
+     * Desktop has no native Google SDK, so the node serves the browser flow and
+     * the APP has to learn the result — two processes, one sign-in. The app
+     * generates a nonce, opens the browser at [oauthBrowserLoginUrl], and polls
+     * here until the node hands the bearer over. One-time: the first successful
+     * collection removes it, so a leaked nonce cannot be replayed afterwards.
+     *
+     * `null` means NOT YET (the node answers 204) — the human is still in the
+     * browser. That is deliberately distinct from a failure: a caller that
+     * treated "not yet" as "failed" would abandon a sign-in that is still going.
+     */
+    suspend fun collectOAuthHandoff(
+        appNonce: String,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        /**
+         * Accept a sign-in that completed without OUR nonce — a stray browser
+         * tab opened at the plain `/login` URL. Off while we still expect our
+         * own flow to land; the caller turns it on only after waiting, so the
+         * bound path always wins when it exists.
+         */
+        allowUnbound: Boolean = false,
+    ): OAuthHandoff? {
+        val client = federationHttpClient()
+        return try {
+            val response = client.get(
+                "$localNodeUrl/v1/auth/oauth/handoff?app_nonce=$appNonce&allow_unbound=$allowUnbound"
+            )
+            if (response.status.value == 204) return null
+            if (!response.status.isSuccess()) return null
+            jsonConfig.decodeFromString(OAuthHandoff.serializer(), response.bodyAsText())
+        } catch (_: Exception) {
+            null
+        } finally {
+            client.close()
+        }
+    }
+
+    /** The browser URL that starts a desktop sign-in for [provider]. */
+    fun oauthBrowserLoginUrl(
+        provider: String,
+        appNonce: String,
+        localNodeUrl: String = LOCAL_NODE_URL,
+    ): String = "$localNodeUrl/v1/auth/oauth/$provider/login?app_nonce=$appNonce"
+
     suspend fun isLocalNodeUp(nodeUrl: String = baseUrl): Boolean {
         val client = federationHttpClient()
         return try {

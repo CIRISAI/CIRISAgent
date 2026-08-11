@@ -52,6 +52,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -423,6 +424,36 @@ private fun EnforcementLadderCard(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testable("input_ladder_attesting_key"),
             )
+            Spacer(Modifier.height(8.dp))
+            // BULK: paste a whole population. One act, one hash, one reason —
+            // not one preview→commit pair per key. The count is shown because a
+            // pasted list is exactly the input an operator cannot eyeball, and
+            // the number they are about to act on is the number they should see
+            // before they sign.
+            val bulkKeys = remember(state.attestingKeyIdsRaw) {
+                state.attestingKeyIdsRaw
+                    .split('\n', ',', ';', ' ', '\t')
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+            }
+            OutlinedTextField(
+                value = state.attestingKeyIdsRaw,
+                onValueChange = viewModel::setAttestingKeyIdsRaw,
+                label = { Text(localizedString("moderation.ladder.attesting_keys_label")) },
+                placeholder = { Text(localizedString("moderation.ladder.attesting_keys_hint")) },
+                minLines = 3,
+                maxLines = 8,
+                modifier = Modifier.fillMaxWidth().testable("input_ladder_attesting_keys"),
+            )
+            if (bulkKeys.isNotEmpty()) {
+                Text(
+                    localizedString("moderation.ladder.attesting_keys_count", "count", bulkKeys.size.toString()),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp).testable("txt_ladder_keys_count"),
+                )
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = state.attestationType,

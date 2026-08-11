@@ -37,6 +37,16 @@ data class AdminLadderState(
     // ── The selection (every field is covered by the selection hash) ──
     /** Rows authored BY this key — the key being judged, in almost every op. */
     val attestingKeyId: String = "",
+    /**
+     * **Many keys at once**, as pasted by the operator — newline / comma /
+     * space separated, because a list arrives from wherever they keep it (an
+     * incident ticket, a shell, a spreadsheet column) and reformatting it by
+     * hand is exactly the tax this removes.
+     *
+     * Parsed by [parsedAttestingKeyIds]. Empty means the singular field alone
+     * decides, so the ordinary one-subject act is unchanged.
+     */
+    val attestingKeyIdsRaw: String = "",
     /** `scores` / `delegates_to` / `withdraws` / … */
     val attestationType: String = "",
     /** One hierarchical dimension prefix. */
@@ -127,6 +137,10 @@ class AdminLadderViewModel(
 
     fun setAttestingKeyId(value: String) = mutateSelection { it.copy(attestingKeyId = value) }
 
+    /** The pasted key list. Changes the selection, therefore changes the hash. */
+    fun setAttestingKeyIdsRaw(value: String) =
+        mutateSelection { it.copy(attestingKeyIdsRaw = value) }
+
     fun setAttestationType(value: String) = mutateSelection { it.copy(attestationType = value) }
 
     fun setDimensionPrefix(value: String) = mutateSelection { it.copy(dimensionPrefix = value) }
@@ -200,9 +214,25 @@ class AdminLadderViewModel(
         )
     }
 
+    /**
+     * Split a pasted key list on newlines, commas, semicolons or whitespace.
+     *
+     * Trims, drops blanks, de-duplicates while PRESERVING the order the
+     * operator pasted — the preview they ratify should read in the order they
+     * supplied, not sorted into something they have to re-check. A blank entry
+     * would widen the predicate to a key that cannot exist, so it is dropped
+     * rather than sent.
+     */
+    private fun parseKeyList(raw: String): List<String> =
+        raw.split('\n', ',', ';', ' ', '\t')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+
     /** The selection as the wire sees it — the ONE place the form becomes a filter. */
     private fun AdminLadderState.toSelection(): AdminSelectionDto = AdminSelectionDto(
         attestingKeyId = attestingKeyId.trim().ifBlank { null },
+        attestingKeyIds = parseKeyList(attestingKeyIdsRaw),
         attestationType = attestationType.trim().ifBlank { null },
         dimensionPrefixes = dimensionPrefix.trim().let { if (it.isEmpty()) emptyList() else listOf(it) },
         after = selectionAfter.trim().ifBlank { null },

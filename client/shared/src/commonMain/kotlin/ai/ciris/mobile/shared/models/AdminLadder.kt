@@ -63,6 +63,22 @@ data class AdminSelectionDto(
     val attestingKeyId: String? = null,
     @SerialName("attested_key_id")
     val attestedKeyId: String? = null,
+    /**
+     * **Rows authored BY ANY of these keys** — one act over a population.
+     *
+     * OR-combined with the singular field by the substrate and pushed into the
+     * query as `IN (…)` (CIRISPersist#627, persist v30.9.0). Before it, an act
+     * named exactly one subject, so clearing 61 exposed keys meant 61
+     * preview→commit pairs. The guarantee was never cardinality: preview-hash
+     * commit is a property of the HASH, and one hash over 61 rows is exactly as
+     * TOCTOU-closed while auditing better — one decision, one reason, one entry
+     * naming the set.
+     */
+    @SerialName("attesting_key_ids")
+    val attestingKeyIds: List<String> = emptyList(),
+    /** **Rows authored ABOUT ANY of these keys** — see [attestingKeyIds]. */
+    @SerialName("attested_key_ids")
+    val attestedKeyIds: List<String> = emptyList(),
     @SerialName("attestation_type")
     val attestationType: String? = null,
     @SerialName("dimension_prefixes")
@@ -81,6 +97,8 @@ data class AdminSelectionDto(
     val isUnpredicated: Boolean
         get() = attestingKeyId.isNullOrBlank() &&
             attestedKeyId.isNullOrBlank() &&
+            attestingKeyIds.isEmpty() &&
+            attestedKeyIds.isEmpty() &&
             attestationType.isNullOrBlank() &&
             dimensionPrefixes.isEmpty() &&
             dimensionExact.isNullOrBlank() &&
@@ -231,7 +249,7 @@ data class AdminPayloadDescent(
  *
  * `outcome` vocabulary by route:
  *  - quarantine: `admitted` | `skipped` | `refused` | `error`
- *  - deadmit:    `revoked` | `error`
+ *  - deadmit:    `revoked` | `refused` | `error`
  *  - refuse-writes: `refused` | `already_refused` | `error`
  *  - accept-writes: `accepted` | `not_refused` | `error`
  *  - annotate / throttle / un-throttle / re-admit: absent (presence in
@@ -252,7 +270,15 @@ data class AdminOpTargetResult(
     val revocationId: String? = null,
     @SerialName("deadmission_id")
     val deadmissionId: String? = null,
-    /** Quarantine's skip reason, or the substrate's own refusal token. */
+    /**
+     * Quarantine's skip reason, or the substrate's own refusal token.
+     *
+     * Deadmit sets it to `federation_delegated_scope_unauthorized` when this
+     * node holds no accord-rooted `slash` grant — the CIRISServer#383 case. That
+     * arrives as `refused`, NOT `error`: the substrate answered a question about
+     * authority, it did not fail to answer. Render [message] for the human and
+     * keep [error] for the debug pane.
+     */
     val reason: String? = null,
     /** The folded quarantine state a skip reports. */
     val state: String? = null,

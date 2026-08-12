@@ -398,6 +398,12 @@ directory.
 
 ### 5.4 Propose an edit to prompts, guide, or accord
 
+> Edits we have actually made, with the battery evidence that forced them and
+> the mechanism each one revealed, are logged in
+> [`GUIDANCE_FIXES.md`](GUIDANCE_FIXES.md). Add an entry when you change a
+> `language_guidance` block — the rationale is what stops the same failure
+> shape recurring in the next language's rotation.
+
 These don't live in `tests/safety/` — they live under
 `ciris_engine/data/localized/`. The edit-proposal Contributions
 (`prompt_edit`, `guide_edit`, `accord_edit` per

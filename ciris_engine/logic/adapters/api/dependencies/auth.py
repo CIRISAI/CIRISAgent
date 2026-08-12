@@ -292,6 +292,49 @@ def _describe_token_family(token: str) -> str:
     return "unrecognized"
 
 
+def resolve_substrate_session(token: str) -> dict:
+    """Ask the substrate who this `sess:` token is. Shared by BOTH auth surfaces.
+
+    There are two authenticators in this adapter — `dependencies/auth.py`
+    (AuthContext) and `api/auth.py` (TokenData) — reached by different route
+    families. They existed before the substrate did, and when only the first
+    learned to verify node-issued tokens, `/v1/partnership`, `/v1/dsar`,
+    `/v1/my_data` and `/v1/connectors` answered 401 "Invalid or expired token"
+    for a token the rest of the API accepted. Caught by Staged QA, not by me.
+
+    So the VERIFICATION lives here once and both callers use it. Two adapters onto
+    one resolver is fine; two resolvers is how they drift.
+
+    Raises HTTPException(503) when the substrate could not judge, and (401) on an
+    explicit rejection — never conflating "I could not look" with "forged".
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        resolved = ciris_server.resolve_bearer(token)
+    except ImportError:
+        logger.error("auth: substrate session token presented but ciris_server is not importable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Identity verification unavailable",
+        ) from None
+    except Exception as exc:  # noqa: BLE001 — an outage is NOT a rejection
+        logger.error(
+            "auth: substrate COULD NOT judge this token (%s). Answering 503, not 401 — "
+            "the credential may be perfectly valid and we simply could not check it.",
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Identity verification unavailable",
+        ) from None
+
+    if resolved is None:
+        logger.info("auth: substrate rejected a session token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session token")
+    return dict(resolved)
+
+
 def _handle_substrate_session_auth(
     request: Request, auth_service: APIAuthService, token: str
 ) -> AuthContext:
@@ -315,33 +358,7 @@ def _handle_substrate_session_auth(
     judged; do not treat this as a rejection") precisely because that collapse is
     the tempting one to write.
     """
-    try:
-        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
-
-        resolved = ciris_server.resolve_bearer(token)
-    except ImportError:
-        logger.error("auth: substrate session token presented but ciris_server is not importable")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Identity verification unavailable",
-        ) from None
-    except Exception as exc:  # noqa: BLE001 — see the contract above; this is NOT a rejection
-        logger.error(
-            "auth: substrate COULD NOT judge this token (%s). Answering 503, not 401 — "
-            "the credential may be perfectly valid and we simply could not check it.",
-            exc,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Identity verification unavailable",
-        ) from None
-
-    if resolved is None:
-        # A real verdict from the authority on identity.
-        logger.info("auth: substrate rejected a session token")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session token"
-        )
+    resolved = resolve_substrate_session(token)
 
     wa_id = resolved["wa_id"]
     role = UserRole(resolved["role"]) if resolved.get("role") else UserRole.OBSERVER

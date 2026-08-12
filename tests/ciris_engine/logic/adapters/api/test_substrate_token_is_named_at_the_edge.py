@@ -122,7 +122,11 @@ def test_an_outage_is_never_reported_as_a_rejection() -> None:
     None`, an identity-store outage logs as every user suddenly presenting bad
     tokens, and the fix looks like a credential problem.
     """
-    source = inspect.getsource(auth_mod._handle_substrate_session_auth)
+    # The 503 lives in the SHARED resolver, which both authenticators call —
+    # `dependencies/auth.py` (AuthContext) and `api/auth.py` (TokenData). When only
+    # the first knew about substrate tokens, /v1/partnership, /v1/dsar, /v1/my_data
+    # and /v1/connectors 401'd on a credential the rest of the API accepted.
+    source = inspect.getsource(auth_mod.resolve_substrate_session)
     # Scan the CODE, not the prose. The docstring deliberately quotes the
     # anti-pattern (`except Exception: return None`) to warn against it, and a
     # scan over the whole source matches its own documentation — the exact
@@ -196,3 +200,31 @@ def test_python_auth_routes_are_gone() -> None:
         "routes/auth.py is back — the brain is minting and verifying its own "
         "identity again alongside the substrate's"
     )
+
+
+def test_both_authenticators_use_the_same_resolver() -> None:
+    """Two adapters onto one resolver is fine; two resolvers is how they drift.
+
+    This adapter has two authenticators, reached by different route families. The
+    substrate deletion taught only one of them about `sess:` tokens, and Staged QA
+    caught the other 401ing on a valid credential — after the unit shard was green,
+    because no unit test has a node behind it.
+    """
+    from ciris_engine.logic.adapters.api import auth as legacy_mod
+
+    legacy = inspect.getsource(legacy_mod.get_current_user)
+    assert "resolve_substrate_session" in legacy, (
+        "api/auth.py no longer delegates — node-issued tokens will 401 on "
+        "/v1/partnership, /v1/dsar, /v1/my_data and /v1/connectors"
+    )
+    # Neither caller may re-implement the verification. Docstrings stripped —
+    # they NAME `ciris_server.resolve_bearer` while explaining why callers must not
+    # call it, and scanning the prose would flag the documentation as the offence.
+    for src in (
+        _strip_docstring(legacy),
+        _strip_docstring(inspect.getsource(auth_mod._handle_substrate_session_auth)),
+    ):
+        assert "ciris_server.resolve_bearer" not in src, (
+            "a caller is calling the substrate directly instead of the shared "
+            "resolver — the 503/401 contract will drift between the two surfaces"
+        )

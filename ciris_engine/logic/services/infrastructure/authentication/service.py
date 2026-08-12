@@ -1150,6 +1150,20 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         )
 
         # Store in database
+        # ENTRY MARKER. `create_wa` is linear — this call always runs — so if a
+        # "✅ Created NEW WA" appears in the setup log with no WA_CREATE_ENTRY and
+        # no WA_WRITE_VERIFY beside it, the module executing is not this one.
+        # Staged QA showed exactly that shape for `jeff`, and this workflow has an
+        # error string for the mechanism: "Canonical staged tree and wheel install
+        # diverge". Absence of a log is weak evidence; this makes presence the
+        # signal instead.
+        logger.warning(
+            "WA_CREATE_ENTRY: about to store %s (name=%s, role=%s) via %s",
+            wa_cert.wa_id,
+            wa_cert.name,
+            wa_cert.role,
+            __file__,
+        )
         await self._store_wa_certificate(wa_cert)
 
         # Store private key in CIRISVerify for signing capability

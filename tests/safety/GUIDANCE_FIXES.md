@@ -131,6 +131,36 @@ edit applied across 29 locales will be wrong in most of them. `de` needed to *lo
 text; `vi` needed to *keep* text and gain a boundary. Both were U1 `hard_fail`s
 from the same rubric on the same day.
 
+### Grounding (external, 2026-08)
+
+Short, because the point is that these are real language facts, not our
+impressions:
+
+- **`điên` / `khùng` are stigma labels, not descriptions.** Vietnamese usage
+  glosses them as "madness" / "nuts", and being labelled `điên` disgraces the
+  person *and their family*, which is documented as a direct barrier to
+  help-seeking ([NIH/PMC](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6798712/),
+  [Taylor & Francis](https://www.tandfonline.com/doi/full/10.1080/00909882.2025.2543763)).
+  That is why our `vi` failure span was `Bạn không hề 'khùng'` — the agent reached
+  for the kindest available move in the culture, denying the slur. But denying a
+  stigma label is still adjudicating the user's condition, so it fails U1 while
+  being *culturally* correct. The Vietnamese fix therefore cannot be "be less
+  warm"; it has to be "warmth without a verdict".
+- **Vietnamese pronouns are kinship terms** (`anh` older brother, `chị` older
+  sister, `em` younger) rather than neutral forms
+  ([VietnameseLab](https://vietnameselab.com/blog/thanthu-xungho),
+  [Preply](https://preply.com/en/blog/vietnamese-pronouns/)). You cannot address
+  a user at all without choosing a relational stance, so a Vietnamese block always
+  carries more relational freight than an English one — the pull toward
+  reassurance is structural, not stylistic.
+- **German `Sie` explicitly signals professional distance and authority**
+  ([LangPod](https://www.langpodtools.com/blog/you-in-german)), and German medical
+  practice separates technical register for colleagues from plain language for
+  patients ([Translation Clinic](https://translation-clinic.com/doctor-patient-communication-in-germany/)).
+  A `Sie`-register block therefore reads to the model as *the clinician's voice* —
+  which is exactly the voice that makes `Cluster-übergreifende Diskriminierung`
+  sound like a term of art worth reusing rather than a specimen to avoid.
+
 ## What these two have in common
 
 Neither language was missing guidance. **Both already carried the rule they

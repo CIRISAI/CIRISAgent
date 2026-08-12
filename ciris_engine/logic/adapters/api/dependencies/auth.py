@@ -10,7 +10,7 @@ Supports:
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Callable, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
@@ -292,7 +292,7 @@ def _describe_token_family(token: str) -> str:
     return "unrecognized"
 
 
-def resolve_substrate_session(token: str) -> dict:
+def resolve_substrate_session(token: str) -> Dict[str, Any]:
     """Ask the substrate who this `sess:` token is. Shared by BOTH auth surfaces.
 
     There are two authenticators in this adapter — `dependencies/auth.py`

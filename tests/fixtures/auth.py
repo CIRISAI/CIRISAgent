@@ -167,10 +167,39 @@ def make_login_request(client, username: str = None, password: str = None) -> Di
     if password is None:
         password = get_test_admin_password()
 
-    response = client.post("/v1/auth/login", json={"username": username, "password": password})
-    assert response.status_code == 200, f"Login failed: {response.json()}"
-    token = response.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    # NO HTTP CALL. `/v1/auth/login` is served by the NODE now — the brain proxies
+    # `/v1/auth/*` to it — and a TestClient app has no node behind it, so the proxy
+    # answers 502 "identity service unavailable" and every test that merely needed
+    # an authenticated client fails for a reason unrelated to what it tests.
+    #
+    # Mint the SAME ARTIFACT the old login endpoint returned — an API key, checked
+    # by the surviving `_handle_api_key_auth` path — on the app's own auth service.
+    # Callers get a working bearer token exactly as before.
+    #
+    # Not the `username:password` bearer: that path is real, but the app's auth
+    # service reloads `_users` during verification and drops the injected test
+    # admin, so it authenticates in isolation and 401s inside the app.
+    #
+    # Exercising LOGIN ITSELF now needs a composed node — integration territory
+    # (qa_runner covers the node's auth surface through the proxy), not TestClient.
+    import secrets
+
+    from ciris_engine.schemas.api.auth import UserRole
+
+    auth_service = client.app.state.auth_service
+    user = auth_service.get_user_by_username(username)
+    assert user is not None, (
+        f"no test user {username!r} on the app's auth service — call "
+        f"setup_test_admin_user(app.state.auth_service) before make_login_request"
+    )
+    api_key = f"ciris_admin_{secrets.token_urlsafe(24)}"
+    auth_service.store_api_key(
+        key=api_key,
+        user_id=user.wa_id,
+        role=user.api_role if isinstance(user.api_role, UserRole) else UserRole(user.api_role),
+        description="test fixture key (replaces the login round-trip)",
+    )
+    return {"Authorization": f"Bearer {api_key}"}
 
 
 @pytest.fixture

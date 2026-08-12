@@ -548,7 +548,7 @@ private fun SlotRow(label: String, holderName: String, primary: Boolean, done: B
  * [AccordCeremonyViewModel.yubiKeyStatus] (GET /v1/accord/yubikey-status).
  */
 @Composable
-private fun YubiKeyStatusBanner(status: YubiKeyStatus?, onRefresh: () -> Unit) {
+internal fun YubiKeyStatusBanner(status: YubiKeyStatus?, onRefresh: () -> Unit) {
     val detected = status?.detected == true
     val ready = status?.ready == true
     val bg = when {

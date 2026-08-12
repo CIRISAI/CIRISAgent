@@ -776,6 +776,11 @@ fun CIRISApp(
     val contactsViewModel: ContactsViewModel = viewModel {
         ContactsViewModel(apiClient)
     }
+    // Delegate moderation duty — the co-scrubbed conferral of slash/moderate/review
+    // onto another self, with the sub-delegation depth stated up front.
+    val dutyConferralViewModel: ai.ciris.mobile.shared.viewmodels.DutyConferralViewModel = viewModel {
+        ai.ciris.mobile.shared.viewmodels.DutyConferralViewModel(apiClient)
+    }
     val accordViewModel: ai.ciris.mobile.shared.viewmodels.AccordViewModel = viewModel {
         ai.ciris.mobile.shared.viewmodels.AccordViewModel(apiClient)
     }
@@ -3270,6 +3275,18 @@ fun CIRISApp(
                 )
             }
 
+            Screen.DutyConferral -> {
+                // Delegate moderation duty, reached from the Accord card. Confer
+                // slash / moderate / review on another self, stating in one control
+                // whether — and how far — they may pass the duty on. Co-scrubbed by
+                // the accord holders; the node signs, the app holds no keys.
+                PlatformLogger.d(TAG, "[Screen.DutyConferral] Rendering duty conferral screen")
+                DutyConferralScreen(
+                    viewModel = dutyConferralViewModel,
+                    onBack = { currentScreen = Screen.Accord },
+                )
+            }
+
             Screen.Accord -> {
                 // Accord card (Manage group): the HUMANITY_ACCORD constitutional
                 // surface — entrenched family + quorum:2/3 holder roster + pending
@@ -3280,6 +3297,7 @@ fun CIRISApp(
                     onBack = { currentScreen = Screen.Interact },
                     // Found-a-new-accord CTA — shown only when no family exists yet.
                     onStartCeremony = { currentScreen = Screen.AccordCeremony },
+                    onConferDuty = { currentScreen = Screen.DutyConferral },
                 )
             }
 
@@ -4745,6 +4763,7 @@ private sealed class Screen {
     object IdentityManagement : Screen()
     // Accord (HUMANITY_ACCORD — constitutional 2/3 kill-switch + holder roster).
     object Accord : Screen()
+    object DutyConferral : Screen()
     // Provision Accord Holder (mint a portable-2FA accord-holder identity).
     object ProvisionAccordHolder : Screen()
     // Accord Genesis Ceremony (stand up a new mesh's 2-of-3 human kill-switch).
@@ -4857,6 +4876,7 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.Delegations -> ai.ciris.mobile.shared.ui.nav.NavSurface.Delegations
     Screen.IdentityManagement -> ai.ciris.mobile.shared.ui.nav.NavSurface.IdentityManagement
     Screen.Accord -> ai.ciris.mobile.shared.ui.nav.NavSurface.Accord
+        Screen.DutyConferral -> ai.ciris.mobile.shared.ui.nav.NavSurface.Accord
     Screen.ProvisionAccordHolder -> ai.ciris.mobile.shared.ui.nav.NavSurface.ProvisionAccordHolder
     Screen.AccordCeremony -> ai.ciris.mobile.shared.ui.nav.NavSurface.AccordCeremony
     Screen.Moderation -> ai.ciris.mobile.shared.ui.nav.NavSurface.Moderation

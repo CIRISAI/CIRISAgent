@@ -106,6 +106,48 @@ def _safe_subpath(path: str) -> str:
     return path
 
 
+def _log_agent_side_cert_inventory(path: str) -> None:
+    """On a refused login, log the certs THIS side can see in the same store.
+
+    Staged QA produced `login failed: no cert resolved for identifier
+    identifier=jeff certs_scanned=5` while the agent had just written a WA named
+    `jeff` to the same database, one second before the node composed. The node
+    counts what it scanned but does not name it, and we log what we wrote but not
+    what is still there at login time — so neither side's logs could answer the
+    only question that matters: is the row absent, or present under a name the
+    node does not match on?
+
+    `certs_scanned=5` is consistent with BOTH. This closes that gap from our end.
+    Diagnostic only — it never affects the response, and any failure to read is
+    swallowed, because a logging aid must not be able to break a login.
+
+    Names are already logged verbatim by CIRIS_USER_CREATE at setup, so this adds
+    no disclosure that the same log file does not already carry.
+    """
+    try:
+        from ciris_engine.logic.persistence.stores import authentication_store
+
+        certs = authentication_store.list_wa_certificates(active_only=False)
+        summary = ", ".join(
+            f"{getattr(c, 'name', '?')!r}/{getattr(c, 'wa_id', '?')[-6:]}"
+            f"{'' if getattr(c, 'active', True) else ' INACTIVE'}"
+            for c in (certs or [])[:12]
+        )
+        logger.warning(
+            "auth proxy: the node REFUSED %s. Agent-side store holds %d cert(s): %s. "
+            "Compare against the node's certs_scanned=. A DIFFERENT count is the "
+            "signal: this side lists only rows passing _is_brain_wa_row (classic "
+            "wa_id shape); anything else is skipped as a substrate-owned federation "
+            "identity. If the two halves partition the same table differently, a "
+            "brain-written cert can be invisible to the node's scan.",
+            path,
+            len(certs or []),
+            summary or "(none)",
+        )
+    except Exception as exc:  # noqa: BLE001 — diagnostics must never break auth
+        logger.debug("auth proxy: could not enumerate agent-side certs: %s", exc)
+
+
 @router.api_route(
     "/auth/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
@@ -145,6 +187,11 @@ async def proxy_auth_to_node(path: str, request: Request) -> Response:
             status_code=502,
             media_type="application/json",
         )
+
+    # A refused LOGIN is the one 401 worth explaining, because it is the only one
+    # where both halves have an opinion about the same rows.
+    if upstream.status_code == 401 and path.rstrip("/").endswith("login"):
+        _log_agent_side_cert_inventory(path)
 
     return Response(
         content=upstream.content,

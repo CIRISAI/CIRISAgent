@@ -330,7 +330,18 @@ def resolve_substrate_session(token: str) -> Dict[str, Any]:
         ) from None
 
     if resolved is None:
-        logger.info("auth: substrate rejected a session token")
+        # Name the SUBJECT, not just the verdict. `wa_id` is not a secret —
+        # `/v1/auth/owner-hint` serves the owner's name unauthenticated, and it is
+        # the wa_id minus its prefix — but the MAC is, so only the id half is
+        # logged. Without this a 401 storm is 191 identical lines that cannot
+        # distinguish "one stale token replayed" from "every fresh token
+        # refused", which have nothing in common as diagnoses.
+        subject = token.split(":")[1] if token.count(":") >= 2 else "<unparseable>"
+        logger.warning(
+            "auth: substrate JUDGED this session token invalid (wa_id=%s). This is a "
+            "verdict, not an outage — the substrate looked and said no.",
+            subject,
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session token")
     return dict(resolved)
 

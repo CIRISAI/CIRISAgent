@@ -262,10 +262,57 @@ def _build_permissions_set(key_info: Any, user: Any) -> Set[Any]:
     return permissions
 
 
+#: Prefix of a session token minted by the SUBSTRATE (`issue_session_token` in
+#: ciris-server `auth/session.rs`) — `sess:<wa_id>:<mac>`. Every node login
+#: mechanism mints this one shape: password, Google/Apple native id_token, and the
+#: OAuth callback all funnel through that single function.
+SUBSTRATE_SESSION_PREFIX = "sess:"
+
+
+def _describe_token_family(token: str) -> str:
+    """Name the token's minter, for logs only. Never a decision input.
+
+    The brain and the node mint DISJOINT token families and neither verifies the
+    other's, which is measurable:
+
+        node   `sess:wa-…`             -> :4243 200, :8080 401
+        python `ciris_system_admin_…`  -> :4243 401, :8080 200
+
+    Before this, presenting a substrate token to a brain route produced a bare
+    "Invalid API key" — indistinguishable from a typo'd credential, which is how
+    the /v1/auth cutover cost a day. A rejection should say WHICH minter issued
+    the thing it could not verify.
+    """
+    if token.startswith(SUBSTRATE_SESSION_PREFIX):
+        return "substrate-session"
+    if token.startswith("service:"):
+        return "service-token"
+    if token.startswith("ciris_"):
+        return "brain-issued"
+    return "unrecognized"
+
+
 def _handle_api_key_auth(request: Request, auth_service: APIAuthService, api_key: str) -> AuthContext:
     """Handle regular API key authentication."""
     key_info = auth_service.validate_api_key(api_key)
     if not key_info:
+        family = _describe_token_family(api_key)
+        if family == "substrate-session":
+            # THE CUTOVER EDGE. The caller authenticated against the node and is
+            # holding a perfectly valid `sess:` token; the brain simply has no way
+            # to verify it, because ciris_server exposes no bearer-resolution
+            # binding to Python (checked: its Python surface has no resolve/verify
+            # token export). This is the one line that tells an operator the
+            # difference between "bad credential" and "right credential, wrong
+            # verifier" — see CIRISAgent#1028 / the substrate ask.
+            logger.warning(
+                "auth: rejected a SUBSTRATE-minted session token on a brain route — "
+                "the credential may be entirely valid; the brain cannot verify it. "
+                "Until the substrate exposes bearer resolution to Python, node-issued "
+                "tokens do not open brain doors."
+            )
+        else:
+            logger.info("auth: rejected bearer token (family=%s)", family)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
     # Get user to check for custom permissions
@@ -455,6 +502,34 @@ async def get_auth_context(  # NOSONAR - FastAPI requires async for dependency i
 
     # Fall back to bearer token authentication
     api_key = _extract_bearer_token(authorization)
+
+    # A SUBSTRATE-minted session token, checked BEFORE anything else parses it.
+    #
+    # `sess:<wa_id>:<mac>` contains colons, so without this it falls into the
+    # `username:password` branch below and is rejected as "Invalid username or
+    # password" — a substrate token, shaped like a credential pair, reported as a
+    # bad credential. The caller may be perfectly authenticated: they logged in
+    # against the node and hold a valid token the brain simply cannot verify,
+    # because ciris_server exposes no bearer-resolution binding to Python.
+    #
+    # Measured, both directions:
+    #     node   `sess:wa-…`            -> :4243 200   :8080 401
+    #     python `ciris_system_admin_…` -> :4243 401   :8080 200
+    #
+    # Disjoint families, neither verifying the other's. This says so out loud
+    # rather than making the next person bisect it. See CIRISAgent#1028.
+    if api_key.startswith(SUBSTRATE_SESSION_PREFIX):
+        logger.warning(
+            "auth: SUBSTRATE-minted session token presented to a brain route. The "
+            "credential may be entirely valid — it opens the node's doors — but the "
+            "brain cannot verify it: ciris_server exposes no bearer resolution to "
+            "Python, so node-issued tokens do not open brain doors. This is the "
+            "/v1/auth cutover blocker, not a bad password."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Substrate session token cannot be verified by this service",
+        )
 
     # Check if this is a service token
     if api_key.startswith("service:"):

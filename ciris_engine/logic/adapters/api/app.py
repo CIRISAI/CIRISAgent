@@ -17,7 +17,7 @@ from .middleware.rate_limiter import RateLimitMiddleware
 from .routes import (
     agent,
     audit,
-    auth,
+    auth_proxy,
     billing,
     config,
     connectors,
@@ -362,7 +362,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         telemetry_export.router,
         audit.router,
         wa.router,
-        auth.router,
+        auth_proxy.router,
         users.router,
         consent.router,
         dsar.router,

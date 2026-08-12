@@ -292,6 +292,75 @@ def _describe_token_family(token: str) -> str:
     return "unrecognized"
 
 
+def _handle_substrate_session_auth(
+    request: Request, auth_service: APIAuthService, token: str
+) -> AuthContext:
+    """Verify a node-minted `sess:` token by asking the SUBSTRATE, not ourselves.
+
+    This is the binding that lets the brain stop having an opinion about identity.
+    `ciris_server.resolve_bearer` is the same verification the node's own doors
+    use, so a token minted by ANY node login mechanism — password, Google or Apple
+    native id_token, the OAuth callback, anything added later — opens brain routes
+    without a second implementation here. Upstream funnels all of them through one
+    `issue_session_token`, so there is exactly one thing to verify.
+
+    THE CONTRACT, which must not be softened:
+
+        None      -> the substrate JUDGED the token and it is invalid  -> 401
+        exception -> the substrate COULD NOT judge it                  -> 503
+
+    `except Exception: return None` would turn a store outage into a silent
+    fleet-wide lockout whose logs read exactly like everyone presenting bad
+    tokens at once. The upstream messages say so in words ("the token was NOT
+    judged; do not treat this as a rejection") precisely because that collapse is
+    the tempting one to write.
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        resolved = ciris_server.resolve_bearer(token)
+    except ImportError:
+        logger.error("auth: substrate session token presented but ciris_server is not importable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Identity verification unavailable",
+        ) from None
+    except Exception as exc:  # noqa: BLE001 — see the contract above; this is NOT a rejection
+        logger.error(
+            "auth: substrate COULD NOT judge this token (%s). Answering 503, not 401 — "
+            "the credential may be perfectly valid and we simply could not check it.",
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Identity verification unavailable",
+        ) from None
+
+    if resolved is None:
+        # A real verdict from the authority on identity.
+        logger.info("auth: substrate rejected a session token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session token"
+        )
+
+    wa_id = resolved["wa_id"]
+    role = UserRole(resolved["role"]) if resolved.get("role") else UserRole.OBSERVER
+    # `actor` is distinct from `wa_id` on a delegated grant: the caller wields the
+    # owner's authority while the ACT is attributable to the delegate. Logging the
+    # wa_id alone would record the owner as having done what a delegate did.
+    actor = resolved.get("actor")
+    logger.debug(
+        "auth: substrate resolved session wa_id=%s role=%s actor=%s", wa_id, role.value, actor
+    )
+    return AuthContext(
+        user_id=wa_id,
+        role=role,
+        permissions=set(ROLE_PERMISSIONS.get(role, set())),
+        api_key_id=None,
+        authenticated_at=datetime.now(timezone.utc),
+    )
+
+
 def _handle_api_key_auth(request: Request, auth_service: APIAuthService, api_key: str) -> AuthContext:
     """Handle regular API key authentication."""
     key_info = auth_service.validate_api_key(api_key)
@@ -519,17 +588,7 @@ async def get_auth_context(  # NOSONAR - FastAPI requires async for dependency i
     # Disjoint families, neither verifying the other's. This says so out loud
     # rather than making the next person bisect it. See CIRISAgent#1028.
     if api_key.startswith(SUBSTRATE_SESSION_PREFIX):
-        logger.warning(
-            "auth: SUBSTRATE-minted session token presented to a brain route. The "
-            "credential may be entirely valid — it opens the node's doors — but the "
-            "brain cannot verify it: ciris_server exposes no bearer resolution to "
-            "Python, so node-issued tokens do not open brain doors. This is the "
-            "/v1/auth cutover blocker, not a bad password."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Substrate session token cannot be verified by this service",
-        )
+        return _handle_substrate_session_auth(request, auth_service, api_key)
 
     # Check if this is a service token
     if api_key.startswith("service:"):

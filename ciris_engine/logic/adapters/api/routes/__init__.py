@@ -8,7 +8,7 @@ Export all route modules for easy import.
 from . import (
     agent,
     audit,
-    auth,
+    auth_proxy,
     billing,
     config,
     connectors,
@@ -36,7 +36,7 @@ from . import (
 __all__ = [
     "agent",
     "audit",
-    "auth",
+    "auth_proxy",
     "billing",
     "config",
     "connectors",

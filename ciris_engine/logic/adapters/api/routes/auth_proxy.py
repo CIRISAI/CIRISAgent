@@ -48,10 +48,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Set
 
 import httpx
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,30 @@ _HOP_BY_HOP: Set[str] = {
 
 _TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 
+#: A single `/v1/auth/*` sub-path. Deliberately narrow: the node's auth surface is
+#: `login`, `me`, `refresh`, `logout`, `attestation`, `owner-hint`, `api-keys/{id}`,
+#: `oauth/{provider}/login|callback`, `native/{google,apple}`, `device/*`.
+#: Everything in that set is [a-z0-9], `-`, `_`, `.` and `/`.
+_SAFE_SUBPATH = re.compile(r"^[A-Za-z0-9._~/-]*$")
+
+
+def _safe_subpath(path: str) -> str:
+    """Validate the caller-supplied sub-path before it becomes an upstream URL.
+
+    This handler forwards `/v1/auth/{path:path}`, so `path` is user-controlled and
+    is concatenated into the node's URL. Without this, `..` segments escape the
+    `/v1/auth/` prefix — httpx normalises them — and the proxy becomes a way to
+    reach ANY node endpoint through a route that authenticates nothing. The node
+    would answer as if we had asked. (Sonar S7044.)
+
+    An allowlist, not a denylist: `..` alone is not enough, because encodings and
+    backslashes reach the same place by other spellings. Anything outside the
+    character set the node's own auth paths use is refused.
+    """
+    if not _SAFE_SUBPATH.match(path) or ".." in path or path.startswith("/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid auth path")
+    return path
+
 
 @router.api_route(
     "/auth/{path:path}",
@@ -94,7 +119,7 @@ async def proxy_auth_to_node(path: str, request: Request) -> Response:
     its errors — a proxy that "helpfully" rewrites an upstream failure is how the
     two implementations diverge again.
     """
-    url = f"{NODE_UPSTREAM}/v1/auth/{path}"
+    url = f"{NODE_UPSTREAM}/v1/auth/{_safe_subpath(path)}"
     headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP_BY_HOP}
 
     try:
@@ -110,7 +135,11 @@ async def proxy_auth_to_node(path: str, request: Request) -> Response:
         # The node not being reachable is an infrastructure failure, not an auth
         # decision. 502 says so; 401 would tell the caller their credentials were
         # rejected by something that never saw them.
-        logger.error("auth proxy could not reach the node at %s: %s", url, exc)
+        # Log the UPSTREAM, never the caller's path — it is user-controlled, and a
+        # CRLF in it forges log lines (Sonar S5145). The path is already validated
+        # above, but a log statement should not depend on a check elsewhere staying
+        # correct. The exception text is the diagnostic value here anyway.
+        logger.error("auth proxy could not reach the node at %s: %s", NODE_UPSTREAM, exc)
         return Response(
             content=b'{"detail":"identity service unavailable"}',
             status_code=502,

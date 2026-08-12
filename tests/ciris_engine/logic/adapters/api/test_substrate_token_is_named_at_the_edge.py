@@ -228,3 +228,52 @@ def test_both_authenticators_use_the_same_resolver() -> None:
             "a caller is calling the substrate directly instead of the shared "
             "resolver — the 503/401 contract will drift between the two surfaces"
         )
+
+
+def test_auth_proxy_refuses_paths_that_escape_the_auth_prefix() -> None:
+    """The proxy forwards `/v1/auth/{path:path}` — so `path` is user input.
+
+    Without validation, `..` segments escape `/v1/auth/` (httpx normalises them)
+    and this route becomes a way to reach ANY node endpoint through a handler that
+    authenticates nothing. Sonar S7044 found it; it is a real SSRF, not a lint.
+
+    Allowlist, not denylist: `..` alone is insufficient because encodings and
+    backslashes arrive at the same place by other spellings.
+    """
+    from fastapi import HTTPException
+
+    from ciris_engine.logic.adapters.api.routes.auth_proxy import _safe_subpath
+
+    for good in ("login", "me", "oauth/google/callback", "api-keys/abc_123.x", ""):
+        assert _safe_subpath(good) == good
+
+    for bad in (
+        "../admin",
+        "a/../../b",
+        "/etc/passwd",
+        "x%0d%0ainjected",
+        "a\\b",
+        "oauth/../../v1/system/shutdown",
+    ):
+        with pytest.raises(HTTPException) as exc:
+            _safe_subpath(bad)
+        assert exc.value.status_code == 400, f"{bad!r} must be refused, not forwarded"
+
+
+def test_auth_proxy_does_not_log_the_caller_supplied_path() -> None:
+    """CRLF in a user-controlled path forges log lines (Sonar S5145).
+
+    The path is validated before use, but a log statement must not depend on a
+    check elsewhere staying correct — so it logs the fixed upstream instead.
+    """
+    from ciris_engine.logic.adapters.api.routes import auth_proxy
+
+    # `_strip_docstring` round-trips through ast.unparse, which normalises quote
+    # style — so assert on the ARGUMENTS, not on the source spelling.
+    code = _strip_docstring(inspect.getsource(auth_proxy.proxy_auth_to_node))
+    assert "NODE_UPSTREAM, exc)" in code, (
+        "the failure log must name the fixed upstream, never the caller's path"
+    )
+    assert "url, exc)" not in code, (
+        "the constructed URL embeds the caller's path — logging it re-opens S5145"
+    )

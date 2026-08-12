@@ -611,8 +611,54 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         return await self.get_wa(wa_id)
 
     async def _store_wa_certificate(self, wa: WACertificate) -> None:
-        """Store a WA certificate in the database."""
+        """Store a WA certificate in the database, and verify it is really there.
+
+        WRITE-VERIFY, because a silent loss here is invisible until login. Staged
+        QA logged "✅ Created NEW WA: … name=jeff" and six seconds later BOTH the
+        node and this side enumerated the same five certs with no `jeff` among
+        them — a write that reported success and did not survive.
+
+        The read-back is deliberately narrow: `get_wa_by_id` on the id we just
+        wrote. It answers the question the enumeration cannot, because
+        `list_wa_certificates` is ALWAYS active-only (persist exposes only
+        `wa_cert_list_by_role`, which restricts to active=true), so an absent row
+        and an inactive row look identical from there — and they need opposite
+        fixes.
+
+        Never raises. A verification probe that can fail the operation it verifies
+        would turn a diagnostic into an outage.
+        """
         authentication_store.store_wa_certificate(wa)
+
+        try:
+            readback = authentication_store.get_wa_by_id(wa.wa_id)
+        except Exception as exc:  # noqa: BLE001 — diagnostics must not break writes
+            logger.warning("WA_WRITE_VERIFY: could not read back %s: %s", wa.wa_id, exc)
+            return
+
+        if readback is None:
+            logger.error(
+                "WA_WRITE_VERIFY: LOST WRITE — stored WA %s (name=%s, role=%s) and it is "
+                "NOT readable immediately afterwards. Any login as this identity will fail "
+                "with 'no cert resolved', and the creation log above will say it succeeded.",
+                wa.wa_id,
+                wa.name,
+                wa.role,
+            )
+        elif not getattr(readback, "active", True):
+            logger.error(
+                "WA_WRITE_VERIFY: WA %s (name=%s) persisted INACTIVE. It exists but is "
+                "invisible to every active-only listing, including the node's login scan.",
+                wa.wa_id,
+                wa.name,
+            )
+        else:
+            logger.info(
+                "WA_WRITE_VERIFY: %s (name=%s, role=%s) written and read back active",
+                wa.wa_id,
+                wa.name,
+                wa.role,
+            )
 
     async def _create_adapter_observer(self, adapter_id: str, name: str) -> WACertificate:
         """Create or reactivate adapter observer WA."""

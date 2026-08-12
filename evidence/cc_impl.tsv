@@ -232,13 +232,25 @@ decimal_id	claim_id	repo	path#symbol	status
 # continue, which let an attacker drive the callback with a forged or replayed
 # state and have the agent mint an API key against an account of their choosing.
 # Locked by tests/adapters/api/test_oauth_state_csrf.py.
-8.8.7	CLM-await-oauth-state-single-use	CIRISAgent	ciris_engine/logic/adapters/api/routes/auth.py#_oauth_state_consume	impl
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170). The agent's
+# `routes/auth.py` was deleted — this property is now implemented and tested in
+# Rust, where the node owns identity, and reached from here through the
+# `/v1/auth/*` proxy. The claim did not go away with our copy of the code; its
+# evidence moved. Agent-side behavioural coverage rides in `qa_runner auth`,
+# which exercises the node's surface through the proxy rather than a TestClient.
+8.8.7	CLM-await-oauth-state-single-use	—	—	substrate
 # Drops any redirect_uri that is protocol-relative, malformed, http-to-a-public-
 # host, or whose public hostname is not on the configured allowlist. The OAuth
 # success redirect CARRIES THE FRESHLY MINTED API KEY, so an unvalidated
 # redirect_uri is direct credential exfiltration to an attacker-chosen domain.
 # Enforced at both oauth_login (:723) and oauth_callback (:1525).
-8.8.7	CLM-await-oauth-redirect-allowlist	CIRISAgent	ciris_engine/logic/adapters/api/routes/auth.py#validate_redirect_uri	impl
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170). The agent's
+# `routes/auth.py` was deleted — this property is now implemented and tested in
+# Rust, where the node owns identity, and reached from here through the
+# `/v1/auth/*` proxy. The claim did not go away with our copy of the code; its
+# evidence moved. Agent-side behavioural coverage rides in `qa_runner auth`,
+# which exercises the node's surface through the proxy rather than a TestClient.
+8.8.7	CLM-await-oauth-redirect-allowlist	—	—	substrate
 # Native Apple sign-in tokens are verified against Apple's published JWKS with alg
 # pinned to RS256, aud restricted to the configured app IDs, iss pinned to Apple,
 # and sub/aud/iss/exp required — and the route 503s rather than admitting anyone
@@ -247,7 +259,13 @@ decimal_id	claim_id	repo	path#symbol	status
 # Google path has a bypass — on asyncio.TimeoutError it falls through to a local
 # decode that does not verify the signature (auth.py:1902-1909, 1769-1770). That is
 # a gap to file, not a control to register; only the Apple path is claimed here.
-8.8.7	CLM-await-apple-id-token-verified	CIRISAgent	ciris_engine/logic/adapters/api/routes/auth.py#_verify_apple_id_token	impl
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170). The agent's
+# `routes/auth.py` was deleted — this property is now implemented and tested in
+# Rust, where the node owns identity, and reached from here through the
+# `/v1/auth/*` proxy. The claim did not go away with our copy of the code; its
+# evidence moved. Agent-side behavioural coverage rides in `qa_runner auth`,
+# which exercises the node's surface through the proxy rather than a TestClient.
+8.8.7	CLM-await-apple-id-token-verified	—	—	substrate
 # On the Home Assistant ingress path the X-Remote-User-Id header alone establishes
 # identity, so can_handle_request first refuses any request not originating from
 # the Supervisor gateway address (or loopback). Fail-open lets an external caller
@@ -533,13 +551,25 @@ decimal_id	claim_id	repo	path#symbol	status
 # the time it looked.
 # Offline sign-in is a real capability this removes — restoring it means cached
 # JWKS (verified offline), not trusting the token. Follow-up tracked on #999.
-8.8.7	CLM-await-google-token-fails-closed	CIRISAgent	tests/adapters/api/test_google_auth_fails_closed_999.py#test_timeout_does_not_become_an_authentication_decision	impl
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170). The agent's
+# `routes/auth.py` was deleted — this property is now implemented and tested in
+# Rust, where the node owns identity, and reached from here through the
+# `/v1/auth/*` proxy. The claim did not go away with our copy of the code; its
+# evidence moved. Agent-side behavioural coverage rides in `qa_runner auth`,
+# which exercises the node's surface through the proxy rather than a TestClient.
+8.8.7	CLM-await-google-token-fails-closed	—	—	substrate
 # The general rule the above violated, gated separately because the next
 # degraded path will be written by someone who has not read that one: no
 # exception handler in the verifier may produce an identity. A timeout is an
 # availability failure; an auth control may never become MORE permissive when a
 # dependency is unreachable.
-8.8.7	CLM-await-degraded-path-no-weaker	CIRISAgent	tests/adapters/api/test_google_auth_fails_closed_999.py#test_every_verification_failure_path_raises	impl
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170). The agent's
+# `routes/auth.py` was deleted — this property is now implemented and tested in
+# Rust, where the node owns identity, and reached from here through the
+# `/v1/auth/*` proxy. The claim did not go away with our copy of the code; its
+# evidence moved. Agent-side behavioural coverage rides in `qa_runner auth`,
+# which exercises the node's surface through the proxy rather than a TestClient.
+8.8.7	CLM-await-degraded-path-no-weaker	—	—	substrate
 # Emergency shutdown resolves authority from the accord verifier — ONE trust
 # root, both entry surfaces (#999). The route carried its own hardcoded key list
 # whose single entry did not match the steward's actual root key, so the

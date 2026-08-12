@@ -3575,6 +3575,9 @@
     "ladder": {
       "attestation_type_label": "证明类型（scores、delegates_to 等）",
       "attesting_key_label": "由该密钥编写的行",
+      "attesting_keys_count": "已选择 {count} 个密钥 —— 这是一次操作，用同一个哈希和同一个理由涵盖全部密钥。",
+      "attesting_keys_hint": "每行粘贴一个密钥（也可用逗号或空格分隔）",
+      "attesting_keys_label": "或一次输入多个密钥",
       "attribution_hint": "两者均为必填，且都会写入已签名的墓碑。一个不携带自身权限依据的行为，在行为人离开之后就无法与未经授权的行为区分开来。",
       "attribution_label": "权限依据与理由",
       "cancel_button": "取消",
@@ -4001,5 +4004,11 @@
     "verbs_help": "选择此授权应包含的每一项职责。它们作为一组随同一份授权一起生效——无需为每项职责单独举行一次仪式。",
     "verbs_label": "要授予的职责",
     "verbs_none": "未选择任何职责。没有范围的授权不会授予任何权限。"
+  },
+  "auth": {
+    "browser_signin": {
+      "timed_out": "未在浏览器中完成登录，因此未做任何更改。请重试，或改用本地账户。",
+      "waiting": "请在浏览器中完成 Google 登录，然后返回此处。"
+    }
   }
 }

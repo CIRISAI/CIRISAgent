@@ -3606,6 +3606,9 @@
     "ladder": {
       "attestation_type_label": "Tipo di attestazione (scores, delegates_to, …)",
       "attesting_key_label": "Righe redatte da questa chiave",
+      "attesting_keys_count": "{count} chiavi selezionate — questo è UN unico atto, con un solo hash e una sola motivazione che li copre tutti.",
+      "attesting_keys_hint": "Incolla una chiave per riga (vanno bene anche virgole o spazi)",
+      "attesting_keys_label": "Oppure molte chiavi in una volta",
       "attribution_hint": "Entrambi sono obbligatori ed entrambi vengono scritti nel tombstone firmato. Un'azione che non porta con sé la propria autorità non è distinguibile da una non autorizzata una volta che l'attore non c'è più.",
       "attribution_label": "Autorità e motivo",
       "cancel_button": "Annulla",
@@ -4032,5 +4035,11 @@
     "verbs_help": "Seleziona tutti i doveri che questa concessione deve portare con sé. Viaggiano insieme come un unico insieme su un'unica concessione: non serve una cerimonia separata per ogni dovere.",
     "verbs_label": "Doveri da conferire",
     "verbs_none": "Nessun dovere selezionato. Una concessione senza ambito non conferisce nulla."
+  },
+  "auth": {
+    "browser_signin": {
+      "timed_out": "L'accesso non è stato completato nel browser, quindi non è stato modificato nulla. Riprova oppure usa un account locale.",
+      "waiting": "Completa l'accesso con Google nel browser, poi torna qui."
+    }
   }
 }

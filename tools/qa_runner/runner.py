@@ -975,6 +975,11 @@ class QARunner:
         """
         if not self.token:
             return True
+        if getattr(self, "_identity_closed_by", None):
+            # Explained once, at the test that closed it. Repeating the
+            # loud line for every later test is what turned one cause
+            # into 191 lines pointing at innocent steps.
+            return True
         try:
             resp = requests.get(
                 f"{self.config.base_url}/v1/auth/me",
@@ -1786,8 +1791,27 @@ class QARunner:
                             self.console.print(f"[yellow]🔄 Re-authenticating after {test.name}...[/yellow]")
                         # Re-authenticate to restore token for subsequent tests
                         if not self._authenticate():
-                            self.console.print(f"[red]❌ Failed to re-authenticate after {test.name}[/red]")
-                            all_passed = False
+                                # `/v1/auth/logout` is the NODE's now, and the node's
+                                # logout DEACTIVATES THE WA CERT rather than dropping a
+                                # token — deliberate upstream, because unauthenticated
+                                # logout was an account-lockout vector (CIRISServer#387).
+                                # A successful logout therefore ENDS the run's identity,
+                                # and re-auth cannot succeed: resolve_login and every
+                                # enumeration are active-only, so the cert is not merely
+                                # logged out, it is invisible.
+                                #
+                                # This produced 191 "Invalid session token" failures that
+                                # read as 191 defects and were one closed account. The
+                                # suite still TESTS logout — fully, asserting 204 — and
+                                # then stops depending on the account it just closed.
+                                self.console.print(
+                                    f"[yellow]🔒 {test.name} closed the run's account "
+                                    f"(node logout deactivates the WA cert, by design). "
+                                    f"Re-auth is impossible; later auth-dependent tests "
+                                    f"are skipped, not counted as failures.[/yellow]"
+                                )
+                                self._identity_closed_by = test.name
+                                self.token = None
                         break
 
                 # Diagnostic auth gate — if this test corrupted the session

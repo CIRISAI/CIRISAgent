@@ -1779,6 +1779,21 @@ class QARunner:
             for test in tests:
                 progress.update(task, description=f"Testing {test.name}...")
 
+                # The run's identity is closed (see the logout branch below).
+                # An auth-requiring test would go out with NO Authorization
+                # header — _run_single_test only attaches one when a token
+                # exists — and come back 401. That is not a defect in the thing
+                # under test, it is the absence of a credential we deliberately
+                # spent, so it must not be counted as a failure.
+                #
+                # Clearing the token without this was half a fix: it stopped the
+                # AUTH GATE noise and left every later auth test running
+                # unauthenticated. Quieter, equally broken — cognitive_state 0/8,
+                # system_messages 0/6, deferral 0/4 in the run that taught me.
+                if getattr(self, "_identity_closed_by", None) and test.requires_auth:
+                    progress.advance(task)
+                    continue
+
                 passed, result = self._run_single_test(test)
                 self.results[f"{test.module.value}::{test.name}"] = result
 

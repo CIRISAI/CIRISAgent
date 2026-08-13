@@ -184,6 +184,21 @@ def _err_text(result: dict, limit: int = 100) -> str:
     return str(raw)[:limit]
 
 
+#: Tests that END the run's identity rather than merely invalidating a token.
+#: The node's logout DEACTIVATES the WA cert (CIRISServer#387), and resolve_login
+#: plus every enumeration are active-only, so afterwards the account cannot be
+#: logged back in — re-auth is not merely unnecessary, it is impossible. These run
+#: last so that fact costs no coverage.
+_IDENTITY_CLOSING = (("logout", "/auth/logout"),)
+
+
+def _closes_identity(test: Any) -> bool:
+    return any(
+        name in test.name.lower() and endpoint in test.endpoint
+        for name, endpoint in _IDENTITY_CLOSING
+    )
+
+
 class QARunner:
     """Main QA test runner."""
 
@@ -504,6 +519,17 @@ class QARunner:
                 setup_tests.extend(tests)
             else:
                 all_tests.extend(tests)
+
+        # ORDER, NOT SKIP. `/v1/auth/logout` is the node's now and DEACTIVATES
+        # the WA cert (CIRISServer#387), so a successful logout ends the run's
+        # identity and nothing after it can authenticate. Skipping the remainder
+        # 'fixes' the red by not running most of the suite — a green build that
+        # tested less, which is worse than the failure it replaces.
+        #
+        # So the identity-closing tests run LAST. Everything else keeps a live
+        # credential exactly as before, logout is still executed and asserted,
+        # and no coverage is traded away for a green.
+        all_tests.sort(key=lambda t: 1 if _closes_identity(t) else 0)
 
         success = True
 
@@ -1706,19 +1732,6 @@ class QARunner:
 
         # Run all SDK modules sequentially (they use async internally)
         for module in modules:
-            # The SDK phase relies on the auth gate below as its ONLY restore
-            # point — it has no re-auth of its own. Once logout has closed the
-            # run's identity there is nothing to restore to, so these modules
-            # would each run tokenless and report every test failed. That is
-            # what produced cognitive_state 0/8, system_messages 0/6,
-            # deferral 0/4, utility_adapters 0/2 — whole modules at zero, the
-            # signature of a missing credential rather than a broken subsystem.
-            if getattr(self, "_identity_closed_by", None):
-                self.console.print(
-                    f"[dim]⏭  skipping SDK module '{module.value}' — identity closed by "
-                    f"'{self._identity_closed_by}'[/dim]"
-                )
-                continue
             self.console.print(f"\n📋 Running {module.value} SDK tests...")
             try:
                 # Special handling for BILLING_INTEGRATION - uses OAuth user token
@@ -1792,20 +1805,6 @@ class QARunner:
             for test in tests:
                 progress.update(task, description=f"Testing {test.name}...")
 
-                # The run's identity is closed (see the logout branch below).
-                # An auth-requiring test would go out with NO Authorization
-                # header — _run_single_test only attaches one when a token
-                # exists — and come back 401. That is not a defect in the thing
-                # under test, it is the absence of a credential we deliberately
-                # spent, so it must not be counted as a failure.
-                #
-                # Clearing the token without this was half a fix: it stopped the
-                # AUTH GATE noise and left every later auth test running
-                # unauthenticated. Quieter, equally broken — cognitive_state 0/8,
-                # system_messages 0/6, deferral 0/4 in the run that taught me.
-                if getattr(self, "_identity_closed_by", None) and test.requires_auth:
-                    progress.advance(task)
-                    continue
 
                 passed, result = self._run_single_test(test)
                 self.results[f"{test.module.value}::{test.name}"] = result

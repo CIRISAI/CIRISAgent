@@ -69,10 +69,14 @@ def foreign_listener():
         [
             sys.executable,
             "-c",
-            "import socket,time\n"
-            "s=socket.socket()\n"
-            "s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
-            "s.bind(('127.0.0.1',4243)); s.listen(8); time.sleep(60)",
+            # A LIVE server, not a bare socket: liveness is checked before
+            # ownership, so a dead foreign socket would trip the zombie branch and
+            # this test would silently measure something else.
+            "from http.server import HTTPServer,BaseHTTPRequestHandler\n"
+            "class H(BaseHTTPRequestHandler):\n"
+            "    def do_GET(self): self.send_error(404)\n"
+            "    def log_message(self,*a): pass\n"
+            "HTTPServer(('127.0.0.1',4243),H).serve_forever()",
         ]
     )
     for _ in range(50):
@@ -117,19 +121,7 @@ def test_refuses_a_live_node_this_process_does_not_own(foreign_listener, tmp_pat
     )
 
 
-def test_still_reuses_on_a_genuine_in_process_restart(own_listener, tmp_path):
-    """The path the branch exists for, which the fix must not cost.
-
-    Mobile restarts the runtime in-process; the node keeps serving on its own
-    tokio thread. Refusing here would break a real, shipped flow to fix CI —
-    trading one product defect for another.
-    """
-    # Must not raise. Downstream reprime/PIN steps are allowed to no-op in a bare
-    # test process; the assertion is about the reuse DECISION, not its sequel.
-    node_fold.start_node_fold(8080, home=str(tmp_path))
-
-
-def test_the_flag_is_the_discriminator_not_the_probe() -> None:
+def test_liveness_and_ownership_are_both_consulted() -> None:
     """Structural: the guard must not depend on reaching the network.
 
     A probe-based guard fails open exactly when the network is unhealthy, which is
@@ -140,7 +132,62 @@ def test_the_flag_is_the_discriminator_not_the_probe() -> None:
 
     source = inspect.getsource(node_fold.start_node_fold)
     guard = source[source.index("if not identity_text:") :]
-    assert "_this_process_owns_port" in guard[:2500], (
-        "the cannot-read-identity arm no longer consults socket ownership — it is "
-        "back to warning-and-reusing, which is what CI caught"
+    assert "_this_process_owns_port" in guard[:3000], (
+        "the cannot-read-identity arm no longer consults socket ownership"
     )
+    assert "http_alive" in guard[:3000], (
+        "the cannot-read-identity arm no longer distinguishes a LIVE node with "
+        "drifted endpoints from a dead socket — that collapse is what left the "
+        "postgres leg 502-ing for an entire run"
+    )
+
+
+def test_refuses_a_zombie_listener_even_though_it_is_ours(own_listener, tmp_path):
+    """A bound socket with nothing serving behind it must not be reused.
+
+    This is the CI postgres leg exactly: socket-ownership said OURS, identity was
+    unreadable, we reused — and :4243 then served NOTHING for the whole run. Zero
+    node-side successes, 39 proxy 502s on a 60-second cadence, while the sqlite
+    leg that bound its own node passed the identical suite.
+
+    Ownership was the wrong sufficient condition (my first fix). It answers "is it
+    ours", and a zombie of ours is still unusable.
+    """
+    with pytest.raises(RuntimeError) as exc:
+        node_fold.start_node_fold(8080, home=str(tmp_path))
+
+    message = str(exc.value)
+    assert "NOTHING is serving" in message
+    assert "owned_by_us=True" in message, (
+        "the message must say the socket IS ours — otherwise it reads as the "
+        "foreign-node case and sends the operator hunting the wrong process"
+    )
+
+
+def test_reuses_our_live_node_whose_identity_endpoints_drifted(tmp_path):
+    """Alive but unreadable is the older-wheel case this branch exists for.
+
+    An HTTPError PROVES a server answered; connection-refused proves one did not.
+    Collapsing those two is what made a zombie indistinguishable from an old wheel.
+    """
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class _Drifted(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 - stdlib interface
+            self.send_error(404)
+
+        def log_message(self, *args):  # noqa: A003 - silence the test server
+            return
+
+    try:
+        srv = HTTPServer(("127.0.0.1", 4243), _Drifted)
+    except OSError:  # pragma: no cover
+        pytest.skip("port 4243 already in use")
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        # Must not raise: our socket, alive, endpoints simply absent.
+        node_fold.start_node_fold(8080, home=str(tmp_path))
+    finally:
+        srv.shutdown()
+        srv.server_close()

@@ -262,14 +262,32 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     if live_node:
         expected_key = key_id or _resolve_key_id()
         identity_text = ""
+        http_alive = False  # did ANY HTTP response come back? (zombie vs live)
         try:
+            import urllib.error as _urlerr
             import urllib.request as _urlreq
 
+            # Track HTTP-LEVEL LIVENESS separately from identity. A bound socket with
+            # nothing serving behind it — our own zombie from a half-dead restart —
+            # looks identical to a live node whose identity endpoints drifted on an
+            # older wheel, because urlopen raises for both. It is not identical: an
+            # HTTPError PROVES a server answered. Connection refused/reset/timeout
+            # proves one did not.
+            #
+            # CI, postgres leg: socket ownership said OURS, identity was unreadable, we
+            # reused — and :4243 then served NOTHING for the whole run (0 node-side
+            # successes, 39 proxy 502s on a 60s cadence). Ownership was the wrong
+            # sufficient condition; the node must also be ALIVE.
             for probe_path in ("/v1/self/identity", "/v1/health"):
                 try:
                     with _urlreq.urlopen(f"http://127.0.0.1:4243{probe_path}", timeout=2) as resp:
                         identity_text += resp.read(65536).decode("utf-8", errors="replace")
-                except Exception:  # noqa: BLE001 — endpoint may not exist on this wheel
+                        http_alive = True
+                except _urlerr.HTTPError:
+                    # 404/500/etc — the endpoint is absent or unhappy, but SOMETHING
+                    # answered. That is the older-wheel case this branch protects.
+                    http_alive = True
+                except Exception:  # noqa: BLE001 — refused/timeout: no server there
                     continue
         except Exception:  # noqa: BLE001
             pass
@@ -283,36 +301,42 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
                 f"Run one node-folded stack per host, or stop the other process first."
             )
         if not identity_text:
-                # CANNOT-DETERMINE IS NOT PERMISSION. This branch used to warn and
-                # reuse anyway, 'preserving the in-process-restart path' — a check
-                # whose negative result changed nothing, which is the same shape as
-                # having no check at all. CI proved the cost: the postgres leg found
-                # a node it could not identify, reused it, and three minutes later
-                # every auth call 502'd because that node was gone. The sqlite leg,
-                # which bound its own, passed the identical suite.
-                #
-                # The restart this branch exists for happens INSIDE this process, so
-                # it is answerable without the network: the LISTENING SOCKET's owner
-                # is a kernel fact that survives the re-import a restart performs.
-                    # A live :4243 this process does not own is someone else's node —
-                    # the confirmed-foreign conclusion, reached from the other side.
-                owns = _this_process_owns_port(4243)
-                if owns is False:
-                    raise RuntimeError(
-                        "node fold: :4243 is already serving, its identity could not be read "
-                        "(no /v1/self/identity or /v1/health), and the listening socket is "
-                        "NOT held by this process — so it is not ours. Reusing it would ship "
-                        "traces to a foreign "
-                        "node (verify_unknown_key, QA all_1 RCA) or, as in CI, leave auth "
-                        "pointed at a node that vanishes mid-run. Stop the other process, or "
-                        "run one node-folded stack per host."
-                    )
-                logger.warning(
-                    "Node fold: 4243 already serving, identity unreadable, socket-ownership "
-                    "says %s — reusing on the in-process-restart assumption. If captures fail "
-                    "verify_unknown_key, another process owns :4243.",
-                    "OURS" if owns else "UNKNOWN (no /proc)",
+            # THREE distinct states, which the original code collapsed into one:
+            #
+            #   http_alive AND ours      -> live node, endpoints drifted (old wheel).
+            #                               Reuse. This is the case the branch exists for.
+            #   NOT http_alive           -> a bound socket with nothing serving behind it.
+            #                               A ZOMBIE. Reusing it is how the postgres leg
+            #                               spent an entire run 502-ing: 0 node-side
+            #                               successes, 39 proxy failures on a 60s cadence,
+            #                               while sqlite — which bound its own — passed.
+            #   http_alive AND NOT ours  -> foreign live node; the confirmed-foreign raise
+            #                               above already covers the readable case, this
+            #                               covers the unreadable one.
+            #
+            # Ownership alone was the wrong sufficient condition — my first fix. It
+            # answers 'is it ours', and a zombie of ours is still unusable.
+            owns = _this_process_owns_port(4243)
+            if not http_alive:
+                raise RuntimeError(
+                    "node fold: :4243 has a bound socket but NOTHING is serving on it "
+                    f"(owned_by_us={owns}). Reusing a dead listener leaves every "
+                    "/v1/auth call answering 502 for the life of the process — observed "
+                    "in CI as 0 node-side successes with 39 proxy failures. Stop the "
+                    "process holding :4243, or let this one bind its own node."
                 )
+            if owns is False:
+                raise RuntimeError(
+                    "node fold: :4243 is serving, its identity could not be read, and the "
+                    "listening socket is NOT held by this process — so it is not ours. "
+                    "Reusing it would ship traces to a foreign node (verify_unknown_key, "
+                    "QA all_1 RCA). Run one node-folded stack per host."
+                )
+            logger.warning(
+                "Node fold: 4243 serving and ALIVE but identity endpoints unreadable "
+                "(socket-ownership=%s) — older-wheel endpoint drift; reusing.",
+                owns,
+            )
         else:
             logger.info(
                 "Node fold: 4243 already serving and identity CONFIRMED ours (key_id=%s) — reusing the live node",

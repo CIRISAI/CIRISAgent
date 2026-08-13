@@ -26,6 +26,55 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+def _this_process_owns_port(port: int) -> Optional[bool]:
+    """Does THIS process hold the listening socket on `port`?
+
+    A module global cannot answer this. The in-process restart the reuse branch
+    exists for re-imports the module — the comment below says so explicitly,
+    "module globals can be wiped by the re-import while the daemon thread lives
+    on" — so any Python-side flag reads False exactly when the answer is yes.
+    That is the failure mode that would refuse a legitimate mobile restart.
+
+    Socket ownership is a KERNEL fact and survives the re-import: match the
+    listener's inode from /proc/self/net/tcp against this process's own fds.
+
+    Returns True/False on Linux, and None where /proc is unavailable — None means
+    "cannot tell", and the caller must not read it as either answer.
+    """
+    import glob
+
+    inodes = set()
+    found_any = False
+    for path in ("/proc/self/net/tcp", "/proc/self/net/tcp6"):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                rows = fh.read().splitlines()[1:]
+            found_any = True
+        except OSError:
+            continue
+        for line in rows:
+            fields = line.split()
+            # st == 0A is TCP_LISTEN; local_address is hex "ADDR:PORT".
+            if len(fields) > 9 and fields[3] == "0A":
+                try:
+                    if int(fields[1].split(":")[1], 16) == port:
+                        inodes.add(fields[9])
+                except (IndexError, ValueError):
+                    continue
+    if not found_any:
+        return None
+    if not inodes:
+        return False
+    for fd in glob.glob("/proc/self/fd/*"):
+        try:
+            target = os.readlink(fd)
+        except OSError:
+            continue
+        if target.startswith("socket:[") and target[8:-1] in inodes:
+            return True
+    return False
+
+
 _node_thread: Optional[threading.Thread] = None
 _node_error: Optional[str] = None
 
@@ -234,11 +283,36 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
                 f"Run one node-folded stack per host, or stop the other process first."
             )
         if not identity_text:
-            logger.warning(
-                "Node fold: 4243 already serving but identity could not be confirmed "
-                "(no readable /v1/self/identity or /v1/health) — reusing on the in-process-restart "
-                "assumption. If captures fail verify_unknown_key, another process owns :4243."
-            )
+                # CANNOT-DETERMINE IS NOT PERMISSION. This branch used to warn and
+                # reuse anyway, 'preserving the in-process-restart path' — a check
+                # whose negative result changed nothing, which is the same shape as
+                # having no check at all. CI proved the cost: the postgres leg found
+                # a node it could not identify, reused it, and three minutes later
+                # every auth call 502'd because that node was gone. The sqlite leg,
+                # which bound its own, passed the identical suite.
+                #
+                # The restart this branch exists for happens INSIDE this process, so
+                # it is answerable without the network: the LISTENING SOCKET's owner
+                # is a kernel fact that survives the re-import a restart performs.
+                    # A live :4243 this process does not own is someone else's node —
+                    # the confirmed-foreign conclusion, reached from the other side.
+                owns = _this_process_owns_port(4243)
+                if owns is False:
+                    raise RuntimeError(
+                        "node fold: :4243 is already serving, its identity could not be read "
+                        "(no /v1/self/identity or /v1/health), and the listening socket is "
+                        "NOT held by this process — so it is not ours. Reusing it would ship "
+                        "traces to a foreign "
+                        "node (verify_unknown_key, QA all_1 RCA) or, as in CI, leave auth "
+                        "pointed at a node that vanishes mid-run. Stop the other process, or "
+                        "run one node-folded stack per host."
+                    )
+                logger.warning(
+                    "Node fold: 4243 already serving, identity unreadable, socket-ownership "
+                    "says %s — reusing on the in-process-restart assumption. If captures fail "
+                    "verify_unknown_key, another process owns :4243.",
+                    "OURS" if owns else "UNKNOWN (no /proc)",
+                )
         else:
             logger.info(
                 "Node fold: 4243 already serving and identity CONFIRMED ours (key_id=%s) — reusing the live node",

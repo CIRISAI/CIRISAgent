@@ -1706,6 +1706,19 @@ class QARunner:
 
         # Run all SDK modules sequentially (they use async internally)
         for module in modules:
+            # The SDK phase relies on the auth gate below as its ONLY restore
+            # point — it has no re-auth of its own. Once logout has closed the
+            # run's identity there is nothing to restore to, so these modules
+            # would each run tokenless and report every test failed. That is
+            # what produced cognitive_state 0/8, system_messages 0/6,
+            # deferral 0/4, utility_adapters 0/2 — whole modules at zero, the
+            # signature of a missing credential rather than a broken subsystem.
+            if getattr(self, "_identity_closed_by", None):
+                self.console.print(
+                    f"[dim]⏭  skipping SDK module '{module.value}' — identity closed by "
+                    f"'{self._identity_closed_by}'[/dim]"
+                )
+                continue
             self.console.print(f"\n📋 Running {module.value} SDK tests...")
             try:
                 # Special handling for BILLING_INTEGRATION - uses OAuth user token

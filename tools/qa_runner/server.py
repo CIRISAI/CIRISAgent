@@ -31,6 +31,12 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
+#: The node's fixed HTTP port (node_fold). Nothing else may bind it — a
+#: transport listener that takes it silently prevents the node from serving,
+#: and the failure surfaces as auth 502s rather than as a bind error.
+NODE_HTTP_PORT = 4243
+
+
 class _MockLogshipperHTTPServer(HTTPServer):
     """HTTPServer subclass that holds per-instance state.
 
@@ -1078,8 +1084,18 @@ class APIServerManager:
         # registers with persist, and EVERY lens-core trace seal then fails
         # verify_unknown_key (the whole trace pipeline silently dies for
         # that leg). Respect an operator override if one is set.
+        # 4243 IS NOT AVAILABLE FOR THIS. It is the node's fixed HTTP port —
+        # node_fold serves federation/self/accord/auth/config/health there. The
+        # postgres leg used to take it, so the edge runtime bound 4243 first and
+        # the node could never have it: every /v1/auth call on that leg answered
+        # 502 for the whole run while sqlite passed the identical suite. One
+        # collision fixed by walking into another.
         if "CIRIS_EDGE_LISTEN_ADDR" not in env:
-            edge_port = 4242 if self.database_backend != "postgres" else 4243
+            edge_port = 4242 if self.database_backend != "postgres" else 4244
+            assert edge_port != NODE_HTTP_PORT, (
+                f"edge port {edge_port} collides with the node's fixed HTTP port "
+                f"{NODE_HTTP_PORT} — the node never binds and every auth call 502s"
+            )
             env["CIRIS_EDGE_LISTEN_ADDR"] = f"0.0.0.0:{edge_port}"
             self.console.print(f"[dim]Edge listen addr: 0.0.0.0:{edge_port} (per-backend)[/dim]")
 

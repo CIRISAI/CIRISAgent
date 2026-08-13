@@ -319,11 +319,15 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
             owns = _this_process_owns_port(4243)
             if not http_alive:
                 raise RuntimeError(
-                    "node fold: :4243 has a bound socket but NOTHING is serving on it "
+                    "node fold: :4243 is bound but does not speak HTTP "
                     f"(owned_by_us={owns}). Reusing a dead listener leaves every "
                     "/v1/auth call answering 502 for the life of the process — observed "
-                    "in CI as 0 node-side successes with 39 proxy failures. Stop the "
-                    "process holding :4243, or let this one bind its own node."
+                    "in CI as 0 node-side successes with 39 proxy failures.\n"
+                    "TWO CAUSES, both seen: (a) a dead node left the socket bound, or "
+                    "(b) a NON-HTTP service holds the port — the QA runner's per-backend "
+                    "edge offset used to put the Reticulum listener on 4243, which is not "
+                    "a zombie at all, just a different service on a reserved port. Check "
+                    "CIRIS_EDGE_LISTEN_ADDR before hunting a dead node."
                 )
             if owns is False:
                 raise RuntimeError(

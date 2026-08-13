@@ -157,7 +157,12 @@ def test_refuses_a_zombie_listener_even_though_it_is_ours(own_listener, tmp_path
         node_fold.start_node_fold(8080, home=str(tmp_path))
 
     message = str(exc.value)
-    assert "NOTHING is serving" in message
+    assert "does not speak HTTP" in message
+    assert "CIRIS_EDGE_LISTEN_ADDR" in message, (
+        "the message must name the OTHER cause too — a non-HTTP service on the "
+        "port is not a zombie, and the QA runner's edge offset put one there. "
+        "Saying only 'nothing is serving' sent me hunting a dead node twice"
+    )
     assert "owned_by_us=True" in message, (
         "the message must say the socket IS ours — otherwise it reads as the "
         "foreign-node case and sends the operator hunting the wrong process"

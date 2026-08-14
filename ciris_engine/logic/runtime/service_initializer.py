@@ -556,6 +556,17 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(15, "AuthenticationService")
 
+        # Long-jump upgrade recovery (2.7.x -> 2.9.x). Pre-2.9.0 the auth
+        # store wrote `wa_cert` rows into the AUDIT database; from 2.9.0 it
+        # reads the persist engine (`cirislens_wa_cert` on the main DB). An
+        # agent that jumped straight across boots GREEN while its owner
+        # cannot log in — the certificate is still on disk, just in the
+        # database the new read path no longer looks at. Import it here:
+        # after the auth service is up (so the persist engine is wired and
+        # the store is usable) and before adapters start minting their own
+        # observers. Idempotent, insert-only, and never raises.
+        self._recover_stranded_wa_certificates()
+
         # Process pending users from setup wizard if file exists
         await self._process_pending_users_from_setup()
 
@@ -573,6 +584,26 @@ This directory contains critical cryptographic keys for the CIRIS system.
             msg = f"[FIRST-RUN] ✓ {self._services_started_count}/{FIRST_RUN_SERVICES} minimal services started - ready for setup wizard"
             logger.warning(msg)
             print(msg)
+
+    def _recover_stranded_wa_certificates(self) -> None:
+        """Import legacy `wa_cert` rows stranded by a long-jump upgrade.
+
+        Boot MUST survive this. The migration already swallows its own
+        failures, but an agent that refuses to start is strictly worse than
+        one whose owner has to re-run setup — so guard the import itself
+        too, and say so loudly if it goes wrong.
+        """
+        try:
+            from ciris_engine.logic.persistence.stores.wa_cert_legacy_migration import (
+                migrate_legacy_wa_certificates,
+            )
+
+            migrate_legacy_wa_certificates(self.essential_config)
+        except Exception:
+            logger.exception(
+                "Legacy WA certificate migration could not run — pre-existing owners may be "
+                "unable to log in. Boot continues."
+            )
 
     async def verify_security_services(self) -> bool:
         """Verify security services are operational."""

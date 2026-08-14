@@ -218,6 +218,45 @@ class TestServiceInitializer:
                 mock_wa.start.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_security_init_recovers_stranded_wa_certificates(
+        self, service_initializer, mock_essential_config
+    ):
+        """The long-jump `wa_cert` recovery must run during security init.
+
+        A 2.7.x -> 2.9.x upgrade leaves the owner's certificate in the AUDIT
+        database while the store now reads persist. If this hook stops firing
+        the agent boots GREEN and the owner silently cannot log in
+        (see wa_cert_legacy_migration).
+        """
+        await service_initializer.initialize_infrastructure_services()
+
+        service_initializer.config_accessor = Mock()
+        service_initializer.config_accessor.get_path = AsyncMock(return_value=Path("test_auth.db"))
+
+        call_order = []
+
+        mock_auth_service = Mock()
+        mock_auth_service.start = AsyncMock(side_effect=lambda: call_order.append("auth_start"))
+
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.AuthenticationService",
+            return_value=mock_auth_service,
+        ), patch("ciris_engine.logic.runtime.service_initializer.WiseAuthorityService") as mock_wa_class, patch(
+            "ciris_engine.logic.persistence.stores.wa_cert_legacy_migration.migrate_legacy_wa_certificates"
+        ) as mock_migrate:
+            mock_migrate.side_effect = lambda cfg: call_order.append("migrate")
+            mock_wa = Mock()
+            mock_wa.start = AsyncMock()
+            mock_wa_class.return_value = mock_wa
+
+            await service_initializer.initialize_security_services(mock_essential_config, mock_essential_config)
+
+        mock_migrate.assert_called_once()
+        # Must run AFTER the auth service is up (persist engine wired, store
+        # usable) and before adapters start minting their own observers.
+        assert call_order == ["auth_start", "migrate"]
+
+    @pytest.mark.asyncio
     async def test_initialize_services(self, service_initializer, mock_essential_config):
         """Test remaining services initialization."""
         # Initialize prerequisites
